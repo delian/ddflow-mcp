@@ -16,6 +16,7 @@ from ..core import blobref as B
 from ..core import outcome as O
 from ..services import gates as GD
 from ..services import logblobs as LB
+from ..services.gates.rounds import delta_rounds, full_rounds, rounds_used
 from ._base import _load
 
 
@@ -50,11 +51,21 @@ def _rows(it, gate: str) -> list[dict[str, Any]] | str:
     return rows
 
 
-def _text(item: str, gate: str, rows: list[dict[str, Any]]) -> str:
+def _fold(cfg, it, gate: str) -> str:
+    """The round count `review show` names: the SAME fold `gate status` and the review
+    budget count (DX-review-round-count), so every view of one gate reports one number."""
+    used = rounds_used(it, gate)
+    cap = cfg.review.max_rounds
+    note = f"{used} of {cap} rounds" if cap > 0 else f"{used} rounds (unlimited)"
+    full, delta = full_rounds(it, gate), delta_rounds(it, gate)
+    return f"{note} -- {full} full, {delta} delta"
+
+
+def _text(item: str, gate: str, rows: list[dict[str, Any]], fold: str) -> str:
     counts = {v: sum(1 for r in rows if r["triage"] == v) for v in ("refuted", "confirmed")}
     left = len(rows) - sum(counts.values())
     out = [
-        f"{item}.{gate}: {len(rows)} finding(s) -- {counts['refuted']} refuted, "
+        f"{item}.{gate}: {fold} -- {len(rows)} finding(s) -- {counts['refuted']} refuted, "
         f"{counts['confirmed']} confirmed, {left} untriaged"
     ]
     for r in rows:
@@ -70,7 +81,7 @@ def _text(item: str, gate: str, rows: list[dict[str, Any]]) -> str:
 
 def show(repo: Path, item: str, *, gate: str = "", agent: str = "") -> O.Outcome:
     """The recorded round's findings for ``gate`` (every gate that has some when omitted)."""
-    _log, _cfg, st = _load(repo, agent)
+    _log, cfg, st = _load(repo, agent)
 
     def bad(why: str) -> O.Outcome:
         return O.failed("review.show", why, id=item, gate=gate, text=why)
@@ -97,7 +108,7 @@ def show(repo: Path, item: str, *, gate: str = "", agent: str = "") -> O.Outcome
             continue
         listing[g] = rows
     text = "\n".join(
-        [_text(item, g, rows) for g, rows in listing.items()]
+        [_text(item, g, rows, _fold(cfg, it, g)) for g, rows in listing.items()]
         + [f"{g}: {why}" for g, why in unreadable.items()]
     )
     if not listing:
@@ -107,6 +118,15 @@ def show(repo: Path, item: str, *, gate: str = "", agent: str = "") -> O.Outcome
         id=item,
         gate=gate or ",".join(gates),
         findings=listing,
+        rounds={
+            g: {
+                "used": rounds_used(it, g),
+                "max_rounds": cfg.review.max_rounds,
+                "full": full_rounds(it, g),
+                "delta": delta_rounds(it, g),
+            }
+            for g in listing
+        },
         unreadable=unreadable,
         text=text,
     )

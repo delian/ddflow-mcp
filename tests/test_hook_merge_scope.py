@@ -57,7 +57,7 @@ def merging(repo, monkeypatch):
     (repo / "src" / "knobs.py").write_text("def renew_lease(holder):\n    return holder\n")
     _commit_all(repo, "base")
     _git(repo, "checkout", "-qb", "feat")
-    run_cli(repo, "task", "add", "T1", "--globs", "own.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "own.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=AGENT).ok
     return repo
 
@@ -181,7 +181,7 @@ def test_an_automatic_merge_of_a_file_both_sides_changed_passes_by_default(mergi
 
 
 def _rival_holds(repo: Path, path: str) -> None:
-    run_cli(repo, "task", "add", "T2", "--globs", path)
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", path)
     assert A.claim(repo, "T2", no_worktree=True, agent="agent-rival").ok
 
 

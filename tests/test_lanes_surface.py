@@ -25,10 +25,10 @@ from ddflow.surfaces.tools.tiers import tier_tools
 @pytest.fixture
 def busy(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "X", "--globs", "f.py")
-    run_cli(repo, "task", "add", "Y", "--globs", "f.py")
+    run_cli(repo, "task", "add", "X", "--title", "X fixture", "--globs", "f.py")
+    run_cli(repo, "task", "add", "Y", "--title", "Y fixture", "--globs", "f.py")
     assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
-    run_cli(repo, "task", "add", "Z", "--globs", "z.py")
+    run_cli(repo, "task", "add", "Z", "--title", "Z fixture", "--globs", "z.py")
     assert run_cli(repo, "claim", "Z", "--no-worktree", agent="waiter")[0] == 0
     assert run_cli(repo, "abandon", "Z", "--reason", "not needed", agent="waiter")[0] == 0
     return repo

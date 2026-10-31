@@ -61,27 +61,30 @@ def proj(repo):
 
 
 def test_claim_warns_about_a_glob_in_a_missing_directory(proj):
-    assert run_cli(proj, "task", "add", "T1", "--globs", "sorc/real.py")[0] == 0
+    assert (
+        run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "sorc/real.py")[0]
+        == 0
+    )
     code, out, err = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0, err
     assert "warning:" in out and "sorc/real.py" in out and "src/real.py" in out
 
 
 def test_claim_json_carries_glob_warnings(proj):
-    run_cli(proj, "task", "add", "T1", "--globs", "sorc/real.py")
+    run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "sorc/real.py")
     code, out, _e = run_cli(proj, "--json", "claim", "T1", "--no-worktree")
     assert code == 0 and json.loads(out)["glob_warnings"]
 
 
 def test_claim_of_a_new_file_says_nothing(proj):
-    run_cli(proj, "task", "add", "T1", "--globs", "src/brand_new.py")
+    run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/brand_new.py")
     code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0 and "warning:" not in out
 
 
 def test_the_knob_turns_the_warning_off(proj):
     run_cli(proj, "config", "--set", "plan.warn_missing_globs", "false")
-    run_cli(proj, "task", "add", "T1", "--globs", "sorc/real.py")
+    run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "sorc/real.py")
     code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0 and "warning:" not in out
 
@@ -108,8 +111,8 @@ def test_claim_over_mcp_carries_glob_warnings_only_when_there_are_some(proj):
         )
         return json.loads(reply["result"]["content"][0]["text"])
 
-    run_cli(proj, "task", "add", "T1", "--globs", "sorc/real.py")
-    run_cli(proj, "task", "add", "T2", "--globs", "src/brand_new.py")
+    run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "sorc/real.py")
+    run_cli(proj, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/brand_new.py")
     assert "src/real.py" in " ".join(claim("T1")["glob_warnings"])
     assert "glob_warnings" not in claim("T2")
 
@@ -118,7 +121,7 @@ def test_a_tracked_file_with_a_space_is_a_nearest_path(proj):
     (proj / "src" / "my file.py").write_text("x = 1\n")
     subprocess.run(["git", "add", "-A"], cwd=proj, check=True)
     subprocess.run(["git", "commit", "-qm", "space"], cwd=proj, check=True)
-    run_cli(proj, "task", "add", "T1", "--globs", "sorc/my file.py")
+    run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "sorc/my file.py")
     code, out, _e = run_cli(proj, "claim", "T1", "--no-worktree")
     assert code == 0 and "src/my file.py" in out
 

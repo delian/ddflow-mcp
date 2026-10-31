@@ -415,7 +415,7 @@ def test_no_lane_activity_has_no_utilisation_not_zero():
 @pytest.fixture
 def worked(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "X", "--globs", "f.py")
+    run_cli(repo, "task", "add", "X", "--title", "X fixture", "--globs", "f.py")
     assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
     return repo
 

@@ -119,7 +119,7 @@ def test_a_human_approval_stamps_what_short_host_returns(tmp_path, monkeypatch):
         '[gate.plan_approved]\ntitle = "ok"\nhuman = true\nprompt = "ask"\n'
     )
     run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     monkeypatch.setattr(H, "short_host", lambda: "sentinel-box")
     log = EventLog(repo)
     cfg = Config.load(repo)

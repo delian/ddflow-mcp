@@ -27,6 +27,7 @@ from ..api import loops as _loops
 from ..api import progress as _progress
 from ..api import surf_setup as SS
 from ..api.refs import provide_upgrade_vocabulary
+from ..api.waves_auto import scope_of
 from ..config_sections._layers import tolerating_conflicts
 from ..core import clock
 from ..core import progress as PR
@@ -377,8 +378,10 @@ def _run(args: argparse.Namespace) -> int:
                 "ddflow: nothing to override (no skew); --allow-older-version ignored",
                 file=sys.stderr,
             )
-    with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
-        return int(args.fn(args, ctx))
+    # Stamping `wave:N` by default (`[waves].auto_stamp`): after a command that wrote.
+    with scope_of(ctx, getattr(args, "cmd", "")):
+        with tolerating_conflicts(parsed_path(args) in CONFLICT_SAFE):
+            return int(args.fn(args, ctx))
 
 
 if __name__ == "__main__":

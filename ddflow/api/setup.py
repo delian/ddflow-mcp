@@ -65,6 +65,7 @@ from ..services.config_shadow import shadow_report
 from ..services.configwrite import bare_id_problem
 from ..services.macros import macro_problems
 from ..services.prompts import TemplateError
+from ..services.swarm import lanehooks_check as CK
 from ..views import human
 from ..views import human as _human
 from ._base import _load
@@ -375,9 +376,15 @@ def _said(added: list[str]) -> str:
 
 
 def _extra_keys(cfg) -> set[str]:
-    """The keys `[enforce].machine_local_keys` adds to the machine-local classification."""
-    enforce = getattr(cfg, "enforce", None)
-    return set(getattr(enforce, "machine_local_keys", None) or [])
+    """The keys `[enforce].machine_local_keys` adds to the machine-local classification.
+
+    Read through the attribute directly, not `getattr(..., None)`: the dead-knob ratchet
+    (tests/test_ratchet_no_dead_knobs.py) is a NAME-based scan and cannot see a read that
+    spells the knob as a `getattr` string literal, so it would report a knob that this very
+    function consumes as dead (bug B21ec47765c). ``config.enforce`` is an `EnforceConfig`
+    dataclass with `machine_local_keys` defaulting to ``[]``, so the attribute is always present.
+    """
+    return set(cfg.enforce.machine_local_keys)
 
 
 def _default_layer(cfg, edit: ConfigEdit) -> str:
@@ -1104,9 +1111,19 @@ def _on_pre_compact(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -
 
 
 def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
-    """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
-    else (another tool, no command, any problem) is allowed: a guard that fails closed on its
-    own bug would stop every command the agent runs."""
+    """Refuse a file write outside the agent's lease globs, or a Bash command that breaks
+    `[hooks].forbidden_commands`, before it runs. Anything else (another tool, no path, no
+    command, any problem) is allowed: a guard that fails closed on its own bug would stop
+    every command the agent runs."""
+    # The lease-glob check for a tool call that names a file path (reuses the lane check,
+    # SW-lane-hooks): a write outside the globs is refused before it happens, and an agent
+    # holding no live lease is stopped. Paths are judged against the repo root, where `_mine`
+    # roots the lease globs.
+    paths = CK.paths_of(p.raw)
+    if paths:
+        code, denial = CK.verdict(repo, agent, paths, Path(p.cwd or Path.cwd()), root=repo)
+        if code == CK.REFUSE:
+            return _HookResult(result="denied", deny=denial, note=denial)
     tool_input = p.raw.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if p.tool.lower() not in ("bash", "run_shell_command", "shell") or not isinstance(command, str):

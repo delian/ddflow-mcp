@@ -54,8 +54,30 @@ def _two_phase_project(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "core", "--globs", "core/**")
     run_cli(repo, "phase", "add", "P2", "--title", "api", "--needs", "P1", "--globs", "api/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/money.py")
-    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "api/routes.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/money.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1",
+        "--title",
+        "P2.T1 fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "api/routes.py",
+    )
 
 
 # -- a phase's dependency governs the tasks inside it ---------------------------------
@@ -105,14 +127,38 @@ def test_the_phase_dependency_releases_when_the_phase_completes(repo):
 
 def test_a_sub_task_does_not_start_while_its_umbrella_is_blocked(repo):
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/money.py")
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "core/account.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/money.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/account.py",
+    )
     run_cli(
         repo,
         "task",
         "add",
         "P1.T3",
+        "--title",
+        "P1.T3 fixture",
         "--phase",
         "P1",
         "--needs",
@@ -120,7 +166,18 @@ def test_a_sub_task_does_not_start_while_its_umbrella_is_blocked(repo):
         "--globs",
         "core/entry.py",
     )
-    run_cli(repo, "task", "add", "P1.T3.a", "--parent", "P1.T3", "--globs", "core/entry.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T3.a",
+        "--title",
+        "P1.T3.a fixture",
+        "--parent",
+        "P1.T3",
+        "--globs",
+        "core/entry.py",
+    )
 
     plan = _plan(repo)
     assert "P1.T3.a" not in _ready(plan), (
@@ -141,12 +198,58 @@ def test_a_sub_task_does_not_start_while_its_umbrella_is_blocked(repo):
 def test_inheritance_is_transitive_through_nested_sub_tasks(repo):
     """A sub-sub-task inherits from the whole chain, not just its immediate parent."""
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "phase", "add", "P2", "--needs", "P1", "--globs", "api/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/a.py")
-    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "api/a.py")
-    run_cli(repo, "task", "add", "P2.T1.a", "--parent", "P2.T1", "--globs", "api/b.py")
-    run_cli(repo, "task", "add", "P2.T1.a.i", "--parent", "P2.T1.a", "--globs", "api/c.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo, "phase", "add", "P2", "--title", "P2 fixture", "--needs", "P1", "--globs", "api/**"
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1",
+        "--title",
+        "P2.T1 fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "api/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1.a",
+        "--title",
+        "P2.T1.a fixture",
+        "--parent",
+        "P2.T1",
+        "--globs",
+        "api/b.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1.a.i",
+        "--title",
+        "P2.T1.a.i fixture",
+        "--parent",
+        "P2.T1.a",
+        "--globs",
+        "api/c.py",
+    )
 
     b = _blocked(_plan(repo))["P2.T1.a.i"]
     assert "P1" in b["waiting_on"], (
@@ -163,9 +266,31 @@ def test_an_umbrella_needing_its_own_child_does_not_deadlock_that_child(repo):
     yours to satisfy by finishing, not to wait on.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/a.py")
-    run_cli(repo, "task", "add", "P1.T1.a", "--parent", "P1.T1", "--globs", "core/b.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1.a",
+        "--title",
+        "P1.T1.a fixture",
+        "--parent",
+        "P1.T1",
+        "--globs",
+        "core/b.py",
+    )
     run_cli(repo, "update", "P1.T1", "--needs", "P1.T1.a")
 
     plan = _plan(repo)
@@ -199,9 +324,24 @@ def test_claim_refuses_an_item_whose_own_dependency_is_open(repo):
     against files that do not exist yet.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "core/a.py")
-    run_cli(repo, "task", "add", "T2", "--phase", "P1", "--needs", "T1", "--globs", "core/b.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "core/a.py"
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T2",
+        "--title",
+        "T2 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "T1",
+        "--globs",
+        "core/b.py",
+    )
 
     code, out, err = run_cli(repo, "claim", "T2")
     assert code == REFUSED, f"exit={code}\n{out}\n{err}"
@@ -213,9 +353,22 @@ def test_claim_refuses_an_item_whose_own_dependency_is_open(repo):
 
 def test_claim_refuses_an_umbrella_and_points_at_its_children(repo):
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "core/a.py")
-    run_cli(repo, "task", "add", "T1.a", "--parent", "T1", "--globs", "core/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo, "task", "add", "T1", "--title", "T1 fixture", "--phase", "P1", "--globs", "core/a.py"
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T1.a",
+        "--title",
+        "T1.a fixture",
+        "--parent",
+        "T1",
+        "--globs",
+        "core/a.py",
+    )
     code, out, err = run_cli(repo, "claim", "T1")
     assert code == REFUSED, f"an umbrella is not work; its children are. exit={code}\n{out}"
     assert "T1.a" in (out + err), f"name the child to work instead: {out}{err}"
@@ -229,15 +382,72 @@ def test_next_and_claim_agree_on_every_item_in_a_mixed_plan(repo):
     others looking fine.
     """
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "phase", "add", "P2", "--needs", "P1", "--globs", "api/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
     run_cli(
-        repo, "task", "add", "P1.T2", "--phase", "P1", "--needs", "P1.T1", "--globs", "core/b.py"
+        repo, "phase", "add", "P2", "--title", "P2 fixture", "--needs", "P1", "--globs", "api/**"
     )
-    run_cli(repo, "task", "add", "P1.T3", "--phase", "P1", "--globs", "core/c.py")
-    run_cli(repo, "task", "add", "P1.T3.a", "--parent", "P1.T3", "--globs", "core/c.py")
-    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "api/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T2",
+        "--title",
+        "P1.T2 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.T1",
+        "--globs",
+        "core/b.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T3",
+        "--title",
+        "P1.T3 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "core/c.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T3.a",
+        "--title",
+        "P1.T3.a fixture",
+        "--parent",
+        "P1.T3",
+        "--globs",
+        "core/c.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1",
+        "--title",
+        "P2.T1 fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "api/a.py",
+    )
 
     plan = _plan(repo)
     ready, blocked = set(_ready(plan)), set(_blocked(plan))
@@ -260,10 +470,34 @@ def test_next_and_claim_agree_on_every_item_in_a_mixed_plan(repo):
 def _queue_with_an_inherited_dep(repo):
     """P2 needs P1. P2.T1 declares NOTHING — that is the whole point."""
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "p1/**")
-    run_cli(repo, "phase", "add", "P2", "--globs", "p2/**", "--needs", "P1")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
-    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "p1/**")
+    run_cli(
+        repo, "phase", "add", "P2", "--title", "P2 fixture", "--globs", "p2/**", "--needs", "P1"
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "p1/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P2.T1",
+        "--title",
+        "P2.T1 fixture",
+        "--phase",
+        "P2",
+        "--globs",
+        "p2/a.py",
+    )
 
 
 def _ready_over_mcp(repo) -> list[str]:

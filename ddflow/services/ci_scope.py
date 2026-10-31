@@ -1,7 +1,8 @@
 """Which tests an item's `ci run` takes (D-test-economy-r2): the affected ones, or the whole suite.
 
-The default pre-push command is `pre-commit run --hook-stage pre-push --all-files`, whose
-`tests` hook runs the whole suite (about 12000 tests). For ONE item the run skips that hook
+The default pre-push command is `pre-commit run --hook-stage pre-push`, run over the diff the
+check is about (the branch against its base; `scope_to_diff` in `services.ci`), whose `tests`
+hook runs the whole suite (about 12000 tests). For ONE item the run skips that hook
 and runs the tests its change reaches instead -- the same selector the unit_tests gate and
 `ddflow tests --item` use (`testselect`), with the same hub cut, budget and whole-suite
 fallbacks. The whole suite stays for `--full`, the merge queue integrator (a batch) and every
@@ -177,9 +178,11 @@ def plan(cfg: Config, tree: Path, base: str, *, requested: str) -> Plan:
     if not cmd:
         return Plan("full", "the `tests` hook does not run pytest")
     cut = [t.path for t in sel.cut]
-    why = f"{len(paths)} test file(s) its change reaches" + (
-        f", {len(cut)} cut at the budget" if cut else ""
-    )
+    why = f"{len(paths)} test file(s) its change reaches"
+    if sel.neutral:
+        why += " (the change is whitespace/comment-only: behaviour-neutral)"
+    if cut:
+        why += f", {len(cut)} cut at the budget"
     if always:
         why += f", {len(always)} always-run guard file(s)"
     return Plan("selected", why, cmd, TESTS_HOOKS, paths, cut, sel.cut_at, always, always_cmd)

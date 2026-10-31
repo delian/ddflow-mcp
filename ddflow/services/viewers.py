@@ -65,7 +65,7 @@ _FILTERS: dict[str, frozenset[str]] = {
     "phase": frozenset({"state", "tag", "agent", "since"}),
     # `item`: the queue item a bug was filed in or affects -- the bug's own `item` field,
     # not its phase (a bug filed against no item has none).
-    "bug": frozenset({"state", "phase", "since", "item"}),
+    "bug": frozenset({"state", "phase", "tag", "since", "item"}),
     "research": frozenset({"state", "phase", "tag", "since"}),
     # `owner` is the lesson's `by`: the agent that first recorded it.
     "lesson": frozenset({"state", "tag", "agent", "since"}),
@@ -120,7 +120,7 @@ def _bug_row(b: Bug, cfg: Config, st: State) -> dict[str, Any]:
         "owner": "",
         "updated": b.fixed_at or b.invalid_at or b.found_at,
         "phase": _phase_of(st, it),
-        "tags": [],
+        "tags": _tags(b.tags, cfg),
         # The queue item the bug is against (`""` when it names none): `--item` filters on
         # this, and it is the bug's OWN field -- `phase` is derived from the same item, but
         # a bug can name an item whose phase differs from where it was filed.

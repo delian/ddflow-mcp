@@ -21,10 +21,12 @@ from ..core import outcome as O
 from ..mcpshim import clients
 from ..services import adopt as AD
 from ..services import claudehooks as CH
+from ..services import harnessfacts as HF
 from ..services import harnessreg as HR
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
 from ..services.hookio import DENY_EMITTERS, Plan, emit
+from .harness_drv import harness_add, harness_lint, harness_probe, harness_test
 
 NATIVE = "native hook"
 DECLARED = "declared, not delivering"
@@ -262,12 +264,53 @@ def harness_doctor(repo: Path, which: str = "") -> O.Outcome:
     )
 
 
-def harness_view(repo: Path, *, what: str = "list", id: str = "") -> O.Outcome:
-    """The three views behind one entry point (the CLI verb and the MCP action)."""
+def harness_facts(agent: str = "", unverified: bool = False) -> O.Outcome:
+    """The facts table: every descriptor value with status, source, version and date.
+    `unverified` keeps only the leads and adds the sections left out (NOT VERIFIED)."""
+    if agent and HR.get(agent) is None:
+        return O.failed("harness_facts", f"no harness {agent!r}; known: {', '.join(HR.ids())}")
+    targets = [HR.get(agent)] if agent else list(HR.load())
+    rs = [r for h in targets for r in HF.rows(h, absent=unverified)]
+    if unverified:
+        rs = [r for r in rs if r["status"] == "unverified"]
+    return O.ok("harness_facts", facts=rs, message=HF.table(rs))
+
+
+def harness_view(
+    repo: Path,
+    *,
+    what: str = "list",
+    id: str = "",
+    unverified: bool = False,
+    family: str = "",
+    title: str = "",
+    directory: str = "",
+    run: bool = False,
+) -> O.Outcome:
+    """The views behind one entry point (the CLI verb and the MCP action)."""
+    if what in ("add", "lint", "test", "probe"):
+        return _author(repo, what, id, family, title, directory, run)
+    if what == "facts":
+        return harness_facts(id, unverified)
     if what == "list":
         return harness_list(repo)
     if what == "show":
         return harness_show(repo, id) if id else O.failed("harness", "show needs a harness id")
     if what == "doctor":
         return harness_doctor(repo, id)
-    return O.failed("harness", f"unknown view {what!r}: list, show or doctor")
+    return O.failed(
+        "harness", f"unknown view {what!r}: list, show, doctor, facts, add, lint, test or probe"
+    )
+
+
+def _author(repo: Path, what: str, id: str, family: str, title: str, directory: str, run: bool):
+    """add | lint | test | probe (`harness_drv`): authoring, one descriptor at a time."""
+    if not id:
+        return O.failed("harness", f"{what} needs a harness id (or a descriptor file)")
+    if what == "add":
+        return harness_add(repo, id, family, title, directory)
+    if what == "lint":
+        return harness_lint(repo, id)
+    if what == "test":
+        return harness_test(repo, id)
+    return harness_probe(repo, id, run)

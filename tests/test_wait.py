@@ -32,9 +32,20 @@ HOLDER, WAITER = "agent-holder", "agent-waiter"
 def proj(repo: Path) -> Path:
     """T1 held by HOLDER; T2 writes the same file; T3 depends on T1."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T3", "--needs", "T1", "--globs", "src/other.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/a.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T3",
+        "--title",
+        "T3 fixture",
+        "--needs",
+        "T1",
+        "--globs",
+        "src/other.py",
+    )
     out = A.claim(repo, "T1", no_worktree=True, agent=HOLDER)
     assert out.ok, out.reason
     return repo
@@ -205,14 +216,28 @@ def test_an_item_that_is_already_free_returns_at_once(proj):
     [
         # A cycle does not clear when anyone finishes.
         (
-            [("task", "add", "C1", "--needs", "C2"), ("task", "add", "C2", "--needs", "C1")],
+            [
+                ("task", "add", "C1", "--title", "C1 fixture", "--needs", "C2"),
+                ("task", "add", "C2", "--title", "C2 fixture", "--needs", "C1"),
+            ],
             "C1",
             "cycle",
         ),
         # Nobody is working on the dependency: take it instead of waiting.
-        ([("task", "add", "D1"), ("task", "add", "D2", "--needs", "D1")], "D2", "nobody"),
+        (
+            [
+                ("task", "add", "D1", "--title", "D1 fixture"),
+                ("task", "add", "D2", "--title", "D2 fixture", "--needs", "D1"),
+            ],
+            "D2",
+            "nobody",
+        ),
         # An operator's hold needs the operator.
-        ([("task", "add", "H1"), ("block", "H1", "--reason", "parked")], "H1", "act on it"),
+        (
+            [("task", "add", "H1", "--title", "H1 fixture"), ("block", "H1", "--reason", "parked")],
+            "H1",
+            "act on it",
+        ),
     ],
 )
 def test_a_wait_nothing_can_end_is_refused_up_front(proj, setup, item, needle):
@@ -246,8 +271,8 @@ def test_an_unknown_item_fails(proj):
 
 def test_waiting_for_anything_with_nothing_in_flight_is_refused(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "C1", "--needs", "C2")
-    run_cli(repo, "task", "add", "C2", "--needs", "C1")
+    run_cli(repo, "task", "add", "C1", "--title", "C1 fixture", "--needs", "C2")
+    run_cli(repo, "task", "add", "C2", "--title", "C2 fixture", "--needs", "C1")
     out = A.wait(repo, timeout_s=30, agent=WAITER)
     assert out.exit == O.NOTHING and not out.data["waitable"]
     assert "no other agent holds anything" in out.reason
@@ -286,8 +311,8 @@ def test_an_expired_lease_wakes_the_waiter_although_no_event_is_written(
     import importlib
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     time.sleep(slow_machine_s)
     monkeypatch.setattr(WT, "RECHECK_S", 0.2)
@@ -354,7 +379,7 @@ def test_an_expired_lease_on_the_item_ITSELF_is_not_a_wake(repo, monkeypatch):
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     monkeypatch.setattr(WT, "RECHECK_S", 0.2)
     out = A.wait(repo, item="T1", timeout_s=20, poll_s=0.05, agent=WAITER)
@@ -456,7 +481,7 @@ def test_an_any_wait_names_only_the_holders_that_block_it(proj):
     """With no item, the waiter is waiting on what blocks the queue -- not on every lease
     in flight. Registering against all of them told an unrelated holder, at every
     heartbeat, that it was holding someone up."""
-    run_cli(proj, "task", "add", "U1", "--globs", "docs/unrelated.md")
+    run_cli(proj, "task", "add", "U1", "--title", "U1 fixture", "--globs", "docs/unrelated.md")
     assert A.claim(proj, "U1", no_worktree=True, agent="agent-other").ok
     out = A.wait(proj, timeout_s=0, agent=WAITER)
     assert out.exit == O.NOTHING and out.data["waitable"]
@@ -471,8 +496,8 @@ def test_a_full_parallelism_cap_waits_on_every_holder(proj):
     cfg.write_text(
         cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1)
     )
-    run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
-    run_cli(proj, "task", "add", "U2", "--globs", "docs/u2.md")
+    run_cli(proj, "task", "add", "U1", "--title", "U1 fixture", "--globs", "docs/u1.md")
+    run_cli(proj, "task", "add", "U2", "--title", "U2 fixture", "--globs", "docs/u2.md")
     assert A.claim(proj, "U1", no_worktree=True, agent="agent-other").ok
     out = A.wait(proj, timeout_s=0, agent=WAITER)
     assert out.exit == O.NOTHING and out.data["waitable"], out.reason
@@ -510,7 +535,7 @@ def test_a_claim_refused_for_an_EXPIRED_lease_does_not_point_at_wait(repo):
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     time.sleep(1.5)
     out = A.claim(repo, "T1", no_worktree=True, agent=WAITER)
@@ -525,7 +550,7 @@ def test_a_resource_you_hold_yourself_is_not_waited_on(repo):
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text('[schedule]\nresources = ["gpu=1"]\n')
     for tid, glob in (("P", "a.py"), ("Q", "b.py")):
-        run_cli(repo, "task", "add", tid, "--globs", glob)
+        run_cli(repo, "task", "add", tid, "--title", "task item", "--globs", glob)
         run_cli(repo, "update", tid, "--resources", "gpu:1")
     assert A.claim(repo, "P", no_worktree=True, agent=WAITER).ok
     out = A.wait(repo, item="Q", timeout_s=0, agent=WAITER)
@@ -537,7 +562,7 @@ def test_a_resource_another_agent_holds_is_waited_on(repo):
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text('[schedule]\nresources = ["gpu=1"]\n')
     for tid, glob in (("P", "a.py"), ("Q", "b.py")):
-        run_cli(repo, "task", "add", tid, "--globs", glob)
+        run_cli(repo, "task", "add", tid, "--title", "task item", "--globs", glob)
         run_cli(repo, "update", tid, "--resources", "gpu:1")
     assert A.claim(repo, "P", no_worktree=True, agent=HOLDER).ok
     out = A.wait(repo, item="Q", timeout_s=0, agent=WAITER)
@@ -555,7 +580,7 @@ def test_a_cap_blocked_item_wait_agrees_with_claim(proj):
             "[schedule]\n", '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 1\n', 1
         )
     )
-    run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
+    run_cli(proj, "task", "add", "U1", "--title", "U1 fixture", "--globs", "docs/u1.md")
     out = A.wait(proj, item="U1", timeout_s=0, agent=WAITER)
     assert out.data["waitable"], f"a full cap clears on any release: {out.reason}"
     claimed = A.claim(proj, "U1", no_worktree=True, agent=WAITER)
@@ -570,7 +595,7 @@ def test_under_deps_only_an_any_wait_does_not_offer_an_EXPIRED_lease(repo):
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
     _deps_only(repo)
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     time.sleep(1.5)
     out = A.wait(repo, timeout_s=0, agent=WAITER)

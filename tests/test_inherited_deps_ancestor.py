@@ -28,10 +28,16 @@ def _plan(repo) -> dict:
 
 def _tree(repo) -> None:
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
-    run_cli(repo, "task", "add", "A", "--phase", "P1", "--globs", "core/a.py")
-    run_cli(repo, "task", "add", "C", "--parent", "A", "--globs", "core/c.py")
-    run_cli(repo, "task", "add", "D", "--parent", "C", "--globs", "core/d.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "core/**")
+    run_cli(
+        repo, "task", "add", "A", "--title", "A fixture", "--phase", "P1", "--globs", "core/a.py"
+    )
+    run_cli(
+        repo, "task", "add", "C", "--title", "C fixture", "--parent", "A", "--globs", "core/c.py"
+    )
+    run_cli(
+        repo, "task", "add", "D", "--title", "D fixture", "--parent", "C", "--globs", "core/d.py"
+    )
     run_cli(repo, "update", "A", "--needs", "C")
 
 
@@ -45,7 +51,9 @@ def test_a_grandchild_does_not_inherit_a_need_on_its_own_parent(repo):
 def test_the_need_is_still_dropped_only_on_the_path_between(repo):
     """A's need on C still binds work OUTSIDE C's subtree (A's other child E)."""
     _tree(repo)
-    run_cli(repo, "task", "add", "E", "--parent", "A", "--globs", "core/e.py")
+    run_cli(
+        repo, "task", "add", "E", "--title", "E fixture", "--parent", "A", "--globs", "core/e.py"
+    )
     st = fold(EventLog(repo, "t").read_all(), strict=False)
     assert ("A", "C") not in inherited_deps(st, st.items["D"])
     assert ("A", "C") in inherited_deps(st, st.items["E"])

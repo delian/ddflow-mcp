@@ -244,7 +244,7 @@ def test_evaluate_files_the_jobs_item_and_records_every_decision(proj):
         'event = "gate.failed"\nkey = "{subject}"\naction = { job = "fix" }\nenabled = true\n',
     )
     _file(proj, "off.toml", 'event = "gate.failed"\naction = { job = "fix" }\n')
-    code, out, err = run_cli(proj, "task", "add", "T1", "--globs", "a.py")
+    code, out, err = run_cli(proj, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert code == 0, (code, out, err)
     code, out, err = run_cli(
         proj, "gate", "record", "T1", "unit_tests", "--outcome", "failed", "--reason", "red"

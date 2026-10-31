@@ -43,6 +43,7 @@ from ..services import roborev as RR
 from ..services import testscope as TSC
 from ..services import testselect as TS
 from ..services.approvals import gate_skip as GS
+from ..services.approvals import overrides as OVR
 from ..services.approvals.consume import operator_gate
 from ..services.completion import changed_paths, readme_report
 from ..services.export import refresh as RF
@@ -59,8 +60,8 @@ from ._base import _load
 from .gate_baseline import apply as baseline_apply
 from .gate_guard import guard_record
 from .lifecycle import callers_tree
+from .lifecycle.author import _session_model
 from .lifecycle.claim import _new_report_count
-from .lifecycle.complete import _session_model
 
 #: A command gate's outcome -> the exit code the caller sees. `unavailable` and `partial`
 #: are 2: the gate could not report, which is not a pass and not a failure of the work.
@@ -201,12 +202,28 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 
-def list_gates(repo: Path, *, refuted: bool = False, since: str = "", agent: str = "") -> O.Outcome:
+def _list_overrides(log, cfg, st, narrowed: bool) -> O.Outcome:
+    if narrowed:
+        return O.failed("gate.list", "--overrides is its own listing; give no --refuted/--since")
+    found = OVR.rows(log.read_all(), st, cfg)
+    return O.ok(
+        "gate.list",
+        overrides=found,
+        count=len(found),
+        text="\n".join(OVR.line(r) for r in found) or "no gate was passed by an override",
+    )
+
+
+def list_gates(
+    repo: Path, *, refuted: bool = False, since: str = "", agent: str = "", overrides: bool = False
+) -> O.Outcome:
     """The gates this project defines; with ``refuted``, the ones recorded passed ON
     REFUTATION instead (D-unify 5), for the operator to spot-check: every (item, gate)
     whose last finding was settled by a triage rather than a clean re-review. ``since``
     (an ISO date or timestamp) keeps those recorded at or after it."""
     _log, cfg, st = _load(repo, agent)
+    if overrides:
+        return _list_overrides(_log, cfg, st, refuted or bool(since))
     if since and not refuted:
         return O.failed("gate.list", "--since narrows --refuted; give both")
     if refuted:
@@ -1086,25 +1103,51 @@ def _author_model_on_reviewer_gate(st, cfg, log, gate: str, gdef, model: str) ->
     `gate record --model` names the REVIEWER's model; `complete --model` the author's.
     Recording the author's own model on a reviewer gate overwrote the reviewer's, and
     `complete` then judged independence against the author's family (B1979dac602). The
-    author is the model this agent declared at `session start`; with none declared there
-    is nothing to compare, and the record stands.
+    author is the model this agent declared at `session start`, or the family the
+    harness configured (`[agent].family` / DDFLOW_AGENT_FAMILY), with none declared
+    there is nothing to compare, and the record stands. A bare FAMILY name after
+    `--model` is judged as that family (DX-author-family): an `[agent].families` value
+    in place of a model id.
     """
     if not G.is_reviewer_gate(gate, gdef):
         return ""
 
-    author = _session_model(st, log.agent_id)
+    author = cfg.agent.family or _session_model(st, log.agent_id)
     if not author:
         return ""
-    fam = G.family_of(model, cfg).strip().lower()
-    if not fam or fam != G.family_of(author, cfg).strip().lower():
-        return ""
-    return (
-        f"--model {model!r} is the author's own family ({fam}, the model {log.agent_id} "
-        f"declared at `session start`), and --model on a reviewer gate names the "
-        f"REVIEWER's model (the author's is `complete --model`). Pass the model that "
-        f"reviewed, or --reviewer-model {model} to state that this reviewer really is "
-        f"of that family (it will not count as independent)."
+    fam = _family_of_name_or_value(model, cfg)
+    author_fam = _family_of_name_or_value(author, cfg)
+    if not fam or fam != author_fam:
+        # An unrecognised `[agent].family` resolves to "" on BOTH legs -- nothing a map
+        # knows to compare -- yet the operator's own spelling still IS the author: the
+        # bare strings must compare too, or a writer recording "--model myorg-x" would
+        # never be told it just named its own family (roborev standards).
+        if not (
+            cfg.agent.family
+            and not author_fam
+            and (model or "").strip().lower() == author.strip().lower()
+        ):
+            return ""
+        fam = author
+    declared = (
+        f"`[agent].family` / DDFLOW_AGENT_FAMILY for {log.agent_id}"
+        if cfg.agent.family
+        else f"the model {log.agent_id} declared at `session start`"
     )
+    return (
+        f"--model {model!r} is the author's own family ({fam}, {declared}), and --model on "
+        f"a reviewer gate names the REVIEWER's model (the author's is `complete "
+        f"--model`). Pass the model that reviewed, or --reviewer-model {model} to state "
+        f"that this reviewer really is of that family (it will not count as independent)."
+    )
+
+
+def _family_of_name_or_value(model: str, cfg) -> str:
+    """`model`'s family with a bare family name recognised as itself: the author and the
+    typed reviewer model are judged by the same resolution (DX-author-family). One
+    canonical form for both legs, so a configured value 'DeepSeek' and a family_for
+    answer 'deepseek' are one family, however they were spelled."""
+    return G.family_name_of(model, cfg.agent.families) or G.family_of(model, cfg).strip().lower()
 
 
 def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple[str, str, str]:

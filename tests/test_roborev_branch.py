@@ -69,8 +69,8 @@ def test_no_result_in_time_is_unavailable_with_the_job_and_the_reason(tmp_path, 
     monkeypatch.setenv("FAKE_HANG", "1")
     r = RB.run(repo, "main", 1)
     assert r.outcome == "unavailable" and r.exit == 2 and r.job == 7
-    assert "no result in 1s" in r.reason and "roborev wait --job 7" in r.reason
-    assert "standards_wait_s" in r.reason
+    assert "gave no verdict" in r.reason and "timed out" in r.reason
+    assert "roborev wait --job 7" in r.reason
 
 
 def test_a_fail_verdict_is_findings_not_unavailable(tmp_path, monkeypatch):
@@ -104,19 +104,20 @@ def test_the_wait_is_a_knob():
     assert Config().gates.standards_wait_s == 900
 
 
-def test_a_job_missing_from_the_list_is_unavailable_and_keeps_the_text(tmp_path, monkeypatch):
-    """No readable status: never `findings` on the strength of printed text alone."""
+def test_a_job_missing_from_the_list_is_unavailable_and_never_findings(tmp_path, monkeypatch):
+    """A job the list no longer has is VANISHED, never `findings` on the strength of printed
+    text alone: the verdict asks are not even made for it."""
     repo, _log = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv("FAKE_LIST_EMPTY", "1")  # `roborev list` no longer names the job
     monkeypatch.setenv("FAKE_VERDICT", "a bug")
     r = RB.run(repo, "main", 20)
-    assert r.outcome == "unavailable" and "unjudged" in r.reason and "a bug" in r.text
+    assert r.outcome == "unavailable" and "hold no job 7" in r.reason and r.text == ""
 
 
 def test_the_job_id_is_the_number_after_the_word_job_not_any_digit(tmp_path, monkeypatch):
     repo, _log = _setup(tmp_path, monkeypatch)
-    assert RB._find_job("roborev", repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
+    assert RB._find_job([], repo, "a" * 40, "queued review job for 3 commits as job #9") == 9
 
 
 def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monkeypatch):
@@ -125,7 +126,7 @@ def test_a_job_missing_from_the_list_and_no_review_is_unavailable(tmp_path, monk
     monkeypatch.setenv("FAKE_LIST_EMPTY", "1")
     monkeypatch.setenv("FAKE_SHOW_FAIL", "1")
     r = RB.run(repo, "main", 20)
-    assert r.outcome == "unavailable" and "unknown state" in r.reason
+    assert r.outcome == "unavailable" and "hold no job 7" in r.reason
 
 
 def test_every_wait_hint_names_the_job_flag(tmp_path, monkeypatch):

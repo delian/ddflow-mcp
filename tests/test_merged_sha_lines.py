@@ -40,7 +40,7 @@ def gitflow(repo, monkeypatch):
 
 def test_a_back_merged_hotfix_ships_on_develop(gitflow):
     repo = gitflow
-    run_cli(repo, "task", "add", "H1", "--tags", "hotfix")
+    run_cli(repo, "task", "add", "H1", "--title", "H1 fixture", "--tags", "hotfix")
     code, out, err = run_cli(repo, "--json", "claim", "H1")
     assert code == 0, out + err
     tree = Path(json.loads(out)["worktree"])

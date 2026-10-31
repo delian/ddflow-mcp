@@ -905,61 +905,1614 @@ key = "def.updated"
 impact = "additive"
 
 [[release]]
-version = "unreleased"
-date = ""
+version = "0.2.1"
+date = "2026-10-08"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.unit_tests_scope"
+new = "\"selected\""
+why = "What the unit_tests gate of a bug fix or small task runs (D-gate-economy 1): 'selected' (default) only the tests its change reaches plus its bugs' regression tests, once its ci gate passed; 'full' the whole suite."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.unit_tests_small_lines"
+new = "150"
+why = "A task with fewer changed lines than this (added plus removed since its base, `.ddflow/` excluded; default 150) is SMALL, and its unit_tests gate runs only the selected tests under `gates.unit_tests_scope = \"selected\"`."
+impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
 key = "release.manifest_lint"
 new = "\"block\""
-why = "What a release does about a knob or event kind change the upgrade manifest does not announce: block (default), warn or off."
+why = "What a release does when the code changes a config knob (added, default changed, removed) or an event kind that the shipped upgrade manifest (`ddflow/templates/upgrade/`) does not announce."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "repair.applied"
+impact = "additive"
+why = "Records that a versioned data repair was applied (its id, since, the applying version and the findings it settled), so the same findings are not offered again."
+
+[[release]]
+version = "0.2.2"
+date = "2026-10-14"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.kind_pipelines"
+new = "{}"
+why = "Per item-kind gate pipelines (task, phase, bug, doc, research, job) that replace the built-in one; a kind not named runs task_pipeline (phase_pipeline for a phase)."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
-key = "review.fix_round_free"
+key = "importer.phase_slug_chars"
+new = "32"
+why = "How long the slug a phase id is derived from may be when ddflow import makes an id from a heading (cut at a whole word, default 32, at least 8)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "importer.task_slug_chars"
+new = "40"
+why = "The same limit for the slug of a task id, the part after the phase id (default 40, at least 8)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.advise_max"
+new = "10"
+why = "How many moves ddflow lanes advise prints, most urgent first."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.brief_notes"
+new = "3"
+why = "How many recent session notes ddflow lanes brief quotes, fenced as data."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.brief_text_chars"
+new = "1200"
+why = "Characters kept of each text a lane brief quotes."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.stale_after_s"
+new = "0"
+why = "Seconds without a heartbeat before a lane holding its lease reads stale instead of working; 0 uses lease.ttl_s."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.watch_interval_s"
+new = "5"
+why = "Seconds between redraws of ddflow lanes --watch when the log has not changed."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.window_s"
+new = "86400"
+why = "How far back a lane's last event may be for ddflow lanes to list it; older agents are history."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.commit_events_at"
+new = "[\"merge\", \"complete\", \"release\", \"stop\"]"
+why = "The doors at which ddflow commits the event shards: merge, complete, release, stop (a session ends)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.commit_events_message"
+new = "\"events: {reason}\""
+why = "The commit message of an event-log commit; {reason} is the door and item."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.pre_push_events"
+new = "\"warn\""
+why = "What the pre-push hook does when event shards are not committed: warn, block or off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.output_schemas"
+new = "\"off\""
+why = "Whether tools/list declares an outputSchema for each object-result tool and a call also returns structuredContent (MCP 2025-06-18+): off (default, the smaller unchanged list) or on."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rag.command"
+new = "\"\""
+why = "The embedder companion command ([rag].command): reads {\"texts\": [...]} as JSON on stdin and prints {\"model\", \"vectors\"}; empty by default, so nothing changes until it is set."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rag.model_dir"
+new = "\"\""
+why = "A local model2vec model directory for the in-process embedder ([rag].model_dir); empty by default, never downloaded."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "rag.timeout_s"
+new = "60"
+why = "Seconds one embedding call may take before the embedder is unavailable ([rag].timeout_s)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.auto"
+new = "\"check\""
+why = "What ddflow does after it is upgraded (D-upgrade-auto-check): check (default) prints one line per version on this machine in the brief and MCP instructions; safe also applies the hooks and instructions categories with a backup; off says nothing."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.backup"
+new = "\"local\""
+why = "Where `ddflow upgrade --apply` saves the files it rewrites (D-upgrade-backups): local (default, .ddflow/backups, git-ignored) or none."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.backup_keep"
+new = "10"
+why = "How many local upgrade backups are kept; the oldest beyond this are removed after an apply (0 keeps every one)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.check_interval_h"
+new = "24.0"
+why = "Hours between release checks (default 24); a failed check counts as a check, so there is at most one request per interval."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.config_changes"
+new = "\"agent\""
+why = "Who may apply an upgrade's config change (D-upgrade-config-changes): agent (default; a value anyone set still needs --confirm), ask or operator (every change waits for --confirm)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.index_url"
+new = "\"\""
+why = "The package index the release check asks, for a private mirror (empty is the public index)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.on_start"
+new = "\"safe\""
+why = "What a starting MCP server or container does when ddflow is newer than the project: safe (default; rebuild derived stores, in a container also apply hooks and instructions after a backup, propose the rest), check (propose only) or off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.prereleases"
+new = "false"
+why = "Whether the release check proposes pre-releases (default false)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.release_check"
+new = "\"on\""
+why = "Whether ddflow looks for a newer release of itself, at most once per check_interval_h, and proposes it (never installs): on (default) or off. DDFLOW_NO_UPDATE_CHECK turns it off for one shell."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.self"
+new = "\"ask\""
+why = "Who may have ddflow install a newer ddflow with ddflow upgrade --self: ask (default; needs --yes --reason, recorded), operator (an agent over MCP is refused) or auto (no consent asked, --self still required)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.start_timeout_s"
+new = "10.0"
+why = "Seconds a starting MCP server or container spends on the upgrade-at-start work before it serves anyway and reports the rest as pending."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ddflow.capabilities"
+impact = "additive"
+why = "Records that a write used a capability (the kinds it governs and the release providing it), so an older ddflow lacking it is refused just those writes."
+
+[[release]]
+version = "0.2.3"
+date = "2026-10-15"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.cli_command"
+new = "[]"
+why = "The tools whose --help is walked to check `<tool> <verb> --flag` mentions; empty uses the project's own scripts."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.command_timeout_s"
+new = "20"
+why = "How long one --help walk step or count command may run."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.count"
+new = "[]"
+why = "The [[docs.count]] entries: numbers a document states, recomputed by a command."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.extract"
+new = "[]"
+why = "The [[docs.extract]] extractors: the flags, tools and knobs the code offers, checked against the documents."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "worktree.dispose_finished"
 new = "true"
-why = "A review round that only re-checks fixes (every prior finding's lines rewritten or confirmed fixed) no longer counts against review.max_rounds; false restores counting it."
+why = "A finished item's own clean, fully merged worktree and branch are removed when the item is completed, abandoned or removed, and for a done item at the next brief; a tree holding work is kept and says why."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "worktree.sweep_min_age_s"
+new = "3600"
+why = "How long a done item must have been finished before the brief sweeps its leftover worktree (default 3600 seconds), so the tree an agent just finished in is left alone."
+impact = "additive"
+
+[[release]]
+version = "0.2.4"
+date = "2026-10-16"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.actors"
+new = "{}"
+why = "Named actors (an id a credential proved) mapped to a role. (SE-actors, the one actor resolver.)"
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.ask_code_length"
+new = "8"
+why = "How many characters the one-time code of an ask has (default 8)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.ask_ttl_s"
+new = "86400"
+why = "How long an ask put through the approvals engine stays answerable before it expires (default 86400 seconds, a day)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.default_role"
+new = "\"agent\""
+why = "The role of a caller no credential or terminal vouches for. (SE-actors, the one actor resolver.)"
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.operator_role"
+new = "\"operator\""
+why = "The role of a person at their own terminal. (SE-actors, the one actor resolver.)"
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "agent.roles"
+new = "{\"agent\": [\"read\", \"claim\", \"note\"], \"bot\": [\"read\", \"claim\", \"note\", \"start_lane\", \"approve_marked\"], \"observer\": [\"read\"], \"operator\": [\"*\"]}"
+why = "A role-to-capabilities table: who may start lanes, approve, adopt and waive is data, not code. (SE-actors, the one actor resolver.)"
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.keep_env"
+new = "[]"
+why = "Variables the CI command keeps although gates.scrub_env removes them."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.check_links"
+new = "\"local\""
+why = "Which links the docs check follows: off, local (the tree) or network."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.check_paths"
+new = "[]"
+why = "The documents the docs check reads; empty uses [enforce].doc_globs minus doc_exclude."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.ignore_names"
+new = "[]"
+why = "Identifiers and flags another tool owns, never reported by the docs check."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.ignore_paths"
+new = "[]"
+why = "Globs of path-like references the docs check does not even note."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.link_timeout_s"
+new = "10"
+why = "How long one remote link may take to answer when check_links is network."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.lint_command"
+new = "\"\""
+why = "A markdown lint line the docs check runs; empty reports the lint as unavailable."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "docs.severity"
+new = "\"warn\""
+why = "What a finding from `ddflow docs check` costs: warn, block or off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.lapsed_lease"
+new = "\"accept\""
+why = "The pre-commit hook accepts a commit covered by its own item's lease that lapsed and was not taken over, with a note to heartbeat; 'refuse' restores treating a lapse as no lease."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.merge_commit_scope"
+new = "\"own\""
+why = "A merge commit is checked only against the paths the branch changed, not the ones that arrive from the merged parent; 'all' restores judging every staged path."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.keep_env"
+new = "[]"
+why = "Variables a gate command keeps although gates.scrub_env removes them."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.scrub_env"
+new = "[\"DDFLOW_AGENT\", \"DDFLOW_SESSION_ID\", \"CLAUDE_SESSION_ID\", \"CLAUDE_CODE_SESSION_ID\"]"
+why = "Variables removed from the environment a gate command and the CI command run with: the caller's identity."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.break_on_timeout"
+new = "false"
+why = "Whether a plain claim that meets a breakable lease breaks it by itself; off (default), the waiter must pass --break."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.hold_max_s"
+new = "3600"
+why = "Seconds a contended lease may show no progress before the waiter may break it (the holder keeps its branch and worktree); 0 never breaks."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.idle_max_s"
+new = "900"
+why = "Seconds a contended lease may show no progress (a heartbeat is not progress) before its holder is asked to yield; 0 never asks."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.renew_log_min_s"
+new = "120"
+why = "A heartbeat closer than this to the last written renewal is acknowledged but not logged, so renewals stop dominating the log."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.renew_long_commands"
+new = "true"
+why = "Whether a long command (gate run, review, ci run, pins regenerate) renews the caller's own lease while it runs; renewal is liveness, never progress."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.resume_own"
+new = "true"
+why = "Whether the agent whose lease lapsed resumes it with a plain claim, full glob set, when no live lease overlaps; off, it needs --force as before."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.wait_max_s"
+new = "600"
+why = "Seconds a refused claim or widening may wait while others wait for files in its own lease, before it is told to release them or report a cycle; 0 never tells it."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.wait_queue"
+new = "false"
+why = "Whether every refused claim or widening is kept in a first-in-first-out line per file."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lessons.test_file_globs"
+new = "[\"tests/**\", \"test/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
+why = "Globs naming test files, so a bug whose fix is confined to them is verified against the old test files or a recorded mutation."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lessons.verify_load_ratio"
+new = "1.0"
+why = "Load per CPU above which a failed regression-test run is flagged as run under load."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lessons.verify_output_lines"
+new = "12"
+why = "How many of the last output lines a failed regression-test run shows."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.evidence_blob_keys"
+new = "[\"chunk_findings\", \"tail\", \"selected_tests\"]"
+why = "The evidence keys that may move out of line."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.evidence_blob_min_bytes"
+new = "1024"
+why = "The smallest value that moves out of line."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.evidence_blobs"
+new = "false"
+why = "Large gate evidence is stored out of line under .ddflow/blobs/ and the event keeps a reference; turning it on records a capability that refuses older ddflow the gate events, so it is off until every writer is upgraded."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.snapshot"
+new = "true"
+why = "Keep the on-disk read snapshot of the parsed log; false neither reads nor writes it (DDFLOW_SNAPSHOT=0 still wins)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.snapshot_min_events"
+new = "5000"
+why = "No snapshot is written below this many events."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.snapshot_stale_days"
+new = "7"
+why = "Days a snapshot written by other code is kept before it is collected."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "log.snapshot_touch_s"
+new = "86400"
+why = "How often, in seconds, a snapshot in use is marked as used."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "loops.wait_cycle"
+new = "true"
+why = "Report a cycle of agents waiting on each other's leases in doctor (default on)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "loops.wait_cycle_shown"
+new = "5"
+why = "How many wait cycles doctor prints in full (default 5)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "merge_queue.eta_default_s"
+new = "900"
+why = "Seconds `ddflow queue status` assumes one entry takes until some have been integrated (default 900)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "merge_queue.eta_history"
+new = "5"
+why = "How many of the latest integrated entries `ddflow queue status` averages for its ETA (default 5)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "merge_queue.keep_history"
+new = "50"
+why = "How many finished merge-queue entries are kept for `ddflow queue status` (default 50)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "merge_queue.max_batch"
+new = "5"
+why = "How many queue entries one `ddflow queue run` integrates before it returns (default 5)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "merge_queue.run_unit_tests"
+new = "false"
+why = "Whether the merge queue's integrator also runs each entry's unit_tests gate on the merged result (default off; ci is run once either way)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "merge_queue.timeout_s"
+new = "0"
+why = "Seconds the merge queue's integrator lets one entry's ci run (default 0: use [ci].timeout_s)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.forecast_high_pct"
+new = "90"
+why = "Percentile reported as the cautious end of the forecast range."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.forecast_low_pct"
+new = "50"
+why = "Percentile reported as the likely end of the forecast range."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.forecast_runs"
+new = "1000"
+why = "Bootstrap draws behind ddflow metrics forecast."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.forecast_seed"
+new = "0"
+why = "Seed of the forecast draws, so the same log gives the same range."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.grid_max_folds"
+new = "24"
+why = "Most instants the grid sampler folds the log at."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.grid_step_s"
+new = "3600"
+why = "Seconds between the instants the lane-utilisation grid replays the plan at."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.min_samples"
+new = "10"
+why = "Fewest samples a metrics figure may rest on; under it the figure is n/a, never zero."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "metrics.top"
+new = "5"
+why = "How many reasons and agents ddflow metrics skips lists."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.after_merge"
+new = "\"amend\""
+why = "What the post-merge hook does after a merge: amend, leave or off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.recipes_file"
+new = "\".ddflow/pins.toml\""
+why = "Where the pin recipes live (one [[pin]] table per kind of pin file) for `ddflow pins regenerate`."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.timeout_s"
+new = "900"
+why = "Seconds one pin recipe may run before it is stopped."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.settle_all_refuted"
+new = "true"
+why = "The triage refuting a failed round's last open finding records the gate passed on refutation at once."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.auto_order"
+new = "\"propose\""
+why = "What ddflow does about an undeclared lease deadlock: off, propose the needs edge that breaks it, or apply it."
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ask.answered"
+impact = "additive"
+why = "A person (or an operator-proven channel) answered an ask: outcome, who, role, how, and whether it was a person."
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ask.expired"
+impact = "additive"
+why = "A sweep marked a pending ask whose time ran out, for the audit trail."
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ask.requested"
+impact = "additive"
+why = "A question or an approval of a content digest was put to a person (what, digest, expiry, optional one-time code hash)."
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ask.withdrawn"
+impact = "additive"
+why = "The asker took a pending ask back."
+
+[[release.change]]
+kind = "event_kind_added"
+key = "lease.waiting"
+impact = "additive"
+why = "Records that an agent was refused files another lease holds (who, which globs, since when, behind which leases), so a refusal returns at once and the wait-for graph can be read from the log."
+
+[[release]]
+version = "0.2.6"
+date = "2026-10-20"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_capture"
+new = "\"full\""
+why = "How much of a reproduction bundle `bug found` stores with the bug: off, basic or full."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_env"
+new = "[\"DDFLOW_*\", \"CI\", \"CI_*\", \"GITHUB_*\", \"PYTEST_*\", \"CLAUDE*\", \"*GATE*\"]"
+why = "Environment variable patterns whose redacted values a reproduction bundle records."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_events"
+new = "10"
+why = "How many of the filing agent's latest log events a full reproduction bundle lists."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_max_bytes"
+new = "65536"
+why = "The largest reproduction bundle `bug found` stores, in bytes."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_redact_extra"
+new = "[]"
+why = "More redaction regexes applied to a reproduction bundle."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_tail_bytes"
+new = "4096"
+why = "How many trailing bytes of command or test output a reproduction bundle keeps."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.repro_test_timeout_s"
+new = "300"
+why = "Seconds `bug found --test ID` lets pytest run to capture its output tail."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "chore.globs"
+new = "[\".ddflow/rules/**\", \".mailmap\", \"DDFLOW.md\", \"docs/ddflow/decisions/**\", \"docs/ddflow/QUEUE.md\", \"docs/ddflow/LESSONS.md\", \"docs/ddflow/LESSONS-SUMMARY.md\"]"
+why = "The files `ddflow chore commit` may land with no reviewer; a person approves the list (`ddflow chore approve`)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "chore.skip_gates"
+new = "[\"research\", \"rules\", \"implement\", \"rubber_duck\", \"critic\", \"verify\", \"standards\", \"ci\", \"unit_tests\", \"bug_hunt\", \"dedupe\"]"
+why = "The gates a chore skips, each with its reason recorded."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.always_tests"
+new = "[\"tests/test_constants_ratchet.py\", \"tests/test_layering*.py\", \"tests/golden/**\", \"tests/test_uc_surf_setup_ops_transcript.py\", \"tests/test_uc_surf_loop_transcript.py\", \"tests/test_readme_*.py\", \"tests/test_mcp_tool_budget.py\"]"
+why = "A selected ci run also takes these repo-wide guard and pin tests (and any test declaring `ALWAYS = True`): an import closure cannot know a new constant, knob or printed line affects them."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.max_concurrent_suites"
+new = "1"
+why = "A full-suite run is limited host-wide (bug B26b5951f2b)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.max_workers"
+new = "48"
+why = "The most workers an auto count may compute."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.min_workers"
+new = "1"
+why = "The fewest workers an auto count may compute."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.suite_wait_s"
+new = "1800"
+why = "A full-suite run is limited host-wide (bug B26b5951f2b)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.tests_scope"
+new = "\"selected\""
+why = "An item's ci run takes the non-test pre-push hooks plus the tests its change reaches; the whole suite runs per merge batch, on cadence and at phase end."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.workers"
+new = "\"auto\""
+why = "The pytest worker count that replaces {workers} in gate commands is computed at run time from cores and load (D-agent-test-etiquette); a number fixes it."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "evaluation.max_miss_rate"
+new = "0.0"
+why = "The share of planted faults a workflow may miss in the shared evaluation harness and still be enabled by default; 0 means it must catch them all."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "evaluation.min_fixtures"
+new = "1"
+why = "Fixtures with at least one planted fault that a workflow needs before its miss rate counts as evidence."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.doc_pipeline"
+new = "[\"rules\", \"implement\", \"standards\", \"dedupe\", \"merge\"]"
+why = "The gates a DOC item (task add --kind doc) passes through: documents and generated output, with no unit_tests, critic or bug hunt. Existing items are tasks and keep the task pipeline."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
 key = "gates.merge_blocked_by_failed"
 new = "[\"ci\"]"
-why = "Gates whose latest outcome failed, or was skipped over a failed run, make ddflow merge refuse the item; empty turns it off."
+why = "Gates whose latest outcome FAILED, or was skipped over a failed run, makes `ddflow merge` refuse the item: landing it can turn the base red."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.standards_wait_s"
+new = "900"
+why = "Seconds the standards gate's roborev run on the combined branch diff waits for the job before reporting it unavailable with the reason."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.unit_tests_hub_importers"
+new = "100"
+why = "A module imported by this many files or more is a hub: the unit_tests selection does not walk through it, and a change to one runs the whole suite."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.unit_tests_max_files"
+new = "100"
+why = "The most test files a selected unit_tests run takes; the farthest are cut and the cut set is recorded."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.unit_tests_max_hops"
+new = "2"
+why = "How far along the import graph a test still counts as reaching a change."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.unit_tests_name_max_tests"
+new = "30"
+why = "A changed identifier spelt by more tests than this selects none of them."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.crash_s"
+new = "300"
+why = "Seconds after its process is gone that a lane with a live lease is reported crashed (0 = off)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.idle_s"
+new = "900"
+why = "Seconds a lane may keep renewing its lease with no progress before it is idle and nudged (0 = off)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.interval_s"
+new = "900"
+why = "How often the watchdog pass falls due in `ddflow cadence` (0 = never)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode"
+new = "\"propose\""
+why = "What the watchdog does about a stalled, locked, crashed or runaway lane: off, propose the correction, or apply the ones that lose no work."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode_crashed"
+new = "\"inherit\""
+why = "The watchdog mode for crashed findings alone; inherit takes health.mode."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode_idle"
+new = "\"inherit\""
+why = "The watchdog mode for idle findings alone; inherit takes health.mode."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode_locked"
+new = "\"inherit\""
+why = "The watchdog mode for locked findings alone; inherit takes health.mode."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode_runaway"
+new = "\"inherit\""
+why = "The watchdog mode for runaway findings alone; inherit takes health.mode."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode_stalled"
+new = "\"inherit\""
+why = "The watchdog mode for stalled findings alone; inherit takes health.mode."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.mode_unresponsive"
+new = "\"inherit\""
+why = "The watchdog mode for unresponsive findings alone; inherit takes health.mode."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.reply_s"
+new = "600"
+why = "Seconds a nudge or stop request may go unanswered before the lane is unresponsive and may be parked (0 = off)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.runaway_s"
+new = "14400"
+why = "Seconds a running job may last before the watchdog reports it as a runaway (0 = off)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.shown"
+new = "10"
+why = "How many watchdog findings doctor prints in full."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "health.stall_s"
+new = "3600"
+why = "Seconds without progress after which a lane with a current lease is reported stalled (0 = off)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "hooks.allowed_commands"
+new = "[\"ddflow review --force --reason\"]"
+why = "Commands exempt from forbidden_commands."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "hooks.forbidden_commands"
+new = "[\"pkill\", \"killall\", \"git stash\", \"git push\", \"git reset --hard @primary\", \"rm -rf .ddflow\", \"--force\", \"--force-with-lease\"]"
+why = "Commands the PreToolUse hook refuses (pkill, git stash, git push, force flags)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.new_file_globs"
+new = "[\"ddflow/templates/upgrade/unreleased/*.toml\"]"
+why = "New files named after their own work (upgrade-manifest fragments) need no directory lease."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "lessons.test_file_globs"
+old = "[\"tests/**\", \"test/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
+new = "[\"**/tests/**\", \"**/test/**\", \"**/spec/**\", \"**/specs/**\", \"**/__tests__/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\", \"**/*.test.[jt]s\", \"**/*.test.[jt]sx\", \"**/*.test.[mc]js\", \"**/*.spec.[jt]s\", \"**/*.spec.[jt]sx\", \"**/*.spec.[mc]js\", \"**/*_test.go\", \"**/*_spec.rb\", \"**/*_test.rb\", \"**/test_*.rb\"]"
+why = "Path globs naming TEST files: the tests/, test/, spec/, specs/ and __tests__/ trees at any depth (Rust's tests/**/*.rs among them), and by name Python (test_*.py, conftest.py), JS/TS (*.test.ts, *.spec.js), Go (*_test.go) and Ruby (*_spe..."
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.on_upgrade"
+new = "\"notify\""
+why = "What a running MCP server does after ddflow is upgraded under it: notify (default; a skew refusal becomes a restart instruction), reexec (replace itself with the installed code on the same stdio) or off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.stale_check_every_s"
+new = "60.0"
+why = "Seconds between a running MCP server's looks at the installed package and the log's version stamps (mcp.on_upgrade); was a fixed minute."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.after_merge_timeout_s"
+new = "120"
+why = "The post-merge pins hook bounds each recipe command by this many seconds and reports one that does not finish as unavailable, so a merge never waits for a test suite."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.merge_check"
+new = "\"fast\""
+why = "`ddflow merge` checks the pin files the post-merge hook may run, reports the stale ones and names the pins the hook never runs; `all` also checks the suite recipes, `off` says nothing."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.parallel"
+new = "4"
+why = "`ddflow pins regenerate` runs its pin checks concurrently, up to this many at once (1 = one after the other)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "pins.progress_s"
+new = "30"
+why = "`ddflow pins regenerate` prints per-recipe progress on stderr, and a line naming the running recipes every this many seconds."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "plan.warn_missing_globs"
+new = "true"
+why = "claim and plan check warn about a task whose literal globs name files and directories that do not exist, with the nearest existing paths."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "prompts.agent_brief"
+new = "\"\""
+why = "Path to a launch-brief template replacing the shipped one."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "prompts.agent_report"
+new = "\"\""
+why = "Path to a completion-report template replacing the shipped one."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.exclude_globs"
+new = "[\"tests/golden/**\", \"*transcript*.json\", \"uv.lock\", \"*.ambr\"]"
+why = "Generated and pinned files are left out of the diff reviewers get, and the output says how many files and bytes."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.exclude_pin_files"
+new = "true"
+why = "Also leave the files .ddflow/pins.toml owns out of review chunks."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.fix_round_free"
+new = "true"
+why = "Whether a pure fix round is free: when commits since the head the last review covered rewrote at least one cited line and every finding of that round is rewritten or settled by the author, the next `ddflow review` is a delta over just th..."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
 key = "review.manifest_max_files"
 new = "40"
-why = "How many files the manifest of the whole change lists in every review chunk's prompt, so a chunk is not judged alone; 0 = no manifest."
+why = "How many files the manifest of the whole change lists in every review chunk's prompt (default 40; 0 = no manifest)."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
-key = "session.report_title_chars"
-new = "100"
-why = "Characters `ddflow report` keeps of each filed record's title."
+key = "schedule.bug_priority"
+new = "10"
+why = "The priority of a bug-fix task filed with none."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
-key = "session.report_summary_chars"
-new = "120"
-why = "Characters `ddflow report` keeps of each fixed bug's summary."
+key = "schedule.dx_id_prefix"
+new = "\"DX-\""
+why = "The id prefix that makes a task a DX task."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.dx_priority"
+new = "8"
+why = "The priority of a DX task filed with none."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.dx_tags"
+new = "[\"dx\"]"
+why = "Tags that make a task a DX task."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.phase_full_suite"
+new = "\"require\""
+why = "A phase cannot complete until the full test suite has passed on its merged tree: a recorded integration_tests pass newer than the last merge of its tasks."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "sensitivity.egress_doors"
+new = "[\"search\", \"recall\", \"brief\", \"export\"]"
+why = "A record labelled restricted or confidential is withheld from the doors that feed models (search and recall today; brief and export as they carry labelled records); empty turns the filter off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "sensitivity.model_allowed"
+new = "[]"
+why = "Levels sent to a model although the vocabulary says not to; empty keeps restricted and confidential away from the doors that feed models."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "sensitivity.scan_at_write"
+new = "true"
+why = "A record is scanned for secrets and personal data when written, and its sensitivity label is raised to match; off leaves only the label given."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_decisions"
+new = "6"
+why = "Governing decisions the subagent launch brief quotes."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_extra"
+new = "\"\""
+why = "Project text added to every subagent launch brief."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_lessons"
+new = "3"
+why = "Task-relevant lessons the subagent launch brief carries."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_max_chars"
+new = "9000"
+why = "Characters the subagent launch brief may take before its lessons and decisions are cut."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_off"
+new = "[]"
+why = "Sections of the subagent launch brief a project leaves out."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_pin_decisions"
+new = "[]"
+why = "Decisions every subagent launch brief quotes first."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.first_call"
+new = "true"
+why = "Append a compact session start to the first MCP tool call of a connection (first_call), capped at first_call_max_tokens tokens; off when a native hook already delivers it."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.first_call_max_tokens"
+new = "600"
+why = "Append a compact session start to the first MCP tool call of a connection (first_call), capped at first_call_max_tokens tokens; off when a native hook already delivers it."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
 key = "session.report_brief_chars"
 new = "200"
-why = "Characters `ddflow report --brief` keeps of each free-text entry; ids and shas are never cut."
+why = "Characters `ddflow report ITEM --brief` keeps of each free-text entry (an override reason, a not-done note); ids, gate names, test names and the landing sha are never cut."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_commits"
+new = "20"
+why = "Limit in the ddflow report completion report."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_note_chars"
+new = "200"
+why = "Limit in the ddflow report completion report."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_summary_chars"
+new = "120"
+why = "Characters `ddflow report ITEM` keeps of the summary of each bug the item fixed, in its regression-test rows."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_test_files"
+new = "12"
+why = "Limit in the ddflow report completion report."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.report_title_chars"
+new = "100"
+why = "Characters `ddflow report ITEM` keeps of the title of each bug, task, lesson, research note and decision it lists as filed."
+impact = "additive"
+
+[[release]]
+version = "0.2.7"
+date = "2026-10-20"
+
+[[release]]
+version = "0.2.8"
+date = "2026-10-23"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.accept_harness"
+new = "true"
+why = "Accept an approval answered in the agent's own chat, read from the harness transcript."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.auto_request"
+new = "true"
+why = "A refused gated command files its own approval request."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.expiry_warn_s"
+new = "600"
+why = "How long before its use window ends an unspent approval is reported as about to expire."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.min_digest_chars"
+new = "8"
+why = "How many leading characters of a request's digest the person types back to answer it."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.policy"
+new = "[]"
+why = "Standing auto-approval rules switched on (none by default)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.policy_max_uses"
+new = "1"
+why = "How many times one standing rule may approve the same item and target."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.policy_unavailable_runs"
+new = "3"
+why = "Unavailable reviewer runs the skip_after_unavailable rule needs."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.reason_chars"
+new = "300"
+why = "How much of an agent's own reason an approval request shows the person."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.transcript_dirs"
+new = "[\"~/.claude/projects\"]"
+why = "Where the harness channel looks for session transcripts."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "approvals.use_ttl_s"
+new = "3600"
+why = "How many seconds an answered operator approval stays spendable."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "bugs.lint_checks"
+new = "[\"ruff\", \"(CI: Lint)\", \"format\"]"
+why = "Which CI-filed bugs are lint bugs that `bug fixed --lint-exempt REASON` may close without a regression test."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "ci.always_tests"
+old = "[\"tests/test_constants_ratchet.py\", \"tests/test_layering*.py\", \"tests/golden/**\", \"tests/test_uc_surf_setup_ops_transcript.py\", \"tests/test_uc_surf_loop_transcript.py\", \"tests/test_readme_*.py\", \"tests/test_mcp_tool_budget.py\"]"
+new = "[\"tests/test_constants_ratchet.py\", \"tests/test_layering*.py\", \"tests/golden/**\", \"tests/test_uc_surf_setup_ops_transcript.py\", \"tests/test_uc_surf_loop_transcript.py\", \"tests/test_readme_*.py\", \"tests/test_mcp_tool_budget.py\", \"tests/test_mcp_parity.py\"]"
+why = "Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for EVERY item in addition to the tests its change reaches, plus any test file declaring `ALWAYS = True` at module level."
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.pins_precheck"
+new = "true"
+why = "`ddflow ci run` checks the pinned outputs in the merge result before the suite and fails at once naming the stale pins."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.suite_min_workers"
+new = "8"
+why = "A run holding the host-wide full-suite lock keeps at least this many pytest workers under load, so one loaded-host run cannot hold the lock for hours at -n 1."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.suite_queue_grace_s"
+new = "120"
+why = "The full-suite lock serves waiters first in, first out (bug B1fa77a6832)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.suite_queue_stale_s"
+new = "120"
+why = "The full-suite lock serves waiters first in, first out (bug B1fa77a6832)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "dedupe.research_task_asks"
+new = "false"
+why = "A research note and the task or phase it informs are related, not duplicates: the pair is listed but no longer makes an add ask (default false). Set true for the old behaviour."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "enforce.complexity_warn_at"
+new = "18"
+why = "The commit hook warns when a staged Python function's complexity rose to this value or more (radon grade D is 21), so the architecture guard's limit is seen at commit time. 0 turns it off."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.doc_globs"
+new = "[\"docs/**\", \"*.md\", \"**/*.md\"]"
+why = "A task whose actual change is documents only runs the doc pipeline and needs no cross-family reviewer (bug B-research-task-cannot-complete-docs-only)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "gates.max_run_timeout_s"
+new = "21600"
+why = "A per-run `gate run --timeout` is bounded (bug B-gate-run-ci-timeout-under-load)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "grants.max_count"
+new = "3"
+why = "The most extra rounds one recorded operator grant (ddflow grant add) may carry."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "grants.ttl_h"
+new = "48"
+why = "How many hours a recorded operator grant stays usable (0 = never expires)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "lease.new_file_globs"
+old = "[\"ddflow/templates/upgrade/unreleased/*.toml\"]"
+new = "[\"ddflow/templates/upgrade/unreleased/*.toml\", \"tests/test_*.py\"]"
+why = "A fix task's new regression test under tests/ needs no glob of its own."
+effect = "A project that never set the knob now also lets an item commit a NEW file under tests/ without a glob of its own; edits to existing tests still need a covering lease."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.progress_s"
+new = "20.0"
+why = "An offloaded MCP tool (gate_run, ci, verify, bisect, wait, review) sends a progress notification this many seconds while it runs, so a client that aborts a silent call does not cut off a quiet gate."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.worker_tools"
+new = "\"core\""
+why = "`ddflow adopt` writes `.ddflow/local/worker-mcp.json`, the ddflow server for lane workers on this tool tier (`DDFLOW_MCP_TOOLS`), started with `claude --mcp-config <file> --strict-mcp-config`."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.chunk_max_tokens"
+new = "0"
+why = "A cap on the tokens one review chunk's request may spend, below the reviewer's own max_tokens; 0 = the reviewer's own."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.require_new_work"
+new = "true"
+why = "A plain review after a recorded round runs only when the item's reviewed paths changed or a finding is untriaged."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "review.split_rounds"
+new = "2"
+why = "How many times a review chunk lost to its size (out of tokens or time) is split in halves and sent again."
 impact = "additive"
 
 [[release.change]]
 kind = "knob_added"
 key = "review.triage_ignore_globs"
-new = '["tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]'
-why = "Files added since a review round that match these globs (tests) do not void a triage pass or make a judged gate stale."
+new = "[\"tests/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
+why = "Globs of files whose change after a review round does not void a triage pass (bugs B-review-pass-on-refutation-invalidated-by-test-only-commit, B4ab42dbedb): answering a refuted finding with a regression test used to change the item's re..."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "schedule.docs_ignore_phase_needs"
+new = "true"
+why = "A docs-only (research/doc/decision) task no longer inherits its phase's needs on other phases (bug B-research-task-inherits-phase-deps)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.claim_rules_reserved"
+new = "2"
+why = "Project rules reach a fresh session: charter line per rule, reserved first."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.context_budget_tokens"
+new = "40000"
+why = "`ddflow doctor` shows the first-turn token cost of ddflow (instructions, tools/list, brief) against this budget."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.redact_lookup_network"
+new = "true"
+why = "Private addresses and hosts are marked in event lookup fields (urls, paths, branches, tags, globs) too."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.rules_charter_title_chars"
+new = "100"
+why = "Project rules reach a fresh session: charter line per rule, reserved first."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.rules_charter_tokens"
+new = "300"
+why = "Project rules reach a fresh session: charter line per rule, reserved first."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.start_bytes_per_token"
+new = "4.0"
+why = "The bytes-per-token ratio of the session start cost estimate."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.start_notice_reserve_tokens"
+new = "100"
+why = "The session start cost reserves this many tokens for the one-line upgrade notice, which cannot be measured without using it up."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "upgrade.skew_notice"
+new = "\"once\""
+why = "The skew notice is said once per version pair per project and machine, names the upgrade command, and can be silenced. (B-path-ddflow-version-skew-noise.)"
+impact = "additive"
+
+[[release.change]]
+kind = "event_kind_added"
+key = "ask.consumed"
+impact = "additive"
+why = "An agent spent one use of a person's approval on the exact command it was for."
+
+[[release]]
+version = "0.2.9"
+date = "2026-10-24"
+
+[[release.change]]
+kind = "knob_added"
+key = "ci.selected_lock_tests"
+new = "20"
+why = "A selected ci run of more test files than this queues for the host-wide full-suite slot like the whole suite; its pytest workers are always the computed count (never -n auto)."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.next_hints"
+new = "\"off\""
+why = "Whether a state-changing MCP result carries an advisory `next` field of up to 3 hints (400 bytes): what usually follows, from the result already computed. Off by default; `on` or 1 to 3 turns it on."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.profile_lean_budget_tokens"
+new = "16000"
+why = "With [mcp].tools = auto the session's effective start budget narrows the profile at initialize: lean at or under the first limit, no wider than families at or under the second."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "mcp.profile_mid_budget_tokens"
+new = "32000"
+why = "With [mcp].tools = auto the session's effective start budget narrows the profile at initialize: lean at or under the first limit, no wider than families at or under the second."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_changed"
+key = "mcp.tools"
+old = "\"all\""
+new = "\"auto\""
+why = "Which tools `tools/list` advertises. `auto` is the lean core: the 9 hot single tools plus the gate, bug, session, task, view and memory families (15 tools, about 30 KB, from 123 tools and about 105 KB). `families`, `hot+families` and the flat tiers are opt-in."
+effect = "an MCP client that never set [mcp].tools now lists 15 tools (the hot singles and six families, each one tool with an `action`) instead of all 123; nothing is removed: every tool, every family action and every old tool name stays callable, the first call by a hidden old name notes the family action that replaces it, and `ddflow_help` names what is hidden. Set [mcp].tools = \"all\" (or DDFLOW_MCP_TOOLS=all) for the previous list"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_budget_share"
+new = "0.1"
+why = "The launch brief is sized to the session start budget: a share of it, with a floor, and a lean mode for small windows."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_lean_chars"
+new = "6000"
+why = "The launch brief is sized to the session start budget: a share of it, with a floor, and a lean mode for small windows."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.agent_brief_min_chars"
+new = "4000"
+why = "The launch brief is sized to the session start budget: a share of it, with a floor, and a lean mode for small windows."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "session.context_budget"
+new = "{}"
+why = "Start budgets per agent type (claude, codex, copilot, ...) beside the global `context_budget_tokens`; a session's effective budget is the smaller of the two."
+impact = "additive"
+
+[[release]]
+version = "0.2.10"
+date = "2026-10-24"

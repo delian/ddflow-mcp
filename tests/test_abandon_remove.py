@@ -22,8 +22,12 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 def _queue(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "a/*")
-    run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "b/*")
+    run_cli(
+        repo, "task", "add", "P1.T1", "--title", "P1.T1 fixture", "--phase", "P1", "--globs", "a/*"
+    )
+    run_cli(
+        repo, "task", "add", "P1.T2", "--title", "P1.T2 fixture", "--phase", "P1", "--globs", "b/*"
+    )
     return repo
 
 
@@ -68,7 +72,18 @@ def test_abandoning_releases_the_lease(repo):
 
 def test_removing_an_item_with_dependents_is_refused(repo):
     _queue(repo)
-    run_cli(repo, "task", "add", "P1.T3", "--phase", "P1", "--needs", "P1.T1")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T3",
+        "--title",
+        "P1.T3 fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "P1.T1",
+    )
     code, _, err = run_cli(repo, "remove", "P1.T1")
     assert code == REFUSED
     assert "P1.T3" in err and "blocked on something that no longer exists" in err
@@ -129,7 +144,9 @@ def test_the_board_does_not_count_abandoned_tasks_as_outstanding(repo):
     """A completed phase rendered as "3/4 tasks" — which reads as unfinished work that
     no longer exists. Abandoned is settled, like done."""
     _queue(repo)
-    run_cli(repo, "task", "add", "P1.T3", "--phase", "P1", "--globs", "c/*")
+    run_cli(
+        repo, "task", "add", "P1.T3", "--title", "P1.T3 fixture", "--phase", "P1", "--globs", "c/*"
+    )
     run_cli(repo, "abandon", "P1.T3", "--reason", "dropped")
     board = run_cli(repo, "board")[1]
     assert "0/2 tasks" in board, board[:400]

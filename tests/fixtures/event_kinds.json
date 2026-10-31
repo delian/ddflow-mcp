@@ -45,6 +45,7 @@
     "by": ["str"],
     "digest": ["str"],
     "effect": ["str"],
+    "grade": ["str"],
     "id": ["str"],
     "verb": ["str"]
    },
@@ -121,6 +122,7 @@
     "score": ["float"],
     "severity": ["str"],
     "summary": ["str"],
+    "tags": ["list"],
     "title": ["str"]
    },
    "v": 1
@@ -142,6 +144,14 @@
   },
   "bug.reported_upstream": {
    "fields": {},
+   "v": 1
+  },
+  "bug.tagged": {
+   "fields": {
+    "add": ["list"],
+    "remove": ["list"],
+    "tags": ["list"]
+   },
    "v": 1
   },
   "cadence.ran": {
@@ -454,6 +464,16 @@
    },
    "v": 1
   },
+  "lane.released_for_gate": {
+   "fields": {
+    "author": ["str"],
+    "gates": ["list"],
+    "holder": ["str"],
+    "judgement": ["list"],
+    "tree": ["str"]
+   },
+   "v": 1
+  },
   "lease.acquired": {
    "fields": {
     "agent": ["str"],
@@ -561,6 +581,13 @@
     "source": ["str"],
     "tags": ["list"],
     "text": ["str"]
+   },
+   "v": 1
+  },
+  "memory.redacted": {
+   "fields": {
+    "event": ["str"],
+    "reason": ["str"]
    },
    "v": 1
   },

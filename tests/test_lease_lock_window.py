@@ -31,8 +31,8 @@ from ddflow.services import leases as L
 
 def _queue(repo: Path) -> None:
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
 
 
 # -- the race the optimisation could reintroduce -------------------------------------------

@@ -38,7 +38,7 @@ def proj(repo: Path) -> Path:
     )
     (d / "off.toml").write_text('event = "gate.failed"\naction = { job = "fix" }\n')
     (d / "bad.toml").write_text("event = [\n")
-    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")[0] == 0
     gate = ("gate", "record", "T1", "unit_tests", "--outcome", "failed", "--reason", "red")
     assert run_cli(repo, *gate)[0] == 0
     return repo

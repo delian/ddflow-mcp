@@ -35,8 +35,8 @@ def _a_person(monkeypatch):
 @pytest.fixture
 def proj(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "t.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "u.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "u.py")
     for item in ("T1", "T2"):
         code, _o, err = run_cli(
             repo, "gate", "record", item, "critic", "--outcome", "failed", "--reason", "findings"
@@ -152,7 +152,7 @@ def test_skipping_a_gate_that_is_not_a_failed_review_says_it_was_not_gated(proj)
     """B97106be46a: a skip that is NOT the operator's failed-review override proceeds, and the
     output says so -- 'skip (not gated)' -- instead of printing nothing about the approval
     dimension. The gate has no runs at all, so there is no request id either way."""
-    code, _o, err = run_cli(proj, "task", "add", "T3", "--globs", "v.py")
+    code, _o, err = run_cli(proj, "task", "add", "T3", "--title", "T3 fixture", "--globs", "v.py")
     assert code == 0, err
     code, out, err = run_cli(
         proj, "gate", "skip", "T3", "rubber_duck", "--reason", "docs only", agent="bot"
@@ -170,7 +170,7 @@ def test_the_not_gated_note_does_not_need_a_reviewer_gate_or_an_agent_marker(pro
     first guard printed the note only for a reviewer gate with an agent marker -- a person's
     skip, and a skip of a gate with no reviewer at all, were silent again. Every non-refused,
     non-stamped skip must say which case it is, whoever is skipping whichever gate."""
-    code, _o, err = run_cli(proj, "task", "add", "T4", "--globs", "w.py")
+    code, _o, err = run_cli(proj, "task", "add", "T4", "--title", "T4 fixture", "--globs", "w.py")
     assert code == 0, err
     # research carries no reviewer: the note cannot require one.
     code, out, err = run_cli(proj, "gate", "skip", "T4", "research", "--reason", "read")
@@ -189,7 +189,7 @@ def test_a_hand_recorded_skipped_outcome_is_the_not_gated_case_too(proj):
     `record()` with ``skip=False``, but the api treats the call as a skip (``hard_skip``)
     and writes ``result`` as 'skipped' -- the note must key off that, or this path is
     the same silent skip the bug reported."""
-    code, _o, err = run_cli(proj, "task", "add", "T5", "--globs", "x.py")
+    code, _o, err = run_cli(proj, "task", "add", "T5", "--title", "T5 fixture", "--globs", "x.py")
     assert code == 0, err
     code, out, err = run_cli(
         proj, "gate", "record", "T5", "rubber_duck", "--outcome", "skipped", "--reason", "docs"

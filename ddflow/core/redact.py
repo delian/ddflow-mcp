@@ -48,6 +48,10 @@ _V4 = 4
 
 _MARKER = MARKER  # the grammar lives in `core.digest`, where digests read it too
 
+#: The marker a SUPERSEDED record's text is replaced with when a later write redacts it
+#: (D-event-log-redaction-forward): the superseded text must not survive the committed log.
+SUPERSEDED_MARKER = "[REDACTED:superseded]"
+
 #: Same detectors as tests/test_repo_is_generic.py.
 _IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?!\d|\.\d)")
 _IPV6 = re.compile(r"(?<![\w:])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
@@ -434,6 +438,7 @@ def redact_argv(
 #: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "memory.redacted": ("reason",),
     "approval.granted": ("note",),
     "ask.answered": ("answer",),
     "ask.requested": ("text",),
@@ -522,6 +527,14 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("lane.released_for_gate", "holder"): "an agent id compared with the lease's holder",
+    ("lane.released_for_gate", "author"): "a family or model id compared at completion",
+    ("lane.released_for_gate", "judgement"): "gate ids",
+    ("lane.released_for_gate", "gates"): "gate ids",
+    (
+        "memory.redacted",
+        "event",
+    ): "the id of the superseded memory.recorded event that was redacted",
     ("lease.waiting", "holder"): "an agent id compared with a lease's holder",
     ("lease.waiting", "lease_event"): "an event id compared with the waiter's lease",
     ("lease.waiting", "on"): "item ids, holders and glob pairs of the leases waited for",
@@ -538,6 +551,7 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("ask.requested", "use_ttl_s"): "a number",
     ("ask.requested", "canon"): "the canonical command record, compared by its digest",
     ("ask.consumed", "by"): "an agent id, the audit trail's who",
+    ("ask.consumed", "grade"): "an approval grade word such as L2-typed",
     ("ask.consumed", "verb"): "a gated-command verb word",
     ("ask.consumed", "effect"): "an event id compared with the effect it stamped",
     ("ask.answered", "outcome"): "the word or choice an answer is compared with",
@@ -564,6 +578,8 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("bug.found", "key"): "a dedupe key",
     ("bug.found", "repro"): "the link to a stored bundle: its blob reference, size and mode",
     ("bug.found", "scope"): "a scope word",
+    ("bug.tagged", "add"): "the tags added: label words",
+    ("bug.tagged", "remove"): "the tags removed: label words",
     ("bug.found", "severity"): "a severity word",
     ("ci.result", "status"): "a status word",
     ("ddflow.seen", "version"): "a version",

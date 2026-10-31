@@ -42,6 +42,7 @@ from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
 from ..services import review_exclude as REX
+from ..services import review_keys
 from ..services import review_manifest as RM
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
@@ -50,6 +51,16 @@ from ..services.gates import evidence as GE
 from ..services.gates import measured as GR
 from ..services.gates import reviewed_paths as RP
 from ..services.gates import running as RUN
+
+# Round counting lives in services.gates.rounds, ONE fold for every view of the budget:
+# `gate status`, `review triage` and `review show` all must report the same number
+# (DX-review-round-count: the first read the current record's evidence and the second
+# the history, so a duplicate run left them apart). These names keep the api callers
+# untouched.
+from ..services.gates.rounds import delta_rounds as _delta_rounds
+from ..services.gates.rounds import full_rounds as _full_rounds
+from ..services.gates.rounds import kept_copy as _kept_copy
+from ..services.gates.rounds import rounds_used as _rounds_used
 from ..services.guidance import inject as GI
 from ..services.review_noise import registered_submodules, without_stray_gitlinks
 from ..views import human
@@ -393,10 +404,11 @@ def triage(
     if it is None:
         return bad(f"no such item {item!r}")
     if verdict not in ("refuted", "confirmed"):
-        return bad(
-            "say which: --refuted (the probe shows the finding false) or --confirmed"
-            + _finding_listing(it, gate)
-        )
+        # The LISTING leads, the refusal follows: a read of the recorded round prints the
+        # findings first, never hidden behind the error (bug Bdd43b55a2a).
+        listing = _finding_listing(it, gate)
+        remedy = "say which: --refuted (the probe shows the finding false) or --confirmed"
+        return bad(f"{listing}\n{remedy}" if listing else remedy)
     if not probe.strip():
         return bad(
             "--probe is required: for --refuted the run that shows the finding false, for "
@@ -488,7 +500,12 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
         if moved:  # a test the round did not review is not new work (triage_ignore_globs)
             seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
-            moved = [p for p in moved if not RP.ignorable(p, seen, ignore)]
+            gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
+            moved = [
+                p
+                for p in moved
+                if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)
+            ]
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
@@ -551,7 +568,7 @@ def _name_paths(paths: list[str], cap: int = 5) -> str:
 def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
     """The evidence of a pass recorded from settled triage (D-unify 5): passed ON
     REFUTATION, flagged, when a finding was refuted; `findings_fixed` when every one was
-    confirmed -- never in `gate list --refuted` (B1396d7bd55). `_settled_pass` keeps
+    confirmed -- never in `gate list --refuted` (B1396d7bd55). `rounds.settled_pass` keeps
     either off the round count."""
     rounds = {"rounds": used, "max_rounds": cap}
     refuted = counts["refuted"]
@@ -935,7 +952,7 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     )
 
 
-def _rerun_scope(it, gate: str, revs: list, diff: str, value):
+def _rerun_scope(it, gate: str, revs: list, diff: str, value, chunk_max_tokens: int = 0):
     """(the reviewer to re-run, the evidence to merge into, the chunks), or why not.
 
     A chunk number means something only in the cut that printed it: the same diff, the
@@ -969,9 +986,9 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
             f"reviewer {prior.get('reviewer')!r}, which recorded {it.id}.{gate}, is not "
             f"configured for {gate!r} now: run the full review"
         )
-    if mine[0].max_chunk_chars != prior.get("max_chunk_chars"):
+    if RV.effective_chunk_budget(mine[0], chunk_max_tokens) != prior.get("max_chunk_chars"):
         return (
-            f"[[reviewer]].max_chunk_chars is {mine[0].max_chunk_chars} now, "
+            f"max_chunk_chars is {RV.effective_chunk_budget(mine[0], chunk_max_tokens)} now, "
             f"{prior.get('max_chunk_chars')} when {it.id}.{gate} was recorded: the chunks "
             f"differ, run the full review"
         )
@@ -995,6 +1012,7 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
             "enabled": r.enabled,
             "base_url": r.base_url,
             "model": r.model,
+            "key": review_keys.status(r.api_key_env, r.api_key_file),
         }
         for r in revs
     ]
@@ -1003,7 +1021,11 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     # rather than about a missing `family = "..."` line.
     unclassified = [r["name"] for r in rows if not r["family"] and r["enabled"]]
 
-    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified}
+    # Names only: which enabled reviewer has neither its variable nor a readable key file.
+    no_key = [
+        r["name"] for r in rows if r["enabled"] and r["key"].startswith(("missing", "UNAVAILABLE"))
+    ]
+    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified, "no_key": no_key}
     if not rows:
         empty = "No reviewers configured. Run `ddflow reviewers detect --write`."
         return O.nothing("reviewers.list", empty, text=empty, **data)
@@ -1280,73 +1302,6 @@ def _review_runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
-def _full_rounds(it, gate: str) -> int:
-    """Full review rounds already recorded for ``it``'s ``gate``.
-
-    Counted from the gate's HISTORY, not its current record: a later delta, a manual
-    `gate skip`/`record` or a re-claim replaces that record's evidence, and the budget
-    must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
-    count: a refused round, an errored one, an interrupted one that recorded nothing
-    and a `--chunk` re-run are not. A run whose record names a verdict it did not
-    reach (`status` UNAVAILABLE/ERROR) charged a round it never delivered; a dead
-    run's record says `unavailable`, so a full-shaped run recorded unavailable
-    charges nothing (Bfdcb5c177c). One whose record carries NO `status` at all and
-    some outcome is a declared round (a full record of the era before `status`
-    evidence carried into a re-claim or hand record): it still counts, or a
-    re-record would silently hand the budget back. The same era's refused and
-    errored full records have no verdict either and this contract excludes them
-    there too (rubber_duck finding #1): outcomes without a verdict charge nothing.
-    """
-    return sum(
-        1
-        for r in _review_runs(it, gate)
-        if r.evidence.get("review_kind") == "full"
-        and (
-            r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-            or (
-                r.evidence.get("status") is None
-                and r.outcome not in (None, "unavailable", "error", "refused")
-            )
-        )
-        and not _kept_copy(r)
-        and not _settled_pass(r)
-        and not r.evidence.get("fix_round")
-        and not r.evidence.get("retry_of_partial")
-    )
-
-
-def _delta_rounds(it, gate: str) -> int:
-    """Delta rechecks already recorded for ``it``'s ``gate`` (counted from its history,
-    like `_full_rounds`): only ones that reached a reviewer."""
-    return sum(
-        1
-        for r in _review_runs(it, gate)
-        if r.evidence.get("review_kind") == "delta"
-        and r.evidence.get("status") in ("REVIEWED", "PARTIAL")
-        and not _kept_copy(r)
-        and not _settled_pass(r)
-        and not r.evidence.get("fix_round")
-    )
-
-
-def _kept_copy(run) -> bool:
-    """A record `_keep_reviewed_round` re-emitted over an outage: a copy of an earlier round,
-    no round of its own (B435bbddb18). Copies written before `round_kept` existed are told
-    by `unavailable_deltas`, which only that path writes."""
-    return bool(run.evidence.get("round_kept") or run.evidence.get("unavailable_deltas"))
-
-
-def _settled_pass(run) -> bool:
-    """A pass `_settle_after_cap` recorded: it carries the settled review's evidence,
-    `review_kind` included, but is no review round (roborev on 1e5dab6e)."""
-    return bool(run.evidence.get("passed_on_refutation"))
-
-
-def _rounds_used(it, gate: str) -> int:
-    """Every review round of ``gate`` the budget counts: full and delta alike."""
-    return _full_rounds(it, gate) + _delta_rounds(it, gate)
-
-
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
     return (
         f"{item}.{gate} has had {done} review rounds, full and delta ([review].max_rounds = "
@@ -1552,7 +1507,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         say(_rounds_report(cfg, it, a, why_ok))
     rerun = None
     if a["chunks"] and diff.strip():
-        rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
+        rerun = _rerun_scope(it, gate, revs, diff, a["chunks"], cfg.review.chunk_max_tokens)
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
 
@@ -1700,6 +1655,12 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
 
 #: How much of one previous finding a re-review quotes: enough to recognise it, not the
 #: whole essay a reviewer may have written.
+_BACKGROUND_HINT = (
+    "a review can take minutes: a harness that cuts a foreground command (often at 120 s) "
+    "kills it -- run `ddflow review --detach`, which reviews in its own session and streams "
+    "to a log it names, so a cut reaches only the launcher and the review outlives it "
+    "(a plain run in the background dies with the cut)."
+)
 _PREVIOUS_DETAIL = 500
 _PREVIOUS_PROBE = 300
 _DELTA_CAVEAT = (
@@ -1748,7 +1709,10 @@ def _with_previous_findings(
         "An earlier review of this item reported the findings below. For each: if the "
         "diff now answers it (a `confirmed` one should be fixed; a `refuted` one should stay "
         "refuted by its probe), do not report it again; report it only if it still holds, "
-        "saying why the fix or the probe does not answer it. Then look for NEW issues in "
+        "saying why the fix or the probe does not answer it. Do not restate a finding from "
+        "memory: check each previous finding against the current code, and do not carry it over "
+        "when the code it cites is gone or the change answers it; if the same defect "
+        "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
         "the whole diff -- these are not the only places to look.",
         "",
     ]
@@ -2647,6 +2611,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
     _log_started(log, it, item, gate)
     results = []
+    say(_BACKGROUND_HINT)
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")

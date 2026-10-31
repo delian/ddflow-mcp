@@ -56,6 +56,13 @@ def _wait_timeout(a: dict[str, Any], repo: Any = None) -> float:
     default; never above the cap. Which cap that is depends on whether the call that
     contains this wait can send progress while it runs: see MCP_WAIT_MAX_S."""
     t = a.get("timeout")
+    if a.get("max_s") is not None:
+        # The caller's own hard bound is the wait's length (B-wait-lease-max-s-ignored);
+        # `wait` takes the smaller of the two, so no default or cap may shorten it here.
+        try:
+            return float(a["max_s"] if t is None else t)
+        except (TypeError, ValueError, OverflowError):
+            pass
     t = MCP_WAIT_DEFAULT_S if t is None else t
     cap = MCP_WAIT_MAX_S if _progress_will_flow(a, repo) else MCP_WAIT_SILENT_MAX_S
     try:
@@ -162,6 +169,24 @@ def _reopening(a: dict[str, Any]) -> bool:
     if not isinstance(mode, bool):
         raise ValueError("reopen must be true or false")
     return mode
+
+
+def _tagging(a: dict[str, Any]) -> bool:
+    """`ddflow_bug_fixed`'s tag mode (strict, as `_reopening`: the modes do opposite things)."""
+    mode = a.get("tag", False)
+    if not isinstance(mode, bool):
+        raise ValueError("tag must be true or false")
+    return mode
+
+
+def _bug_tag(repo, a: dict[str, Any], *, agent: str):
+    """`bug tag`, served by `ddflow_bug_fixed` with `tag`."""
+    # Reached through the shared `_api()` interface (P-unify), not a direct submodule
+    # import: `bug_tag` is re-exported by `ddflow.api`, and a fresh deferred import here
+    # is exactly the ad-hoc way this module's deferred-import ratchet retires.
+    return _api().bug_tag(
+        repo, a["id"], add=a.get("add", "") or "", remove=a.get("remove", "") or "", agent=agent
+    )
 
 
 def _bug_reopen(repo, a: dict[str, Any], *, agent: str):

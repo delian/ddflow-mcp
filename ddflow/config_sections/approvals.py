@@ -57,3 +57,11 @@ class ApprovalsConfig:
         3,
         doc="How many recorded `unavailable` runs of a review gate the rule `skip_after_unavailable` needs before it lets an agent skip that gate's failure (default 3).",
     )
+    accept_chat_for_t3: bool = knob(
+        False,
+        doc="Let a person approve a tier-3 act (such as trusting a command reviewer) by TYPING `approve ID DIGEST` in the agent's chat (default false; D-RA-T3-chat). Honest rating: no stronger than L2 -- the transcript is writable by the agent's own user, so this suits a solo operator who accepts that; every use is recorded as an approval of grade `L2-typed` and `ddflow approvals log` and `doctor` warn on each. An AskUserQuestion answer never satisfies a tier-3 act. Read ONLY from the machine-local layer (`.ddflow/local/config.toml`): the committed file and the environment cannot turn it on, and no agent surface may write it or any chat answer enable it. It cannot be switched on remotely the first time; the operator sets it on the host.",
+    )
+    forbid_chat_for_t3: bool = knob(
+        False,
+        doc="Forbid tier-3 acts over typed chat whatever `accept_chat_for_t3` says (default false). Tighten-only: true in any layer (a project or company file, the machine file, the environment) wins over the opt-in; nothing a chat answer says can undo it.",
+    )

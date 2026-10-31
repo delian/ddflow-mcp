@@ -71,7 +71,7 @@ def test_a_review_outcome_carries_ddflows_measurement_of_the_tree(repo, tmp_path
 
 def _standing_in_t2(repo: Path) -> Path:
     """T2 claimed with its worktree; the path a caller in it would stand in."""
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     code, out, err = run_cli(repo, "--json", "claim", "T2")
     assert code == 0, err
     return Path(json.loads(out)["worktree"])
@@ -83,7 +83,7 @@ def test_a_gate_recorded_from_another_items_tree_is_not_measured(repo):
     import ddflow.api.gates as AG
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     t2 = _standing_in_t2(repo)
 
     out = AG.record(
@@ -147,7 +147,7 @@ def test_a_review_of_an_id_no_item_has_is_refused_not_recorded(repo, tmp_path):
 
 def test_a_local_merge_records_its_gate_with_the_measured_tree(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, err
     tree = Path(json.loads(out)["worktree"])

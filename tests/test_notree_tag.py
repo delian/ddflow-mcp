@@ -21,9 +21,20 @@ def _setup(repo):
     )
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "cfg"], check=True)
-    run_cli(repo, "task", "add", "BUSY", "--globs", "busy.py")
-    run_cli(repo, "task", "add", "CODE", "--globs", "code.py")
-    run_cli(repo, "task", "add", "REVIEW", "--globs", "review.py", "--tags", "no-worktree")
+    run_cli(repo, "task", "add", "BUSY", "--title", "BUSY fixture", "--globs", "busy.py")
+    run_cli(repo, "task", "add", "CODE", "--title", "CODE fixture", "--globs", "code.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "REVIEW",
+        "--title",
+        "REVIEW fixture",
+        "--globs",
+        "review.py",
+        "--tags",
+        "no-worktree",
+    )
     out = A.claim(repo, "BUSY", agent="holder")
     assert out.ok, out.reason
 

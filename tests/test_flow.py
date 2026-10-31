@@ -203,7 +203,7 @@ def test_gitflow_hotfix_lands_on_main_AND_develop_without_a_checkout(gitflow):
     """The primary is on develop and stays there. main is merged in a throwaway tree;
     this used to be refused outright ("check out main yourself")."""
     repo = gitflow
-    run_cli(repo, "task", "add", "H1", "--tags", "hotfix")
+    run_cli(repo, "task", "add", "H1", "--title", "H1 fixture", "--tags", "hotfix")
     code, out, err = run_cli(repo, "--json", "claim", "H1")
     assert code == 0, err
     claimed = json.loads(out)
@@ -312,7 +312,7 @@ def pr_repo(repo, tmp_path, monkeypatch):
 
 
 def _work(repo: Path, item: str, name: str, text: str, *, needs: str = "") -> Path:
-    args = ["task", "add", item, "--globs", name]
+    args = ["task", "add", item, "--title", "task item", "--globs", name]
     if needs:
         args += ["--needs", needs]
     if item not in _state(repo).items:
@@ -445,7 +445,7 @@ def test_an_incomplete_pipeline_opens_no_request(pr_repo):
     """A request spends a person's time. One for work ddflow would refuse to complete
     even once merged spends it on nothing -- and the refusal would come after the merge."""
     repo, forge, _ = pr_repo
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     code, out, _ = run_cli(repo, "--json", "claim", "T1")
     _commit(Path(json.loads(out)["worktree"]), "a.py", "a\n", "feat: a")
     code, _out, err = run_cli(repo, "merge", "T1", "--model", AUTHOR)
@@ -472,7 +472,7 @@ def test_a_dependent_stacks_on_a_request_in_review_and_is_retargeted(pr_repo):
     repo, forge, _ = pr_repo
     _work(repo, "T1", "a.py", "a\n")
     run_cli(repo, "merge", "T1", "--model", AUTHOR)
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py", "--needs", "T1")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py", "--needs", "T1")
     code, out, err = run_cli(repo, "--json", "claim", "T2")
     assert code == 0, err
     assert json.loads(out)["base"] == "ddflow/T1", "T2 must fork from T1's branch"
@@ -575,7 +575,7 @@ def test_a_stacked_request_merged_into_its_dependency_is_not_done_until_it_lands
     repo, forge, _remote = pr_repo
     _work(repo, "T1", "a.py", "a\n")
     run_cli(repo, "merge", "T1", "--model", AUTHOR)
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py", "--needs", "T1")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py", "--needs", "T1")
     _work(repo, "T2", "b.py", "b\n")
     run_cli(repo, "merge", "T2", "--model", AUTHOR)
     forge.merge_as_human(2)  # into ddflow/T1, by a person
@@ -591,7 +591,7 @@ def test_a_stacked_request_merged_into_its_dependency_lands_with_it(pr_repo):
     repo, forge, _ = pr_repo
     _work(repo, "T1", "a.py", "a\n")
     run_cli(repo, "merge", "T1", "--model", AUTHOR)
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py", "--needs", "T1")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py", "--needs", "T1")
     _work(repo, "T2", "b.py", "b\n")
     run_cli(repo, "merge", "T2", "--model", AUTHOR)
     forge.merge_as_human(2)
@@ -673,7 +673,7 @@ def test_abandoning_a_done_item_refuses_instead_of_crashing(repo):
     from conftest import finish
 
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     code, _out, err = finish(repo, "T1")
     assert code == 0, err
     code, _out, err = run_cli(repo, "abandon", "T1", "--reason", "x")

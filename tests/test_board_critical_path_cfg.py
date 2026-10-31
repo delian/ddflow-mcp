@@ -18,7 +18,9 @@ from ddflow.views import markdown as MD
 def test_board_passes_its_config_to_the_critical_path(repo, monkeypatch):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P-a", "--title", "a")
-    run_cli(repo, "task", "add", "A1", "--phase", "P-a", "--globs", "core/a.py")
+    run_cli(
+        repo, "task", "add", "A1", "--title", "A1 fixture", "--phase", "P-a", "--globs", "core/a.py"
+    )
     seen: list = []
     real = MD.critical_path
 
@@ -36,12 +38,33 @@ def test_board_passes_its_config_to_the_critical_path(repo, monkeypatch):
 def _queue(repo) -> None:
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P-gate", "--title", "gate")
-    run_cli(repo, "task", "add", "G1", "--phase", "P-gate", "--globs", "core/g.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "G1",
+        "--title",
+        "G1 fixture",
+        "--phase",
+        "P-gate",
+        "--globs",
+        "core/g.py",
+    )
     run_cli(repo, "phase", "add", "P-next", "--title", "next", "--needs", "P-gate")
     for i in (1, 2, 3):
         needs = ("--needs", f"D{i - 1}") if i > 1 else ()
         run_cli(
-            repo, "task", "add", f"D{i}", "--phase", "P-next", "--globs", f"docs/d{i}.md", *needs
+            repo,
+            "task",
+            "add",
+            f"D{i}",
+            "--title",
+            "task item",
+            "--phase",
+            "P-next",
+            "--globs",
+            f"docs/d{i}.md",
+            *needs,
         )
 
 

@@ -103,6 +103,7 @@ from .knowledge import (
     bug_fixed,
     bug_found,
     bug_invalid,
+    bug_tag,
     dupes,
     history,
     lesson_add,
@@ -116,6 +117,7 @@ from .knowledge import (
     research_add,
     session_adopt_orphans,
     session_end,
+    session_message,
     session_note,
     session_prompt,
     session_start,
@@ -141,6 +143,7 @@ from .lifecycle import wait as wait_item
 from .mergequeue_add import queue_add, queue_remove, queue_status
 from .mergequeue_run import queue_run
 from .metrics import run_metrics
+from .model_cmds import model_show
 from .onboard import onboard as onboard_run
 from .operations import (
     cadence,
@@ -211,6 +214,8 @@ from .setup import setup as adopt_project
 from .verify import refuse_sweep_args, verify_sweep, verify_tool
 from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
+from .watch import watch as watch_target
+from .watch import watch_summary
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -245,6 +250,7 @@ __all__ = [
     "bug_fixed",
     "bug_found",
     "bug_invalid",
+    "bug_tag",
     "cadence",
     "ci_tool",
     "claim",
@@ -307,6 +313,7 @@ __all__ = [
     "memory_forget",
     "memory_list",
     "merge_item",
+    "model_show",
     "next_item",
     "onboard_run",
     "phase_add",
@@ -361,6 +368,7 @@ __all__ = [
     "run_review",
     "session_adopt_orphans",
     "session_end",
+    "session_message",
     "session_note",
     "session_prompt",
     "session_start",
@@ -386,6 +394,8 @@ __all__ = [
     "view_list",
     "view_read",
     "wait_item",
+    "watch_summary",
+    "watch_target",
     "workflow_drop",
     "workflow_gate",
     "workflow_overview",

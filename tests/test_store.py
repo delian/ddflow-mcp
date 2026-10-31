@@ -126,9 +126,9 @@ def test_rebuild_records_its_shard_verification_marks(log, cfg, store):
 
 
 def test_incremental_rebuild_matches_a_fresh_rebuild(log, cfg, store, monkeypatch):
-    """Reconciling the appended deltas in place leaves the SAME rows and the SAME
-    meta as a rebuild from nothing -- the criterion that must hold before a
-    full rebuild may be skipped. The knob is pinned ON: an exported
+    """Reconciling the appended deltas into a swapped-in copy leaves the SAME rows
+    and the SAME meta as a rebuild from nothing -- the criterion that must hold
+    before a full rebuild may be skipped. The knob is pinned ON: an exported
     `DDFLOW_STORE_INCREMENTAL=0` must not silently demote the pin to two full
     rebuilds, which would pass while the incremental mis-reconciles."""
     monkeypatch.setenv("DDFLOW_STORE_INCREMENTAL", "1")
@@ -145,10 +145,10 @@ def test_incremental_rebuild_matches_a_fresh_rebuild(log, cfg, store, monkeypatc
 
 def test_incremental_reconcile_can_be_disabled(log, cfg, store, monkeypatch):
     """The knob, in BOTH directions. ON (its default) reconciles the appended
-    deltas in place; OFF a rebuild is the old full path, and the result is the
-    same rows anyway. A store that ignored the knob in either direction cannot
-    pass: not one that still reconciles while disabled, and not one that never
-    reconciles while enabled."""
+    deltas into a swapped-in copy of the index; OFF a rebuild is the old full
+    path, and the result is the same rows anyway. A store that ignored the knob
+    in either direction cannot pass: not one that still reconciles while
+    disabled, and not one that never reconciles while enabled."""
     original_reconcile = Store._reconcile
     calls = []
 

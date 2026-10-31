@@ -29,7 +29,7 @@ def _setup(repo: Path, caps: str = '["gpu=8"]') -> None:
         ("EVAL", "gpu:4", "b.py"),
         ("DOC", "", "c.md"),
     ):
-        run_cli(repo, "task", "add", tid, "--globs", glob)
+        run_cli(repo, "task", "add", tid, "--title", "task item", "--globs", glob)
         if res:
             run_cli(repo, "update", tid, "--resources", res)
 
@@ -137,12 +137,21 @@ def test_a_capacity_style_spec_is_refused_not_stored_as_a_name(tmp_path):
     assert parse_resources(["gpu=1"]) == {"gpu=1": 1}
     run_cli(tmp_path, "init")
     code, out, err = run_cli(
-        tmp_path, "task", "add", "T1", "--globs", "a.py", "--resources", "gpu=1"
+        tmp_path,
+        "task",
+        "add",
+        "T1",
+        "--title",
+        "T1 fixture",
+        "--globs",
+        "a.py",
+        "--resources",
+        "gpu=1",
     )
     assert code != 0 and "gpu:1" in out + err, (code, out, err)
-    run_cli(tmp_path, "task", "add", "T2", "--globs", "b.py")
+    run_cli(tmp_path, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
     code, out, err = run_cli(tmp_path, "update", "T2", "--resources", "gpu=1")
     assert code != 0 and "gpu:1" in out + err, (code, out, err)
-    run_cli(tmp_path, "task", "add", "T3", "--globs", "c.py")
+    run_cli(tmp_path, "task", "add", "T3", "--title", "T3 fixture", "--globs", "c.py")
     code, out, err = run_cli(tmp_path, "claim", "T3", "--no-worktree", "--resources", "gpu=1")
     assert code != 0 and "gpu:1" in out + err, (code, out, err)

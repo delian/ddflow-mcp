@@ -35,7 +35,7 @@ def _lapsed_claim(repo: Path, monkeypatch) -> None:
     run_cli(repo, "init")
     assert run_cli(repo, "config", "--set", "schedule.resources", '["gpu=4"]')[0] == O.OK
     assert run_cli(repo, "config", "--set", "lease.grace_s", "0")[0] == O.OK
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     monkeypatch.setenv("DDFLOW_LEASE_TTL_S", str(TTL))
     got = A.claim(repo, "T1", no_worktree=True, resources="gpu:1", agent=HOLDER)
     monkeypatch.delenv("DDFLOW_LEASE_TTL_S")

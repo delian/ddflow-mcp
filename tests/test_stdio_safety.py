@@ -84,8 +84,19 @@ def test_a_gate_command_that_reads_stdin_does_not_end_the_mcp_session(repo):
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "cat"\ncwd = "repo"\n'
     )
-    run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "src/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "src/a.py",
+    )
 
     proc = _server(repo)
     try:

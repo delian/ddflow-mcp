@@ -36,7 +36,7 @@ def gitflow_squash(repo, monkeypatch):
 
 
 def _land(repo: Path, item: str, tags: str, fname: str) -> None:
-    run_cli(repo, "task", "add", item, "--tags", tags)
+    run_cli(repo, "task", "add", item, "--title", "task item", "--tags", tags)
     code, out, err = run_cli(repo, "--json", "claim", item)
     assert code == 0, out + err
     tree = Path(json.loads(out)["worktree"])

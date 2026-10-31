@@ -8,7 +8,12 @@ from helpers import items_of as _items
 
 def _task(repo, body="original"):
     run_cli(repo, "init")
-    assert run_cli(repo, "task", "add", "T", "--globs", "t.py", "--body", body)[0] == 0
+    assert (
+        run_cli(
+            repo, "task", "add", "T", "--title", "T fixture", "--globs", "t.py", "--body", body
+        )[0]
+        == 0
+    )
 
 
 def test_append_keeps_the_original(repo):

@@ -7,35 +7,27 @@ against the help of the deepest verb it names. The walk descends while ``<chain>
 not a verb ends the chain and the rest are positionals. Each chain is run once. A tool that
 cannot run (missing, timing out) is a note and its mentions are unchecked, never passed.
 
-ddflow's own help is NOT walked by spawning ``ddflow <verb> --help``: the declared command
-registry (``ddflow.surfaces.cli.build_parser``) already knows every verb and flag, and each
-spawn pays the import (~1.5 s), which turned `ddflow docs check` on this repository into a
-~4 minute wait (DX-docs-check-speed). The in-process walk replays the same argparse tree's
-``parse_args … --help`` per chain instead -- the exact text and exit the spawned process
-would produce -- so only a tool that is NOT ddflow is spawned, bounded by ``timeout_s`` (the
-per-call timeout knob), and the walk of ddflow's own tree is cached per ddflow version.
+ddflow's own help comes from `in_process`: the argparse registry this process already
+built (Bc621160a82), so the check never spawns `ddflow <verb> --help` once per verb —
+only a non-ddflow tool keeps spawning.
 """
 
 from __future__ import annotations
 
-import argparse
 import contextlib
+import importlib
 import io
 import re
 import sys
 import threading
-from collections.abc import Callable, Iterable, Iterator
+from argparse import ArgumentParser
+from collections.abc import Callable
 from pathlib import Path
 
 from ..infra import proc as P
 
 #: Runs an argv and returns how it ended; injected so the check spawns nothing by default.
 Runner = Callable[[list[str]], P.Captured]
-
-#: The commands whose ``<verb> --help`` is walked from THIS process's argparse registry
-#: instead of a spawn. ddflow's registry is its help: spawning it again pays an import per
-#: verb; any other tool (ddflow-mcp, a project's own CLI) has no registry here and spawns.
-IN_PROCESS_COMMANDS: tuple[str, ...] = ("ddflow",)
 
 FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
@@ -45,7 +37,7 @@ _GAP = re.compile(r"\s{2,}")
 #: the whole surface, and one parser answers every chain of one walk. A one-element cell
 #: instead of a bare global: PLW0603 forbids a `global` statement to update it, and the
 #: cell is reassignment-free where a module global would need one.
-_parser: list[argparse.ArgumentParser | None] = [None]
+_parser: list[ArgumentParser | None] = [None]
 
 #: ``redirect_stdout``/``redirect_stderr`` are process-global, so overlapping ``in_process``
 #: runs could capture each other's output: every run takes the lock, and that overlap
@@ -66,17 +58,22 @@ def in_process(verbs: list[str]) -> P.Captured:
         try:
             parser = _parser[0]
             if parser is None:
-                from ddflow.surfaces.cli import build_parser  # deferred: the CLI pulls the whole tree
-
-                parser = _parser[0] = build_parser()
+                # Dynamic, not `from ..surfaces.cli import build_parser`: that STATIC import
+                # breaks the layers contract (services reaching up into surfaces) on this
+                # module's read path, exactly the cycle recovery.py breaks the same way
+                # (`importlib.import_module("ddflow.api.gates")`).
+                parser = _parser[0] = importlib.import_module("ddflow.surfaces.cli").build_parser()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 parser.parse_args([*verbs, "--help"])
         except SystemExit as exc:  # --help exits 0, a bad verb chain exits 2, as the spawn does
+            #: a non-int code (argparse never raises one, so this branch is a guard, not
+            #: a path): folded into neither a success-0 nor an inconsistent "ran with no
+            #: returncode"; the walk reads it as a tool that could not run (jobs 3705-3707).
             if isinstance(exc.code, int):
                 return P.Captured(exc.code, out.getvalue(), err.getvalue())
             return P.Captured(error=exc)
         except Exception as exc:  # the import or the parse raised: "could not run", exactly
-            return P.Captured(error=exc)  # as the spawn path reads its own failures
+            return P.Captured(error=exc)  # as the spawn path reads its own failures (job 3708)
         return P.Captured(0, out.getvalue(), err.getvalue())
 
 
@@ -87,50 +84,30 @@ def _ddflow_help_verbs(argv: list[str]) -> list[str] | None:
     (`ddflow`) or run as this very interpreter's module ``sys.executable -m ddflow``; any
     other spelling -- a different interpreter or a path to some binary -- names a
     specific executable and is run as before."""
-    if len(argv) < 2 or argv[-1] != "--help":
+    if not argv[1:] or argv[-1] != "--help":
         return None
     if argv[0] == "ddflow":  # bare name: THIS process is assumed to be that ddflow (deliberate)
         return argv[1:-1]
     if argv[1:3] == ["-m", "ddflow"] and argv[0] == sys.executable:
-        #: the walk itself never spells this (its argv start at a bare verb name)
+        #: the walk itself never spells this (its argv start at a bare verb name): the
+        #: branch is for a programmatic runner that spells it; pinned by the test below.
         return argv[3:-1]
     return None
 
 
-def command_runner(
-    root, timeout_s: int, *, in_process_commands: Iterable[str] | None = None
-) -> Runner:
+def command_runner(root, timeout_s: int) -> Runner:
     """A `Runner` that runs argv in ``root`` with ``timeout_s`` per call, no shell.
 
-    A ``<command> <chain...> --help`` whose command is named in ``in_process_commands`` is
-    answered from the argparse registry of this process (see the module docstring); every
-    other argv is spawned, bounded by ``timeout_s``. The timeout knob never applies to the
-    in-process walk: it has no I/O to time out.
-    """
-    if in_process_commands is None:
-        known = IN_PROCESS_COMMANDS
-    else:
-        # A single string names one command (a str IS an Iterable[str], but of its chars).
-        known = (in_process_commands,) if isinstance(in_process_commands, str) else tuple(in_process_commands)
-    spawn = lambda argv: P.capture(argv, timeout=timeout_s, cwd=Path(root))  # noqa: E731
+    A `ddflow [<verb>...] --help` naming this process goes to `in_process` instead of a
+    spawn (Bc621160a82): it is this ddflow's own help, and nothing runs, so no
+    ``timeout_s`` applies; any argv naming another tool still runs in ``root``."""
 
     def run(argv: list[str]) -> P.Captured:
-        #: an argv spelling THIS ddflow plays from the registry, never a spawn, even under
-        #: a custom ``known`` -- the '-m' spelling desugars to this same process's parser.
         verbs = _ddflow_help_verbs(argv)
         if verbs is not None:
             return in_process(verbs)
-        #: in-process answers ONLY for the command THIS process's registry declares (its own
-        #: prog): a foreign command named in the knob has no registry here and MUST spawn its
-        #: real tool -- answering it with ddflow's tree would serve another command's help.
-        if known and len(argv) > 1 and argv[0] in known and argv[-1] == "--help" and _HERE.owns(argv[0]):
-            return _HERE.help(argv)
-        return spawn(argv)
+        return P.capture(argv, timeout=timeout_s, cwd=Path(root))
 
-    #: The set this runner actually treats as in-process — stamped on the runner so
-    #: `HelpIndex.walk_all` walks exactly the commands THIS runner answers in-process,
-    #: not a re-derived list (the runner's knob is the one source of the fact).
-    run.in_process_of = set(known)
     return run
 
 
@@ -158,199 +135,6 @@ def flag_of(token: str) -> str | None:
     return m.group(0) if m and not token[m.end() :][:1].isalnum() else None
 
 
-def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser] | None:
-    """The subparser choice table of ``parser`` (None: it has none).
-
-    Argparse allows MORE than one ``_SubParsersAction`` on a parser; the choice table is
-    every action's choices merged, so a second table is never silently dropped from the
-    walk. The walk descends argparse's private ``_actions`` (its ``_SubParsersAction`` and
-    that action's ``choices``) and relies on ``parse_args`` answering ``--help`` with a
-    ``SystemExit`` — stdlib internals on the pinned argparse. A future argparse that
-    renamed them would yield a partial walk, which the speed test's chain budget
-    (`MIN_CHAINS`), not silent behavior, is what catches.
-    """
-    merged: dict[str, argparse.ArgumentParser] = {}
-    for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
-            merged.update(action.choices)
-    return merged or None
-
-
-class _InProcessHelp:
-    """`ddflow <chain...> --help` answered from THIS process's argparse registry.
-
-    ``build_parser()`` IS the help every spawned ``ddflow --help`` prints — the stdout of the
-    spawn is exactly ``parser.format_help()`` — so a chain is walked by descending the parser
-    choices by word: a word that is no subcommand is where a spawn would exit 2 and the chain
-    stops there, exactly like it. The tree build and every chain's replayed help are cached
-    per ddflow version, in this process: a render made for version X is never reused for
-    version Y (per tool version, per DX-docs-check-speed).
-    """
-
-    #: ``(version, root parser, replayed helps)`` of the last build; a module-level memo,
-    #: because every runner of one process asks for the same registry.
-    _built: tuple[str, argparse.ArgumentParser, dict[tuple[str, ...], P.Captured]] | None = None
-
-    def parser(self) -> argparse.ArgumentParser:
-        """The root parser this process declares, built once per ddflow version."""
-        from ddflow import __version__
-        from ddflow.surfaces.cli import build_parser  # deferred: only the walk needs it
-
-        if self._built is None or self._built[0] != __version__:
-            self._built = (__version__, build_parser(), {})
-        return self._built[1]
-
-    def owns(self, cmd: str) -> bool:
-        """Whether THIS process's registry is ``cmd``'s own help (only the parser's own
-        prog is): any other command must spawn its real tool, never receive this tree.
-        A registry that cannot even build owns nothing. The read takes the render lock:
-        the check-and-reassign it reads is a critical section, like ``help``'s render."""
-        try:
-            with _RENDER_LOCK:
-                return cmd == self.parser().prog
-        except (SystemExit, Exception):  # a build that exits or fails has no registry to
-            return False               # own with (MemoryError is an Exception, so it returns
-                                       # False and the runner spawns); a KeyboardInterrupt is
-                                       # NOT theirs to take, and propagates.
-
-    def help(self, argv: list[str]) -> P.Captured:
-        """``Captured`` as the spawned ``argv`` would have been (see the class docstring):
-        ``parse_args`` with ``--help`` run against the registry, its stdout/stderr and its
-        exit replayed — replayed once per chain then cached (per version, per process).
-        `argparse` answers a help request wherever it meets it (`ddflow config set --help`
-        prints the config help, exit 0, though ``set`` is no subcommand), and invalid words
-        error with exit 2 — no flag-counting of our own."""
-        import io
-        import sys
-        from contextlib import redirect_stderr, redirect_stdout
-
-        try:
-            with _RENDER_LOCK:  # build-to-cache is ONE critical section, like any render is:
-                #: the version check, the memo the next steps read, the render and the memo
-                #: write happen while no other replay can rebuild beside them (a rebuild
-                #: between the check and the read would leak a former version's help into
-                #: the new memo -- other replays of one process share this registry, and
-                #: an interleaved second render would replay a chain twice).
-                parser = self.parser()
-                #: the registry answers ONLY for its own prog: a foreign ``argv[0]`` must
-                #: never render (and cache) ddflow's tree as another tool's help -- the
-                #: runner spawns those; a direct call gets "could not run", never wrong text.
-                if not argv or argv[0] != parser.prog:
-                    raise RuntimeError(f"{argv[0] if argv else '<none>'} has no registry in this process")
-                memo = self._built[2]  # the running version's own memo, bound AFTER its check
-                key = tuple(argv[1:])
-                if key in memo:
-                    return memo[key]
-
-                out, err = io.StringIO(), io.StringIO()
-                renderer = threading.get_ident()  # the one thread whose stdio writes ARE the render
-                try:  # argparse ends help and usage errors by raising SystemExit, like a spawn
-                    #: the redirects swap the process-global sys.stdio, which no lock can make
-                    #: thread-local; the swaps below route per thread instead, so the render
-                    #: captures ONLY the rendering thread's writes, and any OTHER thread's
-                    #: print goes to the real stream it meant -- never swallowed into the
-                    #: render's text (a mix would plant phantom flags in the finding set).
-                    with redirect_stdout(_RoutedTo(sys.stdout, out, renderer)), redirect_stderr(
-                        _RoutedTo(sys.stderr, err, renderer)
-                    ):
-                        parser.parse_args(argv[1:])
-                except SystemExit as exc:
-                    #: `sys.exit()` with NO code is exit 0, exactly as the spawn of it is; a
-                    #: `sys.exit("reason")` is the spawn's stderr line + exit 1: replayed so.
-                    if isinstance(exc.code, int):
-                        code = exc.code
-                    elif exc.code is None:
-                        code = 0
-                    else:
-                        #: the spawn of `sys.exit("reason")` prints "reason\n" to stderr
-                        #: and exits 1: replayed verbatim, newline included.
-                        err.write(f"{exc.code}\n")
-                        code = 1
-                else:
-                    code = 0
-                #: the replay keeps BOTH channels verbatim (a spawn does too): callers merge
-                #: with `stdout or stderr`, so nothing printed to stderr is dropped.
-                capped = P.Captured(code, out.getvalue(), err.getvalue())
-                memo[key] = capped  # inside the lock: one replay of the chain per version
-                return capped
-        except SystemExit as exc:  # the build itself exited (argparse-ends-exits too): could not run
-            return P.Captured(error=RuntimeError(f"registry build exited: {exc.code}"))
-        except Exception as exc:  # a registry that cannot build is "could not run"
-            return P.Captured(error=exc)
-
-    def chains(self, cmd: str) -> Iterator[list[str]]:
-        """Every verb chain of ``cmd``'s tree, root first, deepest last; a ``cmd`` this
-        process holds NO registry for (anything but the parser's own prog) is not silently
-        walked as it and noted by ``walk_all`` instead of serving another command's help."""
-        with _RENDER_LOCK:  # a locked read: the build it may trigger is a critical section
-            if cmd != self.parser().prog:
-                raise RuntimeError(f"{cmd} has no registry in this process")
-            tree = self.parser()
-        stack: list[list[str]] = [[cmd]]
-        while stack:
-            chain = stack.pop()
-            yield chain
-            choices = _subcommands(_require_walk(tree, chain))
-            if choices is None:
-                continue
-            for name in sorted(choices):
-                stack.append([*chain, name])
-
-
-#: The in-process walker every runner here shares: one registry per process, whatever
-#: builds the runner (the CLI, the MCP tool, a test).
-_HERE = _InProcessHelp()
-
-
-class _RoutedTo:
-    """A stand-in for ``sys.stdout``/``sys.stderr`` while one render holds them: writes of
-    the thread rendering go to ``sink`` (the render's own capture); ANY other thread's
-    write goes to ``real`` -- the process-wide stream it meant. A foreign print during a
-    render is therefore neither swallowed into the capture (a mix would plant phantom
-    flags in the finding set) nor dropped from its terminal: the redirect cannot be made
-    thread-local, but a capture can be made this-thread-of-it."""
-
-    __slots__ = ("_sink", "_real", "_owner", "isatty", "fileno")
-
-    def __init__(self, real, sink, owner: int) -> None:
-        #: stream introspection still answers as the REAL stream would -- including a
-        #: duck-typed stand-in without `isatty`/`fileno` (an embedder's sys.stdio swap):
-        #: not-a-tty, and fileno unsupported, never an AttributeError that would mark
-        #: every in-process chain could-not-run though a spawn prints.
-        self.isatty = getattr(real, "isatty", lambda: False)
-        self.fileno = getattr(real, "fileno", _no_fileno)
-        self._real, self._sink, self._owner = real, sink, owner
-
-    def write(self, text: str) -> int:
-        (self._sink if threading.get_ident() == self._owner else self._real).write(text)
-        return len(text)
-
-    def flush(self) -> None:
-        self._real.flush()
-
-
-def _no_fileno() -> int:
-    """`fileno` as a stream WITHOUT one answers it (a duck-typed stand-in): raises, like
-    ``io`` streams do, instead of handing out a file number nothing backs."""
-    raise OSError("fileno is not supported here")
-
-
-#: Serializes `parse_args` replays: one render's `_RoutedTo` swaps hold the process-global
-#: stdio while it runs, so two renders never overlap.
-_RENDER_LOCK = threading.Lock()
-
-
-def _require_walk(root: argparse.ArgumentParser, chain: list[str]) -> argparse.ArgumentParser:
-    """The parser ``chain`` names, descended from ``root`` (called with chains from the
-    same walk, so every word IS a choice)."""
-    parser = root
-    for word in chain[1:]:
-        choices = _subcommands(parser)
-        assert choices is not None and word in choices
-        parser = choices[word]
-    return parser
-
-
 class HelpIndex:
     """The flags each verb chain of the configured commands accepts, from their ``--help``."""
 
@@ -361,57 +145,6 @@ class HelpIndex:
         #: Why a command could not be walked, one note each (command or verb chain -> reason).
         self.unavailable: dict[str, str] = {}
         self._broken: set[tuple[str, ...]] = set()  #: chains whose help could not run
-        # The in-process commands are walked whole, now: `ddflow docs check` resolves the
-        # chains a document mentions against a cache the eager walk already filled, paying
-        # one bounded batch per check instead of a render per mention (DX-docs-check-speed).
-        if any(c in self._in_process() for c in self.commands):
-            self.walk_all()
-
-    def _in_process(self) -> set[str]:
-        """The commands THIS runner answers in-process: what the runner itself was told
-        (``command_runner`` stamps it). A runner with no stamp answers nothing in-process:
-        the runner is the ONE source of that fact (a default would be a second one)."""
-        stamp = getattr(self._run, "in_process_of", None)
-        return set() if stamp is None else set(stamp)
-
-    def walk_all(self) -> int:
-        """Eagerly resolve every verb chain of the in-process commands (the ddflow registry)
-        and return how many chains were walked; a tool a custom runner walks its own way is
-        still resolved lazily, chain by a document's mention. The renders run one at a time —
-        inherently serial, because each parse_args replay holds the redirected process stdio
-        while it runs and a render has no I/O a second thread would overlap profitably — so
-        the whole ddflow walk is one bounded batch instead of one render per mentioned verb.
-        The walk `ddflow docs check` pays for a check of ddflow itself (DX-docs-check-speed)."""
-        in_tree = [c for c in sorted(self.commands) if c in self._in_process()]
-        walked = 0
-        for cmd in in_tree:
-            #: one command's tree is built (or failed) alone: a broken command notes itself
-            #: and stops only ITS OWN walk, never the eager cache of the others.
-            try:
-                chains = list(_HERE.chains(cmd))
-            except SystemExit as exc:  # a registry that exits while building: not a crash either
-                #: the EAGER cache holds nothing for it, but the runner still answers its
-                #: mentions lazily (a registry only THIS process cannot build spawns: `owns`
-                #: is False then), so the note says BOTH, never a bare could-not-run.
-                self.unavailable[cmd] = f"registry failed to build, mentions spawn through the runner: exited {exc.code}"
-                continue
-            except Exception as exc:  # a registry that cannot build is "could not run", not a crash
-                self.unavailable[cmd] = f"registry failed to build, mentions spawn through the runner: {exc}"
-                continue
-            for chain in chains:
-                walked += 1
-                key = tuple(chain)
-                capped = _HERE.help([*chain, "--help"])
-                if capped.ran and capped.returncode == 0:
-                    self._cache[key] = help_flags(capped.stdout or capped.stderr)
-                elif not capped.ran:
-                    self._cache[key] = None
-                    self.unavailable[" ".join(key)] = f"could not run: {capped.error}"
-                    self._broken.add(key)
-                else:  # ran, non-zero: the chain's failure is noted for ITS key, however deep
-                    self._cache[key] = None
-                    self.unavailable[" ".join(key)] = f"`--help` exited {capped.returncode}"
-        return walked
 
     def resolve(self, words: list[str]) -> tuple[list[str], set[str]] | None:
         """For ``<cmd> <word>...``: the verb chain and its flags; None when ``cmd`` is not

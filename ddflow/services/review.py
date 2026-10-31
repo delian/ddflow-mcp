@@ -55,6 +55,7 @@ from ..infra import tomlcfg
 from ..infra.container import rewrite_localhost
 from ..services import cmdrunner as CR
 from ..services import prompts as PR
+from ..services import review_keys
 from ..services.cmdrunner import Declared
 from ..services.gates.reviewers import git_state, git_state_change
 
@@ -221,6 +222,9 @@ class Reviewer:
     model: str = ""
     family: str = ""
     api_key_env: str = ""
+    #: Machine-local reviewers file only: a file holding the key, read when the variable
+    #: is unset (see `review_keys`). The path is data; the key never is.
+    api_key_file: str = ""
     gates: list[str] = field(default_factory=lambda: ["critic"])
     enabled: bool = True
     #: Unset (the default) sends NO temperature, so the server applies the model's own
@@ -289,7 +293,11 @@ class Reviewer:
     def api_key(self) -> str:
         # The key is read from the environment, never stored in the config file. A key
         # in a committed TOML is a leaked key, and this config is meant to be committed.
-        return os.environ.get(self.api_key_env, "") if self.api_key_env else ""
+        return review_keys.resolve_key(self.api_key_env, self.api_key_file).value
+
+    def key_result(self, default_env: str = "") -> review_keys.KeyResult:
+        """The key, or why there is none (a reason naming the variable and file, never a value)."""
+        return review_keys.resolve_key(self.api_key_env, self.api_key_file, default_env)
 
 
 @dataclass
@@ -349,7 +357,8 @@ class ReviewResult:
     #: The chunks this run was asked for (`ddflow review --chunk`); empty = all.
     requested: list[int] = field(default_factory=list)
     #: What the chunk numbers refer to: the reviewed diff's digest and the chunk size it
-    #: was cut with. A re-review of chunk N merges only into a record of the SAME cut.
+    #: was cut with (the EFFECTIVE budget `_chunk_budget`, not the `Reviewer.max_chunk_chars`
+    #: config). A re-review of chunk N merges only into a record of the SAME cut.
     diff_sha: str = ""
     max_chunk_chars: int = 0
 
@@ -419,6 +428,7 @@ def load_reviewers(root: Path) -> list[Reviewer]:
         # skipped by older code, instead of failing every review (B6f757e18cf).
         lenient=not _is_code_tree(root),
     )
+    review_keys.refuse_shared_key_files(root, tomlcfg.config_paths(root, "reviewers.toml"))
     # The project's own family map, not just the shipped one. `resolved_family` had no
     # Config in scope, so it always used `FAMILY_HINTS` while `reviewer_independence`
     # used `[agent].families` — a project that taught the map its in-house model name
@@ -722,6 +732,37 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
     return packed
 
 
+def _chunk_budget(rev: Reviewer) -> int:
+    """The largest chunk ``rev`` can reason about within its declared output cap.
+
+    ``max_chunk_chars`` is a bound picked for review QUALITY, not a promise the model
+    answers a chunk that size: a reasoning model spends its ``max_tokens`` OUTPUT budget
+    thinking before it emits the verdict, and the thinking grows with the input. Measured
+    on Qwen3.8-Flash-Next (``Reviewer.max_tokens``): a 30 KB chunk needed 28 381 reasoning
+    tokens -- about one reasoning token per input character -- so a chunk near
+    ``max_chunk_chars`` can exhaust ``max_tokens`` mid-thought and come back ``TRUNCATED``,
+    which ddflow records UNAVAILABLE and a review round is spent (bug B9a2279db22: the qwen
+    reviewer hit its 64k-token reasoning cap on ledger-sized chunks). The chunk is capped at
+    the output cap, so a reviewer whose ``max_tokens`` is below ``max_chunk_chars`` has its
+    chunk split to fit before it is ever sent, and a chunk can never outgrow the budget the
+    model has to reason about it.
+    """
+    return min(rev.max_chunk_chars, rev.max_tokens)
+
+
+def effective_chunk_budget(rev: Reviewer, chunk_max_tokens: int = 0) -> int:
+    """The budget ``review()`` sends after ``chunk_max_tokens`` lowers the request window.
+
+    `_rerun_scope` must compare a recorded cut against the SAME number the reviewing run
+    computed: the reporter's own reduction of its output window is part of that cut, or a
+    ``--chunk`` re-review of a run under ``[review].chunk_max_tokens`` is falsely refused as
+    a changed cut.
+    """
+    if chunk_max_tokens > 0 and chunk_max_tokens < rev.max_tokens:
+        rev = dataclasses.replace(rev, max_tokens=chunk_max_tokens)
+    return _chunk_budget(rev)
+
+
 #: A hunk header and whatever git appended after its closing ``@@``.
 _HUNK_CONTEXT_RE = re.compile(r"(?m)^(@{2,} [-+0-9, ]+ @{2,})[ \t][^\n]*$")
 
@@ -950,9 +991,10 @@ def _truncated(rev: Reviewer, *, reasoning_tokens: object = None) -> str:
 
 def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
     """Anthropic Messages API: system is a TOP-LEVEL field, not a message."""
-    key = rev.api_key()
+    got = rev.key_result("ANTHROPIC_API_KEY")
+    key = got.value
     if not key:
-        return "", (f"no API key: set ${rev.api_key_env or 'ANTHROPIC_API_KEY'} in the environment")
+        return "", got.reason
     body, err = _post_json(
         rev.base_url.rstrip("/") + "/messages",
         {
@@ -967,7 +1009,7 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
         timeout_s,
     )
     if err:
-        return "", err
+        return "", review_keys.scrub(err, key)
     try:
         blocks = body["content"]
     except (KeyError, TypeError):
@@ -980,13 +1022,13 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
 
 def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
     """Google generateContent: the key goes in the query string, not a header."""
-    key = rev.api_key()
+    got = rev.key_result("GEMINI_API_KEY")
+    key = got.value
     if not key:
-        return "", f"no API key: set ${rev.api_key_env or 'GEMINI_API_KEY'}"
-    url = (
-        f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
-        f"?key={urllib.parse.quote(key)}"
-    )
+        return "", got.reason
+    # The key goes in a header, never the URL: a URL is echoed by proxies, access logs and
+    # transport errors.
+    url = f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
     body, err = _post_json(
         url,
         {
@@ -995,11 +1037,11 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
             "generationConfig": {**_temperature(rev), "maxOutputTokens": rev.max_tokens},
             **rev.extra_body,
         },
-        {},
+        {"x-goog-api-key": key},
         timeout_s,
     )
     if err:
-        return "", err
+        return "", review_keys.scrub(err, key)
     try:
         cand = body["candidates"][0]
     except (KeyError, IndexError, TypeError):
@@ -1020,27 +1062,33 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         **rev.extra_body,
     }
 
+    got = rev.key_result()
+    if not got.value and got.reason:
+        return "", got.reason
+    key = got.value
     req = urllib.request.Request(
         rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            **({"Authorization": f"Bearer {rev.api_key()}"} if rev.api_key() else {}),
+            **({"Authorization": f"Bearer {key}"} if key else {}),
         },
     )
     try:
         with _open(req, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
-        return "", f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
+        return "", review_keys.scrub(
+            f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}", key
+        )
     except TimeoutError:
         return "", _no_answer_in_time(timeout_s)
     except (urllib.error.URLError, OSError) as exc:
-        return "", f"unreachable: {exc}"
+        return "", review_keys.scrub(f"unreachable: {exc}", key)
     except http.client.HTTPException as exc:
-        return "", _cut_off(exc)
+        return "", review_keys.scrub(_cut_off(exc), key)
     except (ValueError, json.JSONDecodeError) as exc:
-        return "", f"bad response body: {exc}"
+        return "", review_keys.scrub(f"bad response body: {exc}", key)
     try:
         choice = body["choices"][0]
         msg = choice["message"]
@@ -1062,15 +1110,29 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
 def parse(text: str) -> tuple[list[Finding], bool]:
     """(findings, on_contract). Off contract means no STATUS: block at all."""
     status = _STATUS_RE.search(text or "")
-    findings = [
-        Finding(
-            severity=m.group(1).upper(),
-            location=(m.group(2) or "").strip(),
-            title=(m.group(2) or "").strip() or " ".join((m.group(3) or "").split())[:80],
-            detail=(m.group(3) or "").strip(),
+    findings = []
+    for m in _FINDING_RE.finditer(text or ""):
+        location = (m.group(2) or "").strip()
+        #: The finding's text is the reviewer's paragraph. A reviewer may write only a
+        #: location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still names
+        #: the spot the author must answer, so its text is derived from the location and
+        #: a location-only finding is never recorded empty (B-review-finding-empty-text).
+        detail = (m.group(3) or "").strip() or location
+        title = location or " ".join(detail.split())[:80]
+        if not detail:
+            #: The reviewer declared a finding but named no location and no paragraph.
+            #: It is still a finding -- recorded with a marker, not dropped, so the gate
+            #: stays failed (fail-closed) instead of reading a finding as a clean review.
+            title = "(unnamed finding)"
+            detail = "(reviewer raised a finding but named nothing)"
+        findings.append(
+            Finding(
+                severity=m.group(1).upper(),
+                location=location,
+                title=title,
+                detail=detail,
+            )
         )
-        for m in _FINDING_RE.finditer(text or "")
-    ]
     return findings, status is not None
 
 
@@ -1578,9 +1640,10 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         return problem
 
     stripped = strip_hunk_context(diff)
-    chunks = split_diff(stripped, rev.max_chunk_chars)
+    chunk_budget = _chunk_budget(rev)
+    chunks = split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
-    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), rev.max_chunk_chars
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]

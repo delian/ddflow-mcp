@@ -18,8 +18,8 @@ def _seed(repo: Path) -> None:
     run_cli(repo, "init")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "b.py")
 
 
 def test_an_item_held_by_another_agent_is_not_waiting_for_itself(repo):
@@ -62,7 +62,7 @@ def test_another_agents_expired_lease_names_the_one_line_takeover(repo, monkeypa
     cfg.write_text(re.sub(r"(?m)^\[lease\]$", "[lease]\ngrace_s = 0", cfg.read_text(), count=1))
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent="a")[0] == 0
     monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
@@ -79,7 +79,7 @@ def _grace0(repo: Path) -> None:
     cfg.write_text(re.sub(r"(?m)^\[lease\]$", "[lease]\ngrace_s = 0", cfg.read_text(), count=1))
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
 
 
 def test_the_same_agent_reclaiming_its_live_lease_is_not_a_wait(repo):

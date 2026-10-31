@@ -16,8 +16,8 @@ HOLDER, WAITER = "agent-holder", "agent-waiter"
 @pytest.fixture
 def proj(repo: Path) -> Path:
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
-    run_cli(repo, "task", "add", "T2", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
+    run_cli(repo, "task", "add", "T2", "--title", "T2 fixture", "--globs", "src/a.py")
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     return repo
 

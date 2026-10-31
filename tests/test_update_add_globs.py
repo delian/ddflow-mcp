@@ -13,7 +13,7 @@ AGENT = "agent-holder"
 
 def _task(repo, globs="a.py,b.py"):
     run_cli(repo, "init")
-    assert run_cli(repo, "task", "add", "T1", "--globs", globs)[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", globs)[0] == 0
 
 
 def test_add_globs_keeps_the_existing_ones(repo):

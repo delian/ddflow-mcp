@@ -11,7 +11,33 @@ from __future__ import annotations
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ..argtypes import _positive_int
 from ..registry import Command, Param, by_tool
+from ..render import emit_json
 from ..tools._common import _api
+
+
+def _status_handler(a, c):
+    """`cmd_status` with the `--by-tag` mode: the same sections plus the per-value one.
+
+    `cmd_status` in `surfaces/commands/reporting.py` stays this command's own handler for
+    the default mode, so that unchanged. With `--by-tag` the same sections print from ONE
+    `status` call (which folded the log once, B-gap-log-scale) followed by the per-value
+    lines the API put in `_render['by_tag_lines']` — so the two never disagree (B37).
+    """
+    from ..commands.reporting import _status_body, cmd_status
+
+    by = getattr(a, "by_tag", "") or ""
+    if not by:
+        return cmd_status(a, c)
+    out = _api().status(c.repo, agent=c.requested_agent, full=True, by_tag=by)
+    if c.json:
+        emit_json(out.body())
+        return out.exit
+    d = out.data
+    r = d["_render"]
+    lines = _status_body(d, r, by_tag_lines=tuple(r.get("by_tag_lines") or ()))
+    print("\n".join(lines))
+    return out.exit
+
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -45,24 +71,47 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("recover",),
         tool="ddflow_recover",
-        summary="find crashed agents' work (exit 2 = nothing)",
+        summary="find crashed agents' work; --all --plan triages it (exit 2 = nothing)",
         description=(
             "Find work left behind by a crashed agent: expired leases, orphaned "
             "worktrees, items stuck running. Reports what each worktree contains and "
-            "never deletes anything. Run this at the start of any session that follows "
-            "an interruption."
+            "never deletes anything. With --all --plan this is the recovery plan: the "
+            "pure triage over the lease sweep, orphaned gate-run markers, unended jobs "
+            "and queue entries a dead integrator left running. Each item gets one "
+            "action, classed SAFE_AUTO (idempotent, loses nothing), PROPOSE (shown, "
+            "never done: the exact command) or OPERATOR (a person decides). --apply "
+            "runs only SAFE_AUTO and refuses while the kill switch "
+            "(.ddflow/local/recovery.stop) is on. Run --all --plan at the start of any "
+            "session that follows an interruption."
         ),
         params=(
             Param("item", help="Restrict to one item.", default="", cli_help=""),
             Param(
                 "apply",
                 type="boolean",
-                help="Act on the advice: release the leases and remove the worktrees reported as holding nothing. Only a tree MEASURED as having no uncommitted and no unmerged work is touched; 'could not tell' is not 'empty'.",
+                help="Act on the advice: release the leases and remove the worktrees reported as holding nothing. Only a tree MEASURED as having no uncommitted and no unmerged work is touched; 'could not tell' is not 'empty'. With --all: run the plan's SAFE_AUTO actions (record unwitnessed gate `unavailable` and job ends, requeue orphaned merge-queue entries), never PROPOSE or OPERATOR.",
+                cli_help="",
+            ),
+            Param(
+                "all",
+                type="boolean",
+                help="Sweep beyond leases: orphaned gate-run markers whose process is gone, unended jobs whose process already exited, and merge-queue entries left running.",
+                cli_help="",
+            ),
+            Param(
+                "plan",
+                type="boolean",
+                help="The triage, dry run: per item the class (SAFE_AUTO/PROPOSE/OPERATOR), the evidence, the exact command and the recovery attempt count. --json emits it as rows.",
                 cli_help="",
             ),
         ),
         call=lambda repo, a, agent: _api().recover(
-            repo, item=a.get("item", "") or "", apply=bool(a.get("apply")), agent=agent
+            repo,
+            item=a.get("item", "") or "",
+            apply=bool(a.get("apply")),
+            all=bool(a.get("all")),
+            plan=bool(a.get("plan")),
+            agent=agent,
         ),
         payload="found",
     ),
@@ -231,10 +280,31 @@ COMMANDS: tuple[Command, ...] = (
             "which, what is in flight and who holds it, what is ready to start, what is "
             "blocked, how many agent-hours and commits went in, and whether anything is "
             "looping or waiting to be recovered. This is the tool for 'what is the "
-            "status of this project?' and 'what has been completed?'."
+            "status of this project?' and 'what has been completed?'. With ``by_tag`` "
+            "(the ``--by-tag KEY`` flag): per-value counts for the KEY label namespace "
+            "too — done/running/ready/review/blocked/abandoned per ``wave:N`` or "
+            "``track:fix`` value, and per value what blocks it."
         ),
-        params=(),
-        call=lambda repo, a, agent: _api().status(repo, agent=agent),
+        handler=_status_handler,
+        params=(
+            Param(
+                "by_tag",
+                help=(
+                    "Also group the live items by this label namespace (KEY or KEY:*): per "
+                    "value the done/running/ready/review/blocked/abandoned/open counts, the "
+                    "buckets the plan puts them in, and the open dependencies blocking the "
+                    "most items (e.g. 'wave' or 'track')."
+                ),
+                default="",
+                cli_help=(
+                    "also print per-value counts for this label namespace, e.g. wave or "
+                    "track, with the top blockers per value"
+                ),
+            ),
+        ),
+        call=lambda repo, a, agent: _api().status(
+            repo, agent=agent, by_tag=a.get("by_tag", "") or ""
+        ),
         # The whole object. `_render` is stripped by `Outcome.body`.
         payload="",
     ),

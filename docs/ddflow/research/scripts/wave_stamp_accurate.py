@@ -1,4 +1,6 @@
-"""wave_stamp_accurate.py: stamp each open task's wave:N tag with its true dependency depth.
+"""SUPERSEDED by `ddflow waves --stamp` (kept: queue_width.py reuses its depth rule).
+
+wave_stamp_accurate.py: stamp each open task's wave:N tag with its true dependency depth.
 
 Queue review 2026-10-23 (qa-graph). Replaces restamp_api.py until GR-wave-derived / DX-wave-phase-prereq land.
 Rule (D-wave-semantics): wave = 1 + the highest wave among OPEN prerequisites; a task inherits its phase's

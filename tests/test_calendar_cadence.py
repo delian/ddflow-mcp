@@ -63,7 +63,7 @@ def test_a_calendar_name_replaces_the_count_based_pass_of_the_same_name(repo):
     )
     run_cli(repo, "cadence", "--ran", "dedupe_sweep")
     for t in ("T1", "T2", "T3"):
-        run_cli(repo, "task", "add", t, "--globs", f"{t}.py")
+        run_cli(repo, "task", "add", t, "--title", "task item", "--globs", f"{t}.py")
         EventLog(repo, "x").append("item.completed", t, {"kind": "task"})
     assert "dedupe_sweep" not in _due(repo), "the count-based pass fired under a calendar name"
 

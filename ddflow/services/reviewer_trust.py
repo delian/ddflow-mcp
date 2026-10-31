@@ -171,16 +171,12 @@ def _agent_route(
     repo: Path, rev, name: str, dig: str, why: str, approval: str, note: str, agent: str
 ) -> dict:
     """For an agent: the stamp of the operator's approval of exactly this reviewer entry, or a
-    `ReviewerRefused` that names the route. An entry that runs a program (kind command) is T3:
-    only a person at a terminal vouches for it (it executes code and prints any verdict)."""
-    if rev.kind == "command":
-        raise ReviewerRefused(
-            AP.refusal(why)
-            + f" Reviewer {name!r} runs a program (kind command), so it is T3: terminal only, "
-            "never approved over chat."
-        )
+    `ReviewerRefused` that names the route. An entry that runs a program (kind command) is T3
+    (it executes code and prints any verdict): approvable over chat only by a TYPED answer when
+    the operator opted in on the host (D-RA-T3-chat), never otherwise."""
     log = _log(Path(repo), agent)  # the agent that runs this, not the clone-derived id
-    canon = Canon(verb="reviewers.approve", agent=log.agent_id, item=name, state=dig)
+    verb = "reviewers.approve_command" if rev.kind == "command" else "reviewers.approve"
+    canon = Canon(verb=verb, agent=log.agent_id, item=name, state=dig)
     decision = CN.operator_gate(
         log, Config.load(Path(repo)), canon, approval_id=approval, reason=note
     )

@@ -48,6 +48,7 @@ from .config_sections.dedupe import (  # noqa: F401 -- re-exported, as before th
     DEDUPE_ON_MATCH,
     DedupeConfig,
 )
+from .config_sections.digest import DigestConfig
 from .config_sections.docs import (  # noqa: F401
     DOCS_LINK_MODES,
     EXTRACT_KINDS,
@@ -74,6 +75,7 @@ from .config_sections.flow import (  # noqa: F401 -- re-exported: core/flow impo
     FlowConfig,
 )
 from .config_sections.gates import GatesConfig
+from .config_sections.govern import GovernConfig
 from .config_sections.grants import GrantsConfig
 from .config_sections.health import HealthConfig
 from .config_sections.hooks import HooksConfig
@@ -125,6 +127,7 @@ from .config_sections.session import (
     PROGRESS_MODES,  # noqa: F401 -- re-exported (services/progress_line)
     SessionConfig,
 )
+from .config_sections.swarm import SwarmConfig
 from .config_sections.triggers import (
     TRIGGERS_MAX_FIRES_LIMIT,  # noqa: F401 -- re-exported
     TRIGGERS_STRICTEST_NUMBER,
@@ -134,6 +137,7 @@ from .config_sections.upgrade import (
     UPGRADE_SKEW_POLICIES,  # noqa: F401 -- re-exported
     UpgradeConfig,
 )
+from .config_sections.waves import WavesConfig
 from .config_sections.worktree import WorktreeConfig
 
 
@@ -221,14 +225,18 @@ class Config:
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     lanes: LanesConfig = field(default_factory=LanesConfig)
     health: HealthConfig = field(default_factory=HealthConfig)
+    govern: GovernConfig = field(default_factory=GovernConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
+    swarm: SwarmConfig = field(default_factory=SwarmConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
     plan: PlanConfig = field(default_factory=PlanConfig)
+    waves: WavesConfig = field(default_factory=WavesConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
+    digest: DigestConfig = field(default_factory=DigestConfig)
     grants: GrantsConfig = field(default_factory=GrantsConfig)
     approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)

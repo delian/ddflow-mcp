@@ -83,8 +83,19 @@ def test_a_hand_built_queue_is_not_mistaken_for_an_imported_one(repo):
     """Provenance is a FIELD. An item someone typed has none, and counting it as
     imported would make the whole report a confident fiction."""
     run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--globs", "p1/**")
-    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
+    run_cli(repo, "phase", "add", "P1", "--title", "P1 fixture", "--globs", "p1/**")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P1.T1",
+        "--title",
+        "P1.T1 fixture",
+        "--phase",
+        "P1",
+        "--globs",
+        "p1/a.py",
+    )
     code, data = _verify(repo)
     assert code == NOTHING, data
     assert data["total"] == 0, data["imported"]
@@ -424,7 +435,7 @@ def test_prose_only_provenance_is_a_note_not_a_permanent_finding(repo):
     forever, and a report that can never go green is one people stop reading."""
     _imported(repo)
     run_cli(repo, "update", "P7.T2", "--globs", "src/billing/invoice.py")
-    run_cli(repo, "phase", "add", "LEGACY", "--globs", "x/**")
+    run_cli(repo, "phase", "add", "LEGACY", "--title", "LEGACY fixture", "--globs", "x/**")
     # Simulate the old shape: prose body, no `source` field.
     shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
     shard.write_text(

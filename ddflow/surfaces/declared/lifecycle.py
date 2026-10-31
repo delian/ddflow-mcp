@@ -8,6 +8,8 @@ purpose: a human checkpoint an agent can clear is not a checkpoint.
 
 from __future__ import annotations
 
+import argparse
+
 from ...core.defaults import DEFAULT_NEXT_KIND, DEFAULT_WAIT_TIMEOUT_S
 from ...core.model import GATE_OUTCOMES
 from ...core.outcome import NOTHING, OK
@@ -26,6 +28,18 @@ DEFAULT_CHECK_RECOVERY = True
 #: terminal, not a flag an agent reaches for on reflex (and each flag costs tools/list bytes).
 _OVERRIDE = "an operator's override of another clone's live lease, recorded; CLI only (B90b43dd2d8)"
 OVERRIDE_EXEMPT = {"--force": _OVERRIDE, "--reason": _OVERRIDE}
+
+_APPROVE_EPILOG = (
+    "who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker\n"
+    "(CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.\n"
+    "what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red\n"
+    "(the failing tests also fail on the base branch). The approval is bound to the digest of\n"
+    "that record (outcome, time, reason): a re-run or re-record is a different outcome and\n"
+    "needs its own approval. The gate stays `partial`; completion only stops counting it.\n"
+    "agent route: re-run with `--approval request` to file the request, a person answers it,\n"
+    "then re-run with `--approval ID`. Pending requests: `ddflow approvals list`; a person\n"
+    "answers with `ddflow approvals approve ID` (see `ddflow approvals --help`)."
+)
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -228,18 +242,19 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_heartbeat",
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
-        call=lambda repo, a, agent, called_from=None: _api().heartbeat(
-            repo, a.get("id", ""), agent=agent, called_from=called_from
-        ),
-        payload=("renewed", "waiters", "globs_withheld", "yield_requested"),
+        call=L.heartbeat_call,
+        payload=("renewed", "waiters", "globs_withheld", "yield_requested", "wake"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,
             body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
+            call_kwargs=L.heartbeat_kwargs,
         ),
-        # The item's own tree renews its lease whoever claimed it -- identity is derived
-        # from the tree, so without WHERE the caller is this said "no lease held" from
-        # exactly the tree `claim` made.
+        # The item's own tree renews its lease whoever claimed it -- the CLI may resolve a
+        # DIFFERENT identity than the holder (a harness declaration, `as_agent`), so the
+        # tree check must answer from where the caller actually stands. `heartbeat_kwargs`
+        # passes that raw start past the owner-check redirect (`Ctx.called_from`), which
+        # answered "no lease held" from exactly the tree `claim` made (Bad4752f936).
         wants_called_from=True,
         params=(
             Param(
@@ -268,7 +283,7 @@ COMMANDS: tuple[Command, ...] = (
             force=bool(a.get("force")),
             reason=a.get("reason", "") or "",
         ),
-        payload=("released", "woke"),
+        payload=("released", "woke", "wake"),
         flag_exempt=OVERRIDE_EXEMPT,
         render=L.release_text,
         # A refusal (another clone's live lease) says why on stderr, not "no lease on".
@@ -301,6 +316,7 @@ COMMANDS: tuple[Command, ...] = (
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
             globs=a.get("globs") or None,
             lease=a.get("lease", "") or "",
+            token=a.get("token", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -343,6 +359,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "token",
+                help="The resume token a bounded wait returned (`wake.token`): asks the same question again; item, phase, lease and globs given with it win.",
+                cli_help="resume token from an earlier wait",
+                default="",
+            ),
+            Param(
                 "timeout",
                 type="number",
                 help=f"Seconds to wait (default {MCP_WAIT_DEFAULT_S}, at most {MCP_WAIT_MAX_S}: "
@@ -375,6 +397,8 @@ COMMANDS: tuple[Command, ...] = (
             "asserts it holds end to end rather than resting on this line."
         ),
         summary="a PERSON clears (or rejects) a human-approval gate — no MCP equivalent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_APPROVE_EPILOG,
         params=(
             Param("id", positional=True),
             Param("gate", positional=True),
@@ -407,7 +431,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("gate", "list"),
-        summary="the gates this project defines; --refuted: the gates passed on refutation",
+        summary="the gates this project defines; --refuted: passed on refutation; --overrides: set aside",
         tool="ddflow_gate_list",
         description="The gates this project defines; with refuted=true, every gate passed ON "
         "REFUTATION, to spot-check.",
@@ -415,13 +439,17 @@ COMMANDS: tuple[Command, ...] = (
         prose=True,
         prose_reason="one row per gate (or per gate passed on refutation), meant to be read as lines",
         call=lambda repo, a, agent: _api().gate_list(
-            repo, refuted=bool(a.get("refuted")), since=str(a.get("since") or ""), agent=agent
+            repo,
+            refuted=bool(a.get("refuted")),
+            since=str(a.get("since") or ""),
+            agent=agent,
+            overrides=bool(a.get("overrides")),
         ),
         payload="text",
         render=L.gate_text,
         cli=CliPolicy(
             shown=L.gate_listed,
-            body=lambda out, a: out.body(("refuted", "count", "passes", "gates")),
+            body=lambda out, a: out.body(("refuted", "count", "passes", "gates", "overrides")),
         ),
         params=(
             Param(
@@ -429,6 +457,13 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="List the gates passed on refutation instead.",
                 cli_help="list every gate recorded passed ON REFUTATION (D-unify 5), to spot-check",
+            ),
+            Param(
+                "overrides",
+                type="boolean",
+                help="List the overrides instead: forced completions, skips, claim forces.",
+                cli_help="list every override on the record (forced completion, gate skip, claim "
+                "force, typed-chat T3 use, relayed consent) with who approved it at which level",
             ),
             Param(
                 "since",
@@ -717,6 +752,7 @@ COMMANDS: tuple[Command, ...] = (
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
             regression_test=a.get("regression_test", "") or "",
+            lint_exempt=a.get("lint_exempt", "") or "",
             mutation=mutation_of(a),
             called_from=called_from,
             shell_cwd=shell_cwd,
@@ -727,12 +763,14 @@ COMMANDS: tuple[Command, ...] = (
             "id",
             "sha",
             "author_model",
+            "author_family",
             "model_source",
             "independence",
             "forced",
             "coverage_gaps",
             "note",
             "woke",
+            "wake",
             "bugs_closed",
             "umbrellas_completed",
             "umbrella_refused",
@@ -784,6 +822,12 @@ COMMANDS: tuple[Command, ...] = (
                 action="append",
                 default=[],
             ),
+            Param(
+                "lint_exempt",
+                help="Fix task of a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test. As `bug fixed lint_exempt`; instead of regression_test.",
+                cli_help="close the CI-filed lint bug this fix task fixes (no test to write) with this reason, recorded, instead of --regression-test",
+                default="",
+            ),
             *MUTATION_PARAMS,
         ),
         tool_order=(
@@ -792,6 +836,7 @@ COMMANDS: tuple[Command, ...] = (
             "model",
             "changelog",
             "regression_test",
+            "lint_exempt",
             *MUTATION_ORDER,
             "force",
             "approval",

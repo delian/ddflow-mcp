@@ -36,7 +36,18 @@ def _pair(repo: Path) -> Path:
     run_cli(trainer, "task", "add", "132.D", "--title", "train-record type", "--globs", "t.py")
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text('[schedule]\nrepos = ["trainer=../trainer"]\n')
-    run_cli(repo, "task", "add", "GEN.1", "--needs", "trainer:132.D", "--globs", "g.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "GEN.1",
+        "--title",
+        "GEN.1 fixture",
+        "--needs",
+        "trainer:132.D",
+        "--globs",
+        "g.py",
+    )
     return trainer
 
 
@@ -87,7 +98,18 @@ def test_nothing_is_ever_written_to_the_other_repository(repo):
 
 def test_an_unconfigured_repository_is_a_doctor_PROBLEM_and_a_failed_sync(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "GEN.1", "--needs", "nowhere:1.A", "--globs", "g.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "GEN.1",
+        "--title",
+        "GEN.1 fixture",
+        "--needs",
+        "nowhere:1.A",
+        "--globs",
+        "g.py",
+    )
     code, out, _err = run_cli(repo, "external", "sync")
     assert code == FAIL
     # The reason, not just the exit: a crash is exit 1 too, and says nothing useful.
@@ -99,7 +121,7 @@ def test_an_unconfigured_repository_is_a_doctor_PROBLEM_and_a_failed_sync(repo):
 
 def test_nothing_to_sync_is_exit_2(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     assert run_cli(repo, "external", "sync")[0] == NOTHING
 
 
@@ -116,7 +138,18 @@ def test_a_removed_items_external_dependency_is_not_a_doctor_finding(repo):
     """roborev 829: doctor looked at removed items and sync did not, so the finding's
     remedy could never clear it."""
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "GONE", "--needs", "nowhere:1.A", "--globs", "g.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "GONE",
+        "--title",
+        "GONE fixture",
+        "--needs",
+        "nowhere:1.A",
+        "--globs",
+        "g.py",
+    )
     run_cli(repo, "remove", "GONE", "--reason", "dropped")
     _code, out, _e = run_cli(repo, "doctor")
     assert "nowhere" not in out

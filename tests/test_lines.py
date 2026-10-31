@@ -100,7 +100,7 @@ def test_an_undecided_choice_is_asked_then_defaulted_on_the_record_and_followed(
     _code, out, _ = run_cli(repo, "--json", "brief")
     assert "Open workflow choices" in json.loads(out)["brief"]
     assert "**model**" in json.loads(out)["brief"]
-    run_cli(repo, "task", "add", "T1")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture")
     run_cli(repo, "claim", "T1")
     rec = _state(repo).flow_choices
     assert rec["model"]["by"] == "default" and rec["model"]["value"] == "trunk"
@@ -155,7 +155,17 @@ def _land(repo: Path, item: str, *, edit: tuple[str, str] | None = None) -> dict
 def test_forward_merge_carries_a_fix_up_through_every_line(lined):
     repo = lined
     code, out, err = run_cli(
-        repo, "--json", "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py"
+        repo,
+        "--json",
+        "task",
+        "add",
+        "FIX",
+        "--title",
+        "FIX fixture",
+        "--lines",
+        "1,3",
+        "--globs",
+        "lib.py",
     )
     assert code == 0, err
     added = json.loads(out)
@@ -184,7 +194,17 @@ def test_cherry_pick_ports_run_in_parallel_and_carry_exactly_what_landed(lined):
     repo = lined
     run_cli(repo, "flow", "choose", "port_strategy", "cherry-pick", "--reason", "diverged")
     code, out, err = run_cli(
-        repo, "--json", "task", "add", "FIX", "--lines", "1,2,3", "--globs", "lib.py"
+        repo,
+        "--json",
+        "task",
+        "add",
+        "FIX",
+        "--title",
+        "FIX fixture",
+        "--lines",
+        "1,2,3",
+        "--globs",
+        "lib.py",
     )
     assert code == 0, err
     added = json.loads(out)
@@ -212,7 +232,9 @@ def test_a_conflicting_port_comes_back_as_work_not_as_a_failure(lined):
     _git(tmp, "commit", "-qam", "1.x only")
     _git(repo, "worktree", "remove", str(tmp))
 
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    run_cli(
+        repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,3", "--globs", "lib.py"
+    )
     _land(repo, "FIX", edit=("lib.py", "def f():\n    return 2\n"))
     code, out, err = run_cli(repo, "--json", "claim", "FIX@1")
     assert code == 0, err
@@ -224,23 +246,23 @@ def test_a_conflicting_port_comes_back_as_work_not_as_a_failure(lined):
 
 def test_same_line_same_globs_still_conflict(lined):
     repo = lined
-    run_cli(repo, "task", "add", "A", "--line", "2", "--globs", "lib.py")
-    run_cli(repo, "task", "add", "B", "--line", "2", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--line", "2", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--line", "2", "--globs", "lib.py")
     assert run_cli(repo, "--agent", "a", "claim", "A")[0] == 0
     assert run_cli(repo, "--agent", "b", "claim", "B")[0] == 3
 
 
 def test_a_phase_puts_its_tasks_on_its_line(lined):
     repo = lined
-    run_cli(repo, "phase", "add", "P", "--line", "2")
-    run_cli(repo, "task", "add", "T", "--phase", "P")
+    run_cli(repo, "phase", "add", "P", "--title", "P fixture", "--line", "2")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--phase", "P")
     code, out, err = run_cli(repo, "--json", "claim", "T")
     assert code == 0, err
     assert json.loads(out)["base"] == "maint/2.x"
 
 
 def test_an_unknown_line_is_refused_not_read_as_current(lined):
-    code, _out, err = run_cli(lined, "task", "add", "T", "--line", "7")
+    code, _out, err = run_cli(lined, "task", "add", "T", "--title", "T fixture", "--line", "7")
     assert code == 1 and "unknown release line" in err
     assert "T" not in _state(lined).items
     code, _out, err = run_cli(lined, "update", "T", "--line", "7")
@@ -273,9 +295,9 @@ def test_a_maintenance_line_keeps_its_major(lined):
 def test_single_line_projects_see_no_change(repo):
     """No [flow.lines]: `--line` has nothing to name, and nothing else moves."""
     run_cli(repo, "init")
-    code, _out, err = run_cli(repo, "task", "add", "T", "--line", "2")
+    code, _out, err = run_cli(repo, "task", "add", "T", "--title", "T fixture", "--line", "2")
     assert code == 1 and "no release lines" in err
-    run_cli(repo, "task", "add", "T")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture")
     code, out, _ = run_cli(repo, "--json", "claim", "T")
     assert json.loads(out)["branch"] == "ddflow/T"
     assert "port_strategy" not in _state(repo).flow_choices
@@ -300,9 +322,9 @@ def test_a_port_waits_for_its_source_to_LAND_not_merely_to_reach_review():
 
 def test_next_offers_the_same_file_on_another_line_while_one_is_held(lined):
     repo = lined
-    run_cli(repo, "task", "add", "A", "--line", "1", "--globs", "lib.py")
-    run_cli(repo, "task", "add", "B", "--line", "2", "--globs", "lib.py")
-    run_cli(repo, "task", "add", "C", "--line", "1", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--line", "1", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--line", "2", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "C", "--title", "C fixture", "--line", "1", "--globs", "lib.py")
     assert run_cli(repo, "--agent", "a", "claim", "A")[0] == 0
     _code, out, _ = run_cli(repo, "--agent", "b", "--json", "next")
     body = json.loads(out)
@@ -340,8 +362,8 @@ def test_no_line_and_the_current_line_by_name_are_one_branch(lined):
     """`""` and `"3"` both land on main; comparing the strings let two agents onto one
     file -- and every port to the current line carries the name."""
     repo = lined
-    run_cli(repo, "task", "add", "A", "--globs", "lib.py")
-    run_cli(repo, "task", "add", "B", "--line", "3", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--globs", "lib.py")
+    run_cli(repo, "task", "add", "B", "--title", "B fixture", "--line", "3", "--globs", "lib.py")
     assert run_cli(repo, "--agent", "a", "claim", "A")[0] == 0
     code, _out, err = run_cli(repo, "--agent", "b", "claim", "B")
     assert code == 3, f"two agents on lib.py on main: {err}"
@@ -351,22 +373,22 @@ def test_the_line_of_a_planned_port_or_a_forked_item_cannot_move(lined):
     """Moving a fix re-aimed its forward-merge ports: a whole newer major was merged into
     an old line. Moving a forked item merged its old base's history into another line."""
     repo = lined
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,2")
+    run_cli(repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,2")
     for item in ("FIX", "FIX@2"):
         code, _out, err = run_cli(repo, "update", item, "--line", "3")
         assert code == 3 and "planned port" in err, err
-    run_cli(repo, "task", "add", "T", "--line", "1")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--line", "1")
     run_cli(repo, "claim", "T")
     code, _out, err = run_cli(repo, "update", "T", "--line", "2")
     assert code == 3 and "forked" in err, err
-    run_cli(repo, "task", "add", "U", "--line", "1")
+    run_cli(repo, "task", "add", "U", "--title", "U fixture", "--line", "1")
     assert run_cli(repo, "update", "U", "--line", "2")[0] == 0, "unstarted work may move"
 
 
 def test_merge_refuses_a_branch_forked_from_another_lines_base(lined):
     repo = lined
     _git(repo, "branch", "maint/2.y", "main")
-    run_cli(repo, "task", "add", "T", "--line", "2")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--line", "2")
     _code, out, _ = run_cli(repo, "--json", "claim", "T")
     tree = Path(json.loads(out)["worktree"])
     (tree / "t.py").write_text("t\n")
@@ -380,7 +402,9 @@ def test_merge_refuses_a_branch_forked_from_another_lines_base(lined):
 
 def test_a_forced_early_port_is_not_recorded_and_is_applied_on_the_next_claim(lined):
     repo = lined
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,2", "--globs", "lib.py")
+    run_cli(
+        repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,2", "--globs", "lib.py"
+    )
     code, out, err = run_cli(repo, "--json", "claim", "FIX@2", "--force")
     assert code == 0, err
     assert json.loads(out)["port"]["status"] == "not_ready"
@@ -396,7 +420,7 @@ def test_a_forced_early_port_is_not_recorded_and_is_applied_on_the_next_claim(li
 
 def test_a_line_removed_from_config_does_not_fall_back_to_current(lined):
     repo = lined
-    run_cli(repo, "task", "add", "T", "--line", "2")
+    run_cli(repo, "task", "add", "T", "--title", "T fixture", "--line", "2")
     cfgp = repo / ".ddflow" / "config.toml"
     cfgp.write_text(cfgp.read_text().replace('"2" = "maint/2.x"\n', ""))
     code, _out, err = run_cli(repo, "claim", "T")
@@ -405,7 +429,9 @@ def test_a_line_removed_from_config_does_not_fall_back_to_current(lined):
 
 def test_a_port_in_a_tree_ddflow_did_not_make_is_explained_not_silent(lined):
     repo = lined
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,2", "--globs", "lib.py")
+    run_cli(
+        repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,2", "--globs", "lib.py"
+    )
     _land(repo, "FIX", edit=("lib.py", "def f():\n    return 2\n"))
     code, out, err = run_cli(repo, "--json", "claim", "FIX@2", "--no-worktree")
     assert code == 0, err
@@ -419,7 +445,20 @@ def test_a_fix_on_two_lines_is_in_both_lines_release_notes(lined):
     repo = lined
     _git(repo, "tag", "-a", "v1.0.0", "-m", "1", "maint/1.x")
     _git(repo, "tag", "-a", "v3.0.0", "-m", "3", "main")
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py", "--tags", "bug")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "FIX",
+        "--title",
+        "FIX fixture",
+        "--lines",
+        "1,3",
+        "--globs",
+        "lib.py",
+        "--tags",
+        "bug",
+    )
     _land(repo, "FIX", edit=("lib.py", "def f():\n    return 2\n"))
     for port in ("FIX@2", "FIX@3"):
         _land(repo, port)
@@ -445,11 +484,32 @@ def test_port_of_files_a_followup_fix_for_the_same_lines(lined):
     gives it the lines FIX reached, so its own ports carry what IT lands."""
     repo = lined
     run_cli(repo, "flow", "choose", "port_strategy", "cherry-pick")
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,2,3", "--globs", "lib.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "FIX",
+        "--title",
+        "FIX fixture",
+        "--lines",
+        "1,2,3",
+        "--globs",
+        "lib.py",
+    )
     _land(repo, "FIX", edit=("lib.py", "def f():\n    return 2\n"))
 
     code, out, err = run_cli(
-        repo, "--json", "task", "add", "FIX2", "--port-of", "FIX", "--globs", "extra.py"
+        repo,
+        "--json",
+        "task",
+        "add",
+        "FIX2",
+        "--title",
+        "FIX2 fixture",
+        "--port-of",
+        "FIX",
+        "--globs",
+        "extra.py",
     )
     assert code == 0, err
     added = json.loads(out)
@@ -462,17 +522,23 @@ def test_port_of_files_a_followup_fix_for_the_same_lines(lined):
     assert "AMENDED" in (Path(body["worktree"]) / "extra.py").read_text()
 
     # Naming a PORT resolves to the fix it came from: the same lines again.
-    code, out, err = run_cli(repo, "--json", "task", "add", "FIX3", "--port-of", "FIX@2")
+    code, out, err = run_cli(
+        repo, "--json", "task", "add", "FIX3", "--title", "FIX3 fixture", "--port-of", "FIX@2"
+    )
     assert code == 0, err
     assert sorted(json.loads(out)["ports"]) == ["FIX3@1", "FIX3@2"]
 
 
 def test_port_of_refuses_an_unknown_item_and_a_clash_with_lines(lined):
     repo = lined
-    code, _, err = run_cli(repo, "task", "add", "X", "--port-of", "NOPE")
+    code, _, err = run_cli(repo, "task", "add", "X", "--title", "X fixture", "--port-of", "NOPE")
     assert code != 0 and "NOPE" in err, err
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
-    code, _, err = run_cli(repo, "task", "add", "Y", "--port-of", "FIX", "--lines", "2")
+    run_cli(
+        repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,3", "--globs", "lib.py"
+    )
+    code, _, err = run_cli(
+        repo, "task", "add", "Y", "--title", "Y fixture", "--port-of", "FIX", "--lines", "2"
+    )
     assert code != 0 and "--lines" in err, err
 
 
@@ -480,7 +546,9 @@ def test_port_of_is_reachable_over_mcp(lined):
     from ddflow.surfaces.mcp import Server
 
     repo = lined
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    run_cli(
+        repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,3", "--globs", "lib.py"
+    )
     reply = Server(repo).handle(
         {
             "jsonrpc": "2.0",
@@ -488,7 +556,12 @@ def test_port_of_is_reachable_over_mcp(lined):
             "method": "tools/call",
             "params": {
                 "name": "ddflow_task_add",
-                "arguments": {"id": "FIX2", "port_of": "FIX", "globs": "extra.py"},
+                "arguments": {
+                    "id": "FIX2",
+                    "title": "FIX2 port",
+                    "port_of": "FIX",
+                    "globs": "extra.py",
+                },
             },
         }
     )
@@ -498,7 +571,11 @@ def test_port_of_is_reachable_over_mcp(lined):
 
 def test_port_of_refuses_a_port_whose_fix_was_removed(lined):
     repo = lined
-    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    run_cli(
+        repo, "task", "add", "FIX", "--title", "FIX fixture", "--lines", "1,3", "--globs", "lib.py"
+    )
     run_cli(repo, "remove", "FIX", "--force")
-    code, _, err = run_cli(repo, "task", "add", "FIX2", "--port-of", "FIX@3")
+    code, _, err = run_cli(
+        repo, "task", "add", "FIX2", "--title", "FIX2 fixture", "--port-of", "FIX@3"
+    )
     assert code != 0 and "removed" in err, (code, err)

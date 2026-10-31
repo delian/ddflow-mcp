@@ -130,6 +130,15 @@ SITES: tuple[Site, ...] = (
         "ddflow reviewers approve <name>",
     ),
     Site(
+        "reviewers.approve_command",
+        "A",
+        T3,
+        L4,
+        "the pending command reviewer entry (the program it runs)",
+        ("ddflow/services/reviewer_trust.py:approve",),
+        "ddflow reviewers approve <name>",
+    ),
+    Site(
         "export.ack",
         "A",
         T2,
