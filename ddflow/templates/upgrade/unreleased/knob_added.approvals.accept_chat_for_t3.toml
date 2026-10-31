@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.accept_chat_for_t3"
+new = 'false'
+why = "Typed-chat approval of tier-3 acts: off by default; the operator opts in on the host (D-RA-T3-chat)."
