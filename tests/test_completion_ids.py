@@ -195,9 +195,13 @@ def test_planted_slow_import_fails_the_budget(tmp_path):
 def test_lookup_latency_budget(tmp_path):
     """Import + lookup inside a fresh interpreter fit the 100 ms budget (startup excluded)."""
     _index(tmp_path)
+    # runpy executes the module as `python -m` would, `__main__` block included
     code = (
-        "import time; t = time.perf_counter(); import ddflow.completion_fast as m; "
-        "out = m.complete(['ids', 'COMP']); print(len(out), time.perf_counter() - t)"
+        "import runpy, sys, time, io; t = time.perf_counter(); sys.argv = ['x', 'ids', 'COMP']; "
+        "buf = io.StringIO(); sys.stdout = buf; "
+        "\ntry:\n runpy.run_module('ddflow.completion_fast', run_name='__main__')"
+        "\nexcept SystemExit:\n pass\n"
+        "sys.stdout = sys.__stdout__; print(len(buf.getvalue().split()), time.perf_counter() - t)"
     )
     n, took = _imports(code, tmp_path).split()
     assert n == "2" and float(took) < 0.1
