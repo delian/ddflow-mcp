@@ -177,3 +177,11 @@ def test_empty_file_is_unavailable(tmp_path):
     rep = TR.build_report(tmp_path)
     assert rep["unavailable"] and rep["lead"]["status"] == "UNAVAILABLE"
     assert TR.main([str(tmp_path)]) == 2
+
+
+def test_unreadable_subagent_marks_subagents(proj):
+    (proj / "lead" / "subagents" / "agent-z.jsonl").write_text("{broken\n")
+    rep = TR.build_report(proj)
+    assert rep["subagents"]["status"] == "PARTIAL" and rep["lead"]["status"] == "OK"
+    (proj / "lead" / "subagents" / "agent-a.jsonl").unlink()
+    assert TR.build_report(proj)["subagents"]["status"] == "UNAVAILABLE"

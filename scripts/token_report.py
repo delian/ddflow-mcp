@@ -266,17 +266,17 @@ def build_report(
     rewrites: dict[str, dict] = {}
     carry: dict[str, dict] = {}
     per_agent = []
-    lead_ok = False
+    failed = {"lead": 0, "subagents": 0}
     for p in files:
         sub = "subagents" in p.parts[len(root.parts) :]
         try:
             res = analyse_file(p, since, until, classes)
         except Unavailable as exc:
             rep["unavailable"].append(str(exc))
+            failed["subagents" if sub else "lead"] += 1
             continue
         agg = rep["subagents" if sub else "lead"]
         agg["agents" if sub else "files"] += 1
-        lead_ok |= not sub
         file_units = _fold_calls(res["calls"], agg, rewrites, w, gap_s, min_write)
         agg["units"] += file_units
         if sub:
@@ -288,8 +288,10 @@ def build_report(
                 tok = size // BYTES_PER_TOKEN
                 d["added"] += tok
                 d["carry"] += tok * max(n - seen, 0)
-    if not lead_ok and any("subagents" not in Path(u).parts for u in rep["unavailable"]):
-        rep["lead"]["status"] = "UNAVAILABLE"
+    for side, n in failed.items():
+        ok = rep[side]["files" if side == "lead" else "agents"]
+        if n:
+            rep[side]["status"] = "PARTIAL" if ok else "UNAVAILABLE"
     total = rep["lead"]["units"] + rep["subagents"]["units"]
     rep["total_units"] = total
     rep["share"] = {k: (rep[k]["units"] / total if total else 0.0) for k in ("lead", "subagents")}
