@@ -178,7 +178,13 @@ def test_no_second_word_splitter_is_left_behind() -> None:
     spelling = re.compile(
         r"re\.(split|findall|sub|finditer|compile)\(\s*r?[\"'][^\"']*(\\[wW]|\[\^?\\w)"
     )
-    for path in [*glob.glob("ddflow/infra/store/*.py"), "ddflow/services/guidance/similarity.py"]:
+    store_files = glob.glob("ddflow/infra/store/*.py")
+    # A renamed/moved package must not degrade the guard into a silent no-op: the pre-split
+    # `open("ddflow/infra/store.py")` raised, so the package glob has to match or fail too.
+    assert store_files, (
+        "ddflow/infra/store/*.py matched no files: the word-splitter guard scans nothing"
+    )
+    for path in [*store_files, "ddflow/services/guidance/similarity.py"]:
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
         hits = [n for n, line in enumerate(lines, 1) if spelling.search(line)]
