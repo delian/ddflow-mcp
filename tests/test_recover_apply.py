@@ -52,7 +52,9 @@ def test_apply_leaves_a_tree_holding_work_alone_and_claim_force_adopts_it(repo, 
     # Not stolen by a plain claim...
     assert LC.claim(repo, "T1", agent="next").exit == 3
     # ...adopted by a forced one: the same tree, with the work in it.
-    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
+    monkeypatch.setattr(
+        "ddflow.services.approval.agent_marker", lambda _a="": ""
+    )  # a person forcing
     out = LC.claim(repo, "T1", agent="next", force=True)
     assert out.exit == 0, out.reason
     assert Path(out.data["worktree"]).resolve() == wt.resolve()
@@ -80,7 +82,9 @@ def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo, monkeypatch):
     assert [(r.item, r.salvageable) for r in rec.data["_render"]["found"]] == [("T1", False)]
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and lease.expired_at, "the expiry is RECORDED, not dropped"
-    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
+    monkeypatch.setattr(
+        "ddflow.services.approval.agent_marker", lambda _a="": ""
+    )  # a person forcing
     out = LC.claim(repo, "T1", agent="next", force=True)
     assert out.exit == 0, out.reason
 
