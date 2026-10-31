@@ -2,6 +2,8 @@
 
 from datetime import date
 
+import pytest
+
 from ddflow.services import combine, modelreg
 
 
@@ -35,6 +37,11 @@ def test_copilot_long_context_pair_tier():
     )
     r = combine.effective({"id": "copilot", "facts": {}}, m, None, pair=pair, keys=["price_in"])
     assert r["price_in"] == 2.0 and r.fields["price_in"].source == "pair"
+    rows = [{"harness": "copilot", "model": "gpt-5", "facts": {"long_context": F(True)}}]
+    lc = combine.effective({"id": "copilot", "facts": {}}, m, pair=rows, keys=["long_context"])
+    assert lc["long_context"] is True and lc.fields["long_context"].source == "pair"
+    other = combine.effective(H(), m, pair=rows, keys=["long_context"])
+    assert other["long_context"] is False and other.fields["long_context"].unknown
     none = combine.effective(H(), m, keys=["price_in"], pair=combine.match_pair([], "x", "y", "z"))
     assert none["price_in"] == 1.0
 
@@ -94,3 +101,15 @@ def test_catalog_adapter_unknown_resolves_to_unknown_family():
 def test_names_with_catalog():
     r = combine.effective(H(), "who-knows", "nowhere", catalog=modelreg.Catalog(), keys=["window"])
     assert r.family == "unknown" and r.unknown_models == ("who-knows",)
+
+
+def test_mixed_name_and_mapping():
+    cat = modelreg.Catalog()
+    route = {"id": "r", "facts": {"long_context": F(True)}}
+    a = combine.effective(H(), "m", route, catalog=cat, keys=["long_context"])
+    assert a["long_context"] is True and a.fields["long_context"].source == "route"
+    m = M("unknown", "m")
+    b = combine.effective(H(), m, "nowhere", catalog=cat, keys=["long_context"])
+    assert b.route == "nowhere" and b.unknown_models == ("m",)
+    with pytest.raises(ValueError):
+        combine.effective(H(), "m", keys=["window"])
