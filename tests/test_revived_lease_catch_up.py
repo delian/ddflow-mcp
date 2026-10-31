@@ -78,6 +78,7 @@ def test_the_catch_up_leaves_a_lease_that_changed_hands_alone(repo, monkeypatch)
 
     _lapsed_claim(repo, monkeypatch)
     monkeypatch.setenv("DDFLOW_LEASE_TTL_S", str(TTL))
+    monkeypatch.setattr("ddflow.services.approval.agent_marker", lambda _a="": "")  # a person forcing
     taken = A.claim(repo, "T1", no_worktree=True, force=True, agent="agent-other")
     monkeypatch.delenv("DDFLOW_LEASE_TTL_S")
     assert taken.ok, taken.reason

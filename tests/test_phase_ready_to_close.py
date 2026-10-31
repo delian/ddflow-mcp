@@ -23,7 +23,8 @@ def _finished_phase(repo: Path) -> None:
         ("task", "add", "T2", "--phase", "P1", "--title", "t"),
         ("complete", "T2", "--force"),
     ):
-        code, out, err = run_cli(repo, *argv, agent="a")
+        # `--force` is a person's (B49fa10bbb1): that step runs with no agent marker
+        code, out, err = run_cli(repo, *argv, agent="" if "--force" in argv else "a")
         assert code == 0, (argv, out, err)
 
 
