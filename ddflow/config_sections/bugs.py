@@ -74,6 +74,11 @@ class BugsConfig:
         doc="Seconds `bug found --test ID` lets pytest run to capture its output tail (default 300); a run cut short is recorded as such.",
         check=lambda v: "" if isinstance(v, int) and v >= 1 else "must be a positive integer",
     )
+    repro_runs: int = knob(
+        1,
+        doc="How many times `bug found --repro-cmd CMD` reruns the command at filing (default 1), and thus whether the bug's sighting was confirmed: the bundle records `reproduced yes|no`, `runs` and `failures`.",
+        check=lambda v: "" if isinstance(v, int) and v >= 1 else "must be a positive integer",
+    )
     repro_env: list[str] = knob(
         factory=lambda: [
             "DDFLOW_*",

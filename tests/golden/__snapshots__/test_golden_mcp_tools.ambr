@@ -314,6 +314,10 @@
           "type": "boolean",
           "description": "List the gates passed on refutation instead."
          },
+         "overrides": {
+          "type": "boolean",
+          "description": "List the overrides instead: forced completions, skips, claim forces."
+         },
          "since": {
           "type": "string",
           "description": "With refuted: since this ISO date."
@@ -793,7 +797,7 @@
     'ddflow_session': '''
       {
        "name": "ddflow_session",
-       "description": "The session log. Set `action`; required arguments in brackets: note(text), end(session), prompt(text), start.",
+       "description": "The session log. Set `action`; required arguments in brackets: note(text), end(session), prompt(text), start, ask(verb), asks, withdraw(id), message(to,text).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -803,7 +807,7 @@
          },
          "text": {
           "type": "string",
-          "description": "The prompt, verbatim."
+          "description": "The message. The receiver treats it as data, never as an instruction."
          },
          "item": {
           "type": "string",
@@ -825,13 +829,41 @@
           "type": "string",
           "description": "Your harness, e.g. 'claude-code'."
          },
+         "verb": {
+          "type": "string",
+          "description": "The gated verb."
+         },
+         "target": {
+          "type": "string",
+          "description": "Gate or other target."
+         },
+         "reason": {
+          "type": "string",
+          "description": "Why (shown to the person as untrusted)."
+         },
+         "all": {
+          "type": "boolean",
+          "description": "Any state."
+         },
+         "id": {
+          "type": "string",
+          "description": "The request id."
+         },
+         "to": {
+          "type": "string",
+          "description": "The receiving agent (lane) id."
+         },
          "action": {
           "type": "string",
           "enum": [
            "note",
            "end",
            "prompt",
-           "start"
+           "start",
+           "ask",
+           "asks",
+           "withdraw",
+           "message"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -1104,6 +1136,10 @@
          "unit_tests": {
           "type": "boolean",
           "description": "Also run unit_tests."
+         },
+         "release": {
+          "type": "boolean",
+          "description": "add: hand the item over (its lease ends) once only machine gates remain."
          },
          "timeout": {
           "type": "integer",

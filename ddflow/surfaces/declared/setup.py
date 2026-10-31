@@ -16,7 +16,7 @@ from ..tools._common import _AGENT_KEYS, _api, _configure_reported
 from ..vocabulary import sources
 
 
-def _self_request(a):
+def _self_request(a, agent: str = ""):
     """`ddflow_upgrade`'s `self` argument as the self-upgrade request, None without it."""
     mode = str(a.get("self") or "")
     if not mode:
@@ -32,6 +32,8 @@ def _self_request(a):
         confirm=[str(x) for x in (a.get("confirm") or [])],
         reason=str(a.get("reason") or ""),
         surface="mcp",
+        agent=agent,
+        approval=str(a.get("approval") or ""),
     )
 
 
@@ -200,7 +202,7 @@ COMMANDS: tuple[Command, ...] = (
             snapshot=bool(a.get("snapshot")),
             restore=str(a.get("restore") or ""),
             check=bool(a.get("check")),
-            selfup=_self_request(a),
+            selfup=_self_request(a, agent),
             status=bool(a.get("status")),
             history=bool(a.get("history")),
             resume=bool(a.get("resume")),
@@ -243,6 +245,11 @@ COMMANDS: tuple[Command, ...] = (
             Param("resume", type="boolean", help="Finish interrupted.", mcp_only=True),
             Param("self", help="Upgrade ddflow itself: run, dry-run or rollback.", mcp_only=True),
             Param("to", help="With self: the version.", mcp_only=True),
+            Param(
+                "approval",
+                help="With self: a person's approval id (a refusal files it).",
+                mcp_only=True,
+            ),
         ),
     ),
     Command(

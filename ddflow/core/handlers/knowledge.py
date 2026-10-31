@@ -108,6 +108,42 @@ def _h_bug_found(st: State, ev: Event) -> None:
     if not bug.found_at:  # only the first report sets tags: a re-report never undoes `bug tag`
         bug.tags = list(dict.fromkeys(ev.data.get("tags") or []))
     bug.found_at = bug.found_at or ev.ts
+    bug.sightings += 1
+    _merge_sighted(bug, ev)
+
+
+def _merge_sighted(bug, ev) -> None:
+    """Fold a `sighted` sighting into ``bug`` in place (DX-bug-repro-verify): `reproduced`
+    yes|no with `runs` and `failures`. "yes" sticks -- the sighting that FAILED confirmed
+    the bug, and a later non-failing run never unconfirms it -- while the counts are the
+    last sighting that reached exit codes. Every sighting counts (`bug.sightings`),
+    whatever its runs said: the first filed, a second one confirms the bug even when its
+    run also passed, per "until a second sighting or a confirming run". Events folded
+    before the field existed carry no `sighted` and change nothing."""
+    sig = ev.data.get("sighted")
+    if not isinstance(sig, dict):
+        return
+    if sig.get("reproduced") == "yes":
+        bug.reproduced = "yes"
+    elif sig.get("reproduced") == "no" and bug.reproduced != "yes":
+        bug.reproduced = "no"
+    runs = sig.get("runs")
+    failures = sig.get("failures")
+    if runs is None or failures is None:
+        return  # a sighting missing a count is not a whole sighting (runs or failures);
+        # folding runs alone would pair a run count with a stale failure count
+    if not isinstance(runs, (int, str)) or not isinstance(failures, (int, str)):
+        return  # a float count is not a whole count: fold nothing, never truncate 1.5 to 1
+    try:
+        new_runs = int(runs)
+        new_failures = int(failures)
+    except (TypeError, ValueError, OverflowError):
+        return  # a persisted sighting whose counts cannot count folds nothing -- atomic:
+        # a run count must not advance ahead of a failure count that could not count
+    if new_runs < 0 or new_failures < 0:
+        return  # a negative count folds nothing
+    bug.repro_runs = new_runs
+    bug.repro_failures = new_failures
 
 
 def _h_bug_tagged(st: State, ev: Event) -> None:

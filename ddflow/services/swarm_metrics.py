@@ -29,10 +29,9 @@ from ..core.schedule import critical_path, inherited_deps
 from .metrics.facts import Facts, Span, collect
 from .metrics.providers import Context
 from .metrics.summary import RAN
+from .swarm.ledger import BUG_WINDOW_S
 
 HOUR = 3600.0
-#: A bug filed this long after an item completed still counts as its rework (one week).
-BUG_WINDOW_S = 7 * 24 * HOUR
 
 #: Swarm targets (D-swarm-answers Q4): throughput multiple, cost multiple, rework points.
 TARGET_THROUGHPUT_X = 1.8

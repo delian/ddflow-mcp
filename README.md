@@ -1103,7 +1103,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 457 knobs.
+cadences, and the rest of the 471 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -1430,6 +1430,14 @@ forever is indistinguishable from one that is down except that it also holds a p
 
 **Keys are never written to the config.** Only `api_key_env`, the *name* of an
 environment variable — the config file is committed, and a key in git is a leaked key.
+
+To not export the variable in every shell, a reviewer in the git-ignored
+`.ddflow/local/reviewers.toml` may also name `api_key_file = "~/.config/me/gemini.key"`.
+The variable wins; the file is the fallback. The file must be a regular file you own with
+no group or other access (`chmod 600`, as ssh insists), is read at each call and never
+cached, and a missing, empty or too-open file makes the reviewer UNAVAILABLE with the
+reason. The path is data and the key never is: it appears in no log, event, error,
+review record or listing. `api_key_file` is refused in the committed `.ddflow/config.toml`.
 
 Every way of not reviewing is reported distinctly, with its remedy: no key names the
 variable, a missing CLI names the binary, a dead server names the launch block you could
@@ -5298,7 +5306,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 457): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 471): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5870,7 +5878,7 @@ declared once and persists — see
 
 ## Configuration
 
-457 knobs across 46 sections, every one documented in place and listed, with its default
+471 knobs across 46 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console

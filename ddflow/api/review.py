@@ -42,6 +42,7 @@ from ..services import logblobs as LB
 from ..services import prompts as P
 from ..services import review as RV
 from ..services import review_exclude as REX
+from ..services import review_keys
 from ..services import review_manifest as RM
 from ..services.completion import changed_paths
 from ..services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
@@ -715,6 +716,98 @@ def _link_refuted(log, it, gate: str, findings) -> list[str]:
     return linked
 
 
+_LINE_CITATION = re.compile(r"^\d+(?:\s*[-\u2013]\s*\d+)?$")
+
+
+def _design_point(location: str) -> str:
+    """A finding's cited place with its churning line number dropped -- ``path:line`` ->
+    ``path``, ``path:func`` kept whole -- so two rounds that cite the same file (and
+    function/symbol, when one is named) describe the same place. A file-level citation with
+    no colon already names just the place, and is kept whole. The line is what moves as the
+    diff grows (bug B-review-delta-retriages-same-point)."""
+    loc = " ".join(str(location or "").split()).strip()
+    if not loc:
+        return ""
+    if ":" not in loc:
+        return loc
+    path, _, anchor = loc.rpartition(":")
+    anchor = anchor.strip()
+    return path.strip() if _LINE_CITATION.match(anchor) else loc
+
+
+def _claim_text(f) -> str:
+    """A finding's claim with its whitespace collapsed: what the finding SAYS is wrong, not
+    where it cites it. Two re-worded claims are NOT the same claim, so carrying a verdict
+    keyed by it can never hide a different finding at the same place. A whitespace-only
+    detail falls back to the title (the finding's cited text), so a finding with no body
+    still carries its claim from the citation."""
+    detail = " ".join(str(_finding_field(f, "detail") or "").split())
+    if detail:
+        return detail
+    return " ".join(str(_finding_field(f, "title") or "").split())
+
+
+def _carry_delta_verdicts(log, it, gate: str, kept, mine, say) -> dict:
+    """Carry the same gate's triage to a delta finding that re-raises an already-triaged
+    design point under a new digest (bug B-review-delta-retriages-same-point).
+
+    A delta shows the reviewer only the follow-up commits; the design point the author
+    already triaged (refuted or confirmed) can come back at a shifted line, so its digest --
+    what a triage is keyed by (decision D-review-triage) -- no longer attaches. A finding of
+    ``mine`` matching an earlier finding of ``gate`` at the same design point (the cited file
+    and function, `_design_point`, AND the same claim `_claim_text`) inherits that verdict
+    instead of re-opening the triage cycle; a different claim at the same place stays its own
+    untriaged finding. Appends a `review.triaged` for each and returns them keyed by digest.
+    A byte-identical re-raise keeps its digest and so is skipped (it already stays the
+    earlier triaged copy).
+    """
+    if it is None:
+        return {}
+    triage = it.triage.get(gate, {})
+    prior_digests = {str(_finding_field(f, "digest") or "") for f in kept}
+    if not triage or not prior_digests:
+        return {}
+    by_point = {}
+    for f in kept:
+        point = _design_point(_finding_field(f, "location"))
+        claim = _claim_text(f)
+        t = triage.get(str(_finding_field(f, "digest") or ""))
+        if point and claim and t and t.get("verdict") in _SETTLED:
+            by_point[(point, claim)] = t  # the latest settled triage for this design point
+    if not by_point:
+        return {}
+    carried: dict = {}
+    for n, f in enumerate(mine, 1):
+        digest = str(_finding_field(f, "digest") or "")
+        if not digest or digest in prior_digests:
+            continue
+        point = _design_point(_finding_field(f, "location"))
+        t = by_point.get((point, _claim_text(f)))
+        if not point or t is None:
+            continue
+        log.append(
+            "review.triaged",
+            it.id,
+            {
+                "gate": gate,
+                "finding": n,
+                "digest": digest,
+                "verdict": t.get("verdict", ""),
+                "probe": t.get("probe", ""),
+                "severity": _finding_field(f, "severity"),
+                "title": _finding_field(f, "title"),
+                "location": _finding_field(f, "location"),
+            },
+        )
+        carried[digest] = t
+    if carried:
+        say(
+            f"carried the triage of {len(carried)} re-raised design point(s) to this delta's "
+            "findings (their line moved or was reworded, not triaged anew)"
+        )
+    return carried
+
+
 def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
     """Fold a delta's findings and coverage into the evidence of the review it follows.
 
@@ -747,6 +840,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     if not kept:
         return 0
     have = {f.get("digest"): n for n, f in enumerate(kept, 1)}
+    carried = _carry_delta_verdicts(log, it, gate, kept, mine, say)
     for f in mine:
         if f.get("digest") not in have:
             kept.append(f)
@@ -764,10 +858,19 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
     verdicts = it.triage.get(gate, {})
+    return _untriaged(kept, gone, carried, verdicts)
+
+
+def _untriaged(kept: list[dict], gone, carried: dict, verdicts: dict) -> int:
+    """Findings of the merged record still without a settled verdict. A carried digest's
+    triage is a fresh `review.triaged` `_carry_delta_verdicts` appends, not one the folded
+    ``verdicts`` held, so it is excluded per finding and never over-subtracted."""
+    carried_set = set(carried)
     return sum(
         1
         for f in kept
         if f.get("digest") not in gone
+        and f.get("digest") not in carried_set
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
 
@@ -1011,6 +1114,7 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
             "enabled": r.enabled,
             "base_url": r.base_url,
             "model": r.model,
+            "key": review_keys.status(r.api_key_env, r.api_key_file),
         }
         for r in revs
     ]
@@ -1019,7 +1123,11 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     # rather than about a missing `family = "..."` line.
     unclassified = [r["name"] for r in rows if not r["family"] and r["enabled"]]
 
-    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified}
+    # Names only: which enabled reviewer has neither its variable nor a readable key file.
+    no_key = [
+        r["name"] for r in rows if r["enabled"] and r["key"].startswith(("missing", "UNAVAILABLE"))
+    ]
+    data: dict[str, Any] = {"reviewers": rows, "unclassified": unclassified, "no_key": no_key}
     if not rows:
         empty = "No reviewers configured. Run `ddflow reviewers detect --write`."
         return O.nothing("reviewers.list", empty, text=empty, **data)
@@ -1651,7 +1759,9 @@ def _wants_delta(repo, cfg, it, a, say) -> bool:
 #: whole essay a reviewer may have written.
 _BACKGROUND_HINT = (
     "a review can take minutes: a harness that cuts a foreground command (often at 120 s) "
-    "kills it -- run `ddflow review` in the background and read its output when it ends."
+    "kills it -- run `ddflow review --detach`, which reviews in its own session and streams "
+    "to a log it names, so a cut reaches only the launcher and the review outlives it "
+    "(a plain run in the background dies with the cut)."
 )
 _PREVIOUS_DETAIL = 500
 _PREVIOUS_PROBE = 300

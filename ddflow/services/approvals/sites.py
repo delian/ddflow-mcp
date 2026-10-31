@@ -57,6 +57,8 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/export/select.py:enable": 1,
     "ddflow/services/export/select.py:disable": 1,
     "ddflow/services/export/select.py:acknowledge": 1,
+    "ddflow/services/export/select.py:gate_force": 1,
+    "ddflow/services/approvals/relayed.py:gate": 1,  # upgrade.self and plan.confirm
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
     "ddflow/api/setup.py:configure": 1,
     "ddflow/api/pin_files.py:_regenerate_approval": 1,
@@ -130,6 +132,15 @@ SITES: tuple[Site, ...] = (
         "ddflow reviewers approve <name>",
     ),
     Site(
+        "reviewers.approve_command",
+        "A",
+        T3,
+        L4,
+        "the pending command reviewer entry (the program it runs)",
+        ("ddflow/services/reviewer_trust.py:approve",),
+        "ddflow reviewers approve <name>",
+    ),
+    Site(
         "export.ack",
         "A",
         T2,
@@ -158,6 +169,24 @@ SITES: tuple[Site, ...] = (
         "the operator's lock on the document an agent enables again",
         ("ddflow/services/export/select.py:enable",),
         "ddflow export enable <doc> --approval ID",
+    ),
+    Site(
+        "export.force",
+        "A",
+        T2,
+        L1,
+        "the document and the target file's bytes as they are now (the hand edit it would replace)",
+        ("ddflow/services/export/select.py:gate_force",),
+        "ddflow export <doc> --update|--out PATH --force --approval ID",
+    ),
+    Site(
+        "export.machine",
+        "A",
+        T2,
+        L1,
+        "the document and whether this is an enable or a disable (a per-machine selection)",
+        ("ddflow/services/export/select.py:enable", "ddflow/services/export/select.py:disable"),
+        "ddflow export enable|disable <doc> --local --approval ID",
     ),
     Site(
         "config.reviewer_command",
@@ -191,27 +220,25 @@ SITES: tuple[Site, ...] = (
         "B",
         T2,
         L1,
-        "the target version and the upgrade plan digest",
-        (),
-        "ddflow upgrade --self --yes --reason ...",
-        anchor=("ddflow/surfaces/commands/setup.py", 'confirm=["self"]'),
+        "the running and the target version and the exact install command (relayed `--yes --reason` still works, warned, until [approvals].require_approval lists the verb)",
+        ("ddflow/services/approvals/relayed.py:gate",),
+        "ddflow upgrade --self --approval ID",
     ),
     Site(
         "plan.confirm",
         "B",
         T2,
         L1,
-        "the proposed plan",
-        (),
-        "ddflow plan confirm --yes --reason ...",
-        anchor=("ddflow/api/plan.py", "Confirm with --yes --reason"),
+        "the plan and the tasks it still holds back (relayed `--yes --reason` still works, warned, until [approvals].require_approval lists the verb)",
+        ("ddflow/services/approvals/relayed.py:gate",),
+        "ddflow plan confirm <plan> --approval ID",
     ),
     Site(
         "skew.override",
         "B",
         T2,
         L1,
-        "the installed and the repository version",
+        "none: the version guard refuses the approval engine's own writes, so this keeps relayed consent, warned per use (D-RA-Q2)",
         (),
         "ddflow <write command> --allow-older-version --reason ...",
         anchor=("ddflow/surfaces/history_verbs.py", "skew.overridden"),
@@ -253,14 +280,10 @@ TERMINAL_ONLY: dict[str, str] = {
 }
 
 #: Refusals NOT yet routed, honestly listed with the follow-up that routes them (not T3: the
-#: conformance test requires the reason to name its task, so this table only shrinks).
-NOT_YET_ROUTED: dict[str, str] = {
-    "ddflow/surfaces/declared/export.py:<module>": (
-        "NOT YET ROUTED (follow-up RA-consume-sites-4): `export --force` (override of hand-edit "
-        "protection) and the per-machine `--local` selection are still the operator's terminal acts; "
-        "the lock, the lock lift and the acknowledgement are routed (export.lock/unlock/ack)"
-    ),
-}
+#: conformance test requires the reason to name its task, so this table only shrinks). Empty since
+#: RA-consume-sites-4 routed the last ones (`export --force`/`--local`: `export.force`,
+#: `export.machine`; `upgrade --self`, `plan confirm`: relayed consent beside `--approval`).
+NOT_YET_ROUTED: dict[str, str] = {}
 
 #: Strings that mention a terminal without refusing anyone (input prompts, docs).
 NOT_A_REFUSAL: dict[str, str] = {

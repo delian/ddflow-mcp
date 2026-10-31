@@ -22,6 +22,7 @@ import ddflow.api._dedupe as DD
 
 from ..config import Config
 from ..core import outcome as O
+from ..core.digest import content_digest
 from ..core.records import WORK_KINDS, Item, State
 from ..infra import git as G
 from ..services import items as IT
@@ -30,6 +31,7 @@ from ..services import plan_apply as PA
 from ..services import plancheck as PC
 from ..services import planlint as PL
 from ..services import priority as PRI
+from ..services.approvals import relayed as RL
 from ._base import _load
 from ._globwarn import missing_globs
 from .items import ItemEdit
@@ -352,30 +354,50 @@ def _commit(log, cfg, plan, pid, waves, base) -> O.Outcome:
 
 
 def plan_confirm(
-    repo: Path, plan_id: str, *, yes: bool = False, reason: str = "", agent: str = ""
+    repo: Path,
+    plan_id: str,
+    *,
+    yes: bool = False,
+    reason: str = "",
+    agent: str = "",
+    approval: str = "",
 ) -> O.Outcome:
-    """Release the tasks plan ``plan_id`` proposed. The operator's act, so it needs
-    ``yes`` and a ``reason`` (the same consent every operator-only step takes); exit 2
-    when nothing of the plan is waiting."""
-    log, _cfg, st = _load(repo, agent)
+    """Release the tasks plan ``plan_id`` proposed. The operator's act, so it needs ``yes`` and
+    a ``reason`` (the same consent every operator-only step takes); exit 2 when nothing of the
+    plan is waiting. An agent may instead spend a person's approval (``--approval ID``), and
+    until `[approvals].require_approval` lists ``plan.confirm`` its relayed `--yes --reason` still
+    works, recorded and warned about (D-RA-Q2)."""
+    log, cfg, st = _load(repo, agent)
     waiting = PA.proposed_by(st, plan_id)
     if not waiting:
         return O.nothing(
             "plan.confirm", f"nothing proposed by plan {plan_id} is waiting", plan=plan_id
         )
-    if not (yes and reason.strip()):
-        return O.refused(
-            "plan.confirm",
-            f"{len(waiting)} task(s) wait for the operator's word: "
-            f'{", ".join(waiting)}. Confirm with --yes --reason "<why>"',
-            plan=plan_id,
-            waiting=waiting,
-        )
+    consented = bool(yes and reason.strip())
+    ask = f"{len(waiting)} task(s) wait for the operator's word: {', '.join(waiting)}."
+    held = content_digest(",".join(sorted(waiting)))
+    verdict = RL.gate(
+        log, cfg, "plan.confirm", requested_agent=agent, approval=approval, consented=consented,
+        reason=reason, item=plan_id, state=held,
+    )  # fmt: skip
+    if not verdict.ok:
+        how = verdict.message or 'Confirm with --yes --reason "<why>"'
+        return O.refused("plan.confirm", f"{ask} {how}", plan=plan_id, waiting=waiting)
     with log.transaction():
         st = L._fold(log)  # decided under the lock: a second confirm finds nothing
         waiting = PA.proposed_by(st, plan_id)
+        if waiting and content_digest(",".join(sorted(waiting))) != held:
+            # the set changed after the consent (or approval) was taken: it did not cover this
+            return O.refused(
+                "plan.confirm",
+                f"the tasks plan {plan_id} holds back changed while confirming: re-run it",
+                plan=plan_id,
+                waiting=waiting,
+            )
         for iid in waiting:
-            log.append("item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {reason}"})
+            log.append(
+                "item.unblocked", iid, {"note": f"plan {plan_id} confirmed: {verdict.reason}"}
+            )
     if not waiting:
         return O.nothing("plan.confirm", f"plan {plan_id} was confirmed meanwhile", plan=plan_id)
     return O.ok("plan.confirm", plan=plan_id, released=waiting)

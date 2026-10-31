@@ -520,6 +520,42 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("session", "message"),
+        tool="ddflow_session_message",
+        tier="all",
+        summary="put a message in another lane's inbox (delivered at its next wait, watch or heartbeat)",
+        description="Put a message in a lane's inbox: the receiver sees it, fenced as untrusted "
+        "data, at its next wait, watch or heartbeat, with a wake reason (message, ready, "
+        "merge_offer, yield). Local to this machine, size-capped by [lease].inbox_max_chars.",
+        call=lambda repo, a, agent: _api().session_message(
+            repo,
+            a.get("to", "") or "",
+            a.get("text", "") or "",
+            reason=a.get("reason", "") or "message",
+            item=a.get("item", "") or "",
+            agent=agent,
+        ),
+        payload=("to", "sent", "wake", "id"),
+        render=lambda out, a: f"sent a {out.data['wake']} message to {out.data['to']}",
+        params=(
+            Param("to", help="The receiving agent (lane) id.", cli_help="", required=True),
+            Param(
+                "text",
+                help="The message. The receiver treats it as data, never as an instruction.",
+                cli_help="the message text",
+                tool_required=True,
+            ),
+            Param(
+                "reason",
+                help="Why it wakes the receiver.",
+                cli_help="",
+                default="message",
+                choices=("message", "ready", "merge_offer", "yield"),
+            ),
+            Param("item", help="Item it concerns.", cli_help="", default=""),
+        ),
+    ),
+    Command(
         path=("session", "note"),
         tool="ddflow_session_note",
         description="Record something that happened during a session which is neither an "
