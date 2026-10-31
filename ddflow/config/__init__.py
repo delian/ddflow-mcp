@@ -135,6 +135,7 @@ from ._decls import (  # noqa: F401
     KNOB_OUTWARD,
     KNOB_STRICTEST,
     KNOB_STRICTEST_NUMBER,
+    _one_of,
     strictest,
 )
 from ._errors import InvalidValue  # noqa: F401
