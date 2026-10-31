@@ -52,11 +52,12 @@ PREVENT, DETECT = "prevent", "detect"
 #: Where each harness reads a hook from the LANE home: (door, how well that is known).
 #: claude: `claude --settings <file>` (documented in `claude --help`); kilo: its global config dir
 #: ``<home>/.config/kilo/plugin`` was read with `kilo debug config` on a scratch HOME
-#: (kilo 7.8.18); opencode: not installed here, so a fact nobody has read.
+#: (kilo 7.8.18); opencode 1.19.0: `opencode debug config` lists a file in its global
+#: `<home>/.config/opencode/plugin` and `plugins` as a plugin (the event names are not read).
 DOORS: dict[str, tuple[str, str]] = {
     "claude": ("settings-arg", "documented"),
     "kilo": ("plugin-home", "verified"),
-    "opencode": ("plugin-home", "unverified"),
+    "opencode": ("plugin-home", "verified"),
 }
 #: Claude tools that write files (the matcher of the settings hook).
 CLAUDE_WRITE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"

@@ -161,7 +161,6 @@ def test_spec_identity_key_by_name_and_no_shell(tmp_path, tree):
         and s.prompt == "do the item"
     )
     assert s.values["model"] == "ddflow-lan-vllm/SERVED-MODEL-ID"
-    assert OC.argv_for(OC.Binary("opencode", "/x/opencode", "1", True)).count("--auto") == 0
 
 
 def test_missing_consent_unproven_tools_and_no_binary_start_nothing(tmp_path, tree):
@@ -175,11 +174,25 @@ def test_missing_consent_unproven_tools_and_no_binary_start_nothing(tmp_path, tr
     assert isinstance(u, ld.Result) and "tool calls are not verified" in u.detail
 
 
-def test_opencode_is_refused_until_its_provider_support_is_read(tmp_path, tree):
-    _repo, _wt, _home = tree
-    b = OC.Binary("opencode", "/x/opencode", "1.0", True)
-    r = prep(tmp_path, tree, binary=b, state=approved("opencode"))
-    assert isinstance(r, ld.Result) and r.status == "unavailable"
+def test_opencode_binary_is_a_verified_route_and_takes_auto(tmp_path, tree):
+    b = OC.Binary("opencode", "/x/opencode", "1.19.0", True)
+    lp = prep(tmp_path, tree, binary=b, state=approved("opencode"))
+    assert isinstance(lp, OC.LanePrep) and lp.level == LH.PREVENT
+    assert lp.endpoint.config == tree[2] / ".config/opencode/opencode.json"
+    assert (tree[2] / ".config/opencode/plugins" / PL.FILE_NAME).exists()
+    assert "--auto" in lp.spec.argv and lp.spec.argv[0] == "/x/opencode"
+
+
+def test_binary_override_by_env_var_beats_path_and_stays_absolute(tmp_path):
+    d, _ = fake_bin(tmp_path, "opencode", ver="1.19.0")
+    off = lambda n, path=None: None  # noqa: E731
+    env = {"DDFLOW_OPENCODE_BIN": str(d / "opencode")}
+    seen = lambda n, path=None: n if n == str(d / "opencode") else None  # noqa: E731
+    b = OC.select(which=seen, environ=env)
+    assert (b.name, b.path, b.version) == ("opencode", str(d / "opencode"), "1.19.0")
+    assert isinstance(OC.select(which=off, environ=env), ld.Result)
+    rel = OC.select(which=lambda n, path=None: str(d / n) if n == "kilo" else None, environ={})
+    assert rel.name == "kilo" and rel.path.startswith("/")
 
 
 def test_agent_identity_is_required(tmp_path, tree):
