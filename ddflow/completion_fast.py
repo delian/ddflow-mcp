@@ -16,35 +16,35 @@ import sys
 from .services import completion_ids as CI
 
 
+def _parse(rest: list[str]) -> tuple[str | None, str | None, list[str]] | None:
+    """``--kind K --state S`` and the positional words, or None for malformed arguments."""
+    flags: dict[str, str] = {}
+    words: list[str] = []
+    i = 0
+    while i < len(rest):
+        if rest[i] in ("--kind", "--state"):
+            if i + 1 >= len(rest):
+                return None  # a flag without its value
+            flags[rest[i]] = rest[i + 1]
+            i += 2
+        else:
+            words.append(rest[i])
+            i += 1
+    return flags.get("--kind"), flags.get("--state"), words
+
+
 def complete(argv: list[str]) -> list[str]:
-    """Candidates for ``argv``; never raises."""
+    """Candidates for ``argv``; never raises, and bad arguments give nothing."""
     try:
-        if not argv:
+        parsed = _parse(argv[1:]) if argv else None
+        if parsed is None or len(parsed[2]) > 1:
             return []
-        verb, rest = argv[0], argv[1:]
-        kind = state = None
-        words: list[str] = []
-        i = 0
-        while i < len(rest):
-            w = rest[i]
-            if w in ("--kind", "--state"):
-                if i + 1 >= len(rest):
-                    return []  # a flag without its value: bad arguments print nothing
-                if w == "--kind":
-                    kind = rest[i + 1]
-                else:
-                    state = rest[i + 1]
-                i += 2
-            else:
-                words.append(w)
-                i += 1
-        if len(words) > 1:
-            return []
-        if verb != "ids" and (kind is not None or state is not None):
-            return []
-        prefix = words[0] if words else ""
+        kind, state, words = parsed
+        verb, prefix = argv[0], (words[0] if words else "")
         if verb == "ids":
             return CI.complete_ids(prefix, kind, state)
+        if kind is not None or state is not None:
+            return []  # the filters belong to `ids` alone
         if verb == "phases":
             return CI.phases(prefix)
         if verb in ("kinds", "states"):
