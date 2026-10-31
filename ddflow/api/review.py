@@ -2321,6 +2321,42 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
+def _gate_outcome(best, it, item: str, gate: str, kind: str, cfg, extra_evidence, say) -> tuple[str, dict | None]:
+    """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
+    evidence; a converged full re-review passes with a `converged` flag on the evidence.
+
+    The convergence floor (bug Bf797745b5a) applies to a FULL re-review only: a delta or
+    fix round shows only NEW code, so its own finding is a real defect of the change and
+    blocks at any severity -- while a full re-review re-sends the whole diff the author
+    has already seen, so a new below-floor nit does not re-open the gate.
+    """
+    if best.status != RV.REVIEWED:
+        return (
+            {RV.PARTIAL: "partial", RV.UNAVAILABLE: "unavailable", RV.ERROR: "unavailable"}[
+                best.status
+            ],
+            extra_evidence,
+        )
+    if not best.findings:
+        return "passed", extra_evidence
+    blocking = RV.blocking_findings(
+        best.findings,
+        converged=kind == "full" and it is not None and item and _rounds_used(it, gate) > 0,
+        floor=cfg.review.converge_floor,
+    )
+    if blocking:
+        return "failed", extra_evidence
+    converged = {
+        "findings_below_floor": len(best.findings),
+        "floor": cfg.review.converge_floor,
+    }
+    say(
+        f"→ {converged['findings_below_floor']} finding(s) below [review].converge_floor "
+        f"({converged['floor']}) recorded but not blocking: the full re-review passes (converged)"
+    )
+    return "passed", {**(extra_evidence or {}), "converged": converged}
+
+
 def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     repo, log, cfg, st, it, item: str, gate: str, outcome: str,
     *, called_from, gates, say, best, results, keeps, extra_evidence, scope,
@@ -2356,11 +2392,6 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     outcome, reason = _hold(outcome, _reason_of(best), held, say)
     if clean_pass and outcome == "failed":
         evidence["held_pass"] = True
-    if outcome == "passed" and (converged := (extra_evidence or {}).get("converged")):
-        reason = (
-            f"{converged['findings_below_floor']} finding(s) below [review].converge_floor "
-            f"({converged['floor']}) recorded, not blocking"
-        )
     _record(
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
         reason=reason, evidence=evidence, by=best.model,
@@ -2660,41 +2691,11 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         _say_result(say, res)
 
     best = min(results, key=lambda r: r.status)
-    blocking = list(best.findings)
-    if best.status == RV.REVIEWED and best.findings and kind == "full":
-        # The convergence floor (bug Bf797745b5a) applies to a FULL re-review only: a
-        # delta or fix round shows only NEW code, so its own finding is a real defect of
-        # the change and blocks at any severity -- while a full re-review re-sends the
-        # whole diff the author has already seen, so a new below-floor nit does not
-        # re-open the gate.
-        blocking = RV.blocking_findings(
-            best.findings,
-            converged=it is not None and item and _rounds_used(it, gate) > 0,
-            floor=cfg.review.converge_floor,
-        )
-        if not blocking:
-            extra_evidence = {
-                **(extra_evidence or {}),
-                "converged": {
-                    "findings_below_floor": len(best.findings),
-                    "floor": cfg.review.converge_floor,
-                },
-            }
-            say(
-                f"→ {len(best.findings)} finding(s) below [review].converge_floor "
-                f"({cfg.review.converge_floor}) recorded but not blocking: the full "
-                "re-review passes (converged)"
-            )
-    outcome = {
-        RV.REVIEWED: ("failed" if blocking else "passed"),
-        RV.PARTIAL: "partial",
-        RV.UNAVAILABLE: "unavailable",
-        RV.ERROR: "unavailable",
-    }[best.status]
+    outcome, extra_evidence = _gate_outcome(best, it, item, gate, kind, cfg, extra_evidence, say)
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence, converged=converged,
             scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
