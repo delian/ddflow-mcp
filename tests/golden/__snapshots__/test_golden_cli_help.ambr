@@ -878,8 +878,9 @@
     --mode MODE           enable: whole, region or append
     --local               enable/disable: this machine only
     --lock                disable: the operator's veto; agents cannot enable it
-    --approval APPROVAL   an agent: the id of the operator's approval for ack, disable --lock or
-                          enabling a locked document (a refusal files the request and names it)
+    --approval APPROVAL   an agent: the id of the operator's approval for ack, disable --lock,
+                          enabling a locked document, --force or --local (a refusal files the
+                          request and names it)
     --all                 act on the selected documents
     --since SINCE         entries at or after this date (YYYY-MM-DD or a timestamp prefix)
     --version VERSION     one release (the changelog kind: X or vX, or unreleased)
@@ -1910,15 +1911,18 @@
 # ---
 # name: test_help[ddflow plan confirm]
   '''
-  usage: ddflow plan confirm [-h] [--yes] [--reason REASON] plan_id
+  usage: ddflow plan confirm [-h] [--yes] [--reason REASON] [--approval APPROVAL] plan_id
   
   positional arguments:
-    plan_id          The plan's label.
+    plan_id              The plan's label.
   
   options:
-    -h, --help       show this help message and exit
-    --yes            The operator's consent.
-    --reason REASON  Why the operator accepts the plan.
+    -h, --help           show this help message and exit
+    --yes                The operator's consent.
+    --reason REASON      Why the operator accepts the plan.
+    --approval APPROVAL  An agent: the id of a person's approval of this plan's release, instead of
+                         relaying their consent as --yes --reason (a refusal files the request and
+                         names it).
   
   '''
 # ---
@@ -3020,7 +3024,7 @@
 # ---
 # name: test_help[ddflow upgrade]
   '''
-  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]] [--check] [--status] [--history] [--resume] [--self] [--to VERSION] [--dry-run] [--rollback] [--yes]
+  usage: ddflow upgrade [-h] [--plan] [--apply [CATEGORIES]] [--confirm KEY] [--reason REASON] [--backup MODE] [--snapshot] [--restore [NAME]] [--check] [--status] [--history] [--resume] [--self] [--to VERSION] [--dry-run] [--rollback] [--yes] [--approval ID]
   
   options:
     -h, --help            show this help message and exit
@@ -3060,6 +3064,9 @@
     --rollback            with --self: reinstall the version that ran before the last --self
     --yes                 with --self: the operator consents to installing a new ddflow (needs
                           --reason)
+    --approval ID         with --self, an agent: the id of a person's approval of this install,
+                          instead of relaying their consent as --yes --reason (a refusal files the
+                          request and names it)
   
   '''
 # ---

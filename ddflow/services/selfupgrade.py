@@ -275,7 +275,7 @@ def _consent(cfg: Config, log: Any, req: Request, out: dict[str, Any]) -> str:
     )  # fmt: skip
     if v.ok:
         out["reason"] = v.reason
-    return "" if v.ok else v.message or why
+    return "" if v.ok else f"{why}. {v.message}" if why and v.message else v.message or why
 
 
 def run(
