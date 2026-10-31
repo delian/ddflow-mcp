@@ -45,6 +45,7 @@ from ..services import harnessreg as HR
 from ..services import help as H
 from ..services import hookio as HI
 from ..services import hookwriters as HW
+from ..services.swarm import lanehooks_check as CK
 from ..services import identity as ID
 from ..services import launchers as LA
 from ..services import pins_merge as PM
@@ -1110,9 +1111,20 @@ def _on_pre_compact(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -
 
 
 def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _HookResult:
-    """Refuse a Bash command that breaks `[hooks].forbidden_commands`, before it runs. Anything
-    else (another tool, no command, any problem) is allowed: a guard that fails closed on its
-    own bug would stop every command the agent runs."""
+    """Refuse a file write outside the agent's lease globs, or a Bash command that breaks
+    `[hooks].forbidden_commands`, before it runs. Anything else (another tool, no path, no
+    command, any problem) is allowed: a guard that fails closed on its own bug would stop
+    every command the agent runs."""
+    # The lease-glob check for a tool call that names a file path (reuses the lane check,
+    # SW-lane-hooks): a write outside the globs is refused before it happens. The project
+    # door stays open when the agent holds no lease (the commit hook governs that case).
+    paths = CK.paths_of(p.raw)
+    if paths:
+        code, denial = CK.verdict(
+            repo, agent, paths, Path(p.cwd or Path.cwd()), refuse_no_lease=False
+        )
+        if code == CK.REFUSE:
+            return _HookResult(result="denied", deny=denial, note=denial)
     tool_input = p.raw.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if p.tool.lower() not in ("bash", "run_shell_command", "shell") or not isinstance(command, str):
