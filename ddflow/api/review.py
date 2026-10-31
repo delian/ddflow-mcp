@@ -2797,7 +2797,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence, converged=converged,
+            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
             scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
