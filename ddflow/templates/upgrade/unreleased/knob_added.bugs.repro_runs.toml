@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "bugs.repro_runs"
+new = "1"
+why = "How many times `bug found --repro-cmd CMD` reruns the command at filing (default 1), and thus whether the bug's sighting was confirmed: the bundle records `reproduced yes|no`, `runs` and `failures`."
+impact = "additive"

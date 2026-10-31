@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.pass_env"
+new = '["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"]'
+why = "Environment variable NAMES a launched lane inherits from the launching process, besides its own private home and the key names its launch spec lists; everything else is dropped, so the operator's credentials and settings do not reach the lane."
+impact = "additive"

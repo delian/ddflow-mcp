@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lanes.stop_grace_s"
+new = "10"
+why = "Seconds a lane driver waits after SIGTERM to a lane's process group before SIGKILL (`Lane.stop`, process-headless). 0 kills at once."
+impact = "additive"
