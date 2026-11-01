@@ -79,17 +79,19 @@ RULES: dict[str, Rule] = {
 
 
 #: How a standing rule's answer is recorded: `policy:<id>`.
-def window_start(state) -> float:
-    """The start of the standing window: 0.0 before any standing rule has fired, else the
-    epoch of the FIRST standing auto-approval's ``answered_at`` -- the fire that OPENED the
-    window. ``min``, never the latest: the window never rolls forward, so `[approvals].
-    standing_window_s` is a hard bound even while uses keep landing. The fold KEEPS every ask
-    row for the life of the log (`use_ttl_s` bounds spending, not retention), so the anchor
-    persists past an answer TTL, and `approvals log`/`doctor` show what fired within it."""
+def window_start(state, cfg: Config) -> float:
+    """The start of the standing window: 0.0 before any IN-SCOPE standing rule has fired, else
+    the epoch of the FIRST in-scope standing auto-approval's ``answered_at`` -- the fire that
+    OPENED the window. In-scope means the answer's verb is inside `[approvals].standing_verbs`,
+    so a stale answer from a verb the window no longer covers cannot anchor it. ``min``, never
+    the latest: the window never rolls forward, so `[approvals].standing_window_s` is a hard
+    bound even while uses keep landing. The fold KEEPS every ask row for the life of the log
+    (`use_ttl_s` bounds spending, not retention), so the anchor persists past an answer TTL, and
+    `approvals log`/`doctor` show what fired within it."""
     starts = [
         clock.epoch(r["answered_at"], default=0.0)
         for r in asks_of(state).values()
-        if r["policy"] and r["answered_at"]
+        if r["policy"] and r["answered_at"] and r["verb"] in cfg.approvals.standing_verbs
     ]
     return min(starts, default=0.0)
 
@@ -102,7 +104,7 @@ def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
     anchored at ``now`` -- or it opened fewer than `[approvals].standing_window_s` seconds ago."""
     if canon.verb not in cfg.approvals.standing_verbs:
         return False
-    start = window_start(state)
+    start = window_start(state, cfg)
     if start <= 0.0:
         return True
     return now < start + cfg.approvals.standing_window_s

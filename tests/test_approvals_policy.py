@@ -183,7 +183,7 @@ def test_a_windowed_rule_answers_complete_force_with_its_digest_while_the_window
     row = asks_of(_state(proj))[got.ask_id]
     assert row["policy"] is True and row["answered_by"] == "policy:complete_unavailable"
     assert row["digest"] == canon.digest()
-    assert PO.window_start(_state(proj)) > 0.0  # the fold persisted the opened window
+    assert PO.window_start(_state(proj), cfg) > 0.0  # the fold persisted the opened window
 
 
 def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_asked(
@@ -195,14 +195,20 @@ def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_ask
     log = EventLog(proj, "bot")
     canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
     claim = Canon(verb="claim.force", agent="bot", item="T1", state="s")
-    cfg = _cfg(policy=["complete_unavailable", "claim_unavailable"], policy_max_uses=99)
-    assert C.operator_gate(log, cfg, canon).ok  # opens the window, anchored now
+    cfg = _cfg(
+        policy=["complete_unavailable", "claim_unavailable"],
+        policy_max_uses=99,
+        standing_window_s=120,  # window below use_ttl_s (3600): lapse must be the WINDOW, not the TTL
+    )
+    first = C.operator_gate(log, cfg, canon)
+    assert first.ok  # opens the window, anchored now
     # A SECOND generic T2 refusal while the window is still open is also auto-approved ...
     still = C.operator_gate(log, cfg, claim)
     assert still.ok and still.stamp["via"] == "policy" and still.stamp["policy"] == "claim_unavailable"
     frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
     after = C.operator_gate(log, cfg, canon)
     assert not after.ok and after.ask_id and "requested" in after.message  # a person is asked
+    assert after.ask_id != first.ask_id  # a NEW, still-unanswered ask, not the opening one
 
 
 def test_standing_verbs_scopes_what_the_window_covers(proj, monkeypatch):
