@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/testselect.py:_MIN_STEM" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'

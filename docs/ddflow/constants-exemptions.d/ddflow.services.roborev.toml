@@ -1,0 +1,10 @@
+[knob]
+"ddflow/services/roborev.py:_LIMIT" = 'roborev.limit'
+"ddflow/services/roborev.py:_TIMEOUT_S" = 'roborev.timeout_s'
+
+[exempt]
+"ddflow/services/roborev.py:_FLOOR_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/services/roborev.py:_INDEX_GRACE_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/services/roborev.py:_MIN_ABBREV" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
+"ddflow/services/roborev.py:_POLL_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/services/roborev.py:_VERDICT_FLOOR_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'

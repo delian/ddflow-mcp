@@ -1,0 +1,6 @@
+[knob]
+"ddflow/services/guidance/similarity.py:DEFAULT_THRESHOLD" = 'guidance.similarity.default_threshold'
+
+[exempt]
+"ddflow/services/guidance/similarity.py:MAX_OVERLAP" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
+"ddflow/services/guidance/similarity.py:_MIN_WORD" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'

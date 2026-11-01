@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/skills.py:BODY_HEAD_CHARS" = 'skills.body_head_chars'
+"ddflow/services/skills.py:MAX_FILES" = 'skills.max_files'

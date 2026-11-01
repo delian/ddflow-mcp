@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/infra/docindex.py:LOCK_TIMEOUT_S" = 'the default of DocIndex.lock_timeout_s, a field every caller sets; the docs verb will pass its [docs] config (it is not read anywhere as a bare constant)'
+"ddflow/infra/docindex.py:MIN_SUBSTRING" = 'a format fact: a trigram index matches no fewer than 3 characters, so shorter substrings fall back to LIKE'

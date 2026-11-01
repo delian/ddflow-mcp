@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/surfaces/commands/knowledge.py:_JSON_FIELD_CAP" = 'fixed shape of an internal transport (worker pool, per-record trim of a machine-readable field)'

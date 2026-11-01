@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/config_sections/triggers.py:TRIGGERS_MAX_FIRES_LIMIT" = 'bound of a configuration value itself (the validation ceiling of an existing knob)'

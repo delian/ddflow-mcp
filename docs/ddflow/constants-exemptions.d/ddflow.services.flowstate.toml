@@ -1,0 +1,6 @@
+[knob]
+"ddflow/services/flowstate.py:KEEP_S" = 'flowstate.keep_s'
+
+[exempt]
+"ddflow/services/flowstate.py:LOCK_WAIT_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/services/flowstate.py:STALE_LOCK_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'

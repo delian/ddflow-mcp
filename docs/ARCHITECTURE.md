@@ -302,6 +302,13 @@ behaviour change for existing callers. `core/ports.py` is pinned by
 | `surfaces/mcp.py` | MCP stdio server |
 | `config.py` | documented knobs, TOML + env, and the one family map |
 
+The layer map above and this table are hand-maintained prose and are re-homed by ONE
+consolidation pass after a split wave lands, not by each split lane (a lane re-homes only
+its own module's code and its constants fragment —
+[`docs/ddflow/decisions/split-convention.md`](ddflow/decisions/split-convention.md)). The
+constants a module declares live one file per module under
+`docs/ddflow/constants-exemptions.d/<dotted.module>.toml`, never in a shared register.
+
 **Dependencies.** Two runtime dependencies, both pure Python: **Jinja2** (the prompt and
 export templates) and **tomlkit** (config write-back that keeps comments and layout),
 declared in `pyproject.toml` and decided in `docs/ddflow/decisions/unify.md` (D-unify 1).

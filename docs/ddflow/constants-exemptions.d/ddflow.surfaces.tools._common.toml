@@ -1,0 +1,6 @@
+[knob]
+"ddflow/surfaces/tools/_common.py:MCP_WAIT_DEFAULT_S" = 'tools._common.mcp_wait_default_s'
+
+[exempt]
+"ddflow/surfaces/tools/_common.py:CLIENT_IDLE_ABORT_S" = "the MCP CLIENT aborts a tool call that has sent no frame for 1800 s (Bfc43dae5b9); ddflow mirrors the client's cutoff, it cannot tune the client's"
+"ddflow/surfaces/tools/_common.py:MCP_WAIT_SILENT_MAX_S" = "a token-less wait's cap strictly below CLIENT_IDLE_ABORT_S with headroom for a call already spent silent before its wait started (Bfc43dae5b9); derived safety margin, not a user tunable"

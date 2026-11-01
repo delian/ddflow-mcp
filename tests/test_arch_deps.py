@@ -159,7 +159,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.config._core",
         "ddflow.core.clock",
         "ddflow.core.ids",
-        "ddflow.core.progress",
+        "ddflow.core.progress.models",
         "ddflow.core.schedule._plan",
         "ddflow.infra.claimref",
         "ddflow.infra.container",
