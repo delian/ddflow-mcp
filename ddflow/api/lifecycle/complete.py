@@ -31,6 +31,8 @@ from .. import jobs as JB
 from .._base import _load_fresh
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
+from ..knowledge.bug_close import regression_arg_refusal
+from ..knowledge.self_assessment import auto_file
 from ._common import _chore_base, _chore_event, _require
 from .author import _author_event_identity, _author_model, _recorded_identity
 from .heartbeat import _commit_events, _inbox, _waiters
@@ -142,15 +144,9 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()] or [lint_exempt.strip()] * bool(lint_exempt.strip())
     pending = CM.open_bugs_of(st, item, cfg)
-    if closing and not pending:
-        return O.refused(
-            "item.completed",
-            f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
-            f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
-            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
-            id=item,
-            bugs_closed=[],
-        )
+    bad = _close_arg_refusal(repo, item, closing, pending, tests, lint_exempt, regression_test)
+    if bad is not None:
+        return bad
 
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
@@ -288,12 +284,69 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
         if rr.outcomes:
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
+        _phase_end_self_assessment(repo, changelog, agent, extra)
     # A split task "completes when its children do" (B651a63e574): the last sub-task's
     # completion completes its umbrella, and that one's, up the chain.
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     extra.update(_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=False))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _phase_end_self_assessment(repo: Path, text: str, agent: str, extra: dict[str, Any]) -> None:
+    """The self-assessment pass at phase end (r-ddflow-self-assessment, default on): file each
+    defect this phase's completion names (`--changelog`), skipping duplicates; record its
+    verdict in `extra` when it filed, skipped or failed anything. Never raises: the
+    completion that ran the pass returns whatever it would have, filed defects or not."""
+    try:
+        assessed = auto_file(repo, text=text, trigger="phase_end", agent=agent)
+        if (
+            assessed.data.get("filed")
+            or assessed.data.get("skipped")
+            or assessed.data.get("failed")
+        ):
+            extra["self_assessment"] = assessed.data
+    except Exception as exc:  # a best-effort pass must not abort phase completion
+        extra["self_assessment"] = {
+            "filed": [],
+            "skipped": [],
+            "failed": [f"{type(exc).__name__}: {exc}"],
+        }
+
+
+def _close_arg_refusal(
+    repo, item, closing, pending, tests, lint_exempt, regression_test
+) -> O.Outcome | None:
+    """The `item.completed` refusal for the close args, or None.
+
+    Both halves run BEFORE any approval is spent (B3c1a2491a3). First the pre-existing
+    rule — a close flag on an item that fixes no open bug — then the malformed
+    `--regression-test` check, which `bug_fixed` only reaches after the override: a file
+    path where a pytest node id is required must be refused here, or a typo wastes the
+    operator's single use. `--lint-exempt` skips the second half: `bug_fixed` short-circuits
+    on `lint_exempt` and never inspects `regression_test`, so the pre-check must not refuse
+    what the close would accept.
+    """
+    if closing and not pending:
+        return O.refused(
+            "item.completed",
+            f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
+            f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
+            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
+            id=item,
+            bugs_closed=[],
+        )
+    if lint_exempt.strip() or not any(t.strip() for t in tests):
+        return None
+    bad = regression_arg_refusal(repo, regression_test)
+    if bad is None:
+        return None
+    return O.Outcome(
+        kind="item.completed",
+        data={"id": item, "bugs_closed": []},
+        exit=bad.exit,
+        reason=bad.reason,
+    )
 
 
 def _close_bugs(

@@ -9,6 +9,7 @@ on ``model`` and ``stranded`` and knows nothing about the survey/apply planning 
 from __future__ import annotations
 
 import contextlib
+import sys
 import time
 from pathlib import Path
 
@@ -143,7 +144,7 @@ def dispose_finished(
     base = cfg.worktree.base_ref or W.default_branch(repo)
     wt = W.Worktree(item=it.id, path=path, branch=it.branch, base=base)
     # late-bound: honours monkeypatch of the package attr
-    from . import dispose_tree as _dispose_tree
+    _dispose_tree = sys.modules[__package__].dispose_tree
 
     gone = _dispose_tree(repo, cfg, log, wt, item=it)
     if gone.removed:

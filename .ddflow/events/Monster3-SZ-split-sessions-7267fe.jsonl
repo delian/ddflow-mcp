@@ -1,0 +1,2 @@
+{"agent":"Monster3-SZ-split-sessions-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e5760ae6960254deeac7065be","kind":"ddflow.seen","lamport":123105,"schema":1,"subject":"ddflow","ts":"2026-11-01T19:15:44.669040Z"}
+{"agent":"Monster3-SZ-split-sessions-7267fe","data":{"tags":["size","split","continuous-improvement","wave:0"]},"id":"ecaf7355a984f52bf37bf7bb7","kind":"task.updated","lamport":123106,"schema":1,"subject":"SZ-split-demo_scenario_mcp_orchestration","ts":"2026-11-01T19:15:44.702216Z"}

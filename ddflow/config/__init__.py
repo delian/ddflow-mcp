@@ -115,6 +115,7 @@ from ._core import (  # noqa: F401
     ReviewConfig,
     RulesConfig,
     ScheduleConfig,
+    SelfAssessmentConfig,
     SensitivityConfig,
     SessionConfig,
     SwarmConfig,
