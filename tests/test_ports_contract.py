@@ -68,6 +68,25 @@ def _runs_code(expr: ast.expr) -> bool:
     return not (isinstance(expr, ast.Name) and expr.id == "runtime_checkable")
 
 
+def _literal(expr: ast.expr | None) -> bool:
+    """A literal, which reads: a constant, `None`/`True`/`False`, or a container built of
+    literals (with an unsigned unary). A call (`exec(...)`, `frozenset(...)`) runs code, so
+    it is not a literal, however cheap the code is."""
+    if expr is None or isinstance(expr, ast.Constant):
+        return True
+    if isinstance(expr, ast.Name) and expr.id in ("None", "True", "False"):
+        return True
+    if isinstance(expr, ast.Tuple | ast.List | ast.Set):
+        return all(_literal(e) for e in expr.elts)
+    if isinstance(expr, ast.Dict):
+        return all(
+            _literal(k) and _literal(v) for k, v in zip(expr.keys, expr.values, strict=False)
+        )
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.USub | ast.UAdd | ast.Invert):
+        return _literal(expr.operand)
+    return False
+
+
 def _class_code(node: ast.ClassDef) -> list[str]:
     """What in one `Protocol` class runs code: a decorator, a base, a method body or a
     method decorator. A port is a declaration, so any of them is a second implementation."""
@@ -96,7 +115,7 @@ def _class_code(node: ast.ClassDef) -> list[str]:
             out += [
                 f"{node.name}.{member.name}: an argument default runs code"
                 for default in (*member.args.defaults, *member.args.kw_defaults)
-                if default is not None and not isinstance(default, ast.Constant)
+                if default is not None and not _literal(default)
             ]
         elif _opaque(member) is not None:
             out.append(ast.dump(member))
