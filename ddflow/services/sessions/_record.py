@@ -315,4 +315,5 @@ def note(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = 
 
 
 def end(log: EventLog, session_id: str, *, summary: str = "") -> None:
-    log.append("session.ended", session_id, {"summary": summary})
+    clean, _ = redact(summary, _cfg_of(log))
+    log.append("session.ended", session_id, {"summary": clean})
