@@ -278,6 +278,21 @@ def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested
     return found
 
 
+def _kilo_answer(state: Any, question: str) -> str:
+    """The answer text a completed Kilo `question` part holds for exactly ``question``, or ""."""
+    if not isinstance(state, dict) or state.get("status") != "completed":
+        return ""
+    questions = (state.get("input") or {}).get("questions")
+    answers = (state.get("metadata") or {}).get("answers")
+    if not isinstance(questions, list) or not isinstance(answers, list):
+        return ""
+    for i, q in enumerate(questions):
+        if isinstance(q, dict) and q.get("question") == question:
+            ans = answers[i] if i < len(answers) else None
+            return ans[0] if isinstance(ans, list) and len(ans) == 1 else ""
+    return ""
+
+
 def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Attested]:
     """The accepted answer to exactly ``question`` in one Kilo transcript store (``marker`` is
     the ask id: every question part about it contains it). Only the harness-written `question`
@@ -305,21 +320,9 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
             data = json.loads(raw)
         except ValueError:
             continue
-        state = data.get("state")
-        if not isinstance(state, dict) or state.get("status") != "completed":
-            continue
-        questions = (state.get("input") or {}).get("questions")
-        answers = (state.get("metadata") or {}).get("answers")
-        if not isinstance(questions, list) or not isinstance(answers, list):
-            continue
-        for i, q in enumerate(questions):
-            if not (isinstance(q, dict) and q.get("question") == question):
-                continue
-            ans = answers[i] if i < len(answers) else None
-            text = ans[0] if isinstance(ans, list) and len(ans) == 1 else ""
-            if text:
-                found.append(Attested(f"kilo:{pid}", text, clock.iso_at(created / 1000), path.name))
-            break
+        ans = _kilo_answer(data.get("state"), question)
+        if ans:
+            found.append(Attested(f"kilo:{pid}", ans, clock.iso_at(created / 1000), path.name))
     return found
 
 
