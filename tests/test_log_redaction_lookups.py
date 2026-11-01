@@ -75,3 +75,17 @@ def test_a_loopback_endpoint_is_not_a_leak(tmp_path):
     log.stamp = False
     log.append("pr.opened", "x", {"url": local})
     assert local in _shard(tmp_path)
+
+
+def test_a_verb_word_that_only_looks_like_a_host_is_written_verbatim(tmp_path):
+    """Bug B31f83a9d7b: `verb` is compared byte-for-byte with the canonical verb, so the
+    network pass must not rewrite a gated-command verb whose site ends in `.local`: the verb
+    is a word, never a URL or a path (Ba2df74d558)."""
+    verb = "export.machine" + ".local"  # built, so no private host is committed text
+    log = EventLog(tmp_path, "T")
+    log.stamp = False
+    log.append("ask.requested", "x", {"verb": verb})
+    log.append("ask.consumed", "x", {"verb": verb, "by": "T"})
+    shard = _shard(tmp_path)
+    assert verb in shard, "a `.local` gated-command verb was not stored as typed"
+    assert "[REDACTED:host]" not in shard
