@@ -98,8 +98,19 @@ def _review_runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
-def _reason_of(best) -> str:
-    return best.reason or (f"{len(best.findings)} finding(s)" if best.findings else "")
+def _reason_of(best, results=None) -> str:
+    """The `failed` reason a round records for the gate. The gate blocks on a finding from
+    ANY reviewed reviewer (`_gate_outcome` aggregates `found`), so when the single `best`
+    named none -- another reviewer raised them -- the count still names a finding instead
+    of handing `record` an outcome `failed` with an empty reason (bug B0419c114ef: a delta
+    round over a multi-reviewer gate crashed recording `failed`, so the round never
+    persisted and the gate stayed failed with unresolved findings)."""
+    if best.reason:
+        return best.reason
+    if best.findings:
+        return f"{len(best.findings)} finding(s)"
+    found = [f for r in (results or []) if r.status == RV.REVIEWED for f in r.findings]
+    return f"{len(found)} finding(s)" if found else ""
 
 
 def _finding_rows(best) -> list[dict[str, str]]:

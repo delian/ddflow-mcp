@@ -184,7 +184,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     linked = _link_refuted(log, it, gate, best.findings)
     if linked:
         held = max(0, held - len(linked))
-    outcome, reason = _hold(outcome, _reason_of(best), held, say)
+    outcome, reason = _hold(outcome, _reason_of(best, results), held, say)
     if clean_pass and outcome == "failed":
         evidence["held_pass"] = True
     _record(
