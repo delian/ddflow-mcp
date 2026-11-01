@@ -1,4 +1,12 @@
-"""Shared helpers for the tests/test_upgrade_apply_*.py modules (the `old` fixture is in conftest)."""
+"""Shared helpers for the tests/test_upgrade_apply_*.py modules (the `old` fixture is in conftest).
+
+Rename map: the former tests/test_upgrade_apply.py (D-small-files-30k split) became four modules,
+every test keeping its name:
+  test_upgrade_apply_core.py   apply service: backups, policies, partial applies, repairs, the fold
+  test_upgrade_apply_docs.py   hand edits to driver docs and rules blocks survive
+  test_upgrade_apply_wire.py   the CLI, --json and MCP wire
+  test_upgrade_apply_knobs.py  [upgrade] backup / backup_keep / config_changes and settled items
+"""
 
 from pathlib import Path
 from typing import Any
