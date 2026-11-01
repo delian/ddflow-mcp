@@ -119,7 +119,7 @@ def test_service_sites(text, tmp_path):
     assert slug_digest in ci.bug_id(text)
     raw = text + "/needs-sanitising"
     got = sessions.harness_session_id(raw)
-    assert not got or got.endswith("-" + sha256(raw.encode("utf-8"))[:16])
+    assert not got or got.endswith("-" + sha256(raw.encode("utf-8")))
 
     class Rev:
         name, kind, base_url, model, family, command = text, "openai", "u", "m", "f", ""
@@ -134,6 +134,19 @@ def test_service_sites(text, tmp_path):
     from ddflow.services.legacy import sha256_file
 
     assert sha256_file(f) == sha256(b * 1000)
+
+
+def test_harness_session_id_is_injective_and_never_empty():
+    from ddflow.services import sessions
+
+    # An id that sanitises to nothing still gets a non-empty session id.
+    assert sessions.harness_session_id("///") == "h-" + sha256(b"///")
+    # A sanitised raw never collides with the already-safe id that spells its digest back.
+    raw = "a/b"
+    assert sessions.harness_session_id(raw) == "h-ab-" + sha256(raw.encode("utf-8"))
+    assert sessions.harness_session_id(raw) != sessions.harness_session_id(
+        "ab-" + sha256(raw.encode("utf-8"))
+    )
 
 
 def test_queue_file_names_keep_their_digest(tmp_path):
