@@ -216,10 +216,10 @@ config/     config_sections/               read by every layer; imports none of 
                                            Above `core`: core is handed its knobs.
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
             handlers/, defs.py, clock.py,
-            graph.py, globs.py, redact/,
-            ports.py
-adapters/   proc/, git/, fsio/,            the default implementations of the ports in
-            tomlcfg/, digest/, forge/      core/ports.py. The BOTTOM layer (below).
+            graph.py, globs.py, redact/
+adapters/   ports.py, registry.py,         ports (Protocols) next to their default
+            fakes/, proc/, git/, fsio/,    adapters, the one Registry[T], shipped
+            tomlcfg/, digest/, forge/      fakes. The BOTTOM layer (below).
 ```
 
 
@@ -246,28 +246,66 @@ declaration first hid the dependency graph that this ranking exists to expose.
 
 ## Adapter model
 
-Where a seam ddflow owns lives, decided once (D-adapters-answers), in four sentences:
+Every outside dependency (a subprocess, git, a file, a forge, a model endpoint) is reached
+through a **port** so it can be swapped or faked. Decided once (D-adapters-answers,
+D-adapters-answers-2, D-adapters-answers-3), and pinned by `tests/test_ports_contract.py`.
 
-- **A port** is a `Protocol`, declared in `core/ports.py` and nowhere else. It is pure
-  (stdlib only), so declaring a seam never drags disk, network or subprocess into `core`.
-  A port's methods mirror the module its default adapter is extracted from, so a fake can
-  be dropped in where that module is imported.
-- **The default adapter** lives in `ddflow/adapters/<family>/`, the bottom layer of the
-  contract above. A family with ONE adapter has exactly one implementation — a second is a
-  bug. A family with SEVERAL adapters registers them in one `core.registry.Registry[T]`
-  (`Registry[Forge]`, keyed by the adapter's `name`); `forge` is the worked example
-  (GitHub, GitLab), and `ci`, `notify` and `supervisors` follow it.
-- **The fake** is a `Fake<Port>` in `tests/fakes/`, the one permitted stand-in, imported
-  only by tests. One port, one default, one fake.
-- **Naming**: a port is the family's noun, no suffix (`Proc`, `Git`, `Fsio`, `Toml`,
-  `Digest`, `Forge`); the re-export convention keeps the old import path working.
+```
+ddflow/adapters/        the BOTTOM layer: every layer may import it, it imports none
+    ports.py            the Protocols (pure: typing and the stdlib only)
+    registry.py         the ONE Registry[T]
+    fakes/              shipped fakes, FAKES = {port name: Fake<Port>}
+    <family>/           the default adapter, with its port beside it (as homes move in)
+```
 
-The homes being moved in are `infra.proc`, `infra.git`, `infra.fsio`, `infra.tomlcfg` and
-`core.digest`. Each keeps a thin compatibility re-export at its old path until its
-import-linter baseline is empty, then the shim is deleted (ADP-migrate-homes) — no
-behaviour change for existing callers. `core/ports.py` is pinned by
-`tests/test_ports_contract.py` to stay a declaration (Protocols only, stdlib only, under
-20 KB, the families above and no others).
+- **A port** is a `typing.Protocol` named for the family's noun (`Proc`, `Git`, `Digest`).
+  It lives next to its default adapter in `ddflow/adapters`; `adapters/ports.py` is the
+  one module that gathers them, so there is one place to list the seams.
+- **The default adapter** is the ONE implementation in its home. A second implementation
+  of a single-adapter family is a bug. A family with several adapters (forge, notify, lane
+  transport, search, optimizer, scheduler) holds them in a `Registry[Port]` keyed by the
+  adapter's `name`, and configuration (TOML) picks one.
+- **The fake** is a `Fake<Port>` in `ddflow/adapters/fakes`, shipped (not test-only) so a
+  downstream user can build against a port without the real dependency. A ratchet requires
+  every port to have one; the list of ports still without one only shrinks.
+- **Conformance**: one set of cases runs against the adapter and against its fake, so the
+  fake cannot drift from what the adapter does.
+- **Config**: ddflow's own configuration stays TOML only. Other tools' files
+  (`settings.json`, hooks, `AGENTS.md`) go through a `ManagedFile` port (ADP-managed-files).
+
+**Why `adapters` is below `core`, and the registry moved.** `core` uses only our own
+adapters, so `ddflow.adapters` sits under it (`.importlinter` `layers`, and `ALLOWED` in
+`tests/test_layering.py`, state the one ranking). A layer at the bottom cannot import
+`core`, yet the registry of several adapters is `core.registry.Registry[T]`. Rather than a
+second registry, the single implementation moved to `ddflow/adapters/registry.py` (it was
+already pure of ddflow) and `core/registry.py` is a short re-export of the same
+objects, so existing importers are untouched. `core/ports.py` had no importer and is gone.
+
+**Add a port.** (1) Declare the Protocol in `ddflow/adapters/ports.py` (declarations
+only: no bodies, no ddflow imports). (2) Put the default adapter in
+`ddflow/adapters/<family>/`, importing nothing above `adapters`. (3) Add `Fake<Port>` in
+`ddflow/adapters/fakes/` and decorate it with `_fake`; remove the port from
+`PORTS_WITHOUT_FAKE` in the test. (4) Add its cases to `CASES` in the contract test. (5)
+Several adapters: register each in a `Registry[Port]` and name the TOML key that selects it.
+Check with `uv run pytest tests/test_ports_contract.py tests/test_layering.py` (MCP:
+`ddflow_gate action=run id=<item> gate=unit_tests`; CLI: `ddflow gate run <item> unit_tests`).
+
+**Swap a dependency.** Take the port as an argument (or look it up in the family's
+registry), never import the adapter's module at the call site; in a test pass the fake;
+to replace an adapter, register another under a new `name` and select it in config. A
+module that migrates behind a port keeps a thin re-export at its old import path until its
+import-linter baseline is empty, then the shim is deleted (ADP-migrate-homes): no
+behaviour change for existing callers, and every baseline only shrinks (D-unify).
+
+**Port families planned in P-adapters:** http, sqlite, toml, fs (atomic write, lock,
+scratch), templates, clock and env, search, reviewer clients, managed files, config
+store, git, forge, MCP, ACP, agent lanes, lane transport, notify and ask, external tools,
+platform (Linux and macOS; Windows reports unavailable), log store, secrets providers
+(SX-provider-core), scheduler, optimizer, and the home ports (`proc`, `git`, `fsio`,
+`tomlcfg`, `digest`). Adapters that reach the network (forge, chat, webhook, email)
+need consent recorded once per kind and report unavailable when declined or offline.
+`ports.py` declares `Proc`, `Git`, `Fsio`, `Toml`, `Digest` and `Forge` today, the rest
+land with their tasks.
 
 ## Module map
 |---|---|
