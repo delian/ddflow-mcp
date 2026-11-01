@@ -1,7 +1,0 @@
-[knob]
-"ddflow/services/importer.py:_ANNOTATION_CHARS" = 'importer.annotation_chars'
-"ddflow/services/importer.py:_BODY_CHARS" = 'importer.body_chars'
-"ddflow/services/importer.py:_LEAD_WORD_CHARS" = 'importer.lead_word_chars'
-"ddflow/services/importer.py:_LESSON_BODY_CHARS" = 'importer.lesson_body_chars'
-"ddflow/services/importer.py:_MAX_SOURCE_PATH" = 'importer.max_source_path'
-"ddflow/services/importer.py:_TITLE_CHARS" = 'importer.title_chars'

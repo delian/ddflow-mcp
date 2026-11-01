@@ -293,7 +293,7 @@ behaviour change for existing callers. `core/ports.py` is pinned by
 | `services/review.py` | reviewer backends — any LLM, four wire formats |
 | `services/sessions.py` | prompt provenance, redaction, replay, bundles |
 | `services/companions.py` | detect and register the MCP servers that serve the gates |
-| `services/importer.py` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue; `verify_import` answers whether it is still true and whether anyone finished it |
+| `services/importer/` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue; `verify_import` answers whether it is still true and whether anyone finished it |
 | `services/help.py` | `ddflow help`: narrative from templates, capability inventory generated from the live tool table |
 | `services/adopt.py`, `cleanup.py`, `prompts.py` | install, worktree classification, templates |
 | `services/enforce/hooks.py`, `precommit.py`, `staged.py`, `leasecheck.py`, `views.py`, `driftchecks.py`, `trailers.py` | the commit hook and its commit-time gates (the `services/enforce/` package re-exports the public names) |
