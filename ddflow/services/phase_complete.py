@@ -26,6 +26,7 @@ from .approvals.canon import Canon
 # The importer's own predicate, not a second copy of it: "a phase the IMPORTER wrote" is the
 # one set `phase close` may close, and so the one set this command must leave to it.
 from .importer import _is_imported_phase
+
 # The shared resolve-and-settle guard, not a second copy of `phase close`'s (r-reuse-core).
 from .phase_guard import resolve_phase, settled_tasks
 

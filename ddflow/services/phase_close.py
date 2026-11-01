@@ -26,6 +26,7 @@ from ..core.model import State, fold
 # The importer's own predicate, not a second copy of it: "a phase the IMPORTER wrote -- the
 # only kind it may ever complete" is exactly the set this command may close.
 from .importer import _is_imported_phase
+
 # The shared resolve-and-settle guard, not a second copy of `phase complete`'s (r-reuse-core).
 from .phase_guard import resolve_phase, settled_tasks
 
