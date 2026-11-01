@@ -156,10 +156,12 @@ def test_revoked_gemini_key_is_allowlisted_only_in_event_shards(tmp_path):
     # Bug B5dc280b4eb: Google answers 403 "API key was reported as leaked" for this value,
     # so it is dead, but one event-log shard still holds it in plaintext. The allowlist is
     # scoped to exactly this value, the gcp-api-key rule, and the event-log path — so the
-    # exact value there scans clean, while a one-char variant, or the value anywhere else,
-    # still fires.
+    # exact value there scans clean, while a one-char variant, or the value in a .jsonl
+    # outside .ddflow/events/, still fires.
     line = "use gemini with this key " + _REVOKED_KEY + " and model\n"
     variant = "use gemini with this key " + _REVOKED_KEY[:-1] + "t" + " and model\n"
     assert _scan_committed(tmp_path / "event", ".ddflow/events/a.jsonl", line) == 0
     assert _scan_committed(tmp_path / "variant", ".ddflow/events/a.jsonl", variant) != 0
-    assert _scan_committed(tmp_path / "outside", "notes.txt", line) != 0
+    # A .jsonl outside the event dir proves the path scope is the shard directory, not the
+    # extension: an overbroad *.jsonl exemption would leave this one firing.
+    assert _scan_committed(tmp_path / "outside", "shards/a.jsonl", line) != 0
