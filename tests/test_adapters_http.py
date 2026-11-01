@@ -336,3 +336,23 @@ def test_the_blind_spot_check_sees_a_network_import_hiding_behind_an_allowed_roo
         ("http.client", "HTTPConnection"),
     ]
     assert _network_imports("from . import http\nimport json\n") == []
+
+
+def test_cancelling_a_hedged_copy_aborts_the_connection_the_client_handed_over():
+    """`on_connect` hands the reviewer a handle with `abort()`; `_Cancel` calls it, also for a
+    handle attached after the cancel, and a handle whose socket is already gone is no error."""
+    from ddflow.services import review as R
+
+    class Handle:
+        aborted = 0
+
+        def abort(self) -> None:
+            Handle.aborted += 1
+
+    token = R._Cancel()
+    token.attach(Handle())
+    token.cancel()
+    token.attach(Handle())  # attached after cancellation: closed at once
+    assert Handle.aborted == 2 and token.cancelled
+    sock = type("S", (), {"shutdown": lambda self, how: (_ for _ in ()).throw(OSError("gone"))})()
+    R._abort(H._Tracked(sock))
