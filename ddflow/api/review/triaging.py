@@ -258,12 +258,14 @@ def _round_and_current_tree(repo: Path, ev: dict[str, Any], wt, it) -> tuple[str
         # the commit is reachable -- the worktree, or the primary once a merge removed it.
         at = wt if readable else repo
         was = GE.commit_source_tree(at, base)
-    if not was and ev.get("reviewed_head") and not readable:
+    if not was and ev.get("reviewed_head") and not readable and not ev.get("tree_sha", ""):
         # An after-merge `--commit` review has no worktree to measure, so its round records
-        # only the commit it covered (`reviewed_head`): that commit's own tree is what the
-        # round reviewed (bug B-critic-refutation-pass-needs-tree-after-merge). Never read it
-        # where a worktree stands: `reviewed_head` there is HEAD, and the reviewer saw the
-        # dirty working tree over it, not the commit's own content.
+        # only the commit it covered (`reviewed_head`) and no `tree_sha`: that commit's own
+        # tree is what the round reviewed (bug B-critic-refutation-pass-needs-tree-after-merge).
+        # Never read it where a worktree stands (`reviewed_head` there is HEAD and the
+        # reviewer saw the dirty working tree over it), and never for a round that DID name a
+        # tree: a dirty `tree_sha` whose content the gone worktree cannot vouch for is left
+        # unresolved, not read as `reviewed_head`'s clean commit.
         was = GE.commit_source_tree(repo, ev["reviewed_head"])
     now = GE.source_tree(wt) if readable else _merged_content(repo, it)
     return was, now

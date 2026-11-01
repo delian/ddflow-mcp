@@ -164,3 +164,17 @@ def test_a_commit_review_of_an_older_commit_after_merge_is_still_stale(repo, tmp
     first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
     text = RV.reviewed_other_tree(repo, None, make(first, head), "T1", "critic")
     assert "holds other content" in text, text
+
+
+def test_a_merged_round_that_named_a_dirty_tree_is_not_read_as_the_commits_clean_tree(
+    repo, tmp_path, monkeypatch
+):
+    """`reviewed_head` stand in only when the round named NO tree; a dirty `tree_sha`
+    (opaque fingerprint) whose gone worktree cannot vouch for it stays unresolved."""
+    from ddflow.api import review as RV
+
+    _first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    st = make(head, head)
+    st.items["T1"].gates["critic"].evidence["tree_sha"] = f"{head[:12]}+0123456789abcdef"
+    text = RV.reviewed_other_tree(repo, None, st, "T1", "critic")
+    assert "names no tree" in text, text
