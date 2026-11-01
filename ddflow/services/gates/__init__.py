@@ -180,6 +180,7 @@ from .running import (  # noqa: F401
     start_lock,
     terminating,
 )
+from .skip_followup import file_for_skip, settle  # noqa: F401
 from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,
     Runner,

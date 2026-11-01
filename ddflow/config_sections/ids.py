@@ -64,6 +64,7 @@ _KIND_DOCS = {
     "session": "Session ids. Default s{time}-{pid}: s, the UTC time to the second, the process id.",
     "fix_task": "A bug's own fix task. Default fix-{parent}: fix- and the bug id.",
     "fix_task_followup": "The next fix task when a bug's fix task was abandoned. Default fix-{parent}-{seq}: fix-<bug>-2, -3, ...",
+    "gate_skip_followup": "The future task that re-runs a skipped gate on an item. Default gskip-{parent}-{seq}: gskip-<item>-1, -2, ...",
     "promotion": "Promotion items. Default promote-{env}-{seq}: promote-staging-1, ...",
     "ci_bug": "Bugs filed for a failing CI check. Default Bci-{slug}-{digest}, a STABLE template: the same failing check maps to the same bug while it is open.",
     "split_child": "Sub-items made by `ddflow split` when none is named. Default {parent}.{seq}: P.T.1, P.T.2, ...",
@@ -125,6 +126,11 @@ class IdsConfig:
         "fix-{parent}-{seq}",
         doc=_KIND_DOCS["fix_task_followup"] + _RULES,
         check=lambda v: id_template_problem("fix_task_followup", v),
+    )
+    gate_skip_followup: str = knob(
+        "gskip-{parent}-{seq}",
+        doc=_KIND_DOCS["gate_skip_followup"] + _RULES,
+        check=lambda v: id_template_problem("gate_skip_followup", v),
     )
     promotion: str = knob(
         "promote-{env}-{seq}",

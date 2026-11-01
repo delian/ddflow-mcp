@@ -78,6 +78,7 @@ TEMPLATE_OF: dict[str, Callable[[Config], str]] = {
     "session": lambda c: c.ids.session,
     "fix_task": lambda c: c.ids.fix_task,
     "fix_task_followup": lambda c: c.ids.fix_task_followup,
+    "gate_skip_followup": lambda c: c.ids.gate_skip_followup,
     "promotion": lambda c: c.ids.promotion,
     "ci_bug": lambda c: c.ids.ci_bug,
     "split_child": lambda c: c.ids.split_child,
@@ -238,7 +239,7 @@ def _fixed(fields: dict[str, Any]) -> dict[str, Any]:
 
 def _record_kind(kind: str) -> str:
     """The `taken` kind a minted kind's records are folded as."""
-    return {"ci_bug": "bug", "fix_task": "item", "fix_task_followup": "item"}.get(kind, kind)
+    return {"ci_bug": "bug", "fix_task": "item", "fix_task_followup": "item", "gate_skip_followup": "item"}.get(kind, kind)
 
 
 def _render_template(template: str, kind: str, fields: dict[str, Any]) -> str:

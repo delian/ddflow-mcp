@@ -24,6 +24,7 @@ from ...services import testselect as TS
 from ...services.gates import handrecord as HR
 from ...services.gates import measured as R
 from ...services.gates import running as RUN
+from ...services.gates import skip_followup as SF
 from ...services.gates.reviewers import run_watching_git
 from ...services.identity import agent_marker
 from .._base import _load
@@ -663,4 +664,17 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         if gdef is not None and gdef.is_human_gate:
             return O.refused("gate.record", str(exc), id=item, gate=gate, outcome=result)
         return O.failed("gate.record", str(exc), id=item, gate=gate, outcome=result)
+    # A SKIP files nothing about the item being settled -- the follow-up task is the log
+    # entry and the reminder, and only `skip_followup = 'auto'` adds it (a skip today
+    # records nothing extra). A NON-skip settles the follow-up: the gate has been
+    # answered, so its re-run is no longer owed.
+    if result == "skipped":
+        _, followup_note = SF.file_for_skip(log, cfg, item, gate)
+        warning = " ".join(filter(None, [warning, followup_note]))
+    elif settled := SF.settle(log, st, cfg, item, gate):
+        warning = " ".join(
+            filter(
+                None, [warning, f"settled the follow-up re-running {gate}: {', '.join(settled)}"]
+            )
+        )
     return O.ok("gate.record", id=item, gate=gate, outcome=result, ahead=ordered, warning=warning)
