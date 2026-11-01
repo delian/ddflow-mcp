@@ -36,7 +36,7 @@ def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
                 f"{ask_id}`. An AskUserQuestion answer is not accepted for this act."
             ),
         )
-    body = H.payload(row)
+    body = H.payload(row, cfg)
     text = (
         f"Put this to the person with AskUserQuestion, unaltered (the question text carries the "
         f"request id and digest), then run `ddflow approvals attest {ask_id}`. The person may instead "
@@ -49,7 +49,7 @@ def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
 def approvals_attest(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
     """Record the person's answer from the harness transcript, if it is there."""
     log, cfg, _st = _load(repo, agent)
-    ok, message = H.attest(log, cfg, ask_id)
+    ok, message = H.attest(log, cfg, ask_id, repo=repo)
     if ok:
         return O.ok("approvals.attest", id=ask_id, text=message)
     if message.startswith(H.WAITING):  # not answered yet: come back, not a refusal

@@ -224,6 +224,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.unblocked": _h_unblocked,
     "item.resolved": _h_resolved,
     "item.completed": _h_state(DONE),
+    "phase.completed": _h_state(DONE),
     "item.reopened": _h_reopened,
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
