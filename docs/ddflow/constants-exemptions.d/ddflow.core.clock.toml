@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/core/clock.py:WAIT_MAX_S" = 'bound of a configuration value itself (the validation ceiling of an existing knob)'

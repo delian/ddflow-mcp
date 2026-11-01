@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/api/review_finding_ref.py:MIN_PREFIX" = 'length floor of a digest prefix a user types (a format fact of the printed digests), not a preference'

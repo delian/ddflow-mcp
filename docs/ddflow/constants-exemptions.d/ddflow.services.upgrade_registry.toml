@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/upgrade_registry.py:TIMEOUT_S" = 'upgrade_registry.timeout_s'

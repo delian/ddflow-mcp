@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/reprobundle.py:_MIN_LEAF" = "the length under which the bundle's cap stops halving a string and drops it instead"

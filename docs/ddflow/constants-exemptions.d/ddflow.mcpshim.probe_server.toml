@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/mcpshim/probe_server.py:DEFAULT_DELAY_S" = "the default of the probe server's own --delay argument (how long delaybump waits before notifying); a test fixture's command-line default, set per run, outside ddflow's config"
+"ddflow/mcpshim/probe_server.py:SETTLE_S" = "a 20 ms pause that lets already-pipelined input reach the probe's log before it replies; a race mitigation inside a test fixture, not a tuning choice"

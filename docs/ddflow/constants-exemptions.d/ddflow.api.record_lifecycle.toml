@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/api/record_lifecycle.py:MIN_PARTS" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'
+"ddflow/api/record_lifecycle.py:VALUE_MAX" = 'the cut of one field value shown in a history diff, a presentation width (the full text stays in the log)'

@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/export/kind_rules.py:TEXT_CHARS" = 'export.kind_rules.text_chars'
+"ddflow/services/export/kind_rules.py:TITLE_CHARS" = 'export.kind_rules.title_chars'

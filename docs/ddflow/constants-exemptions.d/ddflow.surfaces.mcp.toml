@@ -1,0 +1,5 @@
+[knob]
+"ddflow/surfaces/mcp.py:_STALE_CHECK_EVERY_S" = 'mcp.stale_check_every_s'
+
+[exempt]
+"ddflow/surfaces/mcp.py:MAX_WORKERS" = 'fixed shape of an internal transport (worker pool, per-record trim of a machine-readable field)'

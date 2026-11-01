@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/export/write.py:EXIT_STALE" = 'an exit code (exit-code contract), matched the name pattern only'

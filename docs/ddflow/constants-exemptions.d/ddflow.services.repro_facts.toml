@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/repro_facts.py:_VALUE_MAX" = 'the cut of one recorded value, a structural bound on a single environment or config value in a bundle (the bundle as a whole is capped by repro_max_bytes)'

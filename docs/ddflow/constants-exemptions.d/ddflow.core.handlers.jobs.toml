@@ -1,0 +1,2 @@
+[knob]
+"ddflow/core/handlers/jobs.py:TRIGGER_FIRES_KEPT" = 'handlers.jobs.trigger_fires_kept'
