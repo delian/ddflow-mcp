@@ -239,7 +239,12 @@ def _fixed(fields: dict[str, Any]) -> dict[str, Any]:
 
 def _record_kind(kind: str) -> str:
     """The `taken` kind a minted kind's records are folded as."""
-    return {"ci_bug": "bug", "fix_task": "item", "fix_task_followup": "item", "gate_skip_followup": "item"}.get(kind, kind)
+    return {
+        "ci_bug": "bug",
+        "fix_task": "item",
+        "fix_task_followup": "item",
+        "gate_skip_followup": "item",
+    }.get(kind, kind)
 
 
 def _render_template(template: str, kind: str, fields: dict[str, Any]) -> str:

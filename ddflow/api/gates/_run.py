@@ -669,6 +669,8 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     # records nothing extra). A NON-skip settles the follow-up: the gate has been
     # answered, so its re-run is no longer owed.
     warning = " ".join(
-        filter(None, [warning, SF.record_side_effect(log, st, cfg, item, gate, result == "skipped")])
+        filter(
+            None, [warning, SF.record_side_effect(log, st, cfg, item, gate, result == "skipped")]
+        )
     )
     return O.ok("gate.record", id=item, gate=gate, outcome=result, ahead=ordered, warning=warning)
