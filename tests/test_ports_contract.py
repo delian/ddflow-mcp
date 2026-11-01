@@ -45,42 +45,69 @@ def test_the_port_families_are_exactly_the_declared_seams():
     )
 
 
+def _opaque(node: ast.AST) -> ast.AST | None:
+    """A statement that runs code. A docstring and an ellipsis (`...`) are declarations;
+    `pass` and a bare annotation (`name: str`) are ones too; everything else — a `return`,
+    an assignment, a call — is a body, and a port with a body is a second implementation
+    wearing the port's name."""
+    if isinstance(node, ast.Pass):
+        return None
+    if isinstance(node, ast.AnnAssign) and node.value is None:
+        return None  # a member declaration such as `name: str`, not code
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+        value = node.value.value
+        if isinstance(value, str) or value is Ellipsis:
+            return None
+    return node
+
+
 def test_ports_are_declarations_only():
-    """`ddflow/core/ports.py` holds a docstring, imports and `Protocol` classes — nothing
-    that runs. A port with a body is a second implementation wearing the port's name."""
+    """`ddflow/core/ports.py` holds a docstring, imports and `Protocol` classes, and every
+    method in them is a docstring or `...` — nothing runs."""
     tree = ast.parse(PORTS_PATH.read_text("utf-8"), str(PORTS_PATH))
-    statements = [
-        node
-        for node in tree.body
-        if not (
-            isinstance(node, ast.ClassDef)
-            or isinstance(node, ast.ImportFrom | ast.Import)
-            or (
-                isinstance(node, ast.Expr)
-                and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
-            )
-        )
-    ]
+    statements: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom | ast.Import):
+            continue
+        if isinstance(node, ast.ClassDef):
+            statements += [
+                f"{node.name}.{member.name}: a method body runs code"
+                for member in node.body
+                if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
+                for body in member.body
+                if _opaque(body) is not None
+            ]
+            class_body = [_opaque(b) for b in node.body if not isinstance(b, ast.FunctionDef)]
+            statements += [ast.dump(b) for b in class_body if b is not None]
+            continue
+        if _opaque(node) is None:
+            continue  # the module docstring
+        statements.append(ast.dump(node))
     assert not statements, (
-        f"ports.py runs code: {[ast.dump(s) for s in statements]}. A port declares; the "
-        "default adapter in ddflow/adapters/ implements it."
+        f"ports.py runs code: {statements}. A port declares; the default adapter in "
+        "ddflow/adapters/ implements it."
     )
 
 
 def test_ports_import_no_ddflow_module_and_no_io():
     """A port is pure: `core` takes no disk, network or subprocess, and `ddflow.adapters`
     (which the ports describe) is below `core`, so the port's types must come from the
-    standard library alone."""
+    standard library alone. Checked for a plain `import subprocess` and a relative import
+    into `ddflow` too, not only for `from ddflow...`."""
     io_modules = {"subprocess", "socket", "urllib", "http", "sqlite3", "shutil", "tempfile"}
     tree = ast.parse(PORTS_PATH.read_text("utf-8"), str(PORTS_PATH))
     offenders: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            offenders += [a.name.split(".")[0] for a in node.names if a.name.startswith("ddflow")]
-        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
+                if alias.name.startswith("ddflow") or top in io_modules:
+                    offenders.append(top)
+        elif isinstance(node, ast.ImportFrom):
             top = (node.module or "").split(".")[0]
-            if top == "ddflow" or top in io_modules:
+            if node.level:
+                offenders.append("." * node.level + (node.module or ""))
+            elif top == "ddflow" or top in io_modules:
                 offenders.append(top)
     assert not offenders, f"ports.py must import the standard library alone, not {offenders}"
 

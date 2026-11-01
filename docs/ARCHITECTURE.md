@@ -190,8 +190,11 @@ This package has been bitten three times by a rule that existed only in prose �
 contract is the single source, and `tests/test_layering.py` walks the AST against the
 *same* ranking, not a second one. Each contract is a RATCHET (D-unify 4): its
 `ignore_imports` holds only the imports that break the ranking today — 8 `core ->
-config`, 2 `services -> views`, and the 9 `surfaces -> infra` entries of
-`surfaces-through-api` — and an entry may only be removed, never added.
+config`, 2 `services -> views`, and the 9 `surfaces` entries of `surfaces-through-api`
+(8 reach `infra` directly, 1 reaches `services.adopt`) — and an entry may only be removed,
+never added. The counts are exactly the entries of
+`tests/guard_baselines/importlinter-layers.toml` and `importlinter-surfaces-through-api/`,
+so the document and the ratchet name the same list.
 
 ```
 surfaces/   cli.py, mcp.py, registry.py,   argparse and JSON-RPC. No policy. A command is
