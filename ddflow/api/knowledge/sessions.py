@@ -11,6 +11,7 @@ from ...services import eventcommit as EC
 from ...services import inbox as IB
 from ...services import sessions as S
 from .._base import _load
+from .self_assessment import auto_file
 
 
 def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "") -> O.Outcome:
@@ -103,7 +104,13 @@ def session_end(repo: Path, session: str, *, summary: str = "", agent: str = "")
 
     log, cfg, _st = _load(repo, agent)
     S.end(log, session, summary=summary)
-    return O.ok("session.ended", session=session, **EC.commit_at(log, cfg, "stop", "stop"))
+    assessed = auto_file(repo, text=summary, trigger="session_end", agent=agent)
+    return O.ok(
+        "session.ended",
+        session=session,
+        self_assessment=assessed.data,
+        **EC.commit_at(log, cfg, "stop", "stop"),
+    )
 
 
 def history(
