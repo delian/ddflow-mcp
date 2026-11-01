@@ -165,17 +165,28 @@ def sites(source: str, ids: set[str], roots: set[str], skip_vendor_keys: bool = 
     return found
 
 
+def _module_sites(rel: str, source: str, ids: set[str], roots: set[str]) -> int:
+    """The sites ddflow's detector counts in one module (``rel``, repo-relative).
+
+    ``ddflow/config_sections/agent.py`` is scanned with the ``FAMILY_HINTS`` vendor keys
+    exempted -- a domain apart from the harness descriptors (Bd567efa0b3).
+    """
+    return len(
+        sites(source, ids, roots, skip_vendor_keys=(rel == "ddflow/config_sections/agent.py"))
+    )
+
+
 def _counts() -> dict[str, int]:
     ids = {h.id for h in HR.load()}
     roots = _roots()
-    agent_py = PKG / "config_sections" / "agent.py"
     out = {}
     for f in sorted(PKG.rglob("*.py")):
         if "harnesses" in f.relative_to(PKG).parts[:1]:
             continue
-        n = len(sites(f.read_text("utf-8"), ids, roots, skip_vendor_keys=(f == agent_py)))
+        rel = f.relative_to(PKG.parent).as_posix()
+        n = _module_sites(rel, f.read_text("utf-8"), ids, roots)
         if n:
-            out[f.relative_to(PKG.parent).as_posix()] = n
+            out[rel] = n
     return out
 
 
@@ -221,11 +232,16 @@ def test_family_hints_vendor_keys_are_not_agent_sites():
 
 
 def test_vendor_key_outside_family_hints_is_still_a_site():
-    # The FAMILY_HINTS exemption is scoped to that table's dict keys. The same vendor name
-    # used as a descriptor read elsewhere would still be a site (Bd567efa0b3).
+    # The FAMILY_HINTS exemption is scoped to that table's dict keys, so a bare vendor name
+    # used as a descriptor read in the very module the detector specialises must still be
+    # counted (Bd567efa0b3). Exercise _module_sites -- the function _counts() calls -- on the
+    # real module source, and again with a planted descriptor read.
     ids = {h.id for h in HR.load()}
     assert "grok" in ids
-    assert sites('ok = "grok"\n', ids, _roots()) == [1]
+    src = (PKG / "config_sections" / "agent.py").read_text("utf-8")
+    assert _module_sites("ddflow/config_sections/agent.py", src, ids, _roots()) == 0
+    planted = src + '\nCURRENT_AGENT = "grok"\n'
+    assert _module_sites("ddflow/config_sections/agent.py", planted, ids, _roots()) == 1
 
 
 #: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125): it scans the whole
