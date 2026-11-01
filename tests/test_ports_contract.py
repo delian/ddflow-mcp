@@ -61,20 +61,42 @@ def _opaque(node: ast.AST) -> ast.AST | None:
     return node
 
 
+def _runs_code(expr: ast.expr) -> bool:
+    """An expression in a decorator or base position that executes at class-definition
+    time. ``@runtime_checkable`` marks a port without running the port code, and a bare
+    name is a reference; anything else (a call, an attribute) is code."""
+    return not (isinstance(expr, ast.Name) and expr.id == "runtime_checkable")
+
+
 def test_ports_are_declarations_only():
     """`ddflow/core/ports.py` holds a docstring, imports and `Protocol` classes, and every
-    method in them is a docstring or `...` — nothing runs."""
+    method in them is a docstring or `...` — nothing runs, not in a body, a decorator or a
+    base."""
     tree = ast.parse(PORTS_PATH.read_text("utf-8"), str(PORTS_PATH))
     statements: list[str] = []
     for node in tree.body:
         if isinstance(node, ast.ImportFrom | ast.Import):
             continue
         if isinstance(node, ast.ClassDef):
+            for decorator in node.decorator_list:
+                if _runs_code(decorator):
+                    statements.append(f"{node.name}: a decorator runs code at definition")
+            for base in node.bases:
+                if isinstance(base, ast.Name) and base.id == "Protocol":
+                    continue
+                statements.append(f"{node.name}: a base {ast.dump(base)} runs code")
             for member in node.body:
                 if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
-                    for body in member.body:
-                        if _opaque(body) is not None:
-                            statements.append(f"{node.name}.{member.name}: a method body runs code")
+                    for decorator in member.decorator_list:
+                        if _runs_code(decorator):
+                            statements.append(
+                                f"{node.name}.{member.name}: a method decorator runs code"
+                            )
+                    statements += [
+                        f"{node.name}.{member.name}: a method body runs code"
+                        for body in member.body
+                        if _opaque(body) is not None
+                    ]
                 elif _opaque(member) is not None:
                     statements.append(ast.dump(member))
             continue
