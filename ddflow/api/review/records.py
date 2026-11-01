@@ -126,7 +126,11 @@ def _still_standing(it, gate: str, findings) -> set[str]:
     """The digests of a previous review's findings still standing (not refuted): a later full
     re-review raising the SAME finding again keeps blocking even below the convergence floor
     -- the floor filters only NEW below-floor findings (bug B-floor-passes-repeated-untriaged-
-    nit)."""
+    nit).
+
+    ``findings`` is a prior review's recorded ``chunk_findings`` (already the merged record:
+    a delta round keeps the earlier full round's findings alongside its own), so every
+    finding the author has already seen is here."""
     if it is None or not isinstance(findings, list):
         return set()
     mine = (getattr(it, "triage", None) or {}).get(gate, {})
