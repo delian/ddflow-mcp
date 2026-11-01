@@ -166,6 +166,26 @@ def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
     )
 
 
+def _reopen_stale_merge(log, parked, item: str) -> dict[str, str]:
+    """A re-claim of an item that had already merged reopens that stale merge, or {}.
+
+    `merged_sha` (and the landing pair) survive a merge; a re-claim that binds a tree for
+    new work is a rework, and leaving the old merge standing made `gate run` answer "merged,
+    the merge removed its worktree" and record UNAVAILABLE over the new work while the
+    merge gate still showed [x] (B-rework-of-merged-item-keeps-stale-merge). The claim
+    writes `item.reworked`, which clears those, and says so, so the rework re-merges.
+    """
+    if parked is None or not parked.merged_sha:
+        return {}
+    log.append("item.reworked", item, {"sha": parked.merged_sha})
+    return {
+        "reopened_merge": (
+            f"{item} had already merged ({parked.merged_sha[:12]}); the re-claim reopened "
+            f"it: merged_sha and the merge/ci gates are cleared, so it re-merges from scratch."
+        )
+    }
+
+
 def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
     """Take back what a refused claim acquired -- and ONLY that.
 
@@ -341,6 +361,10 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
     out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    # A re-claim of an already-merged item reopens its stale merge, recorded only once the
+    # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
+    # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
+    out.data.update(_reopen_stale_merge(log, parked, item))
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
     if bug_globs:

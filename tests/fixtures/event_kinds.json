@@ -433,6 +433,12 @@
    },
    "v": 1
   },
+  "item.reworked": {
+   "fields": {
+    "sha": ["str"]
+   },
+   "v": 1
+  },
   "item.started": {
    "fields": {},
    "v": 1

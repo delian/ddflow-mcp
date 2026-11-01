@@ -17,6 +17,10 @@ name = "item.reopened"
 doc = "A completed item was reopened."
 
 [[kind]]
+name = "item.reworked"
+doc = "A re-claim reopened an item's already-merged state, clearing its merge and ci gates."
+
+[[kind]]
 name = "item.started"
 doc = "An item was started."
 
