@@ -15,6 +15,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from ddflow.config_sections.agent import FAMILY_HINTS
 from ddflow.services import harnessreg as HR
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
@@ -41,11 +42,6 @@ BASELINE: dict[str, tuple[int, str]] = {
         9,
         "the legacy hook table: the identities of hook entries already written into "
         "operators' settings files, kept byte for byte",
-    ),
-    "ddflow/config_sections/agent.py": (
-        7,
-        "model vendors of the agent roster, a different domain: the `grok` vendor key is also "
-        "a harness descriptor id now that DX-grok-hook-descriptor added grok.toml",
     ),
     "ddflow/services/harnessreg.py": (
         6,
@@ -125,15 +121,22 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return out
 
 
-def sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
-    """Line numbers of the string constants that name an agent or sit under an agent's directory."""
+def sites(
+    source: str, ids: set[str], roots: set[str], exempt: frozenset[str] = frozenset()
+) -> list[int]:
+    """Line numbers of the string constants that name an agent or sit under an agent's directory.
+
+    ``exempt`` holds string constants that equal a descriptor id yet live in a different domain
+    -- the model-vendor substrings of ``FAMILY_HINTS`` -- and so are not descriptor reads.
+    """
     tree = ast.parse(source)
     skip = _docstrings(tree)
     found = []
     for n in ast.walk(tree):
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:
             v = n.value
-            if v in ids or any(v.startswith(r) or "/" + r in v or v == r[:-1] for r in roots):
+            is_site = v in ids or any(v.startswith(r) or "/" + r in v or v == r[:-1] for r in roots)
+            if is_site and v not in exempt:
                 found.append(n.lineno)
     return found
 
@@ -141,11 +144,17 @@ def sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
 def _counts() -> dict[str, int]:
     ids = {h.id for h in HR.load()}
     roots = _roots()
+    agent_py = PKG / "config_sections" / "agent.py"
     out = {}
     for f in sorted(PKG.rglob("*.py")):
         if "harnesses" in f.relative_to(PKG).parts[:1]:
             continue
-        n = len(sites(f.read_text("utf-8"), ids, roots))
+        # `FAMILY_HINTS` maps model-name substrings to pretraining families -- a domain apart
+        # from the harness descriptors. Its keys that also name a harness ('grok', 'claude',
+        # 'gemini', ...) are model vendors, not descriptor reads, so they are not sites here
+        # (Bd567efa0b3).
+        exempt = frozenset(FAMILY_HINTS) if f == agent_py else frozenset()
+        n = len(sites(f.read_text("utf-8"), ids, roots, exempt))
         if n:
             out[f.relative_to(PKG.parent).as_posix()] = n
     return out
@@ -181,6 +190,18 @@ def test_the_detector_can_fail():
     assert sites('D = ".claude"\n', ids, roots) == [1]
     assert sites('D = "x/.claude"\n', ids, roots) == []  # a path component, not a root
     assert sites('"""claude"""\ndef f():\n    """.claude/x"""\n', ids, roots) == []
+
+
+def test_family_hints_vendor_keys_are_not_agent_sites():
+    # FAMILY_HINTS maps model-name substrings to pretraining families: a domain apart from the
+    # harness descriptors. A vendor key that also names a harness (now 'grok', 'claude',
+    # 'gemini', ...) is a model vendor, not a descriptor read, so the detector must not count
+    # it as an agent-literal site (Bd567efa0b3, the grok collision reddened this file 6 -> 7).
+    ids = {h.id for h in HR.load()}
+    vendor_ids = frozenset(FAMILY_HINTS) & ids
+    assert vendor_ids, "expected a vendor key to collide with a descriptor id"
+    source = (PKG / "config_sections" / "agent.py").read_text("utf-8")
+    assert sites(source, ids, _roots(), frozenset(FAMILY_HINTS)) == []
 
 
 #: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125): it scans the whole
