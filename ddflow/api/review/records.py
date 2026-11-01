@@ -98,8 +98,32 @@ def _review_runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
-def _reason_of(best) -> str:
-    return best.reason or (f"{len(best.findings)} finding(s)" if best.findings else "")
+def _reviewed_findings(results) -> list[dict[str, Any]]:
+    """The `chunk_findings` of every reviewed reviewer, in venue order. The gate blocks on
+    a finding from ANY of them (`_gate_outcome`), so the record keeps them all: recording
+    ``best``'s alone left a failed round whose finding count named a finding the record
+    did not show (bug B0419c114ef). Each reviewer's `evidence()` builds the dicts with the
+    detail truncation `_merge_delta` and triage already read."""
+    return [
+        fd
+        for r in (results or [])
+        if r.status == RV.REVIEWED
+        for fd in r.evidence()["chunk_findings"]
+    ]
+
+
+def _reason_of(best, found=None) -> str:
+    """The `failed` reason a round records for the gate: what the reviewer said, else the
+    count of the findings the record keeps. ``found`` is the reviewed findings the record
+    already built (every reviewed reviewer's, serialized to chunk dicts); a call that
+    omits it falls back to ``best.findings`` so the reason never goes empty on a failed
+    round (bug B0419c114ef: a delta round over a multi-reviewer gate crashed recording
+    `failed` with no reason, so the round never persisted and the gate stayed failed with
+    unresolved findings)."""
+    if best.reason:
+        return best.reason
+    found = best.findings if found is None else found
+    return f"{len(found)} finding(s)" if found else ""
 
 
 def _finding_rows(best) -> list[dict[str, str]]:

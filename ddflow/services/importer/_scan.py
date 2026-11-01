@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 from ...core.schedule import is_external
@@ -458,7 +459,7 @@ def _flag_shipped_phases_with_open_tasks(plan: ImportPlan) -> None:
      the two is stale is exactly the judgement the operator has to make, and guessing it
      would either resurrect finished work or silently close live work.
     """
-    from ._phases import _claims_done  # deferred: defined below, in _phases
+    _claims_done = sys.modules[__package__]._claims_done  # deferred: defined in _phases
 
     open_by_phase: dict[str, int] = {}
     for f in plan.found:
