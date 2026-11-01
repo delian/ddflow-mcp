@@ -1,0 +1,2 @@
+{"agent":"Monster3-dx-gates-skip-followup-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e21b0a6c6747f72765049361d","kind":"ddflow.seen","lamport":121386,"schema":1,"subject":"ddflow","ts":"2026-11-01T08:11:38.340259Z"}
+{"agent":"Monster3-dx-gates-skip-followup-7267fe","data":{"gate":"rubber_duck"},"id":"e75377ccef9c06305d8e05f9f","kind":"gate.started","lamport":121387,"schema":1,"subject":"dx-gates-skip-followup","ts":"2026-11-01T08:11:38.368737Z"}
