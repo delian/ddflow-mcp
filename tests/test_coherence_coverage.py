@@ -179,11 +179,11 @@ EXEMPT: dict[str, str] = {
 WRITERS_EXEMPT: dict[str, str] = {
     "api/plan.py:_file": "plan apply files a plan `plan check` already ran the duplicate hunt "
     "over, as PROPOSED tasks the operator confirms",
-    "api/items.py:split": "the parts of an item being split: their text is the parent's, "
+    "api/items/_split.py:split": "the parts of an item being split: their text is the parent's, "
     "which every part would match",
     "api/rename.py:rename": "re-files an existing item under a new id: its text is the "
     "original's, which the duplicate hunt would match against itself",
-    "api/items.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",
+    "api/items/_add.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",
     "api/knowledge/bugs.py:_bugs_parent": "the standing bugs phase of a fix task: made on first use, a follow-up once it is done",
     "api/knowledge/bugs.py:_file_fix_task": "the fix task of a bug that was itself just checked",
     "api/knowledge/pairs.py:link_record": "merges a lesson INTO the one it duplicates: the answer "
@@ -220,7 +220,7 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     "api._dedupe.check_add, through api.rules._cross_kind (D-rule-dedupe-everywhere)",
     ("rule", "edit"): "own check: a new title or content runs api._dedupe.check_add through "
     "api.rules._cross_kind (D-rule-dedupe-everywhere)",
-    ("split",): WRITERS_EXEMPT["api/items.py:split"],
+    ("split",): WRITERS_EXEMPT["api/items/_split.py:split"],
     ("import",): WRITERS_EXEMPT["services/importer/_apply.py:apply_import"],
     ("promote", "add"): WRITERS_EXEMPT["services/promotions.py:add"],
     ("grant", "add"): "a person's recorded permission on one item.gate (refused under an agent "

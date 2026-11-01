@@ -1,0 +1,5 @@
+# Ratchet `deferred_imports` for ddflow.surfaces.mcp._core (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# These are the three lazy accessors of ddflow.api (_waves_auto/_identity/_surf): ddflow.api
+# reaches jinja2 and scripts/bump.sh imports ddflow.surfaces.mcp under a bare interpreter.
+baseline = 3

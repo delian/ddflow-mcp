@@ -1,0 +1,2 @@
+{"agent":"Monster3-approvals-bulk-approve-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ee00d2d9ade36348fc723afc2","kind":"ddflow.seen","lamport":121375,"schema":1,"subject":"ddflow","ts":"2026-11-01T08:09:16.325946Z"}
+{"agent":"Monster3-approvals-bulk-approve-7267fe","data":{"gate":"critic"},"id":"ed79e2e2fdc8c018e23fc4411","kind":"gate.started","lamport":121376,"schema":1,"subject":"approvals-bulk-approve","ts":"2026-11-01T08:09:16.352321Z"}

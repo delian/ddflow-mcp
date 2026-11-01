@@ -1,0 +1,5 @@
+[knob]
+"ddflow/services/importer/_titles.py:_ANNOTATION_CHARS" = 'importer.annotation_chars'
+"ddflow/services/importer/_titles.py:_BODY_CHARS" = 'importer.body_chars'
+"ddflow/services/importer/_titles.py:_LEAD_WORD_CHARS" = 'importer.lead_word_chars'
+"ddflow/services/importer/_titles.py:_TITLE_CHARS" = 'importer.title_chars'

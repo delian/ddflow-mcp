@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/infra/harness_identity.py:_MAX_DEPTH" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'

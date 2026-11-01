@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/guidance/waivers.py:MAX_DAYS" = 'bound of a configuration value itself (the validation ceiling of an existing knob)'
