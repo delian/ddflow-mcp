@@ -29,10 +29,12 @@ class Rule:
     doc: str
     #: (item, target, cfg) -> does the rule's condition hold NOW
     when: Callable[[Any, str, Config], bool]
-    #: A WINDOWED rule fires only while the standing window is outstanding (`apply` reads the
-    #: window start from the folded policy answers and the clock; `when` cannot -- it is a
-    #: fold-free predicate). False for the two rules that fire whenever switched on.
-    windowed: bool = False
+
+
+def _true(_it, _target: str, _cfg: Config) -> bool:
+    """A generic-verb rule whose only item-level gate is the site digest: the outstanding-window
+    and `standing_verbs` checks `apply` makes are its whole predicate."""
+    return True
 
 
 def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
@@ -64,40 +66,30 @@ RULES: dict[str, Rule] = {
             "complete.force",
             "complete an item whose unmet completion condition is an unavailable tool/gate, "
             "inside the standing window",
-            # A windowed rule's whole item-level gate is the verb match + the standing-window
-            # scope and outstanding-window check `apply` makes: the site digest already binds
-            # the honest 'unavailable' state, so there is no further fold-free condition.
-            lambda _it, _target, _cfg: True,
-            windowed=True,
+            _true,
         ),
         Rule(
             "claim_unavailable",
             "claim.force",
             "claim an item held by a vanished/unavailable holder, inside the standing window",
-            lambda _it, _target, _cfg: True,
-            windowed=True,
+            _true,
         ),
     )
 }
 
 
-#: The rule ids that are WINDOWED (fire only inside `[approvals].standing_window_s`).
-WINDOWED_RULES = frozenset(r.id for r in RULES.values() if r.windowed)
-
-#: How a windowed rule's answer is recorded, ready-made for `window_start`.
-_WINDOWED_ANSWERERS = {f"policy:{rid}" for rid in WINDOWED_RULES}
-
-
+#: How a standing rule's answer is recorded: `policy:<id>`.
 def window_start(state) -> float:
-    """The start of the standing window: 0.0 before any windowed rule has fired, else the epoch
-    of the FIRST windowed auto-approval's ``answered_at`` -- the fire that opened the window. The
-    fold persists it, so a later `approvals log`/`doctor` can show what was auto-approved within
-    it. A windowed rule fires only at ``window_start <= 0.0`` (it opens the window, anchored now)
-    or while ``now < window_start + [approvals].standing_window_s``."""
+    """The start of the standing window: 0.0 before any standing rule has fired, else the
+    epoch of the FIRST standing auto-approval's ``answered_at`` -- the fire that OPENED the
+    window. ``min``, never the latest: the window never rolls forward, so `[approvals].
+    standing_window_s` is a hard bound even while uses keep landing. The fold KEEPS every ask
+    row for the life of the log (`use_ttl_s` bounds spending, not retention), so the anchor
+    persists past an answer TTL, and `approvals log`/`doctor` show what fired within it."""
     starts = [
         clock.epoch(r["answered_at"], default=0.0)
         for r in asks_of(state).values()
-        if r["policy"] and r["answered_by"] in _WINDOWED_ANSWERERS and r["answered_at"]
+        if r["policy"] and r["answered_at"]
     ]
     return min(starts, default=0.0)
 
@@ -139,7 +131,7 @@ def apply(
             continue
         if canon.site.min_level > 1:  # a policy answer is a standing decision, never above L1
             continue
-        if rule.windowed and not _window_open(canon, state, cfg, now):
+        if not _window_open(canon, state, cfg, now):
             continue
         if used(state, rule_id, canon.subject()) >= cfg.approvals.policy_max_uses:
             continue

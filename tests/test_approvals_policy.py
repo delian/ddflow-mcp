@@ -194,8 +194,12 @@ def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_ask
     frozen = _frozen_clock(monkeypatch)
     log = EventLog(proj, "bot")
     canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
-    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    claim = Canon(verb="claim.force", agent="bot", item="T1", state="s")
+    cfg = _cfg(policy=["complete_unavailable", "claim_unavailable"], policy_max_uses=99)
     assert C.operator_gate(log, cfg, canon).ok  # opens the window, anchored now
+    # A SECOND generic T2 refusal while the window is still open is also auto-approved ...
+    still = C.operator_gate(log, cfg, claim)
+    assert still.ok and still.stamp["via"] == "policy" and still.stamp["policy"] == "claim_unavailable"
     frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
     after = C.operator_gate(log, cfg, canon)
     assert not after.ok and after.ask_id and "requested" in after.message  # a person is asked

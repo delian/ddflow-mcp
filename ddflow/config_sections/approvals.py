@@ -76,7 +76,7 @@ class ApprovalsConfig:
             "gate.skip.failed_review",
             "approve.partial",
         ],
-        doc="The generic T2 verbs the standing window pre-authorises (default the whole generic T2 class: complete.force, claim.force, gate.skip.failed_review, approve.partial). Scopes which verbs a WINDOWED rule covers: a windowed rule whose verb is not listed never fires. Only the two windowed rules (`complete_unavailable`, `claim_unavailable`) consult it; the non-windowed rules `skip_after_unavailable` and `accept_baseline_red` fire as before. A non-generic site has no windowed rule, so listing one of its verbs here does nothing. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
+        doc="The generic T2 verbs the standing window pre-authorises (default the whole generic T2 class: complete.force, claim.force, gate.skip.failed_review, approve.partial). Scopes which verbs a standing rule may cover: a standing rule whose verb is not listed never fires. Every standing rule is window-gated -- `skip_after_unavailable`, `accept_baseline_red`, `complete_unavailable` and `claim_unavailable` all fire only while the window is outstanding, so auto-approval of the whole class stops the instant it lapses. A non-generic site has no standing rule, so listing one of its verbs here does nothing. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )
     accept_chat_for_t3: bool = knob(
         False,
