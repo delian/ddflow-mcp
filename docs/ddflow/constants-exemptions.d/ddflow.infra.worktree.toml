@@ -1,0 +1,3 @@
+[knob]
+"ddflow/infra/worktree.py:STASH_RETRIES" = 'worktree.stash_retries'
+"ddflow/infra/worktree.py:STASH_RETRY_PAUSE_S" = 'worktree.stash_retry_pause_s'

@@ -8,6 +8,7 @@ stale, per tree, measured against git and the live leases. Split out of
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -199,7 +200,7 @@ def _owner_alive(tree: Path) -> bool | None:
     DEFINITELY exited: the pid is gone, or re-started -- a reused pid is not the owner),
     None (unknown: no marker, so the tree predates owner recording, most likely a SIGKILLed
     run; or a pid THIS host cannot read)."""
-    from . import Path as _Path  # late-bound: honours monkeypatch of the package attr
+    _Path = sys.modules[__package__].Path  # late-bound: honours monkeypatch of the package attr
 
     try:
         text = CI.owner_marker(tree).read_text().strip()

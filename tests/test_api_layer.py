@@ -1243,7 +1243,7 @@ def test_verification_with_no_results_is_never_a_pass():
     assert verified([True], "no green baseline") is False
     assert verified([False], "") is False
     # And the rule under test is the one the module actually uses.
-    src = (Path(G.__file__)).read_text()
+    src = (Path(G._query.__file__)).read_text()
     assert '"verified": bool(results) and not reason and all(r.ok for r in results)' in src, (
         "the scoring rule changed; this test is now checking a copy of it"
     )

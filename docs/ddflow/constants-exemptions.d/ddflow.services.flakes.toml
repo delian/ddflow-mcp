@@ -1,0 +1,7 @@
+[knob]
+"ddflow/services/flakes.py:LINE_CHARS" = 'flakes.line_chars'
+"ddflow/services/flakes.py:MAX_FAILED_TESTS" = 'flakes.max_failed_tests'
+"ddflow/services/flakes.py:MAX_ROWS" = 'flakes.max_rows'
+"ddflow/services/flakes.py:MAX_TAILS" = 'flakes.max_tails'
+"ddflow/services/flakes.py:TAIL_CHARS" = 'flakes.tail_chars'
+"ddflow/services/flakes.py:TAIL_LINES" = 'flakes.tail_lines'

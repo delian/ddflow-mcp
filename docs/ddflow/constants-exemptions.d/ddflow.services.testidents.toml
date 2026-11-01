@@ -1,0 +1,7 @@
+[knob]
+"ddflow/services/testidents.py:_PHRASE_CAP" = 'testidents.phrase_cap'
+"ddflow/services/testidents.py:_PHRASE_MIN" = 'testidents.phrase_min'
+
+[exempt]
+"ddflow/services/testidents.py:_MIN_LEN" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
+"ddflow/services/testidents.py:_SHORT_MIN" = 'characters a short fragment has, always _PHRASE_MIN minus one (a matcher heuristic that follows phrase_min), not an independent setting'

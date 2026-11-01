@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from ...config import Config
+from .. import fsio
 from .. import git as G
 from .. import worktree as _W
 from ._locate import Worktree, _ignore_inside, list_worktrees, repo_root, scratch_tree
@@ -276,7 +276,7 @@ def remove(
     args = ["worktree", "remove"] + (["--force"] if force else []) + [str(wt.path)]
     r = _W.git(root, *args)
     if not r.ok and wt.path.exists() and force:
-        shutil.rmtree(wt.path, ignore_errors=True)
+        fsio.rmtree(wt.path)
         _W.git(root, "worktree", "prune")
         return G.GitResult(0, "removed (pruned)", "")
     if r.ok:

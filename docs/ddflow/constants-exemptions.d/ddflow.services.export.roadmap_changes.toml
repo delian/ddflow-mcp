@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/services/export/roadmap_changes.py:LINK_CAP" = 'decisions or research notes named per phase; the rest are counted (a presentation width)'
+"ddflow/services/export/roadmap_changes.py:LIST_CAP" = 'entries listed per kind of change in the Changed section; the rest are counted (a presentation width)'

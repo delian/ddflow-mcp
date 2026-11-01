@@ -47,6 +47,20 @@ def _half_node_ids(tests: list[str]) -> list[str]:
     return out
 
 
+def _half_node_id_why(tests: list[str]) -> str:
+    """The reason `--regression-test` holds a half node id (a `.py` path that names no
+    test, or a leading `::`), or '' when NO entry is one — a full node id, or a
+    deliberately-unflagged spec such as a shell command, is not a half node id."""
+    half = _half_node_ids(tests)
+    if not half:
+        return ""
+    return (
+        f"--regression-test: {'; '.join(repr(h) for h in half)} is not a pytest node id "
+        f"(`path/to/test_x.py::test_name`): the file or the test name is missing, so "
+        f"nothing could be checked to fail without the fix. Check for an unset variable."
+    )
+
+
 def _missing_tests(item: str, missing: list[str], tests: list[str]) -> O.Outcome:
     """The refusal for named tests that exist in no worktree of this repository."""
     joined = [m for m in missing if _looks_like_several(m)]
@@ -63,6 +77,34 @@ def _missing_tests(item: str, missing: list[str], tests: list[str]) -> O.Outcome
         f"that now guard this bug.",
         id=item,
     )
+
+
+def regression_arg_refusal(
+    repo: Path, regression_test: str | list[str], verify_regression: bool = True
+) -> O.Outcome | None:
+    """The refusal for `--regression-test` entries that name no test — a node id that
+    exists in no worktree, or a malformed (half) node id — or None.
+
+    The DETERMINISTIC argument checks, split out so `complete` can run them BEFORE it
+    spends an operator's single-use approval: a typo in the flag must not cost the agent
+    a fresh approval (B3c1a2491a3). It is NOT the single source of these checks —
+    `bug_fixed` re-runs the SAME helpers when it closes the bug (`_unresolved_tests`/
+    `_missing_tests` at its close, `_half_node_id_why` via `_landing_for`). The two stay
+    in lockstep only because both call the same helpers; a NEW malformed-argument rule
+    belongs in a helper both call, never at one site alone — the lockstep is the contract
+    (a test pins the two orders). The order and `verify_regression` condition match
+    `bug_fixed`: the existence check runs always; the half-node-id shape check only when
+    the regression is to be verified (`bug_fixed`'s `_landing_for`). `id` is left to the
+    caller (``complete`` wraps this as its own item).
+    """
+    tests, shown = _named_tests(regression_test)
+    missing, _unchecked = _unresolved_tests(repo, shown)
+    if missing:
+        return _missing_tests("", missing, tests)
+    if verify_regression:
+        if why := _half_node_id_why(tests):
+            return O.refused("bug.fixed", why)
+    return None
 
 
 def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
@@ -257,14 +299,7 @@ def _landing_for(
     """`_landing` of ``--landed`` (none given: no landing, no refusal), plus the rule that
     every named test must be a node id it can run on the two trees; ``(None, refusal)``."""
     if not landed.strip():
-        half = _half_node_ids(tests) if verify_regression else []
-        return None, (
-            f"--regression-test: {'; '.join(repr(h) for h in half)} is not a pytest node id "
-            f"(`path/to/test_x.py::test_name`): the file or the test name is missing, so "
-            f"nothing could be checked to fail without the fix. Check for an unset variable."
-            if half
-            else ""
-        )
+        return None, _half_node_id_why(tests) if verify_regression else ""
     landing, why = _landing(repo, cfg, landed)
     if why:
         return None, f"--landed: {why}"

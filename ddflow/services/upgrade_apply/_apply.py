@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import sys
 import uuid
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
@@ -115,7 +116,7 @@ def apply(
     if prior:
         backup_dir, why, refused = prior, "", False
     else:
-        from . import _save as _do_save  # late-bound: honours monkeypatch of the package attr
+        _do_save = sys.modules[__package__]._save
 
         backup_dir, why, refused = _do_save(repo, cfg, backup, files, frm, to)
     if why:
@@ -214,7 +215,7 @@ def _late_saver(
         fresh = [p for p in more if p.resolve() not in saved]
         if not fresh or mode == "none":
             return ""
-        from . import _save as _do_save  # late-bound: honours monkeypatch of the package attr
+        _do_save = sys.modules[__package__]._save
 
         where, why, _refused = _do_save(repo, cfg, mode, fresh, *versions)
         if why:
@@ -346,13 +347,13 @@ def _save(
         return "", "", False
     try:
         if mode == "snapshot":
-            from . import make_snapshot as _make_snapshot  # late-bound: honours monkeypatch
+            _make_snapshot = sys.modules[__package__].make_snapshot
 
             snap = _make_snapshot(repo, files, frm, to)
             extra = f" (and {snap.local} for what git cannot hold)" if snap.local else ""
             where = snap.tag + extra
         else:
-            from . import make_backup as _make_backup  # late-bound: honours monkeypatch
+            _make_backup = sys.modules[__package__].make_backup  # late-bound: honours monkeypatch
 
             where = str(_make_backup(repo, files, frm, to))
     except SnapshotRefused as exc:
@@ -466,9 +467,7 @@ def _execute(
     for item in _in_order(todo):
         cat = item["category"]
         if cat == "repairs":
-            from . import (
-                _run_repairs as _do_repairs,
-            )  # late-bound: honours monkeypatch of the package attr
+            _do_repairs = sys.modules[__package__]._run_repairs  # late-bound: honours monkeypatch
 
             records = _do_repairs(repo, log, cfg, [item])
         elif cat == "migrations":
@@ -476,7 +475,7 @@ def _execute(
         elif cat == "instructions":
             records = _run_instructions(repo, [item])
         else:
-            from . import _run as _do_run  # late-bound: honours monkeypatch of the package attr
+            _do_run = sys.modules[__package__]._run
 
             records = [_rec(item, *_do_run(repo, cfg, item, agent))]
         out.extend(records)

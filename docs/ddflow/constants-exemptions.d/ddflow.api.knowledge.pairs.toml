@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/api/knowledge/pairs.py:_MIN_PAIR" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'
