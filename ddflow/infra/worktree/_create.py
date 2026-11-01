@@ -51,7 +51,15 @@ def isolate_venv(root: Path, tree: Path) -> bool:
         [uv, "venv", "--seed", "--quiet", "--python", sys.executable, str(venv)],
         timeout=P.TIMEOUTS["probe"],
     )
-    return made.ran and made.returncode == 0
+    if not made.ran or made.returncode != 0:
+        # Seeding pip needs its wheel; when it cannot run (an offline cache, a write the
+        # OS refused), still give the worktree its own `.venv` so virtualenv discovery
+        # never reaches the shared one — the whole point of this guard (bug B4e7af0f14f).
+        P.capture(
+            [uv, "venv", "--quiet", "--python", sys.executable, str(venv)],
+            timeout=P.TIMEOUTS["probe"],
+        )
+    return (venv / "pyvenv.cfg").exists()
 
 
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:

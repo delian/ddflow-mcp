@@ -35,6 +35,10 @@ def test_a_uv_worktree_gets_its_own_venv(tmp_path):
     tree.mkdir()
     assert W.isolate_venv(root, tree) is True
     assert (tree / ".venv" / "pyvenv.cfg").is_file(), "the worktree has no .venv of its own"
+    # --seed ships pip, so an activated bare `pip install -e .` resolves this venv too.
+    assert (tree / ".venv" / "bin" / "pip").is_file() or (
+        tree / ".venv" / "Scripts" / "pip.exe"
+    ).is_file(), "the seeded venv has no pip"
 
 
 def test_a_worktree_that_already_has_a_venv_is_left_alone(tmp_path):
