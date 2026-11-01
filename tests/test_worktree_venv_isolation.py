@@ -1,5 +1,5 @@
-"""A linked worktree gets its own `.venv`, so a `pip install -e .` / `uv pip install
--e .` run inside it cannot repoint the primary checkout's shared one.
+"""A linked worktree gets its own `.venv`, so a `uv pip install -e .`/`uv run` inside
+it cannot repoint the primary checkout's shared one.
 
 Found 2026-10-31 (bug B4e7af0f14f): the shared primary `.venv` editable install
 (`_editable_impl_ddflow_mcp.pth`) was repointed at an agent worktree; when ddflow merged
@@ -60,14 +60,17 @@ def test_a_torn_venv_leftover_is_repaired(tmp_path):
 
 
 def test_a_symlinked_venv_is_not_treated_as_isolated(tmp_path):
-    """A `.venv` that links to the shared primary venv is not local isolation — uv/pip
-    would follow it straight back to the env this guard exists to protect."""
+    """A `.venv` that links to another (shared) venv is not local isolation — the symlink
+    itself must be replaced, even though `pyvenv.cfg` is visible through it."""
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
     root = _uv(tmp_path / "prj")
+    shared = tmp_path / "shared"
+    (shared / ".venv").mkdir(parents=True)
+    (shared / ".venv" / "pyvenv.cfg").write_text("home = /usr\n")
     tree = tmp_path / "wt"
     tree.mkdir()
-    (tree / ".venv").symlink_to(tmp_path / "nowhere", target_is_directory=True)
+    (tree / ".venv").symlink_to(shared / ".venv", target_is_directory=True)
     assert W.isolate_venv(root, tree) is True
     assert (tree / ".venv").is_dir() and not (tree / ".venv").is_symlink()
     assert (tree / ".venv" / "pyvenv.cfg").is_file()

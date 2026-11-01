@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import sys
 from pathlib import Path
@@ -18,7 +19,7 @@ from ._state import sync
 
 
 def isolate_venv(root: Path, tree: Path) -> bool:
-    """Give a linked worktree its own `.venv`, so `pip install -e .` / `uv pip install -e .`
+    """Give a linked worktree its own `.venv`, so `uv pip install -e .` / `uv run`
     run inside it resolve THAT environment and never repoint the primary checkout's shared
     one (bug B4e7af0f14f).
 
@@ -43,16 +44,18 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     venv = Path(tree) / ".venv"
     if (venv / "pyvenv.cfg").is_file() and not venv.is_symlink():
         return False  # a real, LOCAL venv already covers discovery
-    if venv.is_symlink():
-        # A link to the shared `.venv` is not local isolation: uv/pip follow it straight
-        # back to the env this guard exists to protect.
-        venv.unlink(missing_ok=True)
-    elif venv.exists():
-        # A `.venv` with no `pyvenv.cfg` is a torn leftover, not a venv.
-        shutil.rmtree(venv, ignore_errors=True)
     uv = shutil.which("uv")
     if uv is None:
         return False
+    if venv.is_symlink():
+        # A link to another env is not local isolation; `uv venv` follows to build a real
+        # one below. A symlink that cannot be unlinked (read-only parent) must not fail the
+        # claim, so suppress — the guard is best-effort, never a claim-killer.
+        with contextlib.suppress(OSError):
+            venv.unlink(missing_ok=True)
+    elif venv.exists():
+        # A `.venv` with no `pyvenv.cfg` is a torn leftover, not a venv.
+        shutil.rmtree(venv, ignore_errors=True)
     P.capture(
         [uv, "venv", "--quiet", "--python", sys.executable, str(venv)], timeout=P.TIMEOUTS["probe"]
     )
