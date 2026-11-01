@@ -15,6 +15,8 @@ from ddflow.services import file_size as FS
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMIT = Config().quality.max_file_bytes
+#: The fixtures' limit: fixed, so a repository that sets the knob to 0 or another value still runs them.
+FIXTURE_LIMIT = 30000
 
 
 def test_default_limit_is_30k():
@@ -38,34 +40,34 @@ def _repo(tmp_path: Path, size: int) -> Path:
 
 
 def test_an_oversized_new_file_fails_the_ratchet(tmp_path):
-    repo = _repo(tmp_path, LIMIT + 10)
-    [msg] = FS.violations(repo, LIMIT)
+    repo = _repo(tmp_path, FIXTURE_LIMIT + 10)
+    [msg] = FS.violations(repo, FIXTURE_LIMIT)
     assert "big.py" in msg and "split" in msg
     assert FS.violations(repo, 0) == [], "0 turns the check off"
 
 
 def test_a_baselined_file_may_shrink_but_not_grow_and_a_stale_line_fails(tmp_path):
-    repo = _repo(tmp_path, LIMIT + 10)
+    repo = _repo(tmp_path, FIXTURE_LIMIT + 10)
     base = repo / FS.BASELINE
     base.parent.mkdir(parents=True)
     size = (repo / "big.py").stat().st_size
     base.write_text(f"big.py | {size} | legacy\n")
-    assert FS.violations(repo, LIMIT) == []
+    assert FS.violations(repo, FIXTURE_LIMIT) == []
     base.write_text(f"big.py | {size - 1} | legacy\n")
-    assert "grew" in FS.violations(repo, LIMIT)[0]
+    assert "grew" in FS.violations(repo, FIXTURE_LIMIT)[0]
     (repo / "big.py").write_text("x = 1\n")
-    assert "delete its line" in FS.violations(repo, LIMIT)[0]
+    assert "delete its line" in FS.violations(repo, FIXTURE_LIMIT)[0]
 
 
 def test_doctor_note_lists_the_files_over_the_limit(tmp_path):
-    repo = _repo(tmp_path, LIMIT + 10)
-    [note] = FS.doctor_notes(repo, LIMIT)
+    repo = _repo(tmp_path, FIXTURE_LIMIT + 10)
+    [note] = FS.doctor_notes(repo, FIXTURE_LIMIT)
     assert "big.py" in note and "max_file_bytes" in note
-    assert FS.doctor_notes(repo, LIMIT * 2) == []
+    assert FS.doctor_notes(repo, FIXTURE_LIMIT * 2) == []
 
 
 def test_limit_zero_turns_the_ratchet_off_even_with_a_baseline(tmp_path):
-    repo = _repo(tmp_path, LIMIT + 10)
+    repo = _repo(tmp_path, FIXTURE_LIMIT + 10)
     base = repo / FS.BASELINE
     base.parent.mkdir(parents=True)
     base.write_text("gone.py | 99999 | legacy\n")
@@ -76,8 +78,8 @@ def test_a_listing_git_cannot_give_is_an_error_not_an_empty_result(tmp_path):
     import pytest
 
     with pytest.raises(RuntimeError, match="cannot measure"):
-        FS.violations(tmp_path, LIMIT)  # not a git repository
+        FS.violations(tmp_path, FIXTURE_LIMIT)  # not a git repository
 
 
 def test_the_doctor_note_is_silent_when_git_cannot_answer(tmp_path):
-    assert FS.doctor_notes(tmp_path, LIMIT) == []
+    assert FS.doctor_notes(tmp_path, FIXTURE_LIMIT) == []
