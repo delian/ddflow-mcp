@@ -106,6 +106,13 @@ def approvals_approve_bulk(
         target = [(r["id"], "") for r in V.waiting_for_a_person(st)]
     else:
         digests = list(digests)
+        if digests and any(":" in str(raw) for raw in ids):
+            # `--digest` aligns by position; `ID:DIGEST` carries the prefix per id. Mixed in
+            # one command the position-based digests shift or drop, so spell one way or the other.
+            return O.refused(
+                "approvals.approve",
+                "spell digests one way: ID:DIGEST pairs, or ids with --digest per id -- not both",
+            )
         target = [
             (ask_id, inline or (digests[i] if i < len(digests) else ""))
             for i, raw in enumerate(ids)
