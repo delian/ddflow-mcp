@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import shutil
+import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -73,10 +74,9 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
 
     A tree with commits ahead is only here as a landed item's merge/pin leftovers
     (Bfc4ac64c9c): re-proved against the queue as it is now, then removed with that proof."""
-    from . import (
-        dispose_tree as _dispose_tree,
-    )  # late-bound: honour monkeypatch of the package attr
-    from . import proved_leftover_tip as _proved_leftover_tip  # late-bound: honour monkeypatch
+    # late-bound: honour monkeypatch of the package attr
+    _dispose_tree = sys.modules[__package__].dispose_tree
+    _proved_leftover_tip = sys.modules[__package__].proved_leftover_tip  # late-bound: honour monkeypatch
 
     root = W.repo_root(repo)
     wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)

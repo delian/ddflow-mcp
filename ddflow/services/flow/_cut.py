@@ -6,6 +6,7 @@ Part of the former ``ddflow/services/flow.py``, split into submodules that stay 
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -174,9 +175,9 @@ def _plan_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan, *, d
 
 def _prepare_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan):
     """The new text of every `[flow.version_files]` file, or None after recording why not."""
-    # Deferred: at module level this import reaches `reached` in this package while it is
-    # still initialising (ImportError, an import cycle through changelog_cut).
-    from .. import version_files as VF
+    # Late-bound (importlib): a module-level import reaches `reached` in this package while
+    # it is still initialising (ImportError, an import cycle through changelog_cut).
+    VF = importlib.import_module("ddflow.services.version_files")
 
     try:
         return VF.prepare(repo, cfg, version=vp.next, ref=vp.ref)
@@ -189,9 +190,9 @@ def _write_version_files(
     repo: Path, cfg: Config, out: Cut, branch: str, prep, version: str
 ) -> bool:
     """Commit the bump on ``branch``; False (with the reason on ``out``) if it cannot be."""
-    # Deferred: at module level this import reaches `reached` in this package while it is
-    # still initialising (ImportError, an import cycle through changelog_cut).
-    from .. import version_files as VF
+    # Late-bound (importlib): a module-level import reaches `reached` in this package while
+    # it is still initialising (ImportError, an import cycle through changelog_cut).
+    VF = importlib.import_module("ddflow.services.version_files")
 
     try:
         changed = VF.commit_on(repo, cfg, branch, prep, message=f"chore: bump version to {version}")
@@ -222,9 +223,9 @@ def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry
     """The rendered changelog for the cut, or None after recording why not on ``out``.
     The version's section also becomes the tag message (the request body in pr mode, where
     `pr sync` writes the tag's message later)."""
-    # Deferred: at module level this import reaches `reached` in this package while it is
-    # still initialising (ImportError, an import cycle).
-    from .. import changelog_cut as CC
+    # Late-bound (importlib): a module-level import reaches `reached` in this package while
+    # it is still initialising (ImportError, an import cycle).
+    CC = importlib.import_module("ddflow.services.changelog_cut")
 
     try:
         prep = CC.prepare(repo, cfg, version=vp.next, ref=vp.ref, fallback_notes=vp.notes)
@@ -241,9 +242,9 @@ def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry
 
 def _write_changelog(repo, cfg, out: Cut, branch: str, prep, version: str, *, force: bool) -> bool:
     """Commit the prepared changelog on ``branch``; False (with the reason on ``out``) if not."""
-    # Deferred: at module level this import reaches `reached` in this package while it is
-    # still initialising (ImportError, an import cycle).
-    from .. import changelog_cut as CC
+    # Late-bound (importlib): a module-level import reaches `reached` in this package while
+    # it is still initialising (ImportError, an import cycle).
+    CC = importlib.import_module("ddflow.services.changelog_cut")
 
     try:
         action = CC.commit_on(

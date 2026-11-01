@@ -25,9 +25,7 @@ from ._model import _SIMULATED_OLD, KEPT, UPGRADE_OWNED, Cmd
 
 def source_root() -> str:
     """The directory holding the `ddflow` package that is running: the NEW code's PYTHONPATH."""
-    import ddflow
-
-    return str(Path(ddflow.__file__).resolve().parent.parent)
+    return str(Path(sys.modules["ddflow"].__file__).resolve().parent.parent)
 
 
 def new_cmd() -> Cmd:
