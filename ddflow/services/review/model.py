@@ -7,7 +7,7 @@ stage (D-unify kind-pipeline). No network or process I/O live here.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -288,7 +288,9 @@ def finding_digest(severity: str, location: str, title: str, detail: str) -> str
 _SEVERITY_RANK = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
 
 
-def blocking_findings(findings: list[Finding], *, converged: bool, floor: str) -> list[Finding]:
+def blocking_findings(
+    findings: list[Finding], *, converged: bool, floor: str, known: Iterable[str] = ()
+) -> list[Finding]:
     """The findings of a review round that keep the gate open (the convergence floor).
 
     The FIRST full round blocks on every finding: the author has seen none of them yet, so a
@@ -301,12 +303,23 @@ def blocking_findings(findings: list[Finding], *, converged: bool, floor: str) -
     they just do not hold the pass on their own. A delta or fix round does not cite this
     (it shows only NEW code, where any finding is a real defect), so it keeps blocking on
     every finding.
+
+    ``known`` is the digests of the previous review's findings still standing (not refuted):
+    a finding whose digest is in ``known`` is NOT a new nit, so the floor does not filter it
+    -- an earlier below-floor finding the author neither fixed nor answered keeps blocking
+    (bug B-floor-passes-repeated-untriaged-nit).
     """
     if not converged:
         return list(findings)
     limit = _SEVERITY_RANK.get((floor or "HIGH").upper(), _SEVERITY_RANK["HIGH"])
-    # An unknown severity ranks as blocking (fail closed): only a known one below the floor yields.
-    return [f for f in findings if _SEVERITY_RANK.get(f.severity.upper(), limit) >= limit]
+    known = {str(d) for d in known}
+    if not known:
+        return [f for f in findings if _SEVERITY_RANK.get(f.severity.upper(), limit) >= limit]
+    return [
+        f
+        for f in findings
+        if _SEVERITY_RANK.get(f.severity.upper(), limit) >= limit or f.digest in known
+    ]
 
 
 #: How much of a finding's detail the gate evidence keeps for a later merge.
