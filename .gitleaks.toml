@@ -73,7 +73,7 @@ useDefault = true
   targetRules = ["gcp-api-key"]
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
-  regexes = ['''AIzaSyAuEm-JafbL8U6TborcDo8jc9DScUJ8E_s''']
+  regexes = ['''^AIzaSyAuEm-JafbL8U6TborcDo8jc9DScUJ8E_s$''']
 
 [[allowlists]]
   # The lane-launch/opencode tests name a fake `sk-` credential to prove a real one is
@@ -81,7 +81,7 @@ useDefault = true
   # `sk-test-` prefix says so); named per value, not per path, so a real `sk-…` key in a
   # test file still fires.
   description = "Fake sk- fixture value in the lane-launch/opencode tests"
-  regexes = ['''sk-test-0123456789abcdef''']
+  regexes = ['''^sk-test-0123456789abcdef$''']
 
 [[allowlists]]
   # A critic finding in the fix-Bsecbug-redact-google-api-key event shard quotes the
@@ -89,4 +89,4 @@ useDefault = true
   # alphabet) while arguing the redaction shape must also match the plain name `key`.
   # Unmistakably filler; named per value, so a real key captured the same way still fires.
   description = "Sequential-filler example key quoted in a committed event-log critic finding"
-  regexes = ['''1234567890Abcdefghij''']
+  regexes = ['''^1234567890Abcdefghij$''']
