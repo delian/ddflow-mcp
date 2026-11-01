@@ -236,7 +236,9 @@ def test_approve_all_takes_no_ids_or_digest(proj):
 def test_approve_mixing_id_digest_pairs_with_digest_flags_is_refused(proj):
     a = _file(proj, _canon(item="T-mix-1"))
     b = _file(proj, _canon(item="T-mix-2"))
-    code, _o, err = run_cli(proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", b.id, "--digest", b.digest[:12])
+    code, _o, err = run_cli(
+        proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", b.id, "--digest", b.digest[:12]
+    )
     assert code == 3 and "--digest per id" in err, err
 
 
@@ -253,13 +255,22 @@ def test_approve_accepts_several_ids_on_one_line_and_records_each_digest(proj):
 def test_approve_id_digest_pairs_and_repeated_digest_flags(proj):
     a = _file(proj, _canon(item="T-pair-1"))
     b = _file(proj, _canon(item="T-pair-2"))
-    code, out, err = run_cli(proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", f"{b.id}:{b.digest[:12]}")
+    code, out, err = run_cli(
+        proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", f"{b.id}:{b.digest[:12]}"
+    )
     assert code == 0, (out, err)
     c = _file(proj, _canon(item="T-flags-1"))
     d = _file(proj, _canon(item="T-flags-2"))
     code, out, err = run_cli(
-        proj, "approvals", "approve", c.id, d.id,
-        "--digest", c.digest[:12], "--digest", d.digest[:12],
+        proj,
+        "approvals",
+        "approve",
+        c.id,
+        d.id,
+        "--digest",
+        c.digest[:12],
+        "--digest",
+        d.digest[:12],
     )
     assert code == 0, (out, err)
     rows = asks_of(_state(proj))

@@ -136,7 +136,9 @@ def approvals_approve_bulk(
 
     lines = [f"{ask_id} approved by {actor.id}" for ask_id in approved]
     if not approved and not refused:
-        return O.ok("approvals.approve", id=[], outcome=AN.APPROVED, text="no approval requests pending")
+        return O.ok(
+            "approvals.approve", id=[], outcome=AN.APPROVED, text="no approval requests pending"
+        )
     if refused:
         why = "; ".join(f"{ask_id}: {reason}" for ask_id, reason in refused)
         return O.refused(

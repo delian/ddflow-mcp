@@ -171,8 +171,19 @@ COMMANDS: tuple[Command, ...] = (
         tool="",
         reason="a person's act: refused for every agent identity, so no tool carries it",
         params=(
-            Param("ids", positional=True, nargs="*", metavar="ID", cli_help="request id(s); `ID:DIGEST` carries the read-receipt prefix inline"),
-            Param("all", type="boolean", default=False, cli_help="approve every currently-pending request; each answer still records that request's digest"),
+            Param(
+                "ids",
+                positional=True,
+                nargs="*",
+                metavar="ID",
+                cli_help="request id(s); `ID:DIGEST` carries the read-receipt prefix inline",
+            ),
+            Param(
+                "all",
+                type="boolean",
+                default=False,
+                cli_help="approve every currently-pending request; each answer still records that request's digest",
+            ),
             Param(
                 "digest",
                 repeat=True,
