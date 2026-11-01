@@ -70,15 +70,13 @@ def test_ports_are_declarations_only():
         if isinstance(node, ast.ImportFrom | ast.Import):
             continue
         if isinstance(node, ast.ClassDef):
-            statements += [
-                f"{node.name}.{member.name}: a method body runs code"
-                for member in node.body
-                if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
-                for body in member.body
-                if _opaque(body) is not None
-            ]
-            class_body = [_opaque(b) for b in node.body if not isinstance(b, ast.FunctionDef)]
-            statements += [ast.dump(b) for b in class_body if b is not None]
+            for member in node.body:
+                if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
+                    for body in member.body:
+                        if _opaque(body) is not None:
+                            statements.append(f"{node.name}.{member.name}: a method body runs code")
+                elif _opaque(member) is not None:
+                    statements.append(ast.dump(member))
             continue
         if _opaque(node) is None:
             continue  # the module docstring
