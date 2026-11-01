@@ -34,7 +34,7 @@ def test_star_import_exports_the_lazy_reexported_names():
 
 
 def test_all_is_the_public_surface():
-    assert sorted(UA.__all__) == list(dict.fromkeys(sorted(UA.__all__))), "unique, sorted"
+    assert UA.__all__ == sorted(set(UA.__all__)), "duplicated or unsorted __all__"
     for name in ("apply", "Watch", "parse_categories", "touched", "UP", "ACKNOWLEDGED",
                  "SKIPPED"):
         assert name in UA.__all__, name
