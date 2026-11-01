@@ -32,14 +32,16 @@ def parse_categories(spec: str | Collection[str] | None) -> list[str]:
         return list(UP.CATEGORIES)
     names = [p.strip() for p in spec.split(",")] if isinstance(spec, str) else list(spec)
     names = [n for n in names if n]
-    if not names or "all" in names:
+    if not names:
         return list(UP.CATEGORIES)
-    bad = [n for n in names if n not in UP.CATEGORIES]
+    bad = [n for n in names if n != "all" and n not in UP.CATEGORIES]
     if bad:
         raise ValueError(
             f"unknown upgrade categor{'y' if len(bad) == 1 else 'ies'} {', '.join(bad)}; "
             f"known: {', '.join(UP.CATEGORIES)}, all"
         )
+    if "all" in names:
+        return list(UP.CATEGORIES)
     return [c for c in UP.CATEGORIES if c in names]
 
 
