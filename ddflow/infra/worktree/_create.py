@@ -18,6 +18,15 @@ from ._remote import rev
 from ._state import sync
 
 
+def _remove(path: Path) -> None:
+    """Best-effort removal of a symlink, file or directory; never raises."""
+    if path.is_symlink() or path.is_file():
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+    elif path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def isolate_venv(root: Path, tree: Path) -> bool:
     """Give a linked worktree its own `.venv`, so `uv pip install -e .` / `uv run`
     run inside it resolve THAT environment and never repoint the primary checkout's shared
@@ -47,22 +56,24 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     uv = shutil.which("uv")
     if uv is None:
         return False
-    if venv.is_symlink():
-        # A link to another env is not local isolation. Remove it, then `uv venv` builds a
-        # real local `.venv` in its place. A link that cannot be removed (read-only parent)
-        # is a failure to isolate, not "already isolated": return False rather than build or
-        # verify through a link that still points at another env.
-        with contextlib.suppress(OSError):
-            venv.unlink(missing_ok=True)
-        if venv.is_symlink():
-            return False
-    elif venv.exists():
-        # A `.venv` with no `pyvenv.cfg` is a torn leftover, not a venv.
-        shutil.rmtree(venv, ignore_errors=True)
-    P.capture(
-        [uv, "venv", "--quiet", "--python", sys.executable, str(venv)], timeout=P.TIMEOUTS["probe"]
+    # Build the replacement in a sibling temp path and swap it in only after it succeeds.
+    # A `.venv` that cannot be replaced (a symlink that stays, or `uv venv` that fails) is
+    # left alone, never destroyed while the shared env stays reachable via discovery.
+    tmp = venv.with_name(venv.name + ".tmp")
+    _remove(tmp)
+    made = P.capture(
+        [uv, "venv", "--quiet", "--python", sys.executable, str(tmp)], timeout=P.TIMEOUTS["probe"]
     )
-    return (venv / "pyvenv.cfg").exists()
+    if not made.ran or made.returncode != 0 or not (tmp / "pyvenv.cfg").is_file():
+        _remove(tmp)
+        return False
+    _remove(venv)  # the symlink / torn leftover, now that the replacement is built
+    if venv.is_symlink() or venv.exists():
+        _remove(tmp)  # the old `.venv` could not be cleared; don't leave a stranded tmp
+        return False
+    with contextlib.suppress(OSError):
+        tmp.rename(venv)
+    return (venv / "pyvenv.cfg").is_file()
 
 
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:

@@ -76,6 +76,30 @@ def test_a_symlinked_venv_is_not_treated_as_isolated(tmp_path):
     assert (tree / ".venv" / "pyvenv.cfg").is_file()
 
 
+def test_a_symlink_that_cannot_be_removed_is_not_silently_kept(tmp_path, monkeypatch):
+    """A `.venv` link that cannot be removed is reported not-isolated (False), never
+    'verified through' the link to another env (which would render unavailable-as-success)."""
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH")
+    root = _uv(tmp_path / "prj")
+    shared = tmp_path / "shared"
+    (shared / ".venv").mkdir(parents=True)
+    (shared / ".venv" / "pyvenv.cfg").write_text("home = /usr\n")
+    tree = tmp_path / "wt"
+    tree.mkdir()
+    (tree / ".venv").symlink_to(shared / ".venv", target_is_directory=True)
+    real_unlink = Path.unlink
+
+    def refusing_unlink(self, *a, **k):
+        if self == tree / ".venv":
+            raise OSError(30, "Read-only file system", str(self))
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", refusing_unlink)
+    assert W.isolate_venv(root, tree) is False
+    assert (tree / ".venv").is_symlink()
+
+
 def test_a_project_that_is_not_uv_is_not_touched(tmp_path):
     """Python/uv only: told by `uv.lock` beside the primary (the `gates.testcmd` signal).
     A Go/JS project has no `.venv` to repoint, and `uv` may not even be installed there."""
