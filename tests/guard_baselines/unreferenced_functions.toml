@@ -12,6 +12,9 @@ baseline = 0
 # `option_string`, which vulture reports at cli.py and is the protocol's signature,
 # not dead code.)
 [kept]
+# The production wiring of the ExternalTool port (ADP-tools): `ddflow.services.toolrun`; SEC-scanners
+# is its first caller.
+"ddflow/services/toolrun.py:external_tool" = "SEC-scanners"
 # Per-role schema cost of a lean agent definition (LS-agents); the LS-e2e probe matrix reports it.
 "ddflow/surfaces/startcost_texts.py:role_tokens" = "LS-e2e"
 # Renders a document type from its sources (B-dt-sources); B-dt-ownership's render.py calls it.
