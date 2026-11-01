@@ -6,6 +6,7 @@ from pathlib import Path
 import _gitquiet
 import pytest
 from _cli_helpers import RUN_CLI_TIMEOUT_MAX_S, RUN_CLI_TIMEOUT_S, _text, run_cli  # noqa: F401
+from _upgrade_apply_support import old  # noqa: F401 -- fixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Launch lines -- the MCP entries and hooks tests install -- point at THIS tree. From a
