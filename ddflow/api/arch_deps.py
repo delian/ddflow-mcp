@@ -12,13 +12,12 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import archdeps as A
-from ._base import _load
 
 
 def archdeps(repo: Path, *, agent: str = "") -> O.Outcome:
     """The census. ``families`` is one row per dependency family (family, members, home,
-    importers, violations, third_party); ``text`` is the human table. Read-only."""
-    _load(repo, agent)  # resolve the project; the census is its own scan
+    importers, violations, third_party); ``text`` is the human table. Read-only: a pure
+    AST scan of ``repo/ddflow``, it never folds the event log."""
     census = A.scan(repo)
     rows = [
         {

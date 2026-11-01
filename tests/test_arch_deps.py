@@ -317,6 +317,8 @@ def test_violations_are_importers_outside_the_home():
 
 def test_ratchet_violations_match_baseline():
     actual = _families(A.scan(ROOT))
+    unknown = set(actual) - set(BASELINE)
+    assert not unknown, f"new dependency family not in the committed baseline: {sorted(unknown)}"
     for name, base in BASELINE.items():
         got = set(actual[name].violations)
         want = set(base)
@@ -348,14 +350,23 @@ class FakeArchDepsCensus:
 
 def test_unparsable_file_is_reported_not_skipped(tmp_path: Path):
     # a valid module and one that cannot be parsed: the broken one must be reported,
-    # never silently treated as importing nothing.
+    # never silently treated as importing nothing, and the valid one must still count.
     pkg = tmp_path / "ddflow"
     pkg.mkdir()
     (pkg / "ok.py").write_text("import subprocess\n")
     (pkg / "broken.py").write_text("import subprocess\ndef f(:\n")
     census = A.scan(tmp_path)
     assert census.unparsed == ("ddflow.broken",)
-    assert (tmp_path / "ddflow").exists()
+    subprocess_importers = [f.importers for f in census.families if f.family == "subprocess"]
+    assert subprocess_importers and subprocess_importers[0] == ("ddflow.ok",)
+
+
+def test_api_view_carries_families_and_unparsed():
+    from ddflow.api.arch_deps import render
+
+    census = A.FamilyReport("hashlib", ("hashlib",), ("ddflow.core.digest",), ("ddflow.core.digest",))
+    text = render(A.Census((census,), ("ddflow.broken",)))
+    assert "hashlib" in text and "unparsed" in text
 
 
 def test_family_report_is_immutable():
