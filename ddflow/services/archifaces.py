@@ -1,0 +1,152 @@
+"""The interface census (ADP-census-v2): what `archdeps` cannot see because it is not an import.
+
+`archdeps` (ADP-census) counts import families. This module counts five kinds of interface a
+Python import never shows -- ``program`` (external programs run: argv[0] literals and
+``shutil.which`` targets), ``protocol`` (MCP / ACP / JSON-RPC spoken by hand), ``managed-file``
+(files other tools own and ddflow edits), ``env`` (environment variables read) and
+``network`` (network calls and hard-coded URL hosts) -- so ADP-guard-final can prove that every
+external interface, not only every import, goes through its adapter.
+
+A family's *home* is the planned ADP-* task that puts it behind a port; its *home modules*
+are the ddflow modules already allowed to touch it (empty while no adapter exists), and a
+*violation* is a call site outside them. The ratchet counts violations per (kind, family,
+file): a NEW key or a grown count fails, a shrunk one asks for a lower baseline, so the
+committed baseline (``tests/guard_baselines/arch_interfaces.txt``) only shrinks and survives a
+line shift. The scan is the AST of ``repo/ddflow`` (`archifaces_scan`), seconds, no execution.
+"""
+
+from __future__ import annotations
+
+import ast
+from dataclasses import dataclass
+from pathlib import Path
+
+from .archdeps import _dotted
+from .archifaces_scan import ALL_ENV, DYNAMIC, Site, sites_in  # noqa: F401  (re-exported)
+
+KINDS = ("program", "protocol", "managed-file", "env", "network")
+_RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
+
+_AGENT_CLIS = ("claude", "codex", "kilo", "opencode", "vibe")
+_TOOLS = ("roborev", "gitleaks", "pre-commit", "pip-audit", "uv", "uvx", "npm", "npx", "node")
+_PLATFORM = ("python", "ddflow", "ddflow-mcp", "docker", "systemd-run", "sh", "bash")
+
+# (planned home task, modules already allowed) per program family; the default is ADP-tools.
+PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "git": ("ADP-git", ("ddflow.infra.git",)),
+    "gh": ("ADP-forge", ("ddflow.infra.forge",)),
+    "glab": ("ADP-forge", ("ddflow.infra.forge",)),
+    DYNAMIC: ("ADP-tools", _RUNNER),
+    **dict.fromkeys(_AGENT_CLIS, ("ADP-agent-lanes", ())),
+    **dict.fromkeys(_TOOLS, ("ADP-tools", ())),
+    **dict.fromkeys(_PLATFORM, ("ADP-platform", ())),
+}
+KIND_HOMES: dict[str, str] = {"managed-file": "ADP-managed-files", "env": "ADP-clock-env"}
+PROTOCOL_HOMES: dict[str, str] = {
+    "mcp": "ADP-mcp",
+    "acp": "ADP-acp",
+    "jsonrpc": "ADP-lane-transport",
+}
+
+
+def home_of(kind: str, family: str) -> tuple[str, tuple[str, ...]]:
+    """The planned ADP-* task and the modules already allowed for one family."""
+    if kind == "program":
+        return PROGRAM_HOMES.get(family, ("ADP-tools", ()))
+    if kind == "protocol":
+        return PROTOCOL_HOMES.get(family, "ADP-lane-transport"), ()
+    return KIND_HOMES.get(kind, "ADP-http"), ()
+
+
+@dataclass(frozen=True)
+class InterfaceFamily:
+    """One (kind, family) row: its call sites, planned home task and allowed modules."""
+
+    kind: str
+    family: str
+    home: str
+    home_modules: tuple[str, ...]
+    sites: tuple[Site, ...]
+
+    @property
+    def violations(self) -> tuple[Site, ...]:
+        return tuple(s for s in self.sites if s.module not in self.home_modules)
+
+
+@dataclass(frozen=True)
+class InterfaceCensus:
+    families: tuple[InterfaceFamily, ...]
+    unparsed: tuple[str, ...] = ()
+
+
+def scan(repo: Path) -> InterfaceCensus:
+    """The interface census of ``repo/ddflow``, families sorted by kind then name."""
+    pkg = repo / "ddflow"
+    if not pkg.is_dir():
+        return InterfaceCensus(())
+    by_key: dict[tuple[str, str], list[Site]] = {}
+    unparsed: list[str] = []
+    for path in sorted(p for p in pkg.rglob("*.py") if "__pycache__" not in p.parts):
+        module = _dotted(repo, path)
+        try:
+            tree = ast.parse(path.read_bytes())
+        except (OSError, SyntaxError, ValueError):
+            unparsed.append(module)
+            continue
+        rel = path.relative_to(repo).as_posix()
+        for s in sites_in(tree, module, rel, is_init=path.name == "__init__.py"):
+            by_key.setdefault((s.kind, s.family), []).append(s)
+    rows = []
+    for (kind, family), sites in sorted(
+        by_key.items(), key=lambda kv: (KINDS.index(kv[0][0]), kv[0][1])
+    ):
+        home, modules = home_of(kind, family)
+        rows.append(InterfaceFamily(kind, family, home, modules, tuple(sites)))
+    return InterfaceCensus(tuple(rows), tuple(sorted(unparsed)))
+
+
+# -- the ratchet ------------------------------------------------------------------------
+Key = tuple[str, str, str]
+
+
+def counts(census: InterfaceCensus) -> dict[Key, int]:
+    """Violation call sites per (kind, family, path): the quantity the ratchet bounds."""
+    out: dict[Key, int] = {}
+    for f in census.families:
+        for s in f.violations:
+            key = (f.kind, f.family, s.path)
+            out[key] = out.get(key, 0) + 1
+    return out
+
+
+def format_baseline(census: InterfaceCensus) -> str:
+    """The committed baseline text: ``kind<TAB>family<TAB>path<TAB>count``, sorted."""
+    rows = sorted(counts(census).items())
+    return "".join(f"{k}\t{fam}\t{p}\t{n}\n" for (k, fam, p), n in rows)
+
+
+def parse_baseline(text: str) -> dict[Key, int]:
+    out: dict[Key, int] = {}
+    for raw in text.splitlines():
+        if raw.strip() and not raw.startswith("#"):
+            kind, family, path, n = raw.split("\t")
+            out[(kind, family, path)] = int(n)
+    return out
+
+
+def ratchet(
+    census: InterfaceCensus, baseline: dict[Key, int]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(grew, shrank): sites NEW or more than baselined, and baseline entries now too high."""
+    now = counts(census)
+    grew, shrank = [], []
+    for key in sorted(now):
+        was = baseline.get(key, 0)
+        if now[key] > was:
+            grew.append(f"{key[0]} {key[1]} in {key[2]}: {now[key]} site(s), baseline {was}")
+    for key in sorted(baseline):
+        if now.get(key, 0) < baseline[key]:
+            shrank.append(
+                f"{key[0]} {key[1]} in {key[2]}: {now.get(key, 0)} site(s), baseline {baseline[key]}"
+            )
+    return tuple(grew), tuple(shrank)

@@ -1297,6 +1297,14 @@
           "type": "string",
           "description": "check: a git base; report only the extracted surface added since it."
          },
+         "interfaces": {
+          "type": "string",
+          "description": "Census the interfaces that are not imports: 'all' or one kind (program, protocol, managed-file, env, network): programs run, wire protocols, other tools' files, environment variables, network endpoints."
+         },
+         "baseline": {
+          "type": "boolean",
+          "description": "With interfaces: print the ratchet baseline text instead of the report."
+         },
          "stamp": {
           "type": "boolean",
           "description": "Write the derived wave:N tags."

@@ -1,0 +1,345 @@
+"""The AST half of the interface census (ADP-census-v2): the call sites in ONE parsed module.
+
+Five kinds of interface that are not Python imports: ``program`` (an external program ddflow
+runs), ``protocol`` (a wire protocol spoken by hand), ``managed-file`` (a file another tool
+owns), ``env`` (an environment variable read) and ``network`` (a network call or a hard-coded
+URL host). Every site comes from the syntax tree, never from a text search: a docstring, a
+comment or a string statement can not produce a hit. A site records names and locations only,
+never a value (an environment variable's value, a URL's userinfo).
+"""
+
+from __future__ import annotations
+
+import ast
+import re
+from dataclasses import dataclass
+from itertools import pairwise
+
+DYNAMIC = "<dynamic>"
+ALL_ENV = "<all>"
+
+# Dotted names (import aliases resolved) of the calls that start a process.
+_SUBPROCESS = {f"subprocess.{n}" for n in ("run", "Popen", "call", "check_call", "check_output")}
+_PROC = {
+    f"ddflow.infra.proc.{n}" for n in ("run", "popen", "capture", "spawn_stdio", "replace_process")
+}
+_SHELL = {f"ddflow.infra.proc.{n}" for n in ("run_shell", "spawn_shell")} | {
+    "os.system",
+    "os.popen",
+}
+_GIT = {
+    f"ddflow.infra.git.{n}" for n in ("run", "status_run", "paths", "files", "status", "unmerged")
+}
+_EXEC = {f"os.{n}" for n in ("execv", "execve", "execvp", "execvpe", "posix_spawn", "posix_spawnp")}
+
+MCP_METHODS = frozenset(
+    {
+        "tools/list",
+        "tools/call",
+        "resources/list",
+        "resources/read",
+        "prompts/list",
+        "prompts/get",
+        "notifications/initialized",
+        "notifications/cancelled",
+        "notifications/tools/list_changed",
+    }
+)
+ACP_METHODS = frozenset(
+    {
+        "session/new",
+        "session/load",
+        "session/prompt",
+        "session/update",
+        "session/cancel",
+        "session/request_permission",
+        "fs/read_text_file",
+        "fs/write_text_file",
+        "authenticate",
+    }
+)
+
+# A file another tool owns: the literal's last path component (or the whole literal).
+MANAGED_NAMES: dict[str, str] = {
+    "settings.json": "settings.json",
+    "settings.local.json": "settings.json",
+    ".mcp.json": ".mcp.json",
+    "opencode.json": "opencode.json",
+    "hooks.toml": "hooks.toml",
+    "config.toml": "config.toml",
+    "AGENTS.md": "AGENTS.md",
+    "CLAUDE.md": "CLAUDE.md",
+    ".pre-commit-config.yaml": ".pre-commit-config.yaml",
+}
+GIT_HOOKS = ".git/hooks"
+
+_NET_PREFIX = (
+    ("urllib.request.", "http"),
+    ("http.client.", "http"),
+    ("http.server.", "socket"),
+    ("socket.", "socket"),
+    ("socketserver.", "socket"),
+)
+# The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
+# very module an importer of the http family it measures).
+_URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class Site:
+    """One call site: where it is and what it names (``detail`` is a name, never a value)."""
+
+    kind: str
+    family: str
+    path: str
+    line: int
+    module: str
+    detail: str = ""
+
+
+def _base(program: str) -> str:
+    return program.rsplit("/", 1)[-1] or program
+
+
+class _Scan:
+    def __init__(self, tree: ast.Module, module: str, path: str, is_init: bool) -> None:
+        self.tree, self.module, self.path = tree, module, path
+        # ONE traversal feeds every pass below (the walk dominates the scan's cost).
+        self.parent: dict[int, ast.AST] = {}
+        self.nodes: list[ast.AST] = []
+        todo: list[ast.AST] = [tree]
+        while todo:
+            node = todo.pop()
+            self.nodes.append(node)
+            for kid in ast.iter_child_nodes(node):
+                self.parent[id(kid)] = node
+                todo.append(kid)
+        self.alias: dict[str, str] = {}
+        self._aliases(module.split("."), is_init)
+        self.prose = {
+            id(n.value)
+            for n in self.nodes
+            if isinstance(n, ast.Expr)
+            and isinstance(n.value, ast.Constant)
+            and isinstance(n.value.value, str)
+        }
+        self.consts: dict[str, set[str]] = {}
+        self.argv0: dict[str, set[str]] = {}
+        self._assignments()
+        self.out: dict[tuple[str, str, int], Site] = {}
+
+    # -- names ------------------------------------------------------------------------
+    def _aliases(self, parts: list[str], is_init: bool) -> None:
+        pkg = parts if is_init else parts[:-1]
+        for n in self.nodes:
+            if isinstance(n, ast.Import):
+                for a in n.names:
+                    if a.asname:
+                        self.alias[a.asname] = a.name
+                    else:
+                        root = a.name.split(".", 1)[0]
+                        self.alias[root] = root
+            elif isinstance(n, ast.ImportFrom):
+                base = n.module or ""
+                if n.level:
+                    keep = pkg[: max(len(pkg) - (n.level - 1), 0)]
+                    base = ".".join([*keep, *([n.module] if n.module else [])])
+                for a in n.names:
+                    self.alias[a.asname or a.name] = f"{base}.{a.name}" if base else a.name
+
+    def dotted(self, node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return self.alias.get(node.id, node.id)
+        if isinstance(node, ast.Attribute):
+            head = self.dotted(node.value)
+            return f"{head}.{node.attr}" if head else None
+        return None
+
+    def _assignments(self) -> None:
+        """Names bound to a string (pass one), then to a list led by one (pass two), so the
+        result never depends on the order the traversal happens to visit assignments."""
+        binds = [
+            (n.targets[0].id, n.value)
+            for n in self.nodes
+            if isinstance(n, ast.Assign)
+            and len(n.targets) == 1
+            and isinstance(n.targets[0], ast.Name)
+        ]
+        for name, v in binds:
+            lit = self._literal(v)
+            if lit is not None:
+                self.consts.setdefault(name, set()).add(lit)
+        for name, v in binds:
+            if isinstance(v, (ast.List, ast.Tuple)) and v.elts:
+                self.argv0.setdefault(name, set()).add(self._head(v.elts[0]) or DYNAMIC)
+
+    def _literal(self, v: ast.AST) -> str | None:
+        """A string a name is bound to: a literal, or ``shutil.which("lit")`` (maybe ``or``)."""
+        if isinstance(v, ast.Constant) and isinstance(v.value, str):
+            return v.value
+        if isinstance(v, ast.BoolOp):
+            return next((s for s in map(self._literal, v.values) if s), None)
+        if isinstance(v, ast.Call) and self.dotted(v.func) == "shutil.which" and v.args:
+            a = v.args[0]
+            return a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) else None
+        return None
+
+    def _head(self, e: ast.AST) -> str | None:
+        """The program a list's first element names, or None when it is not static."""
+        if isinstance(e, ast.Constant) and isinstance(e.value, str):
+            return e.value
+        if isinstance(e, ast.Name):
+            vals = self.consts.get(e.id, set())
+            return next(iter(vals)) if len(vals) == 1 else None
+        if isinstance(e, ast.Call):
+            return self._literal(e)
+        if self.dotted(e) == "sys.executable":
+            return "python"
+        return None
+
+    def program_of(self, e: ast.AST, *, shell: bool = False) -> str:
+        if isinstance(e, (ast.List, ast.Tuple)):
+            got = self._head(e.elts[0]) if e.elts else None
+        elif isinstance(e, ast.Name):
+            vals = self.argv0.get(e.id, set())
+            got = next(iter(vals)) if len(vals) == 1 and DYNAMIC not in vals else None
+        elif isinstance(e, ast.Constant) and isinstance(e.value, str):
+            words = e.value.split()
+            got = words[0] if words else None
+        else:
+            got = None
+        return _base(got) if got else DYNAMIC
+
+    # -- recording --------------------------------------------------------------------
+    def add(self, kind: str, family: str, node: ast.AST, detail: str = "") -> None:
+        line = getattr(node, "lineno", 0)
+        self.out.setdefault(
+            (kind, family, line), Site(kind, family, self.path, line, self.module, detail)
+        )
+
+    # -- the five kinds ---------------------------------------------------------------
+    def run(self) -> list[Site]:
+        file_protocols = {
+            n.value
+            for n in self.nodes
+            if isinstance(n, ast.Constant) and n.value in MCP_METHODS | ACP_METHODS
+        }
+        for node in self.nodes:
+            if isinstance(node, ast.Call):
+                self._call(node)
+                self._git_hooks_join(node)
+            elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+                if not self._is_div(self.parent.get(id(node))):
+                    self._git_hooks_join(node)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if id(node) not in self.prose:
+                    self._literal_site(node, file_protocols)
+            elif isinstance(node, ast.Attribute) and self.dotted(node) == "os.environ":
+                self._environ(node)
+            elif isinstance(node, ast.Name) and self.alias.get(node.id) == "os.environ":
+                self._environ(node)
+        return sorted(self.out.values(), key=lambda s: (s.path, s.line, s.kind, s.family))
+
+    @staticmethod
+    def _is_div(n: ast.AST | None) -> bool:
+        return isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div)
+
+    def _call(self, node: ast.Call) -> None:
+        name = self.dotted(node.func) or ""
+        arg = node.args[0] if node.args else None
+        if name in _GIT:
+            self.add("program", "git", node)
+        elif name in _SUBPROCESS | _PROC | _EXEC:
+            self.add("program", self.program_of(arg) if arg is not None else DYNAMIC, node)
+        elif name in _SHELL or name == "ddflow.infra.proc.replace_process":
+            self.add("program", self.program_of(arg) if arg is not None else DYNAMIC, node)
+        elif name in ("shutil.which", "ddflow.infra.fsio.which"):
+            lit = arg.value if isinstance(arg, ast.Constant) else None
+            self.add("program", _base(lit) if isinstance(lit, str) else DYNAMIC, node)
+        elif name in ("os.getenv", "os.getenvb"):
+            self._env_arg(node, arg)
+        for prefix, family in _NET_PREFIX:
+            if name.startswith(prefix):
+                self.add("network", family, node, name)
+                break
+
+    def _env_arg(self, node: ast.AST, arg: ast.AST | None) -> None:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            self.add("env", arg.value, node)
+        else:
+            self.add("env", DYNAMIC, node)
+
+    def _environ(self, node: ast.AST) -> None:
+        up = self.parent.get(id(node))
+        if isinstance(up, ast.Subscript) and up.value is node:
+            if isinstance(up.ctx, ast.Load):
+                self._env_arg(up, up.slice)
+        elif isinstance(up, ast.Attribute) and up.value is node:
+            call = self.parent.get(id(up))
+            if up.attr in ("get", "pop", "setdefault", "__getitem__") and isinstance(
+                call, ast.Call
+            ):
+                self._env_arg(call, call.args[0] if call.args else None)
+            elif up.attr in ("copy", "items", "keys", "values", "__iter__"):
+                self.add("env", ALL_ENV, node)
+        elif (
+            isinstance(up, ast.Compare)
+            and node in up.comparators
+            and isinstance(up.ops[0], (ast.In, ast.NotIn))
+        ):
+            self._env_arg(up, up.left)
+        elif isinstance(up, ast.Attribute):
+            return
+        elif not (
+            isinstance(up, (ast.Assign, ast.AugAssign)) and node in getattr(up, "targets", [])
+        ):
+            self.add("env", ALL_ENV, node)
+
+    def _literal_site(self, node: ast.Constant, file_protocols: set[str]) -> None:
+        v = node.value
+        if v == "jsonrpc":
+            fams = [
+                f for f, ms in (("mcp", MCP_METHODS), ("acp", ACP_METHODS)) if file_protocols & ms
+            ]
+            for fam in fams or ["jsonrpc"]:
+                self.add("protocol", fam, node, v)
+        elif v in MCP_METHODS:
+            self.add("protocol", "mcp", node, v)
+        elif v in ACP_METHODS:
+            self.add("protocol", "acp", node, v)
+        name = v.rsplit("/", 1)[-1]
+        if name in MANAGED_NAMES and "\n" not in v and " " not in v:
+            self.add("managed-file", MANAGED_NAMES[name], node, name)
+        if v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v:
+            self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
+        m = _URL.match(v)
+        if m:
+            host = m.group(1).lower()
+            self.add("network", f"host:{host}", node, host)
+
+    def _git_hooks_join(self, node: ast.AST) -> None:
+        """``Path(".git") / "hooks"`` and ``os.path.join(root, ".git", "hooks")``."""
+        leaves: list[str | None] = []
+
+        def flat(e: ast.AST) -> None:
+            if self._is_div(e):
+                flat(e.left)  # type: ignore[attr-defined]
+                flat(e.right)  # type: ignore[attr-defined]
+            elif isinstance(e, ast.Call):
+                for a in e.args:
+                    flat(a)
+            else:
+                leaves.append(e.value if isinstance(e, ast.Constant) else None)  # type: ignore[attr-defined]
+
+        if isinstance(node, ast.Call):
+            for a in node.args:
+                flat(a)
+        else:
+            flat(node)
+        if any(a == ".git" and b == "hooks" for a, b in pairwise(leaves)):
+            self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
+
+
+def sites_in(tree: ast.Module, module: str, path: str, *, is_init: bool = False) -> list[Site]:
+    """Every interface call site in the parsed module, sorted by path then line."""
+    return _Scan(tree, module, path, is_init).run()

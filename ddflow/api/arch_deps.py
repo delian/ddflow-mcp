@@ -12,12 +12,21 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import archdeps as A
+from ..services import archifaces as I
 
 
-def archdeps(repo: Path, *, agent: str = "") -> O.Outcome:
+def archdeps(
+    repo: Path,
+    *,
+    agent: str = "",
+    interfaces: str = "",
+    baseline: bool = False,
+) -> O.Outcome:
     """The census. ``families`` is one row per dependency family (family, members, home,
     importers, violations, third_party); ``text`` is the human table. Read-only: a pure
     AST scan of ``repo/ddflow``, it never folds the event log."""
+    if interfaces or baseline:
+        return _interfaces(repo, "" if interfaces in ("", "all") else interfaces, baseline)
     census = A.scan(repo)
     rows = [
         {
@@ -45,4 +54,56 @@ def render(census: A.Census) -> str:
         )
     for module in census.unparsed:
         lines.append(f"unparsed       {module}")
+    return "\n".join(lines)
+
+
+def _interfaces(repo: Path, kind: str, baseline: bool) -> O.Outcome:
+    """The interface census (ADP-census-v2): programs run, wire protocols, other tools' files,
+    environment variables and network endpoints, with call sites (file:line), planned home
+    task and violations. ``kind`` narrows to one kind (CLI/MCP ``interfaces=KIND``); ``baseline`` returns the ratchet's
+    baseline text (what `tests/guard_baselines/arch_interfaces.txt` holds) instead."""
+    if kind and kind not in I.KINDS:
+        return O.failed(
+            "archdeps",
+            f"unknown kind {kind!r}: one of {', '.join(I.KINDS)}; "
+            "call ddflow_view action=archdeps interfaces=all",
+        )
+    census = I.scan(repo)
+    if baseline:
+        return O.ok("archdeps", text=I.format_baseline(census), unparsed=list(census.unparsed))
+    fams = [f for f in census.families if not kind or f.kind == kind]
+    rows = [
+        {
+            "kind": f.kind,
+            "family": f.family,
+            "home": f.home,
+            "home_modules": list(f.home_modules),
+            "sites": [{"path": s.path, "line": s.line, "detail": s.detail} for s in f.sites],
+            "violations": len(f.violations),
+        }
+        for f in fams
+    ]
+    return O.ok(
+        "archdeps",
+        text=render_interfaces(fams, census.unparsed),
+        interfaces=rows,
+        unparsed=list(census.unparsed),
+    )
+
+
+def render_interfaces(fams: list[I.InterfaceFamily], unparsed: tuple[str, ...]) -> str:
+    """One readable summary: a per-kind total, then one row per family (sites in the JSON)."""
+    lines = []
+    for k in I.KINDS:
+        mine = [f for f in fams if f.kind == k]
+        if mine:
+            sites = sum(len(f.sites) for f in mine)
+            lines.append(f"{k}: {len(mine)} families, {sites} call sites")
+    lines.append("kind          family                    home                 sites  violations")
+    for f in fams:
+        lines.append(
+            f"{f.kind:<13} {f.family:<25} {f.home:<20} {len(f.sites):>5} {len(f.violations):>11}"
+        )
+    lines.extend(f"unparsed       {m}" for m in unparsed)
+    lines.append("call sites: ddflow archdeps --interfaces <kind> --json")
     return "\n".join(lines)
