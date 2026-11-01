@@ -314,6 +314,8 @@ def blocking_findings(
     limit = _SEVERITY_RANK.get((floor or "HIGH").upper(), _SEVERITY_RANK["HIGH"])
     known = {str(d) for d in known}
     if not known:
+        # An unknown severity ranks as blocking (fail closed): only a known one below the
+        # floor yields.
         return [f for f in findings if _SEVERITY_RANK.get(f.severity.upper(), limit) >= limit]
     return [
         f
