@@ -19,16 +19,14 @@ empty answer). An upstream whose issues were fully listed and are zero IS an ans
 
 from __future__ import annotations
 
-import http.client
 import json
 import re
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from http import HTTPStatus
 from typing import Any
 
+from ..adapters.http import HttpProtocolError, HTTPStatus, HttpStatusError, default_client
+from ..adapters.ports import HttpClient
 from . import similar
 
 DEFAULT_REPO = "delian/ddflow-mcp"
@@ -58,17 +56,20 @@ class Response:
 Fetch = Callable[[str, float], Response]
 
 
-def real_fetch(url: str, timeout: float) -> Response:
+def real_fetch(url: str, timeout: float, client: HttpClient | None = None) -> Response:
     """The one real network call: an unauthenticated GET. HTTP error statuses come back
     as a ``Response`` (the caller classifies them); transport failures raise OSError."""
-    req = urllib.request.Request(
-        url, headers={"Accept": "application/vnd.github+json", "User-Agent": "ddflow-dedupe"}
-    )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310 - https only
-            return Response(r.status, dict(r.headers), r.read(MAX_BYTES).decode("utf-8", "replace"))
-    except urllib.error.HTTPError as exc:
-        return Response(exc.code, dict(exc.headers or {}), "")
+        r = (client or default_client()).request(
+            "GET",
+            url,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "ddflow-dedupe"},
+            timeout=timeout,
+            max_bytes=MAX_BYTES,
+        )
+    except HttpStatusError as exc:
+        return Response(exc.status, dict(exc.headers or {}), "")
+    return Response(r.status, dict(r.headers), r.body.decode("utf-8", "replace"))
 
 
 @dataclass(frozen=True)
@@ -155,10 +156,10 @@ def _page(fetch: Fetch, repo: str, page: int, timeout: float) -> tuple[list[dict
         raise
     except TimeoutError as exc:
         raise UpstreamUnavailable(f"upstream timed out after {timeout:g}s") from exc
+    except HttpProtocolError as exc:  # a cut-short or garbled response
+        raise UpstreamUnavailable(f"upstream answer unreadable: {exc}") from exc
     except OSError as exc:
         raise UpstreamUnavailable(f"upstream unreachable: {exc}") from exc
-    except http.client.HTTPException as exc:  # a cut-short or garbled response
-        raise UpstreamUnavailable(f"upstream answer unreadable: {exc!r}") from exc
     spent = _rate_limited(r)
     if r.status in (HTTPStatus.FORBIDDEN, HTTPStatus.TOO_MANY_REQUESTS):
         if spent:

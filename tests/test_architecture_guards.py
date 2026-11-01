@@ -548,6 +548,7 @@ CONTRACTS = frozenset(
         "subprocess-home",
         "fsio-home",
         "digest-home",
+        "http-home",
         "extras-one-adapter",
     }
 )

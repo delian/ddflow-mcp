@@ -7,12 +7,11 @@ real one is never reached. Fixture texts are four real filings of one ddflow bug
 from __future__ import annotations
 
 import json
-import socket
-import urllib.error
-import urllib.request
 
 import pytest
 
+from ddflow.adapters.fakes.http import FakeHttpClient
+from ddflow.adapters.http import HttpIncompleteRead, UrllibHttpClient
 from ddflow.services import bugreport as B
 from ddflow.services import similar
 from ddflow.services import upstream_dedupe as U
@@ -91,8 +90,7 @@ def no_network(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("a test reached the real network")
 
-    monkeypatch.setattr(socket, "create_connection", boom)
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    monkeypatch.setattr(UrllibHttpClient, "request", boom)
 
 
 def test_reworded_duplicate_scores_over_ask_and_offers_comment():
@@ -236,25 +234,44 @@ def test_default_repo_and_thresholds():
     assert (U.ASK_THRESHOLD, U.SHOW_FLOOR) == (0.55, 0.35)
 
 
-def test_real_fetch_transport_failure_is_unavailable(monkeypatch):
-    def refuse(req, timeout):
-        assert req.full_url.startswith("https://api.github.com/") and not req.data  # a GET
-        raise urllib.error.URLError("Network is unreachable")
+def _check_via(client, **kw):
+    """`check` with the real fetch, on the fake HTTP client."""
+    return U.check("t", "b", repo=REPO, fetch=lambda u, t: U.real_fetch(u, t, client=client), **kw)
 
-    monkeypatch.setattr(urllib.request, "urlopen", refuse)
-    res = U.check("t", "b", repo=REPO)  # default fetch = the real one, on a stub transport
+
+def test_real_fetch_is_an_unauthenticated_get_with_the_timeout_and_cap():
+    http = FakeHttpClient().when("GET", prefix=True, url="https://api.github.com/", body="[]")
+    _check_via(http)
+    call = http.calls[0]
+    assert (
+        call.method == "GET"
+        and call.body is None
+        and call.url.startswith("https://api.github.com/")
+    )
+    assert call.max_bytes == U.MAX_BYTES and call.timeout == U.TIMEOUT
+    assert call.headers == {"Accept": "application/vnd.github+json", "User-Agent": "ddflow-dedupe"}
+
+
+def test_real_fetch_transport_failure_is_unavailable():
+    res = _check_via(FakeHttpClient().when(raises="connection"))
     assert res.status == "unavailable" and "unreachable" in res.reason
 
 
-def test_real_fetch_http_error_is_classified(monkeypatch):
-    def limited(req, timeout):
-        raise urllib.error.HTTPError(
-            req.full_url, 403, "rate", {"X-RateLimit-Remaining": "0"}, None
-        )
+def test_real_fetch_timeout_is_unavailable_and_says_so():
+    res = _check_via(FakeHttpClient().when(raises="timeout"))
+    assert res.status == "unavailable" and "timed out" in res.reason
 
-    monkeypatch.setattr(urllib.request, "urlopen", limited)
-    res = U.check("t", "b", repo=REPO)
+
+def test_real_fetch_http_error_is_classified():
+    http = FakeHttpClient().when(status=403, headers={"X-RateLimit-Remaining": "0"}, body="x")
+    res = _check_via(http)
     assert res.status == "unavailable" and "rate limit" in res.reason
+
+
+def test_real_fetch_returns_an_error_status_with_an_empty_body():
+    http = FakeHttpClient().when(status=500, body="boom", headers={"A": "b"})
+    r = U.real_fetch("https://api.github.com/x", 5, client=http)
+    assert (r.status, r.body, dict(r.headers)) == (500, "", {"A": "b"})
 
 
 def test_local_hits_are_checked_without_the_network():
@@ -320,9 +337,9 @@ def test_both_failures_keep_their_own_reasons():
 
 
 def test_a_truncated_response_is_unavailable_not_an_exception():
-    import http.client
-
-    res = U.check("t", "b", repo=REPO, fetch=Fake(raises=http.client.IncompleteRead(b"x")))
+    res = U.check("t", "b", repo=REPO, fetch=Fake(raises=HttpIncompleteRead("IncompleteRead(1)")))
+    assert res.status == "unavailable" and "unreadable" in res.reason
+    res = _check_via(FakeHttpClient().when(raises="protocol"))
     assert res.status == "unavailable" and "unreadable" in res.reason
 
 
