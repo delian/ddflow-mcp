@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ddflow.core import agentname as AN
 
@@ -19,7 +20,6 @@ from ...infra import harness_identity
 from ...infra.log import EventLog
 from .. import mcp_next as _NEXT
 from .. import mcp_protocol as protocol
-from .. import mcp_upgrade as _upgrade
 from .. import projectkinds as PK
 from .. import registry as _REGISTRY
 from ..mcp_protocol import SUPPORTED_PROTOCOLS
@@ -29,12 +29,18 @@ from ..mcp_protocol import modernize as _modernize
 from ..mcp_protocol import ok as _ok
 from ..tools import profiles as _PROFILES
 from ..tools.tiers import resolve_output_schemas, resolve_tier
-
-from ._core import AS_AGENT, _meta_agent, _progress_token
-from ._core import _waves_auto, _identity, _surf, _default_agent
-from ._core import _STRUCTURED_SINCE
+from ._core import (
+    _STRUCTURED_SINCE,
+    AS_AGENT,
+    _default_agent,
+    _identity,
+    _meta_agent,
+    _progress_token,
+    _waves_auto,
+)
 from ._handlers import _Handlers
 from ._instructions import _instructions
+
 
 class Server(_Handlers):
     """One connection. Which, deliberately, is not the same thing as one agent.

@@ -19,8 +19,8 @@ from ddflow.core.outcome import EXIT_NAMES, NOTHING, OK, REFUSED
 from .. import registry as _REGISTRY
 from ..mcp_bound import BOUNDS
 from ..tools import TOOLS
+from ._core import _AS_AGENT_SPEC, _OPTIONAL_KEYS, AS_AGENT
 
-from ._core import _OPTIONAL_KEYS, _AS_AGENT_SPEC, AS_AGENT
 
 def _properties(spec: dict[str, Any]) -> dict[str, tuple[str, str, bool]]:
     """A tool's declared properties plus `as_agent`, which every tool but `identify`
@@ -71,10 +71,6 @@ def _finish_list_read(repo: Path, result: Any, args: dict[str, Any]) -> Any:
         )
     _KB = importlib.import_module("ddflow.api.knowledge.bugs")
     return _KB.finish_bug_list(repo, result, sort=str(args.get("sort") or ""))
-
-
-#: The first protocol revision with `outputSchema` and `structuredContent`.
-_STRUCTURED_SINCE = "2025-06-18"
 
 
 def _result_declaration(name: str, spec: dict[str, Any]) -> dict[str, Any]:

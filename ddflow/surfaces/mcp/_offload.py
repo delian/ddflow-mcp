@@ -12,15 +12,15 @@ import os
 import sys
 import threading
 import traceback
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ...infra import proc as PROC
 from .. import mcp_protocol as protocol
 from ..mcp_protocol import err as _err
 from ..mcp_protocol import ok as _ok
 from ..tools import family_schema as _FAMILIES
-
 from ._core import OFFLOADED
 from ._reply import _text
 from ._server import Server

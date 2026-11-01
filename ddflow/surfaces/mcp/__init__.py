@@ -33,18 +33,72 @@ working unchanged.
 
 from __future__ import annotations
 
+# The registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`; this
+# package routes between them. Every name below is re-exported so imports of
+# `ddflow.surfaces.mcp.<name>` keep working.
+from .. import mcp_next as _NEXT  # noqa: F401
+from .. import mcp_protocol as protocol  # noqa: F401
+from .. import mcp_upgrade as _upgrade  # noqa: F401
+from .. import projectkinds as PK  # noqa: F401
+from .. import registry as _REGISTRY  # noqa: F401
+from ..mcp_bound import BOUNDS as BOUNDS
+from ..mcp_heartbeat import heartbeat as heartbeat
+from ..mcp_protocol import CACHE_SCOPE as CACHE_SCOPE
+from ..mcp_protocol import CACHE_TTL_MS as CACHE_TTL_MS
+from ..mcp_protocol import INVALID_PARAMS as INVALID_PARAMS
+from ..mcp_protocol import META_AGENT as META_AGENT
+from ..mcp_protocol import META_CLIENT_CAPS as META_CLIENT_CAPS
+from ..mcp_protocol import META_SERVER_INFO as META_SERVER_INFO
+from ..mcp_protocol import META_VERSION as META_VERSION
+from ..mcp_protocol import MODERN_PROTOCOLS as MODERN_PROTOCOLS
+from ..mcp_protocol import SERVER_INFO as SERVER_INFO
+from ..mcp_protocol import SUPPORTED_PROTOCOLS as SUPPORTED_PROTOCOLS
+from ..mcp_protocol import UNSUPPORTED_PROTOCOL_VERSION as UNSUPPORTED_PROTOCOL_VERSION
+from ..mcp_protocol import capabilities as _capabilities  # noqa: F401
+from ..mcp_protocol import err as _err  # noqa: F401
+from ..mcp_protocol import modern_check as _modern_check  # noqa: F401
+from ..mcp_protocol import modernize as _modernize  # noqa: F401
+from ..mcp_protocol import ok as _ok  # noqa: F401
+from ..tools import ADD_TOOLS as ADD_TOOLS
+from ..tools import DEDUPE_PROPERTIES as DEDUPE_PROPERTIES
+from ..tools import TOOLS as TOOLS
+from ..tools import family_schema as _FAMILIES  # noqa: F401
+from ..tools import profiles as _PROFILES  # noqa: F401
+from ..tools._common import _AGENT_KEYS as _AGENT_KEYS
+from ..tools._common import MCP_WAIT_DEFAULT_S as MCP_WAIT_DEFAULT_S
+from ..tools._common import MCP_WAIT_MAX_S as MCP_WAIT_MAX_S
+from ..tools._common import _answer as _answer
+from ..tools._common import _api as _api
+from ..tools._common import _bisect as _bisect
+from ..tools._common import _bug_reopen as _bug_reopen
+from ..tools._common import _configure_reported as _configure_reported
+from ..tools._common import _list_or_none as _list_or_none
+from ..tools._common import _opt as _opt
+from ..tools._common import _regression_tests as _regression_tests
+from ..tools._common import _reopening as _reopening
+from ..tools._common import _wait_timeout as _wait_timeout
+from ..tools.aliases import alias_for as _alias_for  # noqa: F401
+from ..tools.tiers import CORE_TOOLS as CORE_TOOLS
+from ..tools.tiers import DEFAULT_TIER as DEFAULT_TIER
+from ..tools.tiers import FULL_ONLY_TOOLS as FULL_ONLY_TOOLS
+from ..tools.tiers import STANDARD_EXTRA_TOOLS as STANDARD_EXTRA_TOOLS
+from ..tools.tiers import TIERS as TIERS
+from ..tools.tiers import resolve_output_schemas as resolve_output_schemas
+from ..tools.tiers import resolve_tier as resolve_tier
+from ..tools.tiers import tier_note as tier_note
+from ..tools.tiers import tier_tools as tier_tools
 from ._core import (
-    AS_AGENT,
-    OFFLOADED,
-    RESOURCES,
-    RESOURCE_BY_URI,
-    ALLOW_OLDER,
-    Resource,
     _AS_AGENT_SPEC,
     _FIRST_CALL_TRIES,
-    _STRUCTURED_SINCE,
-    _STALE_CHECK_EVERY_S,
     _OPTIONAL_KEYS,
+    _STALE_CHECK_EVERY_S,
+    _STRUCTURED_SINCE,
+    ALLOW_OLDER,
+    AS_AGENT,
+    OFFLOADED,
+    RESOURCE_BY_URI,
+    RESOURCES,
+    Resource,
     _default_agent,
     _identity,
     _meta_agent,
@@ -92,57 +146,57 @@ from ._reply import (
 from ._serve import _reexec_ready, main, serve
 from ._server import Server
 
-# The registry lives in `surfaces/tools/` and the protocol engine in `mcp_protocol`; this
-# package routes between them. Every name below is re-exported so imports of
-# `ddflow.surfaces.mcp.<name>` keep working.
-from .. import mcp_next as _NEXT  # noqa: F401
-from .. import mcp_protocol as protocol  # noqa: F401
-from .. import mcp_upgrade as _upgrade  # noqa: F401
-from .. import projectkinds as PK  # noqa: F401
-from .. import registry as _REGISTRY  # noqa: F401
-from ..mcp_bound import BOUNDS as BOUNDS  # noqa: F401
-from ..mcp_heartbeat import heartbeat as heartbeat  # noqa: F401
-from ..mcp_protocol import CACHE_SCOPE as CACHE_SCOPE  # noqa: F401
-from ..mcp_protocol import CACHE_TTL_MS as CACHE_TTL_MS  # noqa: F401
-from ..mcp_protocol import INVALID_PARAMS as INVALID_PARAMS  # noqa: F401
-from ..mcp_protocol import META_AGENT as META_AGENT  # noqa: F401
-from ..mcp_protocol import META_CLIENT_CAPS as META_CLIENT_CAPS  # noqa: F401
-from ..mcp_protocol import META_SERVER_INFO as META_SERVER_INFO  # noqa: F401
-from ..mcp_protocol import META_VERSION as META_VERSION  # noqa: F401
-from ..mcp_protocol import MODERN_PROTOCOLS as MODERN_PROTOCOLS  # noqa: F401
-from ..mcp_protocol import SERVER_INFO as SERVER_INFO  # noqa: F401
-from ..mcp_protocol import SUPPORTED_PROTOCOLS as SUPPORTED_PROTOCOLS  # noqa: F401
-from ..mcp_protocol import UNSUPPORTED_PROTOCOL_VERSION as UNSUPPORTED_PROTOCOL_VERSION  # noqa: F401
-from ..mcp_protocol import capabilities as _capabilities  # noqa: F401
-from ..mcp_protocol import err as _err  # noqa: F401
-from ..mcp_protocol import modern_check as _modern_check  # noqa: F401
-from ..mcp_protocol import modernize as _modernize  # noqa: F401
-from ..mcp_protocol import ok as _ok  # noqa: F401
-from ..tools import ADD_TOOLS as ADD_TOOLS  # noqa: F401
-from ..tools import DEDUPE_PROPERTIES as DEDUPE_PROPERTIES  # noqa: F401
-from ..tools import TOOLS as TOOLS  # noqa: F401
-from ..tools import family_schema as _FAMILIES  # noqa: F401
-from ..tools import profiles as _PROFILES  # noqa: F401
-from ..tools._common import MCP_WAIT_DEFAULT_S as MCP_WAIT_DEFAULT_S  # noqa: F401
-from ..tools._common import MCP_WAIT_MAX_S as MCP_WAIT_MAX_S  # noqa: F401
-from ..tools._common import _AGENT_KEYS as _AGENT_KEYS  # noqa: F401
-from ..tools._common import _answer as _answer  # noqa: F401
-from ..tools._common import _api as _api  # noqa: F401
-from ..tools._common import _bisect as _bisect  # noqa: F401
-from ..tools._common import _bug_reopen as _bug_reopen  # noqa: F401
-from ..tools._common import _configure_reported as _configure_reported  # noqa: F401
-from ..tools._common import _list_or_none as _list_or_none  # noqa: F401
-from ..tools._common import _opt as _opt  # noqa: F401
-from ..tools._common import _regression_tests as _regression_tests  # noqa: F401
-from ..tools._common import _reopening as _reopening  # noqa: F401
-from ..tools._common import _wait_timeout as _wait_timeout  # noqa: F401
-from ..tools.aliases import alias_for as _alias_for  # noqa: F401
-from ..tools.tiers import CORE_TOOLS as CORE_TOOLS  # noqa: F401
-from ..tools.tiers import DEFAULT_TIER as DEFAULT_TIER  # noqa: F401
-from ..tools.tiers import FULL_ONLY_TOOLS as FULL_ONLY_TOOLS  # noqa: F401
-from ..tools.tiers import STANDARD_EXTRA_TOOLS as STANDARD_EXTRA_TOOLS  # noqa: F401
-from ..tools.tiers import TIERS as TIERS  # noqa: F401
-from ..tools.tiers import resolve_output_schemas as resolve_output_schemas  # noqa: F401
-from ..tools.tiers import resolve_tier as resolve_tier  # noqa: F401
-from ..tools.tiers import tier_note as tier_note  # noqa: F401
-from ..tools.tiers import tier_tools as tier_tools  # noqa: F401
+__all__ = (
+    "ALLOW_OLDER",
+    "AS_AGENT",
+    "MAX_WORKERS",
+    "OFFLOADED",
+    "RESOURCES",
+    "RESOURCE_BY_URI",
+    "_AS_AGENT_SPEC",
+    "_FILLERS",
+    "_FIRST_CALL_TRIES",
+    "_OPTIONAL_KEYS",
+    "_SORT_PROPERTY",
+    "_STALE_CHECK_EVERY_S",
+    "_STRUCTURED_SINCE",
+    "_VAR_DEFAULTS",
+    "Resource",
+    "Server",
+    "_Call",
+    "_bounds",
+    "_default_agent",
+    "_fill_pipeline",
+    "_finish_list_read",
+    "_frame_writer",
+    "_identity",
+    "_instruction_vars",
+    "_instructions",
+    "_instructions_text",
+    "_meta_agent",
+    "_modern_identify_note",
+    "_obligation_footer",
+    "_offload",
+    "_offloaded",
+    "_outcome_result",
+    "_progress_token",
+    "_properties",
+    "_reexec_ready",
+    "_refusal_body",
+    "_refusal_said",
+    "_rendered",
+    "_resolve_call",
+    "_result_declaration",
+    "_schema",
+    "_surf",
+    "_text",
+    "_text_with_next",
+    "_upgrade_line",
+    "_waves_auto",
+    "_with_next",
+    "_worker_main",
+    "_worker_stderr",
+    "deprecation_note",
+    "main",
+    "serve",
+)

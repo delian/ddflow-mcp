@@ -13,6 +13,7 @@ import sys
 import threading
 import traceback
 from pathlib import Path
+from typing import Any
 
 from ...infra import proc as PROC
 from ...infra.worktree import repo_root
@@ -21,9 +22,9 @@ from ..mcp_protocol import SERVER_INFO
 from ..mcp_protocol import err as _err
 from ..mcp_protocol import modern_check as _modern_check
 from ..mcp_protocol import modernize as _modernize
-
 from ._offload import _offload, _offloaded
 from ._server import Server
+
 
 def serve(
     repo: Path,

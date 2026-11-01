@@ -9,8 +9,9 @@ Every JSON-RPC method handler (`tools/list`, `tools/call`, `resources/*`, `promp
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar
+from typing import Any, ClassVar
 
 from ddflow.core import agentname as AN
 from ddflow.core.outcome import NOTHING, OK, REFUSED, declared_exit, exit_for
@@ -20,28 +21,41 @@ from ...infra import harness_identity
 from .. import mcp_next as _NEXT
 from .. import mcp_protocol as protocol
 from .. import mcp_upgrade as _upgrade
+from .. import registry as _REGISTRY
 from ..mcp_heartbeat import heartbeat
 from ..mcp_protocol import err as _err
 from ..mcp_protocol import ok as _ok
-from .. import registry as _REGISTRY
 from ..tools import TOOLS
 from ..tools import family_schema as _FAMILIES
 from ..tools import profiles as _PROFILES
-from ..tools.aliases import alias_for as _alias_for
 from ..tools._common import _api
+from ..tools.aliases import alias_for as _alias_for
 from ..tools.tiers import tier_note, tier_tools
+from ._core import (
+    _FIRST_CALL_TRIES,
+    _STALE_CHECK_EVERY_S,
+    ALLOW_OLDER,
+    OFFLOADED,
+    RESOURCE_BY_URI,
+    RESOURCES,
+    _default_agent,
+    _modern_identify_note,
+    _progress_token,
+    _surf,
+)
+from ._instructions import _instructions, _obligation_footer
+from ._reply import (
+    _bounds,
+    _finish_list_read,
+    _outcome_result,
+    _properties,
+    _resolve_call,
+    _result_declaration,
+    _schema,
+    _text,
+    deprecation_note,
+)
 
-from ._core import _FIRST_CALL_TRIES, OFFLOADED, _progress_token
-from ._core import _default_agent, _modern_identify_note
-from ._core import _surf
-from ._core import ALLOW_OLDER
-from ._core import RESOURCES, RESOURCE_BY_URI
-from ._core import _STALE_CHECK_EVERY_S
-from ._instructions import _obligation_footer
-from ._instructions import _instructions
-from ._reply import _bounds, _finish_list_read, _outcome_result
-from ._reply import _properties, _resolve_call, _schema, _result_declaration
-from ._reply import deprecation_note, _text
 
 @dataclass
 class _Call:

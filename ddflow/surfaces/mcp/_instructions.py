@@ -18,8 +18,8 @@ from ddflow.core import measuring
 from ...config import Config
 from ..tools._common import _api
 from ..tools.tiers import DEFAULT_TIER, tier_note
-
 from ._core import _surf
+
 
 def _obligation_footer(server) -> str:
     """The re-instruction footer, or "" — see `services/obligations.py` and `[reinstruct]`.
@@ -52,7 +52,6 @@ def _obligation_footer(server) -> str:
         return text
     except Exception:
         return ""
-
 
 
 _VAR_DEFAULTS: dict[str, Any] = {

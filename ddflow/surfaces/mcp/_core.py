@@ -11,14 +11,14 @@ constants. Nothing here imports a sibling submodule; that would be a cycle.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ddflow.core import agentname as AN
 
 from ...config import Config
-
 from .. import registry as _REGISTRY
 from ..mcp_protocol import META_AGENT, MODERN_PROTOCOLS
 from ..tools._common import _api
