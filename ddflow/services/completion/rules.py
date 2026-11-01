@@ -344,6 +344,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         # not in `api.complete`, so the PR-merge settle path enforces it too.
 
         v.blockers += phase_overdue(state, cfg)
+    else:
+        v.blockers += _own_branch_unmerged(state, cfg, it, repo)
 
     inert = G.inert_requirements(cfg)
     if inert:
@@ -467,6 +469,27 @@ def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> li
     if not left:
         return []
     return [f"task branch(es) not merged into {base}: {', '.join(left)} (`ddflow merge <id>`)"]
+
+
+def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> list[str]:
+    """The item's OWN branch still holds commits its base lacks. Completing it in that state
+    records the work done while those commits never reached the base — a partial land that
+    drops them without notice (Bd59dded6a4). The branchless phase is backstopped by
+    `_unmerged_branches`; this is each task's own guard. Git unable to answer is not a blocker."""
+    if it.kind == "phase" or not it.branch or it.promote_to:
+        return []
+    base = (
+        it.base
+        if it.base and W.git(repo, "rev-parse", "--verify", "--quiet", it.base).ok
+        else (cfg.worktree.base_ref or W.default_branch(repo))
+    )
+    if not W.branch_exists(repo, it.branch) or W.is_merged(repo, it.branch, base):
+        return []
+    return [
+        f"branch {it.branch} has commits not merged into {base}: `ddflow merge {it.id}` "
+        f"first, so completing it does not drop them (or `ddflow abandon {it.id} --force` "
+        f"to drop them deliberately)"
+    ]
 
 
 README_UNKNOWN = (

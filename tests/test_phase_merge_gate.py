@@ -107,3 +107,38 @@ def test_a_task_base_that_no_longer_exists_does_not_hide_unmerged_work(repo):
     task.parent = "P"
     st.items = {"P": phase, "T": task}
     assert _unmerged_branches(st, Config(), phase, repo) != []
+
+
+def test_a_task_with_unmerged_commits_refuses_force(repo):
+    """Bd59dded6a4: complete --force on a released item whose branch still held unmerged
+    commits recorded it done with those commits dropped. The task's own branch must refuse
+    even under --force, because force overrides the merge GATE, not the fact that the work
+    never reached the base."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    wt = Path(json.loads(out)["worktree"])
+    (wt / "a.py").write_text("x = 1\n")
+    _git(wt, "commit", "-qam", "work T1")
+    pass_pipeline(repo, "T1", omit=("merge",))
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", "--force")
+    assert code == 3, out + err
+    assert "not merged" in out + err and "T1" in out + err, out + err
+
+
+def test_a_task_that_merged_completes_after_the_guard(repo):
+    """The guard must not fire on the normal flow: once `merge` lands the branch, the same
+    --force is not even needed, but the branch is merged and no unmerged-commit blocker
+    remains."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    wt = Path(json.loads(out)["worktree"])
+    (wt / "a.py").write_text("x = 1\n")
+    _git(wt, "commit", "-qam", "work T1")
+    run_cli(repo, "merge", "T1")
+    pass_pipeline(repo, "T1", omit=())
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
+    assert code == 0, out + err
