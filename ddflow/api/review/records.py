@@ -112,17 +112,17 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
     ]
 
 
-def _reason_of(best, results=None) -> str:
+def _reason_of(best, found=None) -> str:
     """The `failed` reason a round records for the gate: what the reviewer said, else the
-    count of the findings the record keeps (every reviewed reviewer's). The gate blocks
-    on a finding from ANY reviewed reviewer, so when ``best`` named none -- another
-    reviewer raised them -- the count must still name a finding instead of handing
-    `record` an outcome `failed` with an empty reason (bug B0419c114ef: a delta round over
-    a multi-reviewer gate crashed recording `failed`, so the round never persisted and the
-    gate stayed failed with unresolved findings)."""
+    count of the findings the record keeps. ``found`` is the reviewed findings the record
+    already built (every reviewed reviewer's, serialized to chunk dicts); a call that
+    omits it falls back to ``best.findings`` so the reason never goes empty on a failed
+    round (bug B0419c114ef: a delta round over a multi-reviewer gate crashed recording
+    `failed` with no reason, so the round never persisted and the gate stayed failed with
+    unresolved findings)."""
     if best.reason:
         return best.reason
-    found = _reviewed_findings(results) if results is not None else best.findings
+    found = best.findings if found is None else found
     return f"{len(found)} finding(s)" if found else ""
 
 

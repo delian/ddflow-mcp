@@ -168,7 +168,9 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **(extra_evidence or {}),
         **snapshot,
     }
-    reviewed = _reviewed_findings(results) if results is not None else list(best.findings)
+    reviewed = (
+        _reviewed_findings(results) if results is not None else best.evidence()["chunk_findings"]
+    )
     evidence["chunk_findings"] = reviewed
     evidence["findings"] = len(reviewed)
     evidence["titles"] = [f["title"] for f in reviewed[:10]]
@@ -188,7 +190,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     linked = _link_refuted(log, it, gate, reviewed)
     if linked:
         held = max(0, held - len(linked))
-    outcome, reason = _hold(outcome, _reason_of(best, results), held, say)
+    outcome, reason = _hold(outcome, _reason_of(best, reviewed), held, say)
     if clean_pass and outcome == "failed":
         evidence["held_pass"] = True
     _record(
