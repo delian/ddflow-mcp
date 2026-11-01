@@ -607,6 +607,14 @@
    },
    "v": 1
   },
+  "phase.completed": {
+   "fields": {
+    "evidence": ["str"],
+    "kind": ["str"],
+    "tasks": ["int"]
+   },
+   "v": 1
+  },
   "phase.removed": {
    "fields": {},
    "v": 1
