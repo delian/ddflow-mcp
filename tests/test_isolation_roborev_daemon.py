@@ -55,7 +55,7 @@ def test_teardown_kills_a_daemon_the_suite_spawned_under_its_scratch_home(tmp_pa
     if shutil.which("roborev") is None:
         pytest.skip("roborev is not installed")
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(mode=0o700)  # roborev refuses a group/world-accessible unix-socket dir
     proc = _spawn(home)
     try:
         pid = _pid_under(home, time.monotonic() + 15)
