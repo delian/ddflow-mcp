@@ -51,9 +51,17 @@ def test_a_signal_killed_command_is_unavailable_not_failed():
 
 def test_an_ordinal_high_exit_is_not_read_as_a_signal_death():
     # 128 (no signal 0) and the far tail (255 = 128+127, no such signal) are a program's
-    # own exit status, not a kill: misreading them would downgrade a real failure.
+    # own exit status, not a cut-off: misreading them would downgrade a real failure.
     assert classify_exit(_gate(), 128, "")[0] == "failed"
     assert classify_exit(_gate(), 255, "")[0] == "failed"
+
+
+def test_a_crash_signal_is_a_failure_not_a_cut_off():
+    # SIGSEGV (139) and SIGABRT (134) are the command's own process crashing, not a
+    # harness cutting it off: they must read as FAILED, not UNAVAILABLE.
+    assert classify_exit(_gate(), -11, "")[0] == "failed"  # SIGSEGV
+    assert classify_exit(_gate(), 139, "")[0] == "failed"
+    assert classify_exit(_gate(), 134, "")[0] == "failed"  # SIGABRT
 
 
 def test_a_signal_killed_ci_run_is_unavailable_and_never_a_queued_note(tmp_path):

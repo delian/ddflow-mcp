@@ -359,20 +359,25 @@ def _blocked_on(output: str) -> str:
 
 
 #: A shell that survives a child killed by signal N reports ``128+N`` as its exit status;
-#: ``N`` is the signal number. A process killed by a signal is cut off, not failed.
+#: ``N`` is the signal number. A process killed by signal is cut off, not failed.
 _SHELL_SIGNAL_EXIT = 128
+
+#: The signals that mean the run was CUT OFF from outside (a harness timeout, a `kill`, a
+#: terminal hangup/interrupt), not a verdict. A crash (SIGSEGV, SIGABRT, SIGBUS, SIGFPE,
+#: SIGILL) is the command's own failure and stays FAILED -- only these read as unavailable.
+_CUT_OFF_SIGNALS = frozenset({"SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGKILL"})
 
 
 def _signal_death(code: int | None) -> str:
-    """The signal that killed a command's process, else "".
+    """The signal that cut a command's process off from outside, else "".
 
-    A process killed by a signal did not run to a verdict: it was CUT OFF, not failed.
-    Python reports a signalled child as ``-N``; a shell that survived a signalling child
-    reports ``128+N``. Only a real signal number is read -- exit 128 (``N = 0``) and an
-    exit in the far 128..255 tail are a program's own exit status (a shell only reports
-    ``128+N`` for a signal N >= 1), and misreading them as a kill would downgrade a real
-    failure to UNAVAILABLE. Reading a genuine kill as ``failed`` is what left a cut-off
-    ``ci`` run stuck as "queued 11m of 15m elapsed" forever (B8664a1e0c6).
+    A process killed by a delivery signal did not run to a verdict: it was CUT OFF, not
+    failed. Python reports a signalled child as ``-N``; a shell that survived a signalling
+    child reports ``128+N``. Only a delivery signal is read -- exit 128 (``N = 0``), an exit
+    in the far 128..255 tail, and a crash signal (SIGSEGV, SIGABRT, ...) are not a cut-off:
+    misreading them would downgrade a real failure to UNAVAILABLE. Reading a genuine cut-off
+    as ``failed`` is what left a cut-off ``ci`` run stuck as "queued 11m of 15m elapsed"
+    forever (B8664a1e0c6).
     """
     if not isinstance(code, int) or isinstance(code, bool):
         return ""
@@ -383,9 +388,10 @@ def _signal_death(code: int | None) -> str:
     else:
         return ""
     try:
-        return signal.Signals(n).name
+        name = signal.Signals(n).name
     except ValueError:
         return ""
+    return name if name in _CUT_OFF_SIGNALS else ""
 
 
 def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
