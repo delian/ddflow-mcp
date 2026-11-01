@@ -223,9 +223,12 @@ class _ReplyFile:
         run = clock.run_stamp()
         who = safe_filename(reviewer, repl="_")
         self.repo = repo
+        self.item = item
+        self.gate = gate
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
         self._lock = threading.Lock()
         self._started = False
+        _ACTIVE.append(self)
 
     def add(self, chunk: int, reply: str) -> None:
 
@@ -238,6 +241,48 @@ class _ReplyFile:
             except OSError:
                 pass  # the evidence still carries the bodies; this is the belt
 
+    def chunks(self) -> list[tuple[int, str]]:
+        """The (chunk, reply) pairs this run has checkpointed so far, in arrival order.
+
+        Line-by-line, not whole-file: a kill can leave a truncated trailing line, and one
+        torn line must not discard the earlier checkpointed chunks it follows."""
+        rows: list[tuple[int, str]] = []
+        try:
+            lines = self.path.read_text("utf-8").splitlines()
+        except OSError:
+            return []
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+                rows.append((int(row["chunk"]), row["reply"]))
+            except (ValueError, KeyError, TypeError):
+                continue  # a torn trailing line loses only itself
+        return rows
+
+    def findings(self) -> list[dict[str, Any]]:
+        """Every finding already checkpointed here, as ``chunk_findings`` dicts.
+
+        Chunk number and digest are set exactly as ``ReviewResult.evidence`` sets them, so a
+        killed review's partial findings merge with a later round unchanged."""
+        out: list[dict[str, Any]] = []
+        for chunk, reply in self.chunks():
+            for f in RV.parse(reply)[0]:
+                f.chunk = chunk
+                f.digest = RV.finding_digest(f.severity, f.location, f.title, f.detail)
+                out.append(
+                    {
+                        "chunk": chunk,
+                        "digest": f.digest,
+                        "severity": f.severity,
+                        "title": f.title,
+                        "location": f.location,
+                        "detail": f.detail[: RV.FINDING_DETAIL_KEPT],
+                    }
+                )
+        return out
+
     def evidence(self) -> dict[str, Any]:
 
         if not self._started:
@@ -248,3 +293,22 @@ class _ReplyFile:
             return {}
         # Repo-relative: the event log is committed, an absolute path is one machine's.
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
+
+
+#: The reply files of the review(s) running in THIS process, in creation order. A review
+#: runs in one process -- the CLI, or the MCP worker a review tool is offloaded to -- so a
+#: process-global list is enough; `review()` clears it (`_begin_run`) at entry, so
+#: `_terminated` (bug B982d306cc8) checkpoints only the run that is being killed, never a
+#: sibling or an earlier completed review's files.
+_ACTIVE: list[_ReplyFile] = []
+
+
+def _begin_run() -> None:
+    """Forget every reply file of prior runs in this process: the next run starts fresh."""
+    _ACTIVE.clear()
+
+
+def active_files(item: str, gate: str) -> list[_ReplyFile]:
+    """The reply files of THIS process's run for ``item.gate`` that already have a chunk:
+    the checkpoint a killed review reads back (bug B982d306cc8)."""
+    return [f for f in _ACTIVE if f.item == item and f.gate == gate and f.chunks()]
