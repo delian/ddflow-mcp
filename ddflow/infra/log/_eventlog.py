@@ -40,6 +40,7 @@ T = TypeVar("T")
 #: in a hook never fails the append.
 APPEND_HOOKS: list[Callable[[EventLog, Event, int, int], None]] = []
 
+
 class EventLog(_GuardMixin, _ReadMixin):
     """Sharded append-only log rooted at ``<root>/.ddflow/events``.
 
@@ -424,4 +425,3 @@ class EventLog(_GuardMixin, _ReadMixin):
                         self._meta._rows.pop(shard.name, None)
                     return
         raise KeyError(old_id)
-

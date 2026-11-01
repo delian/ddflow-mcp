@@ -19,6 +19,7 @@ from .. import worktree as W
 
 _AGENT_ID_CACHE: dict[str, str] = {}
 
+
 def _toplevel(path: str) -> str:
     r = G.run(path, "rev-parse", "--show-toplevel", timeout=G.PROBE_TIMEOUT)
     return r.out if r.ok else ""
@@ -239,4 +240,3 @@ def _clone_suffix(root: Path) -> str:
         return path.read_text("utf-8").strip()
     except OSError:
         return ""
-

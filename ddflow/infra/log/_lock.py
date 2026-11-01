@@ -170,4 +170,3 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
                 f"overloaded -- check `ddflow doctor`"
             ) from None
         yield
-

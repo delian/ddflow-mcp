@@ -34,6 +34,7 @@ _event_tuple = operator.attrgetter(*_EVENT_FIELDS)
 #: wins over `[log].snapshot`.
 SNAPSHOT_ENV = "DDFLOW_SNAPSHOT"
 
+
 @dataclass(slots=True)
 class _Parsed:
     """What has already been parsed out of one shard, and how far into it we got.
@@ -374,4 +375,3 @@ def _sorted_unique(events: list[Event]) -> list[Event]:
         seen.add(eid)
         uniq.append(e)
     return uniq
-

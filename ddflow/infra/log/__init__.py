@@ -144,9 +144,6 @@ from ._parse import (
     _MERGED as _MERGED,
 )
 from ._parse import (
-    _Merged as _Merged,
-)
-from ._parse import (
     _ORDER_ARITY as _ORDER_ARITY,
 )
 from ._parse import (
@@ -199,6 +196,9 @@ from ._parse import (
 )
 from ._parse import (
     _license_cached as _license_cached,
+)
+from ._parse import (
+    _Merged as _Merged,
 )
 from ._parse import (
     _parse_event as _parse_event,

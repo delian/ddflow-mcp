@@ -542,4 +542,3 @@ def _last_line(path: Path) -> str:
                 return lines[-1].decode("utf-8", "replace")
             window *= 2
     return ""
-

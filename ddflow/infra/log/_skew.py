@@ -15,6 +15,7 @@ from .. import fsio
 #: The local, git-ignored marker: the last ddflow version THIS machine acted under.
 SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
 
+
 def running_version() -> str:
     """The version of the code that is running (read at call time, so a test can set it)."""
     return V.running()
@@ -225,4 +226,3 @@ class LogMark:
     @property
     def bytes(self) -> int:
         return sum(size for _n, size, _h in self.shards)
-

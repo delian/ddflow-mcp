@@ -307,4 +307,3 @@ class _GuardMixin:
                     break
                 prev = e.lamport
         return out
-
