@@ -91,8 +91,8 @@ def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> 
 def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
+    except (ProcessLookupError, OverflowError):
+        return False  # no such process, or a pid too large to name a real one
     except PermissionError:
         return True
     return True
@@ -114,7 +114,16 @@ def _daemon_pid(pidfile: Path) -> int | None:
             return None
         except ValueError:
             return None
-    return pid if pid > 0 else None
+    return pid if 0 < pid <= _pid_max() else None
+
+
+def _pid_max() -> int:
+    """The host's largest possible pid; a larger value in a corrupt pidfile names no process
+    and must not reach ``os.kill`` (over ``/proc`` it raises ``OverflowError``)."""
+    try:
+        return int(Path("/proc/sys/kernel/pid_max").read_text().strip())
+    except (OSError, ValueError):
+        return 1 << 22  # Linux PID_MAX_LIMIT where /proc is unavailable
 
 
 def _is_roborev_daemon(pid: int) -> bool:
