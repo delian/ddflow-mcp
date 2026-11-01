@@ -67,22 +67,23 @@ def _claim_or_refuse_twin(
     repo: Path, item: str, gate: str, sha: str
 ) -> tuple[Any, O.Outcome | None]:
     """(marker, refusal): claim the started-marker for a review of ``gate`` on ``item`` at
-    ``sha``, or refuse a second review while the first is live (B8664a1e0c6). Two reviews of
-    one item pay the reviewer twice and race for the one recorded outcome; the first to take
-    the lock marks and reviews, and the second sees its marker and refuses. A review of a
-    NEWER commit is a different run and is allowed. (None, None) only when there is no item
-    or no commit to key the run on (nothing is recorded, nothing to race); a marker the
-    filesystem could not write is refused too, because without it a concurrent review could
-    not be refused -- the silent unprotected race this lock exists to prevent."""
+    ``sha``, or refuse a second review while ANY review of that item's gate is live
+    (B8664a1e0c6). Two reviews of one item pay the reviewer twice and race for the one
+    recorded outcome -- the record is per item, not per commit -- so the first to take the
+    lock reviews and the second sees its marker and refuses, whatever commit either covers.
+    (None, None) only when there is no item or no commit to key the run on (nothing is
+    recorded, nothing to race); a marker the filesystem could not write is refused too,
+    because without it a concurrent review could not be refused -- the silent unprotected
+    race this lock exists to prevent."""
     if not item or not sha:
         return None, None
-    marker, twin = RUN.claim_started(repo, item, gate, sha)
+    marker, twin = RUN.claim_started(repo, item, gate, sha, same_commit=False)
     if twin is not None:
         return None, O.nothing(
             "review",
-            f"{gate} is already being reviewed on this commit (pid {twin.pid}, since "
-            f"{twin.at}); wait for it -- a second review would only race it for the one "
-            f"outcome and pay the reviewer twice. A review of a newer commit starts a new run.",
+            f"{gate} is already being reviewed on {item} (pid {twin.pid}, since {twin.at}, "
+            f"commit {twin.sha}); wait for it -- a second review would only race it for the "
+            f"one outcome and pay the reviewer twice. A review can start once the first ends.",
             id=item,
             gate=gate,
         )
