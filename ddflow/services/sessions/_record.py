@@ -216,18 +216,23 @@ def plan_adoptions(events: list, cfg: Config | None = None) -> list[tuple[str, s
     order they must be appended -- pure, so `services.repairs` can show them before writing.
 
     Nearest is the session whose start is the latest one not after the orphan, else the
-    earliest; with no session at all, one implicit session is opened first.
+    earliest; with no session at all, one implicit session is opened first. Starts and
+    orphans are ordered as instants (`clock.epoch`), never as text: '...:00Z' would
+    otherwise sort after '...:00.500000Z' because 'Z' follows '.' (Bff458ced2c).
     """
-    starts = sorted((e.ts, e.subject) for e in events if e.kind == "session.started" and e.subject)
+    starts = sorted(
+        (clock.epoch(e.ts), e.subject) for e in events if e.kind == "session.started" and e.subject
+    )
     out: list[tuple[str, str, dict]] = []
     for o in unadopted_orphans(events):
+        o_ts = clock.epoch(o.ts)
         if starts:
-            before = [sid for ts, sid in starts if ts <= o.ts]
+            before = [sid for ts, sid in starts if ts <= o_ts]
             sid = before[-1] if before else starts[0][1]
         else:
             sid = new_session_id(cfg, events)
             out.append(("session.started", sid, {"model": "", "tool": "", "implicit": True}))
-            starts = [(o.ts, sid)]
+            starts = [(o_ts, sid)]
         out.append((o.kind, sid, {**o.data, "adopted_from": o.id, "orphan_at": o.ts}))
     return out
 
