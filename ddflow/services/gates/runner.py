@@ -358,10 +358,6 @@ def _blocked_on(output: str) -> str:
     return found[-1].strip() if found else ""
 
 
-#: A shell that survives a child killed by signal N reports ``128+N`` as its exit status;
-#: ``N`` is the signal number. A process killed by signal is cut off, not failed.
-_SHELL_SIGNAL_EXIT = 128
-
 #: The signals that mean the run was CUT OFF from outside (a harness timeout, a `kill`, a
 #: terminal hangup/interrupt), not a verdict. A crash (SIGSEGV, SIGABRT, SIGBUS, SIGFPE,
 #: SIGILL) is the command's own failure and stays FAILED -- only these read as unavailable.
@@ -369,26 +365,19 @@ _CUT_OFF_SIGNALS = frozenset({"SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGKILL
 
 
 def _signal_death(code: int | None) -> str:
-    """The signal that cut a command's process off from outside, else "".
+    """The delivery signal that cut a command's process off from outside, else "".
 
-    A process killed by a delivery signal did not run to a verdict: it was CUT OFF, not
-    failed. Python reports a signalled child as ``-N``; a shell that survived a signalling
-    child reports ``128+N``. Only a delivery signal is read -- exit 128 (``N = 0``), an exit
-    in the far 128..255 tail, and a crash signal (SIGSEGV, SIGABRT, ...) are not a cut-off:
-    misreading them would downgrade a real failure to UNAVAILABLE. Reading a genuine cut-off
-    as ``failed`` is what left a cut-off ``ci`` run stuck as "queued 11m of 15m elapsed"
-    forever (B8664a1e0c6).
+    Python reports a signalled DIRECT child as a NEGATIVE return code (``-N``): that is the
+    one trustworthy form, because a shell only reports the positive ``128+N`` for a child of
+    a COMPOUND command it survived, and that is indistinguishable from a command that exits
+    that code itself (``exit 137`` would read as "killed by SIGKILL" and downgrade a real
+    failure to UNAVAILABLE). A kill read as ``failed`` was what left a cut-off ``ci`` run
+    stuck as "queued 11m of 15m elapsed" forever (B8664a1e0c6).
     """
-    if not isinstance(code, int) or isinstance(code, bool):
-        return ""
-    if code < 0:
-        n = -code
-    elif code > _SHELL_SIGNAL_EXIT:
-        n = code - _SHELL_SIGNAL_EXIT
-    else:
+    if not isinstance(code, int) or isinstance(code, bool) or code >= 0:
         return ""
     try:
-        name = signal.Signals(n).name
+        name = signal.Signals(-code).name
     except ValueError:
         return ""
     return name if name in _CUT_OFF_SIGNALS else ""

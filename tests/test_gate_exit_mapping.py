@@ -39,14 +39,21 @@ def test_declared_exit_codes_are_unavailable_and_partial_not_failed():
 
 
 def test_a_signal_killed_command_is_unavailable_not_failed():
-    # Python reports a signalled child as -N; a shell that survived a signalling child
-    # reports 128+N. Either is a run CUT OFF, not a failure (B8664a1e0c6): a kill dressed
-    # up as a failure is what left `gate status` saying "queued 11m of 15m elapsed".
-    for code, sig in ((-9, "SIGKILL"), (137, "SIGKILL"), (143, "SIGTERM")):
+    # Python reports a signalled direct child as -N: that is the trustworthy form (a shell's
+    # 128+N is ambiguous with a command that exits that code itself). Either way a cut-off
+    # run must read as unavailable, not as "queued ... elapsed" (B8664a1e0c6).
+    for code, sig in ((-9, "SIGKILL"), (-15, "SIGTERM")):
         outcome, why = classify_exit(_gate(), code, "")
         assert outcome == "unavailable", (code, why)
         assert sig in why, (code, why)
     assert classify_exit(_gate(), 1, "") == ("failed", "")
+
+
+def test_a_positive_shell_exit_is_not_read_as_a_signal_death():
+    # `sh -c 'exit 137'` ran to a verdict and exited 137; no signal was delivered. It must
+    # read as FAILED, not as "killed by SIGKILL" (a shell's 128+N is ambiguous).
+    assert classify_exit(_gate(), 137, "")[0] == "failed"
+    assert classify_exit(_gate(), 143, "")[0] == "failed"
 
 
 def test_an_ordinal_high_exit_is_not_read_as_a_signal_death():
