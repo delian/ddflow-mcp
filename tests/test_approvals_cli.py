@@ -236,9 +236,12 @@ def test_approve_all_takes_no_ids_or_digest(proj):
 def test_approve_mixing_id_digest_pairs_with_digest_flags_is_refused(proj):
     a = _file(proj, _canon(item="T-mix-1"))
     b = _file(proj, _canon(item="T-mix-2"))
+    c = _file(proj, _canon(item="T-mix-3"))
     code, _o, err = run_cli(
         proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", b.id, "--digest", b.digest[:12]
     )
+    assert code == 3 and "--digest per id" in err, err
+    code, _o, err = run_cli(proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", c.id)
     assert code == 3 and "--digest per id" in err, err
 
 
