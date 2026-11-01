@@ -20,10 +20,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from ...config import Config
 from ...config_sections._layers import LAYERS, layer_path, read_toml
@@ -45,6 +47,13 @@ TYPED_PROOF = "typed:"
 GRADE_T3_CHAT = "L2-typed"
 KNOB_T3 = "approvals.accept_chat_for_t3"
 _TRUE = ("1", "true", "yes", "on")
+
+#: Kilo holds its session transcripts in SQLite, not JSONL, at this standard path (a pinned
+#: fact from the operator's machine; sessions/memory also live under `~/.local/share/kilo/`).
+#: A surfaced AskUserQuestion is a `part` row whose `data.tool` is `question` and whose answer
+#: is the person's selected option in `state.metadata.answers` -- the harness-written record.
+KILO_DB = Path("~/.local/share/kilo/kilo.db").expanduser()
+KILO_TOOL = "question"
 
 
 def _forbidden(cfg: Config) -> bool:
@@ -182,6 +191,30 @@ def _files(cfg: Config, since: float) -> list[Path]:
     return sorted(found, key=lambda p: p.stat().st_mtime)
 
 
+def _is_sqlite(path: Path) -> bool:
+    """Is this file a SQLite database (Kilo's transcript store)? Told by the magic header,
+    never by its name: a `.jsonl` the store happens to be must not be opened as one."""
+    try:
+        with path.open("rb") as fh:
+            return fh.read(16) == b"SQLite format 3\x00"
+    except OSError:
+        return False
+
+
+def _kilo_dbs(cfg: Config) -> list[Path]:
+    """The Kilo transcript stores to read: every `[approvals].transcript_dirs` entry that is a
+    SQLite database file (the configurable path) plus Kilo's default store when it exists."""
+    dbs: list[Path] = []
+    seen: set[Path] = set()
+    for base in [*_dirs(cfg), KILO_DB]:
+        if base in seen:
+            continue
+        seen.add(base)
+        if base.is_file() and _is_sqlite(base):
+            dbs.append(base)
+    return dbs
+
+
 def _text(answer: Any) -> str:
     if isinstance(answer, str):
         return answer
@@ -292,14 +325,70 @@ def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested
     return found
 
 
+def _kilo_answer(state: Any, question: str) -> str:
+    """The answer text a completed Kilo `question` part holds for exactly ``question``, or ""."""
+    if not isinstance(state, dict) or state.get("status") != "completed":
+        return ""
+    _input = state.get("input")
+    _meta = state.get("metadata")
+    if not isinstance(_input, dict) or not isinstance(_meta, dict):
+        return ""  # a ``question`` part whose input/metadata is not a dict holds no answer
+    questions = _input.get("questions")
+    answers = _meta.get("answers")
+    if not isinstance(questions, list) or not isinstance(answers, list):
+        return ""
+    for i, q in enumerate(questions):
+        if isinstance(q, dict) and q.get("question") == question:
+            ans = answers[i] if i < len(answers) else None
+            return ans[0] if isinstance(ans, list) and len(ans) == 1 else ""
+    return ""
+
+
+def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Attested]:
+    """The accepted answer to exactly ``question`` in one Kilo transcript store (``marker`` is
+    the ask id: every question part about it contains it). Only the harness-written `question`
+    tool part counts -- its `state.metadata.answers` holds the option the person picked; text
+    the agent wrote is not such a part, and a T3 act never counts (its filter wants a typed
+    answer, which this is not)."""
+    found: list[Attested] = []
+    try:
+        con = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error:
+        return found
+    try:
+        rows = con.execute(
+            "SELECT id, time_created, data FROM part "
+            "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
+            "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
+            (KILO_TOOL, since * 1000, marker),
+        ).fetchall()
+    except sqlite3.Error:
+        return found  # not a readable Kilo store (wrong schema, locked, missing): nothing there
+    finally:
+        con.close()
+    for pid, created, raw in rows:
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            continue
+        ans = _kilo_answer(data.get("state"), question)
+        if ans:
+            found.append(Attested(f"kilo:{pid}", ans, clock.iso_at(created / 1000), path.name))
+    return found
+
+
 def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     """Every accepted answer to this request's question, from transcripts touched since the
-    request was filed (oldest first)."""
+    request was filed (oldest first, both channels: an answer read after it was asked cannot
+    sit before one read before it)."""
     since = clock.epoch(row["requested_at"], default=0.0)
     hits: list[Attested] = []
     for path in _files(cfg, since):
         hits += scan(path, row["text"], row["id"])
         hits += scan_typed(path, row, cfg.approvals.min_digest_chars)
+    for db in _kilo_dbs(cfg):
+        hits += scan_kilo(db, row["text"], row["id"], since)
+    hits.sort(key=lambda h: clock.epoch(h.at, default=0.0))
     return hits
 
 
