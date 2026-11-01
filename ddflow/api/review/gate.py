@@ -168,9 +168,10 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **(extra_evidence or {}),
         **snapshot,
     }
-    evidence["chunk_findings"] = _reviewed_findings(results)
-    evidence["findings"] = len(evidence["chunk_findings"])
-    evidence["titles"] = [f["title"] for f in evidence["chunk_findings"][:10]]
+    reviewed = _reviewed_findings(results) if results is not None else list(best.findings)
+    evidence["chunk_findings"] = reviewed
+    evidence["findings"] = len(reviewed)
+    evidence["titles"] = [f["title"] for f in reviewed[:10]]
     if evidence.get("retry_of_partial"):
         evidence["rounds"] = done  # the retry of a partial round is no round of its own
         evidence.pop("round", None)
@@ -184,7 +185,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         _track_rerun_raised(evidence, prior, best)
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     clean_pass = outcome == "passed"
-    linked = _link_refuted(log, it, gate, _reviewed_findings(results))
+    linked = _link_refuted(log, it, gate, reviewed)
     if linked:
         held = max(0, held - len(linked))
     outcome, reason = _hold(outcome, _reason_of(best, results), held, say)
