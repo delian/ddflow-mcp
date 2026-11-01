@@ -273,7 +273,10 @@ def test_ratchet_fails_a_new_call_site_and_a_grown_one(tmp_path: Path):
 def test_baseline_format_round_trips_and_names_no_values(tmp_path: Path):
     c = I.scan(_tree(tmp_path, ALL))
     text = I.format_baseline(c)
-    assert I.parse_baseline(text) == I.parse_baseline(I.format_baseline(c))
+    assert I.parse_baseline(text) == I.counts(c) and I.counts(c)
+    odd = {("env", "X", "ddflow/a\tb.py"): 2}  # a tab inside a path round-trips
+    line = "env\tX\tddflow/a\tb.py\t2\n"
+    assert I.parse_baseline(line) == odd
     assert "pw" not in text and "\n\n" not in text
 
 
@@ -322,3 +325,44 @@ def test_the_census_does_not_count_its_own_pattern_tables(tmp_path: Path):
     assert {s.path for f in c.families for s in f.sites} == {"ddflow/services/real.py"}
     live = I.scan(ROOT)
     assert not [s for f in live.families for s in f.sites if s.module in I.SELF_MODULES]
+
+
+REVIEW = """\
+import os
+import subprocess
+from pathlib import Path
+
+
+def f(logger, u):
+    logger.debug(".git", "hooks")
+    h = Path(".git", "hooks")
+    url = "https://example.com/settings.json"
+    os.system("git status && pre-commit run | grep x; FOO=1 uv sync")
+    os.environ["PATH"] += ":x"
+    return h, url
+"""
+DOC_ONLY = """\
+"tools/list"
+
+
+def f():
+    return {"jsonrpc": "2.0"}
+"""
+
+
+def test_review_findings_stay_fixed(tmp_path: Path):
+    root = _tree(tmp_path, {"rev.py": REVIEW, "doc.py": DOC_ONLY})
+    c = I.scan(root)
+    # only a path constructor makes `.git`, `hooks` a managed file; a logger call does not
+    hooks = {s.line for f in c.families if f.family == ".git/hooks" for s in f.sites}
+    assert hooks == {_line(REVIEW, 'Path(".git", "hooks")')}
+    # a URL is a host, never a managed file
+    assert {f.family for f in c.families if f.kind == "managed-file"} == {".git/hooks"}
+    assert "host:example.com" in {f.family for f in c.families}
+    # every command of a shell line, env-prefix words skipped
+    progs = {f.family for f in c.families if f.kind == "program"}
+    assert progs == {"git", "pre-commit", "grep", "uv"}
+    # `os.environ[k] += x` reads k
+    assert ("PATH", "ddflow/rev.py", _line(REVIEW, "+=")) in _sites(c, "env")
+    # a bare string statement does not decide which protocol a jsonrpc literal belongs to
+    assert {f for f, p, _l in _sites(c, "protocol") if p.endswith("doc.py")} == {"jsonrpc"}

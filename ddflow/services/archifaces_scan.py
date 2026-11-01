@@ -82,6 +82,8 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
+_SHELL_SPLIT = re.compile(r"&&|\|\||[;|\n]")
+_PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
 
 
@@ -197,18 +199,24 @@ class _Scan:
             return "python"
         return None
 
-    def program_of(self, e: ast.AST, *, shell: bool = False) -> str:
+    def programs_of(self, e: ast.AST) -> list[str]:
+        """The programs one command argument names: one for an argv list or a name bound to
+        one, every command of a shell string (``a && b | c`` names a, b and c)."""
+        if isinstance(e, ast.Constant) and isinstance(e.value, str):
+            found = []
+            for part in _SHELL_SPLIT.split(e.value):
+                words = [w for w in part.split() if "=" not in w.split("/")[0]]
+                if words:
+                    found.append(_base(words[0]))
+            return found or [DYNAMIC]
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
         elif isinstance(e, ast.Name):
             vals = self.argv0.get(e.id, set())
             got = next(iter(vals)) if len(vals) == 1 and DYNAMIC not in vals else None
-        elif isinstance(e, ast.Constant) and isinstance(e.value, str):
-            words = e.value.split()
-            got = words[0] if words else None
         else:
             got = None
-        return _base(got) if got else DYNAMIC
+        return [_base(got) if got else DYNAMIC]
 
     # -- recording --------------------------------------------------------------------
     def add(self, kind: str, family: str, node: ast.AST, detail: str = "") -> None:
@@ -222,7 +230,9 @@ class _Scan:
         file_protocols = {
             n.value
             for n in self.nodes
-            if isinstance(n, ast.Constant) and n.value in MCP_METHODS | ACP_METHODS
+            if isinstance(n, ast.Constant)
+            and id(n) not in self.prose
+            and n.value in MCP_METHODS | ACP_METHODS
         }
         for node in self.nodes:
             if isinstance(node, ast.Call):
@@ -249,10 +259,9 @@ class _Scan:
         arg = node.args[0] if node.args else None
         if name in _GIT:
             self.add("program", "git", node)
-        elif name in _SUBPROCESS | _PROC | _EXEC:
-            self.add("program", self.program_of(arg) if arg is not None else DYNAMIC, node)
-        elif name in _SHELL or name == "ddflow.infra.proc.replace_process":
-            self.add("program", self.program_of(arg) if arg is not None else DYNAMIC, node)
+        elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL:
+            for program in self.programs_of(arg) if arg is not None else [DYNAMIC]:
+                self.add("program", program, node)
         elif name in ("shutil.which", "ddflow.infra.fsio.which"):
             lit = arg.value if isinstance(arg, ast.Constant) else None
             self.add("program", _base(lit) if isinstance(lit, str) else DYNAMIC, node)
@@ -272,7 +281,8 @@ class _Scan:
     def _environ(self, node: ast.AST) -> None:
         up = self.parent.get(id(node))
         if isinstance(up, ast.Subscript) and up.value is node:
-            if isinstance(up.ctx, ast.Load):
+            aug = isinstance(self.parent.get(id(up)), ast.AugAssign)
+            if isinstance(up.ctx, ast.Load) or aug:  # `os.environ[k] += x` reads k first
                 self._env_arg(up, up.slice)
         elif isinstance(up, ast.Attribute) and up.value is node:
             call = self.parent.get(id(up))
@@ -307,12 +317,12 @@ class _Scan:
             self.add("protocol", "mcp", node, v)
         elif v in ACP_METHODS:
             self.add("protocol", "acp", node, v)
+        m = _URL.match(v)
         name = v.rsplit("/", 1)[-1]
-        if name in MANAGED_NAMES and "\n" not in v and " " not in v:
+        if not m and name in MANAGED_NAMES and "\n" not in v and " " not in v:
             self.add("managed-file", MANAGED_NAMES[name], node, name)
         if v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v:
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
-        m = _URL.match(v)
         if m:
             host = m.group(1).lower()
             self.add("network", f"host:{host}", node, host)
@@ -325,13 +335,16 @@ class _Scan:
             if self._is_div(e):
                 flat(e.left)  # type: ignore[attr-defined]
                 flat(e.right)  # type: ignore[attr-defined]
-            elif isinstance(e, ast.Call):
+            elif isinstance(e, ast.Call) and (self.dotted(e.func) or "") in _PATH_CTORS:
                 for a in e.args:
                     flat(a)
             else:
                 leaves.append(e.value if isinstance(e, ast.Constant) else None)  # type: ignore[attr-defined]
 
         if isinstance(node, ast.Call):
+            name = self.dotted(node.func) or ""
+            if name not in _PATH_CTORS and not name.endswith(".joinpath"):
+                return
             for a in node.args:
                 flat(a)
         else:

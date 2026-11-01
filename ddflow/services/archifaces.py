@@ -136,7 +136,8 @@ def parse_baseline(text: str) -> dict[Key, int]:
     out: dict[Key, int] = {}
     for raw in text.splitlines():
         if raw.strip() and not raw.startswith("#"):
-            kind, family, path, n = raw.split("\t")
+            kind, family, rest = raw.split("\t", 2)
+            path, n = rest.rsplit("\t", 1)  # a path may hold a tab; the count never does
             out[(kind, family, path)] = int(n)
     return out
 
