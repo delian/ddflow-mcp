@@ -9,10 +9,10 @@ the layering ratchet (an eager ``from .sub import ...`` here would read as a
 latent parent<->child cycle).
 
 A star-import reads the module ``__dict__`` (or ``__all__`` when defined), never
-``__dir__`` — so, when a package set no ``__all__`` of its own, this helper installs one:
-the package's real public names plus the public keys of the map, so ``from pkg import *``
-resolves the lazy names too. A package that curates a narrower ``__all__`` keeps it (this
-call fills in an absent one only); it is therefore the final name-defining statement.
+``__dir__`` — so, when the package curates no ``__all__`` of its own, this helper installs
+one: the package's real public names plus the public keys of the map, so ``from pkg import *``
+resolves the lazy names too. A package that curates a narrower ``__all__`` keeps it, and an
+``importlib.reload`` re-derives the list (it never keeps a stale one).
 
 Installed from a package ``__init__.py`` with one line::
 
@@ -24,6 +24,21 @@ from __future__ import annotations
 import importlib
 from collections.abc import Mapping
 from typing import Any
+
+#: Key `reexport` sets in a module dict when IT authored that module's ``__all__``. A
+#: re-import re-enters the same dict, so an absent-or-false value at call time means either a
+#: first import or a package that curated ``__all__`` itself — in both cases the list in
+#: place is the caller's and must not be replaced by a fresh one (unlike the stale list a
+#: previous import of this helper left behind).
+_AUTHORED = "_reexport_authored_all"
+
+
+def _public(here: dict, submodule_of: Mapping[str, str]) -> list[str]:
+    """The module's public surface: real public globals plus the map's public keys."""
+    return sorted(
+        {n for n in here if not n.startswith("_")}
+        | {n for n in submodule_of if not n.startswith("_")}
+    )
 
 
 def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
@@ -51,13 +66,15 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
 
     here["__getattr__"] = __getattr__
     here["__dir__"] = __dir__
-    if "__all__" not in here:
+    if here.get(_AUTHORED):
+        # We authored __all__ on the previous import: re-derive it now, or an
+        # `importlib.reload` would carry the stale list into the next `from pkg import *`.
+        here["__all__"] = _public(here, submodule_of)
+    elif "__all__" not in here:
         # Star-import reads __dict__ or __all__, never __dir__: name every public name the
         # module exposes (real globals plus the public keys of the map) so `from pkg import *`
         # resolves the lazy ones through __getattr__. Private keys stay out, as an un-__all__
-        # star-import skips underscore names too. A package that curates __all__ itself keeps
-        # it; fill in only an absent one.
-        here["__all__"] = sorted(
-            {n for n in here if not n.startswith("_")}
-            | {n for n in submodule_of if not n.startswith("_")}
-        )
+        # star-import skips underscore names too.
+        here["__all__"] = _public(here, submodule_of)
+        here[_AUTHORED] = True
+    # else: the package curated __all__ before this call — keep it (and its ownership).
