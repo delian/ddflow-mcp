@@ -14,7 +14,7 @@ ignore_imports = [
     "ddflow.core.flowsignals -> ddflow.config",
     "ddflow.core.globspec -> ddflow.config",
     "ddflow.core.ids -> ddflow.config",
-    "ddflow.core.progress -> ddflow.config",
+    "ddflow.core.progress.loops -> ddflow.config",
     "ddflow.core.schedule -> ddflow.config",
     "ddflow.core.schedule.* -> ddflow.config",
     # services -> views

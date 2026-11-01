@@ -1,0 +1,5 @@
+[knob]
+"ddflow/core/budget.py:RECALL_MAX_CHARS" = 'budget.recall_max_chars'
+
+[exempt]
+"ddflow/core/budget.py:CHARS_PER_TOKEN" = "unit conversion (the token estimator's ratio), not a preference"

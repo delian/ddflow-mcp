@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/quota.py:PERCENT_LIMIT" = 'bound of a configuration value itself (the validation ceiling of an existing knob)'

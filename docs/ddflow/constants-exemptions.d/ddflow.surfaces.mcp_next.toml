@@ -1,0 +1,4 @@
+[exempt]
+"ddflow/surfaces/mcp_next.py:MAX_BYTES" = 'the `next` field contract: at most 400 bytes per result, the measured hint cost (research section 6); not a user tunable'
+"ddflow/surfaces/mcp_next.py:MAX_HINTS" = 'the `next` field contract: at most 3 hints per result (research section 6), a token cap that a knob would only let one agent undo for all; `[mcp].next_hints` already picks 1 to 3'
+"ddflow/surfaces/mcp_next.py:MAX_WHY" = 'the `next` field contract: a `why` is one fixed clause of at most 80 characters; the templates in mcp_next.py are the content'

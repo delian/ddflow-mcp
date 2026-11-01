@@ -1,0 +1,5 @@
+[knob]
+"ddflow/services/upstream_dedupe.py:ASK_THRESHOLD" = 'upstream_dedupe.ask_threshold'
+"ddflow/services/upstream_dedupe.py:MAX_BYTES" = 'upstream_dedupe.max_bytes'
+"ddflow/services/upstream_dedupe.py:MAX_PAGES" = 'upstream_dedupe.max_pages'
+"ddflow/services/upstream_dedupe.py:TIMEOUT" = 'upstream_dedupe.timeout'

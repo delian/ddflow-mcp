@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/gates/runner.py:OUTPUT_TAIL_CHARS" = 'gates.runner.output_tail_chars'

@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/inventory.py:SITE_TEXT_CHARS" = 'inventory.site_text_chars'
