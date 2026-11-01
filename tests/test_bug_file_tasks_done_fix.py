@@ -224,7 +224,7 @@ def test_the_links_name_an_open_fix_task_too(repo):
 
 def test_json_carries_the_links(repo):
     """rubber_duck / critic / roborev 1508: the task and its state reach --json (and MCP,
-    which `test_api_layer` holds equal to it), not only the text."""
+    which `test_api_layer_*` holds equal to it), not only the text."""
     import json
 
     log = seed(repo)
