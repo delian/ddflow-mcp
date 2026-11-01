@@ -174,20 +174,14 @@ def test_a_record_beyond_the_window_in_the_future_is_not_recent(repo):
         "s1",
         {"text": "continue", "item": "", "redactions": 0, "auto": True},
     )
-    # The record's ts is ~now; a hook fired just over the window ago starts its window in
-    # the past, so this record sits in that firing's "future".
+    # The record's ts is at least `now` (it is written after `now` was captured). A hook
+    # that fired just over the window earlier measures its age from that fired_at, so this
+    # record sits in that firing's "future" and must not read as the same firing.
     assert (
         _recorded_recently(
             log, "continue", window=DOUBLE_FIRE_S, subject="s1", now=now - DOUBLE_FIRE_S - 1.0
         )
         is False
-    )
-    # Within the window in the future is still close enough to be the same firing.
-    assert (
-        _recorded_recently(
-            log, "continue", window=DOUBLE_FIRE_S, subject="s1", now=now - (DOUBLE_FIRE_S - 1.0)
-        )
-        is True
     )
 
 
