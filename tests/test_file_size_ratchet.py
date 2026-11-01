@@ -61,3 +61,11 @@ def test_doctor_note_lists_the_files_over_the_limit(tmp_path):
     [note] = FS.doctor_notes(repo, LIMIT)
     assert "big.py" in note and "max_file_bytes" in note
     assert FS.doctor_notes(repo, LIMIT * 2) == []
+
+
+def test_limit_zero_turns_the_ratchet_off_even_with_a_baseline(tmp_path):
+    repo = _repo(tmp_path, LIMIT + 10)
+    base = repo / FS.BASELINE
+    base.parent.mkdir(parents=True)
+    base.write_text("gone.py | 99999 | legacy\n")
+    assert FS.violations(repo, 0) == []

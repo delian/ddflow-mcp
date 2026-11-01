@@ -53,6 +53,8 @@ def read_baseline(repo: Path) -> dict[str, tuple[int, str]]:
 def violations(repo: Path, limit: int) -> list[str]:
     """What breaks the ratchet: a new oversized file, a baselined file that grew, a baseline
     line that is stale (the file is gone or now under the limit: remove the line)."""
+    if limit <= 0:  # the check is off: no file is over a limit that is not set
+        return []
     over, base = oversized(repo, limit), read_baseline(repo)
     bad = []
     for rel, size in sorted(over.items()):
