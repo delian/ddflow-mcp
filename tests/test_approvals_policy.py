@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 from ddflow.config import Config
+from ddflow.core import clock
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -21,6 +22,7 @@ from ddflow.services.approvals import audit as AU
 from ddflow.services.approvals import consume as C
 from ddflow.services.approvals import gate_skip as GS
 from ddflow.services.approvals import policy as PO
+from ddflow.services.approvals.canon import Canon
 from ddflow.services.ask import engine as E
 
 
@@ -103,8 +105,16 @@ def test_a_rule_approves_nothing_but_its_own_verb_and_unknown_ids_do_nothing(pro
     log = EventLog(proj, "bot")
     cfg = _cfg(policy=["accept_baseline_red", "no_such_rule"])
     assert not C.operator_gate(log, cfg, _canon(proj, log)).ok  # a skip is not an accept
-    assert set(PO.RULES) == {"skip_after_unavailable", "accept_baseline_red"}
-    assert all(r.verb in {"gate.skip.failed_review", "approve.partial"} for r in PO.RULES.values())
+    assert set(PO.RULES) == {
+        "skip_after_unavailable",
+        "accept_baseline_red",
+        "complete_unavailable",
+        "claim_unavailable",
+    }
+    assert all(
+        r.verb in {"gate.skip.failed_review", "approve.partial", "complete.force", "claim.force"}
+        for r in PO.RULES.values()
+    )
 
 
 def test_policy_is_not_a_way_to_answer_as_a_person(proj):
@@ -149,3 +159,73 @@ def test_a_standing_rule_is_consulted_before_the_request_hint_of_a_no_auto_site(
     canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
     assert C.operator_gate(log, cfg, canon, auto=False).ok  # not "re-run with --approval request"
     assert not C.operator_gate(log, Config(), canon, auto=False).ok
+
+
+def _frozen_clock(monkeypatch):
+    from datetime import UTC, datetime
+
+    t = [datetime(2026, 1, 1, tzinfo=UTC)]
+    monkeypatch.setattr(clock, "now_utc", lambda: t[0])
+    return t
+
+
+def test_a_windowed_rule_answers_complete_force_with_its_digest_while_the_window_is_open(
+    proj, monkeypatch,
+):
+    _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    got = C.operator_gate(log, cfg, canon)
+    assert (
+        got.ok and got.stamp["via"] == "policy" and got.stamp["policy"] == "complete_unavailable"
+    )
+    row = asks_of(_state(proj))[got.ask_id]
+    assert row["policy"] is True and row["answered_by"] == "policy:complete_unavailable"
+    assert row["digest"] == canon.digest()
+    assert PO.window_start(_state(proj), cfg) > 0.0  # the fold persisted the opened window
+
+
+def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_asked(
+    proj, monkeypatch,
+):
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    claim = Canon(verb="claim.force", agent="bot", item="T1", state="s")
+    cfg = _cfg(
+        policy=["complete_unavailable", "claim_unavailable"],
+        policy_max_uses=99,
+        standing_window_s=120,  # window below use_ttl_s (3600): lapse must be the WINDOW, not the TTL
+    )
+    first = C.operator_gate(log, cfg, canon)
+    assert first.ok  # opens the window, anchored now
+    # A SECOND generic T2 refusal while the window is still open is also auto-approved ...
+    still = C.operator_gate(log, cfg, claim)
+    assert still.ok and still.stamp["via"] == "policy" and still.stamp["policy"] == "claim_unavailable"
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
+    after = C.operator_gate(log, cfg, canon)
+    assert not after.ok and after.ask_id and "requested" in after.message  # a person is asked
+    assert after.ask_id != first.ask_id  # a NEW, still-unanswered ask, not the opening one
+
+
+def test_standing_verbs_scopes_what_the_window_covers(proj, monkeypatch):
+    _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99, standing_verbs=["claim.force"])
+    assert not C.operator_gate(log, cfg, canon).ok  # complete.force is outside the window's scope
+
+
+def test_skip_after_unavailable_is_window_gated_too(proj, monkeypatch):
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    cfg = _cfg(policy=["skip_after_unavailable"], policy_max_uses=99)
+    assert C.operator_gate(log, cfg, _canon(proj, log)).ok  # opens the window
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
+    after = C.operator_gate(log, cfg, _canon(proj, log))
+    assert not after.ok and after.ask_id  # skip_after_unavailable lapsed too
