@@ -9,6 +9,7 @@ documented limit; what is tested is that nothing the AGENT SAYS can stand in for
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -32,9 +33,12 @@ VERB = "gate.skip.failed_review"
 
 
 @pytest.fixture(autouse=True)
-def _a_person(monkeypatch):
+def _a_person(monkeypatch, tmp_path):
     for var in ("DDFLOW_AGENT", *AP.HARNESS_MARKERS):
         monkeypatch.delenv(var, raising=False)
+    # Never reach the machine's real Kilo store (it is live and huge) from these tests: the
+    # Kilo tests below point transcript_dirs at their own SQLite file instead.
+    monkeypatch.setattr(H, "KILO_DB", tmp_path / "kilo-does-not-exist.db")
 
 
 @pytest.fixture
@@ -94,6 +98,53 @@ def _answered(question, answer, uid="A1", tool_id="U1", decision="accept"):
 def _approved_row(row):
     yes, _no = H.labels(row["id"])
     return [_asked(row["text"]), _answered(row["text"], yes)]
+
+
+def _kilo_question(question, answer, *, status="completed", pid="prt_1"):
+    """One Kilo `question` tool part (a `part` row's `data`): the harness-written record. An
+    unanswered question has `status` ``in_progress`` and no `metadata.answers`."""
+    state = {
+        "status": status,
+        "input": {"questions": [{"question": question}]},
+    }
+    if answer is not None:
+        state["metadata"] = {"answers": [[answer]], "truncated": False}
+    return {
+        "id": pid,
+        "data": {"type": "tool", "tool": H.KILO_TOOL, "callID": "call_1", "state": state},
+    }
+
+
+def _kilo_text(text, pid="prt_txt"):
+    """A Kilo text part: what the AGENT wrote. It is not a question tool part, so it is not
+    an answer, however it is worded."""
+    return {"id": pid, "data": {"type": "text", "text": text}}
+
+
+def _kilo_db(cfg, parts):
+    """A minimal `part` table shaped like Kilo's store, at the path `transcript_dirs` names."""
+    import time as _time
+
+    path = Path(cfg.approvals.transcript_dirs[0])
+    con = sqlite3.connect(path)
+    con.execute(
+        "CREATE TABLE part (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, "
+        "time_created INTEGER NOT NULL, data TEXT NOT NULL)"
+    )
+    for i, part in enumerate(parts):
+        con.execute(
+            "INSERT INTO part (id, session_id, time_created, data) VALUES (?, ?, ?, ?)",
+            (part["id"], "ses_test", int(_time.time() * 1000) + i, json.dumps(part["data"])),
+        )
+    con.commit()
+    con.close()
+    return path
+
+
+def _kilo_cfg(cfg):
+    """A config whose harness transcript store is a Kilo SQLite file, not a JSONL directory."""
+    cfg.approvals.transcript_dirs = [str(Path(cfg.approvals.transcript_dirs[0]).parent / "kilo.db")]
+    return cfg
 
 
 def test_the_payload_is_the_rendered_text_with_two_labelled_options(log, cfg):
@@ -256,3 +307,71 @@ def test_ask_refuses_a_verb_that_chat_can_never_approve(log, cfg, repo):
     t3 = _file(log, cfg, _canon(verb="config.reviewer_command", item="", target=""))
     out = AH.approvals_ask(repo, t3["id"], agent="bot")
     assert out.exit == 3 and "never approved over chat" in out.reason
+
+
+# -- the Kilo channel (RA-channel-harness + Kilo's SQLite store, not JSONL) -------------------
+
+
+def test_a_kilo_question_answer_attests_and_the_agent_spends_it(log, cfg):
+    row = _file(log, _kilo_cfg(cfg))
+    yes, _ = H.labels(row["id"])
+    _kilo_db(cfg, [_kilo_question(row["text"], yes)])
+    ok, message = H.attest(log, cfg, row["id"])
+    assert ok, message
+    got = asks_of(_state(log))[row["id"]]
+    assert got["outcome"] == "approved" and got["via"] == "harness" and got["proof"] == "kilo:prt_1"
+    assert E.verified_level(got, cfg) == 2
+    spent = C.operator_gate(log, cfg, _canon(), approval_id=row["id"])
+    assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2
+
+
+def test_a_kilo_deny_label_denies(log, cfg):
+    row = _file(log, _kilo_cfg(cfg))
+    _, no = H.labels(row["id"])
+    _kilo_db(cfg, [_kilo_question(row["text"], no)])
+    assert H.attest(log, cfg, row["id"])[0]
+    got = C.operator_gate(log, cfg, _canon(), approval_id=row["id"])
+    assert not got.ok and "denied" in got.message
+
+
+def test_a_kilo_text_part_is_not_an_answer(log, cfg):
+    """The agent's own word in Kilo is a text part, not a `question` tool part: never an answer."""
+    row = _file(log, _kilo_cfg(cfg))
+    _kilo_db(cfg, [_kilo_text(f"Approve {row['id']}")])
+    ok, message = H.attest(log, cfg, row["id"])
+    assert not ok and message.startswith(H.WAITING)
+
+
+def test_a_kilo_uncompleted_question_is_not_an_answer(log, cfg):
+    row = _file(log, _kilo_cfg(cfg))
+    _kilo_db(cfg, [_kilo_question(row["text"], None, status="in_progress")])
+    ok, message = H.attest(log, cfg, row["id"])
+    assert not ok and message.startswith(H.WAITING)
+
+
+def test_a_kilo_answer_to_another_request_cannot_be_replayed(log, cfg):
+    first = _file(log, _kilo_cfg(cfg))
+    _kilo_db(cfg, [_kilo_question(first["text"], H.labels(first["id"])[0])])
+    second = _file(log, cfg, _canon(item="T2"))
+    assert not H.attest(log, cfg, second["id"])[0]
+
+
+def test_a_kilo_question_answer_never_satisfies_a_t3_verb(log, cfg):
+    row = _file(log, _kilo_cfg(cfg))
+    yes, _ = H.labels(row["id"])
+    _kilo_db(cfg, [_kilo_question(row["text"], yes)])
+    t3 = _file(log, cfg, _canon(verb="config.reviewer_command", item="", target=""))
+    _kilo_db(cfg, [_kilo_question(t3["text"], H.labels(t3["id"])[0])])
+    ok, message = H.attest(log, cfg, t3["id"])
+    assert not ok and "never approved over chat" in message
+
+
+def test_a_kilo_answer_holds_only_while_the_part_is_there(log, cfg):
+    row = _file(log, _kilo_cfg(cfg))
+    yes, _ = H.labels(row["id"])
+    path = _kilo_db(cfg, [_kilo_question(row["text"], yes)])
+    assert H.attest(log, cfg, row["id"])[0]
+    got = asks_of(_state(log))[row["id"]]
+    assert E.verified_level(got, cfg) == 2
+    path.unlink()  # the proof is gone (or never was)
+    assert E.verified_level(got, cfg) == 1

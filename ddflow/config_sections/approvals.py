@@ -42,7 +42,7 @@ class ApprovalsConfig:
     )
     transcript_dirs: list[str] = knob(
         factory=lambda: ["~/.claude/projects"],
-        doc="Where the harness channel looks for session transcripts (`*.jsonl`) that hold the answer to an approval question (default ~/.claude/projects). Only files modified since the request was filed are read.",
+        doc="Where the harness channel looks for session transcripts that hold the answer to an approval question (default ~/.claude/projects). Each entry is either a directory of Claude Code `*.jsonl` transcripts or a SQLite database file (Kilo's store); Kilo's own default store `~/.local/share/kilo/kilo.db` is also read when it exists. Only transcripts modified since the request was filed are read.",
     )
     expiry_warn_s: int = knob(
         600,
