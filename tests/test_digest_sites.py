@@ -141,12 +141,12 @@ def test_harness_session_id_is_injective_and_never_empty():
 
     # An id that sanitises to nothing still gets a non-empty session id.
     assert sessions.harness_session_id("///") == "h-" + sha256(b"///")
-    # A sanitised raw never collides with the already-safe id that spells its digest back.
+    # A sanitised raw never collides with the already-safe id that spells its 16-char
+    # digest back -- the exact collision the bug reports.
     raw = "a/b"
+    d16 = D.content_digest(raw, length=16)
     assert sessions.harness_session_id(raw) == "h-ab-" + sha256(raw.encode("utf-8"))
-    assert sessions.harness_session_id(raw) != sessions.harness_session_id(
-        "ab-" + sha256(raw.encode("utf-8"))
-    )
+    assert sessions.harness_session_id(raw) != sessions.harness_session_id("ab-" + d16)
 
 
 def test_queue_file_names_keep_their_digest(tmp_path):
