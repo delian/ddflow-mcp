@@ -50,6 +50,21 @@ def test_nothing_matching_returns_the_diff_untouched():
     assert REX.filter_diff(diff, ["*.ambr"]) == (diff, REX.Excluded())
 
 
+def test_a_single_star_directory_glob_leaves_out_the_whole_subtree():
+    diff = (
+        _sec("ddflow/templates/upgrade/unreleased/knob_added.x.toml")
+        + _sec("ddflow/templates/upgrade/unreleased/sub/knob_added.y.toml")
+        + _sec("ddflow/templates/upgrade/changes.toml")
+    )
+    kept, gone = REX.filter_diff(diff, ["ddflow/templates/upgrade/unreleased/*"])
+    assert "unreleased" not in kept
+    assert "changes.toml" in kept
+    assert [p for p, _ in gone.files] == [
+        "ddflow/templates/upgrade/unreleased/knob_added.x.toml",
+        "ddflow/templates/upgrade/unreleased/sub/knob_added.y.toml",
+    ]
+
+
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     seen = tmp_path / "seen.txt"
     cli = tmp_path / "fake-reviewer"
