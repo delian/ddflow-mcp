@@ -65,6 +65,13 @@ def test_a_single_star_directory_glob_leaves_out_the_whole_subtree():
     ]
 
 
+def test_a_glob_metacharacter_prefix_still_means_one_level():
+    diff = _sec("a/top.py") + _sec("a/b/c.py")
+    kept, gone = REX.filter_diff(diff, ["*/*"])
+    assert [p for p, _ in gone.files] == ["a/top.py"]
+    assert "a/b/c.py" in kept
+
+
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     seen = tmp_path / "seen.txt"
     cli = tmp_path / "fake-reviewer"

@@ -105,11 +105,16 @@ def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
     for g in pats:
         if globs.match(path, g, bare_any_depth=True):
             return True
-        # A directory glob ending in a single `/*` leaves out the whole subtree, like
-        # `/**`: `ddflow/templates/upgrade/unreleased/*` drops a nested fragment as well
-        # as its immediate sibling (git's `*` stops at `/`, which read as "did not
-        # apply" -- Be05960132b).
-        if g.endswith("/*") and globs.match(path, g + "*", bare_any_depth=True):
+        # A literal directory glob `dir/*` leaves out the whole subtree, like `dir/**`:
+        # git's `*` stops at `/`, so `ddflow/templates/upgrade/unreleased/*` read as
+        # "did not apply" to a nested fragment (Be05960132b). Only a CONCRETE directory
+        # prefix recurses -- `*/*` still names one level under any directory, not
+        # everything below it.
+        if (
+            g.endswith("/*")
+            and not any(c in g[:-2] for c in "*?[")
+            and globs.match(path, g + "*", bare_any_depth=True)
+        ):
             return True
     # A pin file is an exact path (or a directory), never an any-depth pattern.
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
