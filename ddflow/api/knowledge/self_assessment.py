@@ -33,16 +33,28 @@ def auto_file(
     ``assessment`` (a caller handed it assessment text directly). ``no_task`` passes
     ``bug found --no-task``: a bug fixed in the commit that found it files no fix task.
 
-    Never raises and never repeats a record: each outcome that files is a ``bug.found`` the
-    duplicate check has already run on, and a candidate that would read like an existing
-    record is refused by `bug found` and reported under ``skipped`` rather than filed.
+    A non-OK filing is not a duplicate and not silently a pass: a refusal from ``bug
+    found`` is the duplicate check (reported under ``skipped``), anything else is a real
+    failure (reported under ``failed``) -- the pass itself stays best-effort and reports
+    what happened rather than one line that hides which is which.
     """
     _log, cfg, _st = _load(repo, agent)
     if not cfg.self_assessment.auto_file:
-        return O.ok("self_assessment", trigger=trigger, how="off", filed=[], skipped=[])
+        return O.ok("self_assessment", trigger=trigger, how="off", filed=[], skipped=[], failed=[])
     defects = SA.extract_defects(text)
+    if not defects:
+        return O.ok(
+            "self_assessment",
+            trigger=trigger,
+            how="none",
+            filed=[],
+            skipped=[],
+            failed=[],
+            line=SA.report_line(text, filed=[], skipped=[], failed=[]),
+        )
     filed: list[str] = []
     skipped: list[str] = []
+    failed: list[str] = []
     for defect in defects:
         out = bugs.bug_found(
             repo,
@@ -55,24 +67,16 @@ def auto_file(
         )
         if out.ok:
             filed.append(str(out.data.get("id", "")))
+        elif out.exit == O.REFUSED:
+            skipped.append(str(out.data.get("id", "")))  # the duplicate check
         else:
-            # A refusal from `bug found` is the duplicate check saying an existing record
-            # reads like this one; a failure is the same treatment -- skip, never force.
-            skipped.append(str(out.data.get("id", "")))
-    if not defects:
-        return O.ok(
-            "self_assessment",
-            trigger=trigger,
-            how="none",
-            filed=[],
-            skipped=[],
-            line=SA.report_line(text, filed=[], skipped=[]),
-        )
+            failed.append(str(out.data.get("id", "")))  # a real failure, not a duplicate
     return O.ok(
         "self_assessment",
         trigger=trigger,
         no_task=no_task,
         filed=filed,
         skipped=skipped,
-        line=SA.report_line(text, filed=filed, skipped=skipped),
+        failed=failed,
+        line=SA.report_line(text, filed=filed, skipped=skipped, failed=failed),
     )

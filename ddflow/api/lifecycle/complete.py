@@ -301,10 +301,22 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
 def _phase_end_self_assessment(repo: Path, text: str, agent: str, extra: dict[str, Any]) -> None:
     """The self-assessment pass at phase end (r-ddflow-self-assessment, default on): file each
     defect this phase's completion names (`--changelog`), skipping duplicates; record its
-    verdict in `extra` when it filed or skipped anything."""
-    assessed = auto_file(repo, text=text, trigger="phase_end", agent=agent)
-    if assessed.data.get("filed") or assessed.data.get("skipped"):
-        extra["self_assessment"] = assessed.data
+    verdict in `extra` when it filed, skipped or failed anything. Never raises: the
+    completion that ran the pass returns whatever it would have, filed defects or not."""
+    try:
+        assessed = auto_file(repo, text=text, trigger="phase_end", agent=agent)
+        if (
+            assessed.data.get("filed")
+            or assessed.data.get("skipped")
+            or assessed.data.get("failed")
+        ):
+            extra["self_assessment"] = assessed.data
+    except Exception as exc:  # a best-effort pass must not abort phase completion
+        extra["self_assessment"] = {
+            "filed": [],
+            "skipped": [],
+            "failed": [f"{type(exc).__name__}: {exc}"],
+        }
 
 
 def _close_bugs(

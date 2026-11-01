@@ -18,9 +18,10 @@ from helpers import state as _state
 from ddflow.services.self_assessment import Defect, extract_defects, report_line
 
 
-def test_extract_defects_names_each_list_item_and_ignores_none():
+def test_extract_defects_names_only_list_items_and_ignores_none():
     text = "\n".join(
         [
+            "Assessment:",
             "- the `ddflow waves` verb refused a flag I guessed",
             "* nothing lists standing approvals",
             "none",
@@ -33,17 +34,23 @@ def test_extract_defects_names_each_list_item_and_ignores_none():
         "nothing lists standing approvals",
     ]
     assert all(isinstance(d, Defect) for d in defects)
-    # An assessment that found nothing names no defect, and neither does a blank one.
+    # Prose (a heading) names no defect; an assessment that found nothing names no defect.
+    assert (
+        extract_defects("Assessment:\n- lock timeout too short")[0].title
+        == "lock timeout too short"
+    )
     assert extract_defects("none found") == []
-    assert extract_defects("No defects") == []
+    assert extract_defects("None found.") == []
+    assert extract_defects("- None") == []
     assert extract_defects(None) == []
 
 
-def test_report_line_names_filed_and_skipped_ids():
-    assert report_line("- a defect", filed=["B1"], skipped=["B2"]) == (
+def test_report_line_names_filed_skipped_and_failed_ids():
+    assert report_line("- a defect", filed=["B1"], skipped=["B2"], failed=[]) == (
         "filed: B1, skipped (already tracked): B2"
     )
-    assert report_line("none found", filed=[], skipped=[]) == "none found"
+    assert report_line("- a defect", filed=[], skipped=[], failed=["B3"]) == "failed to file: B3"
+    assert report_line("none found", filed=[], skipped=[], failed=[]) == "none found"
 
 
 def test_auto_file_files_each_named_defect_as_a_ddflow_scoped_bug(repo):
