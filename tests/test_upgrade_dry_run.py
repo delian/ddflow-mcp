@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from ddflow.services import upgrade_dryrun as DR
+from ddflow.services.upgrade_dryrun import _read as _DR_READ
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "releases" / "0.1.3" / "project"
@@ -819,7 +820,9 @@ def test_a_shard_that_never_held_still_is_named(
     for name in ("a.jsonl", "b.jsonl"):
         (events / name).write_bytes(b"{}\n")
 
-    monkeypatch.setattr(DR, "read_stable", lambda p, attempts=3: (b"{}\n", p.name != "a.jsonl"))
+    monkeypatch.setattr(
+        _DR_READ, "read_stable", lambda p, attempts=3: (b"{}\n", p.name != "a.jsonl")
+    )
 
     data, unstable = DR.shard_bytes_checked(tmp_path)
 

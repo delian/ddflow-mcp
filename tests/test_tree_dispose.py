@@ -241,7 +241,7 @@ def test_nothing_but_dispose_removes_a_worktree():
     """Merge, the PR flow, cleanup and onboarding all end in `cleanup.dispose_tree`; a new
     caller of `worktree.remove` would be an unguarded, unlogged fifth path."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    assert _removal_callers(root) == ["services/cleanup.py"]
+    assert _removal_callers(root) == ["services/cleanup/dispose.py"]
 
 
 def test_the_removal_scan_sees_every_way_to_call_it(tmp_path):

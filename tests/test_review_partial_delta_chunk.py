@@ -168,6 +168,6 @@ def test_a_delta_that_cannot_be_cut_says_so(repo, tmp_path, monkeypatch):
     def broken(*_a, **_k):
         raise RuntimeError("git is unwell")
 
-    monkeypatch.setattr(api, "_delta_diff", broken)
+    monkeypatch.setattr(api.delta, "_delta_diff", broken)
     out = _review(repo, chunks=[1])
     assert out.exit == REFUSED and "could not be produced (git is unwell)" in out.reason, out.reason

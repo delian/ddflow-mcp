@@ -16,6 +16,7 @@ import pytest
 from ddflow.config import Config
 from ddflow.services import ci as CI
 from ddflow.services import suitelock as SL
+from ddflow.services.ci import runner
 
 
 def test_a_wait_override_extends_the_suite_wait_knob(tmp_path, monkeypatch):
@@ -54,7 +55,7 @@ def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
         fake_hold,
     )
     monkeypatch.setattr(
-        CI,
+        runner,
         "_execute",
         lambda cfg=None, tree=None, cmd=None, scope=None, budget=None, tick=None, holding_suite=False, used=None: (
             NS(kind="", ran=True),

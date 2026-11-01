@@ -1,8 +1,11 @@
-"""B-split-config: `config.py` is the loader -- each `[section]` lives in its own module.
+"""B-split-config: `config/` is a package -- `_core.py` is the loader, `_decls.py` the
+value sets, `_coerce.py` the value coercion and `config_sections/` one `[section]` per
+module.
 
 Every new knob edits its section's module rather than one 2,400-line file every other
 feature also edits. `from ddflow.config import Config, <Section>` keeps working: the
-sections are re-exported, and they register their knob docs in declaration order.
+package re-exports the sections (in declaration order) and the loader names that used to
+live in `config.py`.
 """
 
 from __future__ import annotations
@@ -18,9 +21,11 @@ from ddflow import config_sections
 from ddflow.config_sections import SECTION_MODULES
 from ddflow.config_sections._docs import KNOB_DOCS
 
-CONFIG_PY = Path(C.__file__)
-#: config.py was 2,445 lines with every section in it; the split left about 920.
-MAX_CONFIG_LINES = 1000
+CONFIG_INIT = Path(C.__file__)
+CONFIG_DIR = CONFIG_INIT.parent
+#: `config.py` was 2,445 lines with every section in it; the split into `config/` keeps
+#: each submodule under 30k chars ([r-small-files]).
+MAX_MODULE_CHARS = 30000
 
 
 def _dataclasses_in(path: Path) -> list[str]:
@@ -44,13 +49,20 @@ def _section_types() -> dict[str, type]:
     }
 
 
-def test_config_py_stays_small():
-    n = len(CONFIG_PY.read_text("utf-8").splitlines())
-    assert n < MAX_CONFIG_LINES, f"config.py is {n} lines; a section belongs in config_sections/"
+def test_each_config_submodule_is_small():
+    for path in CONFIG_DIR.glob("*.py"):
+        size = len(path.read_text("utf-8"))
+        assert size < MAX_MODULE_CHARS, (
+            f"{path.name} is {size} chars; a new knob belongs in config_sections/"
+        )
 
 
-def test_config_py_declares_no_section():
-    assert _dataclasses_in(CONFIG_PY) == ["Config"]
+def test_config_init_declares_no_dataclass():
+    assert _dataclasses_in(CONFIG_INIT) == []
+
+
+def test_the_loader_dataclass_lives_in_core():
+    assert _dataclasses_in(CONFIG_DIR / "_core.py") == ["Config"]
 
 
 def test_each_section_module_holds_exactly_one_section():

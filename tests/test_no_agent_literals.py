@@ -54,7 +54,8 @@ BASELINE: dict[str, tuple[int, str]] = {
         5,
         "the reference checker's table of known agent paths; read by `doctor`",
     ),
-    "ddflow/services/review.py": (3, "reviewer provider kinds (gemini) are not harnesses"),
+    "ddflow/services/review/model.py": (2, "reviewer provider kinds (gemini) are not harnesses"),
+    "ddflow/services/review/engine.py": (1, "reviewer provider kinds (gemini) are not harnesses"),
     "ddflow/config_sections/approvals.py": (
         2,
         "the default transcript root ~/.claude/projects and its doc: a path the claude "

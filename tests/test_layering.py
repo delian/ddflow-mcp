@@ -50,8 +50,9 @@ ALLOWED: dict[str, set[str]] = {
 
 #: Packages that are PART of a layer rather than a layer of their own: `config` is one
 #: module's worth of rule ("read by every layer; imports none") split into a package of
-#: sections, and an import between the two is an import within the layer.
-LAYER_PACKAGES = {"config_sections": "config"}
+#: sections (`config_sections/`) plus the loader machinery (`config/`), and an import
+#: between the two is an import within the layer.
+LAYER_PACKAGES = {"config_sections": "config", "config": "config"}
 
 #: `services` and `views` are deliberately mutual: a service may render a markdown view
 #: as its result (`ddflow render`), and a view reads service types to render them. The
@@ -207,13 +208,11 @@ def test_every_layer_is_declared():
 
 
 def test_no_module_is_left_at_the_top_level_by_accident():
-    """`config.py` and `api.py` are the only modules outside a directory, and both are
-    deliberate: config is read by every layer and imports none, and `api` IS a layer
-    that happens to be one file until it needs to be a package."""
+    """`api.py` is the only module level module outside a directory, and both it and the
+    `config` package are deliberate: config is read by every layer and imports none, and
+    `api` IS a layer that happens to be one file until it needs to be a package."""
     loose = sorted(
-        p.name
-        for p in PKG.glob("*.py")
-        if p.name not in ("__init__.py", "__main__.py", "config.py", "api.py")
+        p.name for p in PKG.glob("*.py") if p.name not in ("__init__.py", "__main__.py", "api.py")
     )
     assert not loose, (
         f"{loose} sit outside every layer, so the rule above says nothing about them. "
