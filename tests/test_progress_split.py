@@ -51,6 +51,13 @@ def test_every_public_definition_a_submodule_makes_is_mapped(pkg):
                     assert node.name in pkg._SUBMODULE_OF, (
                         f"{mod.__name__}.{node.name} is not re-exported"
                     )
+            elif isinstance(node, ast.Assign | ast.AnnAssign):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
+                        assert target.id in pkg._SUBMODULE_OF, (
+                            f"{mod.__name__}.{target.id} is not re-exported"
+                        )
 
 
 def test_no_submodule_is_a_monolith(pkg):
