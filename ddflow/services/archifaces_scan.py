@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import re
+import shlex
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -82,7 +83,7 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
-_SHELL_SPLIT = re.compile(r"&&|\|\||[;|\n]")
+_SHELL_OPS = frozenset({"&&", "||", ";", "|", "&", "\n"})
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
 
@@ -199,15 +200,35 @@ class _Scan:
             return "python"
         return None
 
+    @staticmethod
+    def _shell_commands(line: str) -> list[str]:
+        """The first word of every command in a shell line, quotes respected (``git commit -m
+        'a && b'`` is one command), ``VAR=x`` prefixes skipped; the first word alone when the
+        line does not tokenize."""
+        lex = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        try:
+            tokens = list(lex)
+        except ValueError:
+            words = line.split()
+            return words[:1]
+        out: list[str] = []
+        fresh = True
+        for t in tokens:
+            if t in _SHELL_OPS:
+                fresh = True
+            elif fresh and "=" not in t.split("/")[0]:
+                out.append(t)
+                fresh = False
+        return out
+
     def programs_of(self, e: ast.AST) -> list[str]:
         """The programs one command argument names: one for an argv list or a name bound to
         one, every command of a shell string (``a && b | c`` names a, b and c)."""
         if isinstance(e, ast.Constant) and isinstance(e.value, str):
             found = []
-            for part in _SHELL_SPLIT.split(e.value):
-                words = [w for w in part.split() if "=" not in w.split("/")[0]]
-                if words:
-                    found.append(_base(words[0]))
+            for word in self._shell_commands(e.value):
+                found.append(_base(word))
             return found or [DYNAMIC]
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
@@ -321,34 +342,43 @@ class _Scan:
         name = v.rsplit("/", 1)[-1]
         if not m and name in MANAGED_NAMES and "\n" not in v and " " not in v:
             self.add("managed-file", MANAGED_NAMES[name], node, name)
-        if v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v:
+        hooks = v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v
+        if hooks and not m:
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
         if m:
             host = m.group(1).lower()
             self.add("network", f"host:{host}", node, host)
 
+    def _path_call(self, e: ast.AST) -> bool:
+        """A call that builds a path: ``Path(...)``, ``os.path.join(...)``, ``x.joinpath(...)``."""
+        if not isinstance(e, ast.Call):
+            return False
+        name = self.dotted(e.func) or ""
+        return name in _PATH_CTORS or (
+            isinstance(e.func, ast.Attribute) and e.func.attr == "joinpath"
+        )
+
     def _git_hooks_join(self, node: ast.AST) -> None:
-        """``Path(".git") / "hooks"`` and ``os.path.join(root, ".git", "hooks")``."""
+        """``Path(".git") / "hooks"``, ``os.path.join(root, ".git", "hooks")`` and
+        ``Path(".git").joinpath("hooks")``: the literal parts, in order."""
         leaves: list[str | None] = []
 
         def flat(e: ast.AST) -> None:
             if self._is_div(e):
                 flat(e.left)  # type: ignore[attr-defined]
                 flat(e.right)  # type: ignore[attr-defined]
-            elif isinstance(e, ast.Call) and (self.dotted(e.func) or "") in _PATH_CTORS:
-                for a in e.args:
+            elif self._path_call(e):
+                if isinstance(e.func, ast.Attribute) and e.func.attr == "joinpath":  # type: ignore[attr-defined]
+                    if not isinstance(e.func.value, (ast.Name, ast.Attribute)):  # type: ignore[attr-defined]
+                        flat(e.func.value)  # type: ignore[attr-defined]
+                for a in e.args:  # type: ignore[attr-defined]
                     flat(a)
             else:
                 leaves.append(e.value if isinstance(e, ast.Constant) else None)  # type: ignore[attr-defined]
 
-        if isinstance(node, ast.Call):
-            name = self.dotted(node.func) or ""
-            if name not in _PATH_CTORS and not name.endswith(".joinpath"):
-                return
-            for a in node.args:
-                flat(a)
-        else:
-            flat(node)
+        if isinstance(node, ast.Call) and not self._path_call(node):
+            return
+        flat(node)
         if any(a == ".git" and b == "hooks" for a, b in pairwise(leaves)):
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
 

@@ -18,6 +18,7 @@ line shift. The scan is the AST of ``repo/ddflow`` (`archifaces_scan`), seconds,
 from __future__ import annotations
 
 import ast
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -127,17 +128,17 @@ def counts(census: InterfaceCensus) -> dict[Key, int]:
 
 
 def format_baseline(census: InterfaceCensus) -> str:
-    """The committed baseline text: ``kind<TAB>family<TAB>path<TAB>count``, sorted."""
+    """The committed baseline text: one JSON ``[kind, family, path, count]`` per line, sorted
+    (JSON so that any file name round-trips)."""
     rows = sorted(counts(census).items())
-    return "".join(f"{k}\t{fam}\t{p}\t{n}\n" for (k, fam, p), n in rows)
+    return "".join(json.dumps([k, fam, p, n]) + "\n" for (k, fam, p), n in rows)
 
 
 def parse_baseline(text: str) -> dict[Key, int]:
     out: dict[Key, int] = {}
-    for raw in text.splitlines():
+    for raw in text.split("\n"):
         if raw.strip() and not raw.startswith("#"):
-            kind, family, rest = raw.split("\t", 2)
-            path, n = rest.rsplit("\t", 1)  # a path may hold a tab; the count never does
+            kind, family, path, n = json.loads(raw)
             out[(kind, family, path)] = int(n)
     return out
 

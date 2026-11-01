@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from ddflow.services import archdeps as A
 from ddflow.services import archifaces as I
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -274,9 +275,14 @@ def test_baseline_format_round_trips_and_names_no_values(tmp_path: Path):
     c = I.scan(_tree(tmp_path, ALL))
     text = I.format_baseline(c)
     assert I.parse_baseline(text) == I.counts(c) and I.counts(c)
-    odd = {("env", "X", "ddflow/a\tb.py"): 2}  # a tab inside a path round-trips
-    line = "env\tX\tddflow/a\tb.py\t2\n"
-    assert I.parse_baseline(line) == odd
+    odd = I.InterfaceCensus(
+        (
+            I.InterfaceFamily(
+                "env", "X", "ADP-clock-env", (), (I.Site("env", "X", "ddflow/a\tb\nc.py", 3, "m"),)
+            ),
+        )
+    )
+    assert I.parse_baseline(I.format_baseline(odd)) == {("env", "X", "ddflow/a\tb\nc.py"): 1}
     assert "pw" not in text and "\n\n" not in text
 
 
@@ -366,3 +372,31 @@ def test_review_findings_stay_fixed(tmp_path: Path):
     assert ("PATH", "ddflow/rev.py", _line(REVIEW, "+=")) in _sites(c, "env")
     # a bare string statement does not decide which protocol a jsonrpc literal belongs to
     assert {f for f, p, _l in _sites(c, "protocol") if p.endswith("doc.py")} == {"jsonrpc"}
+
+
+MORE = """\
+import os
+from pathlib import Path
+
+
+def f(p):
+    a = "https://example.com/.git/hooks/pre-commit"
+    b = Path(".git").joinpath("hooks")
+    c = p.joinpath(".git", p.joinpath("hooks"))
+    os.system("git commit -m 'fix && bug' && grep -E 'a|b' x")
+    return a, b, c
+"""
+
+
+def test_second_round_review_findings_stay_fixed(tmp_path: Path):
+    c = I.scan(_tree(tmp_path, {"more.py": MORE}))
+    hooks = {s.line for f in c.families if f.family == ".git/hooks" for s in f.sites}
+    assert hooks == {_line(MORE, 'Path(".git").joinpath'), _line(MORE, "c = p.joinpath")}
+    assert {f.family for f in c.families if f.kind == "program"} == {"git", "grep"}
+
+
+def test_the_census_modules_import_no_os_family():
+    # whole-module self exclusion is safe only while the census modules touch nothing external
+    fams = {f.family: set(f.importers) for f in A.scan(ROOT).families}
+    for family in ("subprocess", "http", "shutil", "clock-env", "sqlite3", "fsio"):
+        assert not fams[family] & set(I.SELF_MODULES), family
