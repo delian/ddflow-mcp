@@ -68,6 +68,36 @@ def _runs_code(expr: ast.expr) -> bool:
     return not (isinstance(expr, ast.Name) and expr.id == "runtime_checkable")
 
 
+def _class_code(node: ast.ClassDef) -> list[str]:
+    """What in one `Protocol` class runs code: a decorator, a base, a method body or a
+    method decorator. A port is a declaration, so any of them is a second implementation."""
+    out = [
+        f"{node.name}: a decorator runs code at definition"
+        for d in node.decorator_list
+        if _runs_code(d)
+    ]
+    out += [
+        f"{node.name}: a base {ast.dump(b)} runs code"
+        for b in node.bases
+        if not (isinstance(b, ast.Name) and b.id == "Protocol")
+    ]
+    for member in node.body:
+        if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
+            out += [
+                f"{node.name}.{member.name}: a method decorator runs code"
+                for d in member.decorator_list
+                if _runs_code(d)
+            ]
+            out += [
+                f"{node.name}.{member.name}: a method body runs code"
+                for body in member.body
+                if _opaque(body) is not None
+            ]
+        elif _opaque(member) is not None:
+            out.append(ast.dump(member))
+    return out
+
+
 def test_ports_are_declarations_only():
     """`ddflow/core/ports.py` holds a docstring, imports and `Protocol` classes, and every
     method in them is a docstring or `...` — nothing runs, not in a body, a decorator or a
@@ -78,27 +108,7 @@ def test_ports_are_declarations_only():
         if isinstance(node, ast.ImportFrom | ast.Import):
             continue
         if isinstance(node, ast.ClassDef):
-            for decorator in node.decorator_list:
-                if _runs_code(decorator):
-                    statements.append(f"{node.name}: a decorator runs code at definition")
-            for base in node.bases:
-                if isinstance(base, ast.Name) and base.id == "Protocol":
-                    continue
-                statements.append(f"{node.name}: a base {ast.dump(base)} runs code")
-            for member in node.body:
-                if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef):
-                    for decorator in member.decorator_list:
-                        if _runs_code(decorator):
-                            statements.append(
-                                f"{node.name}.{member.name}: a method decorator runs code"
-                            )
-                    statements += [
-                        f"{node.name}.{member.name}: a method body runs code"
-                        for body in member.body
-                        if _opaque(body) is not None
-                    ]
-                elif _opaque(member) is not None:
-                    statements.append(ast.dump(member))
+            statements += _class_code(node)
             continue
         if _opaque(node) is None:
             continue  # the module docstring
