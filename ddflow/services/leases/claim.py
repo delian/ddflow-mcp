@@ -163,7 +163,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
     """
     holder = holder or log.agent_id
     now = _leases.time.time()
-    pre = _prejudge(log, cfg, item_id, holder, globs, now, break_lease, activity)
+    pre = _leases._prejudge(log, cfg, item_id, holder, globs, now, break_lease, activity)
     with log.decide_then_append(lambda: _fold(log)) as state:
         it = state.items.get(item_id)
         if it is None:

@@ -181,10 +181,10 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
         rec.advice = (
             head
             + f"`ddflow complete {it.id}` is refused for now: "
-            + "; ".join(b.split("\n")[0][:200] for b in v.blockers[:_SHOWN_BLOCKERS])
+            + "; ".join(b.split("\n")[0][:200] for b in v.blockers[: _leases._SHOWN_BLOCKERS])
             + (
-                f" (+{len(v.blockers) - _SHOWN_BLOCKERS} more)"
-                if len(v.blockers) > _SHOWN_BLOCKERS
+                f" (+{len(v.blockers) - _leases._SHOWN_BLOCKERS} more)"
+                if len(v.blockers) > _leases._SHOWN_BLOCKERS
                 else ""
             )
             + f". Settle what `ddflow gate status {it.id}` shows, then "
