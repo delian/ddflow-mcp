@@ -181,7 +181,7 @@
 "ddflow/core/budget.py:CHARS_PER_TOKEN" = "unit conversion (the token estimator's ratio), not a preference"
 "ddflow/core/clock.py:WAIT_MAX_S" = "bound of a configuration value itself (the validation ceiling of an existing knob)"
 "ddflow/core/rank.py:TRIGRAM_MIN" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
-"ddflow/core/redact.py:_MIN_TERM" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
+"ddflow/core/redact/pattern.py:_MIN_TERM" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
 "ddflow/core/textsim.py:_OPAQUE_MIN" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
 "ddflow/core/textsim.py:_MIN_WORD" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
 "ddflow/core/textsim.py:MIN_WORD_CHARS" = "minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person"
