@@ -21,7 +21,7 @@ def _fold(repo):
 
 
 def _followups(repo, item: str):
-    """Every follow-up task that re-runs a gate on ``item``, oldest definition first."""
+    """Every follow-up task that re-runs a gate on ``item`` oldest definition first."""
     st = _fold(repo)
     return [i for i in st.items.values() if getattr(i, "followup_of", "") == item and not i.removed]
 
@@ -99,4 +99,7 @@ def test_warn_reports_but_files_nothing(repo):
         repo, "gate", "skip", "T1", "dedupe", "--reason", "no shared code touched"
     )
     assert code == 0, f"{out}{err}"
+    assert "skip_followup" in f"{out}{err}", (
+        f"the skip output must report the un-filed follow-up: {out}{err}"
+    )
     assert _followups(repo, "T1") == []

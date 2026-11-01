@@ -21,13 +21,18 @@ from ...services.items import TaskDraft, add_task
 
 
 def _open(st: State, item: str, gate: str = "") -> list[Item]:
-    """The follow-up tasks still in the queue that re-run a gate on ``item``.
+    """The follow-up tasks still owed for ``item``: neither removed nor finished.
 
-    ``gate`` narrower than ``item`` names one gate's follow-up; empty means every gate."""
+    ``gate`` narrower than ``item`` names one gate's follow-up; empty means every gate.
+    A follow-up that was COMPLETED (done) or dropped is not owed: it was settled, and a
+    skip of that gate again must file a fresh one, not read the done one as owed."""
     return [
         i
         for i in st.items.values()
-        if i.followup_of == item and not i.removed and (not gate or i.followup_gate == gate)
+        if i.followup_of == item
+        and not i.removed
+        and not i.terminal
+        and (not gate or i.followup_gate == gate)
     ]
 
 
@@ -127,7 +132,9 @@ def settle(log: EventLog, st: State, cfg: Config, item: str, gate: str = "") -> 
     return ids
 
 
-def record_side_effect(log: EventLog, st: State, cfg: Config, item: str, gate: str, skipped: bool) -> str:
+def record_side_effect(
+    log: EventLog, st: State, cfg: Config, item: str, gate: str, skipped: bool
+) -> str:
     """The follow-up's sentence for a gate record: file one on a skip, settle one on a
     non-skip. Empty when there is nothing to say. The one call `gates.record` makes, so
     the skip path's extra work stays out of that function's own branch count."""
