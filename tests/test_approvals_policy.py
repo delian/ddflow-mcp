@@ -280,3 +280,18 @@ def test_the_retry_rule_fires_on_count_alone_not_the_window_or_the_policy_list(p
     frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
     got = C.operator_gate(log, cfg, _complete(proj, log, state="r2"))
     assert got.ok and got.stamp["policy"] == "auto-after-retries"  # COUNT-based, not time-based
+
+
+def test_refusals_counts_unanswered_but_not_denied_or_withdrawn(proj):
+    log = EventLog(proj, "bot")
+    cfg = Config()
+    canon = _complete(proj, log, state="r1")
+    got = C.operator_gate(log, cfg, canon)
+    assert not got.ok and got.ask_id  # filed + refused: a pending ask
+    assert PO.refusals(_state(proj), canon) == 1
+    E.withdraw(log, got.ask_id, actor=A.resolve_actor(cfg, "me"))
+    assert PO.refusals(_state(proj), canon) == 0  # withdrawn is not a refusal
+    canon2 = _complete(proj, log, state="r2")
+    got2 = C.operator_gate(log, cfg, canon2)
+    E.answer(log, cfg, got2.ask_id, "denied", actor=A.resolve_actor(cfg, "me"), digest=canon2.digest())
+    assert PO.refusals(_state(proj), canon2) == 0  # a denied ask WAS answered: not a refusal

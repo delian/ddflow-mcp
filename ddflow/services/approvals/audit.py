@@ -107,7 +107,7 @@ def findings(state, cfg: Config, *, now: float | None = None, events=()) -> list
                 f"{r['id']} ({r['verb']}) was spent at level L{level}, below the L{r['min_level']} "
                 "its tier needs"
             )
-        if r["notify"]:
+        if r["notify"] and r["answered_by"] == f"policy:{PO.RETRY_RULE_ID}":
             out.append(
                 f"{r['id']} ({r['verb']}): auto-approved by standing rule {PO.RETRY_RULE_ID} "
                 f"after {r['notify']} unanswered refusal(s) -- the operator is notified here "
