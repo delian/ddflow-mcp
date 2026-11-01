@@ -93,6 +93,11 @@ def _class_code(node: ast.ClassDef) -> list[str]:
                 for body in member.body
                 if _opaque(body) is not None
             ]
+            out += [
+                f"{node.name}.{member.name}: an argument default runs code"
+                for default in (*member.args.defaults, *member.args.kw_defaults)
+                if default is not None and not isinstance(default, ast.Constant)
+            ]
         elif _opaque(member) is not None:
             out.append(ast.dump(member))
     return out
