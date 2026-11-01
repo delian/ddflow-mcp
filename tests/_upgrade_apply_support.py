@@ -1,15 +1,9 @@
-"""Shared fixture and helpers for the tests/test_upgrade_apply_*.py modules.
+"""Shared helpers for the tests/test_upgrade_apply_*.py modules (the `old` fixture is in conftest)."""
 
-The old-version project is the one a real ddflow 0.1.3 built (tests/fixtures/releases/0.1.3).
-"""
-
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
-import pytest
-from conftest import run_cli
+from _cli_helpers import run_cli
 
 import ddflow.surfaces.cli  # noqa: F401 -- registers the command table the reference check needs
 from ddflow.api._base import _load
@@ -17,20 +11,7 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import upgrade_apply as UA
 
-OLD = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
 DRIVER = "docs/ddflow/drivers/implement-phase.md"
-
-
-@pytest.fixture
-def old(tmp_path: Path) -> Path:
-    r = tmp_path / "old"
-    shutil.copytree(OLD, r)
-    subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
-    for k, v in (("user.email", "t@e.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
-        subprocess.run(["git", "-C", str(r), "config", k, v], check=True)
-    subprocess.run(["git", "-C", str(r), "add", "-A"], check=True)
-    subprocess.run(["git", "-C", str(r), "commit", "-qm", "old"], check=True)
-    return r
 
 
 def go(repo: Path, categories: Any = None, **kw: Any) -> dict[str, Any]:
