@@ -147,7 +147,7 @@ def test_a_converged_round_weighs_every_reviewers_findings(monkeypatch):
     from ddflow.services import review as RV
 
     monkeypatch.setattr(
-        api, "_last_review", lambda it, gate: {"chunk_findings": [{"severity": "HIGH"}]}
+        api.records, "_last_review", lambda it, gate: {"chunk_findings": [{"severity": "HIGH"}]}
     )
     low = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="nit")])
     high = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="HIGH", title="bad")])
@@ -194,7 +194,7 @@ def test_a_round_with_no_earlier_findings_does_not_converge(monkeypatch):
     from ddflow.config import Config
     from ddflow.services import review as RV
 
-    monkeypatch.setattr(api, "_last_review", lambda it, gate: {})
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: {})
     med = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", title="m")])
     cfg = Config.load(None, env={})
     outcome, _ = api._gate_outcome(med, [med], object(), "T1", "critic", True, cfg, None, print)

@@ -324,10 +324,11 @@ def test_check_views_refuses_when_the_log_probe_failed(adopted, monkeypatch):
     """The probe reporting `failed` is only half; the check must act on it rather than
     fall through to comparing against the disk log."""
     from ddflow.services import enforce as E
+    from ddflow.services.enforce import views
 
     run_cli(adopted, "render")
     _git(adopted, "add", VIEW)
-    monkeypatch.setattr(E, "_unstaged_under", lambda *_a: E.LogProbe([], [], failed=True))
+    monkeypatch.setattr(views, "_unstaged_under", lambda *_a: E.LogProbe([], [], failed=True))
     code, msg = E.check_views(adopted)
     assert code == 1 and "could not report" in msg, msg
 

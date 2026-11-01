@@ -309,7 +309,10 @@ def test_enforce_names_its_exit_codes() -> None:
     """No `return 1, msg` or `return (1, msg)`, however spaced: a check's exit comes from
     core/outcome, so 2 cannot be typed as 0. And no check is annotated as a bare
     (int, str) tuple."""
-    tree = ast.parse((PKG / "services" / "enforce.py").read_text())
+    tree = ast.parse(
+        "\n".join(p.read_text() for p in sorted((PKG / "services" / "enforce").glob("*.py")))
+    )
+
     checks = [
         n
         for n in ast.walk(tree)

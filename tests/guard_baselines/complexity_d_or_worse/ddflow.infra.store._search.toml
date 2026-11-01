@@ -1,0 +1,5 @@
+# Ratchet `complexity_d_or_worse` for ddflow.infra.store._search (tests/test_architecture_guards.py).
+# `summarise_row` (CC 31) is the shipped store recall summarise: the fan-out over the
+# per-table headline/body decisions IS the feature, not branch debt. `ddflow.infra.store.toml`
+# was split file-per-half when store.py became a package; lower each and delete its file at zero.
+baseline = 1

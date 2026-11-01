@@ -177,11 +177,24 @@ Three mechanisms push back:
 
 ## Layers
 
-A module may import only from layers **below** it. `tests/test_layering.py` checks this
-by walking the AST, because this package has been bitten three times by a rule that
-existed only in prose — two `family_of` implementations, three TOML overlay loaders, and
-`mcp_server` reaching into `cli`. A layering rule nothing checks decays into a
-dependency graph.
+One ranking, stated once: **`surfaces > api > views > services > infra > config > core >
+adapters`** — a module may import only from layers below it. `core` is not at the bottom
+because it is **pure**: it is handed its knobs, not read them (the `core -> config`
+imports still in the tree are a shrink-only ratchet, below). `ddflow.adapters` *is* the
+bottom: every layer may import it (`core` uses only our own adapters), and it imports no
+other ddflow layer.
+
+This package has been bitten three times by a rule that existed only in prose — two
+`family_of` implementations, three TOML overlay loaders, and `mcp_server` reaching into
+`cli` — so the ranking is enforced, and enforced **once**: `.importlinter`'s `layers`
+contract is the single source, and `tests/test_layering.py` walks the AST against the
+*same* ranking, not a second one. Each contract is a RATCHET (D-unify 4): its
+`ignore_imports` holds only the imports that break the ranking today — 8 `core ->
+config`, 2 `services -> views`, and the 9 `surfaces` entries of `surfaces-through-api`
+(8 reach `infra` directly, 1 reaches `services.adopt`) — and an entry may only be removed,
+never added. The counts are exactly the entries of
+`tests/guard_baselines/importlinter-layers.toml` and `importlinter-surfaces-through-api/`,
+so the document and the ratchet name the same list.
 
 ```
 surfaces/   cli.py, mcp.py, registry.py,   argparse and JSON-RPC. No policy. A command is
@@ -190,18 +203,23 @@ surfaces/   cli.py, mcp.py, registry.py,   argparse and JSON-RPC. No policy. A c
 api/        lifecycle/, knowledge/,        the application layer: ONE typed entry
             reporting/, items.py,          point per operation. Both surfaces call it.
             gates.py, records.py
+views/      human.py, markdown/            one renderer per result kind. ABOVE
+                                           services: a renderer reads service results, a
+                                           service returns an Outcome, not a view.
 services/   gates/, guidance/,             the domain. Every operation returns an
             searchcore/, leases.py,        Outcome. Nothing here prints.
             cmdrunner.py, ticks.py
-views/      human.py, markdown.py          one renderer per result kind. PEERS with
-                                           services: one layer split by role (below).
 infra/      git.py, proc.py, fsio.py,      disk, git, sqlite, subprocess, containers,
             log.py, worktree.py,           TOML, machine-local state.
             tomlcfg.py, localstore.py
+config/     config_sections/               read by every layer; imports none of them.
+                                           Above `core`: core is handed its knobs.
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
             handlers/, defs.py, clock.py,
-            graph.py, globs.py, redact/
-config.py, config_sections/                read by every layer; imports none of them
+            graph.py, globs.py, redact/,
+            ports.py
+adapters/   proc/, git/, fsio/,            the default implementations of the ports in
+            tomlcfg/, digest/, forge/      core/ports.py. The BOTTOM layer (below).
 ```
 
 
@@ -219,13 +237,39 @@ It also found `infra.container` importing `services.review` to discover reviewer
 for its warnings. `infra` owns the container primitives and has no business knowing
 reviewers exist; the caller passes them in.
 
-`services` and `views` are declared PEERS rather than stacked: a service may render a
-markdown view as its result, and a view reads service types to render them. That is one
-layer split by role, and saying so is more honest than an exemption list that grows.
+`services` and `views` are stacked rather than declared peers: `views` sits above
+`services`, because a renderer reads service results and a service returns an `Outcome`
+and does not render. Two imports still cross that line (`services.enforce` and
+`services.sessions` import `views.markdown`) and sit in the layers ratchet, shrinking
+until each receives a renderer handed in — an exemption list that grows is how a peer
+declaration first hid the dependency graph that this ranking exists to expose.
+
+## Adapter model
+
+Where a seam ddflow owns lives, decided once (D-adapters-answers), in four sentences:
+
+- **A port** is a `Protocol`, declared in `core/ports.py` and nowhere else. It is pure
+  (stdlib only), so declaring a seam never drags disk, network or subprocess into `core`.
+  A port's methods mirror the module its default adapter is extracted from, so a fake can
+  be dropped in where that module is imported.
+- **The default adapter** lives in `ddflow/adapters/<family>/`, the bottom layer of the
+  contract above. A family with ONE adapter has exactly one implementation — a second is a
+  bug. A family with SEVERAL adapters registers them in one `core.registry.Registry[T]`
+  (`Registry[Forge]`, keyed by the adapter's `name`); `forge` is the worked example
+  (GitHub, GitLab), and `ci`, `notify` and `supervisors` follow it.
+- **The fake** is a `Fake<Port>` in `tests/fakes/`, the one permitted stand-in, imported
+  only by tests. One port, one default, one fake.
+- **Naming**: a port is the family's noun, no suffix (`Proc`, `Git`, `Fsio`, `Toml`,
+  `Digest`, `Forge`); the re-export convention keeps the old import path working.
+
+The homes being moved in are `infra.proc`, `infra.git`, `infra.fsio`, `infra.tomlcfg` and
+`core.digest`. Each keeps a thin compatibility re-export at its old path until its
+import-linter baseline is empty, then the shim is deleted (ADP-migrate-homes) — no
+behaviour change for existing callers. `core/ports.py` is pinned by
+`tests/test_ports_contract.py` to stay a declaration (Protocols only, stdlib only, under
+20 KB, the families above and no others).
 
 ## Module map
-
-| Module | Responsibility |
 |---|---|
 | `core/events.py` | the `Event` record, Lamport stamp, content-addressed id |
 | `core/model.py` | domain types and `fold` — pure, no I/O |
@@ -251,7 +295,8 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `services/companions.py` | detect and register the MCP servers that serve the gates |
 | `services/importer.py` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue; `verify_import` answers whether it is still true and whether anyone finished it |
 | `services/help.py` | `ddflow help`: narrative from templates, capability inventory generated from the live tool table |
-| `services/adopt.py`, `enforce.py`, `cleanup.py`, `prompts.py` | install, the commit hook, worktree classification, templates |
+| `services/adopt.py`, `cleanup.py`, `prompts.py` | install, worktree classification, templates |
+| `services/enforce/hooks.py`, `precommit.py`, `staged.py`, `leasecheck.py`, `views.py`, `driftchecks.py`, `trailers.py` | the commit hook and its commit-time gates (the `services/enforce/` package re-exports the public names) |
 | `views/markdown.py` | the generated views and the budgeted brief |
 | `surfaces/cli.py` | argparse |
 | `surfaces/mcp.py` | MCP stdio server |
