@@ -146,6 +146,25 @@ def _last_review(it, gate: str) -> dict:
     return {}
 
 
+def _still_standing(it, gate: str, findings) -> set[str]:
+    """The digests of a previous review's findings still standing (not refuted): a later full
+    re-review raising the SAME finding again keeps blocking even below the convergence floor
+    -- the floor filters only NEW below-floor findings (bug B-floor-passes-repeated-untriaged-
+    nit).
+
+    ``findings`` is a prior review's recorded ``chunk_findings`` (already the merged record:
+    a delta round keeps the earlier full round's findings alongside its own), so every
+    finding the author has already seen is here."""
+    if it is None or not isinstance(findings, list):
+        return set()
+    mine = (getattr(it, "triage", None) or {}).get(gate, {})
+    return {
+        str(f.get("digest"))
+        for f in findings
+        if f.get("digest") and mine.get(f.get("digest"), {}).get("verdict") != "refuted"
+    }
+
+
 def _gate_outcome(
     best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
 ) -> tuple[str, dict | None]:
@@ -166,12 +185,8 @@ def _gate_outcome(
         )
     # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
     # earlier round (which still spends a round) is not a previous review.
-    converged_round = (
-        converging
-        and it is not None
-        and bool(item)
-        and bool(_last_review(it, gate).get("chunk_findings"))
-    )
+    prior = _last_review(it, gate) if it is not None and bool(item) else {}
+    converged_round = converging and bool(prior.get("chunk_findings"))
     # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status == RV.REVIEWED for f in r.findings]
@@ -181,6 +196,7 @@ def _gate_outcome(
         found,
         converged=converged_round,
         floor=cfg.review.converge_floor,
+        known=_still_standing(it, gate, prior.get("chunk_findings")),
     )
     if blocking:
         return "failed", extra_evidence
