@@ -668,13 +668,7 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     # entry and the reminder, and only `skip_followup = 'auto'` adds it (a skip today
     # records nothing extra). A NON-skip settles the follow-up: the gate has been
     # answered, so its re-run is no longer owed.
-    if result == "skipped":
-        _, followup_note = SF.file_for_skip(log, cfg, item, gate)
-        warning = " ".join(filter(None, [warning, followup_note]))
-    elif settled := SF.settle(log, st, cfg, item, gate):
-        warning = " ".join(
-            filter(
-                None, [warning, f"settled the follow-up re-running {gate}: {', '.join(settled)}"]
-            )
-        )
+    warning = " ".join(
+        filter(None, [warning, SF.record_side_effect(log, st, cfg, item, gate, result == "skipped")])
+    )
     return O.ok("gate.record", id=item, gate=gate, outcome=result, ahead=ordered, warning=warning)

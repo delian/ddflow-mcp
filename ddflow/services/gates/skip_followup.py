@@ -125,3 +125,15 @@ def settle(log: EventLog, st: State, cfg: Config, item: str, gate: str = "") -> 
     for tid in ids:
         log.append("task.removed", tid, {"reason": why})
     return ids
+
+
+def record_side_effect(log: EventLog, st: State, cfg: Config, item: str, gate: str, skipped: bool) -> str:
+    """The follow-up's sentence for a gate record: file one on a skip, settle one on a
+    non-skip. Empty when there is nothing to say. The one call `gates.record` makes, so
+    the skip path's extra work stays out of that function's own branch count."""
+    if skipped:
+        _, note = file_for_skip(log, cfg, item, gate)
+        return note
+    if settled := settle(log, st, cfg, item, gate):
+        return f"settled the follow-up re-running {gate}: {', '.join(settled)}"
+    return ""
