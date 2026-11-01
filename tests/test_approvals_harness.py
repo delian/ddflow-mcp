@@ -379,10 +379,7 @@ def test_a_kilo_answer_to_another_request_cannot_be_replayed(log, cfg):
 
 
 def test_a_kilo_question_answer_never_satisfies_a_t3_verb(log, cfg):
-    row = _file(log, _kilo_cfg(cfg))
-    yes, _ = H.labels(row["id"])
-    _kilo_db(cfg, [_kilo_question(row["text"], yes)])
-    t3 = _file(log, cfg, _canon(verb="config.reviewer_command", item="", target=""))
+    t3 = _file(log, _kilo_cfg(cfg), _canon(verb="config.reviewer_command", item="", target=""))
     _kilo_db(cfg, [_kilo_question(t3["text"], H.labels(t3["id"])[0])])
     ok, message = H.attest(log, cfg, t3["id"])
     assert not ok and "never approved over chat" in message
