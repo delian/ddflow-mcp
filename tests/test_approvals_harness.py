@@ -96,13 +96,38 @@ def _approved_row(row):
     return [_asked(row["text"]), _answered(row["text"], yes)]
 
 
-def test_the_payload_is_the_rendered_text_with_two_labelled_options(log, cfg):
+def test_the_payload_is_the_rendered_text_with_three_labelled_options_for_a_generic_request(
+    log, cfg
+):
     row = _file(log, cfg)
-    body = H.payload(row)
+    body = H.payload(row, cfg)
     (q,) = body["questions"]
     assert q["question"] == row["text"]
     assert row["id"] in row["text"] and row["digest"][:16] in row["text"]
-    assert [o["label"] for o in q["options"]] == list(H.labels(row["id"]))
+    assert [o["label"] for o in q["options"]] == [*H.labels(row["id"]), H.window_label(row["id"])]
+    assert all(o["description"] for o in q["options"])
+
+
+def test_a_non_generic_request_offers_no_standing_window_choice(log, cfg):
+    cfg.approvals.standing_verbs = ["complete.force", "claim.force", "approve.partial"]
+    row = _file(log, cfg)  # gate.skip.failed_review is not in the (narrowed) generic scope
+    (q,) = H.payload(row, cfg)["questions"]
+    assert [o["label"] for o in q["options"]] == [*H.labels(row["id"])]
+
+
+def test_the_window_choice_approves_and_enables_the_standing_window(log, cfg, repo):
+    import tomllib
+
+    run_cli(repo, "init")
+    row = _file(log, cfg)
+    _transcript(cfg, "s1", [_asked(row["text"]), _answered(row["text"], H.window_label(row["id"]))])
+    ok, message = H.attest(log, cfg, row["id"], repo=repo)
+    assert ok, message
+    got = asks_of(_state(log))[row["id"]]
+    assert got["outcome"] == "approved" and got["via"] == "harness" and got["proof"] == "U1"
+    data = tomllib.loads((repo / ".ddflow" / "config.toml").read_text())
+    assert data["approvals"]["standing_window_s"] == H.WINDOW_CHOICE_HOURS * 3600
+    assert data["approvals"]["policy"] == list(H.WINDOW_CHOICE_POLICY)
 
 
 def test_an_answer_in_the_transcript_approves_and_the_agent_spends_it(log, cfg):
