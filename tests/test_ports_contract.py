@@ -69,9 +69,9 @@ def _runs_code(expr: ast.expr) -> bool:
 
 
 def _literal(expr: ast.expr | None) -> bool:
-    """A literal, which reads: a constant, `None`/`True`/`False`, or a container built of
-    literals (with an unsigned unary). A call (`exec(...)`, `frozenset(...)`) runs code, so
-    it is not a literal, however cheap the code is."""
+    """A literal, which reads: a constant, `None`/`True`/`False`, a container built of
+    literals, or a signed `int`/`float` constant under `+`/`-` (and `~` on an `int`). A call
+    (`exec(...)`, `frozenset(...)`) runs code, so it is not a literal, however cheap the code."""
     if expr is None or isinstance(expr, ast.Constant):
         return True
     if isinstance(expr, ast.Name) and expr.id in ("None", "True", "False"):
@@ -82,10 +82,12 @@ def _literal(expr: ast.expr | None) -> bool:
         return all(
             _literal(k) and _literal(v) for k, v in zip(expr.keys, expr.values, strict=False)
         )
-    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.USub | ast.UAdd | ast.Invert):
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.USub | ast.UAdd):
         return isinstance(expr.operand, ast.Constant) and isinstance(
             expr.operand.value, int | float
         )
+    if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Invert):
+        return isinstance(expr.operand, ast.Constant) and isinstance(expr.operand.value, int)
     return False
 
 
@@ -143,6 +145,24 @@ def test_ports_are_declarations_only():
         f"ports.py runs code: {statements}. A port declares; the default adapter in "
         "ddflow/adapters/ implements it."
     )
+
+
+def test_literal_classifies_signed_and_container_defaults():
+    """The literal classifier itself: a signed numeric constant reads, a unary on a string
+    or a `float` under `~` runs. A guard that drifted here would silently widen what the
+    declarations-only ratchet accepts, so its corner cases are pinned, not observed."""
+    from ast import Constant, Dict, Invert, List, Name, Tuple, USub
+
+    assert _literal(ast.Constant(-1))
+    assert _literal(ast.Constant("sha256"))
+    assert _literal(Name(id="None"))
+    assert _literal(Tuple(elts=[Constant("a"), Constant("b")]))
+    assert _literal(List(elts=[Constant(1)]))
+    assert _literal(Dict(keys=[Constant("a")], values=[Constant(1)]))
+    assert _literal(ast.parse("-1", mode="eval").body)
+    assert _literal(ast.UnaryOp(op=USub(), operand=Constant(""))) is False
+    assert _literal(ast.UnaryOp(op=Invert(), operand=Constant(1.0))) is False
+    assert _literal(ast.parse("exec('print(1)')").body) is False
 
 
 def test_ports_import_no_ddflow_module_and_no_io():
