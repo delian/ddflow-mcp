@@ -48,11 +48,14 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     if uv is None:
         return False
     if venv.is_symlink():
-        # A link to another env is not local isolation; `uv venv` follows to build a real
-        # one below. A symlink that cannot be unlinked (read-only parent) must not fail the
-        # claim, so suppress — the guard is best-effort, never a claim-killer.
+        # A link to another env is not local isolation. Remove it, then `uv venv` builds a
+        # real local `.venv` in its place. A link that cannot be removed (read-only parent)
+        # is a failure to isolate, not "already isolated": return False rather than build or
+        # verify through a link that still points at another env.
         with contextlib.suppress(OSError):
             venv.unlink(missing_ok=True)
+        if venv.is_symlink():
+            return False
     elif venv.exists():
         # A `.venv` with no `pyvenv.cfg` is a torn leftover, not a venv.
         shutil.rmtree(venv, ignore_errors=True)
