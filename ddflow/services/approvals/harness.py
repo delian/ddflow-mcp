@@ -333,7 +333,8 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
 
 def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     """Every accepted answer to this request's question, from transcripts touched since the
-    request was filed (oldest first)."""
+    request was filed (oldest first, both channels: an answer read after it was asked cannot
+    sit before one read before it)."""
     since = clock.epoch(row["requested_at"], default=0.0)
     hits: list[Attested] = []
     for path in _files(cfg, since):
@@ -341,6 +342,7 @@ def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
         hits += scan_typed(path, row, cfg.approvals.min_digest_chars)
     for db in _kilo_dbs(cfg):
         hits += scan_kilo(db, row["text"], row["id"], since)
+    hits.sort(key=lambda h: clock.epoch(h.at, default=0.0))
     return hits
 
 
