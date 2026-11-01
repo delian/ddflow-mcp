@@ -32,6 +32,7 @@ from .._base import _load_fresh
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
 from ..knowledge.bug_close import regression_arg_refusal
+from ..knowledge.self_assessment import auto_file
 from ._common import _chore_base, _chore_event, _require
 from .author import _author_event_identity, _author_model, _recorded_identity
 from .heartbeat import _commit_events, _inbox, _waiters
@@ -283,12 +284,34 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
         if rr.outcomes:
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
+        _phase_end_self_assessment(repo, changelog, agent, extra)
     # A split task "completes when its children do" (B651a63e574): the last sub-task's
     # completion completes its umbrella, and that one's, up the chain.
     extra.update(_complete_umbrellas_above(repo, log, cfg, item, agent))
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     extra.update(_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=False))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _phase_end_self_assessment(repo: Path, text: str, agent: str, extra: dict[str, Any]) -> None:
+    """The self-assessment pass at phase end (r-ddflow-self-assessment, default on): file each
+    defect this phase's completion names (`--changelog`), skipping duplicates; record its
+    verdict in `extra` when it filed, skipped or failed anything. Never raises: the
+    completion that ran the pass returns whatever it would have, filed defects or not."""
+    try:
+        assessed = auto_file(repo, text=text, trigger="phase_end", agent=agent)
+        if (
+            assessed.data.get("filed")
+            or assessed.data.get("skipped")
+            or assessed.data.get("failed")
+        ):
+            extra["self_assessment"] = assessed.data
+    except Exception as exc:  # a best-effort pass must not abort phase completion
+        extra["self_assessment"] = {
+            "filed": [],
+            "skipped": [],
+            "failed": [f"{type(exc).__name__}: {exc}"],
+        }
 
 
 def _close_arg_refusal(
