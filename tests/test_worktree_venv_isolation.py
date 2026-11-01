@@ -111,6 +111,27 @@ def test_a_project_that_is_not_uv_is_not_touched(tmp_path):
     assert not (tree / ".venv").exists()
 
 
+def test_a_failed_swap_reports_not_isolated_and_leaves_no_stranded_tmp(tmp_path, monkeypatch):
+    """If the final rename into `.venv` fails, the built `.venv.tmp` is cleaned up and
+    isolation is honestly reported not-achieved (False), never a stranded sibling left."""
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH")
+    root = _uv(tmp_path / "prj")
+    tree = tmp_path / "wt"
+    tree.mkdir()
+    real_rename = Path.rename
+
+    def refusing_rename(self, target, *a, **k):
+        if str(target).endswith(".venv"):
+            raise OSError(30, "Read-only file system", str(target))
+        return real_rename(self, target, *a, **k)
+
+    monkeypatch.setattr(Path, "rename", refusing_rename)
+    assert W.isolate_venv(root, tree) is False
+    assert not (tree / ".venv").exists()
+    assert not (tree / ".venv.tmp").exists()
+
+
 def test_a_uv_worktree_is_isolated_even_when_the_primary_lacks_uv_lock(tmp_path):
     """The worktree's own `uv.lock` decides, not the primary checkout's current HEAD: the
     primary can sit on a branch without `uv.lock` while this worktree (from main) is a uv

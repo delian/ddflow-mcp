@@ -73,7 +73,10 @@ def isolate_venv(root: Path, tree: Path) -> bool:
         return False
     with contextlib.suppress(OSError):
         tmp.rename(venv)
-    return (venv / "pyvenv.cfg").is_file()
+    if not (venv / "pyvenv.cfg").is_file():
+        _remove(tmp)  # the rename failed; don't leave a stranded `.venv.tmp`
+        return False
+    return True
 
 
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:
