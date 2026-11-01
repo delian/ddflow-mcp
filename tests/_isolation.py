@@ -106,24 +106,28 @@ def _daemon_pid(pidfile: Path) -> int | None:
     ``os.kill``."""
     try:
         pid = int(json.loads(pidfile.read_text())["pid"])
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, OverflowError, ValueError, KeyError, TypeError):
         raw = pidfile.name.removeprefix("daemon.").removesuffix(".json")
         try:
             pid = int(raw)
+        except OverflowError:
+            return None
         except ValueError:
             return None
     return pid if pid > 0 else None
 
 
 def _is_roborev_daemon(pid: int) -> bool:
-    """Whether ``pid`` is still the roborev daemon that wrote a pidfile under the scratch
+    """Whether ``pid`` is still the roborev *daemon* that wrote a pidfile under the scratch
     ``HOME``. A pidfile's pid may have been recycled by an unrelated process its daemon died
-    earlier; the command line must still name roborev, or the pid is left alone."""
+    earlier; its command line must still carry a ``daemon`` argument (what `roborev daemon
+    run` launches), or the pid is left alone -- a roborev *client* (`roborev review <sha>`)
+    and any other process are not the daemon."""
     try:
-        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+        tokens = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").split()
     except OSError:
         return True
-    return b"roborev" in cmdline
+    return tokens[:1] != [] and b"roborev" in tokens[0] and b"daemon" in tokens[1:]
 
 
 def terminate_suite_daemons(home: Path, grace_s: float = 2.0) -> int:

@@ -11,34 +11,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import socket
 import subprocess
 import time
 from pathlib import Path
 
 import _isolation as ISO
 import pytest
-
-
-def _free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-def _held(port: int) -> bool:
-    """Whether an address is taken again: bind fails where it succeeds on a free port."""
-    probe = socket.socket()
-    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        probe.bind(("127.0.0.1", port))
-        return False
-    except OSError:
-        return True
-    finally:
-        probe.close()
 
 
 def _alive(pid: int) -> bool:
@@ -51,10 +29,10 @@ def _alive(pid: int) -> bool:
     return True
 
 
-def _spawn(home: Path, port: int) -> subprocess.Popen:
+def _spawn(home: Path) -> subprocess.Popen:
     env = dict(os.environ, HOME=str(home))
     return subprocess.Popen(
-        ["roborev", "daemon", "run", "--addr", f"127.0.0.1:{port}"],
+        ["roborev", "daemon", "run", "--addr", f"unix://{home / 'roborev.sock'}"],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -72,25 +50,19 @@ def _pid_under(home: Path, deadline: float) -> int | None:
 
 
 def test_teardown_kills_a_daemon_the_suite_spawned_under_its_scratch_home(tmp_path: Path) -> None:
-    """The teardown that deleted the scratch ``HOME`` also kills the daemon it spawned: the
-    address the daemon held must not be left taken over the deleted database (B7d61f8c094)."""
+    """The teardown that deletes the scratch ``HOME`` also kills the daemon the suite spawned
+    there, so none is orphaned holding its address over the deleted database (B7d61f8c094)."""
     if shutil.which("roborev") is None:
         pytest.skip("roborev is not installed")
     home = tmp_path / "home"
     home.mkdir()
-    port = _free_port()
-    proc = _spawn(home, port)
-    deadline = time.monotonic() + 15
-    while not _held(port) and time.monotonic() < deadline:
-        time.sleep(0.1)  # the daemon is up once it has actually bound the address
+    proc = _spawn(home)
     try:
-        assert _held(port), "the daemon never bound its address"
-        pid = _pid_under(home, time.monotonic() + 2)
+        pid = _pid_under(home, time.monotonic() + 15)
         assert pid is not None, "the daemon wrote no runtime pidfile under the scratch HOME"
         ISO._teardown(home)
         assert not home.exists(), "teardown removed the scratch HOME"
-        assert not _held(port), "the daemon's address is still taken after teardown"
-        proc.wait(timeout=10)  # the daemon exited (SIGKILLed where it ignored SIGTERM)
+        proc.wait(timeout=10)  # reaped: not a live survivor holding the deleted DB
         assert not _alive(pid), "the daemon survived teardown; it would hold the deleted DB"
     finally:
         if home.exists():
