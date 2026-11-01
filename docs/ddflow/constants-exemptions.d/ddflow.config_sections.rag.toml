@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/config_sections/rag.py:RAG_MAX_TIMEOUT_S" = 'bound of a configuration value itself (the validation ceiling of an existing knob)'

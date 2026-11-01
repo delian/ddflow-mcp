@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/selfupgrade.py:INSTALL_TIMEOUT_S" = 'selfupgrade.install_timeout_s'
+"ddflow/services/selfupgrade.py:PLAN_TIMEOUT_S" = 'selfupgrade.plan_timeout_s'

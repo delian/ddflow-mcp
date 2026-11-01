@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/compaction.py:RECENT_S" = 'compaction.recent_s'

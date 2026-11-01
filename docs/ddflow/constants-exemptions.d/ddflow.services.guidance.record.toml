@@ -1,0 +1,5 @@
+[knob]
+"ddflow/services/guidance/record.py:DEFAULT_PRIORITY" = 'guidance.record.default_priority'
+
+[exempt]
+"ddflow/services/guidance/record.py:MAX_PRIORITY" = 'bound of a configuration value itself (the validation ceiling of an existing knob)'
