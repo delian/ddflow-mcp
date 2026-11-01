@@ -1,36 +1,40 @@
-"""Adapter ports: the seams ddflow owns, declared once, here.
+"""Adapter ports: the seams ddflow owns, declared in ddflow/adapters.
 
-This is the ONE place a port is declared. A **port** is a `Protocol` (structural, no base
-class to inherit, no import the other way); an **adapter** is a default implementation in
-`ddflow/adapters/`, and a **fake** is a tests-only stand-in in `tests/fakes/`. The pattern
-every family follows, and the layer it sits in, is documented in `docs/ARCHITECTURE.md`
-under "Adapter model" — this file is the code half of that one document.
+A **port** is a `Protocol` (structural, no base class to inherit, no import the other way);
+its **default adapter** is the one implementation in its home under `ddflow/adapters/`, and
+its **fake** is the shipped stand-in in `ddflow/adapters/fakes/`. The pattern every family
+follows is documented in `docs/ARCHITECTURE.md` under "Adapter model"; this file is the code
+half of that one document.
 
-Where things live:
+Where things live (D-adapters-answers, D-adapters-answers-2):
 
-* **Ports** — here, in `ddflow.core`. Pure: only `typing` and the standard library, so the
-  port never drags disk, network or subprocess into `core`.
-* **Default adapters** — `ddflow/adapters/<family>/`, the bottom of the layer contract
-  (`core` may import from `ddflow.adapters`; `ddflow.adapters` imports no other ddflow
-  layer). The homes being moved in (`proc`, `git`, `fsio`, `tomlcfg`, `digest`) keep a thin
-  re-export at their old import path until their import-linter baseline is empty, then the
-  shim is deleted (ADP-migrate-homes).
-* **Fakes** — `tests/fakes/`, one `Fake<Port>` per adapter, imported only by tests.
+* **Ports** -- here, in `ddflow.adapters`, the BOTTOM of the layer contract: every layer
+  may import `ddflow.adapters`, it imports no other ddflow layer. Pure: only `typing` and
+  the standard library. As a home moves under `ddflow/adapters/<family>/` (ADP-migrate-homes)
+  its Protocol moves next to the adapter and this module re-exports it.
+* **Default adapters** -- `ddflow/adapters/<family>/`. The homes being moved in (`proc`,
+  `git`, `fsio`, `tomlcfg`, `digest`) keep a thin re-export at their old import path until
+  their import-linter baseline is empty, then the shim is deleted.
+* **Fakes** -- `ddflow/adapters/fakes/`, one `Fake<Port>` per port, registered in `FAKES`
+  under the port's name. A ratchet (tests/test_ports_contract.py) requires every port to
+  have one; the list of ports still without one only shrinks.
+* **The registry** -- `ddflow.adapters.registry.Registry[T]`, the one implementation
+  (`ddflow.core.registry` re-exports it). A family with several adapters selects one
+  through it.
 
 Naming:
 
 * a port is the family's noun, no suffix: `Proc`, `Git`, `Fsio`, `Toml`, `Digest`, `Forge`
   (so it reads as a type in a signature);
-* a single-adapter family has exactly ONE implementation in its home module — a second one
+* a single-adapter family has exactly ONE implementation in its home module -- a second one
   is a bug, not a registerable alternative;
-* a family with SEVERAL adapters registers them in a `core.registry.Registry[T]`, the one
-  registry (`Registry[Forge]` in `ddflow/adapters/forge`) keyed by the adapter's `name` —
-  `forge` (GitHub, GitLab) is the worked example, and `ci`, `notify` and `supervisors`
-  follow it.
+* a family with SEVERAL adapters registers them in a `Registry[T]` keyed by the adapter's
+  `name` -- `forge` (GitHub, GitLab) is the worked example; notify, lane transport, search,
+  optimizer and scheduler follow it.
 
 A port's methods mirror the module the default adapter is extracted from, so a fake can be
 dropped in where the module is imported (`from ddflow.infra import proc as P`, then a fake
-`P`). Result types the adapter owns (`Captured`, `GitResult`, `PRInfo`, …) are typed `Any`
+`P`). Result types the adapter owns (`Captured`, `GitResult`, `PRInfo`, ...) are typed `Any`
 here rather than re-imported: the port stays pure, and the type stays in the adapter's own
 module where it is not a second definition.
 """

@@ -1,5 +1,5 @@
 # The `ignore_imports` allowlist of the .importlinter contract `layers` (Layers:
-# surfaces > api > views > services > infra > config > core), which
+# surfaces > api > views > services > infra > config > core > adapters), which
 # tests/test_architecture_guards.py joins back into the contract before it runs
 # import-linter.
 #
