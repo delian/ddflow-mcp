@@ -13,6 +13,9 @@ from ._docs import declare, knob
 #: The standing auto-approve window's ceiling: `standing_window_s` above it is refused.
 STANDING_WINDOW_MAX_S = 24 * 3600
 
+#: The retry-threshold's ceiling: `auto_approve_after_retries` above it is refused.
+AUTO_APPROVE_RETRIES_MAX = 1000
+
 
 @declare("approvals")
 @dataclass
@@ -59,6 +62,16 @@ class ApprovalsConfig:
     policy_unavailable_runs: int = knob(
         3,
         doc="How many recorded `unavailable` runs of a review gate the rule `skip_after_unavailable` needs before it lets an agent skip that gate's failure (default 3).",
+    )
+    auto_approve_after_retries: int = knob(
+        0,
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool)
+            and 0 <= v <= AUTO_APPROVE_RETRIES_MAX
+            else f"must be an integer between 0 and {AUTO_APPROVE_RETRIES_MAX} (0 turns it off)"
+        ),
+        doc="Retry threshold (default 0 = off): after the SAME generic T2 verb (`complete.force`, `claim.force`, `gate.skip.failed_review`, `approve.partial`) has been filed and refused this many times for the same item -- each time the operator was asked and did not answer -- ddflow AUTO-ANSWERS the next filing as a standing rule recorded `policy:auto-after-retries` (the request's digest preserved) and NOTIFIES the operator, surfaced in `ddflow approvals log` and `ddflow doctor`, rather than asking a person again. Distinct from `standing_window_s`, which is TIME-based and carries no per-use notification: this is COUNT-based and always notifies. Not gated by the standing window nor `policy_max_uses`: the threshold is the whole condition, and every auto-answer above it is on the record so `doctor` and `approvals log` show each one. 0 turns it off. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )
     standing_window_s: int = knob(
         3600,

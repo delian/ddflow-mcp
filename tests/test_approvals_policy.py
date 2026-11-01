@@ -231,3 +231,47 @@ def test_skip_after_unavailable_is_window_gated_too(proj, monkeypatch):
     frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
     after = C.operator_gate(log, cfg, _canon(proj, log))
     assert not after.ok and after.ask_id  # skip_after_unavailable lapsed too
+
+
+def _complete(proj, log, state: str, item: str = "T1"):
+    return Canon(verb="complete.force", agent="bot", item=item, state=state)
+
+
+def test_after_n_refusals_the_next_is_auto_approved_and_notified(proj):
+    log = EventLog(proj, "bot")
+    cfg = _cfg(auto_approve_after_retries=2)
+    last = None
+    for s in ("r1", "r2"):  # two DISTINCT digests -> two asks the operator never answered
+        last = _complete(proj, log, state=s)
+        got = C.operator_gate(log, cfg, last)
+        assert not got.ok and got.ask_id  # filed + refused, essentially: a person was asked
+    canon = _complete(proj, log, state="r3")
+    got = C.operator_gate(log, cfg, canon)
+    assert got.ok and got.stamp["via"] == "policy" and got.stamp["policy"] == "auto-after-retries"
+    row = asks_of(_state(proj))[got.ask_id]
+    assert row["policy"] is True and row["answered_by"] == "policy:auto-after-retries"
+    assert row["digest"] == canon.digest()  # the request's digest is preserved
+    assert row["notify"] == 2  # the notification record: the refused count that triggered it
+    rows = AU.rows(_state(proj), cfg)
+    assert any(r["approver"] == "policy:auto-after-retries" and r["notify"] for r in rows)
+    assert any(
+        "auto-after-retries" in f and "refusal" in f for f in AU.findings(_state(proj), cfg)
+    )
+
+
+def test_zero_retry_threshold_never_auto_approves(proj):
+    log = EventLog(proj, "bot")
+    assert Config().approvals.auto_approve_after_retries == 0  # ships OFF
+    for s in ("a", "b", "c"):
+        assert not C.operator_gate(log, Config(), _complete(proj, log, state=s)).ok
+    assert not any(r["policy"] for r in asks_of(_state(proj)).values())
+
+
+def test_the_retry_rule_fires_on_count_alone_not_the_window_or_the_policy_list(proj, monkeypatch):
+    _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    cfg = _cfg(auto_approve_after_retries=1)
+    assert cfg.approvals.policy == []  # the retry rule is NOT a `policy` list entry
+    assert not C.operator_gate(log, cfg, _complete(proj, log, state="r1")).ok  # asked, not answered
+    got = C.operator_gate(log, cfg, _complete(proj, log, state="r2"))
+    assert got.ok and got.stamp["policy"] == "auto-after-retries"
