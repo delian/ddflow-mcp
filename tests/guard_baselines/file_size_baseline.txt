@@ -6,7 +6,6 @@ tests/test_api_layer.py | 81773 | test module over the limit before the ratchet 
 tests/test_upgrade_apply.py | 49236 | test module over the limit before the ratchet existed; split pending (one task per file)
 tests/test_upgrade_dry_run.py | 41069 | test module over the limit before the ratchet existed; split pending (one task per file)
 demos/scenario_full_lifecycle.py | 40788 | demo script over the limit before the ratchet existed; split pending (one task per file)
-tests/test_lease_contest.py | 39833 | test module over the limit before the ratchet existed; split pending (one task per file)
 tests/test_log_read_cache.py | 37219 | test module over the limit before the ratchet existed; split pending (one task per file)
 tests/test_architecture_guards.py | 35239 | test module over the limit before the ratchet existed; split pending (one task per file)
 tests/test_flow.py | 32216 | test module over the limit before the ratchet existed; split pending (one task per file)
