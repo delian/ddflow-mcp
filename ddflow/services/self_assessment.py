@@ -27,8 +27,13 @@ _NONE_LINES = (
     "none",
     "none found",
     "no bugs",
+    "no bugs found",
     "no defects",
+    "no defects found",
+    "no gaps",
+    "no gaps found",
     "no issues",
+    "no issues found",
     "nothing",
     "nothing found",
 )
@@ -49,7 +54,7 @@ class Defect:
 def _none_phrase(word: str) -> bool:
     """Whether `word` -- a list line's text -- says the answer is "none". Trailing
     punctuation is not a different answer: ``None found.`` and ``none`` are the same."""
-    return word.lower().strip().rstrip(".!;:, ").lower() in _NONE_LINES
+    return word.lower().strip().rstrip(".!;:,? ").lower() in _NONE_LINES
 
 
 def extract_defects(text: str | None, *, max_defects: int = 20) -> list[Defect]:
@@ -57,6 +62,8 @@ def extract_defects(text: str | None, *, max_defects: int = 20) -> list[Defect]:
     and nothing else does. A line that says the answer is "none" names no defect, so an
     empty assessment is exactly `[]`."""
     if not text:
+        return []
+    if max_defects <= 0:
         return []
     out: list[Defect] = []
     for raw in text.splitlines():
