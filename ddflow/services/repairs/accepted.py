@@ -155,7 +155,7 @@ def accepting(
     reason: str,
     note_: str = "",
     only: str = "",
-    approved: "frozenset[str] | None" = None,
+    approved: frozenset[str] | None = None,
     by: str = "",
 ) -> Context:
     """`accept` for the names in ``only`` (comma-separated), then a fresh read of the log.
@@ -174,7 +174,7 @@ def accept(
     reason: str,
     note_: str = "",
     only: tuple[str, ...] = (),
-    approved: "frozenset[str] | None" = None,
+    approved: frozenset[str] | None = None,
     by: str = "",
 ) -> list[Item]:
     """Record the findings now open as accepted (those named by ``only``, if given); returns
