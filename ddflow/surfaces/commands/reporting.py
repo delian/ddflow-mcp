@@ -453,7 +453,14 @@ def cmd_doctor(a, c: Ctx) -> int:
         tools=tools,
         start_texts=start_texts,
         accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
+        accept_history=bool(getattr(a, "accept_history", False)),
+        history_reason=str(getattr(a, "history_reason", "") or ""),
+        history_note=str(getattr(a, "history_note", "") or ""),
+        history_only=str(getattr(a, "history_only", "") or ""),
     )
+    if out.exit == REFUSED:
+        print(out.reason, file=sys.stderr)
+        return out.exit
     if c.json:
         emit_json(out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order")))
         return out.exit

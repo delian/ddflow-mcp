@@ -55,3 +55,16 @@ It is CLI-only: an agent reports the PROBLEM to the operator, it does not accept
 The limit: the mark is a count plus the last id. An interior event removed and the shard then
 regrown to the old count, before any ddflow command looks, cannot be told from growth; that
 needs a per-event record (the P-multiuser sync-check).
+
+## History that cannot be mended
+
+An append-only log keeps two kinds of fact forever: events whose content no longer matches their
+address (a secret scrub replaced a key inside event lines) and a Lamport clock that decreases in a
+shard (two clones wrote as one agent id). `ddflow doctor` reports them as PROBLEM until a person
+acknowledges them: `ddflow doctor --accept-history --history-reason "why" [--history-note "scrub
+commit abc123"] [--history-only ID,SHARD:N]` records the findings open now, with who and why, in
+the log (a `repair.applied` of `accepted-history`). Doctor then lists each as an `accepted history`
+note and exits 0 if nothing else is wrong. The acceptance binds to the event's id and its content as
+accepted (and to the clock regression's shard, position and values): a later edit of the same
+event, or a new mismatch or regression, is a PROBLEM again. Person-only, like
+`--accept-lost-events`: an agent (CLI or MCP) is refused and reports the finding to the operator.

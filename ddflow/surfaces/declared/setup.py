@@ -314,6 +314,10 @@ COMMANDS: tuple[Command, ...] = (
         flag_exempt={
             "--upgrade": "the same as `ddflow upgrade`, which is `ddflow_upgrade`",
             "--accept-lost-events": "an explicit, operator-run acknowledgement: not an agent tool",
+            "--accept-history": "a person's acknowledgement of a scrub or clock regression: not an agent tool",
+            "--history-reason": "belongs to --accept-history",
+            "--history-note": "belongs to --accept-history",
+            "--history-only": "belongs to --accept-history",
         },
         prose_reason="a health report written to be read, with remedies in prose",
         description="Integrity and health check: log corruption, dependency cycles, "
@@ -327,6 +331,10 @@ COMMANDS: tuple[Command, ...] = (
             tools=sources()[1],
             start_texts=start_texts,
             accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
+            accept_history=bool(getattr(a, "accept_history", False)),
+            history_reason=str(getattr(a, "history_reason", "") or ""),
+            history_note=str(getattr(a, "history_note", "") or ""),
+            history_only=str(getattr(a, "history_only", "") or ""),
         ),
         # PROSE, as it has always been: a list of problems with advice attached is
         # what an operator and an agent both want, and `views/human.py` renders it once
@@ -343,6 +351,30 @@ COMMANDS: tuple[Command, ...] = (
                 "accept_lost_events",
                 type="boolean",
                 help="record the present event counts of the shards that lost events (to a force-push, revert, reset or deletion) as known, clearing that PROBLEM; the log is not touched",
+                cli_only=True,
+            ),
+            Param(
+                "accept_history",
+                type="boolean",
+                help="A PERSON's acknowledgement of history that cannot be mended in an append-only log (an event edited by a secret scrub, a Lamport clock regression): records the findings now open as accepted, with who and why (needs a reason). doctor then reports them as accepted notes; a changed or new finding is a PROBLEM again",
+                cli_only=True,
+            ),
+            Param(
+                "history_reason",
+                type="string",
+                help="why the history is known and accepted (required to accept it)",
+                cli_only=True,
+            ),
+            Param(
+                "history_note",
+                type="string",
+                help="the scrub's commit or a note, recorded with the acceptance",
+                cli_only=True,
+            ),
+            Param(
+                "history_only",
+                type="string",
+                help="accept only these findings: comma-separated event ids or <shard>:<event number> (default: every open one)",
                 cli_only=True,
             ),
         ),

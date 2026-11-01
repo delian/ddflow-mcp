@@ -244,6 +244,10 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
+def _no_reason(reason: str) -> str:
+    return "" if reason.strip() else "--accept-history needs --history-reason: say why it is known"
+
+
 def doctor(
     repo: Path,
     *,
@@ -251,6 +255,10 @@ def doctor(
     parser: Any = None,
     tools: Any = None,
     accept_lost_events: bool = False,
+    accept_history: bool = False,
+    history_reason: str = "",
+    history_note: str = "",
+    history_only: str = "",
     start_texts: Any = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
@@ -263,6 +271,8 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
+    if accept_history and (why := RP.accepted.refusal(agent) or _no_reason(history_reason)):
+        return O.refused("doctor", why)
     log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
@@ -271,7 +281,20 @@ def doctor(
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
     repair_ctx = RP.context(repo, log, cfg)
+    accepted_now = (
+        RP.accepted.accept(
+            repair_ctx,
+            reason=history_reason,
+            note_=history_note,
+            only=tuple(x.strip() for x in history_only.split(",") if x.strip()),
+        )
+        if accept_history
+        else []
+    )
+    if accepted_now:  # the acceptance is in the log now: read it back
+        repair_ctx = RP.context(repo, log, cfg)
     events = repair_ctx.events
+    st = repair_ctx.st if accepted_now else st
     store = Store(repo, cfg)
     cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
@@ -279,12 +302,10 @@ def doctor(
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
     # agent id, and a lease claimed under it is "mine" in both clones. Claims record
     # their clone, so a double claim is also a CONTESTED item below.
-    for shard, (n, before, after) in log.clock_regressions().items():
-        problems.append(
-            f"{shard}: Lamport clock decreases at event {n} ({before} -> {after}) — two "
-            "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
-            "`[agent].id`, or drop both to derive a per-clone id)"
-        )
+    # (a person's `--accept-history` turns a known one into a note: services/repairs/accepted)
+    clock_problems, clock_notes = RP.accepted.clock_findings(repair_ctx)
+    problems += clock_problems
+    notes += clock_notes
     # A PROBLEM (Ba24a8d32ee): a shard holding fewer events than this clone last saw lost them
     # to a force-push, revert, reset or deletion. Never repaired here.
     problems += [g.render() for g in SM.lost(repo, log)]

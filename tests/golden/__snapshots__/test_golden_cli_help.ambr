@@ -845,7 +845,7 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events]
+  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY]
   
   options:
     -h, --help            show this help message and exit
@@ -853,6 +853,18 @@
     --accept-lost-events  record the present event counts of the shards that lost events (to a
                           force-push, revert, reset or deletion) as known, clearing that PROBLEM;
                           the log is not touched
+    --accept-history      A PERSON's acknowledgement of history that cannot be mended in an append-
+                          only log (an event edited by a secret scrub, a Lamport clock regression):
+                          records the findings now open as accepted, with who and why (needs a
+                          reason). doctor then reports them as accepted notes; a changed or new
+                          finding is a PROBLEM again
+    --history-reason HISTORY_REASON
+                          why the history is known and accepted (required to accept it)
+    --history-note HISTORY_NOTE
+                          the scrub's commit or a note, recorded with the acceptance
+    --history-only HISTORY_ONLY
+                          accept only these findings: comma-separated event ids or <shard>:<event
+                          number> (default: every open one)
   
   '''
 # ---
