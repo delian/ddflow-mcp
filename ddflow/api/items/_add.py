@@ -21,9 +21,7 @@ from ...services import phase_complete as PCC
 from ._edit import _bad_line
 
 
-def phase_complete(
-    repo: Path, item: str, *, approval: str = "", reason: str = "", agent: str = ""
-) -> O.Outcome:
+def phase_complete(repo: Path, item: str, *, approval: str = "", agent: str = "") -> O.Outcome:
     """Retire a phase whose every task is done or abandoned, for a person directly and
     for an agent only by an operator approval.
 
@@ -33,7 +31,7 @@ def phase_complete(
     approval gate reads for the use window.
     """
     log, cfg, _st = _items._load(repo, agent)
-    return PCC.complete(log, cfg, item, approval=approval, reason=reason, agent=agent)
+    return PCC.complete(log, cfg, item, approval=approval, agent=agent)
 
 
 def phase_close(repo: Path, item: str, *, imported: bool = False, agent: str = "") -> O.Outcome:

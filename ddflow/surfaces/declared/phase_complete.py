@@ -31,7 +31,6 @@ COMMANDS: tuple[Command, ...] = (
             repo,
             a["id"],
             approval=a.get("approval", "") or "",
-            reason=a.get("reason", "") or "",
             agent=agent,
         ),
         payload=("id", "evidence", "tasks", "done", "abandoned"),
@@ -45,14 +44,8 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="an agent: 'request' files an approval request (the operator answers in chat), then the approval id; a person completes directly",
                 default="",
             ),
-            Param(
-                "reason",
-                help="An agent's own words about this retire, quoted to the operator.",
-                cli_help="an agent's own words about this retire, quoted to the operator (untrusted)",
-                default="",
-            ),
         ),
-        tool_order=("id", "approval", "reason"),
+        tool_order=("id", "approval"),
     ),
 )
 

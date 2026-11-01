@@ -38,7 +38,6 @@ def complete_phase(
     phase_id: str,
     *,
     approval: str = "",
-    reason: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Complete a phase whose every task is done or abandoned, for a person directly and
@@ -95,7 +94,7 @@ def complete_phase(
             item=phase_id,
             state=content_digest("\n".join(sorted(f"{t.id}:{t.state}" for t in tasks))),
         )
-        decided = CN.operator_gate(log, cfg, canon, approval_id=approval, reason=reason, auto=False)
+        decided = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
         if not decided.ok:
             return O.refused(
                 KIND, "refusing: " + decided.message, id=phase_id, approval=decided.ask_id
@@ -121,9 +120,7 @@ def complete_phase(
     )
 
 
-def complete(
-    log, cfg, phase_id: str, *, approval: str = "", reason: str = "", agent: str = ""
-) -> O.Outcome:
+def complete(log, cfg, phase_id: str, *, approval: str = "", agent: str = "") -> O.Outcome:
     """The transaction around `complete_phase`: fold fresh, then check, gate and write.
 
     Folding INSIDE the transaction, like `phase_close`: a task another agent closed since the
@@ -132,6 +129,4 @@ def complete(
     """
     with log.transaction():
         now = fold(log.read_all(), strict=False)
-        return complete_phase(
-            log, cfg, now, phase_id, approval=approval, reason=reason, agent=agent
-        )
+        return complete_phase(log, cfg, now, phase_id, approval=approval, agent=agent)
