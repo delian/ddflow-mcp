@@ -176,7 +176,7 @@ def test_serve_answers_through_the_table_and_runs_the_hooks(make):
         return msg["id"] == 2  # taken over: not answered by the table
 
     server.serve(lines, intercept=intercept, after=lambda: after.append(1))
-    assert taken == [1, 2, 3] and [f["id"] for f in sent()] == [1, 3] and len(after) == 2
+    assert taken == [1, 2, 3] and [f["id"] for f in sent()] == [1, 3] and len(after) == 3
 
 
 def test_a_notification_is_written_whole():
@@ -239,3 +239,11 @@ def test_a_buffer_at_its_cap_does_not_lose_the_newline_that_ends_a_line():
     os.write(w, b"\n" + b"y" * 1000)
     assert chan.receive(1) == "x" * probe._MAX_BUF
     os.close(w)
+
+
+def test_a_scripted_exception_is_an_error_outcome_for_the_fake_client():
+    server = FakeMcpServer(TOOLS, {"echo": RuntimeError("boom")})
+    client = FakeMcpClient(server)
+    client.connect(1)
+    got = client.call("echo", {}, 1)
+    assert got.status == W.ERROR and got.error["code"] == W.INTERNAL_ERROR

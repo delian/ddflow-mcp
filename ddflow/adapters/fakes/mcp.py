@@ -42,7 +42,8 @@ class FakeMcpServer:
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         if "id" not in msg:
             return None
-        mid, method, params = msg["id"], msg.get("method", ""), msg.get("params") or {}
+        mid, method = msg["id"], msg.get("method", "")
+        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
         if method == "initialize":
             want = params.get("protocolVersion")
             version = want if want in W.SERVED_VERSIONS else W.SERVED_VERSIONS[0]
@@ -87,14 +88,13 @@ class FakeMcpServer:
             if not isinstance(msg, dict):
                 self.sent.append(W.err(None, W.INVALID_REQUEST, "a frame is a JSON object"))
                 continue
-            if intercept is not None and intercept(msg, self.notify):
-                continue
-            try:
-                reply = answer(msg)
-            except Exception as exc:
-                reply = W.err(msg.get("id"), W.INTERNAL_ERROR, f"internal error: {exc}")
-            if reply is not None:
-                self.sent.append(reply)
+            if intercept is None or not intercept(msg, self.notify):
+                try:
+                    reply = answer(msg)
+                except Exception as exc:
+                    reply = W.err(msg.get("id"), W.INTERNAL_ERROR, f"internal error: {exc}")
+                if reply is not None:
+                    self.sent.append(reply)
             if after is not None:
                 after()
 
@@ -134,7 +134,10 @@ class FakeMcpClient:
 
     def _ask(self, method: str, params: dict[str, Any] | None) -> W.Outcome:
         self._id += 1
-        reply = self.server.handle(W.request(self._id, method, params))
+        try:
+            reply = self.server.handle(W.request(self._id, method, params))
+        except Exception as exc:  # what `serve` makes of an escaped exception
+            return W.Outcome(W.ERROR, error={"code": W.INTERNAL_ERROR, "message": str(exc)})
         assert reply is not None
         if "error" in reply:
             return W.Outcome(W.ERROR, error=reply["error"])

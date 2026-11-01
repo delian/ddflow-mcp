@@ -257,7 +257,7 @@ class StdioServer:
         A line that is not JSON is `-32700`; an exception out of `handle` is `-32603` with
         the traceback to `log` (never to the stream: a stray write corrupts it).
         `intercept(msg, notify)` may take a message over (an offloaded call): True means
-        it answered itself, and `after()` is skipped for it. `after()` runs after each message `handle` served."""
+        it answered itself. `after()` runs after every parsed message, taken over or answered."""
         handler = handle or self.handle
         for raw in lines:
             line = raw.strip()
@@ -271,15 +271,14 @@ class StdioServer:
             if not isinstance(msg, dict):
                 self.notify(err(None, INVALID_REQUEST, "a frame is a JSON object"))
                 continue
-            if intercept is not None and intercept(msg, self.notify):
-                continue
-            try:
-                reply = handler(msg)
-            except Exception as exc:
-                self._log(traceback.format_exc())
-                reply = err(msg.get("id"), INTERNAL_ERROR, f"internal error: {exc}")
-            if reply is not None:
-                self.notify(reply)
+            if intercept is None or not intercept(msg, self.notify):
+                try:
+                    reply = handler(msg)
+                except Exception as exc:
+                    self._log(traceback.format_exc())
+                    reply = err(msg.get("id"), INTERNAL_ERROR, f"internal error: {exc}")
+                if reply is not None:
+                    self.notify(reply)
             if after is not None:
                 after()
 
