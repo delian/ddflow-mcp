@@ -281,3 +281,58 @@ def test_the_fake_raises_an_exception_instance_as_given():
     boom = RuntimeError("x")
     with pytest.raises(RuntimeError):
         FakeHttpClient().when(raises=boom).request("GET", "http://a/", timeout=1)
+
+
+# -- the contract's blind spot: import-linter sees ROOTS (`urllib`, `http`) -------------
+
+#: What a module outside the home may still import from the network roots, as (module,
+#: name) -- name None for a plain `import`: string helpers, never a way to open a
+#: connection. `urllib.parse` is allowed anywhere. `http-home`'s baseline lists these
+#: modules only because the contract cannot tell `urllib.parse` from `urllib.request`; this
+#: test can, so a baseline entry cannot hide a `urllib.request` or `http.client` import.
+_ALLOWED_OUTSIDE_HOME = {
+    ("urllib.request", "url2pathname"),  # a file: URL to a path (install_info)
+    (
+        "socket",
+        None,
+    ),  # socket.gethostname (infra/hostinfo): not HTTP; a host-info home is a follow-up
+}
+
+
+def _network_imports(source: str) -> list[tuple[str, str | None]]:
+    import ast
+
+    roots = ("urllib", "http", "socket")
+    out: list[tuple[str, str | None]] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            out += [(a.name, None) for a in node.names if a.name.split(".")[0] in roots]
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            if (node.module or "").split(".")[0] in roots:
+                out += [(node.module or "", a.name) for a in node.names]
+    return out
+
+
+def test_no_module_outside_the_home_can_open_a_connection():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "ddflow"
+    offenders = [
+        f"{path.relative_to(root.parent)}: {mod}{'.' + name if name else ''}"
+        for path in sorted(root.rglob("*.py"))
+        if path != root / "adapters" / "http.py"
+        for mod, name in _network_imports(path.read_text("utf-8"))
+        if not mod.startswith("urllib.parse") and (mod, name) not in _ALLOWED_OUTSIDE_HOME
+    ]
+    assert not offenders, (
+        "only ddflow/adapters/http.py may open connections (urllib.request, urllib.error, "
+        f"http.client, socket): {offenders}. Use the HttpClient port."
+    )
+
+
+def test_the_blind_spot_check_sees_a_network_import_hiding_behind_an_allowed_root():
+    assert _network_imports("import urllib.request\nfrom http.client import HTTPConnection\n") == [
+        ("urllib.request", None),
+        ("http.client", "HTTPConnection"),
+    ]
+    assert _network_imports("from . import http\nimport json\n") == []

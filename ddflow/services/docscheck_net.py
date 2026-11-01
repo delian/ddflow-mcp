@@ -61,7 +61,7 @@ def check_remote(
     texts: Mapping[str, str], timeout_s: int, client: HttpClient | None = None
 ) -> RemoteResult:
     """GET each distinct http(s) link of ``texts`` once."""
-    client = client or default_client()
+    client = default_client() if client is None else client
     result = RemoteResult()
     seen: dict[str, tuple[str, str]] = {}
     for path, n, url in remote_links(texts):

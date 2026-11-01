@@ -60,7 +60,7 @@ def real_fetch(url: str, timeout: float, client: HttpClient | None = None) -> Re
     """The one real network call: an unauthenticated GET. HTTP error statuses come back
     as a ``Response`` (the caller classifies them); transport failures raise OSError."""
     try:
-        r = (client or default_client()).request(
+        r = (default_client() if client is None else client).request(
             "GET",
             url,
             headers={"Accept": "application/vnd.github+json", "User-Agent": "ddflow-dedupe"},

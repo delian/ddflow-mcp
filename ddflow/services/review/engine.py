@@ -16,7 +16,7 @@ import time as _time
 from pathlib import Path
 from typing import Any
 
-from ...adapters.http import HttpError, HttpIncompleteRead, HttpProtocolError, HttpStatusError
+from ...adapters.http import HttpIncompleteRead, HttpProtocolError, HttpStatusError
 from ...core import unidiff
 from ...infra import proc as P
 from ...infra.container import rewrite_localhost
@@ -599,6 +599,6 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
             raise_for_status=False,
             on_connect=_attach_to_running,
         )
-    except HttpError:
+    except OSError:  # HttpError is one; the adapter wraps the rest
         return False
     return _HTTP_OK_FLOOR <= r.status < _HTTP_SERVER_ERROR

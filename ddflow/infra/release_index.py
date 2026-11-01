@@ -52,7 +52,7 @@ def url_for(dist: str, index_url: str = "") -> str:
 def _get(url: str, timeout: float, client: HttpClient | None = None) -> bytes:
     """The index document's bytes: a GET through the `HttpClient` port. `url_for` has refused
     every scheme but http(s), and the adapter refuses them again."""
-    resp = (client or default_client()).request(
+    resp = (default_client() if client is None else client).request(
         "GET", url, headers={"Accept": "application/json"}, timeout=timeout, max_bytes=MAX_BYTES
     )
     return resp.body
