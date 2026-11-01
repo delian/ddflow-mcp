@@ -63,6 +63,12 @@ LAYER_PACKAGES = {"config_sections": "config", "config": "config"}
 #: more honest than an exemption list that grows.
 PEERS = {("services", "views"), ("views", "services")}
 
+#: `adapters` is the BOTTOM, below `config` (D-adapters-answers): ports, default adapters,
+#: fakes and the one `Registry[T]`. Every code layer may import it, it imports no layer.
+ALLOWED["adapters"] = set()
+for _layer_name in [n for n in ALLOWED if n not in ("adapters", "mcpshim", "models")]:
+    ALLOWED[_layer_name].add("adapters")
+
 
 def _layer(path: Path) -> str:
     rel = path.relative_to(PKG)
@@ -551,3 +557,12 @@ def test_no_reexport_shadows_a_submodule():
         f"`from ddflow.api import {clash[0]}` gives the re-export, not the module. "
         f"Rename the re-export (e.g. `review` -> `run_review`)."
     )
+
+
+def test_adapters_is_the_bottom_layer():
+    """Every code layer may import `ddflow.adapters`; it imports no other ddflow layer, so a
+    port, an adapter or a fake can never drag a policy layer in (D-adapters-answers)."""
+    assert ALLOWED["adapters"] == set()
+    for layer, may in ALLOWED.items():
+        if layer not in ("adapters", "mcpshim", "models"):
+            assert "adapters" in may, f"`{layer}` must be allowed to import adapters"
