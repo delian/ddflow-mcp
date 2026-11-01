@@ -78,3 +78,9 @@ def test_terminate_leaves_a_home_with_no_daemon_alone(tmp_path: Path) -> None:
     home = tmp_path / "empty"
     home.mkdir()
     assert ISO.terminate_suite_daemons(home) == 0
+
+
+def test_an_unidentifiable_pid_is_not_the_daemon() -> None:
+    """A pid whose command line cannot be read (here: one pid ``pid_max`` can never name)
+    is not PROVED roborev, so ``terminate_suite_daemons`` leaves it alone (B7d61f8c094)."""
+    assert ISO._is_roborev_daemon(ISO._pid_max() + 1) is False
