@@ -9,6 +9,7 @@ order. The status words come from `._constants`.
 from __future__ import annotations
 
 import json
+import sys
 import tomllib
 from collections.abc import Collection
 from pathlib import Path
@@ -76,16 +77,17 @@ def _writes_config(item: dict[str, Any]) -> bool:
 
 def touched(repo: Path, cfg: Config, item: dict[str, Any]) -> list[Path]:
     """The files applying ``item`` may change (the ones a backup must hold)."""
+    pkg = sys.modules[__package__]  # late-bound: honours monkeypatch on the package names
     cat = item["category"]
     if cat == "config":
-        return _config_files(repo, cfg, item) if _writes_config(item) else []
+        return _config_files(repo, cfg, item) if pkg._writes_config(item) else []
     if cat == "instructions":
-        doc = _abs(repo, item["path"])
+        doc = pkg._abs(repo, item["path"])
         # A refresh of a hand-edited document keeps the edit in a NEW `.local-edits[.N]` file
         # beside it (the first free name, as the writer will take it): a file the apply creates,
         # so the backup must name it for a restore to remove it again.
         return [doc, AD.local_edits_path(doc)]
-    out = [_abs(repo, p) for p in item.get("paths", [])]
+    out = [pkg._abs(repo, p) for p in item.get("paths", [])]
     if cat == "hooks" and item["id"].startswith("hooks:dangling:") and item.get("paths"):
         # `hooks install` refreshes both git hooks, so both are saved.
         try:
@@ -118,12 +120,13 @@ def _value(value: Any) -> object:
 
 
 def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
+    pkg = sys.modules[__package__]  # late-bound: honours monkeypatch on the package names
     key, kind = item["key"], item["change"]
     src = cfg.sources.get(key, "default")
     pinned = bool(item.get("set_by"))
     if pinned and src.startswith("env") and item["action"] == UP.OPERATOR:
         return REFUSED, f"{key} is set by the environment ({src}); change it there"
-    if kind == "knob_removed" and _writes_config(item):
+    if kind == "knob_removed" and pkg._writes_config(item):
         gone = [p for p in _config_files(repo, cfg, item) if _remove_key(p, key)]
         return APPLIED, f"removed {key} from " + (
             ", ".join(p.name for p in gone) if gone else "no file (it was not there)"
@@ -196,16 +199,17 @@ def _apply_mcp(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
 
 
 def _run(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
+    pkg = sys.modules[__package__]  # late-bound: honours monkeypatch on the package names
     cat = item["category"]
     try:
         if cat == "config":
-            return _apply_config(repo, cfg, item, agent)
+            return pkg._apply_config(repo, cfg, item, agent)
         if cat == "features":
             return ACKNOWLEDGED, item["summary"] + (f" -> {item['fix']}" if item.get("fix") else "")
         if cat == "hooks":
-            return _apply_hook(repo, item)
+            return pkg._apply_hook(repo, item)
         if cat == "mcp":
-            return _apply_mcp(repo, item)
+            return pkg._apply_mcp(repo, item)
     except (OSError, ValueError, RuntimeError) as exc:
         return FAILED, f"{type(exc).__name__}: {exc}"
     return SKIPPED, f"no applier for {cat}"
