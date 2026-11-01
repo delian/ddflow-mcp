@@ -29,7 +29,7 @@ COMMANDS: tuple[Command, ...] = (
             interfaces=a.get("interfaces") or "",
             baseline=bool(a.get("baseline")),
         ),
-        payload=("families", "interfaces"),
+        payload=("families", "interfaces", "ratchet"),
         render=_text,
         params=(
             Param(

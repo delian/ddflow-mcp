@@ -60,8 +60,10 @@ def render(census: A.Census) -> str:
 def _interfaces(repo: Path, kind: str, baseline: bool) -> O.Outcome:
     """The interface census (ADP-census-v2): programs run, wire protocols, other tools' files,
     environment variables and network endpoints, with call sites (file:line), planned home
-    task and violations. ``kind`` narrows to one kind (CLI/MCP ``interfaces=KIND``); ``baseline`` returns the ratchet's
-    baseline text (what `tests/guard_baselines/arch_interfaces.txt` holds) instead."""
+    task and violations. ``kind`` narrows to one kind (CLI/MCP ``interfaces=KIND``); ``baseline`` returns the
+    ratchet's baseline text (what `tests/arch_baselines/arch_interfaces.txt` holds) instead.
+    When that file is committed the view also reports the ratchet (``ratchet.grew`` /
+    ``ratchet.shrank``) against it."""
     if kind and kind not in I.KINDS:
         return O.failed(
             "archdeps",
@@ -83,12 +85,15 @@ def _interfaces(repo: Path, kind: str, baseline: bool) -> O.Outcome:
         }
         for f in fams
     ]
-    return O.ok(
-        "archdeps",
-        text=render_interfaces(fams, census.unparsed),
-        interfaces=rows,
-        unparsed=list(census.unparsed),
-    )
+    text = render_interfaces(fams, census.unparsed)
+    data: dict[str, object] = {"interfaces": rows, "unparsed": list(census.unparsed)}
+    committed = repo / I.BASELINE_PATH
+    if committed.is_file():
+        grew, shrank = I.ratchet(census, I.parse_baseline(committed.read_text()))
+        data["ratchet"] = {"grew": list(grew), "shrank": list(shrank), "baseline": I.BASELINE_PATH}
+        text += f"\nratchet vs {I.BASELINE_PATH}: {len(grew)} new or grown, {len(shrank)} to lower"
+        text += "".join(f"\n  {line}" for line in (*grew, *shrank))
+    return O.ok("archdeps", text=text, **data)
 
 
 def render_interfaces(fams: list[I.InterfaceFamily], unparsed: tuple[str, ...]) -> str:

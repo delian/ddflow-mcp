@@ -14,7 +14,7 @@ from pathlib import Path
 from ddflow.services import archifaces as I
 
 ROOT = Path(__file__).resolve().parents[1]
-BASELINE = ROOT / "tests" / "guard_baselines" / "arch_interfaces.txt"
+BASELINE = ROOT / "tests" / "arch_baselines" / "arch_interfaces.txt"
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -309,3 +309,6 @@ def test_api_view_carries_interfaces_and_baseline_text():
     text = API.archdeps(ROOT, interfaces="all", baseline=True).data["text"]
     assert text == I.format_baseline(I.scan(ROOT))
     assert "interfaces" not in API.archdeps(ROOT).data
+    # the committed baseline is applied by the view: the real tree is inside it
+    ratchet = out.data["ratchet"]
+    assert ratchet == {"grew": [], "shrank": [], "baseline": I.BASELINE_PATH}

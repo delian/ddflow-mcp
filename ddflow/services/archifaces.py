@@ -24,6 +24,8 @@ from pathlib import Path
 from .archdeps import _dotted
 from .archifaces_scan import ALL_ENV, DYNAMIC, Site, sites_in  # noqa: F401  (re-exported)
 
+# Where the committed ratchet baseline lives, relative to the repository root.
+BASELINE_PATH = "tests/arch_baselines/arch_interfaces.txt"
 KINDS = ("program", "protocol", "managed-file", "env", "network")
 _RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
 
