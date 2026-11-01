@@ -70,21 +70,31 @@ def _claim_or_refuse_twin(
     ``sha``, or refuse a second review while the first is live (B8664a1e0c6). Two reviews of
     one item pay the reviewer twice and race for the one recorded outcome; the first to take
     the lock marks and reviews, and the second sees its marker and refuses. A review of a
-    NEWER commit is a different run and is allowed. (marker-none, None) when there is no
-    item or no commit to key the run on (nothing is recorded, nothing to race)."""
+    NEWER commit is a different run and is allowed. (None, None) only when there is no item
+    or no commit to key the run on (nothing is recorded, nothing to race); a marker the
+    filesystem could not write is refused too, because without it a concurrent review could
+    not be refused -- the silent unprotected race this lock exists to prevent."""
     if not item or not sha:
         return None, None
     marker, twin = RUN.claim_started(repo, item, gate, sha)
-    if twin is None:
-        return marker, None
-    return None, O.nothing(
-        "review",
-        f"{gate} is already being reviewed on this commit (pid {twin.pid}, since "
-        f"{twin.at}); wait for it -- a second review would only race it for the one "
-        f"outcome and pay the reviewer twice. A review of a newer commit starts a new run.",
-        id=item,
-        gate=gate,
-    )
+    if twin is not None:
+        return None, O.nothing(
+            "review",
+            f"{gate} is already being reviewed on this commit (pid {twin.pid}, since "
+            f"{twin.at}); wait for it -- a second review would only race it for the one "
+            f"outcome and pay the reviewer twice. A review of a newer commit starts a new run.",
+            id=item,
+            gate=gate,
+        )
+    if marker is None:
+        return None, O.nothing(
+            "review",
+            f"the {gate} review could not write its started-marker for {item}; refusing "
+            f"rather than run without the concurrent-review lock",
+            id=item,
+            gate=gate,
+        )
+    return marker, None
 
 
 def _unknown_item(repo: Path, item: str, agent: str, gate: str) -> O.Outcome | None:

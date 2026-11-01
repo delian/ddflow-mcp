@@ -49,6 +49,13 @@ def test_a_signal_killed_command_is_unavailable_not_failed():
     assert classify_exit(_gate(), 1, "") == ("failed", "")
 
 
+def test_an_ordinal_high_exit_is_not_read_as_a_signal_death():
+    # 128 (no signal 0) and the far tail (255 = 128+127, no such signal) are a program's
+    # own exit status, not a kill: misreading them would downgrade a real failure.
+    assert classify_exit(_gate(), 128, "")[0] == "failed"
+    assert classify_exit(_gate(), 255, "")[0] == "failed"
+
+
 def test_a_signal_killed_ci_run_is_unavailable_and_never_a_queued_note(tmp_path):
     from ddflow.services import ci_marker as CM
     from ddflow.services.gates import runner as R

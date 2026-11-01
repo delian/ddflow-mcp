@@ -136,7 +136,9 @@ def claim_started(
     ``sha``, serialised across processes so of two runs started together exactly one sees
     the other's marker. The first starter gets ``(marker, None)`` -- it goes on and clears
     the marker when done -- and the second gets ``(None, twin)`` -- the live marker it must
-    refuse. Shared by a command gate run and a review (B8664a1e0c6)."""
+    refuse. ``(None, None)`` means no marker could be written (the run that would refuse a
+    concurrent twin cannot): the caller decides whether to refuse or run without the lock.
+    Shared by a command gate run and a review (B8664a1e0c6)."""
     with start_lock(repo, item, gate):
         twin = live_run(repo, item, gate, sha)
         if twin is None:

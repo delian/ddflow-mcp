@@ -368,22 +368,24 @@ def _signal_death(code: int | None) -> str:
 
     A process killed by a signal did not run to a verdict: it was CUT OFF, not failed.
     Python reports a signalled child as ``-N``; a shell that survived a signalling child
-    reports ``128+N``. Reading either as ``failed`` is what left a cut-off ``ci`` run
-    stuck as "queued 11m of 15m elapsed" forever (B8664a1e0c6): the run queued, was
-    killed mid-suite, and the queueing evidence then dressed a kill up as a verdict.
+    reports ``128+N``. Only a real signal number is read -- exit 128 (``N = 0``) and an
+    exit in the far 128..255 tail are a program's own exit status (a shell only reports
+    ``128+N`` for a signal N >= 1), and misreading them as a kill would downgrade a real
+    failure to UNAVAILABLE. Reading a genuine kill as ``failed`` is what left a cut-off
+    ``ci`` run stuck as "queued 11m of 15m elapsed" forever (B8664a1e0c6).
     """
     if not isinstance(code, int) or isinstance(code, bool):
         return ""
     if code < 0:
         n = -code
-    elif code >= _SHELL_SIGNAL_EXIT:
+    elif code > _SHELL_SIGNAL_EXIT:
         n = code - _SHELL_SIGNAL_EXIT
     else:
         return ""
     try:
         return signal.Signals(n).name
     except ValueError:
-        return f"signal {n}"
+        return ""
 
 
 def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
