@@ -42,8 +42,14 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     if not (Path(root) / "uv.lock").is_file():
         return False
     venv = Path(tree) / ".venv"
+    if (venv / "pyvenv.cfg").is_file():
+        return False  # a real venv is already there
     if venv.exists():
-        return False
+        # A torn leftover (a `.venv` with no `pyvenv.cfg`, from a create that died
+        # mid-write) is not a virtualenv: clear it so `uv venv` builds a real one instead
+        # of skipping the invalid directory and leaving discovery able to reach the
+        # primary `.venv` (bug B4e7af0f14f).
+        shutil.rmtree(venv, ignore_errors=True)
     uv = shutil.which("uv")
     if uv is None:
         return False
