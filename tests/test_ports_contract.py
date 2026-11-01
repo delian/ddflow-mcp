@@ -305,7 +305,9 @@ def test_the_layer_contract_puts_adapters_at_the_bottom():
     text = (PKG.parent / ".importlinter").read_text("utf-8")
     block = text.split("[importlinter:contract:layers]", 1)[1].split("[importlinter:", 1)[0]
     layers = [
-        ln.strip() for ln in block.split("layers =", 1)[1].splitlines() if ln.strip().startswith("ddflow.")
+        ln.strip()
+        for ln in block.split("layers =", 1)[1].splitlines()
+        if ln.strip().startswith("ddflow.")
     ]
     assert layers[-2:] == ["ddflow.core", "ddflow.adapters"], layers
 
