@@ -104,7 +104,12 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
     ``best``'s alone left a failed round whose finding count named a finding the record
     did not show (bug B0419c114ef). Each reviewer's `evidence()` builds the dicts with the
     detail truncation `_merge_delta` and triage already read."""
-    return [fd for r in results if r.status == RV.REVIEWED for fd in r.evidence()["chunk_findings"]]
+    return [
+        fd
+        for r in (results or [])
+        if r.status == RV.REVIEWED
+        for fd in r.evidence()["chunk_findings"]
+    ]
 
 
 def _reason_of(best, results=None) -> str:
