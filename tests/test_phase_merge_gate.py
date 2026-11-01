@@ -29,13 +29,10 @@ def _task_with_commit(repo: Path, tid: str, phase: str) -> Path:
     return tree
 
 
-def _finish(repo: Path, tid: str, *, merge: bool) -> None:
-    if merge:
-        assert run_cli(repo, "merge", tid)[0] == 0
-    pass_pipeline(repo, tid, omit=() if merge else ("merge",))
-    code, out, err = run_cli(
-        repo, "complete", tid, "--model", "claude-opus-5", "--force", "--reason", "fixture"
-    )
+def _finish(repo: Path, tid: str) -> None:
+    assert run_cli(repo, "merge", tid)[0] == 0
+    pass_pipeline(repo, tid, omit=())
+    code, out, err = run_cli(repo, "complete", tid, "--model", "claude-opus-5")
     assert code == 0, out + err
 
 
@@ -55,7 +52,7 @@ def test_a_phase_with_merged_tasks_completes_without_a_hand_recorded_merge(repo)
     assert run_cli(repo, "config", "schedule.phase_full_suite", "off")[0] == 0
     run_cli(repo, "phase", "add", "P1", "--title", "p")
     _task_with_commit(repo, "T1", "P1")
-    _finish(repo, "T1", merge=True)
+    _finish(repo, "T1")
     pass_pipeline(repo, "P1", omit=("merge",))
     code, out, err = run_cli(repo, "complete", "P1", "--model", "claude-opus-5")
     assert code == 0, out + err
@@ -64,14 +61,27 @@ def test_a_phase_with_merged_tasks_completes_without_a_hand_recorded_merge(repo)
 
 
 def test_a_phase_with_an_unmerged_task_branch_refuses(repo):
+    """A finished sub-task whose branch never reached the base still refuses the phase.
+    Built from the facts: completing that sub-task now refuses on the same unmerged branch
+    (Bd59dded6a4), so the done-but-unmerged state is not reachable through `complete` and
+    the phase backstop is judged straight from the tree."""
+    from ddflow.config import Config
+    from ddflow.core.model import Item, State
+    from ddflow.services.completion import _unmerged_branches
+
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "p")
-    _task_with_commit(repo, "T1", "P1")
-    _finish(repo, "T1", merge=False)
-    pass_pipeline(repo, "P1", omit=("merge",))
-    code, out, err = run_cli(repo, "complete", "P1", "--model", "claude-opus-5")
-    assert code == 3, out + err
-    assert "not merged" in out + err and "T1" in out + err, out + err
+    _git(repo, "checkout", "-q", "-b", "ddflow/T1")
+    (repo / "T1.txt").write_text("x\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "work T1")
+    _git(repo, "checkout", "-q", "main")
+    st = State()
+    phase = Item(id="P1", kind="phase", title="p")
+    task = Item(id="T1", kind="task", title="t", branch="ddflow/T1", base="main", state="done")
+    task.parent = "P1"
+    st.items = {"P1": phase, "T1": task}
+    assert _unmerged_branches(st, Config(), phase, repo) != []
 
 
 def test_an_ordinary_task_still_needs_merge(repo):
@@ -120,7 +130,8 @@ def test_a_task_with_unmerged_commits_refuses_force(repo):
     assert code == 0, out + err
     wt = Path(json.loads(out)["worktree"])
     (wt / "a.py").write_text("x = 1\n")
-    _git(wt, "commit", "-qam", "work T1")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-qm", "work T1")
     pass_pipeline(repo, "T1", omit=("merge",))
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", "--force")
     assert code == 3, out + err
@@ -137,7 +148,8 @@ def test_a_task_that_merged_completes_after_the_guard(repo):
     assert code == 0, out + err
     wt = Path(json.loads(out)["worktree"])
     (wt / "a.py").write_text("x = 1\n")
-    _git(wt, "commit", "-qam", "work T1")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-qm", "work T1")
     run_cli(repo, "merge", "T1")
     pass_pipeline(repo, "T1", omit=())
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
