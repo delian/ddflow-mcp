@@ -26,6 +26,7 @@ from .approvals.canon import Canon
 # The importer's own predicate, not a second copy of it: "a phase the IMPORTER wrote" is the
 # one set `phase close` may close, and so the one set this command must leave to it.
 from .importer import _is_imported_phase
+
 # The shared resolve-and-settle guard, not a second copy of `phase close`'s (r-reuse-core).
 from .phase_guard import resolve_phase, settled_tasks
 
@@ -58,9 +59,7 @@ def complete_phase(
             f"--imported` is the door for work that predates ddflow",
             id=phase_id,
         )
-    err, tasks, done = settled_tasks(
-        it, st, KIND, phase_id, hint="complete or abandon them first"
-    )
+    err, tasks, done = settled_tasks(it, st, KIND, phase_id, hint="complete or abandon them first")
     if err is not None:
         return err
     stamp: dict[str, Any] = {}
