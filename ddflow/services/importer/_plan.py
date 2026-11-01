@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -128,7 +129,9 @@ def plan_import(
     filled it in (`_settle_phases`). ``events`` is the log ``state`` was folded from, which
      says whether somebody touched such a phase since; read from ``repo`` when omitted.
     """
-    from ._apply import _dedupe_found, _leave_out_long_memories  # deferred: defined in _apply
+    # deferred: defined in _apply; read through the package's lazy re-export at call time
+    _dedupe_found = sys.modules[__package__]._dedupe_found
+    _leave_out_long_memories = sys.modules[__package__]._leave_out_long_memories
 
     plan = ImportPlan()
     known = _known_ids(state)

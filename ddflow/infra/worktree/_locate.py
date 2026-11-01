@@ -8,7 +8,6 @@ asks git.
 from __future__ import annotations
 
 import contextlib
-import shutil
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,7 +72,7 @@ def scratch_tree(
         if claimed is not None:
             with contextlib.suppress(OSError):
                 claimed.unlink()
-        shutil.rmtree(tmp, ignore_errors=True)
+        fsio.rmtree(tmp)
         _W.git(root, "worktree", "prune")
 
 
