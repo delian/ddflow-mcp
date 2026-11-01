@@ -7,6 +7,7 @@ import sys
 from ...api import approvals as A
 from ...api import approvals_answer as AA
 from ...api import approvals_harness as AH
+from ...core import outcome as O
 from ..context import OK, Ctx
 from .chore import _finish as finish_payload
 
@@ -69,8 +70,16 @@ def _digest_or_ask(c: Ctx, ask_id: str, digest: str) -> str:
 def cmd_approvals_approve(a, c: Ctx) -> int:
     ids = [str(s) for s in (a.ids or [])]
     digests = [str(s) for s in (a.digest or [])]
-    if a.all:
+    if a.all and (ids or digests):
+        out = O.refused(
+            "approvals.approve", "--all is every pending request: give it no ids and no --digest"
+        )
+    elif a.all:
         out = AA.approvals_approve_all(c.repo, agent=c.requested_agent)
+    elif not ids:
+        out = O.refused(
+            "approvals.approve", "no request ids: give one or more ids, or --all for every pending one"
+        )
     elif len(ids) == 1 and not digests and ":" not in ids[0]:
         # the one-request form keeps its strict read-receipt: the person types the digest
         out = AA.approvals_approve(c.repo, ids[0], digest=_digest_or_ask(c, ids[0], ""), agent=c.requested_agent)

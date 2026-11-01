@@ -226,6 +226,13 @@ def test_an_agent_identity_cannot_answer_with_approve_all(proj):
     assert asks_of(_state(proj))[filed.id]["state"] == "pending"
 
 
+def test_approve_all_takes_no_ids_or_digest(proj):
+    filed = _file(proj, _canon(item="T-all-conflict"))
+    code, _o, err = run_cli(proj, "approvals", "approve", "--all", filed.id)
+    assert code == 3 and "--all" in err, err
+    assert asks_of(_state(proj))[filed.id]["state"] == "pending"
+
+
 def test_approve_accepts_several_ids_on_one_line_and_records_each_digest(proj):
     a = _file(proj, _canon(item="T-multi-1"))
     b = _file(proj, _canon(item="T-multi-2"))
@@ -251,6 +258,8 @@ def test_approve_id_digest_pairs_and_repeated_digest_flags(proj):
     rows = asks_of(_state(proj))
     assert rows[a.id]["outcome"] == "approved" and rows[b.id]["outcome"] == "approved"
     assert rows[c.id]["outcome"] == "approved" and rows[d.id]["outcome"] == "approved"
+    # the read-receipt stays recorded: the FULL digest each answer saw, never the typed prefix
+    assert rows[c.id]["answered_digest"] == c.digest and rows[d.id]["answered_digest"] == d.digest
 
 
 def test_the_answer_api_refuses_an_agent_without_reading_anything(tmp_path, monkeypatch):
