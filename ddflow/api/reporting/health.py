@@ -275,10 +275,17 @@ def doctor(
     repair_ctx = RP.context(repo, log, cfg)
     if accept_history:  # recorded as `repair.applied`; the report below reads it back
         reason, note, only, approval = history  # (reason, note, only ids, approval)
-        why, _stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
+        why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
         if why:
             return O.refused("doctor", why, text=why)
-        repair_ctx = RP.accepted.accepting(repair_ctx, reason, note, only)
+        repair_ctx = RP.accepted.accepting(
+            repair_ctx,
+            reason,
+            note,
+            only,
+            approved=frozenset(stamp.get("keys", ())),
+            by=stamp.get("approved_by", ""),
+        )
         st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)

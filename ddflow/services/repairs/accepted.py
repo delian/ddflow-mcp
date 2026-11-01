@@ -136,7 +136,12 @@ def gate(
         ctx.log, ctx.cfg, canon, approval_id=approval, reason=reason, auto=False
     )
     if decision.ok:
-        return "", dict(decision.stamp or {})
+        # The approval binds the EXACT findings it named: an agent may accept only those keys,
+        # so an extra finding that appears after the person answered is never accepted on their
+        # word (the stamp is passed through to `accept`, never recomputed there).
+        stamp = dict(decision.stamp or {})
+        stamp.setdefault("keys", keys)
+        return "", stamp
     return (
         f"accepting history needs a person ({who}): re-run with `--approval request` "
         f"(MCP: approval=request) and the person answers in chat; or run it yourself in your own "
@@ -145,20 +150,43 @@ def gate(
     )
 
 
-def accepting(ctx: Context, reason: str, note_: str = "", only: str = "") -> Context:
-    """`accept` for the names in ``only`` (comma-separated), then a fresh read of the log."""
-    accept(ctx, reason=reason, note_=note_, only=pending_names(only))
+def accepting(
+    ctx: Context,
+    reason: str,
+    note_: str = "",
+    only: str = "",
+    approved: "frozenset[str]" = frozenset(),
+    by: str = "",
+) -> Context:
+    """`accept` for the names in ``only`` (comma-separated), then a fresh read of the log.
+
+    ``approved`` is the set of finding keys the person's approval covers (an agent may accept
+    nothing else); empty means the caller is the person, who accepts what ``doctor`` just saw.
+    """
+    accept(ctx, reason=reason, note_=note_, only=pending_names(only), approved=approved, by=by)
     return context(ctx.repo, ctx.log, ctx.cfg)
 
 
-def accept(ctx: Context, *, reason: str, note_: str = "", only: tuple[str, ...] = ()) -> list[Item]:
+def accept(
+    ctx: Context,
+    *,
+    reason: str,
+    note_: str = "",
+    only: tuple[str, ...] = (),
+    approved: "frozenset[str]" = frozenset(),
+    by: str = "",
+) -> list[Item]:
     """Record the findings now open as accepted (those named by ``only``, if given); returns
-    them. Appends `repair.applied` events and nothing else; no line is edited."""
+    them. An ``approved`` set bounds what may be accepted (an agent accepts only the findings
+    its approval names; a person's call passes none and accepts what is now open). Appends
+    `repair.applied` events and nothing else; no line is edited."""
     log = ctx.log
     with log.transaction():
         fresh = _fresh(log)
         done = records(ctx.st)
         todo = [i for i in fresh if i.key not in done and (not only or i.ref in only)]
+        if approved:
+            todo = [i for i in todo if i.key in approved]
         for at in range(0, len(todo), PER_EVENT):
             part = todo[at : at + PER_EVENT]
             log.append(
@@ -173,7 +201,9 @@ def accept(ctx: Context, *, reason: str, note_: str = "", only: tuple[str, ...] 
                     "checks": sorted({i.check for i in part}),
                     "reason": reason.strip(),
                     "note": note_.strip(),
-                    "by": _who(),
+                    # The person who accepted: for an agent's call this is the one who
+                    # answered the approval, not the OS user that happens to run the process.
+                    "by": (by.strip() or _who()),
                     "events": 0,
                     "summary": f"accepted history: {len(part)} finding(s)",
                 },

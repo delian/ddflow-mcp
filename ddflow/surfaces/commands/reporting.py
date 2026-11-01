@@ -461,11 +461,13 @@ def cmd_doctor(a, c: Ctx) -> int:
             str(getattr(a, "approval", "") or ""),
         ),
     )
+    if c.json:
+        emit_json(
+            out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
+        )
+        return out.exit
     if out.exit == REFUSED:
         print(out.reason, file=sys.stderr)
-        return out.exit
-    if c.json:
-        emit_json(out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order")))
         return out.exit
     print(out.data["text"])
     return out.exit

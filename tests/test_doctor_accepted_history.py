@@ -97,6 +97,13 @@ def test_an_accepted_clock_regression_stays_specific(repo):
     code, text = _doctor(repo)
     assert code == 0 and "Lamport clock decreases" in text and "accepted" in text, text
     assert "PROBLEM" not in text, text
+    # The acceptance is SPECIFIC to that one decrease: a NEW one (a distinct shard, position
+    # and clock values) is a PROBLEM again, not covered by the earlier acceptance.
+    ev2 = replace(Event.from_json(json.dumps(rows[-1])), subject="TY", lamport=2, id="")
+    ev2 = replace(ev2, id=ev2.compute_id())
+    path.write_text(path.read_text() + ev2.to_json() + "\n")
+    code, text = _doctor(repo)
+    assert code == 1 and text.count("Lamport clock decreases") == 1 and "PROBLEM" in text, text
 
 
 def test_accepting_requires_a_reason_and_records_nothing_without_one(scrubbed):
@@ -148,12 +155,17 @@ def test_an_agent_marker_is_an_agent_without_the_agent_flag(scrubbed, monkeypatc
         monkeypatch.setenv(ID.HARNESS_MARKERS[0], "1")
     code, out, err = run_cli(scrubbed, *ACCEPT)
     assert code == 3 and "--approval request" in out + err, out + err
-    monkeypatch.undo()
+    # restore the person identity for the follow-up read WITHOUT `monkeypatch.undo()`: that
+    # also undoes `_a_person`'s deletions, re-instating a harness marker that is set when
+    # ddflow's own tests run inside a harness (the wrong identity for what follows).
+    for var in ("DDFLOW_AGENT", ID.HARNESS_MARKERS[0]):
+        monkeypatch.delenv(var, raising=False)
     assert _doctor(scrubbed)[0] == 1  # nothing was recorded
 
 
 def test_it_is_reachable_over_mcp_with_the_same_gate(scrubbed):
     from ddflow import api
+    from ddflow.services.approvals.sites import L1, SITES, T2
     from ddflow.surfaces.declared.setup import COMMANDS
 
     ask = ("scrubbed", "", "", "")
@@ -163,3 +175,7 @@ def test_it_is_reachable_over_mcp_with_the_same_gate(scrubbed):
     names = {p.name: p for p in doctor.params}
     for n in ("accept_history", "history_reason", "history_note", "history_only", "approval"):
         assert not names[n].cli_only, n
+    # The operator principle: the accept answers in chat, so the verb is declared at T2
+    # (reachable without a terminal), not only its parameters as non-`cli_only`.
+    accept = next(s for s in SITES if s.verb == "history.accept")
+    assert accept.tier == T2 and accept.min_level == L1, accept
