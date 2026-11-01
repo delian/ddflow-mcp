@@ -244,10 +244,6 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
-def _no_reason(reason: str) -> str:
-    return "" if reason.strip() else "--accept-history needs --history-reason: say why it is known"
-
-
 def doctor(
     repo: Path,
     *,
@@ -271,7 +267,7 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-    if accept_history and (why := RP.accepted.refusal(agent) or _no_reason(history_reason)):
+    if accept_history and (why := RP.accepted.refusal(agent, history_reason)):
         return O.refused("doctor", why)
     log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
@@ -281,20 +277,10 @@ def doctor(
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
     repair_ctx = RP.context(repo, log, cfg)
-    accepted_now = (
-        RP.accepted.accept(
-            repair_ctx,
-            reason=history_reason,
-            note_=history_note,
-            only=tuple(x.strip() for x in history_only.split(",") if x.strip()),
-        )
-        if accept_history
-        else []
-    )
-    if accepted_now:  # the acceptance is in the log now: read it back
-        repair_ctx = RP.context(repo, log, cfg)
+    if accept_history:  # recorded as `repair.applied`; the report below reads it back
+        repair_ctx = RP.accepted.accepting(repair_ctx, history_reason, history_note, history_only)
+        st = repair_ctx.st
     events = repair_ctx.events
-    st = repair_ctx.st if accepted_now else st
     store = Store(repo, cfg)
     cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).

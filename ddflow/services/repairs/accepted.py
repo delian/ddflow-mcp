@@ -24,7 +24,7 @@ from ...core.events import REPAIR_APPLIED_KIND
 from ...core.model import State
 from ...infra.log import EventLog, running_version
 from ..identity import agent_marker
-from .base import Context
+from .base import Context, context
 
 RID = "accepted-history"
 CONTENT, CLOCK = "content_mismatch", "clock_regression"
@@ -98,15 +98,23 @@ def clock_findings(ctx: Context) -> tuple[list[str], list[str]]:
     return [i.detail for i in open_], notes
 
 
-def refusal(agent: str = "") -> str:
-    """Why this caller may not accept history ("" for a person at a terminal)."""
+def refusal(agent: str = "", reason: str = "") -> str:
+    """Why this caller may not accept history ("" when it may): an agent is refused, and so
+    is a call that gives no reason."""
     why = agent_marker(agent)
-    if not why:
-        return ""
-    return (
-        f"accepting history is a person's act ({why}): run `ddflow doctor --accept-history "
-        "--history-reason WHY` yourself, in your own terminal; an agent reports the finding"
-    )
+    if why:
+        return (
+            f"accepting history is a person's act ({why}): run `ddflow doctor --accept-history "
+            "--history-reason WHY` yourself, in your own terminal; an agent reports the finding"
+        )
+    return "" if reason.strip() else "--accept-history needs --history-reason: say why it is known"
+
+
+def accepting(ctx: Context, reason: str, note_: str = "", only: str = "") -> Context:
+    """`accept` for the names in ``only`` (comma-separated), then a fresh read of the log."""
+    names = tuple(x.strip() for x in only.split(",") if x.strip())
+    accept(ctx, reason=reason, note_=note_, only=names)
+    return context(ctx.repo, ctx.log, ctx.cfg)
 
 
 def accept(ctx: Context, *, reason: str, note_: str = "", only: tuple[str, ...] = ()) -> list[Item]:
