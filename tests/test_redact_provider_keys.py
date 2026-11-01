@@ -89,7 +89,7 @@ def test_a_redaction_that_errors_fails_closed(tmp_path, cfg, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(S, "redactor", boom)
+    monkeypatch.setattr(S._record, "redactor", boom)  # the module that defines `redact`
     key = KEYS["google"]
     clean, n = S.redact(f"key {key}", cfg)
     assert clean == RE.FAILED_MARKER and n == 1

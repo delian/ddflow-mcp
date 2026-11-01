@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 #: The checkout this code was imported from: `<tree>/ddflow/config/_tree.py` -> `<tree>`.
@@ -24,7 +25,7 @@ def _is_code_tree(root: Path) -> bool:
     a monkeypatch of ``ddflow.config._CODE_TREE`` (which re-exports the value from here)
     takes effect in tests.
     """
-    from ddflow import config as _config
+    _config = sys.modules[__package__]
 
     try:
         return root.resolve() == _config._CODE_TREE
