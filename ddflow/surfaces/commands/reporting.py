@@ -462,9 +462,11 @@ def cmd_doctor(a, c: Ctx) -> int:
         ),
     )
     if c.json:
-        emit_json(
-            out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
-        )
+        body = out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
+        if out.exit == REFUSED:
+            # The agent route needs the refusal (its approval id) from the JSON, not stderr.
+            body = {**body, "reason": out.reason}
+        emit_json(body)
         return out.exit
     if out.exit == REFUSED:
         print(out.reason, file=sys.stderr)

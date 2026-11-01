@@ -155,13 +155,14 @@ def accepting(
     reason: str,
     note_: str = "",
     only: str = "",
-    approved: "frozenset[str]" = frozenset(),
+    approved: "frozenset[str] | None" = None,
     by: str = "",
 ) -> Context:
     """`accept` for the names in ``only`` (comma-separated), then a fresh read of the log.
 
     ``approved`` is the set of finding keys the person's approval covers (an agent may accept
-    nothing else); empty means the caller is the person, who accepts what ``doctor`` just saw.
+    nothing else); ``None`` means the caller is the person, who accepts what ``doctor`` just
+    saw. An agent whose approval bound zero findings passes an empty set and accepts nothing.
     """
     accept(ctx, reason=reason, note_=note_, only=pending_names(only), approved=approved, by=by)
     return context(ctx.repo, ctx.log, ctx.cfg)
@@ -173,19 +174,19 @@ def accept(
     reason: str,
     note_: str = "",
     only: tuple[str, ...] = (),
-    approved: "frozenset[str]" = frozenset(),
+    approved: "frozenset[str] | None" = None,
     by: str = "",
 ) -> list[Item]:
     """Record the findings now open as accepted (those named by ``only``, if given); returns
-    them. An ``approved`` set bounds what may be accepted (an agent accepts only the findings
-    its approval names; a person's call passes none and accepts what is now open). Appends
-    `repair.applied` events and nothing else; no line is edited."""
+    them. A non-``None`` ``approved`` set bounds what may be accepted (an agent accepts only
+    the findings its approval names; ``None`` is the person, who accepts what is now open).
+    Appends `repair.applied` events and nothing else; no line is edited."""
     log = ctx.log
     with log.transaction():
         fresh = _fresh(log)
         done = records(ctx.st)
         todo = [i for i in fresh if i.key not in done and (not only or i.ref in only)]
-        if approved:
+        if approved is not None:
             todo = [i for i in todo if i.key in approved]
         for at in range(0, len(todo), PER_EVENT):
             part = todo[at : at + PER_EVENT]

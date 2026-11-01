@@ -278,12 +278,13 @@ def doctor(
         why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
         if why:
             return O.refused("doctor", why, text=why)
+        keys = stamp.get("keys")
         repair_ctx = RP.accepted.accepting(
             repair_ctx,
             reason,
             note,
             only,
-            approved=frozenset(stamp.get("keys", ())),
+            approved=frozenset(keys) if keys is not None else None,
             by=stamp.get("approved_by", ""),
         )
         st = repair_ctx.st

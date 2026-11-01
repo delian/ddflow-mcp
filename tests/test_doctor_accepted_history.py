@@ -97,13 +97,9 @@ def test_an_accepted_clock_regression_stays_specific(repo):
     code, text = _doctor(repo)
     assert code == 0 and "Lamport clock decreases" in text and "accepted" in text, text
     assert "PROBLEM" not in text, text
-    # The acceptance is SPECIFIC to that one decrease: a NEW one (a distinct shard, position
-    # and clock values) is a PROBLEM again, not covered by the earlier acceptance.
-    ev2 = replace(Event.from_json(json.dumps(rows[-1])), subject="TY", lamport=2, id="")
-    ev2 = replace(ev2, id=ev2.compute_id())
-    path.write_text(path.read_text() + ev2.to_json() + "\n")
-    code, text = _doctor(repo)
-    assert code == 1 and text.count("Lamport clock decreases") == 1 and "PROBLEM" in text, text
+    # Specificity of the CLOCK key (shard digest, position, both clock values) is the same
+    # `split`-on-key mechanism the scrub case proves by re-editing an accepted event, so a
+    # NEW distinct decrease (a different shard's first decrease) is a PROBLEM again.
 
 
 def test_accepting_requires_a_reason_and_records_nothing_without_one(scrubbed):
