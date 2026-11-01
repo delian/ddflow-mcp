@@ -85,11 +85,12 @@ def _record(log, cfg, st, ask_id: str, actor, prefix: str) -> str:
 
 def _split_ids(ids: list[str], digests: list[str]) -> list[tuple[str, str]] | None:
     """`(ask_id, prefix)` per id, one spelling: bare ids with `--digest` (or none), or every id
-    a non-empty `ID:DIGEST`. None on a mixed or malformed spelling (`ID:` with no digest)."""
+    a non-empty `ID:DIGEST`. None on a mixed or malformed spelling (`ID:` with no digest, or
+    `:DIGEST` with no id)."""
     digests = list(digests)
     pairs = [str(raw).partition(":") for raw in ids]
     has_inline = any(sep == ":" for _, sep, _ in pairs)
-    all_pairs = all(sep == ":" and prefix for _, sep, prefix in pairs)
+    all_pairs = all(ask_id and sep == ":" and prefix for ask_id, sep, prefix in pairs)
     if has_inline and (digests or not all_pairs):
         return None
     target = []

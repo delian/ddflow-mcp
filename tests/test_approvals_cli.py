@@ -248,6 +248,9 @@ def test_approve_mixing_id_digest_pairs_with_digest_flags_is_refused(proj):
     # a trailing `ID:` (no digest) is neither a pair nor a bare id
     code, _o, err = run_cli(proj, "approvals", "approve", f"{a.id}:")
     assert code == 3 and "--digest per id" in err, err
+    # a leading `:DIGEST` (no id) is neither a pair nor a bare id
+    code, _o, err = run_cli(proj, "approvals", "approve", f":{a.digest[:12]}")
+    assert code == 3 and "--digest per id" in err, err
 
 
 def test_approve_accepts_several_ids_on_one_line_and_records_each_digest(proj):
