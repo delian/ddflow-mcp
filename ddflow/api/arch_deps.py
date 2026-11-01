@@ -35,7 +35,9 @@ def archdeps(repo: Path, *, agent: str = "") -> O.Outcome:
 
 def render(census: A.Census) -> str:
     """The one human table, so the CLI and the JSON view never describe the census twice."""
-    lines = ["family         members                home                      importers  violations"]
+    lines = [
+        "family         members                home                      importers  violations"
+    ]
     for f in census.families:
         lines.append(
             f"{f.family:<14} {','.join(f.members):<22} {','.join(f.home) or '-':<24} "
