@@ -217,3 +217,15 @@ def test_standing_verbs_scopes_what_the_window_covers(proj, monkeypatch):
     canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
     cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99, standing_verbs=["claim.force"])
     assert not C.operator_gate(log, cfg, canon).ok  # complete.force is outside the window's scope
+
+
+def test_skip_after_unavailable_is_window_gated_too(proj, monkeypatch):
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    cfg = _cfg(policy=["skip_after_unavailable"], policy_max_uses=99)
+    assert C.operator_gate(log, cfg, _canon(proj, log)).ok  # opens the window
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
+    after = C.operator_gate(log, cfg, _canon(proj, log))
+    assert not after.ok and after.ask_id  # skip_after_unavailable lapsed too
