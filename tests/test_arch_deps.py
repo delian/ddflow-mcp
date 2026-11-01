@@ -331,7 +331,9 @@ def test_ratchet_violations_match_baseline():
 
 def test_fake_returns_the_reports_it_is_given():
     rows = (
-        A.FamilyReport("sqlite3", ("sqlite3",), ("ddflow.infra.docindex",), ("ddflow.infra.docindex",)),
+        A.FamilyReport(
+            "sqlite3", ("sqlite3",), ("ddflow.infra.docindex",), ("ddflow.infra.docindex",)
+        ),
     )
     fake = FakeArchDepsCensus(A.Census(rows))
     assert fake.scan(ROOT).families == rows
@@ -364,7 +366,9 @@ def test_unparsable_file_is_reported_not_skipped(tmp_path: Path):
 def test_api_view_carries_families_and_unparsed():
     from ddflow.api import arch_deps as API
 
-    census = A.FamilyReport("hashlib", ("hashlib",), ("ddflow.core.digest",), ("ddflow.core.digest",))
+    census = A.FamilyReport(
+        "hashlib", ("hashlib",), ("ddflow.core.digest",), ("ddflow.core.digest",)
+    )
     text = API.render(A.Census((census,), ("ddflow.broken",)))
     assert "hashlib" in text and "ddflow.core.digest" in text and "ddflow.broken" in text
 
@@ -376,7 +380,9 @@ def test_api_view_carries_families_and_unparsed():
 
 
 def test_family_report_is_immutable():
-    row = A.FamilyReport("fsio", ("tempfile", "fcntl"), ("ddflow.infra.fsio",), ("ddflow.infra.fsio",))
+    row = A.FamilyReport(
+        "fsio", ("tempfile", "fcntl"), ("ddflow.infra.fsio",), ("ddflow.infra.fsio",)
+    )
     with pytest.raises(dataclasses.FrozenInstanceError):
         row.importers = ()
     assert replace(row, home=()) != row
