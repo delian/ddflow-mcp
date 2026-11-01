@@ -161,6 +161,22 @@ def test_a_standing_rule_is_consulted_before_the_request_hint_of_a_no_auto_site(
     assert not C.operator_gate(log, Config(), canon, auto=False).ok
 
 
+def test_an_explicit_request_is_not_auto_answered_by_a_standing_rule(proj, monkeypatch):
+    """Bef8d328af3: `--approval request` files a request and waits for a person; a standing
+    rule answers refusals the agent did NOT make an explicit request of, never the request."""
+    _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    # without `--approval request` the standing rule still answers (the window is open) ...
+    assert C.operator_gate(log, cfg, canon).ok
+    # ... but an explicit request files an ask and is never answered by the standing rule.
+    got = C.operator_gate(log, cfg, canon, approval_id=C.REQUEST)
+    assert not got.ok and got.ask_id
+    row = asks_of(_state(proj))[got.ask_id]
+    assert row["policy"] is False and row["answered_by"] == ""
+
+
 def _frozen_clock(monkeypatch):
     from datetime import UTC, datetime
 

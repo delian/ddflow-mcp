@@ -70,6 +70,23 @@ def test_complete_by_an_agent_over_unmet_conditions_needs_the_operators_approval
     assert ev.data["approval"]["ask"] == ask_id and ev.data["approval"]["proxy"] == "bot"
 
 
+def test_an_explicit_approval_request_is_not_auto_answered_by_a_standing_rule(proj):
+    """Bef8d328af3: with `complete_unavailable` on and the standing window open, `complete
+    --approval request` must file a request and refuse -- never complete FORCED on its own."""
+    cfgfile = proj / ".ddflow" / "config.toml"
+    cfgfile.write_text(
+        cfgfile.read_text()
+        + '\n[approvals]\nstanding_window_s = 86400\npolicy = ["complete_unavailable"]\n'
+    )
+    code, out, err = _complete(proj, "--approval", "request")
+    assert code == 3, (out, err)
+    assert _state(proj).items["T1"].state != "done"
+    ask_id = _ask_id(err)
+    row = asks_of(_state(proj))[ask_id]
+    assert row["verb"] == "complete.force" and row["policy"] is False
+    assert row["answered_by"] == ""
+
+
 def test_the_complete_approval_does_not_stretch_to_other_state_or_repeat(proj):
     ask_id = _ask_id(_complete(proj, "--approval", "request")[2])
     _approve(proj, ask_id)
