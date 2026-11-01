@@ -44,6 +44,7 @@ from ..config_sections.metrics import MetricsConfig
 from ..config_sections.pins import PinsConfig
 from ..config_sections.plan import PlanConfig
 from ..config_sections.prompts import PromptsConfig
+from ..config_sections.quality import QualityConfig
 from ..config_sections.rag import RagConfig
 from ..config_sections.reinstruct import ReinstructConfig
 from ..config_sections.release import ReleaseConfig
@@ -153,6 +154,7 @@ class Config:
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
     plan: PlanConfig = field(default_factory=PlanConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
     waves: WavesConfig = field(default_factory=WavesConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)

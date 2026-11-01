@@ -109,6 +109,7 @@ from ._core import (  # noqa: F401
     PinsConfig,
     PlanConfig,
     PromptsConfig,
+    QualityConfig,
     RagConfig,
     ReinstructConfig,
     ReleaseConfig,
