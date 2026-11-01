@@ -178,3 +178,43 @@ def test_a_merged_round_that_named_a_dirty_tree_is_not_read_as_the_commits_clean
     st.items["T1"].gates["critic"].evidence["tree_sha"] = f"{head[:12]}+0123456789abcdef"
     text = RV.reviewed_other_tree(repo, None, st, "T1", "critic")
     assert "names no tree" in text, text
+
+
+def test_different_commits_with_the_same_content_compare_equal(repo, tmp_path, monkeypatch):
+    """Content is compared, not commit ids: two commits that differ only in ddflow's own
+    bookkeeping (`.ddflow/`, excluded from `source_tree`) are one tree to a review."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "content"], check=True, capture_output=True
+    )
+    rev = ["git", "-C", str(repo), "rev-parse", "HEAD"]
+    first = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + "\n# bookkeeping-only change\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "bookkeeping"], check=True, capture_output=True
+    )
+    head = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+    assert head != first
+
+    rec = NS(evidence={"reviewed_head": first, "review_kind": "full"})
+    it = NS(
+        id="T1",
+        kind="task",
+        worktree="",
+        merged_sha=head,
+        landed_after="",
+        landed_before="",
+        branch="",
+        pr=None,
+        gates={"critic": rec},
+    )
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (None, ""))
+    assert RV.reviewed_other_tree(repo, None, NS(items={"T1": it}), "T1", "critic") == ""
