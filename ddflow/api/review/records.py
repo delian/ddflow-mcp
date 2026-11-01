@@ -98,18 +98,26 @@ def _review_runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
+def _reviewed_findings(results) -> list[dict[str, Any]]:
+    """The `chunk_findings` of every reviewed reviewer, in venue order. The gate blocks on
+    a finding from ANY of them (`_gate_outcome`), so the record keeps them all: recording
+    ``best``'s alone left a failed round whose finding count named a finding the record
+    did not show (bug B0419c114ef). Each reviewer's `evidence()` builds the dicts with the
+    detail truncation `_merge_delta` and triage already read."""
+    return [fd for r in results if r.status == RV.REVIEWED for fd in r.evidence()["chunk_findings"]]
+
+
 def _reason_of(best, results=None) -> str:
-    """The `failed` reason a round records for the gate. The gate blocks on a finding from
-    ANY reviewed reviewer (`_gate_outcome` aggregates `found`), so when the single `best`
-    named none -- another reviewer raised them -- the count still names a finding instead
-    of handing `record` an outcome `failed` with an empty reason (bug B0419c114ef: a delta
-    round over a multi-reviewer gate crashed recording `failed`, so the round never
-    persisted and the gate stayed failed with unresolved findings)."""
+    """The `failed` reason a round records for the gate: what the reviewer said, else the
+    count of the findings the record keeps (every reviewed reviewer's). The gate blocks
+    on a finding from ANY reviewed reviewer, so when ``best`` named none -- another
+    reviewer raised them -- the count must still name a finding instead of handing
+    `record` an outcome `failed` with an empty reason (bug B0419c114ef: a delta round over
+    a multi-reviewer gate crashed recording `failed`, so the round never persisted and the
+    gate stayed failed with unresolved findings)."""
     if best.reason:
         return best.reason
-    if best.findings:
-        return f"{len(best.findings)} finding(s)"
-    found = [f for r in (results or []) if r.status == RV.REVIEWED for f in r.findings]
+    found = _reviewed_findings(results or [])
     return f"{len(found)} finding(s)" if found else ""
 
 

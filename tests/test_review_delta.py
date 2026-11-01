@@ -350,7 +350,7 @@ def test_a_delta_finding_from_another_reviewer_still_records_a_reason(repo, tmp_
     finder = tmp_path / "finder-reviewer"
     finder.write_text(
         "#!/bin/sh\nin=$(cat)\n"
-        'case "$in" in *FINDME*) printf \'FINDING HIGH y.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n\';; '
+        "case \"$in\" in *FINDME*) printf 'FINDING HIGH y.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac\n"
     )
     finder.chmod(finder.stat().st_mode | stat.S_IXUSR)
@@ -379,6 +379,9 @@ def test_a_delta_finding_from_another_reviewer_still_records_a_reason(repo, tmp_
     rec = _record(repo)
     assert rec.outcome == "failed"
     assert rec.reason, "the failed delta round must record a reason or it never persists"
+    ev = _ev(repo)
+    assert len(ev["chunk_findings"]) == 1, ev["chunk_findings"]
+    assert "y.py:1" in ev["chunk_findings"][0]["location"], ev["chunk_findings"]
 
 
 # -- gate status and surfaces ------------------------------------------------------------

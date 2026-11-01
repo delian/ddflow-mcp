@@ -27,7 +27,7 @@ from .findings import (
     _say_triage_scope,
     _track_rerun_raised,
 )
-from .records import _prior_evidence, _reason_of, _record, _round_evidence
+from .records import _prior_evidence, _reason_of, _record, _reviewed_findings, _round_evidence
 
 
 def _order_refusal(
@@ -168,6 +168,9 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **(extra_evidence or {}),
         **snapshot,
     }
+    evidence["chunk_findings"] = _reviewed_findings(results)
+    evidence["findings"] = len(evidence["chunk_findings"])
+    evidence["titles"] = [f["title"] for f in evidence["chunk_findings"][:10]]
     if evidence.get("retry_of_partial"):
         evidence["rounds"] = done  # the retry of a partial round is no round of its own
         evidence.pop("round", None)
