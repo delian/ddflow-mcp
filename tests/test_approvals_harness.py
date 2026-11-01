@@ -349,6 +349,28 @@ def test_a_kilo_uncompleted_question_is_not_an_answer(log, cfg):
     assert not ok and message.startswith(H.WAITING)
 
 
+def test_a_malformed_kilo_part_does_not_crash(log, cfg):
+    """A `question` part whose metadata is a list, not a dict (the reviewer's crafted row)
+    must degrade to WAITING, never raise."""
+    row = _file(log, _kilo_cfg(cfg))
+    bad = {
+        "id": "prt_bad",
+        "data": {
+            "type": "tool",
+            "tool": H.KILO_TOOL,
+            "callID": "call_bad",
+            "state": {
+                "status": "completed",
+                "input": {"questions": [{"question": row["text"]}]},
+                "metadata": [["yes"]],
+            },
+        },
+    }
+    _kilo_db(cfg, [bad])
+    ok, message = H.attest(log, cfg, row["id"])
+    assert not ok and message.startswith(H.WAITING)
+
+
 def test_a_kilo_answer_to_another_request_cannot_be_replayed(log, cfg):
     first = _file(log, _kilo_cfg(cfg))
     _kilo_db(cfg, [_kilo_question(first["text"], H.labels(first["id"])[0])])

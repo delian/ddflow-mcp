@@ -25,6 +25,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from ...config import Config
 from ...config_sections._layers import LAYERS, layer_path, read_toml
@@ -282,8 +283,12 @@ def _kilo_answer(state: Any, question: str) -> str:
     """The answer text a completed Kilo `question` part holds for exactly ``question``, or ""."""
     if not isinstance(state, dict) or state.get("status") != "completed":
         return ""
-    questions = (state.get("input") or {}).get("questions")
-    answers = (state.get("metadata") or {}).get("answers")
+    _input = state.get("input")
+    _meta = state.get("metadata")
+    if not isinstance(_input, dict) or not isinstance(_meta, dict):
+        return ""  # a ``question`` part whose input/metadata is not a dict holds no answer
+    questions = _input.get("questions")
+    answers = _meta.get("answers")
     if not isinstance(questions, list) or not isinstance(answers, list):
         return ""
     for i, q in enumerate(questions):
@@ -301,15 +306,15 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
     answer, which this is not)."""
     found: list[Attested] = []
     try:
-        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+        con = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=2)
     except sqlite3.Error:
         return found
     try:
         rows = con.execute(
             "SELECT id, time_created, data FROM part "
             "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
-            "AND time_created >= ? AND data LIKE ? ORDER BY time_created ASC",
-            (KILO_TOOL, since * 1000, f"%{marker}%"),
+            "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
+            (KILO_TOOL, since * 1000, marker),
         ).fetchall()
     except sqlite3.Error:
         return found  # not a readable Kilo store (wrong schema, locked, missing): nothing there
