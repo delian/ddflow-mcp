@@ -56,7 +56,8 @@ reconciled layer contract.
 
 ## Conformance
 
-The adapter contract enforces, per `D-adapters-answers` (r-reuse-core, r-small-files,
+The conformance clause lives in the adapter task bodies, not in `D-adapters-answers`
+itself. `ADP-decide` / `ADP-model` carry the clause (r-reuse-core, r-small-files,
 r-everything-configurable, `D-unify` strangler with ratchets):
 
 - one implementation per function: a port (`Protocol`), one default implementation in its
@@ -64,6 +65,10 @@ r-everything-configurable, `D-unify` strangler with ratchets):
 - baseline ignore lists only shrink — a guard count can never go back up;
 - no observable behaviour change for callers;
 - files under 20 KB.
+
+`ADP-migrate-homes` adds the same-change home-entry rule: an existing home's import-linter
+`home` entry is updated in the same change that moves it (entries only shrink), tests
+first, no behaviour change.
 
 ## Evidence
 
