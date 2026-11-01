@@ -110,10 +110,10 @@ def _external_roots(path: Path) -> tuple[str, ...] | None:
     ``Census.unparsed``), never silently treated as importing nothing, or a new import
     inside it would be invisible to the ratchet."""
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_bytes())
     except (OSError, SyntaxError, ValueError):
-        # ValueError covers a decode failure (UnicodeDecodeError) as well as a null
-        # byte, so "cannot be read or parsed" holds whatever the failure.
+        # ast.parse on bytes honours PEP 263 coding cookies; a file that still cannot be
+        # parsed (bad encoding, null byte, a read error) is REPORTED, not skipped.
         return None
     roots: set[str] = set()
     for node in ast.walk(tree):
