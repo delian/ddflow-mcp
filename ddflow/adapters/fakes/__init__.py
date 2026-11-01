@@ -47,8 +47,8 @@ class FakeDigest:
         while len(out) < self.WIDTH:
             crc = zlib.crc32(raw, crc)
             out += f"{crc:08x}"
-        out = out[: (size * 2) if size else self.WIDTH]
-        return out[:length] if length else out
+        out = out[: (size * 2) if size is not None else self.WIDTH]
+        return out[:length] if length is not None else out
 
     def canonical(self, obj: Any) -> str:
         return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)

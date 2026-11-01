@@ -216,12 +216,17 @@ def test_a_single_adapter_family_has_no_name_and_a_multi_adapter_family_has_one(
 #: task that migrates its home (ADP-migrate-homes and the family tasks) and the name leaves
 #: this set in the same change; adding a name here, to excuse a new port, fails the test.
 PORTS_WITHOUT_FAKE = {"Proc", "Git", "Fsio", "Toml", "Forge"}
+#: The ceiling the baseline may never exceed: the ports declared when the ratchet began.
+_CEILING = {"Proc", "Git", "Fsio", "Toml", "Forge"}
 
 
 def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
     """Fakes ship in `ddflow.adapters.fakes` (D-adapters-answers-2) and register under the
     port's name; the ratchet is that no port may lack one except the baseline's, which only
     shrinks."""
+    assert PORTS_WITHOUT_FAKE <= _CEILING, (
+        "PORTS_WITHOUT_FAKE may only shrink: a new port needs a fake"
+    )
     have = set(F.FAKES)
     missing = set(_ports()) - have
     assert missing <= PORTS_WITHOUT_FAKE, (
@@ -261,6 +266,7 @@ def _digest_cases(d) -> None:
     a = d.content_digest("hello")
     assert a == d.content_digest("hello") and a != d.content_digest("hellp")
     assert d.content_digest("hello", length=7) == a[:7]
+    assert d.content_digest("hello", length=0) == ""
     assert d.content_digest("é") == d.content_digest("é".encode())
     assert d.canonical({"b": 1, "a": [1, 2]}) == d.canonical({"a": [1, 2], "b": 1})
     assert d.canonical({"a": 1}) != d.canonical({"a": 2})
