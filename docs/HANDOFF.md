@@ -376,7 +376,7 @@ follow it."* Grep before designing.
   2. `test_every_tool_is_explicitly_json_or_explicitly_prose` — add it to `PROSE_TOOLS`
      (`tests/test_mcp_parity.py`) with a reason, or make it return JSON.
   3. `test_every_typed_tool_has_a_wire_shape_row` — add a row to `MIGRATED_WIRE_SHAPES`
-     (`tests/test_api_layer.py`) giving the equivalent CLI argv.
+     (`tests/api_layer_support.py`) giving the equivalent CLI argv.
   4. `TEXT_BODIED` in the same file, if it returns prose — otherwise the parity test tries
      to parse the document as JSON.
   5. Every `Outcome` branch must carry the key named by the tool's `payload`. The exit-2

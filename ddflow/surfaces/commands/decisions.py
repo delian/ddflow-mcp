@@ -3,7 +3,7 @@
 Every function here RENDERS an `Outcome`; none of them decides anything. That split is
 the B37 shape: one description of a result, two presentations derived from it, rather
 than two presentations kept in step by hand. The `--json` bodies are the contract
-`tests/test_api_layer.py::MIGRATED_WIRE_SHAPES` pins against the MCP tool.
+`tests/api_layer_support.py::MIGRATED_WIRE_SHAPES` pins against the MCP tool.
 """
 
 from __future__ import annotations

@@ -218,7 +218,9 @@ def test_the_shipped_loop_command_reports_the_pins_its_own_suite_holds():
     # Not "first": this file names it too, and ordering among those is by path (critic).
     suites = out.data["tests"]
     assert "tests/test_implement_command.py" in suites
-    assert suites.index("tests/test_implement_command.py") < suites.index("tests/test_api_layer.py")
+    assert suites.index("tests/test_implement_command.py") < suites.index(
+        "tests/api_layer_support.py"
+    )
 
 
 def test_flatten_maps_back_to_source_offsets():
