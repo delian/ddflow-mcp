@@ -183,10 +183,17 @@ def _gate_outcome(
             ],
             extra_evidence,
         )
-    # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
-    # earlier round (which still spends a round) is not a previous review.
+    # Only after a REVIEWED FULL round left findings to converge from: an unavailable or
+    # findingless earlier round (which still spends a round) is not a previous review, and
+    # neither is a delta round no full round has run before. A delta covers only the new
+    # commits, not the whole diff, so the full round that follows it is still the author's
+    # FIRST whole-diff review and must block on every finding (bug B-push-failed-review-delta).
     prior = _last_review(it, gate) if it is not None and bool(item) else {}
-    converged_round = converging and bool(prior.get("chunk_findings"))
+    converged_round = (
+        converging
+        and bool(prior.get("chunk_findings"))
+        and (prior.get("review_kind") != "delta" or bool(prior.get("rounds")))
+    )
     # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status == RV.REVIEWED for f in r.findings]
