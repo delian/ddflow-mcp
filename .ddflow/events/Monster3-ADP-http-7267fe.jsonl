@@ -1,0 +1,2 @@
+{"agent":"Monster3-ADP-http-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e1af12da48ac7a04a1408aed5","kind":"ddflow.seen","lamport":124095,"schema":1,"subject":"ddflow","ts":"2026-11-01T21:34:33.005967Z"}
+{"agent":"Monster3-ADP-http-7267fe","data":{"gate":"rubber_duck"},"id":"e302ebc2e9710b0c9767b6062","kind":"gate.started","lamport":124096,"schema":1,"subject":"ADP-http","ts":"2026-11-01T21:34:33.044268Z"}

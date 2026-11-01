@@ -8,3 +8,4 @@
 {"agent":"sz-log-cache","data":{"tags":["bugfix","wave:0"]},"id":"e4674d246aa92bfcb78146149","kind":"task.updated","lamport":123726,"schema":1,"subject":"fix-B-rework-of-merged-item-keeps-stale-merge","ts":"2026-11-01T21:05:40.824536Z"}
 {"agent":"sz-log-cache","data":{"gate":"ci"},"id":"eca4d99853eb10fcdb8046aac","kind":"gate.started","lamport":123728,"schema":1,"subject":"SZ-split-test_log_read_cache","ts":"2026-11-01T21:06:06.048116Z"}
 {"agent":"sz-log-cache","data":{"at":1793568067.6083086,"holder":"sz-log-cache"},"id":"e8d218f092c41f0455263244d","kind":"lease.renewed","lamport":123942,"schema":1,"subject":"SZ-split-test_log_read_cache","ts":"2026-11-01T21:21:07.742954Z"}
+{"agent":"sz-log-cache","data":{"at":1793568969.9021244,"holder":"sz-log-cache"},"id":"eabd865594efdf19fd350718b","kind":"lease.renewed","lamport":124105,"schema":1,"subject":"SZ-split-test_log_read_cache","ts":"2026-11-01T21:36:09.991088Z"}
