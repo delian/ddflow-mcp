@@ -32,9 +32,12 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     git-ignored and dies with the tree, so it can never dangle against a removed path.
 
     Python/uv projects only (told by `uv.lock` beside the primary, the same signal
-    `gates.testcmd` uses), and only when `uv` is on PATH; a failure to make the venv is
-    skipped, never raised — a claim must not die because a venv could not be made, exactly
-    as `copy_local_files` never raises.
+    `gates.testcmd` uses), and only when `uv` is on PATH. `--seed` ships pip so that a
+    bare `pip install -e .`/`uv pip install -e .` run inside the worktree resolves this
+    venv (pip's and uv's virtualenv DISCOVERY walks up to the shared venv only when the
+    worktree has none of its own). A failure to make the venv is skipped, never raised —
+    a claim must not die because a venv could not be made, exactly as `copy_local_files`
+    never raises.
     """
     if not (Path(root) / "uv.lock").is_file():
         return False
@@ -45,7 +48,8 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     if uv is None:
         return False
     made = P.capture(
-        [uv, "venv", "--quiet", "--python", sys.executable, str(venv)], timeout=P.TIMEOUTS["probe"]
+        [uv, "venv", "--seed", "--quiet", "--python", sys.executable, str(venv)],
+        timeout=P.TIMEOUTS["probe"],
     )
     return made.ran and made.returncode == 0
 

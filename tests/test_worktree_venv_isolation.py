@@ -40,6 +40,7 @@ def test_a_uv_worktree_gets_its_own_venv(tmp_path):
 def test_a_worktree_that_already_has_a_venv_is_left_alone(tmp_path):
     root = _uv(tmp_path / "prj")
     tree = tmp_path / "wt"
+    tree.mkdir()
     (tree / ".venv").mkdir()
     assert W.isolate_venv(root, tree) is False
     assert (tree / ".venv").is_dir()
