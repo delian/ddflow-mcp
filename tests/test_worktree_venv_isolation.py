@@ -59,20 +59,18 @@ def test_a_torn_venv_leftover_is_repaired(tmp_path):
     assert (tree / ".venv" / "pyvenv.cfg").is_file(), "the torn leftover was not repaired"
 
 
-def test_a_seeded_venv_gets_pip(tmp_path):
-    """`--seed` ships pip so an activated `pip install -e .` boards the worktree venv; the
-    bare fallback (an offline cache) still isolates, so the pip marker is asserted only
-    when the seed can run — isolation itself is the first test's job."""
+def test_a_symlinked_venv_is_not_treated_as_isolated(tmp_path):
+    """A `.venv` that links to the shared primary venv is not local isolation — uv/pip
+    would follow it straight back to the env this guard exists to protect."""
     if shutil.which("uv") is None:
         pytest.skip("uv not on PATH")
     root = _uv(tmp_path / "prj")
     tree = tmp_path / "wt"
     tree.mkdir()
+    (tree / ".venv").symlink_to(tmp_path / "nowhere", target_is_directory=True)
     assert W.isolate_venv(root, tree) is True
-    pip = tree / ".venv" / "bin" / "pip"
-    if not pip.is_file() and not (tree / ".venv" / "Scripts" / "pip.exe").is_file():
-        pytest.skip("pip seed not available (offline cache); isolation is covered above")
-    assert pip.is_file() or (tree / ".venv" / "Scripts" / "pip.exe").is_file()
+    assert (tree / ".venv").is_dir() and not (tree / ".venv").is_symlink()
+    assert (tree / ".venv" / "pyvenv.cfg").is_file()
 
 
 def test_a_project_that_is_not_uv_is_not_touched(tmp_path):

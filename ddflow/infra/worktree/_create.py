@@ -32,39 +32,30 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     git-ignored and dies with the tree, so it can never dangle against a removed path.
 
     Python/uv projects only (told by `uv.lock` beside the primary, the same signal
-    `gates.testcmd` uses), and only when `uv` is on PATH. `--seed` ships pip so that a
-    bare `pip install -e .`/`uv pip install -e .` run inside the worktree resolves this
-    venv (pip's and uv's virtualenv DISCOVERY walks up to the shared venv only when the
-    worktree has none of its own). A failure to make the venv is skipped, never raised —
-    a claim must not die because a venv could not be made, exactly as `copy_local_files`
-    never raises.
+    `gates.testcmd` uses), and only when `uv` is on PATH. `uv pip`'s and `uv run`'s
+    virtualenv DISCOVERY walks up to the shared venv only when the worktree has none of
+    its own; those tools need no native `pip` in the venv, so a bare `.venv` is enough.
+    A failure to make the venv is skipped, never raised — a claim must not die because a
+    venv could not be made, exactly as `copy_local_files` never raises.
     """
     if not (Path(root) / "uv.lock").is_file():
         return False
     venv = Path(tree) / ".venv"
-    if (venv / "pyvenv.cfg").is_file():
-        return False  # a real venv is already there
-    if venv.exists():
-        # A torn leftover (a `.venv` with no `pyvenv.cfg`, from a create that died
-        # mid-write) is not a virtualenv: clear it so `uv venv` builds a real one instead
-        # of skipping the invalid directory and leaving discovery able to reach the
-        # primary `.venv` (bug B4e7af0f14f).
+    if (venv / "pyvenv.cfg").is_file() and not venv.is_symlink():
+        return False  # a real, LOCAL venv already covers discovery
+    if venv.is_symlink():
+        # A link to the shared `.venv` is not local isolation: uv/pip follow it straight
+        # back to the env this guard exists to protect.
+        venv.unlink(missing_ok=True)
+    elif venv.exists():
+        # A `.venv` with no `pyvenv.cfg` is a torn leftover, not a venv.
         shutil.rmtree(venv, ignore_errors=True)
     uv = shutil.which("uv")
     if uv is None:
         return False
-    made = P.capture(
-        [uv, "venv", "--seed", "--quiet", "--python", sys.executable, str(venv)],
-        timeout=P.TIMEOUTS["probe"],
+    P.capture(
+        [uv, "venv", "--quiet", "--python", sys.executable, str(venv)], timeout=P.TIMEOUTS["probe"]
     )
-    if not made.ran or made.returncode != 0:
-        # Seeding pip needs its wheel; when it cannot run (an offline cache, a write the
-        # OS refused), still give the worktree its own `.venv` so virtualenv discovery
-        # never reaches the shared one — the whole point of this guard (bug B4e7af0f14f).
-        P.capture(
-            [uv, "venv", "--quiet", "--python", sys.executable, str(venv)],
-            timeout=P.TIMEOUTS["probe"],
-        )
     return (venv / "pyvenv.cfg").exists()
 
 
