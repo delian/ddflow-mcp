@@ -118,12 +118,13 @@ def _value(value: Any) -> object:
 
 
 def _apply_config(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
+    pkg = sys.modules[__package__]  # late-bound: honours monkeypatch on the package names
     key, kind = item["key"], item["change"]
     src = cfg.sources.get(key, "default")
     pinned = bool(item.get("set_by"))
     if pinned and src.startswith("env") and item["action"] == UP.OPERATOR:
         return REFUSED, f"{key} is set by the environment ({src}); change it there"
-    if kind == "knob_removed" and sys.modules[__package__]._writes_config(item):
+    if kind == "knob_removed" and pkg._writes_config(item):
         gone = [p for p in _config_files(repo, cfg, item) if _remove_key(p, key)]
         return APPLIED, f"removed {key} from " + (
             ", ".join(p.name for p in gone) if gone else "no file (it was not there)"
@@ -196,16 +197,17 @@ def _apply_mcp(repo: Path, item: dict[str, Any]) -> tuple[str, str]:
 
 
 def _run(repo: Path, cfg: Config, item: dict[str, Any], agent: str) -> tuple[str, str]:
+    pkg = sys.modules[__package__]  # late-bound: honours monkeypatch on the package names
     cat = item["category"]
     try:
         if cat == "config":
-            return sys.modules[__package__]._apply_config(repo, cfg, item, agent)
+            return pkg._apply_config(repo, cfg, item, agent)
         if cat == "features":
             return ACKNOWLEDGED, item["summary"] + (f" -> {item['fix']}" if item.get("fix") else "")
         if cat == "hooks":
-            return _apply_hook(repo, item)
+            return pkg._apply_hook(repo, item)
         if cat == "mcp":
-            return _apply_mcp(repo, item)
+            return pkg._apply_mcp(repo, item)
     except (OSError, ValueError, RuntimeError) as exc:
         return FAILED, f"{type(exc).__name__}: {exc}"
     return SKIPPED, f"no applier for {cat}"
