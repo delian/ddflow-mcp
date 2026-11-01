@@ -109,7 +109,9 @@ def _external_roots(path: Path) -> tuple[str, ...] | None:
     inside it would be invisible to the ratchet."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError):
+    except (OSError, SyntaxError, ValueError):
+        # ValueError covers a decode failure (UnicodeDecodeError) as well as a null
+        # byte, so "cannot be read or parsed" holds whatever the failure.
         return None
     roots: set[str] = set()
     for node in ast.walk(tree):
