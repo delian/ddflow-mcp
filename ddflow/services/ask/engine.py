@@ -330,9 +330,17 @@ def record_policy(
     with log.transaction():
         asked = request(log, cfg, subject=subject, digest=digest, text=text, command=command)
         answered = {
-            "id": asked.id, "outcome": APPROVED, "digest": digest, "by": f"policy:{rule_id}",
-            "role": "policy", "via": "policy", "human": False, "coded": False,
-            "source": "policy", "level": 1, "policy": True,
+            "id": asked.id,
+            "outcome": APPROVED,
+            "digest": digest,
+            "by": f"policy:{rule_id}",
+            "role": "policy",
+            "via": "policy",
+            "human": False,
+            "coded": False,
+            "source": "policy",
+            "level": 1,
+            "policy": True,
         }
         if notify:
             answered["notify"] = notify

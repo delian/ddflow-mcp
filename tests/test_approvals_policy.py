@@ -254,9 +254,7 @@ def test_after_n_refusals_the_next_is_auto_approved_and_notified(proj):
     assert row["notify"] == 2  # the notification record: the refused count that triggered it
     rows = AU.rows(_state(proj), cfg)
     assert any(r["approver"] == "policy:auto-after-retries" and r["notify"] for r in rows)
-    assert any(
-        "auto-after-retries" in f and "refusal" in f for f in AU.findings(_state(proj), cfg)
-    )
+    assert any("auto-after-retries" in f and "refusal" in f for f in AU.findings(_state(proj), cfg))
 
 
 def test_zero_retry_threshold_never_auto_approves(proj):
@@ -293,7 +291,9 @@ def test_refusals_counts_unanswered_but_not_denied_or_withdrawn(proj):
     assert PO.refusals(_state(proj), canon) == 0  # withdrawn is not a refusal
     canon2 = _complete(proj, log, state="r2")
     got2 = C.operator_gate(log, cfg, canon2)
-    E.answer(log, cfg, got2.ask_id, "denied", actor=A.resolve_actor(cfg, "me"), digest=canon2.digest())
+    E.answer(
+        log, cfg, got2.ask_id, "denied", actor=A.resolve_actor(cfg, "me"), digest=canon2.digest()
+    )
     assert PO.refusals(_state(proj), canon2) == 0  # a denied ask WAS answered: not a refusal
 
 
