@@ -24,8 +24,10 @@ import atexit
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -58,6 +60,13 @@ BASELINE_ENV = "DDFLOW_SUITE_REAL_REPO_BASELINE"
 #: Config keys another process legitimately writes to a shared repository while the suite runs.
 _VOLATILE = ("branch.", "remote.", "submodule.", "worktree.")
 
+#: Where roborev (an external companion some gates shell out to) keeps its daemon's runtime
+#: file, relative to that daemon's ``HOME``: ``daemon.<pid>.json``, next to its SQLite
+#: ``reviews.db``. A daemon the suite started inherits the scratch ``HOME`` below; when the
+#: runner then deletes that ``HOME``, the daemon survives it and keeps holding its address over
+#: a deleted database, failing every roborev gate afterwards (B7d61f8c094).
+ROBOREV_RUNTIME = Path(".roborev") / "runtime"
+
 
 def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> Path:
     """Strip ``REPO_VARS`` and point git's global/system configuration and ``HOME`` at a
@@ -69,7 +78,7 @@ def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> 
     if not named or not home.is_dir():
         home = Path(tempfile.mkdtemp(prefix="ddflow-suite-home-"))
         env[HOME_ENV] = str(home)
-        atexit.register(shutil.rmtree, home, ignore_errors=True)
+        atexit.register(_teardown, home)
     (home / "gitconfig").write_text(GLOBAL_CONFIG)
     env["HOME"] = str(home)
     env["XDG_CONFIG_HOME"] = str(home / "xdg")
@@ -77,6 +86,70 @@ def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> 
     env["GIT_CONFIG_SYSTEM"] = os.devnull
     env["GIT_CONFIG_NOSYSTEM"] = "1"
     return home
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _daemon_pid(pidfile: Path) -> int | None:
+    """The pid a roborev daemon recorded in ``daemon.<pid>.json``: its ``pid`` field, with the
+    file's ``daemon.<pid>`` name as the fallback — a torn file still being written must not
+    hide a live daemon."""
+    try:
+        return int(json.loads(pidfile.read_text())["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        raw = pidfile.name.removeprefix("daemon.").removesuffix(".json")
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
+
+def terminate_suite_daemons(home: Path, grace_s: float = 2.0) -> int:
+    """Kill every roborev daemon whose runtime pidfile sits under ``home`` (a daemon the
+    suite started inherits the scratch ``HOME`` and writes ``daemon.<pid>.json`` there), wait
+    up to ``grace_s`` for each to exit, and SIGKILL any survivor. Only daemons with a pidfile
+    under THIS ``home`` are the suite's: the operator's real daemon lives under the real
+    ``HOME`` and is left running. Returns how many were terminated."""
+    runtime = home / ROBOREV_RUNTIME
+    if not runtime.is_dir():
+        return 0
+    pids = [
+        pid
+        for pidfile in sorted(runtime.glob("daemon.*.json"))
+        if (pid := _daemon_pid(pidfile)) is not None
+    ]
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    deadline = time.monotonic() + grace_s
+    alive = [pid for pid in pids if _alive(pid)]
+    while alive and time.monotonic() < deadline:
+        time.sleep(0.05)
+        alive = [pid for pid in alive if _alive(pid)]
+    for pid in alive:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    return len(pids)
+
+
+def _teardown(home: Path) -> None:
+    """Remove the scratch ``HOME`` the suite was isolated into — killing any roborev daemon
+    the suite spawned there first, so none is orphaned holding its address over a deleted
+    database (B7d61f8c094)."""
+    terminate_suite_daemons(home)
+    shutil.rmtree(home, ignore_errors=True)
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
