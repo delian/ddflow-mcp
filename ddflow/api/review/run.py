@@ -13,6 +13,7 @@ from ...services import prompts as P
 from ...services import review as RV
 from ...services import review_exclude as REX
 from ...services import review_manifest as RM
+from ...services.gates import running as RUN
 from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
@@ -29,7 +30,9 @@ from .delta import _head_of
 from .diff import diff_for
 from .findings import _announce_rerun, _link_refuted
 from .gate import (
+    _claim_or_refuse_twin,
     _early_refusal,
+    _ends_on_signal,
     _intent_missing,
     _log_started,
     _misplaced,
@@ -52,6 +55,7 @@ from .scope import _budget, _cite_grant, _justification, _mark_partial_retry, _s
 from .triaging import _reviewed_snapshot, _why_outcome
 
 
+@_ends_on_signal
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -291,7 +295,7 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
-def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: C901, PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -458,75 +462,81 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
     overrides = P.overrides_from(cfg)
     tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
-    _log_started(log, it, item, gate)
-    results = []
-    say(_BACKGROUND_HINT)
-    for r in revs:
-        keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
-        say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
-        res = RV.review(
-            r,
-            diff,
-            intent,
-            context=context,
-            repo=repo,
-            prompt_overrides=overrides,
-            on_progress=say,
-            on_tick=keep_lease,
-            tick_s=tick_s,
-            only=only,
-            on_chunk=keep.add if item else None,
-            manifest=RM.for_review(diff, skipped, cfg),
-            chunk_max_tokens=cfg.review.chunk_max_tokens,
-            split_rounds=cfg.review.split_rounds,
-        )
-        if prior:
-            # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
-            # record holds every other chunk's coverage, and a later --chunk needs it.
-            why = (
-                (res.reason or "the re-run errored")
-                if res.status == RV.ERROR
-                else RV.merge_rerun(prior, res)
+    marker, twin_refusal = _claim_or_refuse_twin(repo, item, gate, taken)
+    if twin_refusal is not None:
+        return twin_refusal
+    try:
+        _log_started(log, it, item, gate)
+        results = []
+        say(_BACKGROUND_HINT)
+        for r in revs:
+            keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
+            say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
+            res = RV.review(
+                r,
+                diff,
+                intent,
+                context=context,
+                repo=repo,
+                prompt_overrides=overrides,
+                on_progress=say,
+                on_tick=keep_lease,
+                tick_s=tick_s,
+                only=only,
+                on_chunk=keep.add if item else None,
+                manifest=RM.for_review(diff, skipped, cfg),
+                chunk_max_tokens=cfg.review.chunk_max_tokens,
+                split_rounds=cfg.review.split_rounds,
             )
-            if why:
-                return O.Outcome(
-                    kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
+            if prior:
+                # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
+                # record holds every other chunk's coverage, and a later --chunk needs it.
+                why = (
+                    (res.reason or "the re-run errored")
+                    if res.status == RV.ERROR
+                    else RV.merge_rerun(prior, res)
                 )
-        results.append(res)
-        _say_result(say, res)
+                if why:
+                    return O.Outcome(
+                        kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
+                    )
+            results.append(res)
+            _say_result(say, res)
 
-    best = min(results, key=lambda r: r.status)
-    outcome, extra_evidence = _gate_outcome(
-        best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
-    )
-    if item:
-        outcome = _record_review(
-            repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
-            scope=(taken, kind, done, forced, how, len(diff), snapshot),
-        )  # fmt: skip
+        best = min(results, key=lambda r: r.status)
+        outcome, extra_evidence = _gate_outcome(
+            best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        )
+        if item:
+            outcome = _record_review(
+                repo, log, cfg, st, it, item, gate, outcome,
+                called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+                scope=(taken, kind, done, forced, how, len(diff), snapshot),
+            )  # fmt: skip
 
-    data: dict[str, Any] = {
-        "id": item,
-        "gate": gate,
-        "outcome": outcome,
-        "how": how,
-        "reviewer": best.reviewer,
-        "family": best.family,
-        "findings": _finding_rows(best),
-        "text": "\n".join(transcript),
-    }
-    exit_code = {
-        RV.REVIEWED: O.OK,
-        RV.PARTIAL: O.REFUSED,
-        RV.UNAVAILABLE: O.NOTHING,
-        RV.ERROR: O.FAIL,
-    }[best.status]
-    if exit_code == O.OK:
-        return O.ok("review", **data)
-    return O.Outcome(
-        kind="review",
-        data=data,
-        exit=exit_code,
-        reason=best.reason or f"{len(best.findings)} finding(s)",
-    )
+        data: dict[str, Any] = {
+            "id": item,
+            "gate": gate,
+            "outcome": outcome,
+            "how": how,
+            "reviewer": best.reviewer,
+            "family": best.family,
+            "findings": _finding_rows(best),
+            "text": "\n".join(transcript),
+        }
+        exit_code = {
+            RV.REVIEWED: O.OK,
+            RV.PARTIAL: O.REFUSED,
+            RV.UNAVAILABLE: O.NOTHING,
+            RV.ERROR: O.FAIL,
+        }[best.status]
+        if exit_code == O.OK:
+            return O.ok("review", **data)
+        return O.Outcome(
+            kind="review",
+            data=data,
+            exit=exit_code,
+            reason=best.reason or f"{len(best.findings)} finding(s)",
+        )
+    finally:
+        RUN.clear_started(marker)

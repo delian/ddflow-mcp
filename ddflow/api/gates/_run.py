@@ -231,9 +231,7 @@ def _mark_or_refuse_twin(repo, item, gate, started_on):
     """Mark, then look, under one lock: of two runs started together the first to take it
     marks and sees no twin; the second sees the first's marker and refuses.
     Returns (marker, None) to go on, or (marker, the refusal)."""
-    with RUN.start_lock(repo, item, gate):
-        twin = RUN.live_run(repo, item, gate, started_on)
-        marker = None if twin else RUN.mark_started(repo, item, gate, started_on)
+    marker, twin = RUN.claim_started(repo, item, gate, started_on)
     if not twin:
         return marker, None
     return None, O.nothing(

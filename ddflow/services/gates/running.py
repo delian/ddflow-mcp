@@ -129,6 +129,21 @@ def live_run(repo: Path, item: str, gate: str, sha: str) -> Marker | None:
     return None
 
 
+def claim_started(
+    repo: Path, item: str, gate: str, sha: str
+) -> tuple[Marker | None, Marker | None]:
+    """(marker, twin): claim the started-marker for a run of ``gate`` on ``item`` at
+    ``sha``, serialised across processes so of two runs started together exactly one sees
+    the other's marker. The first starter gets ``(marker, None)`` -- it goes on and clears
+    the marker when done -- and the second gets ``(None, twin)`` -- the live marker it must
+    refuse. Shared by a command gate run and a review (B8664a1e0c6)."""
+    with start_lock(repo, item, gate):
+        twin = live_run(repo, item, gate, sha)
+        if twin is None:
+            return mark_started(repo, item, gate, sha), None
+        return None, twin
+
+
 @contextlib.contextmanager
 def start_lock(repo: Path, item: str, gate: str) -> Iterator[None]:
     """Serialise "mark, then look for a twin" across processes (an flock on a per-gate file),

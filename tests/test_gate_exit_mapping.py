@@ -38,6 +38,30 @@ def test_declared_exit_codes_are_unavailable_and_partial_not_failed():
     assert classify_exit(_gate(), 2, "")[0] == "failed", "undeclared codes keep their meaning"
 
 
+def test_a_signal_killed_command_is_unavailable_not_failed():
+    # Python reports a signalled child as -N; a shell that survived a signalling child
+    # reports 128+N. Either is a run CUT OFF, not a failure (B8664a1e0c6): a kill dressed
+    # up as a failure is what left `gate status` saying "queued 11m of 15m elapsed".
+    for code, sig in ((-9, "SIGKILL"), (137, "SIGKILL"), (143, "SIGTERM")):
+        outcome, why = classify_exit(_gate(), code, "")
+        assert outcome == "unavailable", (code, why)
+        assert sig in why, (code, why)
+    assert classify_exit(_gate(), 1, "") == ("failed", "")
+
+
+def test_a_signal_killed_ci_run_is_unavailable_and_never_a_queued_note(tmp_path):
+    from ddflow.services import ci_marker as CM
+    from ddflow.services.gates import runner as R
+
+    # `ddflow ci run` printed its suite-lock wait, then was killed mid-suite: 11m queued
+    # of the run, no verdict. It must read as a kill, never as "queued ... elapsed".
+    gdef = GateDef(id="ci", command=f"echo {CM.wait_line(660)}; kill -KILL $$")
+    outcome, ev = R.run_command_gate(gdef, tmp_path)
+    assert outcome == "unavailable", outcome
+    assert "killed by SIGKILL" in ev.get("reason", ""), ev
+    assert ev.get("waited_s") == 660.0
+
+
 def test_output_patterns_decide_an_exit_0():
     need = _gate(require_output=r"^STATUS:")
     assert classify_exit(need, 0, "STATUS: reviewed 4 files\n")[0] == "passed"
