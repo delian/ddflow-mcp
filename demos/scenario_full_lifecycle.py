@@ -954,7 +954,14 @@ def _act6_the_guardrails(sc, alpha, repo):
     sc.step("A circular dependency is detected, named, and refused")
     alpha.tool("ddflow_phase_add", id="PX", title="a bad plan", globs="x/**")
     for tid, needs in (("X.A", "X.C"), ("X.B", "X.A"), ("X.C", "X.B")):
-        alpha.tool("ddflow_task_add", id=tid, phase="PX", needs=needs, globs=f"x/{tid}.py")
+        alpha.tool(
+            "ddflow_task_add",
+            id=tid,
+            phase="PX",
+            title=f"ring member {tid}",
+            needs=needs,
+            globs=f"x/{tid}.py",
+        )
     loops = alpha.jtool("ddflow_loops")
     cycles = [f for f in loops if f["kind"] == "dependency_cycle"]
     sc.check("the ring is reported", cycles, json.dumps(loops))
