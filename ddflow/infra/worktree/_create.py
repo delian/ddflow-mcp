@@ -2,16 +2,52 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
 from pathlib import Path
 
 from ...config import Config
 from .. import git as G
+from .. import proc as P
 from .. import worktree as _W
 from ..container import default_worktree_root
 from ._local import copy_local_files
 from ._locate import Worktree, _ignore_inside, default_branch, repo_root
 from ._remote import rev
 from ._state import sync
+
+
+def isolate_venv(root: Path, tree: Path) -> bool:
+    """Give a linked worktree its own `.venv`, so `pip install -e .` / `uv pip install -e .`
+    run inside it resolve THAT environment and never repoint the primary checkout's shared
+    one (bug B4e7af0f14f).
+
+    ddflow's shared `.venv` (at the primary checkout root) is where its console scripts —
+    `ddflow`, `ddflow-mcp` — live and where the running agents' ddflow resolves. A worktree
+    sits UNDER the primary (`[worktree].root` is `.ddflow/worktrees`), so a worktree with no
+    `.venv` of its own that runs an editable install walks up the directory tree, discovers
+    the shared venv, and rewrites its editable install's `.pth`/`direct_url.json` to point
+    at the worktree. When the worktree is removed the dangling `.pth` makes every
+    console-script call fail with ModuleNotFoundError. A worktree-local `.venv` is
+    git-ignored and dies with the tree, so it can never dangle against a removed path.
+
+    Python/uv projects only (told by `uv.lock` beside the primary, the same signal
+    `gates.testcmd` uses), and only when `uv` is on PATH; a failure to make the venv is
+    skipped, never raised — a claim must not die because a venv could not be made, exactly
+    as `copy_local_files` never raises.
+    """
+    if not (Path(root) / "uv.lock").is_file():
+        return False
+    venv = Path(tree) / ".venv"
+    if venv.exists():
+        return False
+    uv = shutil.which("uv")
+    if uv is None:
+        return False
+    made = P.capture(
+        [uv, "venv", "--quiet", "--python", sys.executable, str(venv)], timeout=P.TIMEOUTS["probe"]
+    )
+    return made.ran and made.returncode == 0
 
 
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:
@@ -38,6 +74,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
 
     if path.exists() and (path / ".git").exists():
         _ignore_inside(root, wt_root)
+        isolate_venv(root, path)
         wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
         return wt  # adopt: the original fork sha is not this call's `rev(base)`
     wt_root.mkdir(parents=True, exist_ok=True)
@@ -60,5 +97,6 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     wt.created = True
     if cfg.worktree.sync_before_start and have_branch:
         sync(wt, cfg)
+    isolate_venv(root, path)
     wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
     return wt
