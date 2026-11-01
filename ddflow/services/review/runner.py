@@ -9,6 +9,7 @@ concurrency, ``_preflight``/``_absorb_chunk``, and the ``review``/``_settle``/
 from __future__ import annotations
 
 import dataclasses
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -180,7 +181,7 @@ def _bounded(
         # Resolved through the package so a monkeypatch of
         # `ddflow.services.review._chat` (test_prompts) is honoured: a static
         # import would bind engine._chat once at import time.
-        from . import _chat as _do_chat
+        _do_chat = sys.modules[__package__]._chat
 
         got = _do_chat(rev, system, user, bound, tree)
     finally:
@@ -284,7 +285,7 @@ def _halves(piece: str) -> list[str]:
     would let the chunk count as reviewed without it (split_diff no longer drops a hunkless
     section, B779270c994; this stays as the invariant check, not as a workaround). No header at
     all is not "every header kept": there is nothing to check the halves against (roborev)."""
-    from . import split_diff as _split_diff  # late-bound: honours monkeypatch of the package attr
+    _split_diff = sys.modules[__package__].split_diff
 
     pieces = _split_diff(piece, max(1, (len(piece) + 1) // 2))
     headers = unidiff.headers(piece)
@@ -348,7 +349,7 @@ def _retry_truncated(
         parts = grown
         tried.update(i for i, _k in todo)
         users = [render(parts[i][k][0], i + 1) for i, k in todo]
-        from . import _race as _race_  # late-bound: honours monkeypatch of the package attr
+        _race_ = sys.modules[__package__]._race
 
         again = _race_(rev, system, users, started, **race_kw)
         for (i, k), (content, err) in zip(todo, again, strict=True):
@@ -482,7 +483,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
 
     stripped = strip_hunk_context(diff)
     chunk_budget = _chunk_budget(rev)
-    from . import split_diff as _split_diff  # late-bound: honours monkeypatch of the package attr
+    _split_diff = sys.modules[__package__].split_diff
 
     chunks = _split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
@@ -540,7 +541,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     # `_race` and the retry index the SENT chunks (positions in `wanted`); progress and
     # absorption speak chunk numbers.
     res.waves = _waves(rev, len(users))
-    from . import _race as _race_  # late-bound: honours monkeypatch of the package attr
+    _race_ = sys.modules[__package__]._race
 
     first = _race_(
         rev,

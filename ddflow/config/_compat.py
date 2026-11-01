@@ -21,7 +21,7 @@ def _migrate_renamed(data: dict[str, Any], source: str) -> dict[str, Any]:
     effect: the package re-exports this function's home, and a fresh set there is the reset
     a test performs.
     """
-    from ddflow import config as _config
+    _config = sys.modules[__package__]  # ddflow.config, read at call time (monkeypatch, D-compat)
 
     hits = [
         old
