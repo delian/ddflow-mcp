@@ -62,3 +62,31 @@ useDefault = true
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
   regexes = ['''^[0-9a-f]{40}$''']
+
+[[allowlists]]
+  # The now-REVOKED Gemini API key sits unredacted in one committed event-log shard line
+  # (the bridge-cse session shard, commit 1deb264357; the history rewrite did not move it
+  # — bug B5dc280b4eb). Google now answers 403 "API key was reported as leaked" for it, so
+  # the value is dead, not live. Scoped to exactly this value, exactly the gcp-api-key
+  # rule, exactly the event-log shard files: a live `AIza` key anywhere else still fires.
+  description = "REVOKED Gemini API key in a committed event-log shard (Google 403: reported as leaked)"
+  targetRules = ["gcp-api-key"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^AIzaSyAuEm-JafbL8U6TborcDo8jc9DScUJ8E_s$''']
+
+[[allowlists]]
+  # The lane-launch/opencode tests name a fake `sk-` credential to prove a real one is
+  # redacted out of harness output. `sk-test-0123456789abcdef` is obvious filler (the
+  # `sk-test-` prefix says so); named per value, not per path, so a real `sk-…` key in a
+  # test file still fires.
+  description = "Fake sk- fixture value in the lane-launch/opencode tests"
+  regexes = ['''^sk-test-0123456789abcdef$''']
+
+[[allowlists]]
+  # A critic finding in the fix-Bsecbug-redact-google-api-key event shard quotes the
+  # synthetic example `key = 1234567890Abcdefghij` (sequential digits, then sequential
+  # alphabet) while arguing the redaction shape must also match the plain name `key`.
+  # Unmistakably filler; named per value, so a real key captured the same way still fires.
+  description = "Sequential-filler example key quoted in a committed event-log critic finding"
+  regexes = ['''^1234567890Abcdefghij$''']

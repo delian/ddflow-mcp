@@ -89,6 +89,10 @@ def _ev(repo: Path, gate: str = "critic") -> dict:
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates[gate].evidence
 
 
+def _record(repo: Path, gate: str = "critic"):
+    return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates[gate]
+
+
 def _calls(seen: Path) -> int:
     return seen.read_text().count("call") if seen.exists() else 0
 
@@ -331,6 +335,53 @@ def test_a_clean_delta_keeps_the_earlier_findings_visible(repo, tmp_path):
     assert out.exit == OK and ev["delta_findings"] == 0
     assert len(ev["chunk_findings"]) == 1, "the first round's finding is still on the record"
     assert ev["full_coverage"], ev
+
+
+def test_a_delta_finding_from_another_reviewer_still_records_a_reason(repo, tmp_path):
+    """Bug B0419c114ef: the gate blocks on a finding from ANY reviewed reviewer, but the
+    `failed` reason was read from the single ``best`` only; when the delta's finding came
+    from the OTHER reviewer (``best`` reported none), the reason was empty and recording
+    ``failed`` raised ValueError, so that round never persisted and the gate stayed failed
+    with unresolved findings. The reason now counts the findings the gate blocked on,
+    whichever reviewer raised them."""
+    clean = tmp_path / "clean-reviewer"
+    clean.write_text("#!/bin/sh\ncat >/dev/null\necho 'STATUS: NO FINDINGS'\n")
+    clean.chmod(clean.stat().st_mode | stat.S_IXUSR)
+    finder = tmp_path / "finder-reviewer"
+    finder.write_text(
+        "#!/bin/sh\nin=$(cat)\n"
+        "case \"$in\" in *FINDME*) printf 'FINDING HIGH y.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
+        "*) echo 'STATUS: NO FINDINGS';; esac\n"
+    )
+    finder.chmod(finder.stat().st_mode | stat.S_IXUSR)
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        f'[[reviewer]]\nname = "clean"\nkind = "command"\ncommand = "{clean}"\n'
+        'model = "gemini-2.5-pro"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "finder"\nkind = "command"\ncommand = "{finder}"\n'
+        'model = "gemini-2.5-flash"\ngates = ["critic"]\n' + _delta_on("")
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+    first = _review(repo)  # a clean first round: the gate passes
+    assert first.exit == OK, first.reason
+    assert _record(repo).outcome == "passed"
+    _fix(repo, "y.py", "y = 1  # FINDME\n")
+    out = _review(repo)  # the delta raises a finding the OTHER reviewer; best reported none
+    assert out.exit == OK, out.reason
+    assert out.data["outcome"] == "failed", out.data
+    rec = _record(repo)
+    assert rec.outcome == "failed"
+    assert rec.reason, "the failed delta round must record a reason or it never persists"
+    ev = _ev(repo)
+    assert len(ev["chunk_findings"]) == 1, ev["chunk_findings"]
+    assert "y.py:1" in ev["chunk_findings"][0]["location"], ev["chunk_findings"]
 
 
 # -- gate status and surfaces ------------------------------------------------------------

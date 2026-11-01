@@ -1,0 +1,2 @@
+{"agent":"Monster3-dx-approvals-autoapprove-after-retries-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"eb8e7908952c1ef8179337bc1","kind":"ddflow.seen","lamport":123369,"schema":1,"subject":"ddflow","ts":"2026-11-01T20:18:24.645352Z"}
+{"agent":"Monster3-dx-approvals-autoapprove-after-retries-7267fe","data":{"gate":"rubber_duck"},"id":"ef3e3724486c57d7af0ecee58","kind":"gate.started","lamport":123370,"schema":1,"subject":"dx-approvals-autoapprove-after-retries","ts":"2026-11-01T20:18:24.672567Z"}

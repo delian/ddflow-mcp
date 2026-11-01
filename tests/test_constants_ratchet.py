@@ -81,6 +81,16 @@ def test_bug_window_is_a_single_knob_not_a_hidden_duplicate() -> None:
     assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in keys
 
 
+def test_lane_headless_secret_min_is_exempt_and_reasoned() -> None:
+    """B-lanes-knobs-manifest-secretmin-ratchet: SECRET_MIN shipped in neither table and
+    the ratchet went red. It is a redaction heuristic (shorter values are not worth
+    redacting and would mangle text), so it is an [exempt] structural constant, not a tunable
+    knob -- lock that it stays classified, WITH a reason, wherever lane_headless is re-homed."""
+    reg = ca.load_register(ROOT)
+    key = "ddflow/services/lane_headless.py:SECRET_MIN"
+    assert reg.exempt.get(key), f"SECRET_MIN left [exempt] (or lost its reason): {key}"
+
+
 def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> None:
     src = (
         "HOUR = 1\n"

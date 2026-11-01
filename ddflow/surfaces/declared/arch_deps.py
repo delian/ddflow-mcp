@@ -22,6 +22,7 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_archdeps",
         tier="standard",
         reason="",
+        wire_shape=(["archdeps"], {}),
         call=lambda repo, a, agent: _api().archdeps(repo, agent=agent),
         payload=("families",),
         render=_text,
