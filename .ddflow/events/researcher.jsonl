@@ -1,0 +1,2 @@
+{"agent":"researcher","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ebdac2a22c62de9bdd38cdc71","kind":"ddflow.seen","lamport":121880,"schema":1,"subject":"ddflow","ts":"2026-11-01T11:59:58.674852Z"}
+{"agent":"researcher","data":{"path":".ddflow/worktrees/approvals-standing-window"},"id":"e71cef7f3a7fdccc44689b87f","kind":"worktree.removed","lamport":121881,"schema":1,"subject":"approvals-standing-window","ts":"2026-11-01T11:59:58.738288Z"}

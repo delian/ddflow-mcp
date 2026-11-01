@@ -24,8 +24,10 @@ import atexit
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -58,6 +60,13 @@ BASELINE_ENV = "DDFLOW_SUITE_REAL_REPO_BASELINE"
 #: Config keys another process legitimately writes to a shared repository while the suite runs.
 _VOLATILE = ("branch.", "remote.", "submodule.", "worktree.")
 
+#: Where roborev (an external companion some gates shell out to) keeps its daemon's runtime
+#: file, relative to that daemon's ``HOME``: ``daemon.<pid>.json``, next to its SQLite
+#: ``reviews.db``. A daemon the suite started inherits the scratch ``HOME`` below; when the
+#: runner then deletes that ``HOME``, the daemon survives it and keeps holding its address over
+#: a deleted database, failing every roborev gate afterwards (B7d61f8c094).
+ROBOREV_RUNTIME = Path(".roborev") / "runtime"
+
 
 def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> Path:
     """Strip ``REPO_VARS`` and point git's global/system configuration and ``HOME`` at a
@@ -69,7 +78,7 @@ def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> 
     if not named or not home.is_dir():
         home = Path(tempfile.mkdtemp(prefix="ddflow-suite-home-"))
         env[HOME_ENV] = str(home)
-        atexit.register(shutil.rmtree, home, ignore_errors=True)
+        atexit.register(_teardown, home)
     (home / "gitconfig").write_text(GLOBAL_CONFIG)
     env["HOME"] = str(home)
     env["XDG_CONFIG_HOME"] = str(home / "xdg")
@@ -77,6 +86,105 @@ def isolate_environment(env: dict[str, str] | os._Environ[str] = os.environ) -> 
     env["GIT_CONFIG_SYSTEM"] = os.devnull
     env["GIT_CONFIG_NOSYSTEM"] = "1"
     return home
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, OverflowError):
+        return False  # no such process, or a pid too large to name a real one
+    except PermissionError:
+        return True
+    return True
+
+
+def _daemon_pid(pidfile: Path) -> int | None:
+    """The positive pid a roborev daemon recorded in ``daemon.<pid>.json``: its ``pid`` field,
+    with the file's ``daemon.<pid>`` name as the fallback — a torn file still being written must
+    not hide a live daemon. ``None`` for anything not one positive process id: ``kill(0, sig)``
+    and ``kill(-n, sig)`` signal a whole process GROUP, so a corrupt pid must never reach
+    ``os.kill``."""
+    try:
+        pid = int(json.loads(pidfile.read_text())["pid"])
+    except (OSError, OverflowError, ValueError, KeyError, TypeError):
+        raw = pidfile.name.removeprefix("daemon.").removesuffix(".json")
+        try:
+            pid = int(raw)
+        except OverflowError:
+            return None
+        except ValueError:
+            return None
+    return pid if 0 < pid <= _pid_max() else None
+
+
+def _pid_max() -> int:
+    """The host's largest possible pid; a larger value in a corrupt pidfile names no process
+    and must not reach ``os.kill`` (over ``/proc`` it raises ``OverflowError``)."""
+    try:
+        return int(Path("/proc/sys/kernel/pid_max").read_text().strip())
+    except (OSError, ValueError):
+        return 1 << 22  # Linux PID_MAX_LIMIT where /proc is unavailable
+
+
+def _is_roborev_daemon(pid: int) -> bool:
+    """Whether ``pid`` is still the roborev *daemon* that wrote a pidfile under the scratch
+    ``HOME``. A pidfile's pid may have been recycled by an unrelated process its daemon died
+    earlier; its command line must still carry a ``daemon`` argument (what `roborev daemon
+    run` launches), or the pid is left alone -- a roborev *client* (`roborev review <sha>`)
+    and any other process are not the daemon."""
+    try:
+        tokens = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").split()
+    except OSError:
+        return False  # cannot prove it is the daemon: a pid it may name is left alone
+    return tokens[:1] != [] and b"roborev" in tokens[0] and b"daemon" in tokens[1:]
+
+
+def terminate_suite_daemons(home: Path, grace_s: float = 2.0) -> int:
+    """Signal every roborev daemon whose runtime pidfile sits under ``home`` (a daemon the
+    suite started inherits the scratch ``HOME`` and writes ``daemon.<pid>.json`` there), wait
+    up to ``grace_s`` for each to exit, and SIGKILL any survivor. Only a daemon whose pid the
+    pidfile names positive and whose command line still says roborev is touched, so the
+    operator's real daemon under the real ``HOME`` and any pid an exited daemon's leftover
+    file recycled are left alone. Returns how many such daemons it signaled (0 for a leftover
+    pidfile naming a pid that was already gone)."""
+    runtime = home / ROBOREV_RUNTIME
+    if not runtime.is_dir():
+        return 0
+    pids = [
+        pid
+        for pidfile in sorted(runtime.glob("daemon.*.json"))
+        if (pid := _daemon_pid(pidfile)) is not None and _is_roborev_daemon(pid)
+    ]
+
+    def ours_alive() -> list[int]:
+        return [pid for pid in pids if _alive(pid) and _is_roborev_daemon(pid)]
+
+    signaled = 0
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OverflowError):
+            continue
+        signaled += 1
+    deadline = time.monotonic() + grace_s
+    alive = ours_alive()
+    while alive and time.monotonic() < deadline:
+        time.sleep(0.05)
+        alive = ours_alive()
+    for pid in alive:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OverflowError):
+            pass
+    return signaled
+
+
+def _teardown(home: Path) -> None:
+    """Remove the scratch ``HOME`` the suite was isolated into — killing any roborev daemon
+    the suite spawned there first, so none is orphaned holding its address over a deleted
+    database (B7d61f8c094)."""
+    terminate_suite_daemons(home)
+    shutil.rmtree(home, ignore_errors=True)
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:

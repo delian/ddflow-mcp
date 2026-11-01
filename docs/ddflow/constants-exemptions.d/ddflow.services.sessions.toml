@@ -1,0 +1,4 @@
+[knob]
+"ddflow/services/sessions.py:DEDUPE_WINDOW_S" = 'sessions.dedupe_window_s'
+"ddflow/services/sessions.py:DOUBLE_FIRE_S" = 'sessions.double_fire_s'
+"ddflow/services/sessions.py:HOOK_START_MAX_S" = 'sessions.hook_start_max_s'

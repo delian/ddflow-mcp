@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/docsearch/scope.py:MAX_BYTES" = 'the default of Scope.max_bytes, a field the caller sets; the docs verb will pass its [docs] config'

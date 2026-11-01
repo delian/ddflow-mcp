@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/core/participation.py:DEFAULT_RECALL_CAP" = "the default of a declared kind's own `recall_cap` field: a descriptor sets it per kind, it is not a project preference"
