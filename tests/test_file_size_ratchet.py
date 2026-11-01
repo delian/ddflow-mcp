@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 from ddflow.config import Config
+from ddflow.config_sections.quality import QualityConfig
 from ddflow.services import file_size as FS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +18,7 @@ LIMIT = Config().quality.max_file_bytes
 
 
 def test_default_limit_is_30k():
-    assert LIMIT == 30000
+    assert QualityConfig().max_file_bytes == 30000, "the declared default, whatever an org sets"
 
 
 def test_no_new_oversized_file_and_no_baselined_file_grew():
