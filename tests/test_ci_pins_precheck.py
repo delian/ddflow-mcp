@@ -17,6 +17,7 @@ from test_ci_gate import _branch, _project, fake_precommit  # noqa: F401
 
 from ddflow.config import Config
 from ddflow.services import ci as CI
+from ddflow.services.ci import runner
 
 GEN = """\
 import sys
@@ -186,7 +187,7 @@ def test_a_broken_precheck_says_so_and_the_run_goes_on(repo, monkeypatch, capsys
     def boom(*a, **k):
         raise RuntimeError("recipes unreadable")
 
-    monkeypatch.setattr(CI, "regenerate_pins", boom)
+    monkeypatch.setattr(runner, "regenerate_pins", boom)
     res = CI.run(repo, Config.load(repo), base=default)
     assert res.ok, res.reason
     assert (
@@ -199,7 +200,7 @@ def test_a_run_wide_problem_beside_a_stale_pin_does_not_hide_it(repo, monkeypatc
 
     rep = PINS.Report(pins=[PINS.PinState("knobs", ("count.txt",), stale=True)])
     rep.problem = "conflict markers that do not pair up"
-    monkeypatch.setattr(CI, "regenerate_pins", lambda *a, **k: rep)
+    monkeypatch.setattr(runner, "regenerate_pins", lambda *a, **k: rep)
     why = CI._stale_pins(repo, Config.load(repo), "main")
     assert "pins stale after merging main" in why and "knobs" in why
 

@@ -259,12 +259,12 @@ def test_a_subprocess_driving_test_is_a_blind_spot_not_a_scored_miss():
     assert not drives_subprocess("# run_cli(repo) is the helper for this\nresult = run_cli_like")
     # a test that imports a changed module AND drives a subprocess is routable: its miss counts
     both = "from ddflow.services import ci\nrun_cli(repo, 'x')"
-    assert not drives_subprocess(both, ["ddflow/services/ci.py"])
+    assert not drives_subprocess(both, ["ddflow/services/ci/__init__.py"])
     assert drives_subprocess(both, ["ddflow/services/gates.py"])
     assert drives_subprocess("import ddflow.api.review\nrun_cli(r)", ["ddflow/api/cirun.py"])
     # shapes a regex missed: a parenthesised multi-line import, a changed package __init__
     multi = "from ddflow.services import (\n    ci,\n)\nrun_cli(repo)\n"
-    assert not drives_subprocess(multi, ["ddflow/services/ci.py"])
+    assert not drives_subprocess(multi, ["ddflow/services/ci/__init__.py"])
     assert not drives_subprocess(
         "from ddflow.api import review\nrun_cli(r)", ["ddflow/api/__init__.py"]
     )

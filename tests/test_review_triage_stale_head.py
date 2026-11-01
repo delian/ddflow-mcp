@@ -89,7 +89,7 @@ def test_a_round_on_a_clean_commit_is_compared_by_that_commits_tree(repo, tmp_pa
     ).stdout.strip()
     rec = NS(evidence={"tree_sha": f"{head[:12]}+clean"})
     st = NS(items={"T1": NS(gates={"critic": rec})})
-    monkeypatch.setattr(RV, "item_tree", lambda *_a, **_k: (repo, ""))
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (repo, ""))
     assert RV.reviewed_other_tree(repo, None, st, "T1", "critic") == ""
     (repo / "a.py").write_text("x = 2\n")  # the tree moves on from that commit
     assert "holds other content" in RV.reviewed_other_tree(repo, None, st, "T1", "critic")

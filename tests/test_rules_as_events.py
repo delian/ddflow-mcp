@@ -258,6 +258,7 @@ def test_detecting_does_not_create_the_rules_directory(repo: Path) -> None:
 # -- the write path: rule add / update / remove record the definition ---------------------
 
 from ddflow.api import rules as ARULES  # noqa: E402
+from ddflow.api.rules import write as ARULES_WRITE  # noqa: E402
 from ddflow.services.rules import Rule, RulesStorage  # noqa: E402
 
 
@@ -326,7 +327,7 @@ def test_a_log_that_cannot_record_leaves_the_file_and_says_so(repo: Path, monkey
     def refuse(*a, **k):
         raise RuntimeError("log is locked")
 
-    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
+    monkeypatch.setattr(ARULES_WRITE, "def_record_unchecked", refuse)
     out = ARULES.rule_add(repo, _rule(), agent="t")
     # a failure, so no surface shows it as a success; the file is there as the caller asked
     assert out.exit == 1 and (repo / ".ddflow" / "rules" / "r-w.toml").exists()
@@ -346,7 +347,7 @@ def test_a_removal_the_log_cannot_retire_says_the_log_still_holds_the_rule(
     def refuse(*a, **k):
         raise RuntimeError("log is locked")
 
-    monkeypatch.setattr(ARULES, "def_retire", refuse)
+    monkeypatch.setattr(ARULES_WRITE, "def_retire", refuse)
     out = ARULES.rule_remove(repo, "r-w", agent="t")
     assert out.exit == 1 and "file was removed but the log still holds the rule" in out.reason
     assert "log is locked" in out.reason
@@ -370,7 +371,7 @@ def test_the_mcp_tools_show_an_unrecorded_write_as_an_error(repo: Path, monkeypa
     def refuse(*a, **k):
         raise RuntimeError("log is locked")
 
-    monkeypatch.setattr(ARULES, "def_record_unchecked", refuse)
+    monkeypatch.setattr(ARULES_WRITE, "def_record_unchecked", refuse)
     res = call("ddflow_rule_add", {"id": "r-mcp", "title": "T", "content": "Body of the rule."})
     assert res.get("isError") and res["_meta"]["exit"] == 1, res
     text = res["content"][0]["text"]
