@@ -36,9 +36,11 @@ STDLIB_FAMILIES: dict[str, tuple[str, ...]] = {
     "hashlib": ("hashlib",),
     "clock-env": ("time", "uuid", "random", "os"),
 }
-# ``os`` above stands for ``os.environ`` (the family's one concern): at import-root
-# granularity the census also lists modules that import ``os`` only for ``os.path``, so
-# the row over-reports until ADP-clock-env's port separates environ from path.
+# A family is keyed on the IMPORT ROOT: ``os`` above stands for ``os.environ`` and ``urllib``
+# for the network family, so a module importing ``os`` only for ``os.path``, or ``urllib``
+# only for ``urllib.parse``, is still listed under the family (the root is all the census
+# can see). That over-reporting is documented, not a defect, and each family's finer split
+# is that family's own ADP-* port, not the census's job.
 
 # A stdlib family's declared home: the ddflow module(s) allowed to import any of its
 # members. A family absent here has no home contract yet -- every current importer is the

@@ -362,11 +362,17 @@ def test_unparsable_file_is_reported_not_skipped(tmp_path: Path):
 
 
 def test_api_view_carries_families_and_unparsed():
-    from ddflow.api.arch_deps import render
+    from ddflow.api import arch_deps as API
 
     census = A.FamilyReport("hashlib", ("hashlib",), ("ddflow.core.digest",), ("ddflow.core.digest",))
-    text = render(A.Census((census,), ("ddflow.broken",)))
+    text = API.render(A.Census((census,), ("ddflow.broken",)))
     assert "hashlib" in text and "unparsed" in text
+
+    out = API.archdeps(ROOT)
+    assert out.exit == 0
+    assert {f["family"] for f in out.data["families"]} == set(BASELINE)
+    assert {"home", "importers", "violations", "third_party"} <= set(out.data["families"][0])
+    assert out.data["unparsed"] == []
 
 
 def test_family_report_is_immutable():
