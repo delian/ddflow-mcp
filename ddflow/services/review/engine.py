@@ -12,6 +12,7 @@ import http.client
 import json
 import os
 import re
+import sys
 import time as _time
 import urllib.error
 import urllib.request
@@ -281,7 +282,7 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
         headers={"Content-Type": "application/json", **headers},
     )
     try:
-        from . import _open as _open_  # late-bound: honours monkeypatch of the package attr
+        _open_ = sys.modules[__package__]._open
 
         with _open_(req, timeout=timeout_s) as resp:
             return json.loads(resp.read().decode("utf-8", "replace")), ""
@@ -372,7 +373,7 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
     key = got.value
     if not key:
         return "", got.reason
-    from . import _post_json as _post_json_  # late-bound: honours monkeypatch of the package attr
+    _post_json_ = sys.modules[__package__]._post_json
 
     body, err = _post_json_(
         rev.base_url.rstrip("/") + "/messages",
@@ -408,7 +409,7 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     # The key goes in a header, never the URL: a URL is echoed by proxies, access logs and
     # transport errors.
     url = f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
-    from . import _post_json as _post_json_  # late-bound: honours monkeypatch of the package attr
+    _post_json_ = sys.modules[__package__]._post_json
 
     body, err = _post_json_(
         url,
@@ -456,7 +457,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         },
     )
     try:
-        from . import _open as _open_  # late-bound: honours monkeypatch of the package attr
+        _open_ = sys.modules[__package__]._open
 
         with _open_(req, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
@@ -587,7 +588,7 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
     """
 
     try:
-        from . import _open as _open_  # late-bound: honours monkeypatch of the package attr
+        _open_ = sys.modules[__package__]._open
 
         with _open_(rewrite_localhost(url), timeout=timeout_s) as r:
             return _HTTP_OK_FLOOR <= r.status < _HTTP_SERVER_ERROR

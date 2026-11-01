@@ -224,7 +224,7 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         return ""
     ev = rec.evidence or {}
     wt, _held = item_tree(repo, cfg, st, it, None)
-    was, now = _round_and_current_tree(ev, wt)
+    was, now = _round_and_current_tree(repo, ev, wt, it)
     redo = _redo_hint(cfg, it, item, gate)
     if not was:
         return f"the round names no tree it reviewed; {redo}"
@@ -243,21 +243,40 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
-        return (
-            f"the round reviewed {(ev.get('tree_sha') or '')[:19]}, and {item} holds other "
-            f"content now{where}; {redo}"
-        )
+        reviewed = (ev.get("tree_sha") or ev.get("reviewed_head") or "")[:19]
+        return f"the round reviewed {reviewed}, and {item} holds other content now{where}; {redo}"
     return ""
 
 
-def _round_and_current_tree(ev: dict[str, Any], wt) -> tuple[str, str]:
-    """(the content id the round reviewed, the one ``wt`` holds now); "" for one not known."""
-    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
+def _round_and_current_tree(repo: Path, ev: dict[str, Any], wt, it) -> tuple[str, str]:
+    """(the content id the round reviewed, the one the item holds now); "" for one not known."""
     readable = wt is not None and wt.exists()
+    was = GE.recorded_content(ev.get("tree_sha", "") or "", ev.get("source_tree", "") or "")
     base, _sep, dirt = GE.split_identity(GE.normal_fingerprint(ev.get("tree_sha", "") or ""))
-    if not was and dirt == "clean" and base and readable:
-        was = GE.commit_source_tree(wt, base)  # `<head>+clean` names that commit's own tree
-    return was, GE.source_tree(wt) if readable else ""
+    if not was and dirt == "clean" and base:
+        # `<head>+clean` names the commit's own tree: read that content id from git wherever
+        # the commit is reachable -- the worktree, or the primary once a merge removed it.
+        at = wt if readable else repo
+        was = GE.commit_source_tree(at, base)
+    if not was and ev.get("reviewed_head") and not readable and not ev.get("tree_sha", ""):
+        # An after-merge `--commit` review has no worktree to measure, so its round records
+        # only the commit it covered (`reviewed_head`) and no `tree_sha`: that commit's own
+        # tree is what the round reviewed (bug B-critic-refutation-pass-needs-tree-after-merge).
+        # Never read it where a worktree stands (`reviewed_head` there is HEAD and the
+        # reviewer saw the dirty working tree over it), and never for a round that DID name a
+        # tree: a dirty `tree_sha` whose content the gone worktree cannot vouch for is left
+        # unresolved, not read as `reviewed_head`'s clean commit.
+        was = GE.commit_source_tree(repo, ev["reviewed_head"])
+    now = GE.source_tree(wt) if readable else _merged_content(repo, it)
+    return was, now
+
+
+def _merged_content(repo: Path, it) -> str:
+    """`source_tree` of a merged item's landed commit, "" when it names none."""
+    if not (getattr(it, "merged_sha", "") or getattr(it, "landed_after", "")):
+        return ""
+    _where, landed = GE.tree_being_completed(repo, it)
+    return GE.commit_source_tree(repo, landed) if landed else ""
 
 
 def _redo_hint(cfg, it, item: str, gate: str) -> str:
