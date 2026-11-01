@@ -268,10 +268,15 @@ def test_zero_retry_threshold_never_auto_approves(proj):
 
 
 def test_the_retry_rule_fires_on_count_alone_not_the_window_or_the_policy_list(proj, monkeypatch):
-    _frozen_clock(monkeypatch)
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
     log = EventLog(proj, "bot")
     cfg = _cfg(auto_approve_after_retries=1)
     assert cfg.approvals.policy == []  # the retry rule is NOT a `policy` list entry
     assert not C.operator_gate(log, cfg, _complete(proj, log, state="r1")).ok  # asked, not answered
+    # Advance PAST the standing window: a window-based (time-based) rule would have lapsed and
+    # asked a person; the retry rule still fires, so the test refutes a window-based implementation.
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s + 1)
     got = C.operator_gate(log, cfg, _complete(proj, log, state="r2"))
-    assert got.ok and got.stamp["policy"] == "auto-after-retries"
+    assert got.ok and got.stamp["policy"] == "auto-after-retries"  # COUNT-based, not time-based
