@@ -15,12 +15,14 @@ Two rules are worth reading before changing anything:
   is simply not the party who can clear it. An agent branching on exit codes needs to
   tell "this is broken" from "this is not yours to do".
 
-The re-export is LAZY (``__getattr__``): the package imports no submodule until one
-name is asked for, which preserves the two invariants a one-file module had — monkeypatch
-(``monkeypatch.setattr(gates, name, ...)`` re-binds the name on THIS module) and the
-layering ratchet (an eager ``from .sub import ...`` would read as a latent parent<->child
-cycle). The submodules are imported eagerly so ``gates._query`` (and the other siblings)
-stay real module attributes, which downstream tests monkeypatch directly.
+Name RE-EXPORT is lazy (``__getattr__`` resolves each public or patch-covered private
+name from ``_SUBMODULE_OF`` to its defining submodule, so an eager ``from .sub import
+name`` here stays absent and does not read as a latent parent<->child cycle in
+``test_no_mutually_importing_pair``). The submodules themselves are imported EAGERLY so
+``gates._query`` (and the other siblings) stay real module attributes with monkeypatchable
+globals — ``test_refuted_gate_flag`` patches ``gates._query._load`` directly.
+``monkeypatch.setattr(gates, name, ...)`` rebinding a re-exported name shims the attribute
+on THIS package, exactly as it did on the old one-file module.
 """
 
 from __future__ import annotations
@@ -28,7 +30,13 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from . import _query, _run, _timeout, _tree, _vet
+# Eager so the sibling submodules stay REAL module attributes (``gates._query`` is
+# monkeypatched directly); the redundant aliases mark them as intentional re-exports.
+from . import _query as _query
+from . import _run as _run
+from . import _timeout as _timeout
+from . import _tree as _tree
+from . import _vet as _vet
 
 #: Public (and patch-covered private) name -> the submodule that defines it.
 _SUBMODULE_OF = {
@@ -90,22 +98,17 @@ _SUBMODULE_OF = {
     "_agent_skip_refusal": "_vet",
 }
 
-_MODULES: dict[str, Any] = {}
-
 
 def __getattr__(name: str) -> Any:
     sub = _SUBMODULE_OF.get(name)
     if sub is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    mod = _MODULES.get(sub)
-    if mod is None:
-        mod = importlib.import_module(f"{__name__}.{sub}")
-        _MODULES[sub] = mod
-    return getattr(mod, name)
+    return getattr(importlib.import_module(f"{__name__}.{sub}"), name)
 
 
 def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_SUBMODULE_OF))
+
 
 __all__ = [
     "OUTCOME_EXIT",
