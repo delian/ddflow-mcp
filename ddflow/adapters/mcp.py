@@ -27,7 +27,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-PARSE_ERROR, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR = -32700, -32601, -32602, -32603
+PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND = -32700, -32600, -32601
+INVALID_PARAMS, INTERNAL_ERROR = -32602, -32603
 UNSUPPORTED_PROTOCOL_VERSION = -32022
 #: The protocol revision a client offers when its caller names none: any server answering
 #: proves it speaks MCP, so the exact value is not what is tested.
@@ -268,7 +269,7 @@ class StdioServer:
                 self.notify(err(None, PARSE_ERROR, f"parse error: {exc}"))
                 continue
             if not isinstance(msg, dict):
-                self.notify(err(None, INVALID_PARAMS, "a frame is a JSON object"))
+                self.notify(err(None, INVALID_REQUEST, "a frame is a JSON object"))
                 continue
             if intercept is not None and intercept(msg, self.notify):
                 continue

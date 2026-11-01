@@ -158,7 +158,7 @@ def test_serve_maps_a_bad_frame_and_an_escaped_exception_to_json_rpc_errors(make
     server.serve(["not json\n", "[1]\n", "\n"])
     server.serve([W.encode(W.request(7, "ping")) + "\n"], boom)
     codes = [f["error"]["code"] for f in sent()]
-    assert codes == [W.PARSE_ERROR, W.INVALID_PARAMS, W.INTERNAL_ERROR]
+    assert codes == [W.PARSE_ERROR, W.INVALID_REQUEST, W.INTERNAL_ERROR]
     assert sent()[-1]["id"] == 7
 
 

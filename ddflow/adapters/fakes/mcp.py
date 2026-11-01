@@ -85,7 +85,7 @@ class FakeMcpServer:
                 self.sent.append(W.err(None, W.PARSE_ERROR, f"parse error: {exc}"))
                 continue
             if not isinstance(msg, dict):
-                self.sent.append(W.err(None, W.INVALID_PARAMS, "a frame is a JSON object"))
+                self.sent.append(W.err(None, W.INVALID_REQUEST, "a frame is a JSON object"))
                 continue
             if intercept is not None and intercept(msg, self.notify):
                 continue
