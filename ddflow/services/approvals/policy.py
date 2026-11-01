@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...config import Config
+from ...core import clock
 from ...core.handlers.asks import asks_of
 from .. import gate_accept as GA
 from ..ask import engine as E
@@ -28,6 +29,10 @@ class Rule:
     doc: str
     #: (item, target, cfg) -> does the rule's condition hold NOW
     when: Callable[[Any, str, Config], bool]
+    #: A WINDOWED rule fires only while the standing window is outstanding (`apply` reads the
+    #: window start from the folded policy answers and the clock; `when` cannot -- it is a
+    #: fold-free predicate). False for the two rules that fire whenever switched on.
+    windowed: bool = False
 
 
 def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
@@ -54,8 +59,61 @@ RULES: dict[str, Rule] = {
             "accept a partial that ddflow measured baseline-red",
             _measured_baseline_red,
         ),
+        Rule(
+            "complete_unavailable",
+            "complete.force",
+            "complete an item whose unmet completion condition is an unavailable tool/gate, "
+            "inside the standing window",
+            # A windowed rule's whole item-level gate is the verb match + the standing-window
+            # scope and outstanding-window check `apply` makes: the site digest already binds
+            # the honest 'unavailable' state, so there is no further fold-free condition.
+            lambda _it, _target, _cfg: True,
+            windowed=True,
+        ),
+        Rule(
+            "claim_unavailable",
+            "claim.force",
+            "claim an item held by a vanished/unavailable holder, inside the standing window",
+            lambda _it, _target, _cfg: True,
+            windowed=True,
+        ),
     )
 }
+
+
+#: The rule ids that are WINDOWED (fire only inside `[approvals].standing_window_s`).
+WINDOWED_RULES = frozenset(r.id for r in RULES.values() if r.windowed)
+
+#: How a windowed rule's answer is recorded, ready-made for `window_start`.
+_WINDOWED_ANSWERERS = {f"policy:{rid}" for rid in WINDOWED_RULES}
+
+
+def window_start(state) -> float:
+    """The start of the standing window: 0.0 before any windowed rule has fired, else the epoch
+    of the FIRST windowed auto-approval's ``answered_at`` -- the fire that opened the window. The
+    fold persists it, so a later `approvals log`/`doctor` can show what was auto-approved within
+    it. A windowed rule fires only at ``window_start <= 0.0`` (it opens the window, anchored now)
+    or while ``now < window_start + [approvals].standing_window_s``."""
+    starts = [
+        clock.epoch(r["answered_at"], default=0.0)
+        for r in asks_of(state).values()
+        if r["policy"] and r["answered_by"] in _WINDOWED_ANSWERERS and r["answered_at"]
+    ]
+    return min(starts, default=0.0)
+
+
+def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
+    """Is the standing window open now, for ``canon``'s verb?
+
+    Open only when the verb is inside `[approvals].standing_verbs` (the generic T2 scope the
+    operator pre-authorised) and either the window has not opened yet -- this fire opens it,
+    anchored at ``now`` -- or it opened fewer than `[approvals].standing_window_s` seconds ago."""
+    if canon.verb not in cfg.approvals.standing_verbs:
+        return False
+    start = window_start(state)
+    if start <= 0.0:
+        return True
+    return now < start + cfg.approvals.standing_window_s
 
 
 def used(state, rule_id: str, subject: str) -> int:
@@ -67,16 +125,21 @@ def used(state, rule_id: str, subject: str) -> int:
     )
 
 
-def apply(log, cfg: Config, state, canon: Canon, *, reason: str = "") -> dict[str, Any] | None:
+def apply(
+    log, cfg: Config, state, canon: Canon, *, reason: str = "", now: float | None = None
+) -> dict[str, Any] | None:
     """The stamp of an enabled rule that approves ``canon`` now, or None (ask a person)."""
     it = state.items.get(canon.item)
     if it is None:
         return None
+    now = clock.now_utc().timestamp() if now is None else now
     for rule_id in cfg.approvals.policy:
         rule = RULES.get(rule_id)
         if rule is None or rule.verb != canon.verb:
             continue
         if canon.site.min_level > 1:  # a policy answer is a standing decision, never above L1
+            continue
+        if rule.windowed and not _window_open(canon, state, cfg, now):
             continue
         if used(state, rule_id, canon.subject()) >= cfg.approvals.policy_max_uses:
             continue

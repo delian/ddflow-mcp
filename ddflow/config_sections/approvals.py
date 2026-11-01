@@ -10,6 +10,9 @@ from dataclasses import dataclass
 
 from ._docs import declare, knob
 
+#: The standing auto-approve window's ceiling: `standing_window_s` above it is refused.
+STANDING_WINDOW_MAX_S = 24 * 3600
+
 
 @declare("approvals")
 @dataclass
@@ -47,7 +50,7 @@ class ApprovalsConfig:
     )
     policy: list[str] = knob(
         factory=list,
-        doc="Standing auto-approval rules switched ON (default none; D-RA-Q8, D-RA-4). Each id names a rule registered in code (`ddflow approvals log` lists what fired): `skip_after_unavailable` (an agent may skip a failed review gate whose reviewer was recorded unavailable `policy_unavailable_runs` times), `accept_baseline_red` (an agent may accept a partial that ddflow measured baseline-red). A rule approves only its own verb, at most `policy_max_uses` times per item and target, and every use is recorded as an approval answered by `policy:<id>`, never by a person. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
+        doc="Standing auto-approval rules switched ON (default none; D-RA-Q8, D-RA-4). Each id names a rule registered in code (`ddflow approvals log` lists what fired): `skip_after_unavailable` (an agent may skip a failed review gate whose reviewer was recorded unavailable `policy_unavailable_runs` times), `accept_baseline_red` (an agent may accept a partial that ddflow measured baseline-red), `complete_unavailable` (an agent may complete an item whose unmet condition is an unavailable tool/gate, only while the standing window `standing_window_s` is open) and `claim_unavailable` (an agent may claim an item held by a vanished holder, only while the standing window is open). A rule approves only its own verb, at most `policy_max_uses` times per item and target, and every use is recorded as an approval answered by `policy:<id>`, never by a person. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )
     policy_max_uses: int = knob(
         1,
@@ -56,6 +59,24 @@ class ApprovalsConfig:
     policy_unavailable_runs: int = knob(
         3,
         doc="How many recorded `unavailable` runs of a review gate the rule `skip_after_unavailable` needs before it lets an agent skip that gate's failure (default 3).",
+    )
+    standing_window_s: int = knob(
+        3600,
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= STANDING_WINDOW_MAX_S
+            else f"must be an integer between 1 and {STANDING_WINDOW_MAX_S} (24 hours)"
+        ),
+        doc="How long, in seconds, the STANDING AUTO-APPROVE WINDOW stays open once a windowed rule first fires (default 3600, one hour; capped at 86400, 24 hours -- a value above it is refused). The operator pre-authorises the generic T2 class for this bounded time so overnight pile-ups proceed unattended: a windowed rule (`complete_unavailable`, `claim_unavailable`) auto-approves only while the window is outstanding, and the instant it lapses auto-approval stops and a person is asked again. `standing_verbs` scopes which generic verbs the window covers. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
+    )
+    standing_verbs: list[str] = knob(
+        factory=lambda: [
+            "complete.force",
+            "claim.force",
+            "gate.skip.failed_review",
+            "approve.partial",
+        ],
+        doc="The generic T2 verbs the standing window pre-authorises (default the whole generic T2 class: complete.force, claim.force, gate.skip.failed_review, approve.partial). Scopes which verbs a WINDOWED rule covers: a windowed rule whose verb is not listed never fires. Only the two windowed rules (`complete_unavailable`, `claim_unavailable`) consult it; the non-windowed rules `skip_after_unavailable` and `accept_baseline_red` fire as before. A non-generic site has no windowed rule, so listing one of its verbs here does nothing. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )
     accept_chat_for_t3: bool = knob(
         False,
