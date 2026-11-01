@@ -8,7 +8,10 @@ or one of the OS-level stdlib families the adapter work pulls behind a port: htt
 tempfile/fcntl (fsio), hashlib, and the clock/env/randomness/ids family (time / uuid /
 random / os.environ). A family's *declared home* is the ddflow module allowed to import
 it; every other importer is a *violation*. The census is counted on the source with
-``ast``, never by running anything, so it runs in seconds and agrees on every platform.
+``ast``, never by running anything, so it runs in seconds. The stdlib set is the
+running interpreter's `sys.stdlib_module_names`, which is per-platform: a module the tree
+imports only on another OS (``winreg``/``msvcrt`` on Windows) is stdlib THERE but not here,
+so what reads as third-party depends on the platform the scan runs on.
 
 Third-party packages are detected dynamically (an external module that is not in the
 running interpreter's stdlib and not ddflow), so a NEW third-party package is a NEW
