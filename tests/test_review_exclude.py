@@ -73,10 +73,11 @@ def test_a_glob_metacharacter_prefix_still_means_one_level():
 
 
 def test_a_root_only_pattern_does_not_recurse():
-    diff = _sec("root.txt") + _sec("sub/nested.txt")
-    kept, gone = REX.filter_diff(diff, ["/*"])
-    assert [p for p, _ in gone.files] == ["root.txt"]
-    assert "sub/nested.txt" in kept
+    for pat in ["/*", "//*"]:
+        diff = _sec("root.txt") + _sec("sub/nested.txt")
+        kept, gone = REX.filter_diff(diff, [pat])
+        assert [p for p, _ in gone.files] == ["root.txt"]
+        assert "sub/nested.txt" in kept
 
 
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
