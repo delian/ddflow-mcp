@@ -63,37 +63,38 @@ def _log_started(log, it, item: str, gate: str) -> None:
         log.append("gate.started", item, {"gate": gate})
 
 
-def _claim_or_refuse_twin(
-    repo: Path, item: str, gate: str, sha: str
-) -> tuple[Any, O.Outcome | None]:
-    """(marker, refusal): claim the started-marker for a review of ``gate`` on ``item`` at
-    ``sha``, or refuse a second review while ANY review of that item's gate is live
-    (B8664a1e0c6). Two reviews of one item pay the reviewer twice and race for the one
-    recorded outcome -- the record is per item, not per commit -- so the first to take the
-    lock reviews and the second sees its marker and refuses, whatever commit either covers.
-    (None, None) only when there is no item or no commit to key the run on (nothing is
-    recorded, nothing to race); a marker the filesystem could not write is refused too,
-    because without it a concurrent review could not be refused -- the silent unprotected
-    race this lock exists to prevent."""
-    if not item or not sha:
+#: The synthetic key of the per-item review lock: it names no gate, so it never collides
+#: with a command gate's started-marker, and a dead one is skipped by the dead-run sweep.
+_REVIEW_LOCK_GATE = "review"
+
+
+def _claim_or_refuse_twin(repo: Path, item: str, sha: str) -> tuple[Any, O.Outcome | None]:
+    """(marker, refusal): claim the per-ITEM review lock, or refuse a second review of the
+    same item while one is live (B8664a1e0c6). Its record is per item, not per gate or per
+    commit, so a second `ddflow review` of the item -- any gate, any commit -- races the
+    first for the same gate records, and the first to take the lock reviews while the second
+    sees its marker and refuses. Held across the WHOLE call (all of the item's gates), not
+    per gate. The lock uses a synthetic key that is no gate, so it never collides with a
+    command gate's marker and a dead one is skipped by the sweep. (None, None) when there is
+    no item (nothing is recorded, nothing to race); a marker the filesystem could not write
+    is refused too, because without it a concurrent review could not be refused."""
+    if not item:
         return None, None
-    marker, twin = RUN.claim_started(repo, item, gate, sha, same_commit=False)
+    marker, twin = RUN.claim_started(repo, item, _REVIEW_LOCK_GATE, sha, same_commit=False)
     if twin is not None:
         return None, O.nothing(
             "review",
-            f"{gate} is already being reviewed on {item} (pid {twin.pid}, since {twin.at}, "
-            f"commit {twin.sha}); wait for it -- a second review would only race it for the "
-            f"one outcome and pay the reviewer twice. A review can start once the first ends.",
+            f"this item's gates are already being reviewed (pid {twin.pid}, since "
+            f"{twin.at}); wait for it -- a second review would only race it for the one "
+            f"outcome and pay the reviewer twice. A review can start once the first ends.",
             id=item,
-            gate=gate,
         )
     if marker is None:
         return None, O.nothing(
             "review",
-            f"the {gate} review could not write its started-marker for {item}; refusing "
-            f"rather than run without the concurrent-review lock",
+            f"the review could not write its started-marker for {item}; refusing rather "
+            f"than run without the concurrent-review lock",
             id=item,
-            gate=gate,
         )
     return marker, None
 
