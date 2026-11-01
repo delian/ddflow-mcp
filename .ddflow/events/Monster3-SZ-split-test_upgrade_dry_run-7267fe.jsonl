@@ -1,0 +1,2 @@
+{"agent":"Monster3-SZ-split-test_upgrade_dry_run-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e1b5b35d5e278ad9a42966f40","kind":"ddflow.seen","lamport":123750,"schema":1,"subject":"ddflow","ts":"2026-11-01T21:08:35.269500Z"}
+{"agent":"Monster3-SZ-split-test_upgrade_dry_run-7267fe","data":{"gate":"rubber_duck"},"id":"e51147ef179708a55fe4fffcf","kind":"gate.started","lamport":123751,"schema":1,"subject":"SZ-split-test_upgrade_dry_run","ts":"2026-11-01T21:08:35.297707Z"}

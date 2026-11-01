@@ -121,6 +121,23 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
         st = fold(log.read_all(), strict=False)
         held = sorted(i.id for i in st.items.values() if i.lease and i.lease.holder == who.id)
         result = CP.record(log, cfg, payload, held, set(st.sessions))
+        # The defensive self-assessment pass (r-ddflow-self-assessment, default on): file
+        # what the transcript just before this compaction names. Best-effort and never
+        # blocking -- a failure here is dropped, and a PreCompact hook must not stand
+        # between the operator and /compact.
+        if cfg.self_assessment.auto_file:
+            try:
+                from ..knowledge.self_assessment import auto_file
+
+                path = payload.get("transcript_path")
+                body = (
+                    CP.digest(Path(path), cfg.session.compaction_digest_chars)
+                    if isinstance(path, str) and path
+                    else ""
+                )
+                auto_file(repo, text=body, trigger="pre_compact", agent=agent)
+            except Exception:
+                pass
         return O.ok("hooks", message="", result=result)
     except Exception as exc:  # a hook must never stand between the operator and /compact
         return O.ok("hooks", message="", result="skipped", why=f"{type(exc).__name__}: {exc}")

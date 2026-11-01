@@ -33,6 +33,7 @@ def test_the_defaults_are_todays_shapes() -> None:
         "session": "s{time}-{pid}",
         "fix_task": "fix-{parent}",
         "fix_task_followup": "fix-{parent}-{seq}",
+        "gate_skip_followup": "gskip-{parent}-{seq}",
         "promotion": "promote-{env}-{seq}",
         "ci_bug": "Bci-{slug}-{digest}",
         "split_child": "{parent}.{seq}",

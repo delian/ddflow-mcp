@@ -93,6 +93,8 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
     it.priority = int(d.get("priority", it.priority))
     it.source = d.get("source", it.source)
     it.fixes = list(d.get("fixes", it.fixes))
+    it.followup_of = d.get("followup_of", it.followup_of)
+    it.followup_gate = d.get("followup_gate", it.followup_gate)
     for f in ("line", "port_of", "port_from", "port_strategy", "promote_from", "promote_to"):
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
