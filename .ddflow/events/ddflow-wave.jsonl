@@ -254,3 +254,4 @@
 {"agent":"ddflow-wave","data":{"at":1793550021.2689772,"holder":"ddflow-wave"},"id":"eb97836ea23330d1e01780b40","kind":"lease.renewed","lamport":122454,"schema":1,"subject":"fix-B-lanes-knobs-manifest-secretmin-ratchet","ts":"2026-11-01T16:20:21.330934Z"}
 {"agent":"ddflow-wave","data":{"gate":"ci"},"id":"e66ebc2d0f934307b3289b8a1","kind":"gate.started","lamport":122456,"schema":1,"subject":"fix-B3c1a2491a3","ts":"2026-11-01T16:20:32.526109Z"}
 {"agent":"ddflow-wave","data":{"at":1793550326.3707054,"holder":"ddflow-wave"},"id":"e08b83124f50692dfad19c51a","kind":"lease.renewed","lamport":122462,"schema":1,"subject":"fix-B-lanes-knobs-manifest-secretmin-ratchet","ts":"2026-11-01T16:25:26.431030Z"}
+{"agent":"ddflow-wave","data":{"at":1793550453.786095,"holder":"ddflow-wave"},"id":"e3fd0ac3543af10e2e7784d58","kind":"lease.renewed","lamport":122480,"schema":1,"subject":"fix-B-floor-passes-repeated-untriaged-nit","ts":"2026-11-01T16:27:33.969057Z"}
