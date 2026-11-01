@@ -21,6 +21,7 @@ from .._base import _load as _load
 #: Public (and patch-covered) name -> the submodule that defines it.
 _SUBMODULE_OF = {
     "ItemEdit": "_edit",
+    "MIN_SPLIT_PARTS": "_split",
     "phase_add": "_add",
     "phase_close": "_add",
     "plan_edit": "_edit",
