@@ -216,7 +216,7 @@ config/     config_sections/               read by every layer; imports none of 
                                            Above `core`: core is handed its knobs.
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
             handlers/, defs.py, clock.py,
-            graph.py, globs.py, redact.py,
+            graph.py, globs.py, redact/,
             ports.py
 adapters/   proc/, git/, fsio/,            the default implementations of the ports in
             tomlcfg/, digest/, forge/      core/ports.py. The BOTTOM layer (below).
@@ -353,7 +353,7 @@ import-linter contract counts the stragglers and can only go down.
 | time | `core/clock.py` | the one timestamp parser and writer, durations, ages |
 | graphs | `core/graph.py` | closure, cycles, topological order, longest chains, transitive reduction |
 | globs | `core/globs.py` | one glob semantics (`match`, `inside`, `overlap`); `core/globspec.py` reads a list |
-| redaction | `core/redact.py` | one Redactor with named profiles, used by the log, views, exports and bug reports |
+| redaction | `core/redact/` | one Redactor with named profiles, used by the log, views, exports and bug reports |
 | definition records | `core/defs.py`, `core/records.py` | the managed-definition record every kind shares; the fold's record dataclasses |
 | event evolution | `core/upcasters.py` | per-kind payload versions and the upcasters that read old events |
 | overlay loader | `services/overlay.py` | `OverlayLoader`: config path, then `.ddflow/<dir>/`, then shipped; eject, drift, validate |

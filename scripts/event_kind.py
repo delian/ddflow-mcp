@@ -8,7 +8,7 @@ A kind needs six edits, each found otherwise by a failing test, one suite round 
 
   1. handler    `core/model.py` HANDLERS -- code only you can write; `check` reports it
   2. fixture    `tests/fixtures/event_kinds.json`, the kind and its fields' JSON types
-  3. redact     `core/redact.py` LOG_TEXT_FIELDS (free text) or LOG_VERBATIM_FIELDS /
+  3. redact     `core/redact/log.py` LOG_TEXT_FIELDS (free text) or LOG_VERBATIM_FIELDS /
                 LOG_VERBATIM_NAMES (a lookup) for every str, dict or list field
   4. coherence  `tests/test_coherence_coverage.py` CHECKED or EXEMPT, with a reason
   5. fragment   `ddflow/templates/upgrade/unreleased/event_kind_added.<kind>.toml`
@@ -39,7 +39,7 @@ from ddflow.core import eventkinds as EK  # noqa: E402
 from ddflow.core.model import HANDLERS  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "event_kinds.json"
-REDACT = ROOT / "ddflow" / "core" / "redact.py"
+REDACT = ROOT / "ddflow" / "core" / "redact" / "log.py"
 COHERENCE = ROOT / "tests" / "test_coherence_coverage.py"
 EVENTS = ROOT / "ddflow" / "templates" / "events"
 FRAGMENTS = ROOT / "ddflow" / "templates" / "upgrade" / "unreleased"
@@ -73,7 +73,7 @@ def _coherence() -> tuple[set[str], set[str]]:
 
 def _redact() -> tuple[dict, set, set, set]:
     """(LOG_TEXT_FIELDS, LOG_VERBATIM_FIELDS keys, LOG_VERBATIM_NAMES, LOG_TEXT_NAMES), read
-    from the source of `core/redact.py` so that an edit made by `add` is seen at once."""
+    from the source of `core/redact/log.py` so that an edit made by `add` is seen at once."""
     want = ("LOG_TEXT_FIELDS", "LOG_VERBATIM_FIELDS", "LOG_VERBATIM_NAMES", "LOG_TEXT_NAMES")
     got: dict = {}
     for node in ast.parse(REDACT.read_text(encoding="utf-8")).body:
