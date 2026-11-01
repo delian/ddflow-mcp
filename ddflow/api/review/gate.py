@@ -184,7 +184,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         _track_rerun_raised(evidence, prior, best)
     held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
     clean_pass = outcome == "passed"
-    linked = _link_refuted(log, it, gate, best.findings)
+    linked = _link_refuted(log, it, gate, _reviewed_findings(results))
     if linked:
         held = max(0, held - len(linked))
     outcome, reason = _hold(outcome, _reason_of(best, results), held, say)

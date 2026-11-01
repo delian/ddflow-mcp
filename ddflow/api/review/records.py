@@ -117,7 +117,7 @@ def _reason_of(best, results=None) -> str:
     gate stayed failed with unresolved findings)."""
     if best.reason:
         return best.reason
-    found = _reviewed_findings(results or [])
+    found = _reviewed_findings(results) if results is not None else best.findings
     return f"{len(found)} finding(s)" if found else ""
 
 
