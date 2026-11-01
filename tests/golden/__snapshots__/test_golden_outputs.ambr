@@ -821,6 +821,22 @@
       gates.allow_skip_with_reason = True   [default]
           Permit `ddflow gate skip <id> --reason '...'`. The reason is mandatory and
           is recorded in the event log, so a skip is auditable rather than invisible.
+      gates.skip_followup = 'auto'   [default]
+          When a gate is recorded skipped (`ddflow gate skip <id> <gate> --reason
+          ...`, or a hand-recorded `outcome=skipped`), `auto` files ONE future follow-
+          up task whose scope is ONLY to re-run that gate on that item later (run
+          `ddflow gate run <id> <gate>` and record the honest outcome); the follow-up
+          is the log entry, the reminder and the effort to re-run the gate -- not to
+          repair the gate-check code nor to redo the item's payload. It is dropped
+          when the item is abandoned, and settles when the item completes or the gate
+          is re-recorded non-skipped. `warn` reports the follow-up in the skip output
+          and files nothing; `off` does neither. A skip today records nothing extra:
+          only `auto` adds the follow-up. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'auto', the strictest
+          (always files the follow-up, so a skipped gate is never forgotten); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       gates.require_outcome = True   [default]
           Every gate in the pipeline must carry SOME recorded outcome before an item
           completes — passed, failed, unavailable, partial, or an explicit `gate skip
@@ -3508,6 +3524,17 @@
       ids.fix_task_followup = 'fix-{parent}-{seq}'   [default]
           The next fix task when a bug's fix task was abandoned. Default
           fix-{parent}-{seq}: fix-<bug>-2, -3, ... Tokens: {prefix} (the kind's
+          letter), {seq} (next free number), {date}, {time}, {pid}, {slug}, {hash}
+          (salted, ten hex digits), {parent}, {phase}, {env}, {user-text}, {digest}
+          (stable content digest). A template needs {seq}, {hash} or {time} with
+          {pid}; one holding {digest} is stable and may hold only content tokens.
+          Characters outside tokens: ASCII letters, digits, '.', '_', '-'. Applies to
+          records created afterwards; a recorded id is never renamed. An invalid
+          template in a file is warned about, reported by `doctor`, and the default
+          stays in effect; `config --set` refuses it (exit 3).
+      ids.gate_skip_followup = 'gskip-{parent}-{seq}'   [default]
+          The future task that re-runs a skipped gate on an item. Default
+          gskip-{parent}-{seq}: gskip-<item>-1, -2, ... Tokens: {prefix} (the kind's
           letter), {seq} (next free number), {date}, {time}, {pid}, {slug}, {hash}
           (salted, ten hex digits), {parent}, {phase}, {env}, {user-text}, {digest}
           (stable content digest). A template needs {seq}, {hash} or {time} with

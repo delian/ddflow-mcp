@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ids.gate_skip_followup"
+new = "\"gskip-{parent}-{seq}\""
+why = "The future task that re-runs a skipped gate on an item."
+impact = "additive"
