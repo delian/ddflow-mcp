@@ -203,6 +203,56 @@ def test_an_answer_with_a_wrong_digest_does_not_print_the_right_one(proj):
     assert code == 3 and filed.digest[:8] not in err
 
 
+def test_approve_all_answers_every_pending_request_and_records_each_digest(proj):
+    a = _file(proj, _canon(item="T-all-1"))
+    b = _file(proj, _canon(item="T-all-2"))
+    code, out, err = run_cli(proj, "approvals", "approve", "--all")
+    assert code == 0, (out, err)
+    rows = asks_of(_state(proj))
+    assert rows[a.id]["state"] == "answered" and rows[a.id]["outcome"] == "approved"
+    assert rows[b.id]["state"] == "answered" and rows[b.id]["outcome"] == "approved"
+    # each answer recorded that request's full digest (the read receipt), never dropped
+    assert rows[a.id]["answered_digest"] == a.digest
+    assert rows[b.id]["answered_digest"] == b.digest
+    # single-use: a second --all finds nothing left to answer
+    code, out, _e = run_cli(proj, "approvals", "approve", "--all")
+    assert code == 0 and "no approval requests pending" in out, out
+
+
+def test_an_agent_identity_cannot_answer_with_approve_all(proj):
+    filed = _file(proj, _canon(item="T-all-agent"))
+    code, _o, err = run_cli(proj, "approvals", "approve", "--all", agent="bot")
+    assert code == 3 and "person's act" in err, err
+    assert asks_of(_state(proj))[filed.id]["state"] == "pending"
+
+
+def test_approve_accepts_several_ids_on_one_line_and_records_each_digest(proj):
+    a = _file(proj, _canon(item="T-multi-1"))
+    b = _file(proj, _canon(item="T-multi-2"))
+    code, out, err = run_cli(proj, "approvals", "approve", a.id, b.id)
+    assert code == 0, (out, err)
+    rows = asks_of(_state(proj))
+    assert rows[a.id]["state"] == "answered" and rows[b.id]["state"] == "answered"
+    assert rows[a.id]["answered_digest"] == a.digest and rows[b.id]["answered_digest"] == b.digest
+
+
+def test_approve_id_digest_pairs_and_repeated_digest_flags(proj):
+    a = _file(proj, _canon(item="T-pair-1"))
+    b = _file(proj, _canon(item="T-pair-2"))
+    code, out, err = run_cli(proj, "approvals", "approve", f"{a.id}:{a.digest[:12]}", f"{b.id}:{b.digest[:12]}")
+    assert code == 0, (out, err)
+    c = _file(proj, _canon(item="T-flags-1"))
+    d = _file(proj, _canon(item="T-flags-2"))
+    code, out, err = run_cli(
+        proj, "approvals", "approve", c.id, d.id,
+        "--digest", c.digest[:12], "--digest", d.digest[:12],
+    )
+    assert code == 0, (out, err)
+    rows = asks_of(_state(proj))
+    assert rows[a.id]["outcome"] == "approved" and rows[b.id]["outcome"] == "approved"
+    assert rows[c.id]["outcome"] == "approved" and rows[d.id]["outcome"] == "approved"
+
+
 def test_the_answer_api_refuses_an_agent_without_reading_anything(tmp_path, monkeypatch):
     from ddflow.api import approvals_answer as AA
 

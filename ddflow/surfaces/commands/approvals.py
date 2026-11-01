@@ -51,14 +51,14 @@ def cmd_approvals_request(a, c: Ctx) -> int:
     return _finish(c, out, "request")
 
 
-def _digest_or_ask(a, c: Ctx) -> str:
+def _digest_or_ask(c: Ctx, ask_id: str, digest: str) -> str:
     """The digest the person read: --digest, or typed at a terminal after the text is shown."""
-    if a.digest or AA.is_an_agents_call(
+    if digest or AA.is_an_agents_call(
         c.requested_agent
     ):  # an agent is refused by the API, unread
-        return a.digest or ""
+        return digest or ""
     if sys.stdin.isatty() and not c.json:
-        shown = A.approvals_show(c.repo, a.id, agent=c.requested_agent)
+        shown = A.approvals_show(c.repo, ask_id, agent=c.requested_agent)
         if shown.exit == OK:
             print(shown.data["text"])
             n = AA.digest_chars(c.repo, c.requested_agent)
@@ -67,12 +67,20 @@ def _digest_or_ask(a, c: Ctx) -> str:
 
 
 def cmd_approvals_approve(a, c: Ctx) -> int:
-    out = AA.approvals_approve(c.repo, a.id, digest=_digest_or_ask(a, c), agent=c.requested_agent)
+    ids = [str(s) for s in (a.ids or [])]
+    digests = [str(s) for s in (a.digest or [])]
+    if a.all:
+        out = AA.approvals_approve_all(c.repo, agent=c.requested_agent)
+    elif len(ids) == 1 and not digests and ":" not in ids[0]:
+        # the one-request form keeps its strict read-receipt: the person types the digest
+        out = AA.approvals_approve(c.repo, ids[0], digest=_digest_or_ask(c, ids[0], ""), agent=c.requested_agent)
+    else:
+        out = AA.approvals_approve_bulk(c.repo, ids, digests=digests, agent=c.requested_agent)
     return _finish(c, out, "approve")
 
 
 def cmd_approvals_deny(a, c: Ctx) -> int:
-    out = AA.approvals_deny(c.repo, a.id, digest=_digest_or_ask(a, c), agent=c.requested_agent)
+    out = AA.approvals_deny(c.repo, a.id, digest=_digest_or_ask(c, a.id, a.digest or ""), agent=c.requested_agent)
     return _finish(c, out, "deny")
 
 
