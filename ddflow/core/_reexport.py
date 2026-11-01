@@ -8,6 +8,11 @@ two invariants a one-file module had and a package must keep — monkeypatch
 the layering ratchet (an eager ``from .sub import ...`` here would read as a
 latent parent<->child cycle).
 
+A star-import reads the module ``__dict__`` (or ``__all__`` when defined), never
+``__dir__``, so this helper also installs ``__all__`` — the package's real public names
+plus the public keys of the map — so ``from pkg import *`` resolves the lazy names too.
+A package that wants a narrower ``__all__`` sets its own AFTER this call.
+
 Installed from a package ``__init__.py`` with one line::
 
     reexport(globals(), _SUBMODULE_OF, __name__)
@@ -45,3 +50,11 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
 
     here["__getattr__"] = __getattr__
     here["__dir__"] = __dir__
+    # Star-import reads __dict__ or __all__, never __dir__: name every public name the
+    # module exposes (real globals plus the public keys of the map) so `from pkg import *`
+    # resolves the lazy ones through __getattr__. Private keys stay out, as an un-__all__
+    # star-import skips underscore names too.
+    here["__all__"] = sorted(
+        {n for n in here if not n.startswith("_")}
+        | {n for n in submodule_of if not n.startswith("_")}
+    )
