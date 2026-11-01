@@ -31,8 +31,8 @@ from .. import jobs as JB
 from .._base import _load_fresh
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
-from ..knowledge.self_assessment import auto_file
 from ..knowledge.bug_close import regression_arg_refusal
+from ..knowledge.self_assessment import auto_file
 from ._common import _chore_base, _chore_event, _require
 from .author import _author_event_identity, _author_model, _recorded_identity
 from .heartbeat import _commit_events, _inbox, _waiters
