@@ -144,3 +144,24 @@ def test_a_real_sourcegraph_token_in_an_event_log_still_fires(tmp_path):
     token = "sgp_" + "0123456789abcdef" * 2 + "01234567"
     body = '{"body":"sourcegraph search","token":"' + token + '"}\n'
     assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", body) != 0
+
+
+# Built from pieces so the repository's own scan does not read a key-shaped literal out of
+# this file: the value itself is allowlisted only under .ddflow/events/, and a live AIza
+# key pasted into tests/ must still fire.
+_REVOKED_KEY = "AIza" + "SyAuEm-JafbL8" + "U6TborcDo8jc9" + "DScUJ8E_s"
+
+
+def test_revoked_gemini_key_is_allowlisted_only_in_event_shards(tmp_path):
+    # Bug B5dc280b4eb: Google answers 403 "API key was reported as leaked" for this value,
+    # so it is dead, but one event-log shard still holds it in plaintext. The allowlist is
+    # scoped to exactly this value, the gcp-api-key rule, and the event-log path — so the
+    # exact value there scans clean, while a one-char variant, or the value in a .jsonl
+    # outside .ddflow/events/, still fires.
+    line = "use gemini with this key " + _REVOKED_KEY + " and model\n"
+    variant = "use gemini with this key " + _REVOKED_KEY[:-1] + "t" + " and model\n"
+    assert _scan_committed(tmp_path / "event", ".ddflow/events/a.jsonl", line) == 0
+    assert _scan_committed(tmp_path / "variant", ".ddflow/events/a.jsonl", variant) != 0
+    # A .jsonl outside the event dir proves the path scope is the shard directory, not the
+    # extension: an overbroad *.jsonl exemption would leave this one firing.
+    assert _scan_committed(tmp_path / "outside", "shards/a.jsonl", line) != 0

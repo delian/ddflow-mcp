@@ -52,6 +52,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/api/lifecycle/complete.py:_approved_force": 1,
     "ddflow/api/lifecycle/complete.py:_person_force": 1,
     "ddflow/api/lifecycle/complete.py:_ask_hint": 1,
+    "ddflow/services/phase_complete.py:complete_phase": 1,
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
@@ -280,6 +281,15 @@ SITES: tuple[Site, ...] = (
             "ddflow/api/lifecycle/complete.py:_ask_hint",
         ),
         "ddflow complete <id> --approval request|ID",
+    ),
+    Site(
+        "phase.complete",
+        "C",
+        T2,
+        L1,
+        "the phase and the settled state of every task under it",
+        ("ddflow/services/phase_complete.py:complete_phase",),
+        "ddflow phase complete <id> --approval request|ID",
     ),
 )
 

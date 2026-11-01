@@ -23,6 +23,7 @@ from ...services import configcompat as CC
 from ...services import embed as EMB
 from ...services import eventcommit as EC
 from ...services import external as EX
+from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
 from ...services import launchers as LA
@@ -322,6 +323,7 @@ def doctor(
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
+    notes.extend(FSZ.doctor_notes(repo, cfg.quality.max_file_bytes))  # r-small-files
     notes.extend([*RH.doctor_notes(repo), *RH.host_notes()])  # identity, core.bare, orphan suites
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")

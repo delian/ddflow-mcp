@@ -112,7 +112,7 @@ _NOT_RUN = {
 def test_the_declared_shape_is_the_shape_a_call_returns(repo):
     """Run the read tools the wire-shape table knows and compare each body with its declared
     shape: an array is an array, an object has exactly its projection's fields."""
-    from test_api_layer import MIGRATED_WIRE_SHAPES
+    from api_layer_support import MIGRATED_WIRE_SHAPES
 
     for argv in (
         ("init",),

@@ -36,7 +36,7 @@ def test_the_registry_is_reachable_by_kind():
     in `views/markdown.py` and `replay` in `services/sessions.py`; all three are already
     below both surfaces, so requiring a second renderer here would mean either a
     duplicate or a pass-through. What this module owns is the rendering that had NOWHERE
-    else to live. `tests/test_api_layer.py::test_every_text_bodied_tool_actually_returns_a
+    else to live. `tests/test_api_layer_correctness.py::test_every_text_bodied_tool_actually_returns_a
     _STRING` is the check that covers all of them.
     """
     for kind, fn in human.RENDERERS.items():

@@ -219,6 +219,12 @@ class Item:
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
     #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.
     fixes: list[str] = field(default_factory=list)
+    #: Set on a generated GATE-SKIP follow-up (`task.added` `followup_of`, filed by a skipped
+    #: gate): the item whose skipped gate it re-runs, and that gate's id. The one durable
+    #: binding that lets abandoning or completing the item, or re-recording the gate
+    #: non-skipped, settle the follow-up. Empty on every other item.
+    followup_of: str = field(default="", metadata={"omit_empty": True})
+    followup_gate: str = field(default="", metadata={"omit_empty": True})
     blocked_reason: str = ""
     created_at: str = ""
     completed_at: str = ""

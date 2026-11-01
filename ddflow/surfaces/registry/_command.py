@@ -90,7 +90,7 @@ class Command:
     #: The `ddflow_help` inventory heading for this tool (see `services/help.py`).
     help_group: str = ""
     #: ``(argv, arguments)``: the CLI call whose `--json` body this tool must reproduce, for
-    #: `tests/test_api_layer.py`'s wire-shape check (the same row `MIGRATED_WIRE_SHAPES` holds).
+    #: `tests/test_api_layer_wire.py`'s wire-shape check (table in `tests/api_layer_support.py`) (the same row `MIGRATED_WIRE_SHAPES` holds).
     wire_shape: tuple[list[str], dict[str, Any]] | tuple[()] = ()
     #: How the CLI executor differs from its default for this command (`CliPolicy`).
     cli: CliPolicy | None = None
