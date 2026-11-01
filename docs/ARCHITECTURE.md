@@ -309,6 +309,15 @@ its own module's code and its constants fragment —
 constants a module declares live one file per module under
 `docs/ddflow/constants-exemptions.d/<dotted.module>.toml`, never in a shared register.
 
+**File size (r-small-files).** A tracked `.py` file, source or test, over
+`[quality].max_file_bytes` (default 30000 bytes) is split into a package whose `__init__`
+keeps the old import path, so a lease covers a small file and a small-context model can read
+it. `tests/test_file_size_ratchet.py` fails a new oversized file and an exempt file that grew;
+the exemptions are the shrink-only baseline `tests/guard_baselines/file_size_baseline.txt`
+(`path | bytes | reason`, one per line; a split deletes its own line). `ddflow doctor` lists
+the files over the limit. The per-area `MAX_*_LINES` caps in the layout tests are line caps
+with their own reasons and stay.
+
 **Dependencies.** Two runtime dependencies, both pure Python: **Jinja2** (the prompt and
 export templates) and **tomlkit** (config write-back that keeps comments and layout),
 declared in `pyproject.toml` and decided in `docs/ddflow/decisions/unify.md` (D-unify 1).
