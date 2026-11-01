@@ -83,7 +83,9 @@ def _literal(expr: ast.expr | None) -> bool:
             _literal(k) and _literal(v) for k, v in zip(expr.keys, expr.values, strict=False)
         )
     if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.USub | ast.UAdd | ast.Invert):
-        return _literal(expr.operand)
+        return isinstance(expr.operand, ast.Constant) and isinstance(
+            expr.operand.value, int | float
+        )
     return False
 
 
