@@ -22,7 +22,10 @@ name`` here stays absent and does not read as a latent parent<->child cycle in
 ``gates._query`` (and the other siblings) stay real module attributes with monkeypatchable
 globals — ``test_refuted_gate_flag`` patches ``gates._query._load`` directly.
 ``monkeypatch.setattr(gates, name, ...)`` rebinding a re-exported name shims the attribute
-on THIS package, exactly as it did on the old one-file module.
+on THIS package for callers that reach the name through the package; a name used
+INTERNALLY within a submodule must be patched at its defining submodule
+(``gates._run._covered_by_ci``, ``gates._query._load``), because that function resolves
+its own module global, not the package attribute.
 """
 
 from __future__ import annotations

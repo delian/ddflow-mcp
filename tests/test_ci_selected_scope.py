@@ -308,7 +308,7 @@ def test_a_forced_unit_tests_gate_runs_instead_of_being_covered(monkeypatch):
 
     covered = NS(scope="covered", command="", covered_by="ci selected run abc", needs_ci=False)
     monkeypatch.setattr(AG.TSC, "unit_tests_scope", lambda *a: covered)
-    monkeypatch.setattr(AG, "_covered_by_ci", lambda *a: "RECORDED")
+    monkeypatch.setattr(AG._run, "_covered_by_ci", lambda *a: "RECORDED")
     gdef = NS(id="unit_tests", command="pytest")
     args = (None, None, None, None, None, gdef, None, None)
     assert AG._scoped(*args, False)[2] == "RECORDED"
