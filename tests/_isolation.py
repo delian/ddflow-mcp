@@ -135,7 +135,7 @@ def _is_roborev_daemon(pid: int) -> bool:
     try:
         tokens = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").split()
     except OSError:
-        return True
+        return False  # cannot prove it is the daemon: a pid it may name is left alone
     return tokens[:1] != [] and b"roborev" in tokens[0] and b"daemon" in tokens[1:]
 
 
