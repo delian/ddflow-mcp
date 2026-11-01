@@ -26,7 +26,10 @@ would read an eager ``from .claim import ...`` here as a latent parent<->child c
 from __future__ import annotations
 
 import importlib
+import time as time  # re-exported: callers replace leases.time to fake the clock
 from typing import Any
+
+from ...core.admission import shared_globs as shared_globs  # re-exported
 
 #: Public (and patch-covered private) name -> the submodule that defines it.
 _SUBMODULE_OF = {
@@ -93,10 +96,8 @@ _SUBMODULE_OF = {
     # module-level imports the original module re-exported, which callers read or
     # monkeypatch through this module (L.time, L.shared_globs, L.EventLog, L.clock,
     # L.localize, L.foreign, ...)
-    "time": "common",
     "clock": "common",
     "localize": "common",
-    "shared_globs": "common",
     "conflicts": "common",
     "is_shared": "common",
     "glob_conflict": "common",

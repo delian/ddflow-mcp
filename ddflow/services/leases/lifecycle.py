@@ -8,7 +8,6 @@ on a claimed item.
 from __future__ import annotations
 
 import contextlib
-import time
 from collections.abc import Callable
 from typing import Any
 
@@ -16,6 +15,7 @@ from ...config import Config
 from ...core.model import Item, Lease, State
 from ...core.schedule import capacities, resource_shortfall
 from ...infra.log import EventLog
+from .. import leases as _leases
 from .. import waiting as WG
 from ..leaseclock import foreign
 from ..logcoalesce import quiet_renewal, renew_window
@@ -73,7 +73,7 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         # on the globs the lease held: paths the item gained while it lapsed are the
         # heartbeat catch-up's, which keeps the lease on its held globs and says why
         # when any new one is taken (`globs_withheld`).
-        now = time.time()
+        now = _leases.time.time()
         lease = it.lease
         if lease is None or lease.live(now):
             return False  # live even before any grace: no config to read
@@ -88,16 +88,19 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         "lease.renewed",
         mine=True,
         holder=holder,
-        payload=lambda _lease: {"at": time.time(), "holder": holder},
+        payload=lambda _lease: {"at": _leases.time.time(), "holder": holder},
         refuse=lapsed_onto_a_live_claim,
         quiet=lambda lease: quiet_renewal(
-            lease, time.time(), renew_window(Config.load(log.root)), log.clone_id(create=False)
+            lease,
+            _leases.time.time(),
+            renew_window(Config.load(log.root)),
+            log.clone_id(create=False),
         ),
     )
     if ok:
         # A claim someone else took over on the remote is not renewed: False, as for any
         # lease we no longer hold.
-        return not _remote_renew(log, Config.load(log.root), item_id, holder, time.time())
+        return not _remote_renew(log, Config.load(log.root), item_id, holder, _leases.time.time())
     return ok
 
 
@@ -132,7 +135,7 @@ def plan_retarget(
     TTL and grace -- is left for recovery rather than touched, so no lease is brought
     back by an edit. An unclaimed item's globs are not checked, as before.
     """
-    now = time.time() if now is None else now
+    now = _leases.time.time() if now is None else now
     state = _fold(log)
     it = state.items.get(item_id)
     lz = it.lease if it else None
@@ -262,7 +265,7 @@ def settle_remote(
         _remote_drop(log, item_id, holder)
     if kept:
         with contextlib.suppress(LeaseError):
-            _remote_take(log, cfg, item_id, kept, time.time())
+            _remote_take(log, cfg, item_id, kept, _leases.time.time())
 
 
 def transfer(
@@ -325,7 +328,7 @@ def foreign_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "
     same clone, an expired lease (judged on THIS clone's clock, B5a6651cd8e) and a lease with
     no recorded clone (claimed before the field existed) are never foreign. ``caller`` is the
     acting agent, kept for the message: the test is the clone's."""
-    now = time.time()
+    now = _leases.time.time()
     it = _fold(log).items.get(item_id)
     lease = it.lease if it else None
     if lease is None or not foreign(lease, log.clone_id(create=False)):

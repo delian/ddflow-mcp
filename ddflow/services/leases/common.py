@@ -6,17 +6,16 @@ decide which overlapping globs another lease really covers.
 
 from __future__ import annotations
 
-import time
-
 from ...config import Config
 from ...core import clock
 from ...core import globs as GL
-from ...core.admission import conflicts, glob_conflict, is_shared, shared_globs
+from ...core.admission import conflicts, glob_conflict, is_shared
 from ...core.flow import line_key
 from ...core.model import Item, Lease, State, fold
 from ...infra import worktree as W
 from ...infra.log import EventLog, bare_agent_id
 from .. import changes as CH
+from .. import leases as _leases
 from ..leaseclock import localize
 
 
@@ -32,7 +31,7 @@ def _clone_field(log: EventLog, holder: str) -> dict[str, str]:
 def _fold(log: EventLog) -> State:
     """The state of the log as read now: the `decide` that `EventLog.decide_then_append`
     runs outside the append lock, and again under it if the log changed in between."""
-    return localize(fold(log.read_all(), strict=False), log, time.time())
+    return localize(fold(log.read_all(), strict=False), log, _leases.time.time())
 
 
 def glob_clash(
@@ -88,7 +87,7 @@ def _clash_text(
     holder's changed paths say which. Each requested glob that overlaps a live lease is
     kept as a clash only when it overlaps one of those changed paths (or they are unknown).
     """
-    shared = shared_globs(cfg)
+    shared = _leases.shared_globs(cfg)
     mine = it.lease.holder if it.lease else ""
     line = line_key(state, it, cfg)
     first, parts, bad = "", [], set()
@@ -126,7 +125,7 @@ def _live_pairs(
     holder has changed are compared. Only a WILDCARD lease glob can cover files its holder
     never touches: an exact path it claimed is declared work, changed yet or not."""
     pairs = conflicts(globs, lz.globs, shared)
-    changed = holder_changed_paths(log, other) if pairs else None
+    changed = _leases.holder_changed_paths(log, other) if pairs else None
     if changed is None:
         return pairs
     real = [p for p in changed if not is_shared(p, shared)]

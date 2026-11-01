@@ -7,7 +7,6 @@ records expiry for the un-salvageable ones only.
 from __future__ import annotations
 
 import importlib
-import time
 from pathlib import Path
 
 from ...config import Config
@@ -15,6 +14,7 @@ from ...core import schedule
 from ...core.model import REVIEW, Item, State
 from ...infra import worktree as W
 from ...infra.log import EventLog
+from .. import leases as _leases
 from ..leaseclock import foreign
 from .common import _fold
 from .lifecycle import expire
@@ -42,7 +42,7 @@ def scan(
     "is there work in here?" is the only question that decides the remedy, and guessing
     it from the item's status is exactly how real work gets deleted.
     """
-    now = time.time() if now is None else now
+    now = _leases.time.time() if now is None else now
     if (
         state is None
     ):  # a caller that already folded this log passes its State (one fold per command)

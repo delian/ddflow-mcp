@@ -6,7 +6,6 @@ transaction body, and the idle-lease breaking that runs before it.
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from ...config import Config
@@ -17,6 +16,7 @@ from ...core.schedule import capacities, plan_blocker, resource_shortfall
 from ...core.schedule import plan as _plan
 from ...infra.log import EventLog
 from .. import leasebreak as LB
+from .. import leases as _leases
 from .common import _clone_field, _fold, glob_clash
 from .model import LeaseError, Offer
 from .remote import _remote_drop, _remote_renew, _remote_take
@@ -109,7 +109,7 @@ def acquire(
             # Re-asserting a live claim of our own: renewing tolerates an unreachable
             # remote (it lapses at its expiry and the next heartbeat re-takes it), as the
             # heartbeat does; only a claim someone else took over is refused.
-            if lost := _remote_renew(log, cfg, item_id, holder, time.time()):
+            if lost := _remote_renew(log, cfg, item_id, holder, _leases.time.time()):
                 raise LeaseError(
                     f"{item_id}: the remote claim is now {lost}'s -- this lease lapsed "
                     f"there and was taken over.",
@@ -117,7 +117,7 @@ def acquire(
                     item=item_id,
                 )
         else:
-            took = _remote_take(log, cfg, item_id, holder, time.time())
+            took = _remote_take(log, cfg, item_id, holder, _leases.time.time())
     try:
         return _acquire_locked(log, cfg, item_id, holder=holder, **kwargs)
     except Exception:
@@ -129,7 +129,9 @@ def acquire(
 def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
     it = _fold(log).items.get(item_id)
     lease = it.lease if it else None
-    return bool(lease and lease.holder == holder and lease.live(time.time(), cfg.lease.grace_s))
+    return bool(
+        lease and lease.holder == holder and lease.live(_leases.time.time(), cfg.lease.grace_s)
+    )
 
 
 def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller's offer
@@ -160,7 +162,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
     across `stat` calls rather than across a read of every shard.
     """
     holder = holder or log.agent_id
-    now = time.time()
+    now = _leases.time.time()
     pre = _prejudge(log, cfg, item_id, holder, globs, now, break_lease, activity)
     with log.decide_then_append(lambda: _fold(log)) as state:
         it = state.items.get(item_id)
@@ -362,7 +364,10 @@ def _prejudge(
     if it is None:
         return None
     mine = list(globs if globs is not None else it.globs)
-    pre, act = LB.Prejudged(mark=mark, at=time.time()), activity or LB.tree_activity(log.root)
+    pre, act = (
+        LB.Prejudged(mark=mark, at=_leases.time.time()),
+        activity or LB.tree_activity(log.root),
+    )
     stamp = clock.iso_at(now)
     clash = glob_clash(state, cfg, it, holder, mine, now)
     while clash:
@@ -400,7 +405,7 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     act = activity or LB.tree_activity(log.root)
     # Judged from what was read before the lock. The events are reused while the log has not
     # moved (else re-read: a fold, no git); the worktree watermarks while they are young.
-    if pre is not None and pre.fresh(time.time()):
+    if pre is not None and pre.fresh(_leases.time.time()):
         act = pre.activity(act)
     events = pre.events if pre and pre.mark == log.mark(clock=False) else log.read_all()
     plan: list[tuple[str, Lease, tuple[str, str], LB.Verdict]] = []
