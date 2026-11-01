@@ -18,7 +18,7 @@ from typing import Any
 
 from ..core import outcome as O
 from ..core.digest import content_digest
-from ..core.model import DONE, State, fold
+from ..core.model import State, fold
 from . import approval as AP
 from .approvals import consume as CN
 from .approvals.canon import Canon
@@ -26,9 +26,10 @@ from .approvals.canon import Canon
 # The importer's own predicate, not a second copy of it: "a phase the IMPORTER wrote" is the
 # one set `phase close` may close, and so the one set this command must leave to it.
 from .importer import _is_imported_phase
+# The shared resolve-and-settle guard, not a second copy of `phase close`'s (r-reuse-core).
+from .phase_guard import resolve_phase, settled_tasks
 
 KIND = "phase.completed"
-_SHOWN = 8
 
 
 def complete_phase(
@@ -47,16 +48,9 @@ def complete_phase(
     this is the deliberate retire, and it writes `phase.completed`, so a reader knows the
     phase settled without any phase pipeline running.
     """
-    it = st.items.get(phase_id)
-    if it is None or it.removed:
-        gone = " (it was removed from the queue)" if it is not None else ""
-        return O.failed(KIND, f"no such item {phase_id!r}{gone}", id=phase_id)
-    if it.kind != "phase":
-        return O.refused(
-            KIND,
-            f"{phase_id} is a {it.kind}, not a phase: `ddflow complete {phase_id}` finishes an item",
-            id=phase_id,
-        )
+    err, it = resolve_phase(st, KIND, phase_id)
+    if err is not None:
+        return err
     if _is_imported_phase(it):
         return O.refused(
             KIND,
@@ -64,28 +58,11 @@ def complete_phase(
             f"--imported` is the door for work that predates ddflow",
             id=phase_id,
         )
-    if it.terminal:
-        return O.refused(KIND, f"{phase_id} is already {it.state}", id=phase_id)
-    tasks = st.tasks(phase_id)
-    open_tasks = [t for t in tasks if not t.terminal]
-    if open_tasks:
-        shown = ", ".join(t.id for t in open_tasks[:_SHOWN])
-        more = " ..." if len(open_tasks) > _SHOWN else ""
-        return O.refused(
-            KIND,
-            f"{len(open_tasks)} task(s) under {phase_id} are still open: {shown}{more} -- "
-            f"complete or abandon them first",
-            id=phase_id,
-            open=len(open_tasks),
-        )
-    if not tasks:
-        return O.refused(
-            KIND,
-            f"nothing is under {phase_id}: there is no finished work to retire. A phase with "
-            f"tasks to come is not finished",
-            id=phase_id,
-        )
-    done = sum(1 for t in tasks if t.state == DONE)
+    err, tasks, done = settled_tasks(
+        it, st, KIND, phase_id, hint="complete or abandon them first"
+    )
+    if err is not None:
+        return err
     stamp: dict[str, Any] = {}
     if AP.agent_marker(agent):
         canon = Canon(
