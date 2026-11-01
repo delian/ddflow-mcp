@@ -312,3 +312,13 @@ def test_api_view_carries_interfaces_and_baseline_text():
     # the committed baseline is applied by the view: the real tree is inside it
     ratchet = out.data["ratchet"]
     assert ratchet == {"grew": [], "shrank": [], "baseline": I.BASELINE_PATH}
+
+
+def test_the_census_does_not_count_its_own_pattern_tables(tmp_path: Path):
+    # the scanner's tables name "AGENTS.md", "tools/call", ...: they are data, not call sites
+    src = 'X = "AGENTS.md"\nY = "tools/call"\n'
+    root = _tree(tmp_path, {"services/archifaces_scan.py": src, "services/real.py": src})
+    c = I.scan(root)
+    assert {s.path for f in c.families for s in f.sites} == {"ddflow/services/real.py"}
+    live = I.scan(ROOT)
+    assert not [s for f in live.families for s in f.sites if s.module in I.SELF_MODULES]

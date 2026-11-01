@@ -26,6 +26,9 @@ from .archifaces_scan import ALL_ENV, DYNAMIC, Site, sites_in  # noqa: F401  (re
 
 # Where the committed ratchet baseline lives, relative to the repository root.
 BASELINE_PATH = "tests/arch_baselines/arch_interfaces.txt"
+# The census's own modules hold the pattern tables (method names, file names, program names)
+# as data; counting them would make every edit of a table a "new call site".
+SELF_MODULES = ("ddflow.services.archifaces", "ddflow.services.archifaces_scan")
 KINDS = ("program", "protocol", "managed-file", "env", "network")
 _RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
 
@@ -90,6 +93,8 @@ def scan(repo: Path) -> InterfaceCensus:
     unparsed: list[str] = []
     for path in sorted(p for p in pkg.rglob("*.py") if "__pycache__" not in p.parts):
         module = _dotted(repo, path)
+        if module in SELF_MODULES:
+            continue
         try:
             tree = ast.parse(path.read_bytes())
         except (OSError, SyntaxError, ValueError):

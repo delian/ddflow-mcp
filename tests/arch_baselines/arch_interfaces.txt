@@ -62,12 +62,9 @@ env	XDG_CONFIG_HOME	ddflow/services/quota.py	1
 env	XDG_STATE_HOME	ddflow/services/lanes/capacity.py	1
 env	XDG_STATE_HOME	ddflow/services/selfupgrade.py	1
 env	XDG_STATE_HOME	ddflow/services/suitelock.py	1
-managed-file	.git/hooks	ddflow/services/archifaces_scan.py	1
 managed-file	.git/hooks	ddflow/services/onboard_verify.py	1
 managed-file	.git/hooks	ddflow/services/workflow.py	1
-managed-file	.mcp.json	ddflow/services/archifaces_scan.py	1
 managed-file	.mcp.json	ddflow/services/harness.py	1
-managed-file	.pre-commit-config.yaml	ddflow/services/archifaces_scan.py	1
 managed-file	.pre-commit-config.yaml	ddflow/services/ci/precommit.py	1
 managed-file	.pre-commit-config.yaml	ddflow/services/ci_scope.py	2
 managed-file	.pre-commit-config.yaml	ddflow/services/compat_refs.py	2
@@ -80,7 +77,6 @@ managed-file	AGENTS.md	ddflow/services/adopt/_adopt.py	1
 managed-file	AGENTS.md	ddflow/services/adopt/_aider.py	1
 managed-file	AGENTS.md	ddflow/services/adopt/_docs.py	1
 managed-file	AGENTS.md	ddflow/services/adopt/_rules.py	2
-managed-file	AGENTS.md	ddflow/services/archifaces_scan.py	1
 managed-file	AGENTS.md	ddflow/services/compat_refs.py	1
 managed-file	AGENTS.md	ddflow/services/enforce/driftchecks.py	1
 managed-file	AGENTS.md	ddflow/services/lanes/opencode.py	1
@@ -92,7 +88,6 @@ managed-file	CLAUDE.md	ddflow/core/bookkeeping.py	1
 managed-file	CLAUDE.md	ddflow/services/adopt/_adopt.py	2
 managed-file	CLAUDE.md	ddflow/services/adopt/_docs.py	2
 managed-file	CLAUDE.md	ddflow/services/adopt/_rules.py	1
-managed-file	CLAUDE.md	ddflow/services/archifaces_scan.py	1
 managed-file	CLAUDE.md	ddflow/services/compat_refs.py	1
 managed-file	CLAUDE.md	ddflow/services/enforce/driftchecks.py	1
 managed-file	CLAUDE.md	ddflow/services/legacy.py	1
@@ -102,7 +97,6 @@ managed-file	config.toml	ddflow/api/setup/adopt.py	1
 managed-file	config.toml	ddflow/config_sections/_layers.py	1
 managed-file	config.toml	ddflow/infra/tomlcfg.py	1
 managed-file	config.toml	ddflow/services/adopt/_scaffold.py	1
-managed-file	config.toml	ddflow/services/archifaces_scan.py	1
 managed-file	config.toml	ddflow/services/compat_refs.py	2
 managed-file	config.toml	ddflow/services/configwrite/_write.py	3
 managed-file	config.toml	ddflow/services/configwrite/layers.py	1
@@ -110,9 +104,6 @@ managed-file	config.toml	ddflow/services/gates/defs.py	1
 managed-file	config.toml	ddflow/services/shared_files.py	1
 managed-file	config.toml	ddflow/surfaces/commands/setup.py	1
 managed-file	config.toml	ddflow/surfaces/mcp/_instructions.py	1
-managed-file	hooks.toml	ddflow/services/archifaces_scan.py	1
-managed-file	opencode.json	ddflow/services/archifaces_scan.py	1
-managed-file	settings.json	ddflow/services/archifaces_scan.py	2
 managed-file	settings.json	ddflow/services/claudehooks.py	2
 managed-file	settings.json	ddflow/services/compat_refs.py	1
 managed-file	settings.json	ddflow/services/harness.py	1
@@ -231,13 +222,10 @@ program	sh	ddflow/services/jobs.py	1
 program	systemctl	ddflow/services/lane_headless.py	1
 program	systemd-run	ddflow/services/lane_headless.py	2
 program	uvx	ddflow/services/adopt/_launch.py	2
-protocol	acp	ddflow/services/archifaces_scan.py	11
-protocol	jsonrpc	ddflow/services/archifaces.py	1
 protocol	jsonrpc	ddflow/services/companions/probe.py	2
 protocol	jsonrpc	ddflow/surfaces/mcp/_server.py	1
 protocol	jsonrpc	ddflow/surfaces/worker.py	1
 protocol	mcp	ddflow/mcpshim/probe_server.py	11
-protocol	mcp	ddflow/services/archifaces_scan.py	11
 protocol	mcp	ddflow/services/onboard_verify.py	3
 protocol	mcp	ddflow/services/upgrade_dryrun/_support.py	5
 protocol	mcp	ddflow/surfaces/ifacesnap.py	2
