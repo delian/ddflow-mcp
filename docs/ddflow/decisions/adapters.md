@@ -1,8 +1,9 @@
 # Adapters: home, migration pace, family order, layer reconciliation
 
 Decision document for task `ADP-decide` in phase `P-adapters`. It restates the
-decision record below; the record in the event log is the source of truth
-(`ddflow decision show D-adapters-answers`).
+decision records below; the records in the event log are the source of truth
+(`ddflow decision show D-adapters-answers` and `D-adapters-answers-2`, which
+completes it).
 
 ## D-adapters-answers — Adapters: new ddflow/adapters package, strangler with ratchets family by family, census then http first, layer reconciliation folded into ADP-model
 
@@ -26,10 +27,12 @@ chose a **new `ddflow/adapters` package** instead.
 
 `ddflow.adapters` sits at the **bottom of the layer contract**: core code uses only our
 own adapters, so the package is importable by every layer while importing no other
-`ddflow` layer. Ports (`Protocol`) and their default implementations live there, with a
-fake for tests in a test helper. The existing infra homes (`proc`, `git`, `fsio`,
-`tomlcfg`, `digest`) migrate under it behind compatibility re-exports until their
-ratchet baselines are empty.
+`ddflow` layer. A port (`Protocol`), its default implementation and its registry live
+together in one package (ports next to their adapters, not in core); fakes live in
+`ddflow/adapters/fakes` (shipped), with a ratchet requiring every port to have a fake
+(`D-adapters-answers-2`). The existing infra homes (`proc`, `git`, `fsio`, `tomlcfg`,
+`digest`) migrate under it behind compatibility re-exports until their ratchet baselines
+are empty.
 
 ### 2. Migration pace: strangler with ratchets, family by family
 
@@ -53,6 +56,16 @@ The default staged a separate layering edge to `B-arch-layer-contracts`. The ope
 chose to **drop that edge and fold the layer reconciliation into `ADP-model`** instead:
 `ADP-model` no longer waits on `B-arch-layer-contracts` and also produces the one
 reconciled layer contract.
+
+### 5. Completing answers: ManagedFile and config formats (`D-adapters-answers-2`)
+
+`D-adapters-answers-2` completes `D-adapters-answers` with two further operator answers:
+
+- **ManagedFile** backs up next to the file, with consent once per file kind: a
+  `.ddflow-bak` copy before the first write, ownership markers on every ddflow-owned key,
+  consent once per kind of file (for example user-level Vibe hooks), not per write.
+- **Config formats** are TOML-only for ddflow's own config; JSON, JSONC and YAML are
+  handled only in `ManagedFile` for other tools' files.
 
 ## Conformance
 
@@ -80,5 +93,6 @@ first, no behaviour change.
 
 ## Done when
 
-This file exists and names `D-adapters-answers` (it does). The decision record itself
-is filed in the event log and returned by `ddflow recall` / `ddflow decision show`.
+This file exists and names `D-adapters-answers` and `D-adapters-answers-2` (it does).
+The decision records themselves are filed in the event log and returned by `ddflow
+recall` / `ddflow decision show`.
