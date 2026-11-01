@@ -21,9 +21,15 @@ def _fold(repo):
 
 
 def _followups(repo, item: str):
-    """Every follow-up task that re-runs a gate on ``item`` oldest definition first."""
+    """Every OWED follow-up task that re-runs a gate on ``item``, oldest first.
+
+    Mirrors the production ``_open``: neither removed nor finished (terminal) counts."""
     st = _fold(repo)
-    return [i for i in st.items.values() if getattr(i, "followup_of", "") == item and not i.removed]
+    return [
+        i
+        for i in st.items.values()
+        if getattr(i, "followup_of", "") == item and not i.removed and not i.terminal
+    ]
 
 
 def _add(repo, item: str = "T1"):
@@ -103,3 +109,29 @@ def test_warn_reports_but_files_nothing(repo):
         f"the skip output must report the un-filed follow-up: {out}{err}"
     )
     assert _followups(repo, "T1") == []
+
+
+def test_a_finished_followup_is_not_an_open_rerun(repo):
+    """A follow-up that reached a terminal state is not 'owed': skipping the gate again
+    files a FRESH follow-up, not 'already re-runs'. Reverts to not filtering `terminal`
+    would make the second skip file nothing."""
+    _add(repo)
+    code, out, err = run_cli(
+        repo, "gate", "skip", "T1", "dedupe", "--reason", "no shared code touched"
+    )
+    assert code == 0, f"{out}{err}"
+    first = _followups(repo, "T1")
+    assert len(first) == 1
+
+    # Abandon the follow-up ITSELF (terminal, not removed): it is done with, but so is
+    # its claim to be the re-run owed for T1.
+    code, out, err = run_cli(repo, "abandon", first[0].id, "--reason", "re-run happened elsewhere")
+    assert code == 0, f"{out}{err}"
+
+    code, out, err = run_cli(
+        repo, "gate", "skip", "T1", "dedupe", "--reason", "still no shared code touched"
+    )
+    assert code == 0, f"{out}{err}"
+    fups = _followups(repo, "T1")
+    assert len(fups) == 1, f"expected one fresh follow-up, got {[f.id for f in fups]}"
+    assert fups[0].id != first[0].id
