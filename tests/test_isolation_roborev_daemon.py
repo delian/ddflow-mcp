@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import time
@@ -35,10 +34,11 @@ def _held(port: int) -> bool:
     probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         probe.bind(("127.0.0.1", port))
-        probe.close()
         return False
     except OSError:
         return True
+    finally:
+        probe.close()
 
 
 def _alive(pid: int) -> bool:
@@ -72,29 +72,29 @@ def _pid_under(home: Path, deadline: float) -> int | None:
 
 
 def test_teardown_kills_a_daemon_the_suite_spawned_under_its_scratch_home(tmp_path: Path) -> None:
+    """The teardown that deleted the scratch ``HOME`` also kills the daemon it spawned: the
+    address the daemon held must not be left taken over the deleted database (B7d61f8c094)."""
     if shutil.which("roborev") is None:
         pytest.skip("roborev is not installed")
     home = tmp_path / "home"
     home.mkdir()
     port = _free_port()
     proc = _spawn(home, port)
+    deadline = time.monotonic() + 15
+    while not _held(port) and time.monotonic() < deadline:
+        time.sleep(0.1)  # the daemon is up once it has actually bound the address
     try:
-        pid = _pid_under(home, time.monotonic() + 15)
+        assert _held(port), "the daemon never bound its address"
+        pid = _pid_under(home, time.monotonic() + 2)
         assert pid is not None, "the daemon wrote no runtime pidfile under the scratch HOME"
-        assert _alive(pid) and _held(port), "the daemon must be up and holding its address"
-        assert ISO.terminate_suite_daemons(home) >= 1
+        ISO._teardown(home)
+        assert not home.exists(), "teardown removed the scratch HOME"
         assert not _held(port), "the daemon's address is still taken after teardown"
         proc.wait(timeout=10)  # the daemon exited (SIGKILLed where it ignored SIGTERM)
         assert not _alive(pid), "the daemon survived teardown; it would hold the deleted DB"
     finally:
-        pid = _pid_under(home, time.monotonic() + 1)
-        for death in (signal.SIGTERM, signal.SIGKILL):
-            if pid is not None and _alive(pid):
-                try:
-                    os.kill(pid, death)
-                except OSError:
-                    pass
-                time.sleep(0.2)
+        if home.exists():
+            ISO.terminate_suite_daemons(home)
         if proc.poll() is None:
             proc.kill()
         proc.wait()

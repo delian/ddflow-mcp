@@ -99,49 +99,71 @@ def _alive(pid: int) -> bool:
 
 
 def _daemon_pid(pidfile: Path) -> int | None:
-    """The pid a roborev daemon recorded in ``daemon.<pid>.json``: its ``pid`` field, with the
-    file's ``daemon.<pid>`` name as the fallback — a torn file still being written must not
-    hide a live daemon."""
+    """The positive pid a roborev daemon recorded in ``daemon.<pid>.json``: its ``pid`` field,
+    with the file's ``daemon.<pid>`` name as the fallback — a torn file still being written must
+    not hide a live daemon. ``None`` for anything not one positive process id: ``kill(0, sig)``
+    and ``kill(-n, sig)`` signal a whole process GROUP, so a corrupt pid must never reach
+    ``os.kill``."""
     try:
-        return int(json.loads(pidfile.read_text())["pid"])
+        pid = int(json.loads(pidfile.read_text())["pid"])
     except (OSError, ValueError, KeyError, TypeError):
         raw = pidfile.name.removeprefix("daemon.").removesuffix(".json")
         try:
-            return int(raw)
+            pid = int(raw)
         except ValueError:
             return None
+    return pid if pid > 0 else None
+
+
+def _is_roborev_daemon(pid: int) -> bool:
+    """Whether ``pid`` is still the roborev daemon that wrote a pidfile under the scratch
+    ``HOME``. A pidfile's pid may have been recycled by an unrelated process its daemon died
+    earlier; the command line must still name roborev, or the pid is left alone."""
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ")
+    except OSError:
+        return True
+    return b"roborev" in cmdline
 
 
 def terminate_suite_daemons(home: Path, grace_s: float = 2.0) -> int:
-    """Kill every roborev daemon whose runtime pidfile sits under ``home`` (a daemon the
+    """Signal every roborev daemon whose runtime pidfile sits under ``home`` (a daemon the
     suite started inherits the scratch ``HOME`` and writes ``daemon.<pid>.json`` there), wait
-    up to ``grace_s`` for each to exit, and SIGKILL any survivor. Only daemons with a pidfile
-    under THIS ``home`` are the suite's: the operator's real daemon lives under the real
-    ``HOME`` and is left running. Returns how many were terminated."""
+    up to ``grace_s`` for each to exit, and SIGKILL any survivor. Only a daemon whose pid the
+    pidfile names positive and whose command line still says roborev is touched, so the
+    operator's real daemon under the real ``HOME`` and any pid an exited daemon's leftover
+    file recycled are left alone. Returns how many such daemons it signaled (0 for a leftover
+    pidfile naming a pid that was already gone)."""
     runtime = home / ROBOREV_RUNTIME
     if not runtime.is_dir():
         return 0
     pids = [
         pid
         for pidfile in sorted(runtime.glob("daemon.*.json"))
-        if (pid := _daemon_pid(pidfile)) is not None
+        if (pid := _daemon_pid(pidfile)) is not None and _is_roborev_daemon(pid)
     ]
+
+    def ours_alive() -> list[int]:
+        return [pid for pid in pids if _alive(pid) and _is_roborev_daemon(pid)]
+
+    signaled = 0
     for pid in pids:
         try:
             os.kill(pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
+        except (ProcessLookupError, PermissionError, OverflowError):
+            continue
+        signaled += 1
     deadline = time.monotonic() + grace_s
-    alive = [pid for pid in pids if _alive(pid)]
+    alive = ours_alive()
     while alive and time.monotonic() < deadline:
         time.sleep(0.05)
-        alive = [pid for pid in alive if _alive(pid)]
+        alive = ours_alive()
     for pid in alive:
         try:
             os.kill(pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError, OverflowError):
             pass
-    return len(pids)
+    return signaled
 
 
 def _teardown(home: Path) -> None:
