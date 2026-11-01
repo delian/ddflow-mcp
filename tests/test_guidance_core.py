@@ -427,7 +427,7 @@ _FORBIDDEN = {
         "_tokenize",
         "matches_globs",
     ),
-    "ddflow/api/rules.py": ("fnmatch", "textsim", "_get_overlap_terms", "_tokenize", "_compared"),
+    "ddflow/api/rules": ("fnmatch", "textsim", "_get_overlap_terms", "_tokenize", "_compared"),
     "ddflow/api/decisions.py": ("conflicts",),
     "ddflow/api/lifecycle/brief.py": ("conflicts",),
 }
@@ -435,9 +435,14 @@ _FORBIDDEN = {
 
 @pytest.mark.parametrize("path", sorted(_FORBIDDEN))
 def test_no_rule_or_decision_specific_matcher_or_tokenizer_remains(path) -> None:
-    source = (ROOT / path).read_text("utf-8")
-    left = [w for w in _FORBIDDEN[path] if re.search(rf"\b{re.escape(w)}\b", source)]
-    assert not left, (path, left)
+    # `ddflow/api/rules` is a package: the forbidden names must stay out of every
+    # submodule, not just the (former) single file.
+    target = ROOT / path
+    sources = sorted(target.rglob("*.py")) if target.is_dir() else [target]
+    for source in sources:
+        text = source.read_text("utf-8")
+        left = [w for w in _FORBIDDEN[path] if re.search(rf"\b{re.escape(w)}\b", text)]
+        assert not left, (path, left)
 
 
 # -- bug Bc956cae0e0: a refusal by a [rules] limit said "added rule" and not why -----------

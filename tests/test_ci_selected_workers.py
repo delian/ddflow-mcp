@@ -11,6 +11,7 @@ from types import SimpleNamespace as NS
 from ddflow.config import Config
 from ddflow.services import ci as CI
 from ddflow.services import workers as WK
+from ddflow.services.ci import runner
 
 SELECTED = (
     "env DDFLOW_DEMO_NO_REVIEWER=1 uv run pytest -m 'not slow or scenarios' -q --timeout=420 "
@@ -123,8 +124,8 @@ def test_run_stages_gives_the_selected_pytest_the_holders_floor(monkeypatch, tmp
             ran.append(declared.line)
             return NS(ran=True, code=0, output="", elapsed_s=0, kind="", reason="")
 
-    monkeypatch.setattr(CI, "CommandRunner", Fake)
-    monkeypatch.setattr(CI, "child_env", lambda *a, **k: {})
+    monkeypatch.setattr(runner, "CommandRunner", Fake)
+    monkeypatch.setattr(runner, "child_env", lambda *a, **k: {})
     files = " ".join(f"tests/test_{i}.py" for i in range(30))
     for held, want in ((True, "-n 8 "), (False, "-n 1 ")):
         ran.clear()

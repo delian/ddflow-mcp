@@ -1,0 +1,5 @@
+# Ratchet `complexity_d_or_worse` for ddflow.infra.store._tables (tests/test_architecture_guards.py).
+# `_reconcile_tables` (CC 27) is the shipped store reconcile residue writer: the fan-out over
+# the reconcile decisions IS the feature, not branch debt. Lower it in the change that
+# refactors it; delete the file at zero.
+baseline = 1

@@ -185,7 +185,7 @@ def test_a_diff_that_cannot_run_is_never_nothing_changed(merged, monkeypatch):
         RV._delta_diff(repo, _item(Path("/nonexistent")), "item", head)
     it = SimpleNamespace(id="T1", worktree="", branch="item")
 
-    monkeypatch.setattr(RV, "_last_head", lambda *a, **k: head)
+    monkeypatch.setattr(RV.delta, "_last_head", lambda *a, **k: head)
     diff, _how, why = RV._delta_scope(repo, it, "critic", "item", "main")
     assert diff == "" and "could not be produced" in why and "boom" in why
 
