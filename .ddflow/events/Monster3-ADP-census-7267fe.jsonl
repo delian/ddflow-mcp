@@ -1,0 +1,2 @@
+{"agent":"Monster3-ADP-census-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e3ad53ddd1207530e2b2818ba","kind":"ddflow.seen","lamport":120832,"schema":1,"subject":"ddflow","ts":"2026-11-01T01:15:50.796451Z"}
+{"agent":"Monster3-ADP-census-7267fe","data":{"gate":"rubber_duck"},"id":"e8b7eb82580f84618034e7b41","kind":"gate.started","lamport":120833,"schema":1,"subject":"ADP-census","ts":"2026-11-01T01:15:50.823271Z"}
