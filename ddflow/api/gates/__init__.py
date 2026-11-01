@@ -1,8 +1,8 @@
 """The gate pipeline: ask what is next, run it, record it, skip it, prove it can fail.
 
 This family was `ddflow/api/gates.py` and is now a package (r-small-files): the module
-was split into ``_timeout.py``, ``_tree.py``, ``_query.py``, ``_run.py``, ``_vet.py`` and
-``record.py``, each under 30k chars, with the public API re-exported here unchanged.
+was split into ``_timeout.py``, ``_tree.py``, ``_query.py``, ``_run.py`` and ``_vet.py``,
+each under 30k chars, with the public API re-exported here unchanged.
 
 Two rules are worth reading before changing anything:
 
@@ -14,22 +14,98 @@ Two rules are worth reading before changing anything:
 * **A human gate is a REFUSAL (3), never a failure (1).** Nothing went wrong; the caller
   is simply not the party who can clear it. An agent branching on exit codes needs to
   tell "this is broken" from "this is not yours to do".
+
+The re-export is LAZY (``__getattr__``): the package imports no submodule until one
+name is asked for, which preserves the two invariants a one-file module had — monkeypatch
+(``monkeypatch.setattr(gates, name, ...)`` re-binds the name on THIS module) and the
+layering ratchet (an eager ``from .sub import ...`` would read as a latent parent<->child
+cycle). The submodules are imported eagerly so ``gates._query`` (and the other siblings)
+stay real module attributes, which downstream tests monkeypatch directly.
 """
 
 from __future__ import annotations
 
-from .._base import _load as _load
-from ._query import list_gates as list_gates
-from ._query import status as status
-from ._query import sweep_dead_runs as sweep_dead_runs
-from ._query import verify as verify
-from ._run import OUTCOME_EXIT as OUTCOME_EXIT
-from ._run import _note_logged as _note_logged
-from ._run import record as record
-from ._run import run as run
-from ._timeout import _with_run_timeout as _with_run_timeout
-from ._tree import item_tree as item_tree
-from ._vet import Evidence as Evidence
+import importlib
+from typing import Any
+
+from . import _query, _run, _timeout, _tree, _vet
+
+#: Public (and patch-covered private) name -> the submodule that defines it.
+_SUBMODULE_OF = {
+    # query
+    "list_gates": "_query",
+    "status": "_query",
+    "sweep_dead_runs": "_query",
+    "verify": "_query",
+    "_recorded_since": "_query",
+    "_resolve": "_query",
+    "_list_overrides": "_query",
+    "_order_gate": "_query",
+    "_load": "_query",
+    # run
+    "OUTCOME_EXIT": "_run",
+    "record": "_run",
+    "run": "_run",
+    "_note_logged": "_run",
+    "_lease_keeper": "_run",
+    "_superseded_run": "_run",
+    "_mark_or_refuse_twin": "_run",
+    "_account_flakes": "_run",
+    "_failure_reason": "_run",
+    "_refuse_repeated_failure": "_run",
+    "_fail_fast": "_run",
+    "_flakes_after_pass": "_run",
+    "_rerun_failed_tests": "_run",
+    "_guarded": "_run",
+    "_execute": "_run",
+    "_scoped": "_run",
+    "_covered_by_ci": "_run",
+    "TSC": "_run",
+    # timeout
+    "_CI_VERB": "_timeout",
+    "_CI_WORDS": "_timeout",
+    "_quotes_balanced": "_timeout",
+    "_ci_command_with_timeout": "_timeout",
+    "_with_run_timeout": "_timeout",
+    # tree
+    "item_tree": "_tree",
+    "_at_merged_tree": "_tree",
+    "_where_to_run": "_tree",
+    "_no_tree_reason": "_tree",
+    # vet
+    "Evidence": "_vet",
+    "_Vetted": "_vet",
+    "_has_research_note": "_vet",
+    "_implement_without_commits": "_vet",
+    "_vet_claims": "_vet",
+    "_author_model_on_reviewer_gate": "_vet",
+    "_family_of_name_or_value": "_vet",
+    "_reviewed_sha_check": "_vet",
+    "_roborev_reviewer": "_vet",
+    "_docs_gate_export": "_vet",
+    "_evidence_fields": "_vet",
+    "_failed_review_unanswered": "_vet",
+    "_not_gated_skip_note": "_vet",
+    "_override_gate": "_vet",
+    "_agent_skip_refusal": "_vet",
+}
+
+_MODULES: dict[str, Any] = {}
+
+
+def __getattr__(name: str) -> Any:
+    sub = _SUBMODULE_OF.get(name)
+    if sub is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    mod = _MODULES.get(sub)
+    if mod is None:
+        mod = importlib.import_module(f"{__name__}.{sub}")
+        _MODULES[sub] = mod
+    return getattr(mod, name)
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_SUBMODULE_OF))
 
 __all__ = [
     "OUTCOME_EXIT",
