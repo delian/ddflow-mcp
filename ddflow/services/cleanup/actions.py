@@ -76,7 +76,7 @@ def _remove_planned(repo: Path, cfg: Config, log: EventLog, t: TreeState, base: 
     (Bfc4ac64c9c): re-proved against the queue as it is now, then removed with that proof."""
     # late-bound: honour monkeypatch of the package attr
     _dispose_tree = sys.modules[__package__].dispose_tree
-    _proved_leftover_tip = sys.modules[__package__].proved_leftover_tip  # late-bound: honour monkeypatch
+    _proved_leftover_tip = sys.modules[__package__].proved_leftover_tip
 
     root = W.repo_root(repo)
     wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)

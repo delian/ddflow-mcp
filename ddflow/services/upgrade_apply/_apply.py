@@ -116,7 +116,7 @@ def apply(
     if prior:
         backup_dir, why, refused = prior, "", False
     else:
-        _do_save = sys.modules[__package__]._save  # late-bound: honours monkeypatch of the package attr
+        _do_save = sys.modules[__package__]._save
 
         backup_dir, why, refused = _do_save(repo, cfg, backup, files, frm, to)
     if why:
@@ -215,7 +215,7 @@ def _late_saver(
         fresh = [p for p in more if p.resolve() not in saved]
         if not fresh or mode == "none":
             return ""
-        _do_save = sys.modules[__package__]._save  # late-bound: honours monkeypatch of the package attr
+        _do_save = sys.modules[__package__]._save
 
         where, why, _refused = _do_save(repo, cfg, mode, fresh, *versions)
         if why:
@@ -347,7 +347,7 @@ def _save(
         return "", "", False
     try:
         if mode == "snapshot":
-            _make_snapshot = sys.modules[__package__].make_snapshot  # late-bound: honours monkeypatch
+            _make_snapshot = sys.modules[__package__].make_snapshot
 
             snap = _make_snapshot(repo, files, frm, to)
             extra = f" (and {snap.local} for what git cannot hold)" if snap.local else ""
@@ -475,7 +475,7 @@ def _execute(
         elif cat == "instructions":
             records = _run_instructions(repo, [item])
         else:
-            _do_run = sys.modules[__package__]._run  # late-bound: honours monkeypatch of the package attr
+            _do_run = sys.modules[__package__]._run
 
             records = [_rec(item, *_do_run(repo, cfg, item, agent))]
         out.extend(records)
