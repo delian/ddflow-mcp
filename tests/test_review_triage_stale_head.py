@@ -199,6 +199,60 @@ def test_a_clean_tree_sha_round_after_merge_resolves_against_the_merged_content(
     assert "holds other content" in RV.reviewed_other_tree(repo, None, stale, "T1", "critic")
 
 
+def test_a_merge_commit_after_merge_resolves_to_the_branch_head_content(
+    repo, tmp_path, monkeypatch
+):
+    """The `worktree.merged` event carries `landed_after` (a merge commit), whose `now` is
+    its SECOND parent -- the branch head the round reviewed."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "base"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "checkout", "-q", "-b", "feature"], check=True, capture_output=True
+    )
+    (repo / "a.py").write_text("x = 2\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "work"], check=True, capture_output=True
+    )
+    branch_head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "-C", str(repo), "checkout", "-q", "main"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "merge", "-q", "--no-ff", "-m", "merge work", "feature"],
+        check=True,
+        capture_output=True,
+    )
+    merge_commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    rec = NS(evidence={"reviewed_head": branch_head, "review_kind": "full"})
+    it = NS(
+        id="T1",
+        kind="task",
+        worktree="",
+        merged_sha=merge_commit,
+        landed_after=merge_commit,
+        landed_before=f"{merge_commit}^1",
+        branch="",
+        pr=None,
+        gates={"critic": rec},
+    )
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (None, ""))
+    assert RV.reviewed_other_tree(repo, None, NS(items={"T1": it}), "T1", "critic") == ""
+
+
 def test_different_commits_with_the_same_content_compare_equal(repo, tmp_path, monkeypatch):
     """Content is compared, not commit ids: two commits that differ only in ddflow's own
     bookkeeping (`.ddflow/`, excluded from `source_tree`) are one tree to a review."""
