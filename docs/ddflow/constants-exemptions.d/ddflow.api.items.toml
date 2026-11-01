@@ -1,3 +1,0 @@
-[exempt]
-"ddflow/api/items.py:MIN_SPLIT_PARTS" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'
-"ddflow/api/items.py:_MIN_EVENT_PREFIX" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'
