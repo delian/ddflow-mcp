@@ -397,3 +397,36 @@ def test_a_kilo_answer_holds_only_while_the_part_is_there(log, cfg):
     assert E.verified_level(got, cfg) == 2
     path.unlink()  # the proof is gone (or never was)
     assert E.verified_level(got, cfg) == 1
+
+
+def test_the_newest_answer_across_both_channels_wins(log, cfg):
+    """The age sort in find_all: the person answered once in Claude (older) and once in Kilo
+    (older still); find must return the NEWEST, whichever channel held it (roborev finding:
+    the sort's own defect class needed a regression test)."""
+    root = Path(cfg.approvals.transcript_dirs[0]).parent
+    kilo = root / "kilo.db"
+    claude = root / "claude"
+    cfg.approvals.transcript_dirs = [str(claude), str(kilo)]
+
+    row = _file(log, cfg)
+    yes, _ = H.labels(row["id"])
+
+    con = sqlite3.connect(kilo)
+    con.execute(
+        "CREATE TABLE part (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, "
+        "time_created INTEGER NOT NULL, data TEXT NOT NULL)"
+    )
+    part = _kilo_question(row["text"], yes)
+    con.execute(
+        "INSERT INTO part (id, session_id, time_created, data) VALUES (?, ?, ?, ?)",
+        (part["id"], "ses_test", 1000, json.dumps(part["data"])),  # 1970: oldest
+    )
+    con.commit()
+    con.close()
+
+    cdir = claude / "slug"
+    cdir.mkdir(parents=True)
+    (cdir / "s1.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in [_asked(row["text"]), _answered(row["text"], yes)]) + "\n"
+    )
+    assert H.find(cfg, row).tool_use_id == "U1"  # 2026-10-23 > 1970: the newer Claude answer
