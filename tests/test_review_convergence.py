@@ -239,3 +239,41 @@ def test_a_repeated_untriaged_below_floor_finding_still_blocks(monkeypatch):
         fresh, [fresh], object(), "T1", "critic", True, cfg, None, print
     )
     assert outcome == "passed" and ev["converged"]["findings_below_floor"] == 1
+
+
+def test_a_refuted_prior_finding_is_not_still_standing(monkeypatch):
+    """`_still_standing` drops a REFUTED prior finding (settled, no longer stands: re-raising
+    it below the floor is filtered), but keeps a CONFIRMED one (still a real defect: blocks)."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "chunk_findings": [
+            {
+                "severity": "MEDIUM",
+                "digest": "abc123",
+                "title": "m",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ]
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    cfg = Config.load(None, env={})
+    repeated = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", digest="abc123", title="m")]
+    )
+
+    refuted = NS(triage={"critic": {"abc123": {"verdict": "refuted"}}})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], refuted, "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "passed"
+
+    confirmed = NS(triage={"critic": {"abc123": {"verdict": "confirmed"}}})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], confirmed, "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "failed"
