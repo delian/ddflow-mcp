@@ -109,3 +109,18 @@ def test_a_project_that_is_not_uv_is_not_touched(tmp_path):
     tree.mkdir()
     assert W.isolate_venv(root, tree) is False
     assert not (tree / ".venv").exists()
+
+
+def test_a_uv_worktree_is_isolated_even_when_the_primary_lacks_uv_lock(tmp_path):
+    """The worktree's own `uv.lock` decides, not the primary checkout's current HEAD: the
+    primary can sit on a branch without `uv.lock` while this worktree (from main) is a uv
+    project, whose `uv pip install -e .` would still walk up to the shared `.venv`."""
+    if shutil.which("uv") is None:
+        pytest.skip("uv not on PATH")
+    root = tmp_path / "prj"
+    root.mkdir()  # no uv.lock beside the primary
+    tree = tmp_path / "wt"
+    tree.mkdir()
+    (tree / "uv.lock").write_text("")
+    assert W.isolate_venv(root, tree) is True
+    assert (tree / ".venv" / "pyvenv.cfg").is_file()

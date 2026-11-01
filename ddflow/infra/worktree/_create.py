@@ -41,14 +41,14 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     console-script call fail with ModuleNotFoundError. A worktree-local `.venv` is
     git-ignored and dies with the tree, so it can never dangle against a removed path.
 
-    Python/uv projects only (told by `uv.lock` beside the primary, the same signal
-    `gates.testcmd` uses), and only when `uv` is on PATH. `uv pip`'s and `uv run`'s
+    Python/uv projects only (told by `uv.lock` beside the worktree OR the primary), and
+    only when `uv` is on PATH. `uv pip`'s and `uv run`'s
     virtualenv DISCOVERY walks up to the shared venv only when the worktree has none of
     its own; those tools need no native `pip` in the venv, so a bare `.venv` is enough.
     A failure to make the venv is skipped, never raised — a claim must not die because a
     venv could not be made, exactly as `copy_local_files` never raises.
     """
-    if not (Path(root) / "uv.lock").is_file():
+    if not ((Path(root) / "uv.lock").is_file() or (Path(tree) / "uv.lock").is_file()):
         return False
     venv = Path(tree) / ".venv"
     if (venv / "pyvenv.cfg").is_file() and not venv.is_symlink():
