@@ -1,16 +1,20 @@
 """Work actually done, and loops that never finish it.
 
 This package is the former ``ddflow/core/progress.py``, split into submodules that
-stay under 30k chars each (rule r-small-files). The public API is unchanged: every
-name the old module exported is re-exported here, so ``from ddflow.core.progress
-import new_reports_line`` and ``from ddflow.core import progress as PR`` bind exactly
-what they bound before.
+stay under 30k chars each (rule r-small-files). The names the old module defined — its
+public API and the private names the tests patch — are re-exported here from
+``_SUBMODULE_OF``, so ``from ddflow.core.progress import new_reports_line`` and
+``from ddflow.core import progress as PR`` bind the defined names exactly as before.
+Names the old module only imported at top level were not part of that surface and are
+not re-exported.
 
 The re-export is LAZY (``__getattr__``): the package imports no submodule until one
-name is asked for. That keeps two invariants a one-file module had and a package must
-keep — monkeypatch (``monkeypatch.setattr(PR, name, ...)`` re-binds the name on THIS
-module exactly as before) and the layering ratchet (``test_no_mutually_importing_pair``
-would read an eager ``from .work import ...`` here as a latent parent<->child cycle).
+name is asked for, and keeping it lazy (rather than an eager ``from .work import ...``)
+avoids a parent<->child cycle in ``test_no_mutually_importing_pair``.
+``monkeypatch.setattr(PR, name, ...)`` re-binds the name on THIS package; a peer that
+resolves the same name through its own submodule global (``loops.detect`` uses ``work``
+via ``from .tracking import work``) is not seen by such a patch — a difference from the
+old single namespace no call site relies on.
 """
 
 from __future__ import annotations
