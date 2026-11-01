@@ -43,8 +43,9 @@ BASELINE: dict[str, tuple[int, str]] = {
         "operators' settings files, kept byte for byte",
     ),
     "ddflow/config_sections/agent.py": (
-        6,
-        "model vendors of the agent roster (anthropic, google): a different domain",
+        7,
+        "model vendors of the agent roster, a different domain; the `grok` vendor key is "
+        "also a harness descriptor id since DX-grok-hook-descriptor",
     ),
     "ddflow/services/harnessreg.py": (
         6,
@@ -65,8 +66,24 @@ BASELINE: dict[str, tuple[int, str]] = {
         1,
         "HARNESS = 'claude': the lean agent definitions are a claude-only template set",
     ),
-    "ddflow/api/setup.py": (2, "the --claude/--gemini flag parameters of `hooks`"),
-    "ddflow/services/adopt.py": (2, "the CLAUDE.md pointer written when claude is adopted"),
+    "ddflow/api/setup/hooks.py": (2, "the --claude/--gemini flag parameters of `hooks`"),
+    "ddflow/services/adopt/_adopt.py": (
+        1,
+        "the CLAUDE.md pointer written when claude is adopted",
+    ),
+    "ddflow/services/adopt/_docs.py": (
+        1,
+        "the CLAUDE.md pointer written when claude is adopted",
+    ),
+    "ddflow/services/lanes/launch_template.py": (
+        2,
+        "the harness process lanes the shipped launch can start (opencode, kilo)",
+    ),
+    "ddflow/services/lanes/opencode.py": (2, "the opencode/kilo binaries in preference order"),
+    "ddflow/services/swarm/lanehooks.py": (
+        3,
+        "the per-harness DOORS storage keys (claude, kilo, opencode)",
+    ),
     "ddflow/services/hookwriters/__init__.py": (2, "the descriptor styles claude and gemini"),
     "ddflow/services/hookwriters/flatlist.py": (2, "the descriptor styles cursor and copilot"),
     "ddflow/services/mcpconfig.py": (2, "the MCP file shapes named after their first user"),

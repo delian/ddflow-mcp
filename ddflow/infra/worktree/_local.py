@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
+from .. import fsio
 from .. import worktree as _W
 
 
@@ -65,7 +65,7 @@ def copy_local_files_report(primary: Path, tree: Path, names: list[str]) -> dict
             continue
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+            fsio.copy_file(src, dst)
         except OSError:
             dst.unlink(missing_ok=True)
             out[name] = SKIP_FAILED
