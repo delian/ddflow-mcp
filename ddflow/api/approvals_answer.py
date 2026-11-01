@@ -83,6 +83,19 @@ def _record(log, cfg, st, ask_id: str, actor, prefix: str) -> str:
     return ""
 
 
+def _split_ids(ids: list[str], digests: list[str]) -> list[tuple[str, str]] | None:
+    """`(ask_id, prefix)` per id: `ID:DIGEST` carries the prefix inline; `--digest` gives one
+    per id by position. None when both are mixed (the position-based values would shift)."""
+    digests = list(digests)
+    if digests and any(":" in str(raw) for raw in ids):
+        return None
+    target = []
+    for i, raw in enumerate(ids):
+        ask_id, _, inline = str(raw).partition(":")
+        target.append((ask_id, inline or (digests[i] if i < len(digests) else "")))
+    return target
+
+
 def approvals_approve_bulk(
     repo: Path,
     ids: list[str],
@@ -105,19 +118,12 @@ def approvals_approve_bulk(
     if all_pending:
         target = [(r["id"], "") for r in V.waiting_for_a_person(st)]
     else:
-        digests = list(digests)
-        if digests and any(":" in str(raw) for raw in ids):
-            # `--digest` aligns by position; `ID:DIGEST` carries the prefix per id. Mixed in
-            # one command the position-based digests shift or drop, so spell one way or the other.
+        target = _split_ids(ids, digests)
+        if target is None:
             return O.refused(
                 "approvals.approve",
                 "spell digests one way: ID:DIGEST pairs, or ids with --digest per id -- not both",
             )
-        target = [
-            (ask_id, inline or (digests[i] if i < len(digests) else ""))
-            for i, raw in enumerate(ids)
-            for ask_id, _, inline in (str(raw).partition(":"),)
-        ]
 
     approved: list[str] = []
     refused: list[tuple[str, str]] = []
