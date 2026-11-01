@@ -23,6 +23,8 @@ from ...core import digest as D
 from ...core.events import REPAIR_APPLIED_KIND
 from ...core.model import State
 from ...infra.log import EventLog, running_version
+from ..approvals import consume as CN
+from ..approvals.canon import Canon
 from ..identity import agent_marker
 from .base import Context, context
 
@@ -68,6 +70,10 @@ def regressions(log: EventLog) -> list[Item]:
     ]
 
 
+def _fresh(log: EventLog) -> list[Item]:
+    return [*mismatches(log.read_all()), *regressions(log)]
+
+
 def records(st: State) -> dict[str, dict[str, Any]]:
     """Accepted finding key -> the record that accepted it (the latest wins)."""
     out: dict[str, dict[str, Any]] = {}
@@ -98,22 +104,50 @@ def clock_findings(ctx: Context) -> tuple[list[str], list[str]]:
     return [i.detail for i in open_], notes
 
 
-def refusal(agent: str = "", reason: str = "") -> str:
-    """Why this caller may not accept history ("" when it may): an agent is refused, and so
-    is a call that gives no reason."""
-    why = agent_marker(agent)
-    if why:
-        return (
-            f"accepting history is a person's act ({why}): run `ddflow doctor --accept-history "
-            "--history-reason WHY` yourself, in your own terminal; an agent reports the finding"
-        )
-    return "" if reason.strip() else "--accept-history needs --history-reason: say why it is known"
+def pending_names(only: str) -> tuple[str, ...]:
+    return tuple(x.strip() for x in only.split(",") if x.strip())
+
+
+def gate(
+    ctx: Context, agent: str, reason: str, only: str = "", approval: str = ""
+) -> tuple[str, dict[str, Any]]:
+    """`(why not, approval stamp)`: why this call may not accept history ("" when it may).
+
+    A call with no reason is refused. A PERSON at a terminal accepts directly. An agent (or the
+    MCP surface) may not accept on its own word: it files `--approval request`, the person answers
+    in chat, and the agent re-runs it with the approval id; the approval binds the findings
+    accepted, so a changed or extra finding needs a new one (the agent can never approve itself).
+    """
+    if not reason.strip():
+        return "--accept-history needs --history-reason: say why it is known", {}
+    who = agent_marker(agent)
+    if not who:
+        return "", {}
+    names = pending_names(only)
+    keys = sorted(i.key for i in _fresh(ctx.log) if not names or i.ref in names)
+    canon = Canon(
+        verb="history.accept",
+        agent=ctx.log.agent_id,
+        item=",".join(names),
+        args={"count": len(keys)},
+        state=D.content_digest("\n".join(keys)),
+    )
+    decision = CN.operator_gate(
+        ctx.log, ctx.cfg, canon, approval_id=approval, reason=reason, auto=False
+    )
+    if decision.ok:
+        return "", dict(decision.stamp or {})
+    return (
+        f"accepting history needs a person ({who}): re-run with `--approval request` "
+        f"(MCP: approval=request) and the person answers in chat; or run it yourself in your own "
+        f"terminal. {decision.message}",
+        {},
+    )
 
 
 def accepting(ctx: Context, reason: str, note_: str = "", only: str = "") -> Context:
     """`accept` for the names in ``only`` (comma-separated), then a fresh read of the log."""
-    names = tuple(x.strip() for x in only.split(",") if x.strip())
-    accept(ctx, reason=reason, note_=note_, only=names)
+    accept(ctx, reason=reason, note_=note_, only=pending_names(only))
     return context(ctx.repo, ctx.log, ctx.cfg)
 
 
@@ -122,7 +156,7 @@ def accept(ctx: Context, *, reason: str, note_: str = "", only: tuple[str, ...] 
     them. Appends `repair.applied` events and nothing else; no line is edited."""
     log = ctx.log
     with log.transaction():
-        fresh = [*mismatches(log.read_all()), *regressions(log)]
+        fresh = _fresh(log)
         done = records(ctx.st)
         todo = [i for i in fresh if i.key not in done and (not only or i.ref in only)]
         for at in range(0, len(todo), PER_EVENT):

@@ -5,10 +5,14 @@ log; a PERSON accepts them once (`ddflow doctor --accept-history`) and `doctor` 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
+from ddflow.core.handlers.asks import asks_of
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
 from ddflow.services import identity as ID
 from tests.conftest import run_cli
 
@@ -22,8 +26,12 @@ def _a_person(monkeypatch):
 
 
 def _shard(repo: Path) -> Path:
-    (path,) = sorted((repo / ".ddflow" / "events").glob("*.jsonl"))
-    return path
+    # the person's shard (an agent that files an approval request writes its own)
+    return next(
+        p
+        for p in sorted((repo / ".ddflow" / "events").glob("*.jsonl"))
+        if b'"subject":"T1"' in p.read_bytes()
+    )
 
 
 def _edit(repo: Path, old: bytes, new: bytes) -> None:
@@ -97,26 +105,61 @@ def test_accepting_requires_a_reason_and_records_nothing_without_one(scrubbed):
     assert _doctor(scrubbed)[0] == 1
 
 
-@pytest.mark.parametrize("how", ["agent_flag", "env", "harness"])
-def test_an_agent_identity_may_not_accept_history(scrubbed, monkeypatch, how):
-    agent = "bot" if how == "agent_flag" else ""
+def _ask_id(text: str) -> str:
+    found = re.search(r"approval (Q[0-9a-f]+)", text)
+    assert found, text
+    return found.group(1)
+
+
+def _approve(repo: Path, ask_id: str) -> None:
+    st = fold(EventLog(repo, "probe").read_all(), strict=False)
+    digest = asks_of(st)[ask_id]["digest"]
+    code, _o, err = run_cli(repo, "approvals", "approve", ask_id, "--digest", digest[:12])
+    assert code == 0, err
+
+
+def test_an_agent_needs_a_persons_approval_answered_in_chat(scrubbed):
+    code, out, err = run_cli(scrubbed, *ACCEPT, agent="bot")
+    assert code == 3 and "--approval request" in out + err, out + err
+    code, out, err = run_cli(scrubbed, *ACCEPT, "--approval", "request", agent="bot")
+    assert code == 3, out + err
+    ask = _ask_id(out + err)
+    assert _doctor(scrubbed)[0] == 1  # a pending request records nothing
+    # the agent cannot answer its own request, and an unanswered id is not an approval
+    assert run_cli(scrubbed, *ACCEPT, "--approval", ask, agent="bot")[0] == 3
+    assert _doctor(scrubbed)[0] == 1
+    _approve(scrubbed, ask)  # the person, in chat
+    code, out, err = run_cli(scrubbed, *ACCEPT, "--approval", ask, agent="bot")
+    assert code == 0, out + err
+    code, text = _doctor(scrubbed)
+    assert code == 0 and "accepted" in text and "PROBLEM" not in text, text
+    # the same approval does not cover a later edit of the event
+    _edit(scrubbed, b"[REDACTED]", b"[REDACTED-2]")
+    code, text = _doctor(scrubbed)
+    assert code == 1 and "content does not match its address" in text, text
+    assert run_cli(scrubbed, *ACCEPT, "--approval", ask, agent="bot")[0] == 3
+
+
+@pytest.mark.parametrize("how", ["env", "harness"])
+def test_an_agent_marker_is_an_agent_without_the_agent_flag(scrubbed, monkeypatch, how):
     if how == "env":
         monkeypatch.setenv("DDFLOW_AGENT", "bot")
-    if how == "harness":
+    else:
         monkeypatch.setenv(ID.HARNESS_MARKERS[0], "1")
-    code, out, err = run_cli(scrubbed, *ACCEPT, agent=agent)
-    assert code == 3 and "person" in (out + err).lower(), out + err
+    code, out, err = run_cli(scrubbed, *ACCEPT)
+    assert code == 3 and "--approval request" in out + err, out + err
     monkeypatch.undo()
     assert _doctor(scrubbed)[0] == 1  # nothing was recorded
 
 
-def test_it_is_refused_over_mcp_and_is_not_an_mcp_parameter(scrubbed):
+def test_it_is_reachable_over_mcp_with_the_same_gate(scrubbed):
     from ddflow import api
-
-    out = api.doctor(scrubbed, agent="bot", accept_history=True, history_reason="x")
-    assert out.exit == 3, out.data
     from ddflow.surfaces.declared.setup import COMMANDS
 
+    ask = ("scrubbed", "", "", "")
+    out = api.doctor(scrubbed, agent="bot", accept_history=True, history=ask)
+    assert out.exit == 3, out.data
     doctor = next(c for c in COMMANDS if c.path == ("doctor",))
     names = {p.name: p for p in doctor.params}
-    assert names["accept_history"].cli_only and names["history_reason"].cli_only
+    for n in ("accept_history", "history_reason", "history_note", "history_only", "approval"):
+        assert not names[n].cli_only, n

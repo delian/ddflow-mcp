@@ -454,9 +454,12 @@ def cmd_doctor(a, c: Ctx) -> int:
         start_texts=start_texts,
         accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
         accept_history=bool(getattr(a, "accept_history", False)),
-        history_reason=str(getattr(a, "history_reason", "") or ""),
-        history_note=str(getattr(a, "history_note", "") or ""),
-        history_only=str(getattr(a, "history_only", "") or ""),
+        history=(
+            str(getattr(a, "history_reason", "") or ""),
+            str(getattr(a, "history_note", "") or ""),
+            str(getattr(a, "history_only", "") or ""),
+            str(getattr(a, "approval", "") or ""),
+        ),
     )
     if out.exit == REFUSED:
         print(out.reason, file=sys.stderr)

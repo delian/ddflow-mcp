@@ -252,9 +252,7 @@ def doctor(
     tools: Any = None,
     accept_lost_events: bool = False,
     accept_history: bool = False,
-    history_reason: str = "",
-    history_note: str = "",
-    history_only: str = "",
+    history: tuple[str, str, str, str] = ("", "", "", ""),
     start_texts: Any = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
@@ -267,8 +265,6 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-    if accept_history and (why := RP.accepted.refusal(agent, history_reason)):
-        return O.refused("doctor", why)
     log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
@@ -278,7 +274,11 @@ def doctor(
     # the gate-rate pass from folding again.
     repair_ctx = RP.context(repo, log, cfg)
     if accept_history:  # recorded as `repair.applied`; the report below reads it back
-        repair_ctx = RP.accepted.accepting(repair_ctx, history_reason, history_note, history_only)
+        reason, note, only, approval = history  # (reason, note, only ids, approval)
+        why, _stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
+        if why:
+            return O.refused("doctor", why, text=why)
+        repair_ctx = RP.accepted.accepting(repair_ctx, reason, note, only)
         st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)
