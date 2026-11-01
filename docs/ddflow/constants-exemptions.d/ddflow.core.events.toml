@@ -1,0 +1,3 @@
+[knob]
+"ddflow/core/events.py:TAIL_MAX_BYTES" = 'events.tail_max_bytes'
+"ddflow/core/events.py:TAIL_WINDOW_BYTES" = 'events.tail_window_bytes'

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/doctypes/recordquery.py:MAX_LIMIT" = "the ceiling a document section's `limit=` word may name, a validation bound on a declarative query (a section asks for fewer; the cap only rejects a typo like limit=1e9)"

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/workflow.py:OLD_PARALLEL_DEFAULT" = 'legacy default kept for events recorded before the knob existed; replay reads it, so it is history, not a setting'

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/verify.py:_MIN_SUBJECT" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'

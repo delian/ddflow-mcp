@@ -1,0 +1,4 @@
+[exempt]
+"ddflow/services/suitelock.py:LOCK_S" = "how long a new waiter waits for its own ticket's lock while a scan holds it for an instant; a race guard, never reached in practice"
+"ddflow/services/suitelock.py:NEW_S" = 'how long an unlocked ticket is taken for one whose owner has not locked it yet: a race window of microseconds made safe by a second, not a tuning choice'
+"ddflow/services/suitelock.py:QUEUE_POLL_S" = "the sweep and heartbeat period of a queued suite waiter, the same kind of constant as the slot lock's own poll (slots.POLL_S); the wait it bounds is [ci].suite_wait_s"

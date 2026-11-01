@@ -76,7 +76,7 @@ def test_since_compares_instants_not_strings(monkeypatch):
         evidence={"passed_on_refutation": {"refuted": 1, "confirmed": 0, "rounds": 2}},
     )
     st = NS(items={"T": NS(id="T", title="t", state="done", removed=False, gates={"critic": rec})})
-    monkeypatch.setattr(api_gates, "_load", lambda repo, agent: (None, None, st))
+    monkeypatch.setattr(api_gates._query, "_load", lambda repo, agent: (None, None, st))
 
     def n(since):
         return api_gates.list_gates(None, refuted=True, since=since).data["count"]

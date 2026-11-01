@@ -1,0 +1,5 @@
+[knob]
+"ddflow/services/bugreport.py:EXPECTED_MAX" = 'bugreport.expected_max'
+"ddflow/services/bugreport.py:STDERR_MAX" = 'bugreport.stderr_max'
+"ddflow/services/bugreport.py:TITLE_MAX" = 'bugreport.title_max'
+"ddflow/services/bugreport.py:TRACEBACK_MAX" = 'bugreport.traceback_max'

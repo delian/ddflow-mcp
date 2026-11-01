@@ -1,0 +1,4 @@
+[exempt]
+"ddflow/services/searchcore/regexsafe.py:MAX_BRANCH_REPS" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'
+"ddflow/services/searchcore/regexsafe.py:MAX_OPEN_REPEATS" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'
+"ddflow/services/searchcore/regexsafe.py:MAX_PATTERN" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'

@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/repairs/__init__.py:DETAIL_CHARS" = 'repairs.detail_chars'
