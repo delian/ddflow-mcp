@@ -366,7 +366,7 @@ def test_api_view_carries_families_and_unparsed():
 
     census = A.FamilyReport("hashlib", ("hashlib",), ("ddflow.core.digest",), ("ddflow.core.digest",))
     text = API.render(A.Census((census,), ("ddflow.broken",)))
-    assert "hashlib" in text and "unparsed" in text
+    assert "hashlib" in text and "ddflow.core.digest" in text and "ddflow.broken" in text
 
     out = API.archdeps(ROOT)
     assert out.exit == 0
