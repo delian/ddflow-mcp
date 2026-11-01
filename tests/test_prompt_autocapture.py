@@ -156,6 +156,35 @@ def test_a_copy_slow_to_start_is_still_the_same_firing(repo, tmp_path):
     assert len(_events(repo, "session.prompt")) == 1
 
 
+def test_a_record_beyond_the_window_in_the_future_is_not_recent(repo):
+    """B7b632b294c: `_recorded_recently` rejected only records OLDER than the window, so a
+    slow earlier hook whose record landed after a later hook's ``fired_at`` looked "recent"
+    and dropped the later hook's legitimately-second prompt. A record farther than the
+    window in EITHER direction is not the same firing."""
+    import time
+
+    from ddflow.infra.log import EventLog
+    from ddflow.services.sessions import DOUBLE_FIRE_S, _recorded_recently
+
+    run_cli(repo, "init")
+    log = EventLog(repo, "bugtest")
+    now = time.time()
+    log.append(
+        "session.prompt",
+        "s1",
+        {"text": "continue", "item": "", "redactions": 0, "auto": True},
+    )
+    # The record's ts is at least `now` (it is written after `now` was captured). A hook
+    # that fired just over the window earlier measures its age from that fired_at, so this
+    # record sits in that firing's "future" and must not read as the same firing.
+    assert (
+        _recorded_recently(
+            log, "continue", window=DOUBLE_FIRE_S, subject="s1", now=now - DOUBLE_FIRE_S - 1.0
+        )
+        is False
+    )
+
+
 def test_install_claude_adds_the_prompt_hook_beside_the_operators_own(repo):
     run_cli(repo, "init")
     (repo / ".claude").mkdir()
