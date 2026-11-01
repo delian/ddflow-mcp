@@ -23,6 +23,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import stat
 import tempfile
 import time
@@ -398,6 +399,19 @@ def repo_rel(
         return Path(path).resolve().relative_to(root).as_posix()
     except ValueError:
         return None if strict else str(path)
+
+
+def copy_file(src: Path | str, dst: Path | str) -> None:
+    """Copy the file ``src`` to ``dst``, preserving its metadata, like ``shutil.copy2``.
+
+    The worktree layer moves machine-local convenience files with this rather than
+    importing ``shutil`` outside the file home."""
+    shutil.copy2(src, dst)
+
+
+def rmtree(path: Path | str, *, ignore_errors: bool = True) -> None:
+    """Remove the directory tree at ``path``, ignoring errors by default."""
+    shutil.rmtree(path, ignore_errors=ignore_errors)
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,5 @@
+[knob]
+"ddflow/services/export/kind_sessions.py:BRIEF_MIN_CHARS" = 'export.kind_sessions.brief_min_chars'
+"ddflow/services/export/kind_sessions.py:NOTE_CHARS" = 'export.kind_sessions.note_chars'
+"ddflow/services/export/kind_sessions.py:PROMPT_CHARS" = 'export.kind_sessions.prompt_chars'
+"ddflow/services/export/kind_sessions.py:SUMMARY_CHARS" = 'export.kind_sessions.summary_chars'

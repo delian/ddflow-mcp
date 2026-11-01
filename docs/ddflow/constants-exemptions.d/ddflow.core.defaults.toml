@@ -1,0 +1,3 @@
+[knob]
+"ddflow/core/defaults.py:DEFAULT_PRIORITY" = 'defaults.default_priority'
+"ddflow/core/defaults.py:DEFAULT_WAIT_TIMEOUT_S" = 'defaults.default_wait_timeout_s'

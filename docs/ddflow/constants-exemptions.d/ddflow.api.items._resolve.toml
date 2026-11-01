@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/api/items/_resolve.py:_MIN_EVENT_PREFIX" = 'length floor of the event-id prefix `resolve --keep` accepts (a `e` plus five hex digits), a format fact, not a preference'

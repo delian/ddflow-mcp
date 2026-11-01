@@ -1,0 +1,8 @@
+[knob]
+"ddflow/infra/store.py:INDEX_TOUCH_S" = 'store.index_touch_s'
+"ddflow/infra/store.py:STALE_INDEX_DAYS" = 'store.stale_index_days'
+
+[exempt]
+"ddflow/infra/store.py:MIN_FINGERPRINT_SOURCES" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
+"ddflow/infra/store.py:REBUILD_LOCK_TIMEOUT_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/infra/store.py:REBUILD_TEMP_MAX_AGE_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'

@@ -31,6 +31,7 @@ from .. import jobs as JB
 from .._base import _load_fresh
 from ..bug_reopen import refile_reported
 from ..knowledge import bug_fixed
+from ..knowledge.bug_close import regression_arg_refusal
 from ._common import _chore_base, _chore_event, _require
 from .author import _author_event_identity, _author_model, _recorded_identity
 from .heartbeat import _commit_events, _inbox, _waiters
@@ -142,15 +143,9 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     closing = [t for t in tests if t.strip()] or [lint_exempt.strip()] * bool(lint_exempt.strip())
     pending = CM.open_bugs_of(st, item, cfg)
-    if closing and not pending:
-        return O.refused(
-            "item.completed",
-            f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
-            f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
-            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
-            id=item,
-            bugs_closed=[],
-        )
+    bad = _close_arg_refusal(repo, item, closing, pending, tests, lint_exempt, regression_test)
+    if bad is not None:
+        return bad
 
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
@@ -294,6 +289,41 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     extra.update(_commit_events(log, cfg, f"complete {item}", "complete"))
     extra.update(_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=False))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
+
+
+def _close_arg_refusal(
+    repo, item, closing, pending, tests, lint_exempt, regression_test
+) -> O.Outcome | None:
+    """The `item.completed` refusal for the close args, or None.
+
+    Both halves run BEFORE any approval is spent (B3c1a2491a3). First the pre-existing
+    rule — a close flag on an item that fixes no open bug — then the malformed
+    `--regression-test` check, which `bug_fixed` only reaches after the override: a file
+    path where a pytest node id is required must be refused here, or a typo wastes the
+    operator's single use. `--lint-exempt` skips the second half: `bug_fixed` short-circuits
+    on `lint_exempt` and never inspects `regression_test`, so the pre-check must not refuse
+    what the close would accept.
+    """
+    if closing and not pending:
+        return O.refused(
+            "item.completed",
+            f"--regression-test/--lint-exempt: {item} is not the fix task of any open bug, so there is "
+            f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
+            f"fixed <bug> --regression-test ...` (--lint-exempt for a CI lint bug).",
+            id=item,
+            bugs_closed=[],
+        )
+    if lint_exempt.strip() or not any(t.strip() for t in tests):
+        return None
+    bad = regression_arg_refusal(repo, regression_test)
+    if bad is None:
+        return None
+    return O.Outcome(
+        kind="item.completed",
+        data={"id": item, "bugs_closed": []},
+        exit=bad.exit,
+        reason=bad.reason,
+    )
 
 
 def _close_bugs(

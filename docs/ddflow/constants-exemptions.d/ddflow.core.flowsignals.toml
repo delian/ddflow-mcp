@@ -1,0 +1,11 @@
+[knob]
+"ddflow/core/flowsignals.py:BASELINE_S" = 'flowsignals.baseline_s'
+"ddflow/core/flowsignals.py:GATE_WINDOW_S" = 'flowsignals.gate_window_s'
+"ddflow/core/flowsignals.py:MERGE_WINDOW_S" = 'flowsignals.merge_window_s'
+"ddflow/core/flowsignals.py:MIN_BASELINE_GATE_OUTCOMES" = 'flowsignals.min_baseline_gate_outcomes'
+"ddflow/core/flowsignals.py:MIN_BASELINE_REVIEWS" = 'flowsignals.min_baseline_reviews'
+"ddflow/core/flowsignals.py:MIN_GATE_OUTCOMES" = 'flowsignals.min_gate_outcomes'
+"ddflow/core/flowsignals.py:MIN_IN_FLIGHT" = 'flowsignals.min_in_flight'
+"ddflow/core/flowsignals.py:MIN_RECENT_FAILURES" = 'flowsignals.min_recent_failures'
+"ddflow/core/flowsignals.py:MIN_RECENT_REVIEWS" = 'flowsignals.min_recent_reviews'
+"ddflow/core/flowsignals.py:RECENT_REVIEW_S" = 'flowsignals.recent_review_s'

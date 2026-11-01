@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/leasebreak.py:FRESH_S" = 'how long a pre-lock reading of a worktree may be used under the append lock; it only trades a git call for a few seconds of staleness against a hold limit of minutes, and a stale reading re-probes (never wrong)'
