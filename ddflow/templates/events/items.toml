@@ -23,3 +23,7 @@ doc = "An item was started."
 [[kind]]
 name = "item.unblocked"
 doc = "A blocked item was unblocked."
+
+[[kind]]
+name = "phase.completed"
+doc = "A phase was deliberately retired after its tasks settled."

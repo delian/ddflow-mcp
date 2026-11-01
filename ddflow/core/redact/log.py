@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 #: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "phase.completed": ("evidence",),
     "memory.redacted": ("reason",),
     "approval.granted": ("note",),
     "ask.answered": ("answer",),
@@ -113,6 +114,7 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("phase.completed", "kind"): "a kind word",
     ("lane.released_for_gate", "holder"): "an agent id compared with the lease's holder",
     ("lane.released_for_gate", "author"): "a family or model id compared at completion",
     ("lane.released_for_gate", "judgement"): "gate ids",
