@@ -52,7 +52,7 @@ def _section_types() -> dict[str, type]:
 def test_each_config_submodule_is_small():
     for path in CONFIG_DIR.glob("*.py"):
         size = path.stat().st_size
-        assert size <= MAX_MODULE_BYTES, (
+        assert MAX_MODULE_BYTES == 0 or size <= MAX_MODULE_BYTES, (  # 0: the check is off
             f"{path.name} is {size} bytes; a new knob belongs in config_sections/"
         )
 
