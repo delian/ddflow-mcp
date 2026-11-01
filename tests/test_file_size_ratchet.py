@@ -70,3 +70,14 @@ def test_limit_zero_turns_the_ratchet_off_even_with_a_baseline(tmp_path):
     base.parent.mkdir(parents=True)
     base.write_text("gone.py | 99999 | legacy\n")
     assert FS.violations(repo, 0) == []
+
+
+def test_a_listing_git_cannot_give_is_an_error_not_an_empty_result(tmp_path):
+    import pytest
+
+    with pytest.raises(RuntimeError, match="cannot measure"):
+        FS.violations(tmp_path, LIMIT)  # not a git repository
+
+
+def test_the_doctor_note_is_silent_when_git_cannot_answer(tmp_path):
+    assert FS.doctor_notes(tmp_path, LIMIT) == []

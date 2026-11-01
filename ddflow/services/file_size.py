@@ -19,14 +19,22 @@ BASELINE = "tests/guard_baselines/file_size_baseline.txt"
 SHOWN = 5
 
 
+def _listed(repo: Path) -> list[str]:
+    """The `.py` files, or raise: a listing git could not give is not 'no files'."""
+    listed = G.files(repo, pathspec=("*.py",))
+    if listed is None:
+        raise RuntimeError(f"git could not list the files of {repo}: cannot measure file sizes")
+    return listed
+
+
 def oversized(repo: Path, limit: int) -> dict[str, int]:
     """Tracked or new, not git-ignored, `.py` files over ``limit`` bytes, by path.
 
-    {} when ``limit`` is 0 (the check is off) or git could not list the files."""
+    {} when ``limit`` is 0 (the check is off); RuntimeError when git could not list the files."""
     if limit <= 0:
         return {}
     out: dict[str, int] = {}
-    for rel in G.files(repo, pathspec=("*.py",)) or []:
+    for rel in _listed(repo):
         try:
             size = (repo / rel).stat().st_size
         except OSError:  # listed but deleted in the work tree
@@ -69,7 +77,10 @@ def violations(repo: Path, limit: int) -> list[str]:
 
 def doctor_notes(repo: Path, limit: int) -> list[str]:
     """One note listing the files over the limit (largest first); [] when there are none."""
-    over = oversized(repo, limit)
+    try:
+        over = oversized(repo, limit)
+    except RuntimeError:  # advisory: git unable to answer is silence, never a claim
+        return []
     if not over:
         return []
     ranked = sorted(over.items(), key=lambda kv: -kv[1])
