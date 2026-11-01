@@ -295,3 +295,15 @@ def test_refusals_counts_unanswered_but_not_denied_or_withdrawn(proj):
     got2 = C.operator_gate(log, cfg, canon2)
     E.answer(log, cfg, got2.ask_id, "denied", actor=A.resolve_actor(cfg, "me"), digest=canon2.digest())
     assert PO.refusals(_state(proj), canon2) == 0  # a denied ask WAS answered: not a refusal
+
+
+def test_a_retry_answer_does_not_open_the_standing_window(proj, monkeypatch):
+    _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    cfg = _cfg(auto_approve_after_retries=2)
+    for s in ("r1", "r2"):
+        assert not C.operator_gate(log, cfg, _complete(proj, log, state=s)).ok
+    got = C.operator_gate(log, cfg, _complete(proj, log, state="r3"))
+    assert got.ok and got.stamp["policy"] == "auto-after-retries"
+    # the retry answer is COUNT-based and must never anchor the standing window for window rules
+    assert PO.window_start(_state(proj), cfg) == 0.0

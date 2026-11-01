@@ -103,7 +103,10 @@ def window_start(state, cfg: Config) -> float:
     starts = [
         clock.epoch(r["answered_at"], default=0.0)
         for r in asks_of(state).values()
-        if r["policy"] and r["answered_at"] and r["verb"] in cfg.approvals.standing_verbs
+        if r["policy"]
+        and r["answered_at"]
+        and r["verb"] in cfg.approvals.standing_verbs
+        and r["answered_by"] != f"policy:{RETRY_RULE_ID}"  # the retry rule never opens the window
     ]
     return min(starts, default=0.0)
 
