@@ -36,6 +36,9 @@ STDLIB_FAMILIES: dict[str, tuple[str, ...]] = {
     "hashlib": ("hashlib",),
     "clock-env": ("time", "uuid", "random", "os"),
 }
+# ``os`` above stands for ``os.environ`` (the family's one concern): at import-root
+# granularity the census also lists modules that import ``os`` only for ``os.path``, so
+# the row over-reports until ADP-clock-env's port separates environ from path.
 
 # A stdlib family's declared home: the ddflow module(s) allowed to import any of its
 # members. A family absent here has no home contract yet -- every current importer is the
@@ -75,9 +78,11 @@ class FamilyReport:
 @dataclass(frozen=True)
 class Census:
     """The whole census, families in a stable order (stdlib families first, then
-    third-party packages by name)."""
+    third-party packages by name). ``unparsed`` holds every ``ddflow`` module whose
+    file could not be read or parsed, so a bad file is reported, never skipped."""
 
     families: tuple[FamilyReport, ...]
+    unparsed: tuple[str, ...] = ()
 
 
 class ArchDepsCensus(Protocol):
@@ -95,13 +100,17 @@ def _dotted(repo: Path, path: Path) -> str:
     return ".".join(parts)
 
 
-def _external_roots(path: Path) -> tuple[str, ...]:
+def _external_roots(path: Path) -> tuple[str, ...] | None:
     """The root module names ``path`` imports from outside ddflow: the first component of
-    every ``import x.y`` and every level-0 ``from x.y import ...``, sorted and unique."""
+    every ``import x.y`` and every level-0 ``from x.y import ...``, sorted and unique.
+
+    ``None`` when the file cannot be read or parsed: an unparsable file is REPORTED (in
+    ``Census.unparsed``), never silently treated as importing nothing, or a new import
+    inside it would be invisible to the ratchet."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
-        return ()
+        return None
     roots: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -123,10 +132,15 @@ class AstArchDepsCensus:
         member_of = {m: name for name, members in STDLIB_FAMILIES.items() for m in members}
         stdlib_importers: dict[str, set[str]] = {name: set() for name in STDLIB_FAMILIES}
         third_party: dict[str, set[str]] = {}
+        unparsed: list[str] = []
 
         for path in sorted(p for p in pkg.rglob("*.py") if "__pycache__" not in p.parts):
             module = _dotted(repo, path)
-            for root in _external_roots(path):
+            roots = _external_roots(path)
+            if roots is None:
+                unparsed.append(module)
+                continue
+            for root in roots:
                 if root in member_of:
                     stdlib_importers[member_of[root]].add(module)
                 elif root != "ddflow" and root not in stdlib:
@@ -148,7 +162,7 @@ class AstArchDepsCensus:
             )
             for root, mods in sorted(third_party.items())
         )
-        return Census(tuple(reports))
+        return Census(tuple(reports), tuple(sorted(unparsed)))
 
 
 def scan(repo: Path) -> Census:

@@ -31,7 +31,7 @@ def archdeps(repo: Path, *, agent: str = "") -> O.Outcome:
         }
         for f in census.families
     ]
-    return O.ok("archdeps", text=render(census), families=rows)
+    return O.ok("archdeps", text=render(census), families=rows, unparsed=list(census.unparsed))
 
 
 def render(census: A.Census) -> str:
@@ -42,4 +42,6 @@ def render(census: A.Census) -> str:
             f"{f.family:<14} {','.join(f.members):<22} {','.join(f.home) or '-':<24} "
             f"{len(f.importers):>9} {len(f.violations):>10}"
         )
+    for module in census.unparsed:
+        lines.append(f"unparsed       {module}")
     return "\n".join(lines)

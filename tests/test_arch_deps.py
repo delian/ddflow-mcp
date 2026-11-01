@@ -301,6 +301,7 @@ def test_default_scan_reports_every_family():
     assert names >= set(A.STDLIB_FAMILIES)
     assert {"jinja2", "radon", "rapidfuzz", "tomlkit", "model2vec"} <= names
     assert names == set(BASELINE)
+    assert census.unparsed == ()
 
 
 def test_violations_are_importers_outside_the_home():
@@ -343,6 +344,18 @@ class FakeArchDepsCensus:
 
     def scan(self, repo: Path) -> A.Census:
         return self._census
+
+
+def test_unparsable_file_is_reported_not_skipped(tmp_path: Path):
+    # a valid module and one that cannot be parsed: the broken one must be reported,
+    # never silently treated as importing nothing.
+    pkg = tmp_path / "ddflow"
+    pkg.mkdir()
+    (pkg / "ok.py").write_text("import subprocess\n")
+    (pkg / "broken.py").write_text("import subprocess\ndef f(:\n")
+    census = A.scan(tmp_path)
+    assert census.unparsed == ("ddflow.broken",)
+    assert (tmp_path / "ddflow").exists()
 
 
 def test_family_report_is_immutable():
