@@ -177,7 +177,7 @@ def _prepare_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan):
     """The new text of every `[flow.version_files]` file, or None after recording why not."""
     # Late-bound (importlib): a module-level import reaches `reached` in this package while
     # it is still initialising (ImportError, an import cycle through changelog_cut).
-    VF = importlib.import_module("ddflow.services.version_files")
+    VF = importlib.import_module("..version_files", __package__)
 
     try:
         return VF.prepare(repo, cfg, version=vp.next, ref=vp.ref)
@@ -192,7 +192,7 @@ def _write_version_files(
     """Commit the bump on ``branch``; False (with the reason on ``out``) if it cannot be."""
     # Late-bound (importlib): a module-level import reaches `reached` in this package while
     # it is still initialising (ImportError, an import cycle through changelog_cut).
-    VF = importlib.import_module("ddflow.services.version_files")
+    VF = importlib.import_module("..version_files", __package__)
 
     try:
         changed = VF.commit_on(repo, cfg, branch, prep, message=f"chore: bump version to {version}")
@@ -225,7 +225,7 @@ def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry
     `pr sync` writes the tag's message later)."""
     # Late-bound (importlib): a module-level import reaches `reached` in this package while
     # it is still initialising (ImportError, an import cycle).
-    CC = importlib.import_module("ddflow.services.changelog_cut")
+    CC = importlib.import_module("..changelog_cut", __package__)
 
     try:
         prep = CC.prepare(repo, cfg, version=vp.next, ref=vp.ref, fallback_notes=vp.notes)
@@ -244,7 +244,7 @@ def _write_changelog(repo, cfg, out: Cut, branch: str, prep, version: str, *, fo
     """Commit the prepared changelog on ``branch``; False (with the reason on ``out``) if not."""
     # Late-bound (importlib): a module-level import reaches `reached` in this package while
     # it is still initialising (ImportError, an import cycle).
-    CC = importlib.import_module("ddflow.services.changelog_cut")
+    CC = importlib.import_module("..changelog_cut", __package__)
 
     try:
         action = CC.commit_on(
