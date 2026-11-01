@@ -43,9 +43,8 @@ BASELINE: dict[str, tuple[int, str]] = {
         "operators' settings files, kept byte for byte",
     ),
     "ddflow/config_sections/agent.py": (
-        7,
-        "model vendors of the agent roster, a different domain; the `grok` vendor key is "
-        "also a harness descriptor id since DX-grok-hook-descriptor",
+        6,
+        "model vendors of the agent roster (anthropic, google): a different domain",
     ),
     "ddflow/services/harnessreg.py": (
         6,
