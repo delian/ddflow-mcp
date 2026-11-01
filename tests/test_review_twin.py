@@ -75,3 +75,10 @@ def test_the_first_review_marks_and_proceeds(tmp_path):
 
 def test_no_item_claims_nothing(tmp_path):
     assert G._claim_or_refuse_twin(tmp_path, "", "tree-aaa") == (None, None)
+
+
+def test_a_review_whose_marker_cannot_be_written_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(RUN, "mark_started", lambda *a, **k: None)
+    marker, refused = G._claim_or_refuse_twin(tmp_path, "T1", "tree-aaa")
+    assert marker is None and refused is not None
+    assert "could not write its started-marker" in refused.reason
