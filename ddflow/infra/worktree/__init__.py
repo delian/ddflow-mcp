@@ -22,11 +22,15 @@ old module exported is re-exported here, so ``from ddflow.infra import worktree 
 and ``from ddflow.infra.worktree import remove`` bind exactly what they bound before.
 
 The re-export is LAZY (``__getattr__``): the package imports no submodule until one name
-is asked for. The mutability the test-suite relies on survives the split the same way it
-survived the module — ``monkeypatch.setattr(W, "git", ...)`` or ``("time", ...)`` re-binds
-the name on THIS module, and the submodules reach those primitives through it (``_W.git``,
-``_W.time``) rather than holding their own copies, because a commit hook would otherwise
-read an eager ``from ._x import ...`` here as a latent parent<->child cycle.
+is asked for. The mutability the test-suite relies on is that of the primitives the split
+routes through this module — ``monkeypatch.setattr(W, "git", ...)`` or ``("time", ...)``
+re-binds the name on THIS module, and the submodules reach those primitives through it
+(``_W.git``, ``_W.time``) rather than holding their own copies, because a commit hook
+would otherwise read an eager ``from ._x import ...`` here as a latent parent<->child
+cycle. Cross-submodule calls to the pure helpers (``repo_root``, ``list_worktrees``,
+``checked_out_at``, ``_count``) bind their sibling-local names at import and are NOT
+re-routed through ``_W``: they are not monkeypatched to change behaviour inside the
+submodules, only at direct call sites.
 """
 
 from __future__ import annotations
