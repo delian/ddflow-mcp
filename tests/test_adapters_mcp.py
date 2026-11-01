@@ -190,10 +190,52 @@ def test_the_default_adapter_imports_no_other_ddflow_layer_and_no_subprocess():
     from pathlib import Path
 
     tree = ast.parse(Path(W.__file__).read_text("utf-8"))
-    mods = [
-        (n.module or "") if isinstance(n, ast.ImportFrom) else a.name
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Import | ast.ImportFrom)
-        for a in (n.names if isinstance(n, ast.Import) else [n])
-    ]
+    mods = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            mods += [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            mods.append("." * node.level + (node.module or ""))  # a relative import keeps its dots
     assert not [m for m in mods if m.startswith(("ddflow", ".")) or m == "subprocess"], mods
+
+
+def test_an_after_hook_is_skipped_for_an_intercepted_message_and_a_bad_exception_result_is_internal():
+    server = FakeMcpServer(TOOLS, {"echo": RuntimeError("boom")})
+    server.serve([W.encode(W.request(1, "tools/call", {"name": "echo", "arguments": {}})) + "\n"])
+    assert server.sent[0]["error"]["code"] == W.INTERNAL_ERROR
+
+
+def test_a_failed_or_closed_fake_client_is_disconnected():
+    class Bad(FakeMcpServer):
+        def handle(self, msg):
+            return (
+                W.err(msg["id"], W.INTERNAL_ERROR, "bad")
+                if msg["method"] == "initialize"
+                else super().handle(msg)
+            )
+
+    failed = FakeMcpClient(Bad(TOOLS))
+    assert failed.connect(1).status == W.ERROR and failed.list_tools(1).status == W.UNAVAILABLE
+    client = FakeMcpClient(FakeMcpServer(TOOLS))
+    client.connect(1)
+    client.close()
+    assert client.list_tools(1).status == W.UNAVAILABLE
+
+
+def test_the_unavailable_handshake_keeps_the_offered_version():
+    _, client, _ = _default("unavailable")
+    assert client.connect(1, version="2024-11-05").protocol.offered == "2024-11-05"
+
+
+def test_a_buffer_at_its_cap_does_not_lose_the_newline_that_ends_a_line():
+    import os
+    import types
+
+    from ddflow.services.companions import probe
+
+    r, w = os.pipe()
+    chan = probe._ProcessChannel(types.SimpleNamespace(stdout=os.fdopen(r, "rb", 0)))
+    chan._buf = b"x" * probe._MAX_BUF  # a flood's unfinished line fills the cap
+    os.write(w, b"\n" + b"y" * 1000)
+    assert chan.receive(1) == "x" * probe._MAX_BUF
+    os.close(w)

@@ -141,7 +141,11 @@ class _ProcessChannel:
             chunk = os.read(fd, 65536)
             if not chunk:
                 raise EOFError  # nothing holds the pipe any more
-            self._buf = _keep(self._buf, chunk)
+            self._buf += chunk
+            if (
+                b"\n" not in self._buf
+            ):  # trim only a line still unfinished: a cut never eats its newline
+                self._buf = _keep(b"", self._buf)
         line, self._buf = self._buf.split(b"\n", 1)
         return line.decode("utf-8", "replace")
 

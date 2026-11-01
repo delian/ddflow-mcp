@@ -68,6 +68,8 @@ class FakeMcpServer:
             return W.err(mid, W.INVALID_PARAMS, f"unknown tool: {name}")
         self.calls.append((name, args))
         result = self.results.get(name, {"content": [], "isError": False})
+        if isinstance(result, Exception) and not isinstance(result, W.ToolError):
+            raise result  # an escaped exception: `serve` maps it to -32603
         if isinstance(result, W.ToolError):
             return W.ok(mid, {"content": [{"type": "text", "text": str(result)}], "isError": True})
         return W.ok(mid, result)
@@ -123,9 +125,9 @@ class FakeMcpClient:
         if bad is not None:
             return W.Handshake(**vars(bad), protocol=W.Negotiation(version))
         reply = self._ask("initialize", W.initialize_request(0, version)["params"])
-        self.connected = True
         if reply.status != W.OK:
             return W.Handshake(**vars(reply), protocol=W.Negotiation(version))
+        self.connected = True
         detail, server = W.describe_answer({"result": reply.result})
         proto = W.negotiate(version, server.get("protocolVersion"))
         return W.Handshake(W.OK, reply.result, detail=detail, server=server, protocol=proto)
@@ -150,4 +152,4 @@ class FakeMcpClient:
         return self._guarded("tools/call", {"name": name, "arguments": arguments})
 
     def close(self) -> None:
-        self.closed = True
+        self.closed, self.connected = True, False

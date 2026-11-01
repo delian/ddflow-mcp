@@ -256,7 +256,7 @@ class StdioServer:
         A line that is not JSON is `-32700`; an exception out of `handle` is `-32603` with
         the traceback to `log` (never to the stream: a stray write corrupts it).
         `intercept(msg, notify)` may take a message over (an offloaded call): True means
-        it answered itself. `after()` runs once per message, answered or not."""
+        it answered itself, and `after()` is skipped for it. `after()` runs after each message `handle` served."""
         handler = handle or self.handle
         for raw in lines:
             line = raw.strip()
@@ -380,7 +380,11 @@ class StdioClient:
         try:
             self._channel = self._starter(self._argv, self._env)
         except OSError as exc:
-            return Handshake(UNAVAILABLE, detail=f"could not start {self._argv[:1]}: {exc}")
+            return Handshake(
+                UNAVAILABLE,
+                detail=f"could not start {self._argv[:1]}: {exc}",
+                protocol=Negotiation(version),
+            )
         self._next_id = 1
         first = self._exchange(initialize_request(1, version), timeout_s, t0)
         hello = Handshake(**vars(first), protocol=Negotiation(version))
