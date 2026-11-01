@@ -106,3 +106,61 @@ def test_a_spent_budget_on_a_stale_round_says_so_once_and_points_at_the_operator
     text = last.data["text"]
     assert _state(repo).gates["critic"].outcome == "failed"
     assert text.count("stays failed") == 1 and "--force --reason" in text, text
+
+
+def _merged_scenario(repo, tmp_path, monkeypatch):
+    """A merged item (worktree gone; `item_tree` answers None) whose `--commit` re-review
+    recorded only the commit it covered (`reviewed_head`) and no `tree_sha`."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "work"], check=True, capture_output=True
+    )
+    rev = ["git", "-C", str(repo), "rev-parse", "HEAD"]
+    first = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+    (repo / "a.py").write_text("x = 2  # one more\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "more"], check=True, capture_output=True
+    )
+    head = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+
+    def make(reviewed_head, merged):
+        rec = NS(evidence={"reviewed_head": reviewed_head, "review_kind": "full"})
+        it = NS(
+            id="T1",
+            kind="task",
+            worktree="",
+            merged_sha=merged,
+            landed_after="",
+            landed_before="",
+            branch="",
+            pr=None,
+            gates={"critic": rec},
+        )
+        return NS(items={"T1": it})
+
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (None, ""))
+    return first, head, make
+
+
+def test_a_commit_review_after_merge_names_the_commit_it_reviewed(repo, tmp_path, monkeypatch):
+    """Bug B-critic-refutation-pass-needs-tree-after-merge: the round has no worktree to
+    name (`tree_sha`), but its `reviewed_head` is the merged commit the reviewer saw."""
+    from ddflow.api import review as RV
+
+    _first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    assert RV.reviewed_other_tree(repo, None, make(head, head), "T1", "critic") == ""
+
+
+def test_a_commit_review_of_an_older_commit_after_merge_is_still_stale(repo, tmp_path, monkeypatch):
+    from ddflow.api import review as RV
+
+    first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    text = RV.reviewed_other_tree(repo, None, make(first, head), "T1", "critic")
+    assert "holds other content" in text, text
