@@ -128,6 +128,8 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     + EXEMPT["session.prompt"],
     ("reviewers", "add"): _CONFIG,
     ("companions", "add"): _CONFIG,
+    ("harness", "add"): "a harness descriptor skeleton written into .ddflow/local/harnesses by "
+    "the operator: machine-local config, not an authored record the duplicate check covers",
     ("prompts", "eject"): "copies the shipped prompt templates verbatim; there is no "
     "prompt-template add",
 }
