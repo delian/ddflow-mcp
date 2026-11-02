@@ -126,6 +126,7 @@ from .knowledge import (
     similar,
 )
 from .lane_views import lanes, lanes_watch
+from .probe import probe as conflict_probe
 from .lifecycle import (
     DEFAULT_CHECK_RECOVERY,
     DEFAULT_NEXT_KIND,
@@ -324,6 +325,7 @@ __all__ = [
     "phase_complete",
     "phase_progress",
     "pins",
+    "conflict_probe",
     "plan_apply",
     "plan_check",
     "plan_confirm",
