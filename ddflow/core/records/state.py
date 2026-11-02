@@ -164,7 +164,7 @@ class State:
     upgrade_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: repair id -> each application of that versioned data repair (`repair.applied`),
     #: oldest first: {"findings" (the keys it settled), "since", "version", "events",
-    #: "agent", "at"}. `services.repairs` never offers a finding whose key is listed here.
+    #: "reason", "note", "by" (an acceptance's), "agent", "at"}. `services.repairs` never offers a finding whose key is listed here.
     repairs_applied: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: version -> how many events were written by that OLDER ddflow under a skew override
     #: (the `older_ddflow` mark on their data).

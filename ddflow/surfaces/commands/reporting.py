@@ -453,9 +453,23 @@ def cmd_doctor(a, c: Ctx) -> int:
         tools=tools,
         start_texts=start_texts,
         accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
+        accept_history=bool(getattr(a, "accept_history", False)),
+        history=(
+            str(getattr(a, "history_reason", "") or ""),
+            str(getattr(a, "history_note", "") or ""),
+            str(getattr(a, "history_only", "") or ""),
+            str(getattr(a, "approval", "") or ""),
+        ),
     )
     if c.json:
-        emit_json(out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order")))
+        body = out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
+        if out.exit == REFUSED:
+            # The agent route needs the refusal (its approval id) from the JSON, not stderr.
+            body = {**body, "reason": out.reason}
+        emit_json(body)
+        return out.exit
+    if out.exit == REFUSED:
+        print(out.reason, file=sys.stderr)
         return out.exit
     print(out.data["text"])
     return out.exit

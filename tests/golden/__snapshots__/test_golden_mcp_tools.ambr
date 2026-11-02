@@ -1280,7 +1280,7 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips, lanes or stages."
+          "description": "summary (default), forecast, retro, skips, lanes, stages or locks."
          },
          "lane": {
           "type": "string",

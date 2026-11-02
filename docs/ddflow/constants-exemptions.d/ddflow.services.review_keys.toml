@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/review_keys.py:MAX_KEY_FILE_BYTES" = 'safety bound on what is read from a key file (a real key is under a kilobyte): a larger file is not a key file'
