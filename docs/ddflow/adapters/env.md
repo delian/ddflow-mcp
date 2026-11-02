@@ -2,7 +2,7 @@
 
 Port: **Env**, declared in `ddflow/adapters/env.py` and marked `@port`.
 
-Read-only process environment: `get(name, default="")` reads live, `snapshot()` is a copy for a child process.
+Read-only process environment: `get(name, default=None)` reads live (None when unset, "" when set but empty, as `os.environ.get`), `snapshot()` is a copy for a child process.
 
 - **Default adapter:** `SystemEnv` in `ddflow.adapters.env` over `os.environ`; `DEFAULT` is the shared instance.
 - **Fake:** `FakeEnv` in `ddflow/adapters/fakes/env.py`: a dict the test gives (`set`, `unset`); the machine's environment is never seen.

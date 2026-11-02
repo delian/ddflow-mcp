@@ -30,8 +30,9 @@ def _aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for a in node.names:
-                if a.name in READS:
-                    mods[a.asname or a.name] = a.name
+                root = a.name.split(".")[0]  # `import os.path` binds `os`
+                if root in READS:
+                    mods[a.asname or root] = root
         elif isinstance(node, ast.ImportFrom) and node.module in READS and not node.level:
             for a in node.names:
                 if a.name in READS[node.module]:
@@ -48,7 +49,7 @@ def count_reads(tree: ast.AST) -> int:
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id in names and isinstance(node.ctx, ast.Load):
             n += 1
-        elif isinstance(node, ast.Attribute):
+        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
             v = node.value
             if isinstance(v, ast.Name):
                 mod = mods.get(v.id)
@@ -86,6 +87,8 @@ def test_the_counter_sees_calls_and_aliases_but_not_text_or_an_injected_port():
     assert count_reads(ast.parse(aliased)) == 3  # each from-import counts where it is used
     port = "class X:\n    def __init__(self, c): self._time = c\n    def f(self): return self._time.monotonic()\n"
     assert count_reads(ast.parse(port)) == 0
+    assert count_reads(ast.parse("import os.path\nos.environ['HOME']\n")) == 1
+    assert count_reads(ast.parse("import time\ntime.time = lambda: 1\n")) == 0  # a store is no read
 
 
 def test_no_file_reads_the_clock_or_environment_directly_more_than_its_baseline():
@@ -111,7 +114,7 @@ def test_the_baseline_is_tight_so_a_migration_must_lower_it():
 if __name__ == "__main__":
     old = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}
     new = measure()
-    up = {f: (old.get(f, 0), n) for f, n in new.items() if old and n > old.get(f, 0)}
+    up = {f: (old.get(f, 0), n) for f, n in new.items() if BASELINE.exists() and n > old.get(f, 0)}
     if up:
         raise SystemExit(f"refusing to RAISE the baseline (was, now): {up}")
     BASELINE.parent.mkdir(exist_ok=True)
