@@ -19,7 +19,7 @@ catches `OSError` keeps working, and each keeps the text urllib gave it:
   `reason`. `HttpTlsError` and `HttpSchemeError` are kinds of it.
 * `HttpProtocolError`: an answer that is not valid HTTP or stopped mid-body
   (`http.client.HTTPException`); `HttpIncompleteRead` is the cut-short body.
-* `HttpStatusError`: the server answered with a status >= 400 (only raised when
+* `HttpStatusError`: the server answered with a non-2xx status urllib did not follow (only raised when
   `raise_for_status` is true, the default); carries `status`, `headers`, `body`.
 """
 
@@ -38,8 +38,9 @@ from typing import Any
 
 __all__ = ["HTTPStatus"]  # re-exported: status names for callers that may not import `http`
 
-#: The lowest status urllib turns into an error (HTTPErrorProcessor): the answer is a failure.
-STATUS_ERROR_FLOOR = 400
+#: Statuses that are an answer; urllib turns every other one it does not follow (a 304, a 404)
+#: into an `HTTPError`, which the client reports as `HttpStatusError`.
+OK_STATUSES = range(200, 300)
 
 
 @dataclass(frozen=True)
@@ -139,7 +140,10 @@ def _classify(exc: BaseException) -> HttpError:
 def require_http_url(url: str) -> None:
     """Raise `HttpSchemeError` unless ``url`` is http(s): `urlopen` follows `file:` too, and
     an address from a config file must never read a local file (bandit B310)."""
-    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    try:
+        scheme = urllib.parse.urlsplit(url).scheme.lower()
+    except ValueError as exc:  # e.g. an unterminated IPv6 literal
+        raise HttpSchemeError(f"not a valid address: {exc}") from exc
     if scheme not in ("http", "https"):
         raise HttpSchemeError(f"only http(s) addresses; refusing {scheme!r}")
 

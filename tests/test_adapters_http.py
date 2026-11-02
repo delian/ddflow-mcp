@@ -65,7 +65,7 @@ class ScriptedUrllib:
         if raises is not None:
             made = URLLIB_FAILURES[raises]() if isinstance(raises, str) else raises
             outcome = made
-        elif status >= 400:
+        elif not 200 <= status < 300:
             outcome = lambda: _http_error(status, body, headers)  # noqa: E731 -- fresh fp per call
         else:
             outcome = lambda: _Resp(status, dict(headers or {}), body)  # noqa: E731
@@ -171,6 +171,45 @@ def test_a_non_http_address_is_refused_before_urllib_is_asked(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", never)
     with pytest.raises(H.HttpSchemeError, match="refusing 'file'"):
         H.UrllibHttpClient().request("GET", "file:///etc/passwd", timeout=1)
+
+
+def test_a_malformed_address_is_an_http_error_not_a_value_error():
+    with pytest.raises(H.HttpSchemeError, match="not a valid address"):
+        H.UrllibHttpClient().request("GET", "http://[::1", timeout=1)
+    with pytest.raises(H.HttpSchemeError):
+        FakeHttpClient().request("GET", "http://[::1", timeout=1)
+
+
+def test_a_status_urllib_did_not_follow_is_a_status_error_in_adapter_and_fake(monkeypatch):
+    """304 is no 2xx: urllib raises HTTPError for it, so the client says HttpStatusError."""
+    s = ScriptedUrllib(monkeypatch).when(url="http://a/n", status=304)
+    f = FakeHttpClient().when(url="http://a/n", status=304)
+    for c in (s, f):
+        with pytest.raises(H.HttpStatusError) as exc:
+            c.request("GET", "http://a/n", timeout=1)
+        assert exc.value.status == 304
+
+
+def test_the_tracking_opener_is_a_real_opener_and_hands_over_the_connected_socket(monkeypatch):
+    """Built for real (handler classes and all), with only the TCP connect replaced."""
+    seen = []
+
+    class Sock:
+        def sendall(self, data):
+            raise OSError("test socket: not sending")
+
+        def close(self):
+            pass
+
+    def connect(self):
+        self.sock = Sock()
+
+    monkeypatch.setattr(http.client.HTTPConnection, "connect", connect)
+    monkeypatch.setattr(http.client.HTTPSConnection, "connect", connect)
+    for url in ("http://a.test/x", "https://a.test/x"):
+        with pytest.raises(H.HttpConnectionError):
+            H.UrllibHttpClient().request("GET", url, timeout=1, on_connect=seen.append)
+    assert len(seen) == 2 and all(isinstance(h, H._Tracked) for h in seen)
 
 
 def test_a_connect_timeout_is_a_connection_error_and_a_read_timeout_is_a_timeout(monkeypatch):

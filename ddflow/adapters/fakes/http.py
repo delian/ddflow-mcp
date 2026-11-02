@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..http import (
-    STATUS_ERROR_FLOOR,
+    OK_STATUSES,
     HttpConnectionError,
     HttpIncompleteRead,
     HttpProtocolError,
@@ -140,7 +140,7 @@ class FakeHttpClient:
         assert reply is not None
         if max_bytes is not None:
             reply = HttpResponse(reply.status, reply.headers, reply.body[:max_bytes])
-        if raise_for_status and reply.status >= STATUS_ERROR_FLOOR:
+        if raise_for_status and reply.status not in OK_STATUSES:
             raise HttpStatusError(
                 reply.status, reply.headers, reply.body, f"HTTP Error {reply.status}"
             )
