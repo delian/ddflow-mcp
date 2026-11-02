@@ -24,19 +24,34 @@ def test_star_import_exports_the_lazy_reexported_names():
     ns = _star()
     for name in ("apply", "Watch", "parse_categories", "touched"):
         assert name in ns, name
-    for name in ("ACKNOWLEDGED", "APPLIED", "BACKUP_MODES", "CONFIG_POLICIES", "FAILED",
-                 "REFUSED", "SKIPPED", "UNAVAILABLE"):
+    for name in (
+        "ACKNOWLEDGED",
+        "APPLIED",
+        "BACKUP_MODES",
+        "CONFIG_POLICIES",
+        "FAILED",
+        "REFUSED",
+        "SKIPPED",
+        "UNAVAILABLE",
+    ):
         assert name in ns, name
     # The eager re-exports the old module held for its callers stay exported too.
-    for name in ("UP", "BACKUPS", "MANIFEST", "SnapshotRefused", "backup_name",
-                 "make_backup", "make_snapshot", "prune"):
+    for name in (
+        "UP",
+        "BACKUPS",
+        "MANIFEST",
+        "SnapshotRefused",
+        "backup_name",
+        "make_backup",
+        "make_snapshot",
+        "prune",
+    ):
         assert name in ns, name
 
 
 def test_all_is_the_public_surface():
     assert UA.__all__ == sorted(set(UA.__all__)), "duplicated or unsorted __all__"
-    for name in ("apply", "Watch", "parse_categories", "touched", "UP",
-                 "ACKNOWLEDGED", "SKIPPED"):
+    for name in ("apply", "Watch", "parse_categories", "touched", "UP", "ACKNOWLEDGED", "SKIPPED"):
         assert name in UA.__all__, name
     assert not any(n.startswith("_") for n in UA.__all__), UA.__all__
     assert "reexport" not in UA.__all__, "the private helper leaked into __all__"
