@@ -106,7 +106,7 @@ class FakeLane:
         session = next(
             (
                 e.fields["session"]
-                for e in h.script
+                for e in h.script[: h.cursor]
                 if e.event == "started" and isinstance(e.fields.get("session"), str)
             ),
             "",
@@ -116,7 +116,7 @@ class FakeLane:
             exit_code=self.exit_code if done else None,
             exit_meaning=h.spec.exit_codes.get(str(self.exit_code), "") if done else "",
             session=session,
-            events=len(h.script),
+            events=h.cursor,
             dropped=h.dropped,
             capabilities=h.capabilities,
         )

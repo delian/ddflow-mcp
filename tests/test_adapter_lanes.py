@@ -141,3 +141,11 @@ def test_registry_refuses_a_second_factory_and_names_the_known_ones():
         L.register_transport("process-headless", A)
     r = L.driver_for("no-such-transport")
     assert r.status == "unavailable" and "process-headless" in r.detail
+
+
+def test_the_fake_reports_the_session_and_event_count_only_once_replayed():
+    f = FakeLane(TRANSCRIPT)
+    h = f.start(spec())
+    assert (f.status(h).session, f.status(h).events) == ("", 0)
+    list(f.events(h))
+    assert (f.status(h).session, f.status(h).events) == ("s-123", 4)
