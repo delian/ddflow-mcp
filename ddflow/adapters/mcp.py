@@ -208,7 +208,7 @@ class StdioServer:
             self._write(encode(frame))
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
-        mid, method = msg.get("id"), msg.get("method", "")
+        mid, method = msg.get("id"), msg.get("method")
         if "id" not in msg:
             return None  # a notification is never answered
         if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):

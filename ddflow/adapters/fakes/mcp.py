@@ -42,7 +42,7 @@ class FakeMcpServer:
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         if "id" not in msg:
             return None
-        mid, method = msg["id"], msg.get("method", "")
+        mid, method = msg["id"], msg.get("method")
         if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
             return W.err(mid, W.INVALID_REQUEST, "not a JSON-RPC 2.0 request")
         if msg.get("params") is not None and not isinstance(msg["params"], dict):
