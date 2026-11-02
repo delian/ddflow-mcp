@@ -34,4 +34,4 @@ def remove_owned(target: str | Path | None, root: str | Path) -> None:
     if path.is_symlink():  # the link is ours to drop; never follow it to its target
         path.unlink()
     else:
-        shutil.rmtree(path, ignore_errors=True)
+        shutil.rmtree(path)  # a missing target is an error: the test expected it to exist

@@ -75,3 +75,23 @@ def test_a_symlinked_root_is_refused(sandbox) -> None:
     with pytest.raises(ValueError):
         remove_owned(owned / "link" / "sub", owned / "link")
     assert (cwd / "sub").exists()
+
+
+def test_a_cwd_below_the_owned_root_survives_empty_and_dot_targets(
+    sandbox, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, owned = sandbox
+    work = owned / "work"
+    work.mkdir()
+    (work / "sentinel.txt").write_text("keep", "utf-8")
+    monkeypatch.chdir(work)
+    for bad in ("", ".", Path(""), None):
+        with pytest.raises(ValueError):
+            remove_owned(bad, owned)
+    assert (work / "sentinel.txt").exists()
+
+
+def test_a_missing_target_is_an_error_not_a_silent_pass(sandbox) -> None:
+    _, owned = sandbox
+    with pytest.raises(FileNotFoundError):
+        remove_owned(owned / "never-made", owned)
