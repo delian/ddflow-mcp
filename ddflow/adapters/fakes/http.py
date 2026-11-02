@@ -132,9 +132,6 @@ class FakeHttpClient:
             HttpCall(method, url, dict(headers or {}), body, timeout, max_bytes, raise_for_status)
         )
         require_http_url(url)
-        if on_connect is not None:  # a real client calls it once the socket is connected
-            self.connections.append(FakeConnection(url))
-            on_connect(self.connections[-1])
         for rule in self._rules:
             if rule.once and rule.used:
                 continue
@@ -145,8 +142,21 @@ class FakeHttpClient:
             ):
                 continue
             rule.used += 1
+            if on_connect is not None and not self._refused_before_connect(rule, url):
+                # a real client calls it once the socket is connected: not for a refusal
+                self.connections.append(FakeConnection(url))
+                on_connect(self.connections[-1])
             return self._answer(rule, url, max_bytes, raise_for_status)
         raise UnscriptedRequest(f"no reply scripted for {method} {url}")
+
+    @staticmethod
+    def _refused_before_connect(rule: _Rule, url: str) -> bool:
+        """A scripted failure that happens before any socket exists (connection, TLS, scheme)."""
+        err = rule.error
+        if err is None:
+            return False
+        made = ERRORS[err](url) if isinstance(err, str) else err
+        return isinstance(made, HttpConnectionError)  # incl. HttpTlsError, HttpSchemeError
 
     @staticmethod
     def _answer(rule: _Rule, url: str, max_bytes: int | None, raise_for_status: bool):

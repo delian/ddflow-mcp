@@ -377,10 +377,10 @@ def test_no_module_outside_the_home_can_open_a_connection():
 
 
 def test_the_blind_spot_check_sees_a_network_import_hiding_behind_an_allowed_root():
-    assert _network_imports("import urllib.request\nfrom http.client import HTTPConnection\n") == [
-        ("urllib.request", None),
-        ("http.client", "HTTPConnection"),
-    ]
+    assert sorted(
+        _network_imports("import urllib.request\nfrom http.client import HTTPConnection\n"),
+        key=str,
+    ) == [("http.client", "HTTPConnection"), ("urllib.request", None)]
     assert _network_imports("from . import http\nimport json\n") == []
     assert _pure_helper("ddflow/a.py", "urllib", "parse")
     assert not _pure_helper("ddflow/a.py", "socket", None)  # only hostinfo may import socket
@@ -450,3 +450,15 @@ def test_the_fake_returns_a_fresh_response_each_time():
     first = f.request("GET", "http://a/", timeout=1)
     first.headers["A"] = "changed"
     assert f.request("GET", "http://a/", timeout=1).headers["A"] == "1"
+
+
+def test_the_fake_gives_no_connection_to_a_request_refused_before_connecting():
+    f = FakeHttpClient().when(url="http://a/refused", raises="connection")
+    f.when(url="http://a/cut", raises="incomplete").when(url="http://a/ok", body="x")
+    got = []
+    with pytest.raises(H.HttpConnectionError):
+        f.request("GET", "http://a/refused", timeout=1, on_connect=got.append)
+    assert got == []  # nothing connected
+    with pytest.raises(H.HttpIncompleteRead):
+        f.request("GET", "http://a/cut", timeout=1, on_connect=got.append)
+    assert len(got) == 1  # connected, then the body was cut
