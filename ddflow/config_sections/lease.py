@@ -62,6 +62,10 @@ class LeaseConfig:
         doc="A CONTENDED lease with no progress for this many seconds (see idle_max_s) is BREAKABLE (D-lease-hold-limit): the waiter's claim goes through, recorded as a lease.expired event naming who broke it, why and how long it had been idle, and both agents are told. The holder's branch, worktree and recorded gates are kept for it to be restored (DX-park-and-resume). An uncontended lease is never broken, however old; a lease that shows progress never is. 0 = never (the old behaviour).",
         check=int_at_least(0),
     )
+    release_at_merge: bool = knob(
+        True,
+        doc="The lease ends when `ddflow merge` has landed the branch and recorded it (also when the merge queue's integrator lands it), not when the item completes: 33.5% of all lease-hours fell after the merge, held while completion waited on approvals or an absent agent, and no one else could change the files. The worktree and branch stay for the completion steps, `complete` needs no lease, a waiter is woken ready, and a merge that fails keeps the lease. Off: the lease is held to `complete`, as before.",
+    )
     break_on_timeout: bool = knob(
         False,
         doc="A claim that meets a breakable lease breaks it by itself. Off (default): the waiter must say so (`ddflow claim --break`), so breaking another agent's lease is always a deliberate, attributed act. On: any plain claim of a contended, idle lease breaks it.",

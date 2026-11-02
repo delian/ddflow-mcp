@@ -42,6 +42,16 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
         say(line)
 
 
+def _release_at_merge(log, cfg, item: str) -> bool:
+    """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
+    are free for a waiter, whose `wait` reads the release as ready. The worktree and branch
+    stay for the completion steps; `complete` needs no lease. `[lease].release_at_merge`
+    off keeps the hold to complete. Only reached after a landing, so a failed merge keeps it."""
+    if not cfg.lease.release_at_merge:
+        return False
+    return LS.release(log, item, note="merged")
+
+
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
     """The first failed-gate blocker that stops ``item`` landing, or ""."""
     found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
@@ -215,6 +225,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
+    freed = _release_at_merge(log, cfg, item)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.
     back_merged, back_failed = [], []
@@ -275,6 +286,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         **_scope_fields(outside, listed=borrowed),
         # The merge gate is a person's to clear here; nothing was recorded for it.
         merge_gate_human=human_gate,
+        lease_released=freed,
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
     )
