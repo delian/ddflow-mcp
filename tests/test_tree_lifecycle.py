@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
 from helpers import git_raw as _git
+from safe_cleanup import remove_owned
 
 from ddflow.infra import worktree as W
 
@@ -73,11 +75,9 @@ def test_under_puts_the_tree_in_that_directory(repo, tmp_path):
 
 
 def test_a_stale_registration_is_pruned_even_when_the_tree_was_deleted_by_the_body(repo):
-    import shutil
-
     with W.scratch_tree(repo, "side") as s:
         assert s.path is not None
-        shutil.rmtree(s.path)  # the body removed the directory itself
+        remove_owned(s.path, tempfile.gettempdir())  # the body removed the directory itself
     assert _registered(repo) == [str(repo)]
 
 

@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
+from safe_cleanup import remove_owned
 from upgrade_dry_run_support import (
     clean_fixture,  # noqa: F401  (registered as the module fixture `clean`)
     git,
@@ -339,7 +340,10 @@ def test_a_pip_install_that_fails_leaves_the_transcript_and_so_does_an_unwritabl
         assert "PIP-STDERR" in json.dumps(data["commands"])
         assert data["facts"]["could_not_run"] == ["build the old ddflow from the clone"]
     finally:
-        shutil.rmtree(Path(report.diagnostics).parent, ignore_errors=True)
+        # only ever a directory the run made under the system temp dir; never '.' (B-e5e7dc7e27)
+        remove_owned(
+            Path(report.diagnostics).parent if report.diagnostics else None, tempfile.gettempdir()
+        )
 
 
 def test_the_mcp_sessions_get_time_to_check_and_their_replies_are_kept(
