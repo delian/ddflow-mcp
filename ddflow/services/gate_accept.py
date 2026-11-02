@@ -68,7 +68,7 @@ def auto_ids(it: Item, gate: str, cfg=None) -> list[str]:
     """The failing test ids ``gate`` was ACCEPTED AUTOMATICALLY on (D-baseline-red-auto-accept),
     else []: `gate run` measured every one on the base and none in the item's reach, and
     `[gates].baseline_red_auto` is still on. Needs a measured baseline-red partial."""
-    if cfg is None or getattr(cfg.gates, "baseline_red_auto", "off") != "on" or refusal(it, gate):
+    if cfg is None or getattr(cfg.gates, "baseline_red_auto", "on") != "on" or refusal(it, gate):
         return []
     auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto")
     return (
@@ -147,9 +147,13 @@ def approve(
                 AP.refusal(why)
                 + " "
                 + decision.message
-                + f" A baseline-red partial needs no request: `gate run` accepts it itself (CLI "
-                f"`ddflow gate run {item_id} {gate}`, MCP ddflow_gate action=run); an explicit "
-                f"request is for a person and bypasses the standing rule."
+                + (
+                    f" A baseline-red partial needs no request: `gate run` accepts it itself (CLI "
+                    f"`ddflow gate run {item_id} {gate}`, MCP ddflow_gate action=run); an explicit "
+                    f"request is for a person and bypasses the standing rule."
+                    if not refusal(it, gate)
+                    else ""
+                )
             )
         proxy = decision.stamp
     try:

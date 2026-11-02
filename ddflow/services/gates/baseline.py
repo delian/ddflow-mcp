@@ -37,31 +37,40 @@ def _path(repo: Path, sha: str, command: str = "") -> Path:
 def cache_load(
     repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
 ) -> dict[str, bool]:
-    """``{test id: failed on this base}`` measured so far; {} when none or older than ``ttl_s``."""
+    """``{test id: failed on this base}`` measured so far and still younger than ``ttl_s``
+    (each id has its own age); {} when none."""
     if ttl_s <= 0:
         return {}
+    clock_now = time.time() if now is None else now
     try:
-        data = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))
-        seen = data["ids"]
-        fresh = (time.time() if now is None else now) - float(data["at"]) <= ttl_s
-    except (OSError, ValueError, KeyError, TypeError):
+        seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
+        return {str(k): bool(v[0]) for k, v in seen.items() if clock_now - float(v[1]) <= ttl_s}
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return {}
-    return {str(k): bool(v) for k, v in seen.items()} if fresh and isinstance(seen, dict) else {}
 
 
 def cache_store(
     repo: Path, sha: str, results: dict[str, bool], ttl_s: int, command: str = ""
 ) -> None:
-    """Merge ``results`` into the cache of ``sha`` (best effort: a failed write costs a rerun)."""
+    """Merge ``results`` into the cache of ``sha`` and ``command``, each id stamped with the
+    time it was measured (best effort: a failed write costs a rerun)."""
     if ttl_s <= 0 or not results:
         return
     try:
-        merged = {**cache_load(repo, sha, ttl_s, None, command), **results}
         path = _path(repo, sha, command)
+        try:
+            held = json.loads(path.read_text(encoding="utf-8"))["ids"]
+        except (OSError, ValueError, KeyError, TypeError):
+            held = {}
+        now = time.time()
+        merged = {
+            **{k: v for k, v in held.items() if now - float(v[1]) <= ttl_s},
+            **{i: [f, now] for i, f in results.items()},
+        }
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)
-        atomic_write(path, json.dumps({"sha": sha, "at": time.time(), "ids": merged}))
-    except OSError:
+        atomic_write(path, json.dumps({"sha": sha, "ids": merged}))
+    except (OSError, ValueError, IndexError, TypeError):
         return
 
 
