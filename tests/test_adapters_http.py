@@ -259,7 +259,9 @@ def test_on_connect_uses_the_tracking_opener_and_abort_shuts_the_socket(monkeypa
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: pytest.fail("plain path"))
     c = H.UrllibHttpClient()
     assert c.request("GET", "http://a/", timeout=1, on_connect=got.append).body == b"ok"
-    assert made == [got.append]
+    assert len(made) == 1
+    made[0]("handle")  # the opener's callback hands the connection on to the caller's
+    assert got == ["handle"]
 
     shut: list[int] = []
 
