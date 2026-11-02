@@ -87,46 +87,49 @@ def test_import_contracts(tmp_path: Path) -> None:
     assert f"Contracts: {len(contracts)} kept, 0 broken." in output, output
 
 
-def _extra_import_name(req: str) -> str:
-    """The top-level import name a pyproject optional-dependency requirement provides.
-
-    ``pyproject.toml`` declares a *distribution* name (PEP 508), e.g. ``sqlite-vec>=0.1.9``;
-    the name a module is imported under is that name with ``-`` normalised to ``_``
-    (``sqlite_vec``). Splitting on the first version/extras/marker separator keeps the name
-    for requirements like ``rapidfuzz>=3.14.6``.
-    """
-    name = re.split(r"[<>=!~;\s\[]", req, maxsplit=1)[0].strip()
-    return name.replace("-", "_")
+def _dist_name(req: str) -> str:
+    """The PEP 508 distribution name an optional-dependency requirement declares: the part
+    before the first version/extras/marker separator (``rapidfuzz>=3.14.6`` -> ``rapidfuzz``)."""
+    return re.split(r"[<>=!~;\s\[]", req, maxsplit=1)[0].strip()
 
 
-def _missing_extra_modules(extras: dict[str, list[str]]) -> dict[str, list[str]]:
-    """Extras whose declared packages' import names are absent from the one-adapter
-    contract's ``forbidden_modules``. Derived from pyproject, never a hard-coded map, so a
-    package added under an existing extra is checked too, not just the extra's name."""
-    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
-    return {
-        extra: [m for m in (_extra_import_name(r) for r in reqs) if m not in named]
-        for extra, reqs in extras.items()
-    }
+#: Distribution name (as pyproject declares it) -> the top-level import name its package
+#: provides. Explicit, never derived: no mechanical rule maps a distribution name to its
+#: import name (``python-dateutil`` imports as ``dateutil``, ``PyYAML`` as ``yaml``).
+_EXTRA_IMPORTS: dict[str, str] = {
+    "rapidfuzz": "rapidfuzz",
+    "watchfiles": "watchfiles",
+    "model2vec": "model2vec",
+    "sqlite-vec": "sqlite_vec",
+    "mcp": "mcp",
+}
 
 
 def test_every_extra_has_a_contract() -> None:
     """Each package an optional extra declares is named in the one-adapter contract, so an
     extra -- or a package added under an existing extra -- cannot exist without its import
-    being confined to one module."""
+    being confined to one module. The check reads pyproject's package list, not a
+    hard-coded module list, so a package added under an existing extra is checked too."""
     extras = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"].get(
         "optional-dependencies", {}
     )
-    missing = _missing_extra_modules(extras)
-    assert not any(missing.values()), f"extras whose import names are not forbidden: {missing}"
+    dists = {_dist_name(req) for reqs in extras.values() for req in reqs}
+    assert dists == set(_EXTRA_IMPORTS), (
+        f"pyproject declares packages {sorted(dists)}; the import-name map knows "
+        f"{sorted(_EXTRA_IMPORTS)} (add an entry for each new package, remove a stale one)"
+    )
+    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
+    unconfined = {d: i for d, i in _EXTRA_IMPORTS.items() if i not in named}
+    assert not unconfined, f"extras whose import names are not forbidden: {unconfined}"
 
 
 def test_package_added_under_existing_extra_is_checked() -> None:
     """Regression for B-arch-guard-extras-hardcoded: a package added under an existing
-    extra is checked against ``forbidden_modules``; the old hard-coded module list missed
-    it, so this fails on the unfixed guard and passes with pyproject-derived names."""
-    missing = _missing_extra_modules({"rag": ["model2vec>=0.9.0", "numpy>=1.26"]})
-    assert missing == {"rag": ["numpy"]}
+    extra is checked against the contract. The old hard-coded module list never compared
+    pyproject's packages, so it missed such a package; the pyproject-derived set flags it."""
+    extras = {"rag": ["model2vec>=0.9.0", "numpy>=1.26"]}
+    dists = {_dist_name(req) for reqs in extras.values() for req in reqs}
+    assert "numpy" in dists - set(_EXTRA_IMPORTS)
 
 
 def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
