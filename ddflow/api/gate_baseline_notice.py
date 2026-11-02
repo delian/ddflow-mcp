@@ -8,6 +8,7 @@ failing ids: re-reading the gate or recompleting the item says nothing more."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ..core.digest import content_digest
@@ -25,7 +26,7 @@ SHOWN = 8
 
 def marker(item: str, gate: str, ids: list[str]) -> str:
     """Leads the recorded text (a cut cannot remove it): which failing set this told."""
-    return f"[{RULE} {item}.{gate} {content_digest(','.join(sorted(ids)))[:10]}]"
+    return f"[{RULE} {item}.{gate} {content_digest(json.dumps(sorted(ids)))[:10]}]"
 
 
 def notice_text(item: str, gate: str, ids: list[str], bug: str) -> str:
