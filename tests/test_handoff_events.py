@@ -17,7 +17,6 @@ from ddflow.services.handoff import events as E
 from ddflow.services.handoff import patch as P
 from ddflow.services.handoff import refs as R
 
-
 PATCH = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1,2 @@\n x = 1\n+y = 2\n"
 
 
@@ -248,7 +247,7 @@ def test_ref_is_cut_on_the_tip_without_touching_the_checkout(repo, sender, cfg) 
     _git(repo, "commit", "-qm", "a")
     tip = _git(repo, "rev-parse", "HEAD")
     p = _send(sender, cfg, sid="SG1", base=tip, repo=repo)
-    assert p.probe == "clean" and p.ref == "refs/ddflow/suggest/O-1/SG1"
+    assert p.probe == "clean" and p.ref == R.ref_name("O-1", "SG1")
     assert _git(repo, "show", f"{p.ref}:a.py") == "x = 1\ny = 2"
     assert (repo / "a.py").read_text() == "x = 1\n"
     assert _git(repo, "rev-parse", p.ref + "^") == tip
@@ -288,7 +287,8 @@ def test_a_real_binary_patch_is_detected() -> None:
 
 
 def test_ref_names_are_safe_components() -> None:
-    assert R.ref_name("a..b", "x.lock").startswith("refs/ddflow/suggest/a.b-")
+    owner_part, id_part = R.ref_name("a..b", "x.lock").split("/")[-2:]
+    assert ".." not in owner_part and not id_part.endswith(".lock") and id_part.startswith("x-")
     assert R.ref_name("", "").startswith("refs/ddflow/suggest/owner-")
 
 
@@ -342,7 +342,8 @@ def test_lock_suffixes_are_all_dropped_and_the_operator_may_mark_seen(
     sender, owner, cfg, repo
 ) -> None:
     assert R.ref_name("o", "a.lock.lock") != R.ref_name("o", "a")
-    assert R.ref_name("o", "a.lock.lock").startswith("refs/ddflow/suggest/o/a-")
+    assert R.ref_name("o", "a.lock") != R.ref_name("o", "a-" + R.ref_name("o", "a.lock")[-8:])
+    assert R.ref_name("o", "a.lock.lock").split("/")[-1].startswith("a-")
     _send(sender, cfg, sid="SG1")
     person = A.resolve_actor(cfg, "me")
     E.move(EventLog(repo, "me"), "seen", "SG1", actor=person)
@@ -357,7 +358,8 @@ def test_a_reason_that_is_not_text_is_no_reason(sender, owner, cfg) -> None:
 
 def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg) -> None:
     quoted = 'diff --git "a/\\303\\251" "b/\\303\\251"\n--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n x\n+y\n'
-    assert P.shape(quoted).added == 1 and len(P.shape(quoted).files) == 1
+    q = P.shape(quoted)
+    assert q.added == 1 and len(q.files) == 1 and not q.malformed
     over = "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n a\ndiff --git a/y b/y\n@@ -1 +1 @@\n-b\n+c\n"
     assert P.shape(over).malformed
     cfg.handoff.reject_breaker = 2

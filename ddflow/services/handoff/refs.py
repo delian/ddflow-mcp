@@ -48,13 +48,12 @@ def _part(text: str, fallback: str) -> str:
 
 
 def ref_name(owner: str, sid: str) -> str:
-    """`refs/ddflow/suggest/OWNER/ID`, each part made a safe ref component. A part that had to
-    be changed gets a short digest of the original appended, so two different inputs never
-    share a ref."""
+    """`refs/ddflow/suggest/OWNER/ID`, each part made a safe ref component. Every part carries a short digest of its original text, so two different
+    inputs never share a ref (the event keeps the ref name; nothing derives it again)."""
 
     def one(text: str, fallback: str) -> str:
         part = _part(text, fallback)
-        return part if part == text else f"{part}-{B.address(text.encode())[7:15]}"
+        return f"{part}-{B.address(text.encode())[7:23]}"
 
     return f"{NAMESPACE}/{one(owner, 'owner')}/{one(sid, 'id')}"
 
