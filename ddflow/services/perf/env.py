@@ -1,0 +1,178 @@
+"""Environment fingerprint stamped on perf samples and gate/ci evidence.
+
+A timing series is noise unless it is keyed by where it ran. :func:`fingerprint` is pure:
+it takes already-probed facts and returns a short stable key over the *class* of
+machine (never hostname, user or path) plus the facts it was built from. :func:`collect`
+probes this machine with every reader injectable, so tests use fakes. A probe that
+could not run is the string ``unavailable``, never zero and never a pass.
+
+The git head of the measured tree is stamped but is NOT part of the key: it changes
+every commit, and the regression detector compares samples of one key class across
+commits. Thresholds (load bands) are parameters here; the ``[perf_metrics]`` knob
+section that feeds them lands with the perf config task.
+
+Next call: the stamp is read back with ``ddflow perf env`` / MCP ``ddflow_perf action=env``
+once the perf CLI task registers it.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import platform
+import sys
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
+from pathlib import Path
+
+UNAVAILABLE = "unavailable"
+DEFAULT_LOAD_BANDS: tuple[float, float] = (0.25, 1.0)
+KEY_LEN = 12
+HEAD_LEN = 12
+
+Reader = Callable[[str], "str | None"]
+
+
+@dataclass(frozen=True)
+class Fingerprint:
+    key: str
+    facts: dict[str, object] = field(default_factory=dict)
+
+    def stamp(self) -> str:
+        """One line for evidence: the key then the readable facts."""
+        parts = " ".join(f"{k}={v}" for k, v in sorted(self.facts.items()))
+        return f"env:{self.key} {parts}"
+
+
+def load_class(ratio: float | None, bands: tuple[float, float] = DEFAULT_LOAD_BANDS) -> str:
+    """Load per cpu at start: idle below bands[0], busy below bands[1], else saturated."""
+    if ratio is None:
+        return UNAVAILABLE
+    return "idle" if ratio < bands[0] else "busy" if ratio < bands[1] else "saturated"
+
+
+def _read_file(path: str) -> str | None:
+    try:
+        return Path(path).read_text("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def in_container(exists: Callable[[str], bool] | None = None) -> bool:
+    ex = exists or (lambda p: Path(p).exists())
+    return ex("/.dockerenv") or ex("/run/.containerenv")
+
+
+def cgroup_state(read: Reader = _read_file) -> str:
+    """limited | unlimited | unavailable, from cgroup v2 then v1 cpu and memory limits."""
+    seen: list[bool] = []
+    cpu = read("/sys/fs/cgroup/cpu.max")
+    if cpu is not None and cpu.split():
+        seen.append(cpu.split()[0] != "max")
+    mem = read("/sys/fs/cgroup/memory.max")
+    if mem is not None and mem.strip():
+        seen.append(mem.strip() != "max")
+    quota = read("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+    if quota is not None and quota.strip():
+        seen.append(quota.strip() != "-1")
+    if not seen:
+        return UNAVAILABLE
+    return "limited" if any(seen) else "unlimited"
+
+
+def cache_state(dirs: Iterable[Path]) -> str:
+    """warm when any given cache directory holds an entry, cold when none does."""
+    ds = list(dirs)
+    if not ds:
+        return UNAVAILABLE
+    for d in ds:
+        try:
+            if d.is_dir() and any(d.iterdir()):
+                return "warm"
+        except OSError:
+            continue
+    return "cold"
+
+
+def _num(v: int | None) -> object:
+    return UNAVAILABLE if v is None else v
+
+
+def fingerprint(
+    *,
+    cpu_count: int | None,
+    load_ratio: float | None,
+    xdist_workers: int | None,
+    parallel_cap: int | None,
+    system: str,
+    python_version: str,
+    ddflow_version: str,
+    git_head: str,
+    cache: str | None,
+    container: bool,
+    cgroup: str,
+    load_bands: tuple[float, float] = DEFAULT_LOAD_BANDS,
+) -> Fingerprint:
+    vm = "unknown" if system == "Darwin" or (container and cgroup == UNAVAILABLE) else "no"
+    facts: dict[str, object] = {
+        "cpu_count": _num(cpu_count),
+        "load": load_class(load_ratio, load_bands),
+        "xdist_workers": _num(xdist_workers),
+        "parallel_cap": _num(parallel_cap),
+        "os": system or UNAVAILABLE,
+        "python": ".".join(python_version.split(".")[:2]) or UNAVAILABLE,
+        "cache": cache or UNAVAILABLE,
+        "ddflow": ddflow_version or UNAVAILABLE,
+        "container": container,
+        "cgroup": cgroup,
+        "vm": vm,
+    }
+    blob = json.dumps(facts, sort_keys=True).encode()
+    key = hashlib.sha256(blob).hexdigest()[:KEY_LEN]
+    facts["git_head"] = git_head[:HEAD_LEN] if git_head else UNAVAILABLE
+    return Fingerprint(key, facts)
+
+
+def _git_head(root: Path) -> str:
+    from ddflow.infra.worktree._merge import head_sha
+
+    try:
+        return head_sha(root)
+    except Exception:
+        return ""
+
+
+def collect(
+    root: Path,
+    *,
+    parallel_cap: int | None,
+    xdist_workers: int | None,
+    cache_dirs: Iterable[Path] = (),
+    load_bands: tuple[float, float] = DEFAULT_LOAD_BANDS,
+    read: Reader = _read_file,
+    exists: Callable[[str], bool] | None = None,
+    git_head: str | None = None,
+) -> Fingerprint:
+    """Probe this machine. Every probe that fails is ``unavailable``."""
+    from ddflow import __version__
+
+    cpus = os.cpu_count()
+    try:
+        ratio = os.getloadavg()[0] / cpus if cpus else None
+    except (OSError, AttributeError):
+        ratio = None
+    return fingerprint(
+        cpu_count=cpus,
+        load_ratio=ratio,
+        xdist_workers=xdist_workers,
+        parallel_cap=parallel_cap,
+        system=platform.system(),
+        python_version=sys.version.split()[0],
+        ddflow_version=__version__,
+        git_head=_git_head(root) if git_head is None else git_head,
+        cache=cache_state(cache_dirs),
+        container=in_container(exists),
+        cgroup=cgroup_state(read),
+        load_bands=load_bands,
+    )
