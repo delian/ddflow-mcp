@@ -1,2 +1,0 @@
-[knob]
-"ddflow/api/rules.py:DEFAULT_RULE_PRIORITY" = 'rules.default_rule_priority'

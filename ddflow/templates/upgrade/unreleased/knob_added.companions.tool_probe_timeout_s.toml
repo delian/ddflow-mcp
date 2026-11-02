@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "companions.tool_probe_timeout_s"
+new = "20.0"
+why = "The ExternalTool port (ADP-tools) takes its probe and run timeouts from configuration instead of a constant."
+impact = "additive"

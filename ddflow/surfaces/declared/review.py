@@ -123,6 +123,7 @@ COMMANDS: tuple[Command, ...] = (
             "--probe": "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)",
             "--force": "lifting the review-round budget belongs to the operator",
             "--reason": "lifting the review-round budget belongs to the operator",
+            "--detach": "relaunching the review into a detached session is a CLI concern of surviving the harness time limit; the MCP caller's connection is already the session to stream to",
         },
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_REVIEW_EPILOG,

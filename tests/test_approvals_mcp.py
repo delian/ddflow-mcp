@@ -39,9 +39,13 @@ def proj(repo):
     return repo
 
 
-def call(repo, tool, agent="bot", **args):
+def call(repo, tool, agent="bot", conn=None, **args):
+    """One MCP `tools/call`. `agent` is the per-call `as_agent`; `conn` the CONNECTION's
+    identity (defaults to `agent`). The two differ exactly in the case a subagent, or an
+    agent naming another agent, rides a connection: over MCP the per-call name is a claim
+    the transport does not authenticate (B6335d3482d)."""
     args.setdefault("as_agent", agent)
-    reply = Server(repo).handle(
+    reply = Server(repo, agent=(agent if conn is None else conn)).handle(
         {
             "jsonrpc": "2.0",
             "id": 1,
@@ -162,6 +166,21 @@ def test_withdraw_works_only_for_the_asker(proj):
     assert not err, out
     assert call(proj, "ddflow_session", "bot", action="withdraw", id=ask_id)[1]
     assert person_approves(proj, ask_id)[0] != 0  # a withdrawn ask cannot be answered
+
+
+def test_naming_another_agent_reads_or_withdraws_nothing(proj):
+    """The per-call `as_agent` is not authenticated: bot's connection naming mallory must
+    neither list nor withdraw mallory's asks (B6335d3482d)."""
+    theirs = ask(proj, "mallory", "T2")
+    out, err = call(proj, "ddflow_session", agent="mallory", conn="bot", action="asks")
+    assert err, "bot named mallory and read mallory's asks"
+    assert theirs not in json.dumps(out)  # the refused read leaks no ask id
+    _out, err = call(
+        proj, "ddflow_session", agent="mallory", conn="bot", action="withdraw", id=theirs
+    )
+    assert err, "bot named mallory and withdrew mallory's ask"
+    row = asks_of(fold(EventLog(proj, "probe").read_all(), strict=False))[theirs]
+    assert row["state"] == "pending"  # untouched by the refused calls
 
 
 def test_asks_lists_only_the_callers_own_and_leaks_nothing_of_others(proj):

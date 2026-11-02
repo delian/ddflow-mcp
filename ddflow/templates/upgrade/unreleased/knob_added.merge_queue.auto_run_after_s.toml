@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge_queue.auto_run_after_s"
+new = "120"
+why = "LC-integrator-trigger: seconds a queued entry waits with no integrator alive before the tick starts one and the warnings say so."
+impact = "additive"

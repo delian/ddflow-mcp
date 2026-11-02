@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/config_sections/approvals.py:STANDING_WINDOW_MAX_S" = 'validation ceiling the standing_window_s knob refuses above (24h): a bound on a knob, not a knob itself'
+"ddflow/config_sections/approvals.py:AUTO_APPROVE_RETRIES_MAX" = 'validation ceiling the auto_approve_after_retries knob refuses above: a bound on a knob, not a knob itself'

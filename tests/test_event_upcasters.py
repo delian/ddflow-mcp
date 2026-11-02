@@ -583,10 +583,10 @@ def test_an_older_reader_skips_what_the_bumped_writer_appended(
 #: Every version constant ddflow declares: (module, name). The contract page lists them all.
 VERSION_CONSTANTS = (
     ("ddflow", "FORMAT_LEVEL"),
-    ("ddflow.config", "CONFIG_FORMAT"),
+    ("ddflow.config._core", "CONFIG_FORMAT"),
     ("ddflow.core.events", "SCHEMA_VERSION"),
-    ("ddflow.infra.log", "SNAPSHOT_FORMAT"),
-    ("ddflow.infra.store", "SCHEMA"),
+    ("ddflow.infra.log._parse", "SNAPSHOT_FORMAT"),
+    ("ddflow.infra.store._fingerprint", "SCHEMA"),
     ("ddflow.core.textsim", "VERSION"),
     ("ddflow.services.ticks", "FORMAT"),
     ("ddflow.services.quota", "STORE_VERSION"),

@@ -1,0 +1,178 @@
+"""The `Optimizer` port: how ready work is ordered and cut to the free slots (ADP-optimizer).
+
+Home of the `optimizer` family. The port is `Optimizer` (`OptimizerPort` is an alias), declared
+below next to its adapter; the fake is `ddflow.adapters.fakes.optimizer.FakeOptimizer`. A family
+with several adapters keeps them in `OPTIMIZERS`, keyed by `name`; `[schedule].optimizer` picks one
+and `get_optimizer` resolves it.
+
+* ``order(ctx, candidates)`` ranks the candidates: one `Placement` each, best first, every one
+  carrying the itemised terms that put it there.
+* ``cut(ctx, ready, slots, ...)`` walks an ordered ready list and decides, per item, whether it
+  is taken, held, clashes with a taken item, or is cut for lack of a slot.
+* ``explain(placement)`` says in words why an item sits where it does.
+
+The default adapter, ``greedy-v1``, is the algorithm ddflow always had: the registered order
+keys left to right (bugs first, priority, id) and a greedy cut that takes an item only when it
+overlaps nothing already taken. Affinity and aversion are PREFERENCES that reorder, never filters:
+hard constraints stay `needs` and `globs`, decided by the caller's readiness filters.
+
+Deterministic: terms are integers (or the id), the id is the final tie-break, no clock, no hash
+order, no randomness. ``ctx`` is an OPEN mapping: later phases (lock-wait signals, load) add keys
+and an adapter reads only the ones it knows. Pure of ddflow: imports no other layer.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Protocol, runtime_checkable
+
+from .ports import port
+from .registry import Registry
+
+#: The adapter used when `[schedule].optimizer` names none.
+DEFAULT_NAME = "greedy-v1"
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One item as the optimizer sees it. ``terms`` are the caller's ordering keys, left to
+    right, as ``(name, value)`` pairs (the registered keys of `core.schedule`); ``tags`` carry
+    preferences such as ``affinity:<key>@50`` for an adapter that reads them."""
+
+    id: str
+    terms: tuple[tuple[str, Any], ...] = ()
+    globs: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
+    needs_tree: bool = True
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Where one candidate landed: ``rank`` (0 is first) and the itemised ``terms``."""
+
+    id: str
+    rank: int
+    terms: tuple[tuple[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class Slots:
+    """What is free: ``flight`` items in flight and ``tree`` worktrees (both counts)."""
+
+    flight: int
+    tree: int
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """What `cut` decided for one item, in walk order. ``what`` is ``taken``, ``held``,
+    ``clash`` (``other`` names the taken item it overlaps) or ``cut`` (no slot)."""
+
+    id: str
+    what: str
+    other: str = ""
+
+
+@dataclass(frozen=True)
+class CutResult:
+    """The verdicts of one cut, in the order the ready list was walked."""
+
+    verdicts: tuple[Verdict, ...] = field(default_factory=tuple)
+
+    def ids(self, what: str) -> list[str]:
+        return [v.id for v in self.verdicts if v.what == what]
+
+
+#: Whether an item is held back (a waiter in line): True drops it from the cut.
+Hold = Callable[[Candidate], bool]
+#: The taken item a candidate overlaps, or "" when it overlaps none.
+Clash = Callable[[Candidate, Sequence[Candidate]], str]
+
+
+def _term_text(value: Any) -> str:
+    return str(int(value)) if isinstance(value, bool) else str(value)
+
+
+@port
+@runtime_checkable
+class Optimizer(Protocol):
+    """Order ready work and cut it to the free slots.
+
+    Home: `ddflow.adapters.optimizer`. Default adapter `GreedyV1`; the fake is `FakeOptimizer`.
+    An adapter never filters: it reorders and cuts what the caller's readiness filters let
+    through, and is deterministic (a total order, ties broken by id). An adapter also has a
+    ``name`` (its registry key; not declared here: the port contract reserves that for `Forge`).
+    """
+
+    def order(self, ctx: Mapping[str, Any], candidates: Sequence[Candidate]) -> list[Placement]:
+        """Every candidate once, best first, each with its itemised terms."""
+
+    def cut(
+        self,
+        ctx: Mapping[str, Any],
+        ready: Sequence[Candidate],
+        slots: Slots,
+        *,
+        hold: Hold | None = None,
+        clash: Clash | None = None,
+    ) -> CutResult:
+        """Walk ``ready`` in the order given; one `Verdict` per item. Never takes more than
+        ``slots.flight`` items nor more tree-needing ones than ``slots.tree``."""
+
+    def explain(self, placement: Placement) -> str:
+        """The placement's terms in words."""
+
+
+OptimizerPort = Optimizer  # the name the task was filed under
+
+OPTIMIZERS: Registry[Optimizer] = Registry("optimizer", key=lambda a: a.name, same_ok=True)  # type: ignore[attr-defined]
+
+
+class GreedyV1:
+    """The default adapter: ddflow's own ordering, unchanged."""
+
+    name = DEFAULT_NAME
+
+    def order(self, ctx: Mapping[str, Any], candidates: Sequence[Candidate]) -> list[Placement]:
+        ranked = sorted(candidates, key=lambda c: (tuple(v for _, v in c.terms), c.id))
+        return [Placement(c.id, n, c.terms) for n, c in enumerate(ranked)]
+
+    def cut(
+        self,
+        ctx: Mapping[str, Any],
+        ready: Sequence[Candidate],
+        slots: Slots,
+        *,
+        hold: Hold | None = None,
+        clash: Clash | None = None,
+    ) -> CutResult:
+        taken: list[Candidate] = []
+        trees = 0
+        out: list[Verdict] = []
+        for c in ready:
+            if hold is not None and hold(c):
+                out.append(Verdict(c.id, "held"))
+                continue
+            other = clash(c, taken) if clash is not None else ""
+            if other:
+                out.append(Verdict(c.id, "clash", other))
+            elif len(taken) < slots.flight and (not c.needs_tree or trees < slots.tree):
+                taken.append(c)
+                trees += c.needs_tree
+                out.append(Verdict(c.id, "taken"))
+            else:
+                out.append(Verdict(c.id, "cut"))
+        return CutResult(tuple(out))
+
+    def explain(self, placement: Placement) -> str:
+        items = ", ".join(f"{k}={_term_text(v)}" for k, v in placement.terms)
+        return f"{placement.id}: rank {placement.rank} by {items or 'id'}"
+
+
+OPTIMIZERS.register(GreedyV1())
+
+
+def get_optimizer(name: str = "") -> Optimizer:
+    """The adapter named ``name`` (default `greedy-v1`); an unknown name lists those known."""
+    return OPTIMIZERS.get_or_raise(name or DEFAULT_NAME)

@@ -1,2 +1,0 @@
-[knob]
-"ddflow/services/ci.py:TAIL_CHARS" = 'ci.tail_chars'

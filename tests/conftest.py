@@ -50,6 +50,14 @@ def _no_first_call_start(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_auto_integrator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``[merge_queue].auto_run`` (default on) starts a detached integrator when a release is
+    accepted; the suite's release tests run ``queue run`` themselves and must not race a
+    background one. tests/test_integrator_trigger.py turns it back on with a fake starter."""
+    monkeypatch.setenv("DDFLOW_MERGE_QUEUE_AUTO_RUN", "off")
+
+
+@pytest.fixture(autouse=True)
 def _no_release_check_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     """The release check (``[upgrade].release_check``, default on) must never reach a network
     from the suite; ``run_cli`` subprocesses inherit this. tests/test_upgrade_release_check.py
