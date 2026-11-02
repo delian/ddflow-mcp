@@ -18,7 +18,12 @@ def remove_owned(target: str | Path | None, root: str | Path) -> None:
     path = Path(target)
     if not path.is_absolute():
         raise ValueError(f"refusing to delete: relative target {str(target)!r}")
-    if ".." in path.parts or str(root).strip() == "" or not Path(root).is_absolute():
+    if (
+        ".." in path.parts
+        or str(root).strip() == ""
+        or not Path(root).is_absolute()
+        or Path(root).is_symlink()
+    ):
         raise ValueError(
             f"refusing to delete {str(target)!r}: '..' in it, or root {str(root)!r} not absolute"
         )

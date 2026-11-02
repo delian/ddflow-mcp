@@ -66,3 +66,12 @@ def test_dotdot_targets_and_empty_or_relative_roots_are_refused(sandbox) -> None
         with pytest.raises(ValueError):
             remove_owned(target, root)
     assert (cwd / "sentinel.txt").exists() and owned.exists()
+
+
+def test_a_symlinked_root_is_refused(sandbox) -> None:
+    cwd, owned = sandbox
+    (cwd / "sub").mkdir()
+    (owned / "link").symlink_to(cwd, target_is_directory=True)
+    with pytest.raises(ValueError):
+        remove_owned(owned / "link" / "sub", owned / "link")
+    assert (cwd / "sub").exists()
