@@ -40,3 +40,5 @@
 {"agent":"adp-modular","data":{"at":1793605212.6697311,"holder":"adp-modular"},"id":"e1829e6d36f197a9bc35836b5","kind":"lease.renewed","lamport":126914,"schema":1,"subject":"ADP-modular-registry","ts":"2026-11-02T07:40:12.736450Z"}
 {"agent":"adp-modular","data":{"at":1793605797.7778165,"holder":"adp-modular"},"id":"eb88ee18f2771390c6d998737","kind":"lease.renewed","lamport":126959,"schema":1,"subject":"ADP-modular-registry","ts":"2026-11-02T07:49:57.848705Z"}
 {"agent":"adp-modular","data":{"at":1793606159.473838,"holder":"adp-modular"},"id":"ea8cd2f8595597374554c6b3f","kind":"lease.renewed","lamport":126994,"schema":1,"subject":"ADP-modular-registry","ts":"2026-11-02T07:55:59.550117Z"}
+{"agent":"adp-modular","data":{"at":1793606734.3738735,"holder":"adp-modular"},"id":"ea4919b04ea5bcbe20dbb513c","kind":"lease.renewed","lamport":127094,"schema":1,"subject":"ADP-modular-registry","ts":"2026-11-02T08:05:34.446660Z"}
+{"agent":"adp-modular","data":{"gate":"ci"},"id":"e3307d7b7e91f4f8c61ae67c0","kind":"gate.started","lamport":127100,"schema":1,"subject":"ADP-modular-registry","ts":"2026-11-02T08:06:00.866643Z"}

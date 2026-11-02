@@ -1,0 +1,2 @@
+{"agent":"Monster3-PM-cycle-split-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e5f8265347e35a1ecee0e00ff","kind":"ddflow.seen","lamport":127101,"schema":1,"subject":"ddflow","ts":"2026-11-02T08:06:04.950387Z"}
+{"agent":"Monster3-PM-cycle-split-7267fe","data":{"gate":"ci"},"id":"e6126c37f52aac68ab1a88c18","kind":"gate.started","lamport":127102,"schema":1,"subject":"PM-cycle-split","ts":"2026-11-02T08:06:04.992918Z"}
