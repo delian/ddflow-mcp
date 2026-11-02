@@ -56,3 +56,11 @@ class MetricsConfig:
         24,
         doc="Most instants the grid sampler folds the log at, newest first. Each fold replays the whole log up to that instant, so this caps the cost of `ddflow metrics lanes`; the answer says when the cap cut the window short.",
     )
+    stage_size_small: int = knob(
+        50,
+        doc="Largest change, in lines (insertions plus deletions the gate evidence recorded), that `ddflow metrics stages --group-by size` calls small. An item whose evidence never showed a changed line is grouped as unknown size, never as small.",
+    )
+    stage_size_large: int = knob(
+        300,
+        doc="Changes above this many lines are large in `ddflow metrics stages --group-by size`; between the small and the large bound they are medium.",
+    )

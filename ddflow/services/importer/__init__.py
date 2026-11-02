@@ -287,16 +287,18 @@ __all__ = [
     "apply_import",
     "glob_match",
     "plan_import",
-    "scan_branches",
-    "scan_decisions",
-    "scan_journal",
-    "scan_lesson_summaries",
-    "scan_lessons",
-    "scan_optmem",
-    "scan_research",
-    "scan_todos",
     "sources_from",
     "task_body",
     "touched_since_import",
     "verify_import",
+]
+# The ``scan_*`` names re-exported from `_scan` (its ``__all__`` is their one list) sit
+# alphabetically between ``plan_import`` and ``scan_todos``; extend them here from the
+# ``_SUBMODULE_OF`` mapping rather than re-listing them beside `_scan`'s own list.
+_scan_names = [
+    name for name in _SUBMODULE_OF if _SUBMODULE_OF[name] == "_scan" and not name.startswith("_")
+]
+__all__[__all__.index("sources_from") : __all__.index("sources_from")] = [
+    *_scan_names,
+    "scan_todos",
 ]

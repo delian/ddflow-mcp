@@ -1,59 +1,58 @@
-"""Shipped fakes: one `Fake<Port>` per port in `ddflow.adapters.ports` (D-adapters-answers-2).
+"""Shipped fakes: one module per family, one `@fake class Fake<Port>` in it (D-adapters-answers-2).
 
-`FAKES` maps a port's name to its fake class; `tests/test_ports_contract.py` requires every
-port to be here (a baseline of the ports still without one only shrinks) and runs the same
+`FAKES` maps a port's name to its fake class. It is filled by importing every module of this
+package in sorted name order (`collect`), so a new fake is a new file and edits no shared one;
+importing a fake module registers nothing else. `tests/test_ports_contract.py` requires every
+port to have one (a baseline of ports still without one only shrinks) and runs the family's
 conformance cases against the default adapter and the fake. Fakes are shipped, not test-only,
 so a downstream user can build against a port without the real dependency.
 """
 
 from __future__ import annotations
 
-import json
-import zlib
-from typing import Any
+import importlib
+from types import ModuleType
+from typing import TypeVar
 
+from ..ports import module_names
 from ..registry import Registry
 
-FAKES: Registry[type] = Registry("fake", key=lambda cls: cls.__name__.removeprefix("Fake"))
+_T = TypeVar("_T")
+
+#: The attribute `@fake` sets: the port's name (the class name without `Fake`).
+MARK = "__ddflow_fake__"
 
 
-def _fake(cls: type) -> type:
-    """Register a `Fake<Port>` class under the port's name."""
-    return FAKES.register(cls)
+def fake(cls: _T) -> _T:
+    """Mark a `Fake<Port>` class as the fake of the port named without its prefix."""
+    setattr(cls, MARK, cls.__name__.removeprefix("Fake"))
+    return cls
 
 
-@_fake
-class FakeDigest:
-    """A deterministic in-memory `Digest`: no `hashlib`, a CRC chain rendered as hex.
+def collect(package: ModuleType) -> dict[str, type]:
+    """Every `@fake` class defined in a module of `package`, by port name, in sorted module
+    order. Importing the modules is the only side effect."""
+    found: dict[str, type] = {}
+    for name in module_names(package, frozenset()):
+        module = importlib.import_module(f"{package.__name__}.{name}")
+        for _, cls in sorted(vars(module).items()):
+            if (
+                isinstance(cls, type)
+                and cls.__dict__.get(MARK)
+                and cls.__module__ == module.__name__
+            ):
+                port = cls.__dict__[MARK]
+                if found.get(port) is cls:
+                    continue  # an alias of a fake already seen
+                if port in found:
+                    raise ValueError(
+                        f"two fakes for {port}: {found[port].__module__} and {module.__name__}"
+                    )
+                found[port] = cls
+    return found
 
-    Same inputs give the same value, different inputs differ, `length` cuts the hex, text
-    and its UTF-8 bytes agree, and `canonical` sorts keys -- the properties a caller relies
-    on, not the algorithm's actual bytes.
-    """
 
-    WIDTH = 64  # hex characters of a full digest; a knob for a test that wants shorter
-
-    def content_digest(
-        self,
-        data: str | bytes | memoryview,
-        algo: str = "sha256",
-        *,
-        length: int | None = None,
-        errors: str = "strict",
-        size: int | None = None,
-    ) -> str:
-        raw = data.encode("utf-8", errors) if isinstance(data, str) else bytes(data)
-        out, crc = "", zlib.crc32(algo.encode())
-        while len(out) < self.WIDTH:
-            crc = zlib.crc32(raw, crc)
-            out += f"{crc:08x}"
-        out = out[: (size * 2) if size is not None else self.WIDTH]
-        return out[:length] if length is not None else out
-
-    def canonical(self, obj: Any) -> str:
-        return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
-
-    def of_obj(
-        self, obj: Any, algo: str = "blake2b", *, size: int | None = 12, length: int | None = None
-    ) -> str:
-        return self.content_digest(self.canonical(obj), algo, size=size, length=length)
+FAKES: Registry[type] = Registry("fake", key=lambda cls: cls.__dict__[MARK])
+for _cls in collect(importlib.import_module(__name__)).values():
+    FAKES.register(_cls)
+    globals()[_cls.__name__] = _cls  # `from ddflow.adapters.fakes import Fake<Port>` keeps working

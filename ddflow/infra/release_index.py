@@ -12,10 +12,10 @@ them is the same: say nothing and try again later.
 from __future__ import annotations
 
 import json
-import urllib.request
 from collections.abc import Callable
 from urllib.parse import urlparse
 
+from ..adapters.http import HttpClient, default_client
 from ..core.events import version_key
 
 #: The public Python package index's JSON API; `[upgrade].index_url` replaces it for a
@@ -48,11 +48,13 @@ def url_for(dist: str, index_url: str = "") -> str:
     return f"{base}/{dist}/json"
 
 
-def _get(url: str, timeout: float) -> bytes:
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    # `url_for` has refused every scheme but http(s), so B310's file:/custom-scheme risk is closed.
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
-        return resp.read(MAX_BYTES)
+def _get(url: str, timeout: float, client: HttpClient | None = None) -> bytes:
+    """The index document's bytes: a GET through the `HttpClient` port. `url_for` has refused
+    every scheme but http(s), and the adapter refuses them again."""
+    resp = (default_client() if client is None else client).request(
+        "GET", url, headers={"Accept": "application/json"}, timeout=timeout, max_bytes=MAX_BYTES
+    )
+    return resp.body
 
 
 def _candidates(doc: dict) -> list[str]:

@@ -1,0 +1,97 @@
+"""B-e5e7dc7e27: the cleanup helper refuses unsafe targets and deletes nothing."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from safe_cleanup import remove_owned
+
+
+@pytest.fixture(name="sandbox")
+def sandbox_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A throwaway cwd with a sentinel (never the real repo) and a separate owned root."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    (cwd / "sentinel.txt").write_text("keep", "utf-8")
+    owned = tmp_path / "owned"
+    owned.mkdir()
+    monkeypatch.chdir(cwd)
+    return cwd, owned
+
+
+@pytest.mark.parametrize("bad", ["", ".", "sub/dir", "..", None])
+def test_empty_dot_and_relative_targets_are_refused(sandbox, bad) -> None:
+    cwd, owned = sandbox
+    with pytest.raises(ValueError):
+        remove_owned(bad, owned)
+    assert (cwd / "sentinel.txt").exists()
+
+
+def test_a_target_outside_the_owned_root_or_the_root_itself_is_refused(sandbox) -> None:
+    cwd, owned = sandbox
+    for bad in (cwd, owned, owned.parent):
+        with pytest.raises(ValueError):
+            remove_owned(bad, owned)
+    assert (cwd / "sentinel.txt").exists() and owned.exists()
+
+
+def test_a_directory_inside_the_owned_root_is_removed(sandbox) -> None:
+    _, owned = sandbox
+    (owned / "d").mkdir()
+    (owned / "d" / "f").write_text("x", "utf-8")
+    remove_owned(str(owned / "d"), owned)
+    assert not (owned / "d").exists()
+
+
+def test_a_symlink_is_dropped_without_following_it(sandbox) -> None:
+    _, owned = sandbox
+    (owned / "important").mkdir()
+    (owned / "link").symlink_to(owned / "important", target_is_directory=True)
+    remove_owned(owned / "link", owned)
+    assert (owned / "important").is_dir() and not (owned / "link").is_symlink()
+
+
+def test_a_symlink_inside_the_removed_tree_is_not_followed_out_of_it(sandbox) -> None:
+    cwd, owned = sandbox
+    (owned / "d").mkdir()
+    (owned / "d" / "out").symlink_to(cwd, target_is_directory=True)
+    remove_owned(owned / "d", owned)
+    assert not (owned / "d").exists() and (cwd / "sentinel.txt").exists()
+
+
+def test_dotdot_targets_and_empty_or_relative_roots_are_refused(sandbox) -> None:
+    cwd, owned = sandbox
+    for target, root in ((owned / "..", owned), (cwd, ""), (cwd / "x", "."), (cwd, "..")):
+        with pytest.raises(ValueError):
+            remove_owned(target, root)
+    assert (cwd / "sentinel.txt").exists() and owned.exists()
+
+
+def test_a_symlinked_root_is_refused(sandbox) -> None:
+    cwd, owned = sandbox
+    (cwd / "sub").mkdir()
+    (owned / "link").symlink_to(cwd, target_is_directory=True)
+    with pytest.raises(ValueError):
+        remove_owned(owned / "link" / "sub", owned / "link")
+    assert (cwd / "sub").exists()
+
+
+def test_a_cwd_below_the_owned_root_survives_empty_and_dot_targets(
+    sandbox, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, owned = sandbox
+    work = owned / "work"
+    work.mkdir()
+    (work / "sentinel.txt").write_text("keep", "utf-8")
+    monkeypatch.chdir(work)
+    for bad in ("", ".", Path(""), None):
+        with pytest.raises(ValueError):
+            remove_owned(bad, owned)
+    assert (work / "sentinel.txt").exists()
+
+
+def test_a_missing_target_is_an_error_not_a_silent_pass(sandbox) -> None:
+    _, owned = sandbox
+    with pytest.raises(FileNotFoundError):
+        remove_owned(owned / "never-made", owned)

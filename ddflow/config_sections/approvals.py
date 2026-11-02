@@ -13,6 +13,9 @@ from ._docs import declare, knob
 #: The standing auto-approve window's ceiling: `standing_window_s` above it is refused.
 STANDING_WINDOW_MAX_S = 24 * 3600
 
+#: The retry-threshold's ceiling: `auto_approve_after_retries` above it is refused.
+AUTO_APPROVE_RETRIES_MAX = 1000
+
 
 @declare("approvals")
 @dataclass
@@ -42,7 +45,7 @@ class ApprovalsConfig:
     )
     transcript_dirs: list[str] = knob(
         factory=lambda: ["~/.claude/projects"],
-        doc="Where the harness channel looks for session transcripts (`*.jsonl`) that hold the answer to an approval question (default ~/.claude/projects). Only files modified since the request was filed are read.",
+        doc="Where the harness channel looks for session transcripts that hold the answer to an approval question (default ~/.claude/projects). Each entry is either a directory of Claude Code `*.jsonl` transcripts or a SQLite database file (Kilo's store); Kilo's own default store `~/.local/share/kilo/kilo.db` is also read when it exists. Only transcripts modified since the request was filed are read.",
     )
     expiry_warn_s: int = knob(
         600,
@@ -54,11 +57,20 @@ class ApprovalsConfig:
     )
     policy_max_uses: int = knob(
         1,
-        doc="How many times one standing rule may approve the same item and target (default 1). A rule past its cap falls back to asking a person.",
+        doc="How many times one standing rule may approve the SAME item and target (default 1): the cap is counted per item+target, so a backlog of DISTINCT items is not limited by it -- each item gets its own use, and a completed item needs no more approvals (the standing `complete_unavailable` use completes it once and it is done). A rule past its cap falls back to asking a person. An explicit `--approval request` is ALWAYS reserved for a person (never answered by a standing rule, never counted against this cap), whatever the window or the cap say.",
     )
     policy_unavailable_runs: int = knob(
         3,
         doc="How many recorded `unavailable` runs of a review gate the rule `skip_after_unavailable` needs before it lets an agent skip that gate's failure (default 3).",
+    )
+    auto_approve_after_retries: int = knob(
+        0,
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= AUTO_APPROVE_RETRIES_MAX
+            else f"must be an integer between 0 and {AUTO_APPROVE_RETRIES_MAX} (0 turns it off)"
+        ),
+        doc="Retry threshold (default 0 = off): after the SAME generic T2 verb (`complete.force`, `claim.force`, `gate.skip.failed_review`, `approve.partial`) has been filed and refused this many times for the same item -- each time the operator was asked and did not answer, counted across EVERY agent -- ddflow AUTO-ANSWERS the next filing as a standing rule recorded `policy:auto-after-retries` (the request's digest preserved) and NOTIFIES the operator, surfaced in `ddflow approvals log` and `ddflow doctor`, rather than asking a person again. Distinct from `standing_window_s`, which is TIME-based and carries no per-use notification: this is COUNT-based and always notifies. Not gated by the standing window nor `policy_max_uses`: the threshold is the whole condition, and every auto-answer above it is on the record so `doctor` and `approvals log` show each one. Once armed, it stays armed: the refusals are asks the log keeps for its life (an expired ask was still asked and left unanswered), so later filings of that verb for that item keep auto-approving with a notification until the operator lowers this knob. 0 turns it off. An agent's edit of this knob is a `config.set`, which needs a person's approval.",
     )
     standing_window_s: int = knob(
         3600,

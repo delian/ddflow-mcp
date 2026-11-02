@@ -141,7 +141,7 @@ per subject" — leaves a `lease.released` with no acquire. Probe: a queue that 
 **zero**. Under `[loops] on_detect = "block"` that is a behaviour change, not a lost
 report. The kind is removed and the allowlist in
 `tests/test_abandon_remove.py::test_every_declared_event_kind_can_actually_be_emitted`
-is now empty. Regression tests and all eight mutations: `tests/test_log_read_cache.py`.
+is now empty. Regression tests and all eight mutations: `tests/test_log_read_cache_*.py`.
 Budget: ≤1h, no GPU; spent ~50 min.
 
 **Source:** [Sanders et al., *The Log is the Agent: Event-Sourced Reactive Graphs for

@@ -433,6 +433,12 @@
    },
    "v": 1
   },
+  "item.reworked": {
+   "fields": {
+    "sha": ["str"]
+   },
+   "v": 1
+  },
   "item.started": {
    "fields": {},
    "v": 1
@@ -604,6 +610,14 @@
     "source": ["str"],
     "tags": ["list"],
     "title": ["str"]
+   },
+   "v": 1
+  },
+  "phase.completed": {
+   "fields": {
+    "evidence": ["str"],
+    "kind": ["str"],
+    "tasks": ["int"]
    },
    "v": 1
   },

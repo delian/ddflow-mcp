@@ -22,7 +22,7 @@ behind it: a window that produced no exit code is unavailable, never reproduced,
 run that never reached an exit code is counted apart as ``unreached``, never cited for
 the verdict. The line runs THROUGH THE SHELL, like the ci gate's line: it is the
 operator's own command, so ``VAR=val cmd`` prefixes, ``&&``, redirections and globs are
-the shell's, and a timeout kills the whole process group (`infra.proc.run_shell`).
+the shell's, and a timeout kills the whole process group (`services.cmdrunner.CommandRunner`).
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from typing import Any
 
 from ..infra import fsio as F
 from ..infra import git as G
-from ..infra import proc as P
 from ..infra import worktree as W
+from . import cmdrunner as CR
 
 
 def check(
@@ -60,7 +60,7 @@ def _run_at(
     repo: Path, sha: str, line: str, count: int, timeout_s: float, tail_bytes: int
 ) -> dict[str, Any]:
     """Run ``line`` up to ``count`` times in one scratch checkout of ``sha``. The line is
-    the SHELL's: `run_shell` runs it whole, so a `VAR=val` prefix, ``&&``, a redirection
+    the SHELL's: `CommandRunner` runs it whole, so a `VAR=val` prefix, ``&&``, a redirection
     or a glob behave as the saw it did, and a timeout kills the line's process group. A
     run cut off (timed out, could not start) never yields an exit code: it is not part of
     the verdict, it is counted as ``unreached`` -- without runs that answered, the record
@@ -195,8 +195,13 @@ def _one_run(
     the WHOLE line redirecting to ``tail_file`` (outside the checkout; /dev/null when
     nothing is kept), so every command the line runs writes there and nowhere else."""
     dest = f" > {shlex.quote(str(tail_file))} 2>&1" if keep else " > /dev/null 2>&1"
-    shot = P.run_shell(f"( {line}\n){dest}", timeout_s=timeout_s, cwd=scratch, merge_stderr=True)
-    if shot.could_not_run or shot.timed_out or shot.code is None:
+    shot = CR.CommandRunner().run(
+        CR.Declared(f"( {line}\n){dest}", "bug --repro-cmd"),
+        cwd=scratch,
+        timeout_s=timeout_s,
+        merge_stderr=True,
+    )
+    if shot.status != "ran" or shot.code is None:
         return None, b"", 0
     code = int(shot.code)
     if code in (126, 127):
