@@ -126,6 +126,40 @@ def recall(
     return O.Outcome(kind="recall", data=data, reason=cut.note())
 
 
+def _semantic_bug_rows(repo: Path, cfg, st, text: str, rows: list[dict]) -> str:
+    """Fold the semantic matcher's bug candidates into ``rows`` (in place), and Return the
+    note ("" when the embedder ran). Strengthened for bugs (DX-bug-dedupe-sweep): a
+    differently-worded report of one defect the token engine missed is surfaced; its score
+    is folded into the candidate, and a bug only the embedder sees is added."""
+    bugs = [r for r in similar_records(st) if r["kind"] == "bug"]
+    hits, note = bugsim.semantic_hits(repo, cfg, text, bugs, floor=cfg.dedupe.show_floor)
+    sem = dict(hits)
+    have = {r["id"] for r in rows if r["kind"] == "bug"}
+    for r in rows:
+        if r["kind"] == "bug" and r["id"] in sem:
+            r["semantic"] = sem[r["id"]]
+            r["score"] = max(r["score"], r["semantic"])
+    for bid, s in hits:
+        if bid in have:
+            continue
+        src = next((x for x in bugs if x["id"] == bid), None)
+        headline, state = DD.record_state(st, bid, "bug", grace_s=cfg.lease.grace_s)
+        rows.append(
+            {
+                "id": bid,
+                "kind": "bug",
+                "title": " ".join((headline or (src["body"] if src else "")).split())[:200],
+                "state": state,
+                "score": s,
+                "semantic": s,
+                "shared": [],
+                "flags": ["semantic"],
+            }
+        )
+    rows.sort(key=lambda r: (-r["score"], r["id"]))
+    return note
+
+
 def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Outcome:
     """ "Is this already filed?" -- the records most like ``text``, before it is added.
 
@@ -166,39 +200,7 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
         # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
         cands = [c for c in found.candidates if c.kind in scope]
         rows = DD.rows(st, matcher, cands, text, grace_s=cfg.lease.grace_s)
-        note = ""
-        if "bug" in scope:
-            # Strengthened for bugs (DX-bug-dedupe-sweep): the semantic matcher surfaces a
-            # differently-worded report of one defect the token engine missed. Its score is
-            # folded into the candidate, and a bug it sees that the tokens did not is added.
-            bugs = [r for r in similar_records(st) if r["kind"] == "bug"]
-            hits, note = bugsim.semantic_hits(
-                repo, cfg, text, bugs, floor=cfg.dedupe.show_floor
-            )
-            sem = dict(hits)
-            have = {r["id"] for r in rows if r["kind"] == "bug"}
-            for r in rows:
-                if r["kind"] == "bug" and r["id"] in sem:
-                    r["semantic"] = sem[r["id"]]
-                    r["score"] = max(r["score"], r["semantic"])
-            for bid, s in hits:
-                if bid in have:
-                    continue
-                src = next((x for x in bugs if x["id"] == bid), None)
-                headline, state = DD.record_state(st, bid, "bug", grace_s=cfg.lease.grace_s)
-                rows.append(
-                    {
-                        "id": bid,
-                        "kind": "bug",
-                        "title": " ".join((headline or (src["body"] if src else "")).split())[:200],
-                        "state": state,
-                        "score": s,
-                        "semantic": s,
-                        "shared": [],
-                        "flags": ["semantic"],
-                    }
-                )
-            rows.sort(key=lambda r: (-r["score"], r["id"]))
+        note = _semantic_bug_rows(repo, cfg, st, text, rows) if "bug" in scope else ""
     data = {
         "text": text,
         "kinds": scope,
