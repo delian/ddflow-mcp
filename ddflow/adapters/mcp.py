@@ -211,6 +211,8 @@ class StdioServer:
         mid, method = msg.get("id"), msg.get("method")
         if "id" not in msg:
             return None  # a notification is never answered
+        if mid is not None and not isinstance(mid, str | int | float):
+            return err(None, INVALID_REQUEST, "`id` must be a string, a number or null")
         if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
             return err(mid, INVALID_REQUEST, "not a JSON-RPC 2.0 request")
         if msg.get("params") is not None and not isinstance(msg["params"], dict):
@@ -398,7 +400,10 @@ class StdioClient:
         if first.status == OK:
             hello.detail, hello.server = describe_answer({"result": first.result})
             hello.protocol = negotiate(version, first.result.get("protocolVersion"))
-            self._send(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+            if not self._send(
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
+            ):
+                hello.status, hello.detail = EOF, CLOSED_BEFORE_READ
         elif first.status == ERROR:
             hello.detail = describe_answer({"error": first.error})[0]
         return hello
