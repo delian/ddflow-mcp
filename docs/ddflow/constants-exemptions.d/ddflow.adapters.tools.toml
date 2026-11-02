@@ -1,0 +1,3 @@
+[knob]
+"ddflow/adapters/tools.py:DEFAULT_PROBE_TIMEOUT_S" = 'companions.tool_probe_timeout_s'
+"ddflow/adapters/tools.py:DEFAULT_RUN_TIMEOUT_S" = 'companions.tool_run_timeout_s'

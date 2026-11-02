@@ -61,6 +61,10 @@ KNOWN_UNREAD: dict[str, str] = {
     # Declared for the `pins drivers --check` mergiraf evaluation (mergedrivers.keep_mergiraf);
     # that caller is not yet wired, so nothing reads it yet.
     "pins.mergiraf_keep_pct": "declared for the `pins drivers --check` mergiraf keep/drop evaluation; keep_mergiraf has no caller yet",
+    # Read through an alias the regex cannot see: `cfg = Config.load(repo).companions` then
+    # `cfg.tool_probe_timeout_s` (ddflow/services/toolrun.py) IS a read of companions.*.
+    "companions.tool_probe_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
+    "companions.tool_run_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
 }
 
 
