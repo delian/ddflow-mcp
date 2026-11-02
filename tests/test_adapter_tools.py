@@ -9,12 +9,13 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
 from ddflow.adapters import tool_parsers as TP
 from ddflow.adapters import tools as T
-from ddflow.adapters.fakes import FakeExternalTool
+from ddflow.adapters.fakes.tools import FakeExternalTool
 from ddflow.adapters.tool_types import (
     CLEAN,
     FINDINGS,
@@ -303,3 +304,65 @@ def test_the_default_tool_takes_its_timeouts_from_the_knobs(tmp_path):
     )
     t = external_tool("gitleaks", tmp_path)
     assert (t.probe_timeout_s, t.run_timeout_s) == (3, 9)
+
+
+# -- conformance: the same cases against the default adapter and the fake ------------------
+
+
+class _Kit:
+    """The default adapter over a scripted runner, built the way the fake's `scripted` is:
+    `kit.scripted(probe=, run=)` takes the `RunResult`s the "process" gave. The row is the
+    generic `normalized` one, so no real tool is named or run."""
+
+    ROW: ClassVar[dict] = {
+        "id": "t", "argv": ["t"], "version_argv": ["t", "-v"], "parser": "normalized",
+        "install": "install-t", "finding_codes": [1],
+    }  # fmt: skip
+
+    def scripted(self, probe=None, run=None):
+        answers = {"-v": probe or ok("tool 1.2.3"), "run": run or ok("[]")}
+
+        def runner(argv, *, timeout_s, cwd=None):
+            return answers["-v" if argv[-1] == "-v" else "run"]
+
+        return T.TableTool(T.spec_from_row(self.ROW), runner)
+
+
+def tool_cases(kit) -> None:
+    p = kit.scripted(probe=ok("tool v1.2.3")).probe()
+    assert (p.installed, p.version, p.usable) == (True, "1.2.3", True)
+    absent = kit.scripted(probe=gone(MISSING, "gone")).probe()
+    assert absent.installed is False and not absent.usable and absent.hint == "install-t"
+    assert kit.scripted(probe=gone(TIMEOUT, "slow")).probe().installed is None
+    hit = json.dumps([{"rule": "r1", "severity": "low", "file": "f", "line": 2}])
+    got = kit.scripted(run=ok(hit, 1)).run()
+    assert got.status == FINDINGS and got.findings[0].rule == "r1" and got.findings[0].line == 2
+    assert kit.scripted(run=ok("[]")).run().status == CLEAN
+    for bad in (
+        gone(MISSING, "gone"),
+        gone(TIMEOUT, "slow"),
+        ok("[]", 2),
+        ok("not json"),
+        ok("[]", 1),
+    ):
+        assert kit.scripted(run=bad).run().status == UNAVAILABLE, bad
+    tool = kit.scripted()
+    assert tool.install_hint() == "install-t" and tool.tool_id() == "t"
+    assert [f.rule for f in tool.parse(hit)] == ["r1"]
+
+
+CONFORMANCE = {
+    "ExternalTool": {
+        "real": lambda monkeypatch: _Kit(),
+        "cases": tool_cases,
+        "fake": lambda cls: cls("t", finding_codes=(1,), install="install-t"),
+    }
+}
+
+
+def test_the_default_adapter_passes_the_tool_cases():
+    tool_cases(_Kit())
+
+
+def test_the_fake_passes_the_tool_cases():
+    tool_cases(FakeExternalTool("t", finding_codes=(1,), install="install-t"))

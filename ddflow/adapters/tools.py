@@ -18,8 +18,9 @@ from __future__ import annotations
 import re
 import tomllib
 from importlib import resources
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
+from .ports import port
 from .registry import Registry
 from .tool_parsers import PARSERS
 from .tool_types import (
@@ -37,6 +38,40 @@ from .tool_types import (
     ToolRunner,
     ToolSpec,
 )
+
+
+@port
+@runtime_checkable
+class ExternalTool(Protocol):
+    """A command-line tool ddflow shells to (roborev, gitleaks, pre-commit, ...), reached
+    through one probe, one run, one parser and one "unavailable" rule.
+
+    One adapter per tool, each answering `tool_id()` (a method, not a `name` member: a data
+    member would stop the port satisfying `issubclass`), described as a row of `tools.toml` and
+    held in `ddflow.adapters.tools.SPECS`. Home:
+    `ddflow.adapters.tools` (values in `ddflow.adapters.tool_types`). The adapter starts no
+    process itself: the caller injects a runner (`ddflow.services.toolrun` in production).
+    Results are typed `Any` here: `ToolProbe`, `ToolRun` and `Finding` stay in the adapter's
+    own module. A failure is never "passed": every one is a `ToolRun` whose status is
+    `unavailable`.
+    """
+
+    def tool_id(self) -> str:
+        """The tool's id: the row of `tools.toml` it is described by."""
+
+    def probe(self) -> Any:
+        """Installed (True, False, or None for could-not-tell), version, pin satisfied; a
+        `ToolProbe`."""
+
+    def run(self, args: list[str] | None = None, *, cwd: str | None = None) -> Any:
+        """Run with `args` appended; a `ToolRun` that is `clean`, `findings` or `unavailable`."""
+
+    def parse(self, output: str) -> list[Any]:
+        """The tool's output as normalized `Finding`s; `ToolParseError` for a shape not read."""
+
+    def install_hint(self) -> str:
+        """The install command as data: shown to the operator, never run without consent."""
+
 
 #: Defaults the caller overrides (production reads them from configuration): seconds a version
 #: probe and a run may take.
@@ -116,7 +151,6 @@ class TableTool:
         run_timeout_s: float = DEFAULT_RUN_TIMEOUT_S,
     ) -> None:
         self.spec = spec
-        self.name = spec.id
         self.runner = runner
         self.pin = spec.pin if pin is None else pin
         self.probe_timeout_s = probe_timeout_s
@@ -124,6 +158,9 @@ class TableTool:
         self._probed: ToolProbe | None = None
 
     # -- the port ------------------------------------------------------------------------
+    def tool_id(self) -> str:
+        return self.spec.id
+
     def install_hint(self) -> str:
         """The install command, as data. Show it; run it only when the operator agrees."""
         return self.spec.install
