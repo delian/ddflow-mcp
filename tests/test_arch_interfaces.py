@@ -350,7 +350,7 @@ def f(logger, u):
     logger.debug(".git", "hooks")
     h = Path(".git", "hooks")
     url = "https://example.com/settings.json"
-    os.system("git status && pre-commit run | grep x; FOO=1 uv sync")
+    os.system("git status && pre-commit run")
     os.environ["PATH"] += ":x"
     return h, url
 """
@@ -372,9 +372,9 @@ def test_review_findings_stay_fixed(tmp_path: Path):
     # a URL is a host, never a managed file
     assert {f.family for f in c.families if f.kind == "managed-file"} == {".git/hooks"}
     assert "host:example.com" in {f.family for f in c.families}
-    # every command of a shell line, env-prefix words skipped
+    # a shell LINE runs the shell: one `sh` site, its commands are not parsed
     progs = {f.family for f in c.families if f.kind == "program"}
-    assert progs == {"git", "pre-commit", "grep", "uv"}
+    assert progs == {"sh"}
     # `os.environ[k] += x` reads k
     assert ("PATH", "ddflow/rev.py", _line(REVIEW, "+=")) in _sites(c, "env")
     # a bare string statement does not decide which protocol a jsonrpc literal belongs to
@@ -399,7 +399,7 @@ def test_second_round_review_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"more.py": MORE}))
     hooks = {s.line for f in c.families if f.family == ".git/hooks" for s in f.sites}
     assert hooks == {_line(MORE, 'Path(".git").joinpath'), _line(MORE, "c = p.joinpath")}
-    assert {f.family for f in c.families if f.kind == "program"} == {"git", "grep"}
+    assert {f.family for f in c.families if f.kind == "program"} == {"sh"}
 
 
 def test_the_census_modules_import_no_os_family():
@@ -416,7 +416,7 @@ def test_a_string_is_a_shell_line_only_for_shell_calls(tmp_path: Path):
         'subprocess.run("git status & uv sync", shell=True)\n'
     )
     c = I.scan(_tree(tmp_path, {"sh.py": src}))
-    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "git", "uv"}
+    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "sh"}
 
 
 THIRD = """\
@@ -427,7 +427,7 @@ import subprocess
 
 def f():
     f"opencode.json"
-    os.system("git status\\npre-commit run && make > /dev/null 2>&1")
+    os.system("git status\\npre-commit run")
     subprocess.run(args=["gh", "pr"])
     return os.getenv(key="KW_VAR"), shutil.which(cmd="uv")
 """
@@ -435,43 +435,7 @@ def f():
 
 def test_third_round_review_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"third.py": THIRD}))
-    assert {f.family for f in c.families if f.kind == "program"} == {
-        "git",
-        "pre-commit",
-        "make",
-        "gh",
-        "uv",
-    }
+    assert {f.family for f in c.families if f.kind == "program"} == {"sh", "gh", "uv"}
     assert {f.family for f in c.families if f.kind == "env"} == {"KW_VAR"}
     assert not [f for f in c.families if f.kind == "managed-file"]  # a bare f-string is prose
     assert I.parse_baseline(" # indented comment\n\n") == {}
-    (tmp_path / "sub").mkdir()
-    sub = I.scan(
-        _tree(
-            tmp_path / "sub", {"sub.py": 'import os\nos.system("(cd x && git status) | grep y")\n'}
-        )
-    )
-    assert {f.family for f in sub.families if f.kind == "program"} == {"cd", "git", "grep"}
-
-
-def test_shell_lines_with_quoted_newlines_and_fd_redirections(tmp_path: Path):
-    src = (
-        'import os\nos.system("git commit -m \'a\\nb\' && ls")\nos.system("2>/dev/null uv sync")\n'
-    )
-    c = I.scan(_tree(tmp_path, {"q.py": src}))
-    assert {f.family for f in c.families if f.kind == "program"} == {"git", "ls", "uv"}
-    (tmp_path / "w").mkdir()
-    more = 'import os\nos.system("ls # note\\ngit status")\nos.system("make \\\\\\nall")\n'
-    d = I.scan(_tree(tmp_path / "w", {"w.py": more}))
-    assert {f.family for f in d.families if f.kind == "program"} == {"ls", "git", "make"}
-
-
-def test_shell_comments_escaped_quotes_and_leading_fd_redirections(tmp_path: Path):
-    src = (
-        "import os\n"
-        'os.system("# note\\ngit status")\n'
-        'os.system("echo \\"a\\\\\\"b\\"\\nls")\n'
-        'os.system("2>&1 uv sync")\n'
-    )
-    c = I.scan(_tree(tmp_path, {"e.py": src}))
-    assert {f.family for f in c.families if f.kind == "program"} == {"git", "echo", "ls", "uv"}

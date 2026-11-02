@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import ast
 import re
-import shlex
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -83,7 +82,6 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
-_SHELL_OPS = frozenset({"&&", "||", ";", "|", "&", "(", ")"})
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
 
@@ -101,30 +99,6 @@ class Site:
 
 
 _ARG_KEYWORDS = ("args", "argv", "cmd", "command", "key", "path", "file")
-
-
-def _is_redirect(token: str) -> bool:
-    return set(token) <= set("<>&|;()") and ("<" in token or ">" in token)
-
-
-def _unquoted_newlines_to_semicolons(line: str) -> str:
-    """A newline outside quotes separates commands (shlex would read it as blank space)."""
-    out, quote, escaped = [], "", False
-    for ch in line.replace("\\\n", " "):  # backslash-newline is a continuation
-        if escaped:  # the character after a backslash is literal (not in single quotes)
-            escaped = False
-        elif ch == "\\" and quote != "'":
-            escaped = True
-        elif quote:
-            if ch == quote:
-                quote = ""
-        elif ch in "'\"":
-            quote = ch
-        elif ch == "\n":
-            out.append(" ; ")
-            continue
-        out.append(ch)
-    return "".join(out)
 
 
 def _keyword_arg(node: ast.Call) -> ast.AST | None:
@@ -240,49 +214,15 @@ class _Scan:
             return "python"
         return None
 
-    @staticmethod
-    def _shell_commands(line: str) -> list[str]:
-        """The first word of every command in a shell line, quotes respected (``git commit -m
-        'a && b'`` is one command), ``VAR=x`` prefixes skipped; the first word alone when the
-        line does not tokenize."""
-        lex = shlex.shlex(
-            _unquoted_newlines_to_semicolons(line), posix=True, punctuation_chars=True
-        )
-        lex.whitespace_split = True
-        lex.commenters = ""  # a comment ends at the newline we turned into `;`: not worth parsing
-        try:
-            tokens = list(lex)
-        except ValueError:
-            return line.split()[:1]
-        out: list[str] = []
-        fresh, skip, comment = True, False, False
-        for i, t in enumerate(tokens):
-            if comment:  # a `# ...` comment runs to the `;` that a newline became
-                comment = t != ";"
-                fresh = fresh or t == ";"
-            elif t.startswith("#"):
-                comment = True
-            elif skip:  # the target of a redirection (`2>&1`, `> file`) is not a command
-                skip = False
-            elif t in _SHELL_OPS:
-                fresh = True
-            elif _is_redirect(t):
-                skip = True
-            elif t.isdigit() and i + 1 < len(tokens) and _is_redirect(tokens[i + 1]):
-                continue  # a file descriptor in front of a redirection (`2>/dev/null`)
-            elif fresh and "=" not in t.split("/")[0]:
-                out.append(t)
-                fresh = False
-        return out
-
     def programs_of(self, e: ast.AST, *, shell: bool = False) -> list[str]:
-        """The programs one command argument names: one for an argv list or a name bound to
-        one; for a string, every command of the shell line when ``shell`` (``a && b | c``
-        names a, b and c), else the string is the program path itself (``os.execv``)."""
+        """The program one command argument names: the head of an argv list or of a name bound
+        to one; a string is the program path itself (``os.execv``), or, for a shell call, a
+        shell LINE: the program run is the shell (``sh``) and its commands are not parsed here
+        (a shell grammar is not the census's business; no live site passes a literal line)."""
         if isinstance(e, ast.Constant) and isinstance(e.value, str):
-            if not shell:
-                return [_base(e.value)] if e.value else [DYNAMIC]
-            return [_base(word) for word in self._shell_commands(e.value)] or [DYNAMIC]
+            if shell:
+                return ["sh"]
+            return [_base(e.value)] if e.value else [DYNAMIC]
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
         elif isinstance(e, ast.Name):
