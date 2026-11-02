@@ -87,6 +87,22 @@ forbidden_modules =
     hashlib
 allow_indirect_imports = True
 
+# HTTP belongs in ddflow.adapters.http (the `HttpClient` port's one default adapter).
+# `forbidden_modules` are import ROOTS (an external package is squashed to its root), so
+# `urllib.parse` and `http.HTTPStatus` users are listed in the baseline too: they are
+# string and constant helpers, not network use, and leave the list when a pure home for
+# them exists.
+[importlinter:contract:http-home]
+name = urllib, http and socket are imported only by ddflow.adapters.http
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    urllib
+    http
+    socket
+allow_indirect_imports = True
+
 # Optional extras (D-unify 2): each is imported by exactly ONE adapter module, which owns
 # the stdlib fallback and the doctor line. The task that writes an adapter adds its one
 # "home" entry to tests/guard_baselines/importlinter-extras-one-adapter.toml, e.g.

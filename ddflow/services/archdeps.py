@@ -53,6 +53,7 @@ STDLIB_HOMES: dict[str, tuple[str, ...]] = {
     "fsio": ("ddflow.infra.fsio",),
     "shutil": ("ddflow.infra.fsio",),
     "hashlib": ("ddflow.core.digest",),
+    "http": ("ddflow.adapters.http",),
 }
 
 # A third-party package's declared home: the one module allowed to import the package.

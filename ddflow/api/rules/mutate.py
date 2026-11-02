@@ -9,11 +9,10 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ...core import outcome as O
-from ...infra.fsio import replace_text
 from ...services.guidance.record import ENFORCEMENTS
 from ...services.rules import RulesStorage
 from .dedup import RuleDedupAnswer, _cross_kind, _is_rule
-from .write import _record_in_log, _retire_in_log, rules_manifest
+from .write import _record_in_log, _retire_in_log, _update_manifest
 
 
 def _check_edit(
@@ -111,10 +110,7 @@ def rule_update(
     try:
         _rule, _event_fields = storage.update(rule_id, **fields)
 
-        # Update the manifest
-        manifest_content = rules_manifest(storage)
-        manifest_path = repo / "DDFLOW.md"
-        replace_text(manifest_path, manifest_content)
+        _update_manifest(repo, storage)
 
         return _record_in_log(
             repo,
@@ -149,10 +145,7 @@ def rule_remove(repo: Path, rule_id: str, *, agent: str = "") -> O.Outcome:
     try:
         storage.remove(rule_id)
 
-        # Update the manifest
-        manifest_content = rules_manifest(storage)
-        manifest_path = repo / "DDFLOW.md"
-        replace_text(manifest_path, manifest_content)
+        _update_manifest(repo, storage)
 
         return _retire_in_log(repo, rule_id, agent, O.ok("rule.deleted", id=rule_id))
 

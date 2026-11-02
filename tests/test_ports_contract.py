@@ -26,7 +26,7 @@ PORTS_PATH = PKG / "adapters" / "ports.py"
 
 #: The families that have a port. `forge` is the multi-adapter family (GitHub, GitLab,
 #: registered in a `Registry[Forge]`); the other five have one default implementation each.
-FAMILIES = {"Proc", "Git", "Fsio", "Toml", "Digest", "Forge"}
+FAMILIES = {"Proc", "Git", "Fsio", "Toml", "Digest", "Forge", "HttpClient"}
 
 
 def _ports() -> dict[str, type]:
@@ -253,13 +253,19 @@ def test_the_fakes_are_shipped_in_the_adapters_package():
 # -- conformance: one set of cases, run against the adapter and its fake ----------------
 
 
-def _real_adapters() -> dict[str, object]:
+def _real_adapters(monkeypatch=None) -> dict[str, object]:
     """The default adapter of each port that has a fake. Until a home moves under
     `ddflow.adapters` (ADP-migrate-homes) it is the existing module, which IS the port
     structurally: that is how a fake is dropped in where the module is imported."""
     from ddflow.core import digest
 
-    return {"Digest": digest}
+    out: dict[str, object] = {"Digest": digest}
+    if monkeypatch is not None:
+        # No network: the default adapter runs with urllib's `urlopen` scripted.
+        from tests.test_adapters_http import ScriptedUrllib
+
+        out["HttpClient"] = ScriptedUrllib(monkeypatch)
+    return out
 
 
 def _digest_cases(d) -> None:
@@ -275,18 +281,24 @@ def _digest_cases(d) -> None:
     assert len(d.of_obj({"a": 1}, length=6)) == 6
 
 
-CASES = {"Digest": _digest_cases}
+def _http_cases(c) -> None:
+    from tests.test_adapters_http import http_conformance
+
+    http_conformance(c)
 
 
-def test_every_fake_has_a_conformance_case_and_a_real_adapter():
-    assert set(F.FAKES) == set(CASES) == set(_real_adapters()), (
+CASES = {"Digest": _digest_cases, "HttpClient": _http_cases}
+
+
+def test_every_fake_has_a_conformance_case_and_a_real_adapter(monkeypatch):
+    assert set(F.FAKES) == set(CASES) == set(_real_adapters(monkeypatch)), (
         "a fake with no conformance case runs against nothing: add its case here"
     )
 
 
 @pytest.mark.parametrize("family", sorted(CASES))
-def test_adapter_and_fake_pass_the_same_cases(family: str):
-    CASES[family](_real_adapters()[family])
+def test_adapter_and_fake_pass_the_same_cases(family: str, monkeypatch):
+    CASES[family](_real_adapters(monkeypatch)[family])
     CASES[family](F.FAKES[family]())
 
 

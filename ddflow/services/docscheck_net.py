@@ -9,12 +9,11 @@ check reports itself ``unavailable`` rather than passing the links it could not 
 
 from __future__ import annotations
 
-import http.client
-import urllib.error
-import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from ..adapters.http import HttpError, HttpStatusError, default_client
+from ..adapters.ports import HttpClient
 from .docscheck import _LINK, _REFDEF
 from .docscheck_md import lines
 from .docscheck_types import Finding
@@ -45,25 +44,29 @@ def remote_links(texts: Mapping[str, str]) -> list[tuple[str, int, str]]:
     return out
 
 
-def _verdict(url: str, timeout_s: int) -> tuple[str, str]:
+def _verdict(url: str, timeout_s: int, client: HttpClient) -> tuple[str, str]:
     """("ok" | "gone" | "refused" | "silent", why): what the address said to a GET."""
-    req = urllib.request.Request(url, headers={"User-Agent": "ddflow-docs-check"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout_s):  # nosec B310 -- http(s) only
-            return "ok", ""
-    except urllib.error.HTTPError as exc:
-        return ("gone" if exc.code in GONE else "refused"), str(exc.code)
-    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as exc:
+        client.request(
+            "GET", url, headers={"User-Agent": "ddflow-docs-check"}, timeout=timeout_s, max_bytes=0
+        )
+        return "ok", ""
+    except HttpStatusError as exc:
+        return ("gone" if exc.status in GONE else "refused"), str(exc.status)
+    except (HttpError, ValueError) as exc:
         return "silent", str(getattr(exc, "reason", exc))
 
 
-def check_remote(texts: Mapping[str, str], timeout_s: int) -> RemoteResult:
+def check_remote(
+    texts: Mapping[str, str], timeout_s: int, client: HttpClient | None = None
+) -> RemoteResult:
     """GET each distinct http(s) link of ``texts`` once."""
+    client = default_client() if client is None else client
     result = RemoteResult()
     seen: dict[str, tuple[str, str]] = {}
     for path, n, url in remote_links(texts):
         if url not in seen:
-            seen[url] = _verdict(url, timeout_s)
+            seen[url] = _verdict(url, timeout_s, client)
             result.checked += 1
         if seen[url][0] == "gone":
             result.findings.append(

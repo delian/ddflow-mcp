@@ -491,8 +491,9 @@ _LAST = ("repairs", "migrations", "instructions")
 
 def _in_order(todo: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The items in the order they are executed (and recorded in the run's `started` event)."""
-    rest = [i for i in todo if i["category"] not in _LAST]
-    return rest + [i for c in _LAST for i in todo if i["category"] == c]
+    _last = sys.modules[__package__]._LAST  # late-bound: honours monkeypatch on the package
+    rest = [i for i in todo if i["category"] not in _last]
+    return rest + [i for c in _last for i in todo if i["category"] == c]
 
 
 def _refusal(item: dict[str, Any], config_changes: str) -> str:
