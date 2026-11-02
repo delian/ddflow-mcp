@@ -6,8 +6,9 @@ prompt or note -- calls ``check_add`` BEFORE it writes, and applies what comes b
 * a **refusal** (exit 3, "possible duplicate") carrying the candidates, when the text
   looks like an existing record and nobody has said what it is;
 * an **extension** -- the text goes onto the existing record as a ``record.extended``
-  and no new id is made -- when the answer is ``extends X`` / ``duplicate_of X`` and X is
-  still open and unclaimed (or the text is an exact copy of such a record);
+  and no new id is made -- when the answer is ``merge_into X`` / ``duplicate_of X`` and X
+  is still open and unclaimed (or the text is an exact copy of such a record); ``extends X``
+  is never an extension: it files a new record linked to X (see ``LINK_ONLY_KINDS``);
 * otherwise **fields** for the add event: a link to X when X is claimed, in progress or
   closed (a NEW record, so nothing is lost), and the ``dedupe`` answer, which is recorded
   for every answer including ``new``.
@@ -42,9 +43,11 @@ RELATIONS = ("new", "extends", "duplicate_of", "related")
 #: Also accepted as an answer, never offered: append to the target instead of filing a
 #: record (the old behaviour of ``extends``, now explicit -- B-extends-merges-into-open-target).
 MERGE_INTO = "merge_into"
-#: Records whose OWNER decides what is on them: ``extends`` files a new record linked to
-#: one of these instead of writing onto it.
-LINK_ONLY_KINDS = ("task", "phase", "research")
+#: Kinds ``extends`` files a new record linked to instead of writing onto it: items whose
+#: OWNER decides what is on them (task, phase, research), and decisions, which are never
+#: edited in place (D-no-deletion; B-decision-extends-mutates-old-record). Appending to one
+#: of these is the explicit answer ``merge_into`` (``duplicate_of`` still merges).
+LINK_ONLY_KINDS = ("task", "phase", "research", "decision")
 #: Words listed to explain one match: enough to see why, few enough to read at a glance.
 SHARED_WORDS = 5
 
