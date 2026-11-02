@@ -1,6 +1,6 @@
 """The `http-home` contract's blind spot: import-linter sees import ROOTS, this test sees names.
 
-No module outside ddflow/adapters/http.py may import a way to open a connection.
+No module outside ddflow/adapters/ may import a way to open a connection.
 """
 
 from __future__ import annotations
@@ -49,12 +49,13 @@ def test_no_module_outside_the_home_can_open_a_connection():
     offenders = [
         f"{path.relative_to(root.parent)}: {mod}{'.' + name if name else ''}"
         for path in sorted(root.rglob("*.py"))
-        if path != root / "adapters" / "http.py"
+        if (root / "adapters")
+        not in path.parents  # the home is ddflow/adapters/ (D-adapters-answers)
         for mod, name in _network_imports(path.read_text("utf-8"))
         if not _pure_helper(path.relative_to(root.parent).as_posix(), mod, name)
     ]
     assert not offenders, (
-        "only ddflow/adapters/http.py may open connections (urllib.request, urllib.error, "
+        "only ddflow/adapters/ may open connections (urllib.request, urllib.error, "
         f"http.client, socket): {offenders}. Use the HttpClient port."
     )
 
