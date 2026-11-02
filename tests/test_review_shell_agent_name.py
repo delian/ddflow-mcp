@@ -12,6 +12,7 @@ it back instead of deriving.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -47,6 +48,8 @@ def test_a_per_call_name_is_recorded_for_the_agents_own_shell(repo):
             timeout=120,
         )
         assert cli.returncode == 0, cli.stdout + cli.stderr
-        assert '"sub-1"' in cli.stdout, "the shell's CLI derived a name instead: " + cli.stdout
+        said = json.loads(cli.stdout)
+        assert said["agent"] == "sub-1", "the shell's CLI named the wrong identity: " + cli.stdout
+        assert said["source"] == "ddflow_identify", "the shell did not take the harness record: " + cli.stdout
     finally:
         H.declare(repo, "")
