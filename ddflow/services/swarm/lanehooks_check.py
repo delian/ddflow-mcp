@@ -4,7 +4,8 @@ One matcher, ``core.globs`` (the one `check-commit` uses); this module reads the
 lease and nothing else. The hook calls it as ``python -m ddflow.services.swarm.lanehooks_check
 --repo R --agent LANE`` with the harness's tool-call JSON on stdin; exit 2 refuses the call and
 puts the reason on stderr (the exit-2 block mode of the command-hook dialects, and what the
-plugin template turns into a throw). It FAILS OPEN: a crash or an unreadable lease allows the
+plugin template turns into a throw). It reads `.ddflow/local/lease-snapshot.json`
+(`enforce.hooksnap`), never the event log. It FAILS OPEN: a crash or an unreadable lease allows the
 call with one fixed line, because a guard that fails closed on its own bug stops every lane.
 
 Only calls that carry a file path are judged; a shell command carries none, so a write done
@@ -23,14 +24,9 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from ...config import Config
 from ...core.bookkeeping import SELF_MANAGED
 from ...core.globs import inside
-from ...core.model import fold
-from ...core.schedule import shared_globs
-from ...infra.log import EventLog
-from .. import leases
-from ..leaseclock import localize
+from ..enforce import hooksnap
 
 #: Always refused: the conformance probe's path (never a real project path).
 PROBE_DIR = "ddflow-hook-probe"
@@ -62,17 +58,21 @@ def _relative(path: str, cwd: Path, root: Path | None = None) -> str | None:
     return PurePosixPath(*rel.parts).as_posix()
 
 
+class SnapshotUnusable(Exception):
+    """The lease snapshot cannot be trusted: the call is allowed and the sentence says why."""
+
+
 def _mine(repo: Path, agent: str) -> tuple[list[str], list[str]]:
-    """(globs of the agent's live leases, shared globs) from the project's event log."""
-    cfg = Config.load(repo)
-    log = EventLog(repo, agent, log_cfg=cfg.log)
-    now = time.time()
-    state = localize(fold(log.read_all(), strict=False), log, now)
+    """(globs of the agent's live leases, shared globs) from the lease snapshot, which every
+    lease event keeps current (LK-hook-snapshot): milliseconds, where folding the event log
+    cost seconds. A missing, torn, newer or stale snapshot raises `SnapshotUnusable`."""
+    snap = hooksnap.read(repo)
+    if snap.status != hooksnap.OK:
+        raise SnapshotUnusable(snap.note)
     globs: list[str] = []
-    for lease in leases.unfinished_leases(state, cfg, now).values():
-        if lease.holder == agent:
-            globs.extend(lease.globs)
-    return globs, list(shared_globs(cfg))
+    for lease in snap.live_for(agent, time.time()):
+        globs.extend(lease.get("globs", []))
+    return globs, snap.shared
 
 
 def _self_managed(rel: str) -> bool:
@@ -90,7 +90,10 @@ def verdict(
             return REFUSE, f"ddflow lane hook probe: {raw} is refused on purpose (the hook fired)"
     if not rels:
         return 0, ""
-    mine, shared = _mine(repo, agent)
+    try:
+        mine, shared = _mine(repo, agent)
+    except SnapshotUnusable as why:
+        return 0, f"{why} The call is allowed (not checked here)."
     if not mine:
         return REFUSE, f"lane {agent} holds no live lease: stop; do not write any file"
     bad = []
