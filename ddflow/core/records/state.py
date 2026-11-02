@@ -124,6 +124,9 @@ class State:
     #: person-supplied text, so any full-state export redacts it leaf-wise like every
     #: other field.
     asks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: suggestion id -> the folded suggestion (`suggestion.*` events, `core.handlers.suggestions`;
+    #: read it through `suggestions_of`). Holds the patch's digest and counts, never its text.
+    suggestions: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: item id -> the newest `lease.waiting` record of an agent refused the files it asked for
     #: ({"holder", "globs", "on", "since", "queue", "ttl_s", "lease_event", "agent", "at"}).
     #: Whether it still stands is asked at read time (`services.waiting`), never in the fold.

@@ -811,6 +811,93 @@
    },
    "v": 1
   },
+  "suggestion.accepted": {
+   "fields": {
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.applied": {
+   "fields": {
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.countered": {
+   "fields": {
+    "counter": ["str"],
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.expired": {
+   "fields": {
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.proposed": {
+   "fields": {
+    "added": ["int"],
+    "base": ["str"],
+    "blob": ["str"],
+    "digest": ["str"],
+    "files": ["list"],
+    "from_agent": ["str"],
+    "from_item": ["str"],
+    "id": ["str"],
+    "kind": ["str"],
+    "patch_id": ["str"],
+    "probe": ["str"],
+    "reason": ["str"],
+    "ref": ["str"],
+    "removed": ["int"],
+    "to_agent": ["str"],
+    "to_item": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.rejected": {
+   "fields": {
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.seen": {
+   "fields": {
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.superseded": {
+   "fields": {
+    "by_id": ["str"],
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
+  "suggestion.withdrawn": {
+   "fields": {
+    "id": ["str"],
+    "reason": ["str"],
+    "role": ["str"]
+   },
+   "v": 1
+  },
   "task.added": {
    "fields": {
     "body": ["str"],
