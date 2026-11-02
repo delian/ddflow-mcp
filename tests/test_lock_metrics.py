@@ -244,6 +244,7 @@ def test_declared_is_scored_on_the_in_window_merge_only():
     st, cfg, now = frozen(log)
     cfg.metrics.min_samples = 1
     probes = Fake({("A0", "A1"): ["old/x.py"], ("B0", "B1"): ["src/a.py"]}, {})
+    # scoring the out-of-window merge by mistake would put src/a.py outside old/*.py
     since = f"{int(now - (T0 + 1000))}s"
     d = M.run(log.events, st, cfg, now, view="locks", since=since, probes=probes).metrics[
         "declared"

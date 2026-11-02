@@ -137,9 +137,8 @@ def _actual(
     return frozenset(f for p in parts for f in p or ())
 
 
-def _blockers(ctx: Context, item: str, since: float) -> list[Lease]:
+def _blockers(ctx: Context, item: str, since: float, mine: tuple[str, ...]) -> list[Lease]:
     """Other items holding a lease at ``since`` whose globs overlap the waiter's."""
-    mine = _declared_of(ctx, item, since)
     out = []
     for lease in ctx.facts.leases:
         live = lease.start <= since and (lease.end is None or lease.end > since)
@@ -158,8 +157,8 @@ def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> di
             continue
         began, secs = min(before), claim - min(before)
         spans.append(secs)
-        blockers = _blockers(ctx, item, began)
         own = next((x for x in ctx.facts.leases if x.item == item and x.start == claim), None)
+        blockers = _blockers(ctx, item, began, own.globs if own else _declared_of(ctx, item))
         mine = _actual(ctx, probes, item, cache, own)
         theirs = [_actual(ctx, probes, b.item, cache, b) for b in blockers]
         if not blockers or mine is None or any(t is None for t in theirs):
