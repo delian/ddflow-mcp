@@ -35,7 +35,7 @@ treated as "no problem".
 
 from __future__ import annotations
 
-from .baseline import (
+from .baseline import (  # noqa: F401
     auto_decision,
     cache_load,
     cache_store,
