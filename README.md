@@ -1105,7 +1105,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 494 knobs.
+cadences, and the rest of the 498 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5308,7 +5308,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 494): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 498): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5886,7 +5886,7 @@ declared once and persists — see
 
 ## Configuration
 
-494 knobs across 48 sections, every one documented in place and listed, with its default
+498 knobs across 48 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5953,8 +5953,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=15dc69b76e01 -->
-<details><summary>All 494 knobs across 48 sections</summary>
+<!-- ddflow:begin README/knobs sha=f3428a980fe1 -->
+<details><summary>All 498 knobs across 48 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6105,6 +6105,7 @@ long default is left to `ddflow config --explain`.
 | `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
 | `schedule.phase_full_suite` | `"require"` | `off` \| `require` \| `run` |
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
+| `schedule.optimizer` | `"greedy-v1"` |  |
 | `schedule.bugs_first` | `true` |  |
 | `schedule.dx_priority` | `8` |  |
 | `schedule.bug_priority` | `10` |  |
@@ -6341,6 +6342,9 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.eta_default_s` | `900` |  |
 | `merge_queue.eta_history` | `5` |  |
 | `merge_queue.keep_history` | `50` |  |
+| `merge_queue.auto_run` | `"on"` | `on` \| `off` |
+| `merge_queue.auto_run_after_s` | `120` |  |
+| `merge_queue.auto_run_max_parallel` | `1` |  |
 | `chore.globs` | (long: see `ddflow config --explain`) |  |
 | `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
 | `digest.escalate_after` | `"1h, 24h"` |  |
