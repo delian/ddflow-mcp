@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.baseline_red_rate_warn"
+new = "10"
+why = "Automatic baseline-red acceptances per day from which doctor says the base is red."
+impact = "additive"

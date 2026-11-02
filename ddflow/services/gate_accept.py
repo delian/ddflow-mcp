@@ -17,7 +17,8 @@ becoming a way to turn partial into passed:
 * only a `partial` that ddflow MEASURED as baseline-red can be accepted (operator decision
   D-accept-baseline-red-partial): the failing tests also fail on the base branch
   (`services.gates.baseline_red`, evidence `baseline` -> `red` (ev['baseline']['red']), written only by `gate run`: the
-  caller's `gate record` cannot set it). `failed`, `unavailable` and a hand-recorded or
+  caller's `gate record` cannot set it). Since D-baseline-red-auto-accept `gate run` also decides, from the
+  same measurement, whether NO person is needed (`baseline.auto`, `auto_ids`). `failed`, `unavailable` and a hand-recorded or
   `partial_exits` partial are not this path.
 """
 
@@ -63,10 +64,27 @@ def refusal(it: Item, gate: str) -> str:
     return ""
 
 
-def accepted(state: State, it: Item, gate: str) -> AP.Verdict:
-    """Has a person accepted the CURRENT partial outcome of ``gate``?"""
+def auto_ids(it: Item, gate: str, cfg=None) -> list[str]:
+    """The failing test ids ``gate`` was ACCEPTED AUTOMATICALLY on (D-baseline-red-auto-accept),
+    else []: `gate run` measured every one on the base and none in the item's reach, and
+    `[gates].baseline_red_auto` is still on. Needs a measured baseline-red partial."""
+    if cfg is None or getattr(cfg.gates, "baseline_red_auto", "on") != "on" or refusal(it, gate):
+        return []
+    auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto")
+    return (
+        list(auto.get("ids") or [])
+        if isinstance(auto, dict) and auto.get("accepted") is True
+        else []
+    )
+
+
+def accepted(state: State, it: Item, gate: str, cfg=None) -> AP.Verdict:
+    """Has the CURRENT partial outcome of ``gate`` been accepted: automatically (``cfg`` given
+    and the measurement allows it) or by a person?"""
     if refusal(it, gate):
         return AP.Verdict(False, refusal(it, gate))
+    if ids := auto_ids(it, gate, cfg):
+        return AP.Verdict(True, f"accepted-baseline-red automatically: {', '.join(ids[:5])}")
     return AP.check(state, subject(it.id, gate), digest(it, gate))
 
 
@@ -125,7 +143,18 @@ def approve(
                       state=digest(it, gate))  # fmt: skip
         decision = CN.operator_gate(log, cfg, canon, approval_id=approval, reason=note)
         if not decision.ok:
-            raise ValueError(AP.refusal(why) + " " + decision.message)
+            raise ValueError(
+                AP.refusal(why)
+                + " "
+                + decision.message
+                + (
+                    f" A baseline-red partial needs no request: `gate run` accepts it itself (CLI "
+                    f"`ddflow gate run {item_id} {gate}`, MCP ddflow_gate action=run); an explicit "
+                    f"request is for a person and bypasses the standing rule."
+                    if auto_ids(it, gate, cfg)
+                    else next_step(it, item_id, gate)
+                )
+            )
         proxy = decision.stamp
     try:
         got = grant(log, it, gate, note=note, requested_agent=agent, proxy=proxy)
@@ -134,4 +163,32 @@ def approve(
     return (
         f"{it.id}.{gate} partial outcome ACCEPTED by {got.actor.user}; it stays "
         f"partial on the record, and `complete` no longer counts it as a blocker"
+    )
+
+
+def warning(it: Item, gate: str, reason: str, cfg=None) -> str:
+    """The warning `complete` prints for a partial that settled on an acceptance."""
+    who = (
+        "ddflow accepted that baseline-red outcome"
+        if auto_ids(it, gate, cfg)
+        else "a person accepted that outcome"
+    )
+    return (
+        f"gate {gate} is PARTIAL ({it.gates[gate].reason[:160]}) and settles only because "
+        f"{who}: {reason}. It was not passed."
+    )
+
+
+def next_step(it: Item, item_id: str, gate: str) -> str:
+    """What to say after a measured baseline-red partial that is still unsettled ("" for any
+    other gate): never "request an approval" (D-baseline-red-auto-accept)."""
+    if it.gate_outcome(gate) != ACCEPTABLE or refusal(it, gate):
+        return ""
+    auto = ((it.gates[gate].evidence or {}).get("baseline") or {}).get("auto") or {}
+    why = auto.get("why") or "[gates].baseline_red_auto is off or the measurement predates it"
+    return (
+        f"; {gate} is partial and baseline-red but was not accepted automatically ({why}). "
+        f"Do NOT request an approval: fix what it names, then re-run it (CLI `ddflow gate run {item_id} {gate}`, "
+        f"MCP ddflow_gate action=run id={item_id} gate={gate}). Only a person, who runs "
+        f"`ddflow approve {item_id} {gate}`, accepts it otherwise"
     )
