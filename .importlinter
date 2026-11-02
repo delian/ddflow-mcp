@@ -1,5 +1,5 @@
 # Architecture contracts for import-linter (`lint-imports`), run by
-# tests/test_architecture_guards.py and so by the unit suite, CI and the pre-push hook.
+# tests/test_architecture_import_contracts.py and so by the unit suite, CI and the pre-push hook.
 #
 # These are RATCHETS (D-unify 4, strangler with ratchets). Each contract states the rule
 # the code is moving towards; its `ignore_imports` lists the imports that break the rule
