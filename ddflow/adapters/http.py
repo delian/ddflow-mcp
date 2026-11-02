@@ -224,8 +224,15 @@ class UrllibHttpClient:
         require_http_url(url)
         req = urllib.request.Request(url, data=body, headers=dict(headers or {}), method=method)
         opened = False
+        up = False  # the socket was handed over (only known when the caller asked for it)
+
+        def connected(handle: Any) -> None:
+            nonlocal up
+            up = True
+            on_connect(handle)  # type: ignore[misc]  # only installed when on_connect is set
+
         try:
-            with _open(req, timeout, on_connect) as resp:
+            with _open(req, timeout, connected if on_connect is not None else None) as resp:
                 opened = True
                 return HttpResponse(resp.status, dict(resp.headers), resp.read(max_bytes))
         except urllib.error.HTTPError as exc:
@@ -243,7 +250,7 @@ class UrllibHttpClient:
         except (OSError, http.client.HTTPException) as exc:
             err = _classify(exc)
             if isinstance(err, HttpConnectionError):
-                err.connected = opened
+                err.connected = opened or up
             raise err from exc
 
 

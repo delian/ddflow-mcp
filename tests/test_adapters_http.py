@@ -420,3 +420,26 @@ def test_a_hangup_while_reading_the_body_is_a_connection_error_that_was_connecte
             "GET", "http://a/", timeout=1, on_connect=got.append
         )
     assert len(got) == 1
+
+
+def test_a_peer_that_hangs_up_before_any_response_is_connected_when_the_socket_was_handed_over(
+    monkeypatch,
+):
+    """With the tracking opener, `on_connect` ran before the failure: `connected` says so."""
+
+    class Opener:
+        def open(self, req, timeout=None):
+            self.cb(H._Tracked(object()))  # the socket came up ...
+            raise http.client.RemoteDisconnected("closed before any response")  # ... then failed
+
+    opener = Opener()
+
+    def tracked(cb):
+        opener.cb = cb
+        return opener
+
+    monkeypatch.setattr(H, "_tracked_opener", tracked)
+    got = []
+    with pytest.raises(H.HttpConnectionError) as exc:
+        H.UrllibHttpClient().request("GET", "http://a/", timeout=1, on_connect=got.append)
+    assert exc.value.connected and len(got) == 1
