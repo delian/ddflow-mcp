@@ -129,7 +129,7 @@ def test_relation_extends_files_a_new_linked_record(filed_as, tool):
 def test_relation_merge_into_a_decision_is_refused(filed_as):
     repo = filed_as("ddflow_decision_add")
     args, old = CALLS["ddflow_decision_add"]
-    body, result = call(repo, "ddflow_decision_add", relation=f"merge_into:{old}", **args)
+    _body, result = call(repo, "ddflow_decision_add", relation=f"merge_into:{old}", **args)
     assert result["_meta"]["exit"] == 3
     assert "never edited in place" in result["content"][-1]["text"]
     st = fold(EventLog(repo, "a").read_all(), strict=False)
