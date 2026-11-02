@@ -12,8 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from ..adapters.http import HttpError, HttpStatusError, default_client
-from ..adapters.ports import HttpClient
+from ..adapters.http import HttpClient, HttpError, HttpStatusError, default_client
 from .docscheck import _LINK, _REFDEF
 from .docscheck_md import lines
 from .docscheck_types import Finding

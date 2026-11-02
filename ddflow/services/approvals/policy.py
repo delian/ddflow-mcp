@@ -22,8 +22,10 @@ from typing import Any
 from ...config import Config
 from ...core import clock
 from ...core.handlers.asks import EXPIRED, PENDING, asks_of
+from ...core.records.gates import GateOutcome
 from .. import gate_accept as GA
 from ..ask import engine as E
+from ..gates.defs import required_gates
 from . import request as R
 from .canon import Canon
 
@@ -58,6 +60,33 @@ def _measured_baseline_red(it, gate: str, cfg: Config) -> bool:
     return not GA.refusal(it, gate)
 
 
+_UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.value)
+
+
+def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
+    """`complete_unavailable`: `target` -- the FULL `Verdict.unmet_gates` list the
+    completion site (`_auto_complete_unavailable`) passes, never a caller-derived subset --
+    must be non-empty, and every gate it names a REQUIRED gate recorded `unavailable`
+    (a tool could not run) or `partial` (it reported partway). A required gate recorded
+    `failed` ALWAYS blocks, whatever `target` names (the OVER-FIRE guard below), and a
+    never-run (silent) required gate blocks the same way -- its empty outcome is neither
+    `unavailable` nor `partial`, so the outcome check refuses it. An excused required
+    gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
+    already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
+    the verdict alone knows what `applies_when` excused."""
+    required = set(required_gates(cfg))
+    for g in required:
+        if it.gate_outcome(g) == GateOutcome.FAILED.value:
+            return False
+    names = [g for g in (target or "").split(",") if g]
+    return bool(names) and all(
+        g in required
+        and not it.gate_satisfied(g, True)
+        and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        for g in names
+    )
+
+
 RULES: dict[str, Rule] = {
     r.id: r
     for r in (
@@ -78,7 +107,7 @@ RULES: dict[str, Rule] = {
             "complete.force",
             "complete an item whose unmet completion condition is an unavailable tool/gate, "
             "inside the standing window",
-            _true,
+            _unavailable_unmet_only,
         ),
         Rule(
             "claim_unavailable",

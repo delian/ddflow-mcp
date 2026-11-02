@@ -25,8 +25,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..adapters.http import HttpProtocolError, HTTPStatus, HttpStatusError, default_client
-from ..adapters.ports import HttpClient
+from ..adapters.http import (
+    HttpClient,
+    HttpProtocolError,
+    HTTPStatus,
+    HttpStatusError,
+    default_client,
+)
 from . import similar
 
 DEFAULT_REPO = "delian/ddflow-mcp"
