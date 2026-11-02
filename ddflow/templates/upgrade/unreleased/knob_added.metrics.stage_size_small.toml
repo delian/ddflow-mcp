@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.stage_size_small"
+new = "50"
+why = "The cycle-time split (ddflow metrics stages) groups items by the size of their change; the bounds are knobs."
+impact = "additive"

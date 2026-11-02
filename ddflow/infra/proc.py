@@ -29,6 +29,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from . import resources as R
+
 #: Re-exported so callers need only import this module.
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -36,6 +38,8 @@ CalledProcessError = subprocess.CalledProcessError
 SubprocessError = subprocess.SubprocessError
 TimeoutExpired = subprocess.TimeoutExpired
 Popen = subprocess.Popen
+#: `Popen` whose reap keeps its own rusage (see `resources.metered`).
+MeteredPopen = R.metered(subprocess.Popen)
 
 
 def run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
@@ -64,10 +68,10 @@ def replace_process(path: str, argv: list[str], env: dict[str, str]) -> None:
     os.execve(path, argv, env)
 
 
-def popen(*args: Any, **kwargs: Any) -> subprocess.Popen:
-    """`subprocess.Popen` with the same default."""
+def popen(*args: Any, cls: type = subprocess.Popen, **kwargs: Any) -> subprocess.Popen:
+    """`subprocess.Popen` (or ``cls``, a subclass: `resources.MeteredPopen`) with the same default."""
     kwargs.setdefault("stdin", subprocess.DEVNULL)
-    return subprocess.Popen(*args, **kwargs)
+    return cls(*args, **kwargs)
 
 
 @dataclass
@@ -84,6 +88,8 @@ class Captured:
     stdout: str = ""
     stderr: str = ""
     error: BaseException | None = None
+    #: What the command cost (`resources.Resources`); None when it never started.
+    resources: R.Resources | None = None
 
     @property
     def timed_out(self) -> bool:
@@ -114,6 +120,7 @@ def capture(
     command's own trouble: a timeout, a missing binary or an OSError comes back in
     ``error`` (`unwrap` raises it for a caller that lets it through). stdin is /dev/null
     unless ``input`` is given (see `run`)."""
+    before = R.children_snapshot()
     try:
         done = run(
             argv,
@@ -127,9 +134,18 @@ def capture(
             timeout=timeout,
             check=False,
         )
+    except subprocess.TimeoutExpired as exc:  # it started and was killed: what it cost, as a delta
+        return Captured(error=exc, resources=R.measure(None, before))
     except (subprocess.SubprocessError, OSError) as exc:
         return Captured(error=exc)
-    return Captured(done.returncode, done.stdout or "", done.stderr or "")
+    # `run` is the seam the call sites patch, and `subprocess.run` hands back no Popen, so
+    # there is no wait4 here: the RUSAGE_CHILDREN delta, marked approximate (`resources.DELTA`).
+    return Captured(
+        done.returncode,
+        done.stdout or "",
+        done.stderr or "",
+        resources=R.measure(None, before),
+    )
 
 
 def spawn_stdio(
@@ -252,6 +268,8 @@ class ShellResult:
     could_not_run: bool = False
     #: Seconds from start to the end (or the kill).
     elapsed_s: float = 0.0
+    #: What the command cost (`resources.Resources`); None when it never started.
+    resources: R.Resources | None = None
 
     @property
     def ok(self) -> bool:
@@ -305,6 +323,7 @@ def run_shell(
     if merge_stderr:
         kwargs["stderr"] = subprocess.STDOUT
     from_tick: list[Exception] = []
+    cost: list[R.Resources] = []
 
     def tick() -> None:
         assert on_tick is not None
@@ -321,6 +340,7 @@ def run_shell(
             on_tick=tick if on_tick is not None else None,
             tick_s=tick_s,
             input=stdin_text,
+            cost=cost,
             **kwargs,
         )
     except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
@@ -333,6 +353,7 @@ def run_shell(
                 _text(exc.stderr),
                 timed_out=True,
                 elapsed_s=round(time.monotonic() - start, 3),
+                resources=cost[0] if cost else None,
             )
         return ShellResult(None, err=str(exc), could_not_run=True)
     return ShellResult(
@@ -340,6 +361,7 @@ def run_shell(
         p.stdout or "",
         p.stderr or "",
         elapsed_s=round(time.monotonic() - start, 3),
+        resources=cost[0] if cost else None,
     )
 
 
@@ -356,6 +378,7 @@ def _shell_group(
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 0,
     input: str | None = None,
+    cost: list[R.Resources] | None = None,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess:
     """`run(command, shell=True, capture_output=True, timeout=...)` whose timeout kills
@@ -393,8 +416,9 @@ def _shell_group(
     if input is not None:
         kwargs["stdin"] = PIPE
     watcher = _start_watcher()
+    before = R.children_snapshot()
     try:
-        p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
+        p = popen(command, cls=MeteredPopen, shell=True, **kwargs)  # nosec B604 - the operator's line
     except BaseException:
         _arm_watcher(watcher, None)
         raise
@@ -409,6 +433,7 @@ def _shell_group(
                 wait = tick_s if wait is None else min(tick_s, wait)
             try:
                 out, err = p.communicate(timeout=wait)
+                _note_cost(cost, p, before)
                 return subprocess.CompletedProcess(command, p.returncode, out, err)
             except subprocess.TimeoutExpired:
                 if deadline is not None and time.monotonic() >= deadline:
@@ -418,11 +443,18 @@ def _shell_group(
     except subprocess.TimeoutExpired:
         kill_group(p)
         out, err = _drain(p)
+        _note_cost(cost, p, before)
         raise subprocess.TimeoutExpired(command, timeout or 0, output=out, stderr=err) from None
     except BaseException:
         kill_group(p)
         _drain(p)
         raise
+
+
+def _note_cost(cost: list[R.Resources] | None, p: subprocess.Popen, before: Any) -> None:
+    """Append what the reaped ``p`` cost to ``cost`` (the caller's out-parameter), if it asked."""
+    if cost is not None and p.returncode is not None:
+        cost.append(R.measure(p, before))
 
 
 #: The watcher: started BY the owner BEFORE the command and told the command's process group on
