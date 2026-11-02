@@ -1,0 +1,5 @@
+# Ratchet `subprocess_calls` for ddflow.surfaces.mcp._offload (tests/test_architecture_guards.py).
+# The MCP offload worker's PROC.popen moved here when surfaces/mcp.py split into a package.
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+baseline = 1

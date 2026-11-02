@@ -24,6 +24,7 @@ _SUBMODULE_OF = {
     "MIN_SPLIT_PARTS": "_split",
     "phase_add": "_add",
     "phase_close": "_add",
+    "phase_complete": "_add",
     "plan_edit": "_edit",
     "resolve": "_resolve",
     "split": "_split",

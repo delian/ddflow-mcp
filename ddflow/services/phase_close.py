@@ -27,8 +27,10 @@ from ..core.model import State, fold
 # only kind it may ever complete" is exactly the set this command may close.
 from .importer import _is_imported_phase
 
+# The shared resolve-and-settle guard, not a second copy of `phase complete`'s (r-reuse-core).
+from .phase_guard import resolve_phase, settled_tasks
+
 KIND = "phase.close"
-_SHOWN = 8
 
 
 def close_imported(log: Any, st: State, phase_id: str, *, agent: str = "") -> O.Outcome:
@@ -38,16 +40,9 @@ def close_imported(log: Any, st: State, phase_id: str, *, agent: str = "") -> O.
     importer did not write is not this command's business, and an item that is not a phase
     is `ddflow complete`'s.
     """
-    it = st.items.get(phase_id)
-    if it is None or it.removed:
-        gone = " (it was removed from the queue)" if it is not None else ""
-        return O.failed(KIND, f"no such item {phase_id!r}{gone}", id=phase_id)
-    if it.kind != "phase":
-        return O.refused(
-            KIND,
-            f"{phase_id} is a {it.kind}, not a phase: `ddflow complete {phase_id}` finishes an item",
-            id=phase_id,
-        )
+    err, it = resolve_phase(st, KIND, phase_id)
+    if err is not None:
+        return err
     if not _is_imported_phase(it):
         return O.refused(
             KIND,
@@ -55,28 +50,11 @@ def close_imported(log: Any, st: State, phase_id: str, *, agent: str = "") -> O.
             f"a phase this project worked runs its pipeline -- `ddflow gate status {phase_id}`",
             id=phase_id,
         )
-    if it.terminal:
-        return O.refused(KIND, f"{phase_id} is already {it.state}", id=phase_id)
-    tasks = st.tasks(phase_id)
-    open_tasks = [t for t in tasks if not t.terminal]
-    if open_tasks:
-        shown = ", ".join(t.id for t in open_tasks[:_SHOWN])
-        more = " ..." if len(open_tasks) > _SHOWN else ""
-        return O.refused(
-            KIND,
-            f"{len(open_tasks)} task(s) under {phase_id} are still open: {shown}{more} -- "
-            f"close them first, or file the work that remains",
-            id=phase_id,
-            open=len(open_tasks),
-        )
-    if not tasks:
-        return O.refused(
-            KIND,
-            f"nothing is under {phase_id}: there is no finished work to record. A phase with "
-            f"tasks to come is not finished, and one with none is not imported work",
-            id=phase_id,
-        )
-    done = sum(1 for t in tasks if t.state == "done")
+    err, tasks, done = settled_tasks(
+        it, st, KIND, phase_id, hint="close them first, or file the work that remains"
+    )
+    if err is not None:
+        return err
     # What is KNOWN, not what is assumed: the phase came from the importer, and every task
     # under it is settled. "completed before ddflow" would claim something this cannot
     # check -- a task may have been finished HERE afterwards (roborev on ab4179fb).

@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "phase.completed"
+why = "A phase was deliberately retired after its tasks settled."
+impact = "additive"
