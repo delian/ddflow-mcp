@@ -97,6 +97,8 @@ def test_the_counter_sees_calls_and_aliases_but_not_text_or_an_injected_port():
     assert count_reads(ast.parse(port)) == 0
     own = "import os\nclass C:\n    def __init__(self): self.os = os\n    def f(self): return self.os.environ\n"
     assert count_reads(ast.parse(own)) == 1
+    assert count_reads(ast.parse("from os import environ\nenviron['X']\n")) == 1
+    assert count_reads(ast.parse("from os import environ\nenviron.get('X')\n")) == 1
     assert count_reads(ast.parse("from os.path import os\nos.environ\n")) == 1
     assert count_reads(ast.parse("from time import *\nx = time() + monotonic()\n")) == 2
     assert count_reads(ast.parse("import os.path\nos.environ['HOME']\n")) == 1
