@@ -47,6 +47,7 @@ def test_the_ports_are_found_by_scanning_not_listed():
             f"{name} is no Protocol"
         )
         assert cls.__module__ == f"ddflow.adapters.{_family(cls)}"
+    assert P.module_names(A) == sorted(P.module_names(A)), "module scan must be sorted"
     assert list(found) == [
         n for m in P.module_names(A) for n in found if found[n].__module__.endswith(f".{m}")
     ], "ports must come in sorted module order"
@@ -267,7 +268,8 @@ def test_fakes_register_in_sorted_module_order():
     found = F.collect(F)
     mods = P.module_names(F, frozenset())
     expect = [n for m in mods for n, c in found.items() if c.__module__ == f"{F.__name__}.{m}"]
-    assert list(found) == expect and sorted(F.FAKES) == sorted(found)
+    assert list(found) == expect and all(F.FAKES[n] is c for n, c in found.items())
+    assert sorted(F.FAKES) == sorted(found)
 
 
 # -- conformance: one set of cases, run against the adapter and its fake ----------------

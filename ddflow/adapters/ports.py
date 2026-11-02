@@ -25,7 +25,9 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from types import ModuleType
-from typing import Any
+from typing import TypeVar
+
+_T = TypeVar("_T")
 
 #: The attribute `@port` sets; discovery reads it, so no list of ports exists anywhere.
 MARK = "__ddflow_port__"
@@ -33,7 +35,7 @@ MARK = "__ddflow_port__"
 PLUMBING = frozenset({"ports", "registry", "fakes"})
 
 
-def port(cls: Any) -> Any:
+def port(cls: _T) -> _T:
     """Mark a `Protocol` class as an adapter port. Changes nothing else about it."""
     setattr(cls, MARK, True)
     return cls
@@ -56,5 +58,10 @@ def discover(package: ModuleType, skip: frozenset[str] = PLUMBING) -> dict[str, 
                 and cls.__dict__.get(MARK)
                 and cls.__module__ == module.__name__
             ):
+                if cls.__name__ in found:
+                    raise ValueError(
+                        f"two ports named {cls.__name__}: {found[cls.__name__].__module__} and "
+                        f"{module.__name__}; a port name is its key, rename one"
+                    )
                 found[cls.__name__] = cls
     return found

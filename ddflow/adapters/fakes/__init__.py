@@ -12,16 +12,18 @@ from __future__ import annotations
 
 import importlib
 from types import ModuleType
-from typing import Any
+from typing import TypeVar
 
 from ..ports import module_names
 from ..registry import Registry
+
+_T = TypeVar("_T")
 
 #: The attribute `@fake` sets: the port's name (the class name without `Fake`).
 MARK = "__ddflow_fake__"
 
 
-def fake(cls: Any) -> Any:
+def fake(cls: _T) -> _T:
     """Mark a `Fake<Port>` class as the fake of the port named without its prefix."""
     setattr(cls, MARK, cls.__name__.removeprefix("Fake"))
     return cls
@@ -39,7 +41,12 @@ def collect(package: ModuleType) -> dict[str, type]:
                 and cls.__dict__.get(MARK)
                 and cls.__module__ == module.__name__
             ):
-                found[cls.__dict__[MARK]] = cls
+                port = cls.__dict__[MARK]
+                if port in found:
+                    raise ValueError(
+                        f"two fakes for {port}: {found[port].__module__} and {module.__name__}"
+                    )
+                found[port] = cls
     return found
 
 

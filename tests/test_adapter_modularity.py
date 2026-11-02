@@ -16,6 +16,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from ddflow.adapters import fakes as F
 from ddflow.adapters import ports as P
 
@@ -131,3 +133,16 @@ def test_every_family_has_its_four_per_family_homes():
             assert (ROOT / "tests" / f"test_adapter_{family}.py").is_file(), (
                 f"{name}: its conformance cases belong in tests/test_adapter_{family}.py"
             )
+
+
+def test_two_families_with_one_port_name_are_refused_not_overwritten(tmp_path, monkeypatch):
+    _temp_package(tmp_path, "adp_fixture_dup")
+    (tmp_path / "adp_fixture_dup" / "other.py").write_text(textwrap.dedent(WIDGET))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        pkg = importlib.import_module("adp_fixture_dup")
+        with pytest.raises(ValueError, match="two ports named Widget"):
+            P.discover(pkg)
+    finally:
+        for name in [m for m in sys.modules if m.startswith("adp_fixture_dup")]:
+            del sys.modules[name]
