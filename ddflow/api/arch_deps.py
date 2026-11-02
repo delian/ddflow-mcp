@@ -71,6 +71,13 @@ def _interfaces(repo: Path, kind: str, baseline: bool) -> O.Outcome:
             "call ddflow_view action=archdeps interfaces=all",
         )
     census = I.scan(repo)
+    if baseline and census.unparsed:
+        return O.failed(
+            "archdeps",
+            f"cannot write a baseline: {len(census.unparsed)} file(s) do not parse "
+            f"({', '.join(census.unparsed[:3])}); fix them, then call ddflow archdeps "
+            "--interfaces all --baseline",
+        )
     if baseline:
         return O.ok("archdeps", text=I.format_baseline(census), unparsed=list(census.unparsed))
     fams = [f for f in census.families if not kind or f.kind == kind]
@@ -90,6 +97,11 @@ def _interfaces(repo: Path, kind: str, baseline: bool) -> O.Outcome:
     committed = repo / I.BASELINE_PATH
     if committed.is_file():
         grew, shrank = I.ratchet(census, I.parse_baseline(committed.read_text()))
+        if kind:  # the ratchet shown matches the kind shown
+            grew, shrank = (
+                tuple(x for x in grew if x.startswith(f"{kind} ")),
+                tuple(x for x in shrank if x.startswith(f"{kind} ")),
+            )
         data["ratchet"] = {"grew": list(grew), "shrank": list(shrank), "baseline": I.BASELINE_PATH}
         text += f"\nratchet vs {I.BASELINE_PATH}: {len(grew)} new or grown, {len(shrank)} to lower"
         text += "".join(f"\n  {line}" for line in (*grew, *shrank))

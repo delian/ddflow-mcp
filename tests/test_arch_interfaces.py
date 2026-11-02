@@ -301,9 +301,9 @@ def test_real_tree_ratchet_against_committed_baseline():
 
 
 def test_scan_is_cheap_enough_for_the_suite():
-    started = time.monotonic()
+    started = time.process_time()  # CPU time: immune to a preempted runner
     I.scan(ROOT)
-    assert time.monotonic() - started < 15
+    assert time.process_time() - started < 15
 
 
 def test_api_view_carries_interfaces_and_baseline_text():
@@ -517,3 +517,35 @@ def test_a_file_that_stops_parsing_is_not_a_shrink(tmp_path: Path):
     census = I.scan(root)
     assert census.unparsed == ("ddflow.a",)
     assert I.ratchet(census, base) == ((), ())
+
+
+def test_seventh_round_findings_stay_fixed(tmp_path: Path):
+    src = (
+        "import os\nimport subprocess\n"
+        'os.spawnv(os.P_WAIT, "/usr/bin/git", ["git"])\n'
+        'subprocess.run("git status", shell=1)\n'
+        'def register(fn, k): pass\nregister("SECRET", os.environ.get)\n'
+    )
+    c = I.scan(_tree(tmp_path, {"h.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"git", "sh"}
+    assert not [f for f in c.families if f.kind == "env"]  # a passed bound method reads nothing
+
+
+def test_baseline_refused_while_a_file_does_not_parse(tmp_path: Path):
+    from ddflow.api import arch_deps as API
+
+    (tmp_path / "ddflow").mkdir()
+    (tmp_path / "ddflow" / "bad.py").write_text("def f(:\n")
+    out = API.archdeps(tmp_path, interfaces="all", baseline=True)
+    assert out.exit != 0
+
+
+def test_the_ratchet_shown_matches_the_kind_shown(tmp_path: Path):
+    from ddflow.api import arch_deps as API
+
+    root = _tree(tmp_path, {"m.py": 'import os\nos.getenv("E_VAR")\nos.system("x")\n'})
+    (root / "tests" / "arch_baselines").mkdir(parents=True)
+    (root / I.BASELINE_PATH).write_text("")
+    every = API.archdeps(root, interfaces="all").data["ratchet"]["grew"]
+    only = API.archdeps(root, interfaces="env").data["ratchet"]["grew"]
+    assert len(every) == 2 and len(only) == 1 and only[0].startswith("env ")

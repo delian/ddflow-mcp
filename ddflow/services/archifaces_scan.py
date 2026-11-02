@@ -300,7 +300,8 @@ class _Scan:
 
     def _call(self, node: ast.Call) -> None:
         name = self.dotted(node.func) or ""
-        arg = node.args[0] if node.args else _keyword_arg(node)
+        at = 1 if name.startswith("os.spawn") else 0  # os.spawnv(mode, path, args)
+        arg = node.args[at] if len(node.args) > at else _keyword_arg(node)
         if name in _GIT:
             self.add("program", "git", node)
         elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL:
@@ -314,8 +315,8 @@ class _Scan:
 
     def _process(self, node: ast.Call, name: str, arg: ast.AST | None) -> None:
         shell = name in _SHELL or any(
-            k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True
-            for k in node.keywords
+            k.arg == "shell" and not (isinstance(k.value, ast.Constant) and not k.value.value)
+            for k in node.keywords  # any `shell=` that is not a literal falsy value
         )
         for program in self.programs_of(arg, line=shell) if arg is not None else [DYNAMIC]:
             self.add("program", program, node)
@@ -345,8 +346,10 @@ class _Scan:
                 self._env_arg(up, up.slice)
         elif isinstance(up, ast.Attribute) and up.value is node:
             call = self.parent.get(id(up))
-            if up.attr in ("get", "pop", "setdefault", "__getitem__") and isinstance(
-                call, ast.Call
+            if (
+                up.attr in ("get", "pop", "setdefault", "__getitem__")
+                and isinstance(call, ast.Call)
+                and call.func is up
             ):
                 self._env_arg(call, call.args[0] if call.args else _keyword_arg(call))
             elif up.attr in ("copy", "items", "keys", "values", "__iter__") and (
