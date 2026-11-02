@@ -31,6 +31,7 @@ class FakeHandle:
     transport: str = TRANSPORT
     capabilities: frozenset[str] = frozenset()
     cursor: int = 0
+    emitted: int = 0
     dropped: int = 0
     stopped: bool = False
     steered: list[str] = field(default_factory=list)
@@ -79,7 +80,10 @@ class FakeLane:
 
     def events(self, h: FakeHandle, idle_s: float | None = None) -> Iterator[L.LaneEvent]:
         while h.cursor < len(h.script):
+            if h.stopped:
+                return
             h.cursor += 1
+            h.emitted += 1
             yield h.script[h.cursor - 1]
 
     def steer(self, h: FakeHandle, text: str) -> L.Result:
@@ -92,11 +96,10 @@ class FakeLane:
 
     def stop(self, h: FakeHandle, grace_s: float | None = None) -> L.Result:
         h.stopped = h.stopped or h.cursor < len(h.script)
-        h.cursor = len(h.script)
         return L.ok(f"exit {self.exit_code}")
 
     def status(self, h: FakeHandle) -> L.LaneStatus:
-        done = h.cursor >= len(h.script)
+        done = h.stopped or h.cursor >= len(h.script)
         if not done:
             state = "running"
         elif h.stopped:
@@ -106,7 +109,7 @@ class FakeLane:
         session = next(
             (
                 e.fields["session"]
-                for e in h.script[: h.cursor]
+                for e in h.script[: h.emitted + h.dropped]
                 if e.event == "started" and isinstance(e.fields.get("session"), str)
             ),
             "",
@@ -116,7 +119,7 @@ class FakeLane:
             exit_code=self.exit_code if done else None,
             exit_meaning=h.spec.exit_codes.get(str(self.exit_code), "") if done else "",
             session=session,
-            events=h.cursor,
+            events=h.emitted + h.dropped,
             dropped=h.dropped,
             capabilities=h.capabilities,
         )

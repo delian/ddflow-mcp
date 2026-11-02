@@ -149,3 +149,12 @@ def test_the_fake_reports_the_session_and_event_count_only_once_replayed():
     assert (f.status(h).session, f.status(h).events) == ("", 0)
     list(f.events(h))
     assert (f.status(h).session, f.status(h).events) == ("s-123", 4)
+
+
+def test_a_fake_stopped_before_replay_reports_no_events():
+    f = FakeLane(TRANSCRIPT)
+    h = f.start(spec())
+    f.stop(h)
+    st = f.status(h)
+    assert (st.state, st.events, st.session) == ("stopped", 0, "")
+    assert list(f.events(h)) == []
