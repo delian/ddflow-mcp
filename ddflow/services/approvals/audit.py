@@ -174,7 +174,7 @@ def _red_base_note(cfg: Config, state, now: float) -> list[str]:
         and r["answered_by"] == "policy:baseline_red_auto"
         and now - clock.epoch(r["answered_at"], default=0.0) <= timedelta(days=1).total_seconds()
     )
-    if not cfg.gates.baseline_red_rate_warn or recent < cfg.gates.baseline_red_rate_warn:
+    if cfg.gates.baseline_red_rate_warn <= 0 or recent < cfg.gates.baseline_red_rate_warn:
         return []
     return [
         f"the base branch is red: {recent} baseline-red partial(s) were accepted automatically "

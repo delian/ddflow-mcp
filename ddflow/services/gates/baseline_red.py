@@ -48,7 +48,7 @@ def on_base(
     sha = W.rev(repo, base)
     if not sha:
         return {"red": False, "why": f"base {base} does not resolve"}
-    known = BL.cache_load(repo, sha, ttl_s)
+    known = BL.cache_load(repo, sha, ttl_s, None, gdef.command)
     if all(i in known for i in ids):
         return {"red": all(known[i] for i in ids), "cached": True, "base": base, "base_sha": sha,
                 "ids": ids, "still_failing": [i for i in ids if known[i]]}  # fmt: skip
@@ -62,7 +62,7 @@ def on_base(
     failing = ev.get("failed_tests") or []
     red = outcome == "failed" and all(i in failing for i in ids)
     if outcome in ("passed", "failed"):  # a run that could not run says nothing about the base
-        BL.cache_store(repo, sha, {i: i in failing for i in ids}, ttl_s)
+        BL.cache_store(repo, sha, {i: i in failing for i in ids}, ttl_s, gdef.command)
     return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha, "outcome": outcome, "command": cmd,
             "ids": ids, "still_failing": failing}  # fmt: skip
 

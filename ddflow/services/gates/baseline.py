@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ...core.digest import content_digest as digest
 from ...infra import fsio
 from ...infra.tomlcfg import atomic_write
 from .. import testselect as TS
@@ -28,16 +29,19 @@ CACHE_DIR = Path(".ddflow") / "local" / "baseline"
 KNOB = "baseline_red_auto"
 
 
-def _path(repo: Path, sha: str) -> Path:
-    return Path(repo) / CACHE_DIR / f"{sha[:40]}.json"
+def _path(repo: Path, sha: str, command: str = "") -> Path:
+    """One file per base sha AND gate command: another command measures other tests."""
+    return Path(repo) / CACHE_DIR / f"{sha[:40]}.{digest(command)[:12]}.json"
 
 
-def cache_load(repo: Path, sha: str, ttl_s: int, now: float | None = None) -> dict[str, bool]:
+def cache_load(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> dict[str, bool]:
     """``{test id: failed on this base}`` measured so far; {} when none or older than ``ttl_s``."""
     if ttl_s <= 0:
         return {}
     try:
-        data = json.loads(_path(repo, sha).read_text(encoding="utf-8"))
+        data = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))
         seen = data["ids"]
         fresh = (time.time() if now is None else now) - float(data["at"]) <= ttl_s
     except (OSError, ValueError, KeyError, TypeError):
@@ -45,13 +49,15 @@ def cache_load(repo: Path, sha: str, ttl_s: int, now: float | None = None) -> di
     return {str(k): bool(v) for k, v in seen.items()} if fresh and isinstance(seen, dict) else {}
 
 
-def cache_store(repo: Path, sha: str, results: dict[str, bool], ttl_s: int) -> None:
+def cache_store(
+    repo: Path, sha: str, results: dict[str, bool], ttl_s: int, command: str = ""
+) -> None:
     """Merge ``results`` into the cache of ``sha`` (best effort: a failed write costs a rerun)."""
     if ttl_s <= 0 or not results:
         return
     try:
-        merged = {**cache_load(repo, sha, ttl_s), **results}
-        path = _path(repo, sha)
+        merged = {**cache_load(repo, sha, ttl_s, None, command), **results}
+        path = _path(repo, sha, command)
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)
         atomic_write(path, json.dumps({"sha": sha, "at": time.time(), "ids": merged}))

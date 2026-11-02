@@ -51,12 +51,11 @@ def notify(repo: Path, agent: str, item: str, gate: str) -> bool:
     canon = Canon(verb="approve.partial", agent=log.agent_id or agent or "ddflow", item=item,
                   target=gate, state=GA.digest(it, gate))  # fmt: skip
     state = fold(log.read_all(), strict=False)
-    if PO.used(state, RULE, canon.subject()) and _said(state, canon):
-        return False
     text = notice_text(item, gate, ids, str(base.get("bug") or ""))
-    PO.record_auto(log, cfg, canon, text, RULE)
+    if _said(state, canon, text):
+        return False
     if cfg.gates.baseline_red_notify_to:
-        LR.notify(
+        why = LR.notify(
             repo,
             cfg,
             cfg.gates.baseline_red_notify_to,
@@ -65,12 +64,17 @@ def notify(repo: Path, agent: str, item: str, gate: str) -> bool:
             reason="message",
             sender=canon.agent,
         )
+        if why:  # not told: leave no record, so the next run tries again
+            return False
+    PO.record_auto(log, cfg, canon, text, RULE)
     return True
 
 
-def _said(state, canon: Canon) -> bool:
+def _said(state, canon: Canon, text: str) -> bool:
+    """Was this item's gate already told for these same failing ids (a re-run records a new
+    outcome, so the digest cannot be the key)?"""
     return any(
         r["policy"] and r["answered_by"] == f"policy:{RULE}" and r["subject"] == canon.subject()
-        and r["digest"] == canon.digest()
+        and text in r["text"]
         for r in asks_of(state).values()
     )  # fmt: skip

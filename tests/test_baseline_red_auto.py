@@ -58,8 +58,11 @@ def test_a_subset_of_the_baseline_failures_is_accepted_and_told_once(repo) -> No
     assert len(notices) == 1 and ID in notices[0]["text"]
     msgs = IB.pending(repo, "coordinator")
     assert len(msgs) == 1 and ID in msgs[0].text
-    _run(repo)  # the same outcome again says nothing more
-    assert len(IB.pending(repo, "coordinator")) <= 2
+    bugs = set(_state(repo).bugs)
+    _run(repo)  # the same measurement again files and says nothing more
+    again = _state(repo)
+    assert set(again.bugs) == bugs
+    assert len(IB.pending(repo, "coordinator")) == 1
 
 
 def test_the_knob_off_leaves_it_to_a_person(repo) -> None:
@@ -135,3 +138,4 @@ def test_an_open_bug_naming_the_ids_is_linked_not_refiled(repo) -> None:
     bug = next(iter(_state(repo).bugs))
     assert GB._linked(repo, "worker", [ID]) == bug
     assert GB._linked(repo, "worker", ["tests/other.py::t"]) == ""
+    assert GB._linked(repo, "worker", [ID[:-1]]) == ""  # the start of a longer id is not the id

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,11 @@ def _linked(repo: Path, agent: str, ids: list[str]) -> str:
     """The open bug whose text already names every one of ``ids`` (dedup by test id), or ""."""
     _log, _cfg, st = _load(repo, agent)
     for b in st.bugs.values():
-        if not (b.fixed_at or b.invalid_at) and all(i in b.summary for i in ids):
+        if not (b.fixed_at or b.invalid_at) and all(_names(b.summary, i) for i in ids):
             return b.id
     return ""
+
+
+def _names(text: str, test_id: str) -> bool:
+    """Does ``text`` name ``test_id`` as a whole id (not as the start of a longer one)?"""
+    return re.search(rf"(?<![\w:/.\[-]){re.escape(test_id)}(?![\w\]\[:-])", text) is not None
