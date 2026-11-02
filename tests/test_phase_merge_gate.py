@@ -133,6 +133,34 @@ def test_a_task_with_unmerged_commits_refuses_force(repo):
     _git(wt, "add", ".")
     _git(wt, "commit", "-qm", "work T1")
     pass_pipeline(repo, "T1", omit=("merge",))
+    # Bd59dded6a4: `release` left the item claimable and completable by anyone with the
+    # branch still unmerged. Release drops the lease, not the branch, so the guard must
+    # still refuse a force-complete of the released item.
+    assert run_cli(repo, "release", "T1")[0] == 0
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", "--force")
+    assert code == 3, out + err
+    assert "not merged" in out + err and "T1" in out + err, out + err
+
+
+def test_a_task_with_a_partial_merge_refuses_force(repo):
+    """Bd59dded6a4 was a PARTIAL merge: the base held the branch's first commit and the
+    follow-ups were dropped. The guard is "every branch commit reachable from the base", so
+    a branch whose first commit reached the base but whose LATER commits did not must still
+    refuse -- not just a branch that was never merged at all."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    wt = Path(json.loads(out)["worktree"])
+    (wt / "a.py").write_text("x = 1\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-qm", "work T1 part 1")
+    first = _git(wt, "rev-parse", "HEAD")
+    (wt / "a.py").write_text("x = 2\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-qm", "work T1 part 2")
+    _git(repo, "cherry-pick", first)  # the base now holds part 1; part 2 stays branch-only
+    pass_pipeline(repo, "T1", omit=("merge",))
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", "--force")
     assert code == 3, out + err
     assert "not merged" in out + err and "T1" in out + err, out + err
