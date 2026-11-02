@@ -132,6 +132,8 @@ def _classify(exc: BaseException) -> HttpError:
         return HttpTlsError(str(exc), reason=exc)
     if isinstance(exc, http.client.IncompleteRead):
         return HttpIncompleteRead(repr(exc), cause=exc)
+    if isinstance(exc, OSError):  # incl. RemoteDisconnected, both an OSError and an HTTPException
+        return HttpConnectionError(str(exc), reason=exc)
     if isinstance(exc, http.client.HTTPException):
         return HttpProtocolError(repr(exc), cause=exc)
     return HttpConnectionError(str(exc), reason=exc)
@@ -228,6 +230,8 @@ class UrllibHttpClient:
                 data = exc.read(max_bytes) if max_bytes is not None else exc.read()
             except (OSError, http.client.HTTPException):
                 pass
+            finally:
+                exc.close()  # release the socket now, not at garbage collection
             headers_out = dict(exc.headers or {})
             if not raise_for_status:
                 return HttpResponse(exc.code, headers_out, data)

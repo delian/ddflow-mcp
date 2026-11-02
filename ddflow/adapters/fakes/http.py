@@ -153,8 +153,8 @@ class FakeHttpClient:
         if rule.error is not None:
             err = ERRORS[rule.error](url) if isinstance(rule.error, str) else rule.error
             raise err
-        reply = rule.reply
-        assert reply is not None
+        assert rule.reply is not None
+        reply = HttpResponse(rule.reply.status, dict(rule.reply.headers), rule.reply.body)  # fresh
         if max_bytes is not None:
             reply = HttpResponse(reply.status, reply.headers, reply.body[:max_bytes])
         if raise_for_status and reply.status not in OK_STATUSES:

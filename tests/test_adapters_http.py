@@ -416,3 +416,37 @@ def test_the_fake_hands_on_connect_a_connection_that_records_abort():
     assert got == f.connections and len(got) == 1  # only the request that asked got one
     got[0].abort()
     assert f.connections[0].aborted
+
+
+def test_a_peer_that_hangs_up_mid_exchange_is_a_connection_error_not_a_protocol_one(monkeypatch):
+    """`RemoteDisconnected` is an OSError AND an HTTPException; urlopen callers always saw the
+    OSError branch ("unreachable"), so the client classifies it as a connection error, raised
+    from the body read too (where urllib does not wrap it in a URLError)."""
+
+    class Hangup(_Resp):
+        def read(self, n=None):
+            raise http.client.RemoteDisconnected("Remote end closed connection without response")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: Hangup(200, {}, b""))
+    with pytest.raises(H.HttpConnectionError) as exc:
+        H.UrllibHttpClient().request("GET", "http://a/", timeout=1)
+    assert not isinstance(exc.value, H.HttpProtocolError)
+
+
+def test_an_error_status_closes_its_response(monkeypatch):
+    closed = []
+    err = _http_error(500, b"boom")
+    err.close = lambda: closed.append(True)
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda req, timeout=None: (_ for _ in ()).throw(err)
+    )
+    with pytest.raises(H.HttpStatusError):
+        H.UrllibHttpClient().request("GET", "http://a/", timeout=1)
+    assert closed == [True]
+
+
+def test_the_fake_returns_a_fresh_response_each_time():
+    f = FakeHttpClient().when(headers={"A": "1"}, body="x")
+    first = f.request("GET", "http://a/", timeout=1)
+    first.headers["A"] = "changed"
+    assert f.request("GET", "http://a/", timeout=1).headers["A"] == "1"
