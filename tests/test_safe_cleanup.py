@@ -58,3 +58,11 @@ def test_a_symlink_inside_the_removed_tree_is_not_followed_out_of_it(sandbox) ->
     (owned / "d" / "out").symlink_to(cwd, target_is_directory=True)
     remove_owned(owned / "d", owned)
     assert not (owned / "d").exists() and (cwd / "sentinel.txt").exists()
+
+
+def test_dotdot_targets_and_empty_or_relative_roots_are_refused(sandbox) -> None:
+    cwd, owned = sandbox
+    for target, root in ((owned / "..", owned), (cwd, ""), (cwd / "x", "."), (cwd, "..")):
+        with pytest.raises(ValueError):
+            remove_owned(target, root)
+    assert (cwd / "sentinel.txt").exists() and owned.exists()
