@@ -270,6 +270,11 @@ def test_fakes_register_in_sorted_module_order():
     expect = [n for m in mods for n, c in found.items() if c.__module__ == f"{F.__name__}.{m}"]
     assert list(found) == expect and all(F.FAKES[n] is c for n, c in found.items())
     assert sorted(F.FAKES) == sorted(found)
+    assert found, "fake discovery found nothing"
+    assert {c.__module__.rsplit(".", 1)[1] for c in found.values()} == {
+        m for m in mods if m != "__init__"
+    }, "every module of the fakes package must hold a fake"
+    assert all(getattr(F, c.__name__) is c for c in found.values()), "Fake<Port> stays importable"
 
 
 # -- conformance: one set of cases, run against the adapter and its fake ----------------

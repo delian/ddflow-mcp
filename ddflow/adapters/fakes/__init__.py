@@ -53,3 +53,4 @@ def collect(package: ModuleType) -> dict[str, type]:
 FAKES: Registry[type] = Registry("fake", key=lambda cls: cls.__dict__[MARK])
 for _cls in collect(importlib.import_module(__name__)).values():
     FAKES.register(_cls)
+    globals()[_cls.__name__] = _cls  # `from ddflow.adapters.fakes import Fake<Port>` keeps working
