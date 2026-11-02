@@ -28,7 +28,6 @@ CONFORMANCE = {
 def test_the_adapter_and_the_fake_satisfy_the_port():
     assert isinstance(N.SystemEntropy(), Entropy) and isinstance(FakeEntropy(), Entropy)
     assert FAKES["Entropy"] is FakeEntropy
-    assert N.default_entropy() is N.DEFAULT
 
 
 def test_the_fake_is_reproducible_per_seed():

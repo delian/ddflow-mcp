@@ -55,8 +55,3 @@ class SystemClock:
 
 #: The one stateless instance callers default to; a test passes `FakeClock` instead.
 DEFAULT = SystemClock()
-
-
-def default_clock() -> SystemClock:
-    """The clock a caller uses when it was handed none."""
-    return DEFAULT

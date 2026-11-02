@@ -38,8 +38,3 @@ class SystemEnv:
 
 #: The one stateless instance callers default to; a test passes `FakeEnv` instead.
 DEFAULT = SystemEnv()
-
-
-def default_env() -> SystemEnv:
-    """The environment a caller uses when it was handed none."""
-    return DEFAULT

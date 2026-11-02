@@ -45,8 +45,3 @@ class SystemEntropy:
 
 #: The one stateless instance callers default to; a test passes `FakeEntropy` instead.
 DEFAULT = SystemEntropy()
-
-
-def default_entropy() -> SystemEntropy:
-    """The source a caller uses when it was handed none."""
-    return DEFAULT

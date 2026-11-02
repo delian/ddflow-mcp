@@ -35,7 +35,6 @@ CONFORMANCE = {
 def test_the_adapter_and_the_fake_satisfy_the_port():
     assert isinstance(E.SystemEnv(), Env) and isinstance(FakeEnv(), Env)
     assert FAKES["Env"] is FakeEnv
-    assert E.default_env() is E.DEFAULT
 
 
 def test_the_adapter_reads_the_live_environment_each_call(monkeypatch):

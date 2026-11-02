@@ -41,7 +41,6 @@ CONFORMANCE = {"Clock": {"real": _NoSleep, "cases": clock_conformance}}
 def test_the_adapter_and_the_fake_satisfy_the_port():
     assert isinstance(C.SystemClock(), Clock) and isinstance(FakeClock(), Clock)
     assert FAKES["Clock"] is FakeClock
-    assert C.default_clock() is C.DEFAULT
 
 
 def test_the_adapter_reads_the_host_clocks(monkeypatch):
