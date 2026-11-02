@@ -132,6 +132,8 @@ def test_relation_merge_into_a_decision_is_refused(filed_as):
     body, result = call(repo, "ddflow_decision_add", relation=f"merge_into:{old}", **args)
     assert result["_meta"]["exit"] == 3
     assert "never edited in place" in result["content"][-1]["text"]
+    st = fold(EventLog(repo, "a").read_all(), strict=False)
+    assert st.decisions[old].decision == FIRST and st.decisions[old].globs == []
 
 
 @pytest.mark.parametrize("tool", sorted(CALLS))
