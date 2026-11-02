@@ -11,6 +11,7 @@ from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import approval as AP
 from ..services import leasekeep as LK
+from ..services import mergedrivers as MD
 from ..services import pins as PN
 from ..services import pins_merge as PM
 from ..services import pins_written as PW
@@ -45,6 +46,8 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
     if top is not None and top.ok and top.out.strip():
         repo = Path(top.out.strip())
     cfg = Config.load(repo)
+    if verb == "drivers":
+        return _drivers(repo, cfg, check=check, install=install)
     if install:
         actions = PM.install(repo, cfg)
         if not actions:
@@ -65,6 +68,22 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
         approval=approval,
         on_progress=on_progress,
     )
+
+
+def _drivers(repo: Path, cfg: Config, *, check: bool, install: bool) -> O.Outcome:
+    """`pins drivers`: show the merge-driver lines; `--install` (the consent) writes them;
+    `--check` verifies the merged baselines are still sorted and unique."""
+    if check:
+        bad = MD.check_baselines(repo, cfg)
+        return O.failed("pins", "; ".join(bad)) if bad else O.ok("pins", note="baselines are sorted")
+    if install:
+        acts = MD.apply(repo, cfg)
+        return O.ok("pins", installed=acts) if acts else O.nothing("pins", "merge drivers already set up")
+    p = MD.plan(repo, cfg)
+    note = "\n".join(p.lines()) or "nothing to add: the merge drivers are already set up"
+    if not p.empty():
+        note += f"\nwrite these with: {MD.NEXT_CLI}  (MCP: {MD.NEXT_MCP})"
+    return O.ok("pins", note=note)
 
 
 def _regenerate_tail(
