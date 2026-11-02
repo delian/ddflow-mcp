@@ -104,6 +104,7 @@ _SUBMODULE_OF = {
     "remove": "_merge",
     # _create
     "create": "_create",
+    "isolate_venv": "_create",
     # _diff
     "_DIFF_PREFIXES": "_diff",
     "_diff_text": "_diff",

@@ -45,6 +45,16 @@ class Outcome:
     changed_lines: int | None = None
 
 
+@dataclass(frozen=True)
+class Landing:
+    """One `worktree.merged`: when, and the commits it names (empty when the event had none)."""
+
+    at: float
+    before: str = ""  # the target branch before the merge
+    after: str = ""  # ... and after it
+    head: str = ""  # the branch tip that was merged
+
+
 @dataclass
 class Lease:
     item: str
@@ -90,6 +100,8 @@ class Facts:
     waits: dict[str, list[float]] = field(default_factory=dict)
     #: item -> when each `worktree.merged` landed its branch.
     merges: dict[str, list[float]] = field(default_factory=dict)
+    #: item -> each `worktree.merged` with the commits it recorded (same order as ``merges``).
+    landings: dict[str, list[Landing]] = field(default_factory=dict)
     state: State | None = None
 
     def starts_of(self, item: str) -> list[float]:
@@ -174,6 +186,12 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
         facts.waits.setdefault(ev.subject, []).append(since if since is not None else at)
     elif kind == "worktree.merged":
         facts.merges.setdefault(ev.subject, []).append(at)
+        facts.landings.setdefault(ev.subject, []).append(
+            Landing(
+                at,
+                *(str(d.get(k) or "") for k in ("landed_before", "landed_after", "branch_head")),
+            )
+        )
     elif kind == "bug.found" and isinstance(d.get("item"), str) and d["item"]:
         facts.bugs.append((d["item"], at))
     elif kind.startswith("gate."):

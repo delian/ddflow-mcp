@@ -1,0 +1,10 @@
+id = "r-no-shell"
+title = "No shell needed: every command and acceptance works over MCP and chat; a shell-less server instructs the agent what to run"
+tags = ["principle", "remote", "no-shell", "approvals"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**", "integrations/**"]
+created = "2026-11-01T16:59:49.619932+00:00"
+updated = "2026-11-01T16:59:49.619940+00:00"
+
+Decision D-no-shell-principle (operator 2026-11-01). When you add or change code: (1) every command, every acting flag and every acceptance has an MCP form (a family action, tools/list has no headroom) and a chat route: the agent proposes (--approval request, or the approval parameter), the person answers with AskUserQuestion, the agent attests and re-runs with the id. The agent never approves its own request. No refusal, remedy or note for a T2-or-lower act may send the caller to a terminal; a T3 act follows the host's install-time opt-in and is refused with the exact install step otherwise. (2) A step the server cannot run (no shell, remote server, container, missing git) never ends in a bare unavailable: it returns an agent_action envelope in the same result (what to run as argv with cwd and expected outcome, and the call that records the result, stored as agent_reported and never as server-verified). This must always be possible, on every surface. (3) A new CLI command or acting flag ships with its MCP form in the same change; test_mcp_parity exemptions only shrink and each carries a reason. (4) Do not assume a local shell, git, a writable filesystem or the agent's transcript on the server host: ask the capability probe. (5) Say in the task which route the acceptance takes; the standards gate and reviewers check it.

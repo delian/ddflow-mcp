@@ -1,0 +1,50 @@
+# The external tools ddflow shells to, as data (ADP-tools). One row per tool; `ddflow.adapters.tools`
+# turns each into an `ExternalTool`. Nothing here is ever run by itself: `install` is the command a
+# human runs AFTER the operator agrees, shown and never executed.
+#
+#   argv          the run command; the caller's extra arguments are appended
+#   version_argv  the version probe (read-only, bounded)
+#   version_re    first capture group = the version (default: the first dotted number)
+#   parser        a name in `ddflow.adapters.tool_parsers.PARSERS`
+#   clean_codes   exit codes meaning "ran, found nothing"        (default [0])
+#   finding_codes exit codes meaning "ran, found something"      (default [])
+#                 any other exit code is `unavailable`, never clean
+#   pin           minimum version, "" for none (a caller or a project may set it)
+#   install       the install command, a hint only
+
+[[tool]]
+id = "roborev"
+title = "Automated second-opinion code review"
+argv = ["roborev"]
+# `roborev version`, not `--version`: v0.63 rejects the flag.
+version_argv = ["roborev", "version"]
+parser = "none"
+install = "cargo install roborev"
+
+[[tool]]
+id = "gitleaks"
+title = "Secret scanner"
+# --redact: the report must never carry the secret it found. Exit 1 is gitleaks' "leaks found".
+argv = ["gitleaks", "detect", "--no-banner", "--redact", "--report-format", "json", "--report-path", "/dev/stdout"]
+version_argv = ["gitleaks", "version"]
+parser = "gitleaks"
+finding_codes = [1]
+install = "go install github.com/gitleaks/gitleaks/v8@latest"
+
+[[tool]]
+id = "pre-commit"
+title = "Local lint, format and secret checks (pre-commit)"
+argv = ["pre-commit", "run", "--all-files", "--color", "never"]
+version_argv = ["pre-commit", "--version"]
+parser = "pre-commit"
+finding_codes = [1]
+install = "pipx install pre-commit"
+
+[[tool]]
+id = "prek"
+title = "Local lint, format and secret checks (prek, a pre-commit compatible runner)"
+argv = ["prek", "run", "--all-files", "--color", "never"]
+version_argv = ["prek", "--version"]
+parser = "pre-commit"
+finding_codes = [1]
+install = "uv tool install prek"

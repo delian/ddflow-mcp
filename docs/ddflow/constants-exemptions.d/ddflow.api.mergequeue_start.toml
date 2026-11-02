@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/api/mergequeue_start.py:START_LOCK_WAIT_S" = 'internal timing of the integrator start lock (held for one check and one launch): a single-flight timing, not a workload setting'

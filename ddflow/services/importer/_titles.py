@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ._tables import Found
 
 TODO_GLOBS = (
     "docs/todo/open/*.md",
@@ -322,13 +318,6 @@ def _prose_needs(text: str, known: set[str], self_id: str) -> list[str]:
     return out
 
 
-def _add_prose_needs(found: list[Found], prose: list[tuple[Found, str]]) -> None:
-    """Add, after any `**Needs:**` line's ids, the ones each task's prose names."""
-    known = {f.ident for f in found}
-    for task, text in prose:
-        task.needs.extend(d for d in _prose_needs(text, known, task.ident) if d not in task.needs)
-
-
 def _continuation(lines: list[str], fenced: list[bool], n: int, indent: int) -> str:
     """The wrapped lines of the bullet that ends at line ``n`` (1-based): the indented
     lines after it, up to a blank line, a heading, a list item or an annotation."""
@@ -551,7 +540,6 @@ __all__ = [
     "_TITLE_CHARS",
     "_VERDICT_FILLER",
     "_WORD_END",
-    "_add_prose_needs",
     "_clean_title",
     "_continuation",
     "_cut_title",

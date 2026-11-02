@@ -2,16 +2,81 @@
 
 from __future__ import annotations
 
+import contextlib
+import shutil
+import sys
 from pathlib import Path
 
 from ...config import Config
 from .. import git as G
+from .. import proc as P
 from .. import worktree as _W
 from ..container import default_worktree_root
 from ._local import copy_local_files
 from ._locate import Worktree, _ignore_inside, default_branch, repo_root
 from ._remote import rev
 from ._state import sync
+
+
+def _remove(path: Path) -> None:
+    """Best-effort removal of a symlink, file or directory; never raises."""
+    if path.is_symlink() or path.is_file():
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+    elif path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def isolate_venv(root: Path, tree: Path) -> bool:
+    """Give a linked worktree its own `.venv`, so `uv pip install -e .` / `uv run`
+    run inside it resolve THAT environment and never repoint the primary checkout's shared
+    one (bug B4e7af0f14f).
+
+    ddflow's shared `.venv` (at the primary checkout root) is where its console scripts —
+    `ddflow`, `ddflow-mcp` — live and where the running agents' ddflow resolves. A worktree
+    sits UNDER the primary (`[worktree].root` is `.ddflow/worktrees`), so a worktree with no
+    `.venv` of its own that runs an editable install walks up the directory tree, discovers
+    the shared venv, and rewrites its editable install's `.pth`/`direct_url.json` to point
+    at the worktree. When the worktree is removed the dangling `.pth` makes every
+    console-script call fail with ModuleNotFoundError. A worktree-local `.venv` is
+    git-ignored and dies with the tree, so it can never dangle against a removed path.
+
+    Python/uv projects only (told by `uv.lock` beside the worktree OR the primary), and
+    only when `uv` is on PATH. `uv pip`'s and `uv run`'s
+    virtualenv DISCOVERY walks up to the shared venv only when the worktree has none of
+    its own; those tools need no native `pip` in the venv, so a bare `.venv` is enough.
+    A failure to make the venv is skipped, never raised — a claim must not die because a
+    venv could not be made, exactly as `copy_local_files` never raises.
+    """
+    if not ((Path(root) / "uv.lock").is_file() or (Path(tree) / "uv.lock").is_file()):
+        return False
+    venv = Path(tree) / ".venv"
+    if (venv / "pyvenv.cfg").is_file() and not venv.is_symlink():
+        return False  # a real, LOCAL venv already covers discovery
+    uv = shutil.which("uv")
+    if uv is None:
+        return False
+    # Build the replacement in a sibling temp path and swap it in only after it succeeds.
+    # A `.venv` that cannot be replaced (a symlink that stays, or `uv venv` that fails) is
+    # left alone, never destroyed while the shared env stays reachable via discovery.
+    tmp = venv.with_name(venv.name + ".tmp")
+    _remove(tmp)
+    made = P.capture(
+        [uv, "venv", "--quiet", "--python", sys.executable, str(tmp)], timeout=P.TIMEOUTS["probe"]
+    )
+    if not made.ran or made.returncode != 0 or not (tmp / "pyvenv.cfg").is_file():
+        _remove(tmp)
+        return False
+    _remove(venv)  # the symlink / torn leftover, now that the replacement is built
+    if venv.is_symlink() or venv.exists():
+        _remove(tmp)  # the old `.venv` could not be cleared; don't leave a stranded tmp
+        return False
+    with contextlib.suppress(OSError):
+        tmp.rename(venv)
+    if not (venv / "pyvenv.cfg").is_file():
+        _remove(tmp)  # the rename failed; don't leave a stranded `.venv.tmp`
+        return False
+    return True
 
 
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:
@@ -38,6 +103,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
 
     if path.exists() and (path / ".git").exists():
         _ignore_inside(root, wt_root)
+        isolate_venv(root, path)
         wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
         return wt  # adopt: the original fork sha is not this call's `rev(base)`
     wt_root.mkdir(parents=True, exist_ok=True)
@@ -60,5 +126,6 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     wt.created = True
     if cfg.worktree.sync_before_start and have_branch:
         sync(wt, cfg)
+    isolate_venv(root, path)
     wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
     return wt
