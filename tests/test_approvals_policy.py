@@ -251,9 +251,9 @@ def test_complete_unavailable_does_not_answer_a_non_required_unavailable_gate(pr
     assert not got.ok and got.ask_id  # nothing required is blocked: a person is asked
 
 
-def test_complete_unavailable_requires_a_gate_of_the_items_pipeline(proj):
-    """`target` must name a required, still-unmet gate OF THE ITEM'S PIPELINE: a required gate
-    not on it (e.g. a gate removed from this kind's pipeline) is never auto-answered."""
+def test_complete_unavailable_blocks_when_a_required_gate_failed(proj):
+    """The OVER-FIRE guard: a required gate recorded `failed` blocks even when `target`
+    names only a DIFFERENT gate -- never the omitted failed one."""
     from ddflow.core.records.gates import GateRecord
     from ddflow.core.records.items import Item
 
@@ -262,15 +262,13 @@ def test_complete_unavailable_requires_a_gate_of_the_items_pipeline(proj):
         kind="task",
         gates={
             "implement": GateRecord(gate="implement", outcome="passed"),
-            "unit_tests": GateRecord(gate="unit_tests", outcome="passed"),
-            "merge": GateRecord(gate="merge", outcome="passed"),
-            "ci": GateRecord(gate="ci", outcome="unavailable"),
+            "unit_tests": GateRecord(gate="unit_tests", outcome="failed"),
+            "merge": GateRecord(gate="merge", outcome="unavailable"),
         },
     )
     cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
-    cfg.gates.required = ["implement", "unit_tests", "merge", "ci"]  # ci is NOT a task gate
-    assert PO.RULES["complete_unavailable"].when(it, "ci", cfg) is False
-    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False  # already passed
+    assert PO.RULES["complete_unavailable"].when(it, "merge", cfg) is False  # unit_tests failed
+    assert PO.RULES["complete_unavailable"].when(it, "lint", cfg) is False  # lint not required
 
 
 def _only_unavailable_repo(repo, unit):
@@ -293,7 +291,7 @@ def test_a_routine_completion_auto_answers_only_an_unavailable_gate_end_to_end(r
     _only_unavailable_repo(repo, "unavailable")
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
     assert code == 0, (out, err)
-    ev = [e for e in EventLog(repo, "probe").read_all() if e.kind == "item.completed"][-1]
+    ev = [e for e in EventLog(repo, "bot").read_all() if e.kind == "item.completed"][-1]
     assert ev.data["approval"]["policy"] == "complete_unavailable"
     assert ev.data["forced"] is True and ev.data["overridden"]
     assert ev.data["approval"]["digest"]

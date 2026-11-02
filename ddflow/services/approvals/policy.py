@@ -25,7 +25,7 @@ from ...core.handlers.asks import EXPIRED, PENDING, asks_of
 from ...core.records.gates import GateOutcome
 from .. import gate_accept as GA
 from ..ask import engine as E
-from ..gates.defs import pipeline_for, required_gates
+from ..gates.defs import required_gates
 from . import request as R
 from .canon import Canon
 
@@ -64,29 +64,26 @@ _UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.va
 
 
 def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
-    """`complete_unavailable`: every unmet required gate of the item's pipeline must be
-    `unavailable` or `partial` (a worktree gone before it could run, or a command gate that
-    reported partway), and `target` -- the verdict's unmet gates the completion site names --
-    must name at least one of those REQUIRED, still-unmet gates OF THE ITEM'S PIPELINE (a
-    non-required gate, a required gate already passed, or a required gate not on THIS
-    item's pipeline never answers). A `failed` gate or a silent (never run)
-    required gate fails the
-    OVER-FIRE guard below and always blocks the auto-answer, whatever `target` names: a
-    genuinely-failed gate is NEVER auto-approved, the whole point of the rule. WHICH gates are
-    unmet is the verdict's decision (a not_applicable gate, a chore's skip, a person-accepted
-    partial is NOT unmet and lives in `Verdict.unmet_gates`), so this never re-derives that."""
+    """`complete_unavailable`: every gate `target` names -- the verdict's unmet required
+    gates the completion site passes -- must be a REQUIRED gate whose recorded outcome is
+    `unavailable` or `partial` (a non-required gate, or a required gate already passed,
+    never answers). A required gate recorded `failed` ALWAYS blocks, whatever `target`
+    names (the OVER-FIRE guard below): a genuinely-failed gate is NEVER auto-approved.
+    A required gate that is excused/never-run is the verdict's own decision
+    (`Verdict.unmet_gates` excludes a not_applicable/`applies_when`-excused gate, a
+    chore's skip, a person-accepted partial), so it is not re-judged here and never
+    spuriously blocks an otherwise-only-unavailable completion."""
     required = set(required_gates(cfg))
-    unmet = []
-    for g in pipeline_for(it, cfg):
-        if g not in required:
-            continue
-        if it.gate_satisfied(g, True):
-            continue
-        if it.gate_outcome(g) not in _UNAVAILABLE_OR_PARTIAL:
+    for g in required:
+        if it.gate_outcome(g) == GateOutcome.FAILED.value:
             return False
-        unmet.append(g)
     names = [g for g in (target or "").split(",") if g]
-    return bool(names) and set(names) <= set(unmet)
+    return bool(names) and all(
+        g in required
+        and not it.gate_satisfied(g, True)
+        and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        for g in names
+    )
 
 
 RULES: dict[str, Rule] = {
