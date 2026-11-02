@@ -46,7 +46,7 @@ def _json_list(output: str, what: str) -> list[Any]:
     for at in starts:
         try:
             value, end = json.JSONDecoder().raw_decode(text[at:])
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if not isinstance(value, list):
             continue

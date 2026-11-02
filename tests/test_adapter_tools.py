@@ -506,3 +506,17 @@ def test_precommit_reads_a_note_after_the_state():
 def test_the_fake_does_not_join_stdout_and_stderr_digits():
     f = FakeExternalTool("s", probe=RunResult(True, 0, "v1.2", "3"))
     assert f.probe().version == "1.2"
+
+
+@pytest.mark.parametrize(
+    ("version", "pin", "want"),
+    [("8.30.0-rc.1", "8.30.0-rc.1", True), ("1.2.3+build.1", "1.2.3", True),
+     ("1.2.3\nfoo", "1.2.3", True), ("1.2.3-beta", "1.2.3", False)],
+)  # fmt: skip
+def test_pre_release_detection_is_exact(version, pin, want):
+    assert T.version_at_least(version, pin) is want
+
+
+def test_a_deeply_nested_array_is_a_parse_error_not_a_crash():
+    with pytest.raises(ToolParseError):
+        TP.PARSERS["normalized"]("t", "[" * 100000)

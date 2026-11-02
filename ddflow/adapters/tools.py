@@ -127,7 +127,8 @@ def _load_table() -> list[ToolSpec]:
 SPECS: Registry[ToolSpec] = Registry("external tool", key=lambda s: s.id, loader=_load_table)
 
 
-_CORE = re.compile(r"v?(\d+(?:\.\d+)*)(.*)", re.DOTALL)
+_CORE = re.compile(r"v?(\d+(?:\.\d+)*)([^\s+]*)")
+_PRE = re.compile(r"^[-._]?(?:a|b|c|rc|alpha|beta|dev|pre|preview)(?:[-._]?\d+)?\b", re.IGNORECASE)
 
 
 def _version_key(text: str) -> tuple[tuple[int, ...], bool]:
@@ -135,19 +136,20 @@ def _version_key(text: str) -> tuple[tuple[int, ...], bool]:
     m = _CORE.search(text.strip())
     if not m:
         return (), False
-    return tuple(int(n) for n in m.group(1).split(".")), bool(re.search(r"[A-Za-z]", m.group(2)))
+    return tuple(int(n) for n in m.group(1).split(".")), bool(_PRE.match(m.group(2)))
 
 
 def version_at_least(version: str, pin: str) -> bool | None:
     """Is ``version`` >= ``pin``, comparing dotted numbers part by part ("8.30.10" > "8.30.1",
-    "8.30" == "8.30.0"); a pre-release ("8.30.0-rc.1") is older than its release. None when
+    "8.30" == "8.30.0"); a pre-release ("8.30.0-rc.1") is older than its release, and build
+    metadata ("+build.1") is ignored. None when
     either holds no number: not knowing is not a pass."""
-    (have, pre), (want, _) = _version_key(version), _version_key(pin)
+    (have, pre), (want, want_pre) = _version_key(version), _version_key(pin)
     if not have or not want:
         return None
     size = max(len(have), len(want))
     have, want = have + (0,) * (size - len(have)), want + (0,) * (size - len(want))
-    return have > want or (have == want and not pre)
+    return have > want or (have == want and (not pre or want_pre))
 
 
 class TableTool:
