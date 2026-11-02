@@ -17,7 +17,21 @@ from ...services import choices as CH
 from ...services import items as IT
 from ...services import leases as L
 from ...services import phase_close as PC
+from ...services import phase_complete as PCC
 from ._edit import _bad_line
+
+
+def phase_complete(repo: Path, item: str, *, approval: str = "", agent: str = "") -> O.Outcome:
+    """Retire a phase whose every task is done or abandoned, for a person directly and
+    for an agent only by an operator approval.
+
+    Distinct from `phase close` (imported work only) and from `complete` (an item's own
+    pipeline): this is the deliberate retire, gated behind the operator for an agent, and it
+    records `phase.completed` with the evidence. The api loads the config too, which the
+    approval gate reads for the use window.
+    """
+    log, cfg, _st = _items._load(repo, agent)
+    return PCC.complete(log, cfg, item, approval=approval, agent=agent)
 
 
 def phase_close(repo: Path, item: str, *, imported: bool = False, agent: str = "") -> O.Outcome:

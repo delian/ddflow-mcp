@@ -26,6 +26,7 @@ from ...services import upgrade_check as UC
 from ...services import upgrade_notice as UN
 from ...services import upgrade_start as US
 from .._base import _load
+from ..knowledge.self_assessment import auto_file
 from ..lifecycle import brief
 from ..operations import cadence, external_sync
 
@@ -127,8 +128,6 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
         # between the operator and /compact.
         if cfg.self_assessment.auto_file:
             try:
-                from ..knowledge.self_assessment import auto_file
-
                 path = payload.get("transcript_path")
                 body = (
                     CP.digest(Path(path), cfg.session.compaction_digest_chars)

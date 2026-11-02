@@ -298,7 +298,7 @@ def _hand_rolled() -> set[str]:
     found: set[str] = set()
     for path in sorted((ROOT / "ddflow").rglob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
-        if rel == "ddflow/core/registry.py":
+        if rel in ("ddflow/core/registry.py", "ddflow/adapters/registry.py"):
             continue
         tree = ast.parse(path.read_text("utf-8"))
         names = _module_names(tree)

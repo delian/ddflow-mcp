@@ -257,6 +257,8 @@ WRITES_NOT_COMPARABLE = {
     # Writes an `item.completed`: a second call finds the phase already closed and is
     # refused, so invoking it twice is not the same as invoking it once.
     "ddflow_phase_close",
+    # Writes a `phase.completed` retire: a second call finds the phase already done.
+    "ddflow_phase_complete",
     "ddflow_task_add",
     "ddflow_split",
     # Settles a contest: a second call finds nothing contested and is refused (exit 3).

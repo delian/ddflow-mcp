@@ -22,6 +22,20 @@ def phase_close_text(out, a) -> str:
     )
 
 
+def phase_complete_text(out, a) -> str:
+    """What `phase complete` did: the deliberate retire, with the evidence.
+
+    The evidence is the point of the command: it is what a reader (and `ddflow verify`) is
+    given instead of a phase pipeline that never ran for this retire.
+    """
+    d = out.data
+    return (
+        f"{d['id']} completed: {d['evidence']}\n"
+        f"  {d['tasks']} task(s) under it keep their state, and the gate pipeline did not "
+        f"run -- `ddflow show {d['id']}` carries the evidence."
+    )
+
+
 def split_text(out, a) -> str:
     created = out.data["created"]
     tail = ""

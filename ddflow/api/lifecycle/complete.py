@@ -27,6 +27,7 @@ from ...services.approvals import consume as CN
 from ...services.approvals.canon import Canon
 from ...services.export import refresh as RF
 from ...services.gates import failed_review as GO
+from ...services.gates import skip_followup as SF
 from .. import jobs as JB
 from .._base import _load_fresh
 from ..bug_reopen import refile_reported
@@ -261,6 +262,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         },
     )
     L.release(log, item, note="completed")
+    SF.settle(log, st, cfg, item)
     extra: dict[str, Any] = {"bugs_refiled": refiled}
     extra.update(_dispose(repo, cfg, log, item, (called_from, shell_cwd)))
     extra.update(_refuted_extra(st, item))
@@ -505,6 +507,7 @@ def abandon(
         st = fold(log.read_all(), strict=False)
     stranded = stuck_edges_to(st, item)
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
+    SF.settle(log, st, cfg, item)
     if it.lease:
         L.release(log, item, note=f"abandoned: {reason}")
     return O.Outcome(
