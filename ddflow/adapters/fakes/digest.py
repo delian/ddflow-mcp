@@ -31,10 +31,11 @@ class FakeDigest:
     ) -> str:
         raw = data.encode("utf-8", errors) if isinstance(data, str) else bytes(data)
         out, crc = "", zlib.crc32(algo.encode())
-        while len(out) < self.WIDTH:
+        want = (size * 2) if size is not None else self.WIDTH
+        while len(out) < max(want, self.WIDTH):
             crc = zlib.crc32(raw, crc)
             out += f"{crc:08x}"
-        out = out[: (size * 2) if size is not None else self.WIDTH]
+        out = out[:want]
         return out[:length] if length is not None else out
 
     def canonical(self, obj: Any) -> str:
