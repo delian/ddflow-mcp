@@ -32,7 +32,6 @@ from .tool_types import (
     UNAVAILABLE,
     Finding,
     RunResult,
-    ToolParseError,
     ToolProbe,
     ToolRun,
     ToolRunner,
@@ -273,9 +272,9 @@ class TableTool:
 
     @staticmethod
     def _why(exc: Exception) -> str:
-        """Our own parse errors never carry the output; any other exception is named by type
-        only, since its text could hold a line of what the tool printed (a secret)."""
-        return str(exc)[:_ERR_TAIL] if isinstance(exc, ToolParseError) else type(exc).__name__
+        """The exception's TYPE only: its text may hold a line of what the tool printed (a
+        secret), and a parser's message is not ours to vouch for."""
+        return type(exc).__name__
 
     def _absent(self, reason: str) -> str:
         return (
