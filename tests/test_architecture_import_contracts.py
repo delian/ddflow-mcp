@@ -140,12 +140,16 @@ def test_every_extra_has_a_contract() -> None:
     assert not problems, f"extras whose imports are not confined: {problems}"
 
 
-def test_package_added_under_existing_extra_is_checked() -> None:
+def test_package_added_under_existing_extra_is_checked(monkeypatch) -> None:
     """Regression for B-arch-guard-extras-hardcoded: a package added under an existing
-    extra is reported by the guard's own logic. The old guard iterated a hard-coded module
+    extra is reported both when its import name is unmapped and when it is mapped but its
+    import name is not in ``forbidden_modules``. The old guard iterated a hard-coded module
     list, never pyproject's packages, so it missed such a package."""
-    problems = _unconfined({"rag": ["model2vec>=0.9.0", "acme-noval-pkg>=1.0"]})
-    assert "acme-noval-pkg: no _EXTRA_IMPORTS entry for its import name" in problems
+    assert "acme-noval-pkg: no _EXTRA_IMPORTS entry for its import name" in _unconfined(
+        {"rag": ["model2vec>=0.9.0", "acme-noval-pkg>=1.0"]}
+    )
+    monkeypatch.setitem(_EXTRA_IMPORTS, "acme-noval-pkg", "acme_noval")
+    assert "acme_noval: not in forbidden_modules" in _unconfined({"rag": ["acme-noval-pkg>=1.0"]})
 
 
 def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
