@@ -31,7 +31,7 @@ def _text(value: Any) -> str:
 def _int(value: Any) -> int:
     try:
         return max(0, int(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: JSON Infinity / 1e309
         return 0
 
 
@@ -99,7 +99,9 @@ def parse_gitleaks(tool: str, output: str) -> list[Finding]:
 
 
 #: A pre-commit result line: ``<hook name>....Failed`` (the dots pad to the terminal width).
-_HOOK_LINE = re.compile(r"^(?P<hook>\S.*?)\.{3,}(?:\(.*\))?\s*(?P<state>Passed|Failed|Skipped)\s*$")
+_HOOK_LINE = re.compile(
+    r"^(?P<hook>[A-Za-z0-9_(\[].*?)\.{3,}(?:\(.*\))?\s*(?P<state>Passed|Failed|Skipped)\s*$"
+)
 
 
 def parse_precommit(tool: str, output: str) -> list[Finding]:

@@ -44,7 +44,6 @@ class FakeExternalTool:
         install: str = "install-fake-tool",
     ) -> None:
         self.name = name
-        self._probe_in, self._run_in = probe, run
         self._probe = probe or RunResult(True, 0, "1.0.0")
         self._run = run or RunResult(True, 0, "[]")
         self._parser = parser
@@ -100,8 +99,8 @@ class FakeExternalTool:
         tests script one tool this way)."""
         return type(self)(
             self.name,
-            probe=probe or self._probe_in,
-            run=run or self._run_in,
+            probe=probe or self._probe,
+            run=run or self._run,
             parser=self._parser,
             clean_codes=self._clean,
             finding_codes=self._finding,

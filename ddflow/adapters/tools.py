@@ -32,7 +32,6 @@ from .tool_types import (
     UNAVAILABLE,
     Finding,
     RunResult,
-    ToolParseError,
     ToolProbe,
     ToolRun,
     ToolRunner,
@@ -246,10 +245,10 @@ class TableTool:
             )
         try:
             found = tuple(self.parse(done.out))
-        except (ToolParseError, KeyError, ValueError, TypeError) as exc:
+        except Exception as exc:  # a parser that raises anything is "could not read it"
             return self._unavailable(
                 COULD_NOT_RUN,
-                f"could not parse {s.id} output: {exc}. Run `{' '.join(argv)}` by hand and "
+                f"could not parse {s.id} output: {str(exc)[:_ERR_TAIL]}. Run `{' '.join(argv)}` by hand and "
                 "compare with `ddflow/adapters/tool_parsers.py`; until then record unavailable.",
                 done,
             )

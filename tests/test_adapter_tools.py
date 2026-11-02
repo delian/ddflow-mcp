@@ -265,7 +265,7 @@ def test_tool_modules_import_nothing_above_adapters_and_start_no_process(mod):
         i
         for i in _imports(PKG / "adapters" / f"{mod}.py")
         if i.startswith(("ddflow", "subprocess", "shutil", "socket", "urllib"))
-        or (i.startswith("..") and not i.startswith("..."))
+        or i.startswith("..")
     }
     assert not bad, bad
 
@@ -439,3 +439,19 @@ def test_a_falsy_injected_runner_is_still_used():
             return CommandRun("ran", declared.line, code=0, out="from-injected")
 
     assert command_tool_runner(Falsy())(["x"], timeout_s=1).out == "from-injected"
+
+
+def test_a_diff_line_that_looks_like_a_hook_result_is_not_one():
+    out = "mypy....Failed\n+test....Failed\n-old....Failed\n"
+    assert [f.rule for f in TP.PARSERS["pre-commit"]("pre-commit", out)] == ["mypy"]
+
+
+def test_json_infinity_is_a_zero_line_not_a_crash():
+    got = TP.PARSERS["normalized"]("t", '[{"rule": "r", "line": 1e309}]')
+    assert got[0].line == 0
+
+
+def test_a_parser_that_raises_anything_is_unavailable():
+    t = T.tool("gitleaks", Script(ok("[]")))
+    t.parse = lambda out: None.strip()
+    assert t.run().status == UNAVAILABLE
