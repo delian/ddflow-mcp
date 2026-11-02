@@ -17,14 +17,16 @@ once the perf CLI task registers it.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import platform
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from ddflow import __version__
+from ddflow.core.digest import of_obj
+from ddflow.infra.worktree._merge import head_sha
 
 UNAVAILABLE = "unavailable"
 DEFAULT_LOAD_BANDS: tuple[float, float] = (0.25, 1.0)
@@ -141,15 +143,12 @@ def fingerprint(
         "cgroup": cgroup,
         "vm": vm,
     }
-    blob = json.dumps(facts, sort_keys=True).encode()
-    key = hashlib.sha256(blob).hexdigest()[:KEY_LEN]
+    key = of_obj(facts, length=KEY_LEN)
     facts["git_head"] = git_head[:HEAD_LEN] if git_head else UNAVAILABLE
     return Fingerprint(key, facts)
 
 
 def _git_head(root: Path) -> str:
-    from ddflow.infra.worktree._merge import head_sha
-
     try:
         return head_sha(root)
     except Exception:
@@ -168,8 +167,6 @@ def collect(
     git_head: str | None = None,
 ) -> Fingerprint:
     """Probe this machine. Every probe that fails is ``unavailable``."""
-    from ddflow import __version__
-
     cpus = os.cpu_count()
     try:
         ratio = os.getloadavg()[0] / cpus if cpus else None
