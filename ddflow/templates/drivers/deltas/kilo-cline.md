@@ -18,10 +18,10 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
    monitoring — they are waits, never stops. Stop only on a `question` or operator gate, or
    when the scope is empty; everything else — including a wait — carries the wave forward.
    On a runtime with no `task`-subagent run (Roo) there is no background loop: a one-shot
-   invocation does ONE item directly — claim, gate, merge — then prints `ddflow next` and
-   `ddflow cadence` as the handoff for the next invocation. These loop facts are the
-   `[orchestration]` record in `ddflow/harnesses/kilo.toml`; the command and subagent are
-   EMITTED from `ddflow/templates/` by `ddflow adopt`, not hand-written.
+   invocation does ONE item directly — claim, gate, then merge or park — and prints
+   `ddflow next` and `ddflow cadence` as the handoff for the next invocation. These loop
+   facts are the `[orchestration]` record in `ddflow/harnesses/kilo.toml`; the command and
+   subagent are EMITTED from `ddflow/templates/` by `ddflow adopt`, not hand-written.
 2. **Subagents.** `task` tool, with worktree isolation where supported.
 3. **Asking the operator.** The `question` tool.
 4. **File references.** `@path`.

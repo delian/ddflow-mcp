@@ -82,19 +82,20 @@ class Continuation:
 class Orchestration:
     """How the harness runs the ddflow wave loop, as data.
 
-    The loop is harness-agnostic: read ``ddflow next``'s ready set, fan each ready item
-    to a subagent by its ``tier`` hint, re-read ``next`` after each merge/park, wait in
-    the background (never a foreground poll), persist the wave position, and stop ONLY on
-    a question or operator gate. This record names a harness's primitives for those
-    steps; its driver delta and command/agent files are the emitted prose instances.
+    The loop is harness-agnostic: read ``ddflow next``'s ready set, CLAIM each ready item,
+    fan each claimed item to a subagent by its ``tier`` hint, re-read ``next`` after each
+    merge or park, wait in the background (never a foreground poll), persist the wave
+    position, and stop only on an empty scope (no ready, held or in-flight items) or a
+    question/operator gate. This record names a harness's primitives for those steps; its
+    driver delta and command/agent files are the emitted prose instances.
     """
 
     none: bool = False
     loop: str = ""  #: one of ORCHESTRATION_LOOPS — always a BACKGROUND primitive
-    dispatch: str = ""  #: the subagent fan-out primitive (one item per ready id)
+    dispatch: str = ""  #: the subagent fan-out primitive (one claimed item per ready id)
     wait: str = ""  #: the wait primitive (background process + `ddflow wait`)
     persist: str = ""  #: where the wave position persists and resumes
-    stop: str = ""  #: the ONLY stops: the question/ask/approval operator gates
+    stop: str = ""  #: the ONLY stops: empty scope, or the question/ask/approval operator gates
 
 
 @dataclass(frozen=True)
