@@ -45,6 +45,13 @@ dir = ".github/skills"
 [subagents]
 dir = ".github/agents"
 
+[orchestration]
+loop = "second-window"
+dispatch = "another window / terminal agent (one item each)"
+wait = "background terminal + ddflow wait"
+persist = "printed ddflow next + cadence"
+stop = "Ask in chat and stop"
+
 [verified]
 date = "2026-10-09"
 sources = ["https://code.visualstudio.com/docs/copilot/customization/mcp-servers"]

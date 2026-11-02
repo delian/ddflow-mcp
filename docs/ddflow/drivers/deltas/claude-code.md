@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.9 fmt=1 sha=3919365d9a68 -->
+<!-- ddflow:begin drivers/deltas/claude-code ddflow=0.2.10 fmt=1 sha=58addbb00420 -->
 # Delta: Claude Code
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -27,7 +27,8 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    `ddflow cadence` as the handoff. The continuation, each turn: a backgrounded command
    that *finishes* (e.g. `sleep 600`), then `ScheduleWakeup` re-passing the same `/loop`
    prompt. A timer alone is not a continuation mechanism; a completing background task
-   re-invokes reliably.
+   re-invokes reliably. These loop facts are the `[orchestration]` record in
+   `ddflow/harnesses/claude.toml`, emitted into this delta by `ddflow adopt`.
 2. **Blocked behind another agent.** When `claim` is refused because another agent
    holds the item or overlapping files, or `next` has nothing ready while work is in
    flight, do not poll and do not ask the operator to tell you when to retry. Run

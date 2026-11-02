@@ -28,6 +28,19 @@ CONTINUATION_MECHANISMS = frozenset(
     }
 )
 
+#: The loop primitive a harness runs the orchestration wave loop under. Every value is a
+#: BACKGROUND primitive on purpose: the wave orchestration must never block the operator's
+#: main chat with a foreground loop, so no "goal" or "foreground" value exists to pick.
+ORCHESTRATION_LOOPS = frozenset(
+    {
+        "background-subagents",  # background task subagents (Kilo's `task` tool)
+        "self-paced-command",  # a self-paced slash command (Claude Code's /loop)
+        "subtask",  # a background subtask agent (opencode)
+        "second-window",  # a second window / terminal process (VS Code)
+        "none",
+    }
+)
+
 
 @dataclass(frozen=True)
 class Detect:
@@ -63,6 +76,25 @@ class Continuation:
     cap: int = 0  #: the most continuations the mechanism allows
     goal_command: str = ""
     loop_guard: str = ""
+
+
+@dataclass(frozen=True)
+class Orchestration:
+    """How the harness runs the ddflow wave loop, as data.
+
+    The loop is harness-agnostic: read ``ddflow next``'s ready set, fan each ready item
+    to a subagent by its ``tier`` hint, re-read ``next`` after each merge/park, wait in
+    the background (never a foreground poll), persist the wave position, and stop ONLY on
+    a question or operator gate. This record names a harness's primitives for those
+    steps; its driver delta and command/agent files are the emitted prose instances.
+    """
+
+    none: bool = False
+    loop: str = ""  #: one of ORCHESTRATION_LOOPS — always a BACKGROUND primitive
+    dispatch: str = ""  #: the subagent fan-out primitive (one item per ready id)
+    wait: str = ""  #: the wait primitive (background process + `ddflow wait`)
+    persist: str = ""  #: where the wave position persists and resumes
+    stop: str = ""  #: the ONLY stops: the question/ask/approval operator gates
 
 
 @dataclass(frozen=True)
@@ -111,6 +143,7 @@ V2_SECTIONS: dict[str, type] = {
     "detect": Detect,
     "headless": Headless,
     "continuation": Continuation,
+    "orchestration": Orchestration,
     "meters": Meters,
     "caps": Caps,
     "autonomy": Autonomy,
@@ -156,11 +189,10 @@ def check_table(table: Any, name: str, where: str) -> None:
         raise DescriptorError(f"{where}: [{name}] is empty: omit it or say none = true")
     if not keys and table.get("none") is not True:
         raise DescriptorError(f"{where}: [{name}] gives no values: omit it or say none = true")
-    mech = table.get("mechanism")
-    if name == "continuation" and isinstance(mech, str) and mech not in CONTINUATION_MECHANISMS:
-        raise DescriptorError(
-            f"{where}: continuation.mechanism must be one of {sorted(CONTINUATION_MECHANISMS)}"
-        )
+    _membership(
+        name, table.get("mechanism"), "continuation.mechanism", CONTINUATION_MECHANISMS, where
+    )
+    _membership(name, table.get("loop"), "orchestration.loop", ORCHESTRATION_LOOPS, where)
     if name == "headless" and table.get("autonomy") == "":
         raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
     if "none" in table and table["none"] is True and keys:
@@ -171,6 +203,19 @@ def check_table(table: Any, name: str, where: str) -> None:
                 f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
                 " other than none"
             )
+
+
+def _membership(name: str, value: Any, field: str, vocab: frozenset, where: str) -> None:
+    """Reject a value that is not in ``vocab``, for ``field`` when this section is ``name``.
+
+    ``None`` is "absent" and is skipped by its caller's own needs; a non-string truthy
+    value (``1``, ``true``) is still not a member and fails here, exactly as the
+    built-record check did before the helper extracted it.
+    """
+    if name != field.partition(".")[0] or value is None:
+        return
+    if not isinstance(value, str) or value not in vocab:
+        raise DescriptorError(f"{where}: {field} must be one of {sorted(vocab)}")
 
 
 def validate_reserved(reserved: dict[str, Reserved], where: str) -> None:
@@ -192,9 +237,9 @@ def validate(sections: dict[str, Any], where: str) -> None:
                 f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
                 " other than none"
             )
-    if cont and cont.mechanism and cont.mechanism not in CONTINUATION_MECHANISMS:
-        raise DescriptorError(
-            f"{where}: continuation.mechanism must be one of {sorted(CONTINUATION_MECHANISMS)}"
+    if cont and cont.mechanism:
+        _membership(
+            "continuation", cont.mechanism, "continuation.mechanism", CONTINUATION_MECHANISMS, where
         )
     head = sections.get("headless")
     if head and head.autonomy:
@@ -203,3 +248,6 @@ def validate(sections: dict[str, Any], where: str) -> None:
             raise DescriptorError(
                 f"{where}: headless.autonomy {head.autonomy!r} is not an [autonomy].profiles id"
             )
+    orch = sections.get("orchestration")
+    if orch and orch.loop:
+        _membership("orchestration", orch.loop, "orchestration.loop", ORCHESTRATION_LOOPS, where)

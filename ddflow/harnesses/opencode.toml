@@ -46,6 +46,13 @@ dir = ".opencode/skills"
 [subagents]
 dir = ".opencode/agents"
 
+[orchestration]
+loop = "subtask"
+dispatch = "opencode config/zen agent (one item each)"
+wait = "background task + ddflow wait"
+persist = "printed ddflow next + cadence"
+stop = "Ask and stop"
+
 [verified]
 date = "2026-10-09"
 sources = ["https://github.com/anomalyco/opencode"]
