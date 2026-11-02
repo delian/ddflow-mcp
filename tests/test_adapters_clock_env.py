@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -126,8 +127,6 @@ def test_the_baseline_is_tight_so_a_migration_must_lower_it():
 
 
 if __name__ == "__main__":
-    import sys
-
     if not BASELINE.exists() and "--init" not in sys.argv:
         raise SystemExit("no baseline: refusing to invent one; pass --init to create it first time")
     old = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}

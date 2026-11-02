@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from datetime import UTC
 
+import pytest
+
 from ddflow.adapters import clock as C
 from ddflow.adapters.clock import Clock
 from ddflow.adapters.fakes import FAKES
@@ -68,7 +70,6 @@ def test_the_fake_moves_only_when_told_and_sleep_advances_both_clocks():
 
 
 def test_the_fake_refuses_to_run_backwards():
-    import pytest
 
     c = FakeClock()
     with pytest.raises(ValueError):
