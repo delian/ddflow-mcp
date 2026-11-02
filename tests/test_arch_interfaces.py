@@ -453,3 +453,11 @@ def test_network_home_is_the_import_census_http_home(tmp_path: Path):
     http = next(f for f in c.families if f.kind == "network" and f.family == "http")
     assert {s.module for s in http.violations} == {"ddflow.services.other"}
     assert http.home_modules == A.STDLIB_HOMES["http"]
+
+
+def test_mcp_adapter_and_its_fake_are_the_protocol_home(tmp_path: Path):
+    src = 'def f():\n    return "tools/call"\n'
+    files = {"adapters/mcp.py": src, "adapters/fakes/mcp.py": src, "surfaces/x.py": src}
+    c = I.scan(_tree(tmp_path, files))
+    mcp = next(f for f in c.families if f.kind == "protocol" and f.family == "mcp")
+    assert {s.module for s in mcp.violations} == {"ddflow.surfaces.x"}

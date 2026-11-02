@@ -60,12 +60,18 @@ PROTOCOL_HOMES: dict[str, str] = {
 }
 
 
+# Modules already allowed to speak a protocol by hand: the adapter and its fake (ADP-mcp).
+PROTOCOL_MODULES: dict[str, tuple[str, ...]] = {
+    "mcp": ("ddflow.adapters.mcp", "ddflow.adapters.fakes.mcp"),
+}
+
+
 def home_of(kind: str, family: str) -> tuple[str, tuple[str, ...]]:
     """The planned ADP-* task and the modules already allowed for one family."""
     if kind == "program":
         return PROGRAM_HOMES.get(family, ("ADP-tools", ()))
     if kind == "protocol":
-        return PROTOCOL_HOMES.get(family, "ADP-lane-transport"), ()
+        return PROTOCOL_HOMES.get(family, "ADP-lane-transport"), PROTOCOL_MODULES.get(family, ())
     if kind == "network":  # the import census already declares the http home: one list
         return "ADP-http", STDLIB_HOMES.get("http", ())
     return KIND_HOMES.get(kind, "ADP-http"), ()
