@@ -157,7 +157,9 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
     for path in tracked:
         if not is_shared(path, cfg.pins.baseline_globs):
             continue
-        staged = G.run(repo, "show", f":{path}")  # the blob a commit would carry
+        staged = G.run(
+            repo, "show", f":./{path}"
+        )  # ./ keeps `1:x` a path, not a stage; the blob a commit would carry
         if not staged.ok:
             bad.append(
                 f"{path}: its staged content could not be read ({staged.err or 'git failed'}); the"
