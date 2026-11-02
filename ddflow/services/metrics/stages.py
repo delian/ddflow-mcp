@@ -162,11 +162,8 @@ def _gate_rows(by_gate: dict[str, list[tuple[Outcome, float]]], minimum: int) ->
     return out
 
 
-def build(ctx: Context, group_by: str = "") -> dict:
-    """The stage split as plain data; ValueError on a group-by it does not know."""
-    if group_by and group_by not in GROUPS:
-        raise ValueError(f"unknown group-by {group_by!r}: one of {', '.join(GROUPS)}")
-    minimum = int(ctx.cfg.metrics.min_samples)
+def _gather(ctx: Context, group_by: str):
+    """(group -> each item's stage samples, group -> gate -> runs, the slowest item's id)."""
     runs_of: dict[str, list[tuple[Outcome, float]]] = defaultdict(list)
     for o, secs in gate_durations(ctx):
         runs_of[o.item].append((o, secs))
@@ -191,6 +188,15 @@ def build(ctx: Context, group_by: str = "") -> dict:
         total = got.get("claim_to_merge", span.cycle_s)
         if total is not None and total > slowest[0]:
             slowest = (total, span.item)
+    return members, gates, slowest[1]
+
+
+def build(ctx: Context, group_by: str = "") -> dict:
+    """The stage split as plain data; ValueError on a group-by it does not know."""
+    if group_by and group_by not in GROUPS:
+        raise ValueError(f"unknown group-by {group_by!r}: one of {', '.join(GROUPS)}")
+    minimum = int(ctx.cfg.metrics.min_samples)
+    members, gates, slowest = _gather(ctx, group_by)
     groups = [
         {
             "group": g,
@@ -205,7 +211,7 @@ def build(ctx: Context, group_by: str = "") -> dict:
         n = sum(1 for rows in members.values() for r in rows if name in r)
         if n < max(minimum, 1):
             unavailable[name] = f"{n} items with a sample, need {minimum}"
-    item = slowest[1] or "<item id>"
+    item = slowest or "<item id>"
     return {
         "group_by": group_by,
         "groups": groups,
