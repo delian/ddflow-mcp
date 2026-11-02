@@ -275,8 +275,14 @@ def harness_session_id(raw: str) -> str:
     # Sanitising or truncating changed the raw (or emptied it). Digest the FULL raw: the
     # 64-hex suffix makes the id longer than any clean id (`safe == raw` caps at 48), so a
     # sanitised id can never collide with the clean id that spells its digest back, and an
-    # id like '///' that sanitises to nothing still gets a non-empty id.
-    return f"h-{safe}-{content_digest(raw)}" if safe else f"h-{content_digest(raw)}"
+    # id like '///' that sanitises to nothing still gets a non-empty id. (`surrogatepass`
+    # keeps a lone-surrogate harness id, e.g. from a surrogateescape-decoded env var, from
+    # raising here.)
+    return (
+        f"h-{safe}-{content_digest(raw, errors='surrogatepass')}"
+        if safe
+        else f"h-{content_digest(raw, errors='surrogatepass')}"
+    )
 
 
 def capture_prompt(
