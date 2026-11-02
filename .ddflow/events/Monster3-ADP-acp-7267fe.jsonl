@@ -1,0 +1,2 @@
+{"agent":"Monster3-ADP-acp-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e48e48f5cff7164bd08dbb762","kind":"ddflow.seen","lamport":127333,"schema":1,"subject":"ddflow","ts":"2026-11-02T08:26:40.914840Z"}
+{"agent":"Monster3-ADP-acp-7267fe","data":{"gate":"rubber_duck"},"id":"e4c7ecb9c27a10323d158ed5c","kind":"gate.started","lamport":127334,"schema":1,"subject":"ADP-acp","ts":"2026-11-02T08:26:40.955289Z"}
