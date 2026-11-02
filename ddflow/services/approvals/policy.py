@@ -67,7 +67,9 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     """`complete_unavailable`: every unmet required gate of the item's pipeline must be
     `unavailable` or `partial` (a worktree gone before it could run, or a command gate that
     reported partway), and `target` -- the verdict's unmet gates the completion site names --
-    must name at least one. A `failed` gate or a silent (never run) required gate fails the
+    must name at least one of those REQUIRED, still-unmet gates (a non-required gate, or a
+    required gate already passed, never answers). A `failed` gate or a silent (never run)
+    required gate fails the
     OVER-FIRE guard below and always blocks the auto-answer, whatever `target` names: a
     genuinely-failed gate is NEVER auto-approved, the whole point of the rule. WHICH gates are
     unmet is the verdict's decision (a not_applicable gate, a chore's skip, a person-accepted
@@ -79,7 +81,12 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
         ):
             return False
     names = [g for g in (target or "").split(",") if g]
-    return bool(names) and all(it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL for g in names)
+    return bool(names) and all(
+        g in required
+        and not it.gate_satisfied(g, True)
+        and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        for g in names
+    )
 
 
 RULES: dict[str, Rule] = {
