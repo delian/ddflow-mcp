@@ -1,6 +1,6 @@
 """r-small-files ratchet: no new `.py` file over `[quality].max_file_bytes`, no exempt file grows.
 
-The exemptions are the shrink-only baseline `tests/guard_baselines/file_size_baseline.txt`;
+The exemptions are the shrink-only baseline `tests/file_size_baseline.txt`;
 a split deletes its own line. The limit is the knob, never a constant here.
 """
 
