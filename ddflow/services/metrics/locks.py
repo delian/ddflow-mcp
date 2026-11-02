@@ -100,9 +100,16 @@ def _hold(ctx: Context, runs, minimum: int) -> dict:
     }
 
 
-def _declared_of(ctx: Context, item: str) -> tuple[str, ...]:
-    first = next((lease for lease in ctx.facts.leases if lease.item == item), None)
-    return first.globs if first else ()
+def _declared_of(ctx: Context, item: str, at: float | None = None) -> tuple[str, ...]:
+    """The globs of the item's lease that was held at ``at`` (its first lease when ``at`` is
+    None or no lease spans it): a re-claim may declare other globs."""
+    mine = [lease for lease in ctx.facts.leases if lease.item == item]
+    if at is not None:
+        held = [
+            lease for lease in mine if lease.start <= at and (lease.end is None or at <= lease.end)
+        ]
+        mine = held or mine
+    return mine[0].globs if mine else ()
 
 
 def _actual(ctx: Context, probes: Probes | None, item: str, cache: dict) -> frozenset | None:
@@ -121,7 +128,7 @@ def _actual(ctx: Context, probes: Probes | None, item: str, cache: dict) -> froz
 
 def _blockers(ctx: Context, item: str, since: float) -> list[str]:
     """Other items holding a lease at ``since`` whose globs overlap the waiter's."""
-    mine = _declared_of(ctx, item)
+    mine = _declared_of(ctx, item, since)
     out = []
     for lease in ctx.facts.leases:
         live = lease.start <= since and (lease.end is None or lease.end > since)
@@ -165,7 +172,8 @@ def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> di
 def _declared(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> dict:
     untouched, outside, wrote, items = [], [], 0, 0
     for item in ctx.facts.landings:
-        declared, actual = _declared_of(ctx, item), _actual(ctx, probes, item, cache)
+        declared = _declared_of(ctx, item, ctx.facts.landings[item][0].at)
+        actual = _actual(ctx, probes, item, cache)
         if (
             not declared
             or actual is None

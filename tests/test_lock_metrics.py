@@ -214,3 +214,19 @@ def test_declared_counts_an_item_with_any_merge_inside_the_window():
     since = f"{int(now - (T0 + 1000))}s"
     ans = M.run(log.events, st, cfg, now, view="locks", since=since, probes=probes)
     assert ans.metrics["declared"]["items"] == 3
+
+
+def test_declared_globs_come_from_the_lease_held_at_the_merge():
+    log = Log()
+    log.task("A", "x")
+    log.claim("a", "A", T0, "old/*.py")
+    log.release("a", "A", T0 + 100)
+    log.claim("a", "A", T0 + 200, "src/*.py")
+    merged(log, "A", T0 + 300, "A")
+    log.release("a", "A", T0 + 400)
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    probes = Fake({("A0", "A1"): ["src/a.py"]}, {})
+    d = M.run(log.events, st, cfg, now, view="locks", probes=probes).metrics["declared"]
+    assert d["actual_outside_declared_share"] == pytest.approx(0.0)
+    assert d["declared_untouched_share"] == pytest.approx(0.0)
