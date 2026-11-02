@@ -10,3 +10,5 @@ ACP is JSON-RPC over stdio. The agent half answers `initialize`, `session/new` (
 - **Adopters:** DSH-lane-acp and VB-acp take the port when they land.
 
 The pattern is in [README.md](README.md).
+
+Cancel semantics: `session/cancel` marks the session, and the NEXT turn that finishes reports `cancelled` once (the flag is then cleared). `AcpStdioAgent.serve` reads one frame at a time, so a cancel is seen between turns; a caller that needs to interrupt a running turn feeds frames from a second thread and watches `session.cancelled` inside `on_prompt`.

@@ -137,6 +137,9 @@ def test_a_client_drives_a_scripted_session_and_maps_the_updates(make):
 def _agent_cases(agent):
     old = agent.handle(A.initialize_request(1, 99))
     assert old["result"]["protocolVersion"] == A.SERVED_VERSIONS[0]
+    odd = agent.handle(A.initialize_request(8, True))  # True == 1 is not a version
+    assert odd["result"]["protocolVersion"] == A.SERVED_VERSIONS[0]
+    assert type(odd["result"]["protocolVersion"]) is int
     assert agent.handle({"jsonrpc": "2.0", "method": "session/cancel", "params": {}}) is None
     bad = agent.handle(A.request(2, "session/new", {"cwd": 5}))
     assert bad["error"]["code"] == A.INVALID_PARAMS
@@ -188,6 +191,19 @@ def test_the_agent_serves_lines_and_streams_updates_before_the_answer():
         "answer",
     ]
     assert frames[-1]["result"]["stopReason"] == "end_turn"
+
+
+def test_a_cancel_sent_as_a_request_is_answered_and_a_bad_tool_call_title_is_refused_cleanly():
+    agent = A.AcpStdioAgent(lambda line: None, on_prompt=_on_prompt)
+    reply = agent.handle(A.request(9, "session/cancel", {"sessionId": "s1"}))
+    assert reply["error"]["code"] == A.INVALID_PARAMS
+    peer = _Peer()
+    client = A.AcpStdioClient(lambda argv, env: peer, ["x"], poll_s=0.01)
+    result = A.PromptResult(A.OK)
+    bad = {"jsonrpc": "2.0", "id": "p", "method": "session/request_permission"}
+    client.connect(1)
+    client._on_other({**bad, "params": {"toolCall": "bad"}}, result, None, None)
+    assert result.permissions == [("", "")]
 
 
 def test_a_cancel_during_a_prompt_makes_the_stop_reason_cancelled():

@@ -207,7 +207,9 @@ class AcpStdioAgent:
             sid = params.get("sessionId") if isinstance(params, dict) else None
             if isinstance(sid, str) and (session := self.sessions.get(sid)) is not None:
                 session.cancelled = True
-            return None  # a notification: a malformed one is ignored, never raised
+            if "id" in msg:  # request-shaped by mistake: a request is always answered
+                return err(msg["id"], INVALID_PARAMS, "session/cancel is a notification")
+            return None  # a malformed one is ignored, never raised
         if "id" not in msg:
             return None
         if (refusal := check_request(msg)) is not None:
@@ -215,7 +217,7 @@ class AcpStdioAgent:
         mid = msg["id"]
         if method == "initialize":
             want = params.get("protocolVersion")
-            version = want if want in self.versions else self.versions[0]
+            version = want if type(want) is int and want in self.versions else self.versions[0]
             caps = {"loadSession": False, "promptCapabilities": {}}
             return ok(
                 mid,
@@ -408,7 +410,8 @@ class AcpStdioClient:
         elif method == "session/request_permission" and "id" in msg:
             params = msg.get("params") or {}
             chosen = permission(params) if permission is not None else None
-            title = str((params.get("toolCall") or {}).get("title", ""))
+            call = params.get("toolCall")
+            title = str(call.get("title", "")) if isinstance(call, dict) else ""
             result.permissions.append((title, chosen or ""))
             outcome = (
                 {"outcome": "selected", "optionId": chosen} if chosen else {"outcome": CANCELLED}
