@@ -48,6 +48,19 @@ def test_head_is_stamped_but_not_in_key():
     assert a.facts["git_head"] == "a" * 12 and b.facts["git_head"] == "b" * 12
 
 
+def test_load_and_cache_change_cond_not_key():
+    a, b = _facts(load_ratio=0.1, cache="cold"), _facts(load_ratio=2.0, cache="warm")
+    assert a.key == b.key and a.cond != b.cond
+    assert a.facts["load"] == "idle" and b.facts["load"] == "saturated"
+
+
+def test_cgroup_v1_memory():
+    mem = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+    cpu = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"
+    assert E.cgroup_state(_reader({mem: "1073741824\n", cpu: "-1\n"})) == "limited"
+    assert E.cgroup_state(_reader({mem: "9223372036854771712\n", cpu: "-1\n"})) == "unlimited"
+
+
 def test_load_classes_use_bands():
     assert E.load_class(0.05) == "idle"
     assert E.load_class(0.6) == "busy"
@@ -106,12 +119,24 @@ def test_cache_state(tmp_path: Path):
     assert E.cache_state([d]) == "warm"
 
 
+def _identifiers(tmp_path: Path) -> list[str]:
+    try:
+        user = getpass.getuser()
+    except (KeyError, OSError):
+        user = ""
+    paths = (tmp_path, Path.home())
+    names = [socket.gethostname(), user, tmp_path.name]
+    names += [str(p) for p in paths] + [p.as_posix() for p in paths]
+    return [n for n in names if n]
+
+
 def test_collect_runs_here_and_leaks_nothing(tmp_path: Path):
     fp = E.collect(tmp_path, parallel_cap=2, xdist_workers=1, cache_dirs=[tmp_path / "none"])
-    blob = json.dumps({"k": fp.key, "f": fp.facts, "s": fp.stamp()})
-    for secret in (socket.gethostname(), getpass.getuser(), str(tmp_path), str(Path.home())):
+    blob = "\n".join([fp.key, fp.cond, json.dumps(fp.facts, ensure_ascii=False), fp.stamp()])
+    blob = blob.replace("\\\\", "\\")
+    for secret in _identifiers(tmp_path):
         assert secret not in blob
-    assert fp.stamp().startswith("env:" + fp.key)
+    assert fp.stamp().startswith(f"env:{fp.key}/{fp.cond}")
     assert set(fp.facts) >= {
         "cpu_count",
         "load",

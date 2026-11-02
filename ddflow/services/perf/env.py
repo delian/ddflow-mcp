@@ -31,6 +31,10 @@ from ddflow.infra.worktree._merge import head_sha
 UNAVAILABLE = "unavailable"
 DEFAULT_LOAD_BANDS: tuple[float, float] = (0.25, 1.0)
 KEY_LEN = 12
+#: cgroup v1 reports "no limit" as a number near 2**63; anything below 2**60 is a real cap.
+V1_UNLIMITED_BYTES = 2**60
+#: Facts that change between runs on one machine: they form `cond`, not the key.
+CONDITION_FACTS = ("load", "cache")
 HEAD_LEN = 12
 
 Reader = Callable[[str], "str | None"]
@@ -38,13 +42,18 @@ Reader = Callable[[str], "str | None"]
 
 @dataclass(frozen=True)
 class Fingerprint:
+    """``key`` names the machine class (stable across runs and commits); ``cond`` names the
+    run-time condition (load class, cache state). Compare series on ``key``; also require an
+    equal ``cond`` when load or cache could explain a difference."""
+
     key: str
+    cond: str = ""
     facts: dict[str, object] = field(default_factory=dict)
 
     def stamp(self) -> str:
         """One line for evidence: the key then the readable facts."""
         parts = " ".join(f"{k}={v}" for k, v in sorted(self.facts.items()))
-        return f"env:{self.key} {parts}"
+        return f"env:{self.key}/{self.cond} {parts}"
 
 
 def load_class(ratio: float | None, bands: tuple[float, float] = DEFAULT_LOAD_BANDS) -> str:
@@ -75,6 +84,9 @@ def cgroup_state(read: Reader = _read_file) -> str:
     mem = read("/sys/fs/cgroup/memory.max")
     if mem is not None and mem.strip():
         seen.append(mem.strip() != "max")
+    v1mem = read("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+    if v1mem is not None and v1mem.strip().isdigit():
+        seen.append(int(v1mem.strip()) < V1_UNLIMITED_BYTES)
     quota = read("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
     if quota is not None and quota.strip():
         seen.append(quota.strip() != "-1")
@@ -130,22 +142,25 @@ def fingerprint(
     python_version, ddflow_version = r.python_version, r.ddflow_version
     git_head, cache, container, cgroup = r.git_head, r.cache, r.container, r.cgroup
     vm = "unknown" if system == "Darwin" or (container and cgroup == UNAVAILABLE) else "no"
+    load, cache_fact = load_class(load_ratio, load_bands), cache or UNAVAILABLE
     facts: dict[str, object] = {
         "cpu_count": _num(cpu_count),
-        "load": load_class(load_ratio, load_bands),
+        "load": load,
         "xdist_workers": _num(xdist_workers),
         "parallel_cap": _num(parallel_cap),
         "os": system or UNAVAILABLE,
         "python": ".".join(python_version.split(".")[:2]) or UNAVAILABLE,
-        "cache": cache or UNAVAILABLE,
+        "cache": cache_fact,
         "ddflow": ddflow_version or UNAVAILABLE,
         "container": container,
         "cgroup": cgroup,
         "vm": vm,
     }
+    cond = of_obj({k: facts.pop(k) for k in CONDITION_FACTS}, length=KEY_LEN)
     key = of_obj(facts, length=KEY_LEN)
+    facts.update(load=load, cache=cache_fact)
     facts["git_head"] = git_head[:HEAD_LEN] if git_head else UNAVAILABLE
-    return Fingerprint(key, facts)
+    return Fingerprint(key, cond, facts)
 
 
 def _git_head(root: Path) -> str:
