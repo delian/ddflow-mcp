@@ -165,6 +165,20 @@ def _still_standing(it, gate: str, findings) -> set[str]:
     }
 
 
+def _confirmed_unrechecked(it, gate: str) -> bool:
+    """Is there a CONFIRMED finding of ``gate`` that no later delta round re-checked?
+
+    A full round that merely does not raise one has not re-checked the fix, so a converged
+    full re-review must not pass while one stands (bug B-push-failed-review-delta). Read from
+    the recorded gate (whose latest outcome is still the previous round's `failed`) so the
+    exact "confirmed and not cleared after a delta" rule lives in one place. Returns False
+    for a non-item `it` (the `_gate_outcome` unit tests pass a bare object and mock
+    `_last_review` instead)."""
+    if it is None or not callable(getattr(it, "gate_outcome", None)):
+        return False
+    return bool(GD.unresolved_review_failure(it, gate, confirmed_only=True))
+
+
 def _gate_outcome(
     best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
 ) -> tuple[str, dict | None]:
@@ -183,17 +197,10 @@ def _gate_outcome(
             ],
             extra_evidence,
         )
-    # Only after a REVIEWED FULL round left findings to converge from: an unavailable or
-    # findingless earlier round (which still spends a round) is not a previous review, and
-    # neither is a delta round no full round has run before. A delta covers only the new
-    # commits, not the whole diff, so the full round that follows it is still the author's
-    # FIRST whole-diff review and must block on every finding (bug B-push-failed-review-delta).
+    # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
+    # earlier round (which still spends a round) is not a previous review.
     prior = _last_review(it, gate) if it is not None and bool(item) else {}
-    converged_round = (
-        converging
-        and bool(prior.get("chunk_findings"))
-        and (prior.get("review_kind") != "delta" or bool(prior.get("rounds")))
-    )
+    converged_round = converging and bool(prior.get("chunk_findings"))
     # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status == RV.REVIEWED for f in r.findings]
@@ -206,6 +213,11 @@ def _gate_outcome(
         known=_still_standing(it, gate, prior.get("chunk_findings")),
     )
     if blocking:
+        return "failed", extra_evidence
+    # A full re-review must not converge (pass on below-floor findings) while a confirmed
+    # finding the gate has ever recorded still awaits a later delta round (bug
+    # B-push-failed-review-delta).
+    if converged_round and _confirmed_unrechecked(it, gate):
         return "failed", extra_evidence
     converged = {
         "findings_below_floor": len(found),
