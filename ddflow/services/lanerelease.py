@@ -194,8 +194,9 @@ def warning(repo: Path, cfg, st, now: float | None = None) -> str:
             + (f": {shown}" if rel else "")
             + f"), integrator not running: `{RUN_CLI}` (MCP: `{RUN_MCP}`)"
         )
-    newest = {e.item: e.seq for e in MQ.entries(repo)}
-    for e in MQ.entries(repo):
+    every = MQ.entries(repo)  # read once: a concurrent add must not split the two passes
+    newest = {e.item: e.seq for e in every}
+    for e in every:
         it = st.items.get(e.item)
         if (
             e.released

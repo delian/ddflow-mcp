@@ -127,8 +127,9 @@ def test_a_wait_with_nobody_integrating_is_a_warning_with_the_next_call(rp, monk
     text = LR.warning(rp, cfg, st, now=late)
     assert "1 entries waiting (1 released: T1), integrator not running" in text
     assert "`ddflow queue run`" in text and "`ddflow_queue action=run`" in text
+    monkeypatch.setattr(LR.time, "time", lambda: late)
     status = MA.queue_status(rp)
-    assert "warning" in status.data
+    assert "integrator not running" in status.data["warning"]
     monkeypatch.setattr(LR.time, "time", lambda: late)
     assert "integrator not running" in _queue_block(rp, st, cfg)
 

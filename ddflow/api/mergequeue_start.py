@@ -46,13 +46,15 @@ def start_integrator(
     lock.parent.mkdir(parents=True, exist_ok=True)
     try:
         with fsio.file_lock(lock, START_LOCK_WAIT_S):
-            return _start_locked(repo, cfg, agent, starter or job_detach)
+            return _start_locked(repo, agent, starter or job_detach)
     except fsio.LockTimeout:
         return _not_started("another start is in progress; it will run the integrator")
 
 
-def _start_locked(repo: Path, cfg, agent: str, starter: Starter) -> dict:
-    _l, _c, st = _load(repo, agent)  # read under the lock: a start just finished is seen
+def _start_locked(repo: Path, agent: str, starter: Starter) -> dict:
+    _l, cfg, st = _load(repo, agent)  # read under the lock: a start just finished is seen
+    if cfg.merge_queue.auto_run != "on":
+        return _not_started("[merge_queue].auto_run was turned off")
     waiting = [e for e in MQ.live(repo) if e.state == MQ.QUEUED]
     if not waiting:
         return _not_started("nothing is waiting in the merge queue")
