@@ -74,7 +74,8 @@ def on_base(
     failing = [i for i in ids if known.get(i)]
     red = all(known.get(i) for i in ids)
     return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,
-            "outcome": "failed" if red else (outcomes[-1] if outcomes else ""), "command": cmd,
+            "outcome": "failed" if red or "failed" in outcomes else (outcomes[-1] if outcomes else ""),
+            "command": cmd,
             "ids": ids, "still_failing": failing}  # fmt: skip
 
 
@@ -85,7 +86,7 @@ def _chunk(gdef, cwd: Path, part: list[str], run) -> tuple[str, dict[str, bool] 
     outcome, ev = run(gdef, cwd)
     failing = set(ev.get("failed_tests") or ())
     whole = outcome == "passed" or (
-        outcome == "failed" and failing and not TS.fail_fast(gdef.command)
+        outcome == "failed" and failing and (len(part) == 1 or not TS.fail_fast(gdef.command))
     )
     if not whole or ev.get("failed_tests_more"):
         return outcome, None

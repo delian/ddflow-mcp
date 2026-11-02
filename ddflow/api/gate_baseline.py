@@ -10,6 +10,7 @@ from typing import Any
 
 from ..infra import worktree as W
 from ..services import testscope as TSC
+from ..services import testselect as TS
 from ..services.gates import baseline as BL
 from ..services.gates import baseline_red as BR
 from ..services.gates.defs import load_gates
@@ -43,7 +44,8 @@ def apply(  # noqa: PLR0913, PLR0917
     ids = BR.candidate_ids(gate, gdef.command, seen, fail_fast) if result == "failed" else []
     probe = gdef
     if gate == "ci":  # `ddflow ci run` is no pytest: the whole failing list is kept aside, and
-        ids, probe = _ci_ids(repo, cfg, ev, ids), _unit_tests_def(repo, cfg) or gdef
+        probe = _unit_tests_def(repo, cfg) or gdef
+        ids = [] if TS.fail_fast(probe.command) else _ci_ids(repo, cfg, ev, ids)
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
@@ -97,8 +99,10 @@ def _linked(repo: Path, agent: str, ids: list[str]) -> str:
 
 
 def _names(text: str, test_id: str) -> bool:
-    """Does ``text`` name ``test_id`` as a whole id (not as the start of a longer one)?"""
-    return re.search(rf"(?<![\w:/.\[-]){re.escape(test_id)}(?![\w\]\[:-]|\.\w)", text) is not None
+    """Does ``text`` name ``test_id`` as a whole id (not inside a longer one or a path)?"""
+    left = r"(?:(?<![^\s,;(`'\"\[]))"  # start, or after a space or opening punctuation
+    right = r"(?=$|[\s,;)`'\"\]]|[.:](?:\s|$))"
+    return re.search(left + re.escape(test_id) + right, text) is not None
 
 
 def _ci_ids(repo, cfg, ev: dict[str, Any], capped: list[str]) -> list[str]:

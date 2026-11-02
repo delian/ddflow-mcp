@@ -15,6 +15,7 @@ from conftest import run_cli
 from test_gate_baseline_red import ID, _project
 
 from ddflow.config import Config
+from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.core.records import GateRecord
 from ddflow.infra.log import EventLog
@@ -63,6 +64,8 @@ def test_a_subset_of_the_baseline_failures_is_accepted_and_told_once(repo) -> No
     again = _state(repo)
     assert set(again.bugs) == bugs
     assert len(IB.pending(repo, "coordinator")) == 1
+    asked = [r for r in asks_of(again).values() if r["answered_by"] == "policy:baseline_red_auto"]
+    assert len(asked) == 1
 
 
 def test_the_knob_off_leaves_it_to_a_person(repo) -> None:
@@ -138,6 +141,8 @@ def test_an_open_bug_naming_the_ids_is_linked_not_refiled(repo) -> None:
     bug = next(iter(_state(repo).bugs))
     assert GB._linked(repo, "worker", [ID]) == bug
     assert GB._linked(repo, "worker", ["tests/other.py::t"]) == ""
+    assert GB._names(f"see {ID}: fails.", ID) and GB._names(f"[{ID}] red", ID)
+    assert not GB._names(f"{ID}_b is red", ID) and not GB._names(f"{ID}/helpers.py", ID)
     assert GB._linked(repo, "worker", [ID[:-1]]) == ""  # the start of a longer id is not the id
 
 

@@ -49,6 +49,14 @@ def cache_load(
         return {}
 
 
+def _fresh(entry, now: float, ttl_s: int) -> bool:
+    """Is a held ``[failed, measured_at]`` entry well formed and still within the ttl?"""
+    try:
+        return now - float(entry[1]) <= ttl_s
+    except (TypeError, ValueError, IndexError, KeyError):
+        return False
+
+
 def cache_store(
     repo: Path, sha: str, results: dict[str, bool], ttl_s: int, command: str = ""
 ) -> None:
