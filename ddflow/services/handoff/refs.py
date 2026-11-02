@@ -10,12 +10,11 @@ the owner's tree or index. The redacted patch text is also stored content-addres
 from __future__ import annotations
 
 import re
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from ...core import blobref as B
-from ...infra import git
+from ...infra import fsio, git
 from ...infra.blobstore import BlobStore
 
 NAMESPACE = "refs/ddflow/suggest"
@@ -81,8 +80,8 @@ def cut(repo: Path | str, tip: str, patch: str, ref: str, message: str) -> Cut:
     """Apply ``patch`` to ``tip`` in a scratch index and point ``ref`` at the result."""
     if not tip:
         return Cut(UNAVAILABLE, why="no base commit was given, so no ref was cut")
-    with tempfile.TemporaryDirectory(prefix="ddflow-sg-") as tmp:
-        env = {**_IDENT, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+    with fsio.scratch_dir("ddflow-sg-") as tmp:
+        env = {**_IDENT, "GIT_INDEX_FILE": str(tmp / "index")}
         steps = (
             ("read-tree", tip),
             ("apply", "--cached", "--whitespace=nowarn", "-"),
