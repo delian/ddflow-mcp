@@ -121,7 +121,7 @@ def _docstrings(tree: ast.AST) -> set[int]:
 
 
 def _vendor_key_nodes(tree: ast.AST) -> set[int]:
-    """``id()`` of the string constants that are KEYS of the ``FAMILY_HINTS`` dict literal.
+    """``id()`` of the string constants that are KEYS of the module-level ``FAMILY_HINTS`` dict.
 
     ``FAMILY_HINTS`` maps model-name substrings to pretraining families -- a domain apart from
     the harness descriptors. A key that also names a harness ('grok' since
@@ -130,11 +130,11 @@ def _vendor_key_nodes(tree: ast.AST) -> set[int]:
     anywhere else in the module is still a site (Bd567efa0b3).
     """
     nodes: set[int] = set()
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Assign):
-            targets, value = n.targets, n.value
-        elif isinstance(n, ast.AnnAssign):
-            targets, value = [n.target], n.value
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign):
+            targets, value = stmt.targets, stmt.value
+        elif isinstance(stmt, ast.AnnAssign):
+            targets, value = [stmt.target], stmt.value
         else:
             continue
         if isinstance(value, ast.Dict) and any(
@@ -242,6 +242,15 @@ def test_vendor_key_outside_family_hints_is_still_a_site():
     assert _module_sites("ddflow/config_sections/agent.py", src, ids, _roots()) == 0
     planted = src + '\nCURRENT_AGENT = "grok"\n'
     assert _module_sites("ddflow/config_sections/agent.py", planted, ids, _roots()) == 1
+
+
+def test_shadowed_family_hints_is_not_exempt():
+    # _vendor_key_nodes is scoped to the MODULE-level FAMILY_HINTS table. A function-local
+    # dict also named FAMILY_HINTS is not that vendor table, so its keys are still sites.
+    ids = {h.id for h in HR.load()}
+    assert "grok" in ids
+    source = 'def f():\n    FAMILY_HINTS = {"grok": "x"}\n    return FAMILY_HINTS\n'
+    assert sites(source, ids, _roots(), skip_vendor_keys=True) == [2]
 
 
 #: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125): it scans the whole
