@@ -41,7 +41,7 @@ module where it is not a second definition.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -202,3 +202,30 @@ class Forge(Protocol):
 
     def resolve(self, number: int, thread_id: str) -> None:
         """Mark a review thread resolved."""
+
+
+@runtime_checkable
+class HttpClient(Protocol):
+    """One HTTP exchange, the way every caller makes it.
+
+    Home: `ddflow.adapters.http` (urllib.request / http.client; the one module allowed to
+    import them). Single adapter; the fake is `FakeHttpClient`. The adapter never decides
+    consent or reads configuration: the caller checks both and passes its own timeout.
+    """
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
+        timeout: float,
+        max_bytes: int | None = None,
+        raise_for_status: bool = True,
+        on_connect: Callable[[Any], None] | None = None,
+    ) -> Any:
+        """Send the request; an `HttpResponse` (status, headers, body bytes). Raises only
+        `HttpError` subclasses: `HttpTimeout`, `HttpConnectionError` (`HttpTlsError`,
+        `HttpSchemeError`), `HttpProtocolError` and, unless `raise_for_status` is false,
+        `HttpStatusError`. `on_connect` receives an object with `abort()` once connected."""

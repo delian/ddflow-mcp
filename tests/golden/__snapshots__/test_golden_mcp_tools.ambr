@@ -909,7 +909,7 @@
     'ddflow_task': '''
       {
        "name": "ddflow_task",
-       "description": "Tasks, phases and research notes. Set `action`; required arguments in brackets: phase_add(id), split(id,into), add(id), research_add(question,verdict), update(id), remove(id), resolve(id,keep), phase_close(id,imported), batch, fold(dup,keep), rename(old,new).",
+       "description": "Tasks, phases and research notes. Set `action`; required arguments in brackets: phase_add(id), split(id,into), add(id), research_add(question,verdict), update(id), remove(id), resolve(id,keep), phase_close(id,imported), batch, fold(dup,keep), rename(old,new), phase_complete(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1089,6 +1089,10 @@
           "type": "string",
           "description": "Its new id."
          },
+         "approval": {
+          "type": "string",
+          "description": "An agent's route: 'request' asks the operator, then the approval id they answered."
+         },
          "action": {
           "type": "string",
           "enum": [
@@ -1102,7 +1106,8 @@
            "phase_close",
            "batch",
            "fold",
-           "rename"
+           "rename",
+           "phase_complete"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -1117,7 +1122,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1326,6 +1331,7 @@
            "metrics",
            "health",
            "docs",
+           "archdeps",
            "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."

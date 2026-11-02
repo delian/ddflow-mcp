@@ -13,6 +13,7 @@ import zlib
 from typing import Any
 
 from ..registry import Registry
+from .http import FakeHttpClient
 
 FAKES: Registry[type] = Registry("fake", key=lambda cls: cls.__name__.removeprefix("Fake"))
 
@@ -57,3 +58,6 @@ class FakeDigest:
         self, obj: Any, algo: str = "blake2b", *, size: int | None = 12, length: int | None = None
     ) -> str:
         return self.content_digest(self.canonical(obj), algo, size=size, length=length)
+
+
+FAKES.register(FakeHttpClient)
