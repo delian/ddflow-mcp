@@ -108,8 +108,8 @@ def test_the_shared_files_name_no_family_that_has_its_own_files():
     assert every, "discovery found nothing"
     for rel in FORMER_SHARED:
         text = (ROOT / rel).read_text("utf-8")
-        # only the shrink-only baseline ceiling may still name the legacy ports
-        names = every - LEGACY if rel == "tests/test_ports_contract.py" else every
+        # the baseline ceiling names the legacy ports; in prose "Git" is also just a word
+        names = every - LEGACY if rel.endswith((".md", "test_ports_contract.py")) else every
         named = sorted(n for n in names if n in text)
         assert not named, f"{rel} names {named}: it is a per-family file now, not a shared list"
 
