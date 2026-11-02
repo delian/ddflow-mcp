@@ -46,8 +46,8 @@ def apply(  # noqa: PLR0913, PLR0917
     if gate == "ci":  # `ddflow ci run` is no pytest: the whole failing list is kept aside, and
         probe = _unit_tests_def(repo, cfg) or gdef
         ids = _ci_ids(repo, cfg, ev, ids)
-        if len(ids) > 1 and TS.fail_fast(probe.command):
-            ids = []  # a run stopped at its first failure lists one of many
+        if TS.fail_fast(probe.command):
+            ids = []  # a run stopped at its first failure lists one of possibly many
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)

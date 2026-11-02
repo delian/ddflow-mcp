@@ -241,3 +241,30 @@ def test_a_malformed_cache_is_dropped_not_fatal_and_a_name_after_equals_matches(
     BL.cache_store(repo, sha, {"c": True}, 3600)
     assert BL.cache_load(repo, sha, 3600) == {"c": True}
     assert GB._names(f"--deselect={ID}", ID)
+
+
+def test_a_fail_fast_ci_probe_never_attributes_its_failures(repo, monkeypatch) -> None:
+    from ddflow.api import gate_baseline as GB
+
+    monkeypatch.setattr(GB, "_ci_ids", lambda *a: [ID])  # one id: of how many that never ran?
+    monkeypatch.setattr(GB, "_unit_tests_def", lambda *a: SimpleNamespace(command="pytest -x -q"))
+
+    def boom(*a):
+        raise AssertionError("the base must not be asked")
+
+    monkeypatch.setattr(BR, "on_base", boom)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    it = SimpleNamespace(id="T1", base="main")
+    got = GB.apply(
+        repo,
+        cfg,
+        "a",
+        it,
+        "ci",
+        SimpleNamespace(command="ddflow ci run"),
+        "failed",
+        {},
+        None,
+        False,
+    )
+    assert got[0] == "failed"
