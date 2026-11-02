@@ -110,7 +110,7 @@ def _is_redirect(token: str) -> bool:
 def _unquoted_newlines_to_semicolons(line: str) -> str:
     """A newline outside quotes separates commands (shlex would read it as blank space)."""
     out, quote = [], ""
-    for ch in line:
+    for ch in line.replace("\\\n", " "):  # backslash-newline is a continuation
         if quote:
             if ch == quote:
                 quote = ""
@@ -245,6 +245,7 @@ class _Scan:
             _unquoted_newlines_to_semicolons(line), posix=True, punctuation_chars=True
         )
         lex.whitespace_split = True
+        lex.commenters = ""  # a comment ends at the newline we turned into `;`: not worth parsing
         try:
             tokens = list(lex)
         except ValueError:
