@@ -42,13 +42,12 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
         say(line)
 
 
-def _release_at_merge(log, cfg, item: str) -> bool:
+def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
     """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
-    are free for a waiter, whose `wait` reads the release as ready. `complete` needs no lease. `[lease].release_at_merge`
-    off keeps the hold to complete. Only reached after a landing, so a failed merge keeps it."""
-    if not cfg.lease.release_at_merge:
-        return False
-    return LS.release(log, item, note="merged")
+    are free for a waiter, whose `wait` reads the release as ready, and `complete` needs no
+    lease. Kept when `[lease].release_at_merge` is off or a hotfix back-merge failed (it needs
+    its files to retry). Only reached after a landing, so a failed merge keeps the lease."""
+    return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
 
 
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
@@ -233,7 +232,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             extra if br.ok else f"{extra}: {br.err or br.out}"
         )
     # After the back-merges: a hotfix whose back-merge failed still needs its files to retry.
-    freed = False if back_failed else _release_at_merge(log, cfg, item)
+    freed = _release_at_merge(log, cfg, item, back_failed)
     human_gate = GM.record_merge(
         log,
         cfg,
