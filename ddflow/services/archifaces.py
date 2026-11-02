@@ -169,7 +169,9 @@ def ratchet(
     now = counts(census)
     # a file that stopped parsing is reported in `unparsed`; its sites did not go away
     broken = {m.replace(".", "/") + ext for m in census.unparsed for ext in (".py", "/__init__.py")}
-    grew, shrank = [], []
+    # fail closed: a file the census could not read is an unknown, not an absence
+    grew: list[str] = [f"unparsed {m}: the census cannot read it" for m in census.unparsed]
+    shrank: list[str] = []
     for key in sorted(now):
         was = baseline.get(key, 0)
         if now[key] > was:

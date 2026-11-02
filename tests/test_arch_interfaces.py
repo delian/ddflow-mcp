@@ -516,7 +516,8 @@ def test_a_file_that_stops_parsing_is_not_a_shrink(tmp_path: Path):
     (root / "ddflow" / "a.py").write_text("def f(:\n")
     census = I.scan(root)
     assert census.unparsed == ("ddflow.a",)
-    assert I.ratchet(census, base) == ((), ())
+    grew, shrank = I.ratchet(census, base)  # not a shrink; an unknown fails closed
+    assert shrank == () and grew == ("unparsed ddflow.a: the census cannot read it",)
 
 
 def test_seventh_round_findings_stay_fixed(tmp_path: Path):
