@@ -64,6 +64,7 @@ PROTOCOL_HOMES: dict[str, str] = {
 # Modules already allowed to speak a protocol by hand: the adapter and its fake (ADP-mcp).
 PROTOCOL_MODULES: dict[str, tuple[str, ...]] = {
     "mcp": ("ddflow.adapters.mcp", "ddflow.adapters.fakes.mcp"),
+    "acp": ("ddflow.adapters.acp", "ddflow.adapters.fakes.acp"),
 }
 
 
