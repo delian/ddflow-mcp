@@ -103,6 +103,10 @@ def spec_from_row(row: dict[str, Any]) -> ToolSpec:
     parser = str(row.get("parser", "none"))
     if parser not in PARSERS:
         raise ValueError(f"tool {tid!r}: unknown parser {parser!r}. Known: {', '.join(PARSERS)}")
+    try:
+        re.compile(str(row.get("version_re", r"(\d+)")))
+    except re.error as exc:
+        raise ValueError(f"tool {tid!r}: version_re is not a regular expression: {exc}") from exc
     extra = {k: str(row[k]) for k in ("version_re", "pin", "install", "title") if k in row}
     return ToolSpec(
         tid,
@@ -187,7 +191,8 @@ class TableTool:
                 f"Not usable as installed; ask the operator, then run: {s.install}",
             )
         m = re.search(s.version_re, done.out + "\n" + done.err)
-        version = (m.group(1) if m and m.groups() else m.group(0) if m else "").strip()
+        version = ((m.group(1) if m.groups() else m.group(0)) if m else "") or ""
+        version = version.strip()
         out = mk(True, version=version)
         out.pinned_ok = version_at_least(version, self.pin) if self.pin else None
         if out.pinned_ok is False:
@@ -241,7 +246,7 @@ class TableTool:
             )
         try:
             found = tuple(self.parse(done.out))
-        except ToolParseError as exc:
+        except (ToolParseError, KeyError, ValueError, TypeError) as exc:
             return self._unavailable(
                 COULD_NOT_RUN,
                 f"could not parse {s.id} output: {exc}. Run `{' '.join(argv)}` by hand and "

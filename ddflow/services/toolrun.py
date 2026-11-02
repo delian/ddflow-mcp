@@ -27,7 +27,7 @@ SOURCE = "ddflow/adapters/tools.toml"
 
 def command_tool_runner(runner: CommandRunner | None = None, *, source: str = SOURCE) -> ToolRunner:
     """A `ToolRunner` over ``runner`` (default: a plain `CommandRunner`)."""
-    run = runner or CommandRunner()
+    run = CommandRunner() if runner is None else runner
 
     def call(argv: Sequence[str], *, timeout_s: float, cwd: str | None = None) -> RunResult:
         done = run.run(Declared(shlex.join(argv), source), cwd=cwd, timeout_s=timeout_s)

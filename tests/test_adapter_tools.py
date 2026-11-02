@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import json
+import sys
 from pathlib import Path
 from typing import ClassVar
 
@@ -37,9 +38,11 @@ class Script:
     def __init__(self, *answers: RunResult) -> None:
         self.answers = list(answers)
         self.calls: list[tuple[list[str], float]] = []
+        self.cwds: list[str | None] = []
 
     def __call__(self, argv, *, timeout_s, cwd=None):
         self.calls.append((list(argv), timeout_s))
+        self.cwds.append(cwd)
         return self.answers.pop(0)
 
 
@@ -181,7 +184,7 @@ def test_run_appends_args_and_passes_the_timeout_and_cwd():
     T.tool("gitleaks", sc, run_timeout_s=11).run(["--source", "x"], cwd="/w")
     argv, timeout = sc.calls[0]
     assert argv[: len(T.SPECS["gitleaks"].argv)] == list(T.SPECS["gitleaks"].argv)
-    assert argv[-2:] == ["--source", "x"] and timeout == 11
+    assert argv[-2:] == ["--source", "x"] and timeout == 11 and sc.cwds == ["/w"]
 
 
 def test_gitleaks_always_runs_redacted():
@@ -276,11 +279,11 @@ def test_the_production_runner_maps_missing_and_timeout_and_runs_a_real_argv():
     from ddflow.services.toolrun import command_tool_runner
 
     run = command_tool_runner()
-    done = run(["python3", "-c", "print('hi')"], timeout_s=20)
+    done = run([sys.executable, "-c", "print('hi')"], timeout_s=20)
     assert (done.ran, done.code, done.out.strip()) == (True, 0, "hi")
     miss = run(["ddflow-no-such-tool-xyz", "--version"], timeout_s=5)
     assert (miss.ran, miss.kind) == (False, MISSING) and "ddflow-no-such-tool-xyz" in miss.reason
-    slow = run(["python3", "-c", "import time; time.sleep(30)"], timeout_s=0.3)
+    slow = run([sys.executable, "-c", "import time; time.sleep(30)"], timeout_s=0.3)
     assert (slow.ran, slow.kind) == (False, TIMEOUT)
 
 
@@ -288,7 +291,7 @@ def test_an_argument_with_shell_syntax_stays_one_argv_token():
     from ddflow.services.toolrun import command_tool_runner
 
     done = command_tool_runner()(
-        ["python3", "-c", "import sys; print(sys.argv[1])", "a b; echo $HOME"], timeout_s=20
+        [sys.executable, "-c", "import sys; print(sys.argv[1])", "a b; echo $HOME"], timeout_s=20
     )
     assert done.out.strip() == "a b; echo $HOME"
 
@@ -366,3 +369,73 @@ def test_the_default_adapter_passes_the_tool_cases():
 
 def test_the_fake_passes_the_tool_cases():
     tool_cases(FakeExternalTool("t", finding_codes=(1,), install="install-t"))
+
+
+def test_a_parse_failure_never_echoes_the_output():
+    for fn in ("gitleaks", "normalized"):
+        with pytest.raises(ToolParseError) as e:
+            TP.PARSERS[fn]("t", "Secret: AKIAIOSFODNN7EXAMPLE")
+        assert "AKIA" not in str(e.value)
+    with pytest.raises(ToolParseError) as e:
+        TP.PARSERS["gitleaks"]("t", '[{"Secret": "hunter2"}]')
+    assert "hunter2" not in str(e.value)
+
+
+def test_null_fields_are_empty_not_the_word_none():
+    got = TP.PARSERS["normalized"]("t", '[{"rule": "r", "severity": null, "file": null}]')
+    assert (got[0].severity, got[0].file) == ("", "")
+
+
+def test_an_indented_array_after_log_lines_is_read():
+    out = 'log line\n  [\n    {"rule": "x"}\n  ]'
+    assert [f.rule for f in TP.PARSERS["normalized"]("t", out)] == ["x"]
+
+
+def test_precommit_ignores_indented_output_that_looks_like_a_result():
+    out = "mypy....Failed\n  - hook id: mypy\n    test_foo....Failed\n"
+    assert [f.rule for f in TP.PARSERS["pre-commit"]("pre-commit", out)] == ["mypy"]
+
+
+def test_a_pin_that_could_not_be_checked_is_not_usable():
+    from ddflow.adapters.tool_types import ToolProbe
+
+    assert not ToolProbe("t", True, "", "1.0", None).usable
+    assert ToolProbe("t", True, "", "", None).usable
+
+
+def test_a_bad_version_regex_is_refused_when_the_row_is_read():
+    row = {"id": "x", "argv": ["x"], "version_argv": ["x", "-v"], "version_re": "("}
+    with pytest.raises(ValueError, match="version_re"):
+        T.spec_from_row(row)
+
+
+def test_a_version_regex_without_a_match_group_value_does_not_crash():
+    row = {"id": "x", "argv": ["x"], "version_argv": ["x", "-v"], "version_re": r"(\d+)?"}
+    t = T.TableTool(T.spec_from_row(row), Script(ok("no digits")))
+    assert t.probe().installed is True
+
+
+def test_a_parser_that_raises_something_else_is_still_unavailable():
+    t = T.tool("gitleaks", Script(ok("[]")))
+    t.parse = lambda out: (_ for _ in ()).throw(TypeError("bad"))
+    assert t.run().status == UNAVAILABLE
+
+
+def test_the_fake_scripted_copy_keeps_the_other_script():
+    f = FakeExternalTool("s", probe=gone(MISSING, "x")).scripted(run=ok("[]"))
+    assert f.probe().installed is False
+
+
+def test_a_falsy_injected_runner_is_still_used():
+    from ddflow.services.toolrun import command_tool_runner
+
+    class Falsy:
+        def __bool__(self):
+            return False
+
+        def run(self, declared, **kw):
+            from ddflow.services.cmdrunner import CommandRun
+
+            return CommandRun("ran", declared.line, code=0, out="from-injected")
+
+    assert command_tool_runner(Falsy())(["x"], timeout_s=1).out == "from-injected"

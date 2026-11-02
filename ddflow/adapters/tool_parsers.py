@@ -23,6 +23,11 @@ Parser = Callable[[str, str], list[Finding]]
 PARSERS: Registry[Parser] = Registry("tool parser")
 
 
+def _text(value: Any) -> str:
+    """A JSON field as text: null is absent, not the string "None"."""
+    return "" if value is None else str(value)
+
+
 def _int(value: Any) -> int:
     try:
         return max(0, int(value))
@@ -36,7 +41,7 @@ def _json_list(output: str, what: str) -> list[Any]:
     text = output.strip()
     if not text:
         return []
-    starts = [m.start() for m in re.finditer(r"(?m)^\[", text)]
+    starts = [m.start(1) for m in re.finditer(r"(?m)^[ \t]*(\[)", text)]
     for at in starts:
         try:
             value, _ = json.JSONDecoder().raw_decode(text[at:])
@@ -44,9 +49,8 @@ def _json_list(output: str, what: str) -> list[Any]:
             continue
         if isinstance(value, list):
             return value
-    raise ToolParseError(
-        f"{what}: no JSON array in the output (first 80 characters: {text[:80]!r})"
-    )
+    # The output is not echoed: a scanner's text can hold the secret it found.
+    raise ToolParseError(f"{what}: no JSON array in the output ({len(text)} characters)")
 
 
 def parse_none(tool: str, output: str) -> list[Finding]:
@@ -61,15 +65,15 @@ def parse_normalized(tool: str, output: str) -> list[Finding]:
     out = []
     for row in rows:
         if not isinstance(row, dict) or not row.get("rule"):
-            raise ToolParseError(f"{tool}: a finding without a 'rule': {str(row)[:80]}")
+            raise ToolParseError(f"{tool}: a finding without a 'rule'")
         out.append(
             Finding(
                 tool,
                 str(row["rule"]),
-                str(row.get("severity", "")),
-                str(row.get("file", "")),
+                _text(row.get("severity")),
+                _text(row.get("file")),
                 _int(row.get("line", 0)),
-                str(row.get("advisory", "")),
+                _text(row.get("advisory")),
             )
         )
     return out
@@ -81,13 +85,13 @@ def parse_gitleaks(tool: str, output: str) -> list[Finding]:
     out = []
     for row in _json_list(output, tool):
         if not isinstance(row, dict) or not row.get("RuleID"):
-            raise ToolParseError(f"{tool}: a report row without a RuleID: {str(row)[:80]}")
+            raise ToolParseError(f"{tool}: a report row without a RuleID")
         out.append(
             Finding(
                 tool,
                 str(row["RuleID"]),
                 "high",
-                str(row.get("File", "")),
+                _text(row.get("File")),
                 _int(row.get("StartLine", 0)),
             )
         )
@@ -95,7 +99,7 @@ def parse_gitleaks(tool: str, output: str) -> list[Finding]:
 
 
 #: A pre-commit result line: ``<hook name>....Failed`` (the dots pad to the terminal width).
-_HOOK_LINE = re.compile(r"^(?P<hook>.+?)\.{3,}(?:\(.*\))?\s*(?P<state>Passed|Failed|Skipped)\s*$")
+_HOOK_LINE = re.compile(r"^(?P<hook>\S.*?)\.{3,}(?:\(.*\))?\s*(?P<state>Passed|Failed|Skipped)\s*$")
 
 
 def parse_precommit(tool: str, output: str) -> list[Finding]:
@@ -104,7 +108,7 @@ def parse_precommit(tool: str, output: str) -> list[Finding]:
     return [
         Finding(tool, m["hook"].strip(), "error")
         for line in output.splitlines()
-        if (m := _HOOK_LINE.match(line.strip())) and m["state"] == "Failed"
+        if (m := _HOOK_LINE.match(line.rstrip())) and m["state"] == "Failed"
     ]
 
 

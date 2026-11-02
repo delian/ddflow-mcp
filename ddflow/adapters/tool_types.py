@@ -93,8 +93,10 @@ class ToolProbe:
 
     @property
     def usable(self) -> bool:
-        """Installed, and the pin (when one is set) is met. Not knowing is not usable."""
-        return self.installed is True and self.pinned_ok is not False
+        """Installed, and the pin (when one is set) is KNOWN to be met. Not knowing is not usable."""
+        if self.pin:
+            return self.installed is True and self.pinned_ok is True
+        return self.installed is True
 
 
 @dataclass
