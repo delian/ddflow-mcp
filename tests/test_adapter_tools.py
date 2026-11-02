@@ -455,3 +455,10 @@ def test_a_parser_that_raises_anything_is_unavailable():
     t = T.tool("gitleaks", Script(ok("[]")))
     t.parse = lambda out: None.strip()
     assert t.run().status == UNAVAILABLE
+
+
+def test_a_foreign_parser_exception_text_is_not_copied_into_the_reason():
+    t = T.tool("gitleaks", Script(ok("[]")))
+    t.parse = lambda out: (_ for _ in ()).throw(ValueError('row {"Secret":"hunter2"}'))
+    r = t.run()
+    assert r.status == UNAVAILABLE and "hunter2" not in r.reason and "ValueError" in r.reason

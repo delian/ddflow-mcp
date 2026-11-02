@@ -248,7 +248,7 @@ class TableTool:
         except Exception as exc:  # a parser that raises anything is "could not read it"
             return self._unavailable(
                 COULD_NOT_RUN,
-                f"could not parse {s.id} output: {str(exc)[:_ERR_TAIL]}. Run `{' '.join(argv)}` by hand and "
+                f"could not parse {s.id} output: {self._why(exc)}. Run `{' '.join(argv)}` by hand and "
                 "compare with `ddflow/adapters/tool_parsers.py`; until then record unavailable.",
                 done,
             )
@@ -269,6 +269,12 @@ class TableTool:
             return self.runner(list(argv), timeout_s=timeout_s, cwd=cwd)
         except Exception as exc:  # a runner that raises must not turn into a crash or a pass
             return RunResult(False, None, kind=COULD_NOT_RUN, reason=f"the runner failed: {exc}")
+
+    @staticmethod
+    def _why(exc: Exception) -> str:
+        """Our own parse errors never carry the output; any other exception is named by type
+        only, since its text could hold a line of what the tool printed (a secret)."""
+        return str(exc)[:_ERR_TAIL] if isinstance(exc, ToolParseError) else type(exc).__name__
 
     def _absent(self, reason: str) -> str:
         return (
