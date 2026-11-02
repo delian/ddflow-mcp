@@ -65,6 +65,10 @@ def err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any
     return {"jsonrpc": "2.0", "id": mid, "error": error}
 
 
+#: The refusal of a `tools/call` whose `name` or `arguments` has the wrong shape (shared with the fake).
+BAD_CALL = "tools/call needs a string `name` and object `arguments`"
+
+
 def valid_id(mid: Any) -> bool:
     """A JSON-RPC id is a string, a finite number or null; a boolean and NaN are none."""
     if isinstance(mid, bool):
@@ -204,9 +208,11 @@ class McpServer(Protocol):
 class StdioServer:
     """The default `McpServer`: a declared tool table behind a line-framed transport.
 
-    `tools` is the table already filtered to the profile in force (the table and its
-    profiles are declared once, in `surfaces/registry`); `call(name, arguments)` returns the
-    tool's result dict and may raise `ToolError`. `write` takes one encoded line.
+    ddflow's own `Server` passes its own `handle` to `serve` (its era rules stay as they were;
+    `check_request` is not applied to it: that would change behaviour). `tools` is the table
+    already filtered to the profile in force (declared once, in `surfaces/registry`);
+    `call(name, arguments)` returns the tool's result dict and may raise `ToolError`; `write`
+    takes one encoded line.
     """
 
     def __init__(
@@ -263,9 +269,7 @@ class StdioServer:
     def _tools_call(self, mid: Any, params: dict[str, Any]) -> dict[str, Any]:
         name, args = params.get("name"), params.get("arguments", {})
         if not isinstance(name, str) or not isinstance(args, dict):
-            return err(
-                mid, INVALID_PARAMS, "tools/call needs a string `name` and object `arguments`"
-            )
+            return err(mid, INVALID_PARAMS, BAD_CALL)
         if self._call is None or name not in {t.get("name") for t in self.tools}:
             return err(mid, INVALID_PARAMS, f"unknown tool: {name}")
         try:

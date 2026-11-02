@@ -68,7 +68,7 @@ class FakeMcpServer:
     def _tools_call(self, mid: Any, params: dict[str, Any]) -> dict[str, Any]:
         name, args = params.get("name"), params.get("arguments", {})
         if not isinstance(name, str) or not isinstance(args, dict):
-            return W.err(mid, W.INVALID_PARAMS, "tools/call needs a string `name` and object")
+            return W.err(mid, W.INVALID_PARAMS, W.BAD_CALL)
         if name not in {t.get("name") for t in self.tools}:
             return W.err(mid, W.INVALID_PARAMS, f"unknown tool: {name}")
         self.calls.append((name, args))
