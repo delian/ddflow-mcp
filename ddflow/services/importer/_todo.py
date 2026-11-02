@@ -36,11 +36,11 @@ from ._titles import (
     _OLD_TASK_SLUG,
     _RESOURCES,
     TODO_GLOBS,
-    _add_prose_needs,
     _clean_title,
     _continuation,
     _cut_title,
     _prose_globs,
+    _prose_needs,
     _split_id,
     _title_of,
     _titled,
@@ -265,6 +265,13 @@ def scan_todos(
     _set_legacy_ids(found, ids_cfg)
     _add_prose_needs(found, prose)
     return found, empty
+
+
+def _add_prose_needs(found: list[Found], prose: list[tuple[Found, str]]) -> None:
+    """Add, after any `**Needs:**` line's ids, the ones each task's prose names."""
+    known = {f.ident for f in found}
+    for task, text in prose:
+        task.needs.extend(d for d in _prose_needs(text, known, task.ident) if d not in task.needs)
 
 
 def _set_legacy_ids(found: list[Found], ids_cfg) -> None:
@@ -582,6 +589,7 @@ __all__ = [
     "_LESSON_ID",
     "_PREFIX_QUORUM",
     "_SEEN_IN",
+    "_add_prose_needs",
     "_adopt_child_prefix",
     "_agrees",
     "_box_disposition",
