@@ -162,7 +162,7 @@ def integrator_command(repo: Path) -> str:
 def live_jobs(repo: Path, st) -> list:
     """The integrator jobs still running on this machine. Recognised by the END of the
     command: the log stores the interpreter's path redacted, never the arguments."""
-    tail = " ".join(shlex.split(integrator_command(repo))[3:])
+    tail = shlex.join(shlex.split(integrator_command(repo))[3:])
     return [
         j for j in st.jobs.values() if j.command.endswith(tail) and J.status(j).state == "running"
     ]
@@ -188,12 +188,11 @@ def warning(repo: Path, cfg, st, now: float | None = None) -> str:
     waiting = overdue(repo, cfg, now)
     if waiting and not integrator_alive(repo, st):
         rel = [e.item for e in waiting if e.released]
-        names = ", ".join(e.item for e in waiting[:NAMED]) + (
-            ", ..." if len(waiting) > NAMED else ""
-        )
+        shown = ", ".join(rel[:NAMED]) + (", ..." if len(rel) > NAMED else "")
         lines.append(
-            f"{len(waiting)} entries waiting ({len(rel)} released: {names}), integrator not "
-            f"running: `{RUN_CLI}` (MCP: `{RUN_MCP}`)"
+            f"{len(waiting)} entries waiting ({len(rel)} released"
+            + (f": {shown}" if rel else "")
+            + f"), integrator not running: `{RUN_CLI}` (MCP: `{RUN_MCP}`)"
         )
     newest = {e.item: e.seq for e in MQ.entries(repo)}
     for e in MQ.entries(repo):

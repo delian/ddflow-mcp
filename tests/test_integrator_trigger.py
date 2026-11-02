@@ -86,7 +86,7 @@ def test_a_dead_integrator_job_is_restarted_by_the_tick(rp, on, procs, monkeypat
     assert len(procs) == 2
 
 
-def test_the_tick_waits_until_the_entry_is_overdue(rp, on, procs, monkeypatch):
+def test_the_tick_waits_until_the_entry_is_overdue(rp, on, procs, monkeypatch):  # on: knob is ON
     _finish(rp, "T1")
     run_cli_add = MQ.add(rp, "T1", agent="t1", keep_history=50)  # queued, nobody integrating
     assert run_cli_add[1]
@@ -94,6 +94,9 @@ def test_the_tick_waits_until_the_entry_is_overdue(rp, on, procs, monkeypatch):
     ctx = TK.TickCtx(repo=rp, cfg=cfg, state=st)
     monkeypatch.setattr(MS, "time", SimpleNamespace(time=lambda: MQ.live(rp)[0].queued_at + 1))
     assert MS.integrator_tick(ctx) is None and not procs
+    monkeypatch.setattr(MS, "time", SimpleNamespace(time=lambda: MQ.live(rp)[0].queued_at + 10**6))
+    assert MS.integrator_tick(ctx), "past the threshold the same tick starts the run"
+    assert len(procs) == 1
 
 
 def test_auto_run_off_starts_nothing_and_says_how_to_run_it(rp, procs, monkeypatch):
@@ -126,7 +129,8 @@ def test_a_wait_with_nobody_integrating_is_a_warning_with_the_next_call(rp, monk
     assert "`ddflow queue run`" in text and "`ddflow_queue action=run`" in text
     status = MA.queue_status(rp)
     assert "warning" in status.data
-    assert _queue_block(rp, st, cfg) == "" or "integrator not running" in _queue_block(rp, st, cfg)
+    monkeypatch.setattr(LR.time, "time", lambda: late)
+    assert "integrator not running" in _queue_block(rp, st, cfg)
 
 
 def test_a_parked_released_entry_is_named_with_the_call_that_resumes_it(rp):
