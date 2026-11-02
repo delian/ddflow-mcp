@@ -221,15 +221,15 @@ class _Scan:
             return "python"
         return None
 
-    def programs_of(self, e: ast.AST, *, shell: bool = False) -> list[str]:
+    def programs_of(self, e: ast.AST, *, line: bool = False) -> list[str]:
         """The program one command argument names: the head of an argv list or of a name bound
-        to one; a string is the program path itself (``os.execv``), or, for a shell call, a
+        to one; a string is the program path itself (``os.execv``), or, when ``line``, a
         shell LINE: the shell (``sh``) plus every known program the line names as a word. The
         census does not parse shell grammar (quotes, comments and continuations are a parser's
         business, unbounded); naming a known program in any word position over-reports, never
         under-reports. No live site passes a literal line."""
         if isinstance(e, ast.Constant) and isinstance(e.value, str):
-            if shell:
+            if line:
                 named = sorted(w for w in set(_WORD.findall(e.value)) if w in KNOWN_PROGRAMS)
                 return ["sh", *(w for w in named if w != "sh")]
             return [_base(e.value)] if e.value else [DYNAMIC]
@@ -288,7 +288,7 @@ class _Scan:
                 k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True
                 for k in node.keywords
             )
-            for program in self.programs_of(arg, shell=shell) if arg is not None else [DYNAMIC]:
+            for program in self.programs_of(arg, line=shell) if arg is not None else [DYNAMIC]:
                 self.add("program", program, node)
         elif name in ("shutil.which", "ddflow.infra.fsio.which"):
             lit = arg.value if isinstance(arg, ast.Constant) else None
