@@ -106,7 +106,7 @@ def _declared_of(ctx: Context, item: str, at: float | None = None) -> tuple[str,
     mine = [lease for lease in ctx.facts.leases if lease.item == item]
     if at is not None:
         held = [
-            lease for lease in mine if lease.start <= at and (lease.end is None or at <= lease.end)
+            lease for lease in mine if lease.start <= at and (lease.end is None or at < lease.end)
         ]
         mine = held or mine
     return mine[0].globs if mine else ()
@@ -129,7 +129,8 @@ def _actual(
     lands = [
         m
         for m in ctx.facts.landings.get(item, ())
-        if lease is None or (lease.start <= m.at and (lease.end is None or m.at <= lease.end))
+        if ctx.in_scope(item, m.at)
+        and (lease is None or (lease.start <= m.at and (lease.end is None or m.at <= lease.end)))
     ]
     parts = [_landing_files(probes, m, cache) for m in lands]
     if not parts or any(p is None for p in parts):
@@ -137,14 +138,19 @@ def _actual(
     return frozenset(f for p in parts for f in p or ())
 
 
-def _blockers(ctx: Context, item: str, since: float, mine: tuple[str, ...]) -> list[Lease]:
-    """Other items holding a lease at ``since`` whose globs overlap the waiter's."""
-    out = []
-    for lease in ctx.facts.leases:
-        live = lease.start <= since and (lease.end is None or lease.end > since)
-        if live and lease.item != item and any(G.overlap(x, y) for x in mine for y in lease.globs):
-            out.append(lease)
-    return out
+def _blockers(
+    ctx: Context, item: str, began: float, claim: float, mine: tuple[str, ...]
+) -> list[Lease]:
+    """Other items' leases held at any time while ``item`` waited (``began`` to ``claim``)
+    whose globs overlap the waiter's."""
+    return [
+        lease
+        for lease in ctx.facts.leases
+        if lease.item != item
+        and lease.start < claim
+        and (lease.end is None or lease.end > max(began, lease.start))
+        and any(G.overlap(x, y) for x in mine for y in lease.globs)
+    ]
 
 
 def _false_wait(
@@ -153,7 +159,7 @@ def _false_wait(
     """Was this wait false serialization (waiter and every blocker wrote disjoint files)?
     None when it cannot be classified: no blocker found, or git could not say."""
     own = next((x for x in ctx.facts.leases if x.item == item and x.start == claim), None)
-    blockers = _blockers(ctx, item, began, own.globs if own else _declared_of(ctx, item))
+    blockers = _blockers(ctx, item, began, claim, own.globs if own else _declared_of(ctx, item))
     mine = _actual(ctx, probes, item, cache, own)
     theirs = [_actual(ctx, probes, b.item, cache, b) for b in blockers]
     if not blockers or mine is None or any(t is None for t in theirs):

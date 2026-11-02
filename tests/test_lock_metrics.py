@@ -243,8 +243,8 @@ def test_declared_is_scored_on_the_in_window_merge_only():
     log.release("a", "A", T0 + 2000)
     st, cfg, now = frozen(log)
     cfg.metrics.min_samples = 1
-    probes = Fake({("A0", "A1"): ["old/x.py"], ("B0", "B1"): ["src/a.py"]}, {})
-    # scoring the out-of-window merge by mistake would put src/a.py outside old/*.py
+    probes = Fake({("A0", "A1"): ["stray.py"], ("B0", "B1"): ["src/a.py"]}, {})
+    # the out-of-window merge wrote stray.py outside old/*.py: scoring it would show an undeclared write
     since = f"{int(now - (T0 + 1000))}s"
     d = M.run(log.events, st, cfg, now, view="locks", since=since, probes=probes).metrics[
         "declared"
@@ -295,6 +295,54 @@ def test_false_serialization_uses_the_files_of_the_leases_that_collided():
         ("A10", "A11"): ["common.txt"], ("B10", "B11"): ["common.txt"],
         ("A20", "A21"): ["src/a.py"], ("B20", "B21"): ["src/b.py"],
     }  # fmt: skip
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    w = M.run(log.events, st, cfg, now, view="locks", probes=Fake(files, {})).metrics["waits"]
+    assert w["classified"] == 1 and w["false_serialization"]["spans"] == 1
+
+
+def test_merges_before_the_window_are_not_counted():
+    log = seeded()
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    since = f"{int(now - (T0 + 850))}s"  # A's merge (T0+800) is before the window, B and C are in
+    w = M.run(log.events, st, cfg, now, view="locks", since=since, probes=Fake(FILES, CONFLICTS))
+    assert w.metrics["merges"]["merges"] == 2
+
+
+def test_a_blocker_that_arrived_mid_wait_is_counted():
+    log = Log()
+    for t in "ABC":
+        log.task(t, "x")
+    log.claim("a", "A", T0, "src/*.py")
+    merged(log, "A", T0 + 400, "A")
+    log.release("a", "A", T0 + 500)
+    log.add("lease.waiting", "B", "b", T0 + 10, at=T0 + 10, globs=["src/*.py"], holder="a", on=[])
+    log.claim("c", "C", T0 + 200, "src/*.py")  # only arrives mid-wait
+    merged(log, "C", T0 + 450, "C")
+    log.release("c", "C", T0 + 600)
+    log.claim("b", "B", T0 + 700, "src/*.py")
+    merged(log, "B", T0 + 800, "B")
+    log.release("b", "B", T0 + 900)
+    files = {("A0", "A1"): ["src/x.py"], ("C0", "C1"): ["src/b.py"], ("B0", "B1"): ["src/b.py"]}
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    w = M.run(log.events, st, cfg, now, view="locks", probes=Fake(files, {})).metrics["waits"]
+    assert w["classified"] == 1 and w["false_serialization"]["spans"] == 0  # C overlapped B
+
+
+def test_a_merge_at_the_instant_the_lease_ends_belongs_to_that_lease():
+    log = Log()
+    for t in "AB":
+        log.task(t, "x")
+    log.claim("a", "A", T0, "src/*.py")
+    log.add("lease.waiting", "B", "b", T0 + 10, at=T0 + 10, globs=["src/*.py"], holder="a", on=[])
+    merged(log, "A", T0 + 500, "A")
+    log.release("a", "A", T0 + 500)  # merged and released in the same instant
+    log.claim("b", "B", T0 + 600, "src/*.py")
+    merged(log, "B", T0 + 700, "B")
+    log.release("b", "B", T0 + 800)
+    files = {("A0", "A1"): ["src/a.py"], ("B0", "B1"): ["src/b.py"]}
     st, cfg, now = frozen(log)
     cfg.metrics.min_samples = 1
     w = M.run(log.events, st, cfg, now, view="locks", probes=Fake(files, {})).metrics["waits"]
