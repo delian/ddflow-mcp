@@ -444,3 +444,18 @@ register(
         enabled=_flow_enabled,
     )
 )
+
+
+def _integrator_enabled(ctx: TickCtx) -> bool:
+    return getattr(getattr(ctx.cfg, "merge_queue", None), "auto_run", "off") == "on"
+
+
+register(
+    Tick(
+        "merge_queue.integrator",
+        every_s=30,
+        budget_s=20.0,
+        target="ddflow.api.mergequeue_start:integrator_tick",
+        enabled=_integrator_enabled,
+    )
+)
