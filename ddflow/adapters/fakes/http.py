@@ -156,7 +156,8 @@ class FakeHttpClient:
         if err is None:
             return False
         made = ERRORS[err](url) if isinstance(err, str) else err
-        return isinstance(made, HttpConnectionError)  # incl. HttpTlsError, HttpSchemeError
+        # incl. HttpTlsError, HttpSchemeError; a failure of an up connection is `connected`
+        return isinstance(made, HttpConnectionError) and not made.connected
 
     @staticmethod
     def _answer(rule: _Rule, url: str, max_bytes: int | None, raise_for_status: bool):

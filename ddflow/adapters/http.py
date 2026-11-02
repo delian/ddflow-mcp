@@ -60,7 +60,8 @@ class HttpError(OSError):
 
 class HttpConnectionError(HttpError):
     """Nothing answered. `reason` is urllib's (an `OSError`, a string); `timed_out` marks a
-    connect timeout, which urllib reports as a `URLError`, not a `TimeoutError`."""
+    connect timeout, which urllib reports as a `URLError`, not a `TimeoutError`; `connected`
+    says the socket was up before it failed (a peer that hung up while the body was read)."""
 
     kind = "connection"
 
@@ -68,6 +69,7 @@ class HttpConnectionError(HttpError):
         super().__init__(message)
         self.reason = reason if reason is not None else message
         self.timed_out = timed_out
+        self.connected = False
 
 
 class HttpTlsError(HttpConnectionError):
@@ -221,8 +223,10 @@ class UrllibHttpClient:
         """
         require_http_url(url)
         req = urllib.request.Request(url, data=body, headers=dict(headers or {}), method=method)
+        opened = False
         try:
             with _open(req, timeout, on_connect) as resp:
+                opened = True
                 return HttpResponse(resp.status, dict(resp.headers), resp.read(max_bytes))
         except urllib.error.HTTPError as exc:
             data = b""
@@ -237,7 +241,10 @@ class UrllibHttpClient:
                 return HttpResponse(exc.code, headers_out, data)
             raise HttpStatusError(exc.code, headers_out, data, str(exc)) from exc
         except (OSError, http.client.HTTPException) as exc:
-            raise _classify(exc) from exc
+            err = _classify(exc)
+            if isinstance(err, HttpConnectionError):
+                err.connected = opened
+            raise err from exc
 
 
 #: The one stateless instance callers default to; tests pass `FakeHttpClient` instead.
