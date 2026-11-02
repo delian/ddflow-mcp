@@ -87,11 +87,17 @@ def test_import_contracts(tmp_path: Path) -> None:
     assert f"Contracts: {len(contracts)} kept, 0 broken." in output, output
 
 
+_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?")
+
+
 def _dist_name(req: str) -> str:
-    """The PEP 508 distribution name an optional-dependency requirement declares: the part
-    before the first version/extras/marker/direct-reference separator
-    (``rapidfuzz>=3.14.6`` -> ``rapidfuzz``, ``name@url`` -> ``name``)."""
-    return re.split(r"[@<>=!~;\s\[]", req, maxsplit=1)[0].strip()
+    """The PEP 508 distribution name an optional-dependency requirement declares: the
+    leading name component (``rapidfuzz>=3.14.6`` -> ``rapidfuzz``, ``name@url`` ->
+    ``name``). The PEP 508 name alphabet stops at any separator, not only the version
+    operators, so an entry written ``rapidfuzz(>=3.14.6)`` still reads ``rapidfuzz``."""
+    match = _NAME.match(req.strip())
+    assert match, f"no distribution name in requirement {req!r}"
+    return match.group(0)
 
 
 #: Distribution name (as pyproject declares it) -> the top-level import name its package
