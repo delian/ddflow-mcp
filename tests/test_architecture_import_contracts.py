@@ -106,19 +106,26 @@ _EXTRA_IMPORTS: dict[str, str] = {
 }
 
 
-def _undeclared_imports(extras: dict[str, list[str]]) -> dict[str, str | None]:
-    """Declared packages the one-adapter contract does not confine, keyed by distribution
-    name: a package with no ``_EXTRA_IMPORTS`` entry (value ``None``), or whose import name
-    is not in ``forbidden_modules``. Read from pyproject's package list, never a hard-coded
-    module list, so a package added under an existing extra is checked too."""
+def _unconfined(extras: dict[str, list[str]]) -> list[str]:
+    """Why the declared extras are not each confined to one module: a package whose
+    distribution name has no ``_EXTRA_IMPORTS`` entry, or whose import name is not in the
+    one-adapter contract's ``forbidden_modules``, or a ``_EXTRA_IMPORTS`` entry that no
+    extra still declares. Read from pyproject's package list, never a hard-coded module
+    list, so a package added under an existing extra is checked too."""
     named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
-    problems: dict[str, str | None] = {}
+    declared = {_dist_name(req) for reqs in extras.values() for req in reqs}
+    problems: list[str] = []
     for reqs in extras.values():
         for req in reqs:
             dist = _dist_name(req)
             imp = _EXTRA_IMPORTS.get(dist)
-            if imp is None or imp not in named:
-                problems[dist] = imp
+            if imp is None:
+                problems.append(f"{dist}: no _EXTRA_IMPORTS entry for its import name")
+            elif imp not in named:
+                problems.append(f"{imp}: not in forbidden_modules")
+    stale = set(_EXTRA_IMPORTS) - declared
+    if stale:
+        problems.append(f"_EXTRA_IMPORTS entries not declared in pyproject: {sorted(stale)}")
     return problems
 
 
@@ -129,16 +136,16 @@ def test_every_extra_has_a_contract() -> None:
     extras = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"].get(
         "optional-dependencies", {}
     )
-    problems = _undeclared_imports(extras)
-    assert not problems, f"extras whose import names are not forbidden: {problems}"
+    problems = _unconfined(extras)
+    assert not problems, f"extras whose imports are not confined: {problems}"
 
 
 def test_package_added_under_existing_extra_is_checked() -> None:
     """Regression for B-arch-guard-extras-hardcoded: a package added under an existing
-    extra whose import is not confined is reported. The old guard iterated a hard-coded
-    module list, never pyproject's packages, so it missed such a package."""
-    problems = _undeclared_imports({"rag": ["model2vec>=0.9.0", "numpy>=1.26"]})
-    assert problems == {"numpy": None}
+    extra is reported by the guard's own logic. The old guard iterated a hard-coded module
+    list, never pyproject's packages, so it missed such a package."""
+    problems = _unconfined({"rag": ["model2vec>=0.9.0", "acme-noval-pkg>=1.0"]})
+    assert "acme-noval-pkg: no _EXTRA_IMPORTS entry for its import name" in problems
 
 
 def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
