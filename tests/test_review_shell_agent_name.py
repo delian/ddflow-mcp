@@ -50,6 +50,8 @@ def test_a_per_call_name_is_recorded_for_the_agents_own_shell(repo):
         assert cli.returncode == 0, cli.stdout + cli.stderr
         said = json.loads(cli.stdout)
         assert said["agent"] == "sub-1", "the shell's CLI named the wrong identity: " + cli.stdout
-        assert said["source"] == "ddflow_identify", "the shell did not take the harness record: " + cli.stdout
+        assert said["source"] == "ddflow_identify", (
+            "the shell did not take the harness record: " + cli.stdout
+        )
     finally:
         H.declare(repo, "")
