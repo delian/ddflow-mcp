@@ -93,8 +93,10 @@ def _check_bounds(cfg: Config, patch: str, kind: str, reason: str, to_item: str)
             f"the patch is empty or over {h.max_bytes} bytes ([handoff].max_bytes); {hint}"
         )
     shp = P.shape(patch)
-    if shp.binary or not shp.files:
-        raise SuggestionRefused("a suggestion is a text diff of at least one file (git diff)")
+    if shp.binary or shp.malformed or not shp.files:
+        raise SuggestionRefused(
+            "a suggestion is a well-formed text diff of at least one file (git diff)"
+        )
     if len(shp.files) > h.max_files or shp.lines > h.max_lines:
         raise SuggestionRefused(
             f"{len(shp.files)} files / {shp.lines} lines is over {h.max_files} files / "
@@ -117,13 +119,29 @@ def _scan(cfg: Config, patch: str) -> str:
     return clean
 
 
+def _answered_at(row: dict[str, Any]) -> str:
+    return row["history"][-1]["at"] if row["history"] else row["proposed_at"]
+
+
+def _breaker_streak(pair: list[dict[str, Any]]) -> int:
+    """Rejections in a row, newest ANSWER first, up to an acceptance (answer order, not the
+    order the suggestions were sent in)."""
+    streak = 0
+    for r in sorted(pair, key=_answered_at, reverse=True):
+        if r["state"] in (ACCEPTED, APPLIED):
+            break
+        streak += r["state"] == REJECTED
+    return streak
+
+
 def _check_caps(cfg: Config, st, sender: str, to_item: str, to_agent: str, files, now: float):
     h = cfg.handoff
-    mine = [
+    pair = [
         r
         for r in suggestions_of(st).values()
-        if r["from_agent"] == sender and r["to_agent"] == to_agent and r["to_item"] == to_item
+        if r["from_agent"] == sender and r["to_agent"] == to_agent
     ]
+    mine = [r for r in pair if r["to_item"] == to_item]
     hint = _task_hint(to_item)
     for f in files:
         n = sum(1 for r in mine if r["state"] in LIVE and f in r["files"])
@@ -133,24 +151,19 @@ def _check_caps(cfg: Config, st, sender: str, to_item: str, to_agent: str, files
                 f"([handoff].max_open_per_owner_file {h.max_open_per_owner_file}); wait until they "
                 f"are answered or the file is released (`ddflow wait`), or {hint}"
             )
-    if mine and h.min_interval_s:
-        last = max(clock.epoch(r["proposed_at"], default=0.0) for r in mine)
+    if pair and h.min_interval_s:
+        last = max(clock.epoch(r["proposed_at"], default=0.0) for r in pair)
         if now - last < h.min_interval_s:
             raise SuggestionRefused(
                 f"the last suggestion to {to_agent} was {int(now - last)}s ago "
                 f"([handoff].min_interval_s {h.min_interval_s}); try again later"
             )
-    if h.reject_breaker:
-        streak = 0
-        for r in sorted(mine, key=lambda r: r["proposed_at"], reverse=True):
-            if r["state"] in (ACCEPTED, APPLIED):
-                break
-            streak += r["state"] == REJECTED
-        if streak >= h.reject_breaker:
-            raise SuggestionRefused(
-                f"{to_agent} rejected the last {streak} suggestions "
-                f"([handoff].reject_breaker {h.reject_breaker}); {hint}"
-            )
+    streak = _breaker_streak(pair) if h.reject_breaker else 0
+    if h.reject_breaker and streak >= h.reject_breaker:
+        raise SuggestionRefused(
+            f"{to_agent} rejected the last {streak} suggestions "
+            f"([handoff].reject_breaker {h.reject_breaker}); {hint}"
+        )
 
 
 def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyword-only
@@ -171,7 +184,12 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
     now: float | None = None,
 ) -> Proposed:
     """Send ``patch`` to ``to_agent``, the current lease holder of ``to_item``."""
-    sender = sender or log.agent_id
+    if sender and sender != log.agent_id:
+        raise SuggestionRefused(
+            f"the sender is the log's own author ({log.agent_id}), not {sender}: a suggestion is "
+            "bound to who writes it"
+        )
+    sender = log.agent_id
     if not to_agent or not to_item or sender == to_agent:
         raise SuggestionRefused("a suggestion goes to ANOTHER agent that holds the file's lease")
     shp = _check_bounds(cfg, patch, kind, reason, to_item)

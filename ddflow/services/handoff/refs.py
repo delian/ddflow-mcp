@@ -36,9 +36,19 @@ class Cut:
     why: str = ""
 
 
+def _part(text: str, fallback: str) -> str:
+    """One ref component git accepts: no `..`, no leading dot or dash, no `.lock` suffix."""
+    out = _SAFE.sub("-", text)
+    while ".." in out:
+        out = out.replace("..", ".")
+    out = out.strip(".-")
+    out = out.removesuffix(".lock").strip(".-")
+    return out or fallback
+
+
 def ref_name(owner: str, sid: str) -> str:
     """`refs/ddflow/suggest/OWNER/ID`, each part made a safe ref component."""
-    return f"{NAMESPACE}/{_SAFE.sub('-', owner).strip('.-') or 'owner'}/{_SAFE.sub('-', sid)}"
+    return f"{NAMESPACE}/{_part(owner, 'owner')}/{_part(sid, 'id')}"
 
 
 def store_blob(root: Path | str, patch: str) -> str:

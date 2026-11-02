@@ -9,6 +9,11 @@ changes nothing:
 * DDFLOW (``role`` "ddflow") marks seen, expired, and applied-by-patch-id;
 * the OPERATOR (``role`` "operator", which the service grants only to a person) may do any.
 
+The ``role`` marks ("ddflow", "operator") are the log's word, as an ask's source is: the fold
+cannot read the actor table, so `services.handoff.events.move` grants them (only to ddflow's own
+sweep, or to an actor holding ``approve``) and a same-user process that hand-writes one is as
+trusted as one that hand-writes an `ask.answered`. No move ever applies a patch by itself.
+
 The fold is pure: whether a suggestion has EXPIRED is a question of a clock, answered by
 `services.handoff`, never here -- replaying a log at any time yields the same rows. Patch text
 is never in the row: only the digest of the stored (redacted) patch, the files and the counts.
