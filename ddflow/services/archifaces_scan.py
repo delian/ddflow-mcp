@@ -109,9 +109,13 @@ def _is_redirect(token: str) -> bool:
 
 def _unquoted_newlines_to_semicolons(line: str) -> str:
     """A newline outside quotes separates commands (shlex would read it as blank space)."""
-    out, quote = [], ""
+    out, quote, escaped = [], "", False
     for ch in line.replace("\\\n", " "):  # backslash-newline is a continuation
-        if quote:
+        if escaped:  # the character after a backslash is literal (not in single quotes)
+            escaped = False
+        elif ch == "\\" and quote != "'":
+            escaped = True
+        elif quote:
             if ch == quote:
                 quote = ""
         elif ch in "'\"":
@@ -251,9 +255,14 @@ class _Scan:
         except ValueError:
             return line.split()[:1]
         out: list[str] = []
-        fresh, skip = True, False
+        fresh, skip, comment = True, False, False
         for i, t in enumerate(tokens):
-            if skip:  # the target of a redirection (`2>&1`, `> file`) is not a command
+            if comment:  # a `# ...` comment runs to the `;` that a newline became
+                comment = t != ";"
+                fresh = fresh or t == ";"
+            elif t.startswith("#"):
+                comment = True
+            elif skip:  # the target of a redirection (`2>&1`, `> file`) is not a command
                 skip = False
             elif t in _SHELL_OPS:
                 fresh = True

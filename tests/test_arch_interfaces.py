@@ -464,3 +464,14 @@ def test_shell_lines_with_quoted_newlines_and_fd_redirections(tmp_path: Path):
     more = 'import os\nos.system("ls # note\\ngit status")\nos.system("make \\\\\\nall")\n'
     d = I.scan(_tree(tmp_path / "w", {"w.py": more}))
     assert {f.family for f in d.families if f.kind == "program"} == {"ls", "git", "make"}
+
+
+def test_shell_comments_escaped_quotes_and_leading_fd_redirections(tmp_path: Path):
+    src = (
+        "import os\n"
+        'os.system("# note\\ngit status")\n'
+        'os.system("echo \\"a\\\\\\"b\\"\\nls")\n'
+        'os.system("2>&1 uv sync")\n'
+    )
+    c = I.scan(_tree(tmp_path, {"e.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"git", "echo", "ls", "uv"}
