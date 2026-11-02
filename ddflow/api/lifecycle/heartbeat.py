@@ -182,7 +182,7 @@ def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:
                 continue
             new = list(getattr(it, field))
             args = (new, None) if field == "globs" else (None, new)
-            live, refusal = L.plan_retarget(log, cfg, item, *args, now=now)
+            live, refusal, _accepted = L.plan_retarget(log, cfg, item, *args, now=now)
             if refusal:
                 why.append(refusal)
             elif live is not None:

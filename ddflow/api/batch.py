@@ -122,7 +122,7 @@ def _retargets(log, cfg, plans, kind):
         globs, res = fields.get("globs"), fields.get("resources")
         if globs is None and res is None:
             continue
-        lease, refusal = L.plan_retarget(log, cfg, it.id, globs, res)
+        lease, refusal, _accepted = L.plan_retarget(log, cfg, it.id, globs, res)
         if refusal:
             # `plan_retarget` ends by saying the wait was recorded; a batch records nothing.
             refusal = refusal.split(" The globs were not changed")[0].rstrip()
