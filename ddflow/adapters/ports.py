@@ -58,6 +58,8 @@ def discover(package: ModuleType, skip: frozenset[str] = PLUMBING) -> dict[str, 
                 and cls.__dict__.get(MARK)
                 and cls.__module__ == module.__name__
             ):
+                if found.get(cls.__name__) is cls:
+                    continue  # an alias of a port already seen
                 if cls.__name__ in found:
                     raise ValueError(
                         f"two ports named {cls.__name__}: {found[cls.__name__].__module__} and "

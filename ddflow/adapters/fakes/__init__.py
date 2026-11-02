@@ -42,6 +42,8 @@ def collect(package: ModuleType) -> dict[str, type]:
                 and cls.__module__ == module.__name__
             ):
                 port = cls.__dict__[MARK]
+                if found.get(port) is cls:
+                    continue  # an alias of a fake already seen
                 if port in found:
                     raise ValueError(
                         f"two fakes for {port}: {found[port].__module__} and {module.__name__}"

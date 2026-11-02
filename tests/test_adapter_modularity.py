@@ -146,3 +146,19 @@ def test_two_families_with_one_port_name_are_refused_not_overwritten(tmp_path, m
     finally:
         for name in [m for m in sys.modules if m.startswith("adp_fixture_dup")]:
             del sys.modules[name]
+
+
+def test_an_alias_of_a_port_or_a_fake_is_not_a_second_one(tmp_path, monkeypatch):
+    _temp_package(tmp_path, "adp_fixture_alias")
+    pkg = tmp_path / "adp_fixture_alias"
+    (pkg / "widget.py").write_text(textwrap.dedent(WIDGET) + "\nAlias = Widget\n")
+    (pkg / "fakes" / "widget.py").write_text(
+        textwrap.dedent(FAKE_WIDGET) + "\nAlias = FakeWidget\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        assert sorted(P.discover(importlib.import_module("adp_fixture_alias"))) == ["Widget"]
+        assert sorted(F.collect(importlib.import_module("adp_fixture_alias.fakes"))) == ["Widget"]
+    finally:
+        for name in [m for m in sys.modules if m.startswith("adp_fixture_alias")]:
+            del sys.modules[name]
