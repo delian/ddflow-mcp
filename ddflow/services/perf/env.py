@@ -100,13 +100,14 @@ def cache_state(dirs: Iterable[Path]) -> str:
     ds = list(dirs)
     if not ds:
         return UNAVAILABLE
+    unreadable = False
     for d in ds:
         try:
             if d.is_dir() and any(d.iterdir()):
                 return "warm"
         except OSError:
-            continue
-    return "cold"
+            unreadable = True
+    return UNAVAILABLE if unreadable else "cold"
 
 
 def _num(v: int | None) -> object:
@@ -140,7 +141,8 @@ def fingerprint(
     cpu_count, load_ratio, system = r.cpu_count, r.load_ratio, r.system
     xdist_workers, parallel_cap = r.xdist_workers, r.parallel_cap
     python_version, ddflow_version = r.python_version, r.ddflow_version
-    git_head, cache, container, cgroup = r.git_head, r.cache, r.container, r.cgroup
+    git_head, cache, container = r.git_head, r.cache, r.container
+    cgroup = r.cgroup or UNAVAILABLE
     vm = "unknown" if system == "Darwin" or (container and cgroup == UNAVAILABLE) else "no"
     load, cache_fact = load_class(load_ratio, load_bands), cache or UNAVAILABLE
     facts: dict[str, object] = {

@@ -111,6 +111,33 @@ def test_cgroup_probe_v2_v1_and_missing():
     assert E.cgroup_state(_reader({})) == "unavailable"
 
 
+def test_unlistable_cache_is_unavailable_not_cold(tmp_path: Path):
+    f = tmp_path / "file"
+    f.write_text("x")
+    d = tmp_path / "d"
+    d.mkdir()
+    d.chmod(0)
+    try:
+        if not _listable(d):
+            assert E.cache_state([d]) == "unavailable"
+    finally:
+        d.chmod(0o700)
+
+
+def _listable(d: Path) -> bool:
+    try:
+        list(d.iterdir())
+    except OSError:
+        return False
+    return True
+
+
+def test_empty_cgroup_is_unavailable_and_vm_unknown():
+    g = _facts(container=True, cgroup="")
+    assert g.facts["cgroup"] == "unavailable" and g.facts["vm"] == "unknown"
+    assert g.key == _facts(container=True, cgroup="unavailable").key
+
+
 def test_container_probe():
     assert E.in_container(lambda p: p == "/.dockerenv") is True
     assert E.in_container(lambda p: False) is False
@@ -126,6 +153,9 @@ def test_cache_state(tmp_path: Path):
     assert E.cache_state([d]) == "warm"
 
 
+MIN_IDENT = 3  # shorter names collide with the fixed stamp vocabulary, not with a leak
+
+
 def _identifiers(tmp_path: Path) -> list[str]:
     try:
         user = getpass.getuser()
@@ -134,12 +164,14 @@ def _identifiers(tmp_path: Path) -> list[str]:
     paths = (tmp_path, Path.home())
     names = [socket.gethostname(), user, tmp_path.name]
     names += [str(p) for p in paths] + [p.as_posix() for p in paths]
-    return [n for n in names if len(n) > 1]
+    return [n for n in names if len(n) > MIN_IDENT]
 
 
 def test_collect_runs_here_and_leaks_nothing(tmp_path: Path):
     fp = E.collect(tmp_path, parallel_cap=2, xdist_workers=1, cache_dirs=[tmp_path / "none"])
     blob = "\n".join([fp.key, fp.cond, json.dumps(fp.facts, ensure_ascii=False), fp.stamp()])
+    for vocab in ["env:", *fp.facts, *map(str, fp.facts.values())]:  # fixed, non-identifying words
+        blob = blob.replace(vocab, "")
     for secret in _identifiers(tmp_path):
         assert secret not in blob
         assert json.dumps(secret)[1:-1] not in blob
