@@ -29,11 +29,10 @@ foreground `goal start` loop is exactly what blocks the operator. You ARE the lo
      another ready item;
    - renew `ddflow heartbeat <id>` on every claimed item during long gates.
 4. Persist the wave position in `kilo_memory_save` under the key
-   `orchestrator_wave:<scope>` — your own agent/session id, the last `ddflow next` read,
-   which items were claimed and what each merged as. On resume, if the stored id is not
-   yours, another run already owns this scope — stop rather than overwrite (one
-   `/ddflow-wave` run per scope at a time). A compaction or restart then resumes AT the
-   wave, never before it.
+   `orchestrator_wave:<scope>` — the last `ddflow next` read, which items were claimed and
+   what each merged as — so a compaction or restart resumes AT the wave, never before it.
+   Run one `/ddflow-wave` run per scope at a time, and clear the slot when the scope is
+   DONE so a later run starts fresh.
 5. Stop for exactly two reasons: the scope is DONE (rule 2's empty-scope test — report it
    and stop), or the question tool requires a person: an operator approval
    (`ddflow ... --approval request` needs an answer only a person gives), a policy
