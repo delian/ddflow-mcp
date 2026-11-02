@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.policy"
+new = '[]'
+why = "Standing auto-approval rules switched ON, each recorded as an approval answered by policy:<id>."

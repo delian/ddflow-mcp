@@ -129,6 +129,18 @@ SOURCES: tuple[Source, ...] = (
         ("complete.force",),
     ),
     _s(
+        "phase_complete",
+        "a phase-complete request awaits approval",
+        OPERATOR,
+        "nudge",
+        "phase.complete approval ask records without an answer",
+        "approve or deny the phase completion",
+        "ddflow phase complete <id> --approval request|ID",
+        APPROVAL_ASK,
+        "the phase (its tasks are settled; it stays open meanwhile)",
+        ("phase.complete",),
+    ),
+    _s(
         "chore",
         "a chore proposal awaits approval",
         OPERATOR,
