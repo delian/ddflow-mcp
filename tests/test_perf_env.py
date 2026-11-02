@@ -158,17 +158,6 @@ def test_cache_state(tmp_path: Path):
     assert E.cache_state([d]) == "warm"
 
 
-def _identifiers(tmp_path: Path) -> list[str]:
-    try:
-        user = getpass.getuser()
-    except Exception:
-        user = ""
-    paths = (tmp_path, Path.home())
-    names = [socket.gethostname(), user, tmp_path.name]
-    names += [str(p) for p in paths] + [p.as_posix() for p in paths]
-    return [n for n in names if n]
-
-
 def _assert_closed_vocabulary(fp) -> None:
     """Every fact is an int, a bool or a word from a closed set: nothing free-form can carry
     a hostname, user or path, whatever those are called."""
@@ -196,16 +185,25 @@ def _assert_closed_vocabulary(fp) -> None:
             raise AssertionError(f"unexpected fact {k}")
 
 
-def test_collect_runs_here_and_leaks_nothing(tmp_path: Path):
-    fp = E.collect(tmp_path, parallel_cap=2, xdist_workers=1, cache_dirs=[tmp_path / "none"])
+def test_collect_runs_here_and_leaks_nothing(tmp_path: Path, monkeypatch):
+    """Plant distinctive identities (host, user, home, repo path) so a substring check has
+    no false positives against the fixed stamp vocabulary, then look for them."""
+    host, user = "zqhost-91c3", "zquser-77d2"
+    home = tmp_path / "zqhome-5e8a"
+    repo = tmp_path / "zqrepo-3b1f"
+    for d in (home, repo):
+        d.mkdir()
+    monkeypatch.setattr(socket, "gethostname", lambda: host)
+    monkeypatch.setattr(getpass, "getuser", lambda: user)
+    for var in ("USER", "LOGNAME", "USERNAME"):
+        monkeypatch.setenv(var, user)
+    monkeypatch.setenv("HOSTNAME", host)
+    monkeypatch.setenv("HOME", str(home))
+    fp = E.collect(repo, parallel_cap=2, xdist_workers=1, cache_dirs=[repo / "none"])
     _assert_closed_vocabulary(fp)
     blob = "\n".join([fp.key, fp.cond, json.dumps(fp.facts, ensure_ascii=False), fp.stamp()])
-    vocab = {str(v) for v in fp.facts.values()} | set(fp.facts) | {"env"}
-    for secret in _identifiers(tmp_path):
-        if secret in vocab:
-            continue  # a fixed word; _assert_closed_vocabulary proves it is not a leak
+    for secret in (host, user, home.name, repo.name, str(home), str(repo), tmp_path.name):
         assert secret not in blob
-        assert json.dumps(secret)[1:-1] not in blob
     assert fp.stamp().startswith(f"env:{fp.key}/{fp.cond}")
     assert set(fp.facts) >= {
         "cpu_count",
