@@ -99,8 +99,8 @@ def test_a_target_given_by_name_is_imported_only_when_it_runs(proj: Path) -> Non
     assert res.status == TK.FAILED and "ModuleNotFoundError" in res.detail
 
 
-def test_the_flow_sample_is_the_one_tick_ddflow_ships() -> None:
-    assert [t.name for t in TK.registered()] == ["flow.sample"]
+def test_the_ticks_ddflow_ships_are_the_flow_sample_and_the_integrator() -> None:
+    assert [t.name for t in TK.registered()] == ["flow.sample", "merge_queue.integrator"]
 
 
 # -- due, claimed, recorded ----------------------------------------------------------------

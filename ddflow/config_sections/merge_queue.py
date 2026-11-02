@@ -44,3 +44,19 @@ class MergeQueueConfig:
         doc="How many finished (merged or parked) entries the queue keeps for `ddflow queue status` and the ETA; older ones are deleted when an entry is added.",
         check=int_at_least(0),
     )
+    auto_run: str = knob(
+        "on",
+        doc="Whether ddflow itself starts the integrator (`ddflow queue run`) so a queued entry never waits with nobody to land it. 'on': accepting a release at enqueue starts one detached integrator run through the job machinery (a job with its log path; none is started while one is alive), and a tick started by any ddflow command starts it again when an entry has waited longer than `auto_run_after_s` with no integrator alive. 'off': nothing is started; `ddflow queue run` by hand still works, and `brief`, `queue status` and `doctor` still warn when entries wait with nobody integrating. No daemon is involved.",
+        choices=("on", "off"),
+        strictest=("off", "ddflow starts no process on its own; the queue is run by hand"),
+    )
+    auto_run_after_s: int = knob(
+        120,
+        doc="Seconds a queued entry waits with no integrator alive before the tick starts one, and before `brief`, `queue status` and `doctor` call the wait a problem. Applies when `auto_run` is on (the warning applies always).",
+        check=int_at_least(0),
+    )
+    auto_run_max_parallel: int = knob(
+        1,
+        doc="How many automatically started integrator jobs may be alive at once. The queue's own lock still lets only one integrate, so more than 1 only matters for a very short overlap while one ends and the next starts.",
+        check=int_at_least(1),
+    )

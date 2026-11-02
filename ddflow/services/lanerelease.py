@@ -15,10 +15,14 @@ passed on the CURRENT tree (or skipped with its reason). Release never forces a 
 
 from __future__ import annotations
 
+import shlex
+import sys
+import time
 from pathlib import Path
 
 from . import gates as G
 from . import inbox as IB
+from . import jobs as J
 from . import mergequeue as MQ
 from .completion import changed_paths
 
@@ -136,3 +140,74 @@ def after_run(repo: Path, cfg, it, e: MQ.Entry) -> None:
     else:
         text = f"{e.item} was merged and completed by the integrator."
     notify(repo, cfg, e.lane or e.agent, text, item=e.item, reason="message", sender="merge-queue")
+
+
+# -- who runs the integrator (LC-integrator-trigger) -------------------------------------
+
+#: The agent the automatically started integrator runs as.
+INTEGRATOR_AGENT = "integrator"
+#: Entries a warning names before it says "...".
+NAMED = 5
+RUN_CLI = "ddflow queue run"
+RUN_MCP = "ddflow_queue action=run"
+
+
+def integrator_command(repo: Path) -> str:
+    """The command of an automatically started integrator job: one fixed string per
+    project, so a job is recognised as an integrator by its command alone."""
+    argv = [sys.executable, "-m", "ddflow", "--repo", str(repo), "--agent", INTEGRATOR_AGENT]
+    return shlex.join([*argv, "queue", "run"])
+
+
+def live_jobs(repo: Path, st) -> list:
+    """The integrator jobs still running on this machine. Recognised by the END of the
+    command: the log stores the interpreter's path redacted, never the arguments."""
+    tail = " ".join(shlex.split(integrator_command(repo))[3:])
+    return [
+        j for j in st.jobs.values() if j.command.endswith(tail) and J.status(j).state == "running"
+    ]
+
+
+def integrator_alive(repo: Path, st) -> bool:
+    """Someone is integrating: the queue's lock holder, or a running integrator job."""
+    return MQ.holder(repo) is not None or bool(live_jobs(repo, st))
+
+
+def overdue(repo: Path, cfg, now: float | None = None) -> list[MQ.Entry]:
+    """Queued entries that have waited at least ``[merge_queue].auto_run_after_s``."""
+    now = time.time() if now is None else now
+    after = cfg.merge_queue.auto_run_after_s
+    return [e for e in MQ.live(repo) if e.state == MQ.QUEUED and now - e.queued_at >= after]
+
+
+def warning(repo: Path, cfg, st, now: float | None = None) -> str:
+    """The sentence ``brief``, ``queue status`` and ``doctor`` say when entries wait with
+    nobody integrating, naming the call that fixes it; "" when nothing is wrong. A PARKED
+    released entry is named too: its lane was woken and must claim it again."""
+    lines = []
+    waiting = overdue(repo, cfg, now)
+    if waiting and not integrator_alive(repo, st):
+        rel = [e.item for e in waiting if e.released]
+        names = ", ".join(e.item for e in waiting[:NAMED]) + (
+            ", ..." if len(waiting) > NAMED else ""
+        )
+        lines.append(
+            f"{len(waiting)} entries waiting ({len(rel)} released: {names}), integrator not "
+            f"running: `{RUN_CLI}` (MCP: `{RUN_MCP}`)"
+        )
+    newest = {e.item: e.seq for e in MQ.entries(repo)}
+    for e in MQ.entries(repo):
+        it = st.items.get(e.item)
+        if (
+            e.released
+            and e.state == MQ.PARKED
+            and newest[e.item] == e.seq
+            and it
+            and not it.terminal
+        ):
+            lines.append(
+                f"{e.item} was released and is PARKED ({e.reason or 'see queue status'}): "
+                f"lane {e.lane or e.agent or '?'} resumes it with `ddflow claim {e.item}` "
+                f"(MCP: `ddflow_claim id={e.item}`)"
+            )
+    return "\n".join(lines)
