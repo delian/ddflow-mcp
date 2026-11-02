@@ -19,7 +19,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
-from . import baseline as BL
+from .baseline import cache_load, cache_store
 
 GATES = ("ci", "unit_tests")
 SHOWN = 5
@@ -50,7 +50,7 @@ def on_base(
     sha = W.rev(repo, base)
     if not sha:
         return {"red": False, "why": f"base {base} does not resolve"}
-    known = BL.cache_load(repo, sha, ttl_s, None, gdef.command)
+    known = cache_load(repo, sha, ttl_s, None, gdef.command)
     if all(i in known for i in ids):
         return {"red": all(known[i] for i in ids), "cached": True, "base": base, "base_sha": sha,
                 "ids": ids, "still_failing": [i for i in ids if known[i]]}  # fmt: skip
@@ -77,7 +77,7 @@ def on_base(
             if whole and not ev.get("failed_tests_more"):
                 # a run that could not run says nothing about the base
                 known.update({i: i in failing_here for i in part})
-                BL.cache_store(repo, sha, {i: i in failing_here for i in part}, ttl_s, gdef.command)
+                cache_store(repo, sha, {i: i in failing_here for i in part}, ttl_s, gdef.command)
     failing = [i for i in ids if known.get(i)]
     red = all(known.get(i) for i in ids)
     return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,

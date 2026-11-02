@@ -158,11 +158,13 @@ def run(
         everyone = [f["id"] for f in failed_tests(res.output)]
         if len(everyone) > len(res.failures.get("failed_tests") or ()):
             data["failed_tests_total"] = len(everyone)
-        other = [
-            c for c in res.checks if not c.ok and c.id != "command"
-        ]  # a failed hook is not tests
-        if not other and (kept := BL.write_full(repo, res.sha, everyone)):
+        if not BL.only_tests_failed(res.checks):
+            names = ", ".join(c.id for c in res.checks if not c.ok)
+            data["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
+        elif kept := BL.write_full(repo, res.sha, everyone):
             data["failing_ids_file"] = kept
+        else:
+            data["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
     if res.scope:
         data["scope_line"] = CM.marker_line(res.scope)
     if log_to is not None and not res.ok:  # a pass keeps no log
