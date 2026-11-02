@@ -6,6 +6,7 @@ extra is confined to one adapter. Helpers: architecture_guards_support.py.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -86,27 +87,46 @@ def test_import_contracts(tmp_path: Path) -> None:
     assert f"Contracts: {len(contracts)} kept, 0 broken." in output, output
 
 
-#: Extra -> the top-level import names its packages provide.
-_EXTRA_MODULES: dict[str, list[str]] = {
-    "search": ["rapidfuzz"],
-    "watch": ["watchfiles"],
-    "rag": ["model2vec", "sqlite_vec"],
-    "mcp-sdk": ["mcp"],
-}
+def _extra_import_name(req: str) -> str:
+    """The top-level import name a pyproject optional-dependency requirement provides.
+
+    ``pyproject.toml`` declares a *distribution* name (PEP 508), e.g. ``sqlite-vec>=0.1.9``;
+    the name a module is imported under is that name with ``-`` normalised to ``_``
+    (``sqlite_vec``). Splitting on the first version/extras/marker separator keeps the name
+    for requirements like ``rapidfuzz>=3.14.6``.
+    """
+    name = re.split(r"[<>=!~;\s\[]", req, maxsplit=1)[0].strip()
+    return name.replace("-", "_")
+
+
+def _missing_extra_modules(extras: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Extras whose declared packages' import names are absent from the one-adapter
+    contract's ``forbidden_modules``. Derived from pyproject, never a hard-coded map, so a
+    package added under an existing extra is checked too, not just the extra's name."""
+    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
+    return {
+        extra: [m for m in (_extra_import_name(r) for r in reqs) if m not in named]
+        for extra, reqs in extras.items()
+    }
 
 
 def test_every_extra_has_a_contract() -> None:
-    """Each optional extra pyproject declares is named in the one-adapter contract, so an
-    extra cannot be added without its import being confined to one module."""
+    """Each package an optional extra declares is named in the one-adapter contract, so an
+    extra -- or a package added under an existing extra -- cannot exist without its import
+    being confined to one module."""
     extras = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"].get(
         "optional-dependencies", {}
     )
-    assert set(extras) == set(_EXTRA_MODULES), (
-        f"pyproject declares extras {sorted(extras)}; this test knows {sorted(_EXTRA_MODULES)}"
-    )
-    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
-    missing = {e: [m for m in mods if m not in named] for e, mods in _EXTRA_MODULES.items()}
+    missing = _missing_extra_modules(extras)
     assert not any(missing.values()), f"extras whose import names are not forbidden: {missing}"
+
+
+def test_package_added_under_existing_extra_is_checked() -> None:
+    """Regression for B-arch-guard-extras-hardcoded: a package added under an existing
+    extra is checked against ``forbidden_modules``; the old hard-coded module list missed
+    it, so this fails on the unfixed guard and passes with pyproject-derived names."""
+    missing = _missing_extra_modules({"rag": ["model2vec>=0.9.0", "numpy>=1.26"]})
+    assert missing == {"rag": ["numpy"]}
 
 
 def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
