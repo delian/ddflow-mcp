@@ -127,6 +127,24 @@ def test_eject_does_not_clobber_without_force(repo):
     assert path.read_text() != "MINE\n"
 
 
+def test_eject_a_macro_named_like_a_template_is_listed_once(repo):
+    from ddflow.api.setup import prompts as A
+
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "macros.toml").write_text(
+        '[[macro]]\nname = "review_user"\ndescription = "x"\nprompt = "hello"\n'
+    )
+    path = str(repo / ".ddflow" / "prompts" / "review_user.md")
+    out = A(repo, action="eject")
+    assert out.ok, out.reason
+    assert path in out.data["written"]
+    assert path not in out.data["skipped"], (
+        "a macro named like a template is in BOTH TEMPLATE_NAMES and all_commands, so the "
+        "un-deduped eject listed its path in written AND skipped (the second write saw the "
+        "first)"
+    )
+
+
 def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
     """An override that reports success and changes nothing is the worst kind.
 
