@@ -68,7 +68,10 @@ _NATIVE = [
     ),
 ]
 
-_COMMANDS = {"claude": {".claude/commands/implement.md": "commands/claude/implement.md"}}
+_COMMANDS = {
+    "claude": {".claude/commands/implement.md": "commands/claude/implement.md"},
+    "kilo": {".kilo/command/ddflow-wave.md": "commands/kilo/ddflow-wave.md"},
+}
 
 _GOOD = """
 id = "demo"
