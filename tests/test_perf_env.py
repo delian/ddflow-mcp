@@ -58,7 +58,7 @@ def test_cgroup_v1_threshold_is_a_parameter():
     mem = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
     r = _reader({mem: "2147479552\n"})
     assert E.cgroup_state(r) == "limited"
-    assert E.cgroup_state(r, v1_unlimited_bytes=2**31) == "unlimited"
+    assert E.cgroup_state(r, v1_unlimited_bytes=2147479552) == "unlimited"
 
 
 def test_cgroup_v1_memory():
