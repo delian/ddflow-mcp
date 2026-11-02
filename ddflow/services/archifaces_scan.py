@@ -26,6 +26,8 @@ _PROC = {
 _SHELL = {f"ddflow.infra.proc.{n}" for n in ("run_shell", "spawn_shell")} | {
     "os.system",
     "os.popen",
+    "subprocess.getoutput",
+    "subprocess.getstatusoutput",
 }
 _GIT = {
     f"ddflow.infra.git.{n}" for n in ("run", "status_run", "paths", "files", "status", "unmerged")
@@ -187,6 +189,10 @@ class _Scan:
             if isinstance(n, ast.Assign)
             and len(n.targets) == 1
             and isinstance(n.targets[0], ast.Name)
+        ] + [
+            (n.target.id, n.value)  # `GIT: str = "git"`
+            for n in self.nodes
+            if isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name) and n.value
         ]
         for name, v in binds:
             lit = self._literal(v)
@@ -233,9 +239,11 @@ class _Scan:
         got: str | None = None
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
-        elif isinstance(e, ast.Name) and not line:
-            vals = self.argv0.get(e.id) or self.consts.get(e.id, set())
+        elif isinstance(e, ast.Name):
+            vals = self.argv0.get(e.id) or (set() if line else self.consts.get(e.id, set()))
             got = next(iter(vals)) if len(vals) == 1 and DYNAMIC not in vals else None
+        elif isinstance(e, ast.Attribute):
+            got = self._head(e)  # sys.executable
         if got:
             out.append(_base(got))
         elif not out:
@@ -310,6 +318,8 @@ class _Scan:
                 self.add("network", f"host:{arg.value.lower()}", node, arg.value)
 
     def _env_arg(self, node: ast.AST, arg: ast.AST | None) -> None:
+        if isinstance(arg, ast.Name) and len(self.consts.get(arg.id, ())) == 1:
+            arg = ast.Constant(value=next(iter(self.consts[arg.id])))  # a name bound to a string
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             self.add("env", arg.value, node)
         else:

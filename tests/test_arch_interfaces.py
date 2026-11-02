@@ -476,3 +476,20 @@ def test_fourth_round_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"f.py": src}))
     assert {f.family for f in c.families if f.kind == "program"} == {"roborev", "sh", "echo"}
     assert {f.family for f in c.families if f.kind == "env"} == {"KW_ENV"}
+
+
+def test_fifth_round_findings_stay_fixed(tmp_path: Path):
+    src = (
+        "import os\nimport subprocess\nimport sys\n"
+        'GIT: str = "git"\n'
+        'KEY = "KEYED"\n'
+        "ARGV = ['uv', 'sync']\n"
+        "subprocess.run(GIT)\n"
+        "os.execv(sys.executable, [])\n"
+        'subprocess.getoutput("x")\n'
+        "subprocess.run(ARGV, shell=True)\n"
+        "os.getenv(KEY)\n"
+    )
+    c = I.scan(_tree(tmp_path, {"g.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"git", "python", "sh", "uv"}
+    assert {f.family for f in c.families if f.kind == "env"} == {"KEYED"}
