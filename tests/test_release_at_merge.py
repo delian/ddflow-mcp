@@ -106,5 +106,7 @@ def test_a_merge_through_the_queue_releases_at_the_merge(proj):  # noqa: F811
     assert run_cli(proj, "queue", "run", agent="integrator")[0] == 0
     code, out, err = run_cli(proj, "--json", "history", "--item", "T1", "--kind", "lease.released")
     assert code == 0, out + err
-    notes = [e.get('data', e).get('note') for e in json.loads(out).get('events', json.loads(out))]
+    body = json.loads(out)
+    events = body["events"] if isinstance(body, dict) else body
+    notes = [e.get("data", e).get("note") for e in events]
     assert 'merged' in notes, out
