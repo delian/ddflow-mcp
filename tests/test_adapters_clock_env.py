@@ -35,7 +35,9 @@ def _aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
                     mods[a.asname or root] = root
         elif isinstance(node, ast.ImportFrom) and node.module in READS and not node.level:
             for a in node.names:
-                if a.name in READS[node.module]:
+                if a.name == "*":  # `from time import *` binds every public name
+                    names.update({n: f"{node.module}.{n}" for n in READS[node.module]})
+                elif a.name in READS[node.module]:
                     names[a.asname or a.name] = f"{node.module}.{a.name}"
     return mods, names
 
@@ -87,6 +89,7 @@ def test_the_counter_sees_calls_and_aliases_but_not_text_or_an_injected_port():
     assert count_reads(ast.parse(aliased)) == 3  # each from-import counts where it is used
     port = "class X:\n    def __init__(self, c): self._time = c\n    def f(self): return self._time.monotonic()\n"
     assert count_reads(ast.parse(port)) == 0
+    assert count_reads(ast.parse("from time import *\nx = time() + monotonic()\n")) == 2
     assert count_reads(ast.parse("import os.path\nos.environ['HOME']\n")) == 1
     assert count_reads(ast.parse("import time\ntime.time = lambda: 1\n")) == 0  # a store is no read
 
