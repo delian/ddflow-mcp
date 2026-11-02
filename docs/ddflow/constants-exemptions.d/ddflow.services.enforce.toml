@@ -1,2 +1,0 @@
-[knob]
-"ddflow/services/enforce.py:MAX_LISTED_PATHS" = 'enforce.max_listed_paths'

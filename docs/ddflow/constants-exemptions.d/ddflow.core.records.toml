@@ -1,2 +1,0 @@
-[knob]
-"ddflow/core/records.py:DEFAULT_LEASE_TTL_S" = 'lease.default_ttl_s'

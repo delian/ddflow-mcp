@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/approvals/harness.py:WINDOW_CHOICE_HOURS" = 'approvals.window_choice_hours'
