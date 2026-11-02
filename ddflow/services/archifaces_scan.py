@@ -109,6 +109,7 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
+_LOOP_SPAWN = (".subprocess_exec", ".subprocess_shell")  # asyncio event-loop methods
 _ENVIRON = ("os.environ", "os.environb")
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?(\[[0-9a-f:.]+\]|[^/:?#\s{}\[\]]+)", re.IGNORECASE)
@@ -317,7 +318,7 @@ class _Scan:
         arg = node.args[at] if len(node.args) > at else _keyword_arg(node)
         if name in _GIT:
             self.add("program", "git", node)
-        elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL:
+        elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL or name.endswith(_LOOP_SPAWN):
             self._process(node, name, arg)
         elif name in ("shutil.which", "ddflow.infra.fsio.which"):
             lit = arg.value if isinstance(arg, ast.Constant) else None
@@ -327,9 +328,13 @@ class _Scan:
         self._network(node, name, arg)
 
     def _process(self, node: ast.Call, name: str, arg: ast.AST | None) -> None:
-        shell = name in _SHELL or any(
-            k.arg == "shell" and not (isinstance(k.value, ast.Constant) and not k.value.value)
-            for k in node.keywords  # any `shell=` that is not a literal falsy value
+        shell = (
+            name in _SHELL
+            or name.endswith(".subprocess_shell")
+            or any(
+                k.arg == "shell" and not (isinstance(k.value, ast.Constant) and not k.value.value)
+                for k in node.keywords  # any `shell=` that is not a literal falsy value
+            )
         )
         for program in self.programs_of(arg, line=shell) if arg is not None else [DYNAMIC]:
             self.add("program", program, node)

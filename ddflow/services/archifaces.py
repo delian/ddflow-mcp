@@ -106,7 +106,9 @@ def scan(repo: Path) -> InterfaceCensus:
         return InterfaceCensus(())
     by_key: dict[tuple[str, str], list[Site]] = {}
     unparsed: list[str] = []
-    for path in sorted(p for p in pkg.rglob("*.py") if "__pycache__" not in p.parts):
+    for path in sorted(
+        p for p in pkg.rglob("*.py") if "__pycache__" not in p.relative_to(repo).parts
+    ):
         module = _dotted(repo, path)
         try:
             tree = ast.parse(path.read_bytes())

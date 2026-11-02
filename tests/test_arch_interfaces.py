@@ -579,3 +579,11 @@ def test_eighth_round_findings_stay_fixed(tmp_path: Path):
     (tmp_path / I.BASELINE_PATH).write_text("")
     grew = API.archdeps(tmp_path, interfaces="env").data["ratchet"]["grew"]
     assert any(g.startswith("unparsed ") for g in grew)
+
+
+def test_ninth_round_findings_stay_fixed(tmp_path: Path):
+    home = tmp_path / "__pycache__" / "repo"  # an ancestor named __pycache__ hides nothing
+    home.mkdir(parents=True)
+    src = "def f(loop):\n    loop.subprocess_exec(object, 'git', 'status')\n    loop.subprocess_shell(object, 'x')\n"
+    c = I.scan(_tree(home, {"loop.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"sh", "<dynamic>"}
