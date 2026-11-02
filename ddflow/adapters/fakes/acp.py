@@ -64,28 +64,31 @@ class FakeAcpAgent:
                 {"protocolVersion": version, "agentCapabilities": {}, "agentInfo": self.agent_info},
             )
         if method == "session/new":
-            cwd, servers = params.get("cwd"), params.get("mcpServers", [])
-            if not isinstance(cwd, str) or not isinstance(servers, list):
-                return A.err(
-                    mid,
-                    A.INVALID_PARAMS,
-                    "session/new needs a string `cwd` and a list `mcpServers`",
-                )
-            sid = f"s{len(self.sessions) + 1}"
-            self.sessions[sid] = A.AcpSession(A.OK, session_id=sid, cwd=cwd, mcp_servers=servers)
-            return A.ok(mid, {"sessionId": sid})
+            return self._new(mid, params)
         if method == "session/prompt":
-            sid = params.get("sessionId")
-            session = self.sessions.get(sid) if isinstance(sid, str) else None
-            if session is None:
-                return A.err(mid, A.INVALID_PARAMS, f"unknown session: {sid}")
-            for update in self.script.events:
-                note = {"sessionId": sid, "update": update}
-                self.sent.append({"jsonrpc": "2.0", "method": "session/update", "params": note})
-            cancelled, session.cancelled = session.cancelled, False  # a cancel ends ONE turn
-            stop = A.CANCELLED if cancelled else self.script.stop_reason
-            return A.ok(mid, {"stopReason": stop})
+            return self._prompt(mid, params)
         return A.err(mid, A.METHOD_NOT_FOUND, f"method not found: {method}")
+
+    def _new(self, mid: Any, params: dict[str, Any]) -> dict[str, Any]:
+        cwd, servers = params.get("cwd"), params.get("mcpServers", [])
+        if not isinstance(cwd, str) or not isinstance(servers, list):
+            return A.err(
+                mid, A.INVALID_PARAMS, "session/new needs a string `cwd` and a list `mcpServers`"
+            )
+        sid = f"s{len(self.sessions) + 1}"
+        self.sessions[sid] = A.AcpSession(A.OK, session_id=sid, cwd=cwd, mcp_servers=servers)
+        return A.ok(mid, {"sessionId": sid})
+
+    def _prompt(self, mid: Any, params: dict[str, Any]) -> dict[str, Any]:
+        sid = params.get("sessionId")
+        session = self.sessions.get(sid) if isinstance(sid, str) else None
+        if session is None:
+            return A.err(mid, A.INVALID_PARAMS, f"unknown session: {sid}")
+        for update in self.script.events:
+            note = {"sessionId": sid, "update": update}
+            self.sent.append({"jsonrpc": "2.0", "method": "session/update", "params": note})
+        cancelled, session.cancelled = session.cancelled, False  # a cancel ends ONE turn
+        return A.ok(mid, {"stopReason": A.CANCELLED if cancelled else self.script.stop_reason})
 
     def serve(self, lines) -> None:
         import json
