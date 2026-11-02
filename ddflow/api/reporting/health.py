@@ -253,6 +253,8 @@ def doctor(
     parser: Any = None,
     tools: Any = None,
     accept_lost_events: bool = False,
+    accept_history: bool = False,
+    history: tuple[str, str, str, str] = ("", "", "", ""),
     start_texts: Any = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
@@ -273,6 +275,21 @@ def doctor(
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
     repair_ctx = RP.context(repo, log, cfg)
+    if accept_history:  # recorded as `repair.applied`; the report below reads it back
+        reason, note, only, approval = history  # (reason, note, only ids, approval)
+        why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
+        if why:
+            return O.refused("doctor", why, text=why)
+        keys = stamp.get("keys")
+        repair_ctx = RP.accepted.accepting(
+            repair_ctx,
+            reason,
+            note,
+            only,
+            approved=frozenset(keys) if keys is not None else None,
+            by=stamp.get("approved_by", ""),
+        )
+        st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)
     cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
@@ -281,12 +298,10 @@ def doctor(
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
     # agent id, and a lease claimed under it is "mine" in both clones. Claims record
     # their clone, so a double claim is also a CONTESTED item below.
-    for shard, (n, before, after) in log.clock_regressions().items():
-        problems.append(
-            f"{shard}: Lamport clock decreases at event {n} ({before} -> {after}) — two "
-            "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
-            "`[agent].id`, or drop both to derive a per-clone id)"
-        )
+    # (a person's `--accept-history` turns a known one into a note: services/repairs/accepted)
+    clock_problems, clock_notes = RP.accepted.clock_findings(repair_ctx)
+    problems += clock_problems
+    notes += clock_notes
     # A PROBLEM (Ba24a8d32ee): a shard holding fewer events than this clone last saw lost them
     # to a force-push, revert, reset or deletion. Never repaired here.
     problems += [g.render() for g in SM.lost(repo, log)]

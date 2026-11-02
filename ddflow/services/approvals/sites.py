@@ -65,6 +65,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
     "ddflow/api/setup.py:configure": 1,
     "ddflow/api/pin_files.py:_regenerate_approval": 1,
+    "ddflow/services/repairs/accepted.py:gate": 1,
 }
 
 MARKER_NAMES = frozenset({"agent_marker", "is_agent", "_is_agent", "reviewer_agent_marker"})
@@ -199,6 +200,16 @@ SITES: tuple[Site, ...] = (
         "the [[reviewer]] command line (it executes code)",
         ("ddflow/surfaces/commands/review.py:_reviewers_add",),
         "ddflow reviewers add --preset ...",
+    ),
+    Site(
+        "history.accept",
+        "A",
+        T2,
+        L1,
+        "the findings accepted (a digest of their keys: an event's id and content, or a "
+        "clock regression's shard, position and values) and the ids named",
+        ("ddflow/services/repairs/accepted.py:gate",),
+        "ddflow doctor --accept-history --history-reason WHY --approval request|ID",
     ),
     Site(
         "config.set",

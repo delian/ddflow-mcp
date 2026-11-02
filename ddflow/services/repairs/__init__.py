@@ -25,6 +25,7 @@ from ...config import Config
 from ...core.events import REPAIR_APPLIED_KIND
 from ...core.model import State
 from ...infra.log import EventLog, running_version
+from . import accepted as AH
 from .base import AGENT, OPERATOR, Context, Corrective, Finding, Repair, Unavailable, context
 from .seeds import AUTHORS, MISMATCHED, ORPHANS, SEEDS, TORN, unknown_author_shards
 
@@ -208,9 +209,10 @@ def integrity(ctx: Context) -> tuple[list[str], list[str]]:
     what a quarantine repair recorded: an edited event or unreadable line already on a
     `repair.applied` is a note, not a problem that would fail `doctor` forever."""
     edited, held = _split(ctx, MISMATCHED)
-    problems = [
-        f"{f.key}: content does not match its address (edited after the fact?)" for f in edited
-    ]
+    # a person's `--accept-history` covers an event by id AND the content it has now
+    ids = {f.key for f in edited}
+    open_, accepted_notes = AH.split(ctx.st, AH.mismatches([e for e in ctx.events if e.id in ids]))
+    problems = [f"{i.detail}" for i in open_]
     try:
         torn, held_torn = _split(ctx, TORN)
     except Unavailable as exc:
@@ -220,8 +222,11 @@ def integrity(ctx: Context) -> tuple[list[str], list[str]]:
         problems.append(f"{len(torn)} unparseable line(s) — likely a torn append after a crash")
     held += held_torn
     if not held:
-        return problems, []
-    return problems, [f"{held} damaged log line(s) quarantined by a data repair, left in place"]
+        return problems, accepted_notes
+    return problems, [
+        *accepted_notes,
+        f"{held} damaged log line(s) quarantined by a data repair, left in place",
+    ]
 
 
 def unknown_authors(ctx: Context) -> tuple[list[str], str]:
