@@ -23,9 +23,7 @@ def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "config", "user.email", "a@b.c")
     _git(tmp_path, "config", "user.name", "t")
     (tmp_path / ".ddflow").mkdir()
-    (tmp_path / ".ddflow" / "config.toml").write_text(
-        '[pins]\nbaseline_globs = ["base/*.txt"]\n'
-    )
+    (tmp_path / ".ddflow" / "config.toml").write_text('[pins]\nbaseline_globs = ["base/*.txt"]\n')
     (tmp_path / "base").mkdir()
     (tmp_path / "base" / "a.txt").write_text("a\nm\nz\n")
     _git(tmp_path, "add", "-A")

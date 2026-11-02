@@ -150,7 +150,9 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         try:
             text = (Path(repo) / path).read_text("utf-8")
         except OSError as exc:
-            bad.append(f"{path} could not be read ({exc.strerror}): the check is unavailable for it")
+            bad.append(
+                f"{path} could not be read ({exc.strerror}): the check is unavailable for it"
+            )
             continue
         rows = [r for r in text.splitlines() if r.strip() and not r.startswith("#")]
         if _MARK.search(text):
