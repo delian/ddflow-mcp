@@ -45,8 +45,8 @@ RELATIONS = ("new", "extends", "duplicate_of", "related")
 MERGE_INTO = "merge_into"
 #: Kinds ``extends`` files a new record linked to instead of writing onto it: items whose
 #: OWNER decides what is on them (task, phase, research), and decisions, which are never
-#: edited in place (D-no-deletion; B-decision-extends-mutates-old-record). Appending to one
-#: of these is the explicit answer ``merge_into`` (``duplicate_of`` still merges).
+#: edited in place (D-no-deletion; B-decision-extends-mutates-old-record). ``merge_into``
+#: still appends to the rest; for a decision it is refused (see ``_point``).
 LINK_ONLY_KINDS = ("task", "phase", "research", "decision")
 #: Words listed to explain one match: enough to see why, few enough to read at a glance.
 SHARED_WORDS = 5
@@ -436,6 +436,15 @@ def _point(
     if chosen.relation == "related":
         out.fields |= {"related": chosen.target, "dedupe": note}
         out.back_links.append((chosen.target, rec.rid))
+    elif chosen.relation == MERGE_INTO and tkind == "decision":
+        out.refusal = O.refused(
+            rec.event_kind,
+            f"cannot merge into {chosen.target}: a decision is never edited in place "
+            f"(D-no-deletion). Answer extends:{chosen.target} to file this as a new record "
+            f"linked to it.",
+            id=rec.rid,
+            candidates=out.shown,
+        )
     elif chosen.relation == MERGE_INTO and not extendable(
         st, chosen.target, tkind, grace_s=grace_s
     ):

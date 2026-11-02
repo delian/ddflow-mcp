@@ -55,6 +55,7 @@ def test_decision_extends_files_a_new_linked_record_and_leaves_the_target(repo):
     st = state(repo)
     assert st.decisions["D-old"].globs == ["src/a.py"]
     assert st.decisions["D-new"].globs == ["src/a.py", "src/b.py"]
+    assert st.decisions["D-new"].decision == SECOND  # the new decision text is filed, not dropped
     assert st.links["D-new"].linked("extends") == {"D-old"}
 
 
