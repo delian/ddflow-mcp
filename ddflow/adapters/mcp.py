@@ -14,7 +14,7 @@ default adapter (D-adapters-answers):
 
 Pure standard library; imports no other ddflow layer. The shipped stand-ins are
 `FakeMcpServer` and `FakeMcpClient` in `ddflow.adapters.fakes.mcp`; the same cases run
-against both (tests/test_adapters_mcp.py).
+against both (tests/test_adapter_mcp.py).
 """
 
 from __future__ import annotations
@@ -27,6 +27,8 @@ import traceback
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
+
+from .ports import port
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND = -32700, -32600, -32601
 INVALID_PARAMS, INTERNAL_ERROR = -32602, -32603
@@ -180,6 +182,7 @@ class ToolError(Exception):
 Handler = Callable[[dict[str, Any]], "dict[str, Any] | None"]
 
 
+@port
 @runtime_checkable
 class McpServer(Protocol):
     """Serve MCP over newline-delimited JSON-RPC, a declared tool table or a caller's handler.
@@ -372,6 +375,7 @@ class Handshake(Outcome):
         return None if self.status == TIMEOUT else False
 
 
+@port
 @runtime_checkable
 class McpClient(Protocol):
     """Start an MCP server, initialize, list and call its tools, bounded in time.

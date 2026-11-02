@@ -1,6 +1,7 @@
-"""The MCP wire port: the same cases against the default adapter and its fake (ADP-mcp).
+"""The MCP wire ports: the same cases against the default adapters and their fakes (ADP-mcp).
 
-Written first: it fails until `ddflow.adapters.mcp` and `ddflow.adapters.fakes.mcp` exist.
+`CONFORMANCE` is what the generic contract test (tests/test_ports_contract.py) reads: per port,
+how to build the real adapter, the fake, and the cases both must pass.
 """
 
 from __future__ import annotations
@@ -104,8 +105,7 @@ def test_a_server_answering_a_revision_we_do_not_serve_is_a_fact_not_a_failure()
     assert W.negotiate("2025-03-26", "2024-11-05").supported is True
 
 
-def test_tools_are_listed_and_called_and_a_tool_refusal_is_an_error_result(make):
-    _, client, _ = make()
+def _client_cases(client):
     client.connect(1)
     assert client.list_tools(1).result["tools"] == TOOLS
     got = client.call("echo", {"a": 1}, 1)
@@ -114,6 +114,10 @@ def test_tools_are_listed_and_called_and_a_tool_refusal_is_an_error_result(make)
     assert refused.status == W.OK and refused.result["isError"] is True
     unknown = client.call("nope", {}, 1)
     assert unknown.status == W.ERROR and unknown.error["code"] == W.INVALID_PARAMS
+
+
+def test_tools_are_listed_and_called_and_a_tool_refusal_is_an_error_result(make):
+    _client_cases(make()[1])
 
 
 def test_calls_before_connect_are_unavailable_not_passed(make):
@@ -142,14 +146,31 @@ def test_a_closed_stream_is_eof():
     assert client.connect(1).status == W.EOF
 
 
-def test_the_server_answers_ping_unknown_methods_and_never_a_notification(make):
-    server, _, _ = make()
+def _server_cases(server):
     assert server.handle({"jsonrpc": "2.0", "id": 1, "method": "ping"})["result"] == {}
     bad = server.handle({"jsonrpc": "2.0", "id": 2, "method": "nope/x"})
     assert bad["error"]["code"] == W.METHOD_NOT_FOUND and bad["id"] == 2
     assert server.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
     old = server.handle(W.initialize_request(3, "1999-01-01"))
     assert old["result"]["protocolVersion"] == W.SERVED_VERSIONS[0]
+
+
+def test_the_server_answers_ping_unknown_methods_and_never_a_notification(make):
+    _server_cases(make()[0])
+
+
+CONFORMANCE = {
+    "McpClient": {
+        "real": lambda monkeypatch: _default()[1],
+        "fake": lambda: _fake()[1],
+        "cases": _client_cases,
+    },
+    "McpServer": {
+        "real": lambda monkeypatch: _default()[0],
+        "fake": lambda: _fake()[0],
+        "cases": _server_cases,
+    },
+}
 
 
 def test_serve_maps_a_bad_frame_and_an_escaped_exception_to_json_rpc_errors(make):
@@ -196,7 +217,10 @@ def test_the_default_adapter_imports_no_other_ddflow_layer_and_no_subprocess():
             mods += [a.name for a in node.names]
         elif isinstance(node, ast.ImportFrom):
             mods.append("." * node.level + (node.module or ""))  # a relative import keeps its dots
-    assert not [m for m in mods if m.startswith(("ddflow", ".")) or m == "subprocess"], mods
+    # `.ports` is the stdlib-only marker every family imports (its own layer: adapters)
+    assert not [
+        m for m in mods if (m.startswith(("ddflow", ".")) and m != ".ports") or m == "subprocess"
+    ], mods
 
 
 def test_an_after_hook_is_skipped_for_an_intercepted_message_and_a_bad_exception_result_is_internal():

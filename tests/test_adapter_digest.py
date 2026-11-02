@@ -1,0 +1,39 @@
+"""The `Digest` port: one set of cases against `ddflow.core.digest` (until its home moves
+under `ddflow.adapters`, ADP-migrate-homes) and the shipped `FakeDigest`.
+
+`CONFORMANCE` is read by the generic contract test (tests/test_ports_contract.py).
+"""
+
+from __future__ import annotations
+
+from ddflow.adapters.fakes.digest import FakeDigest
+
+
+def digest_cases(d) -> None:
+    a = d.content_digest("hello")
+    assert a == d.content_digest("hello") and a != d.content_digest("hellp")
+    assert d.content_digest("hello", length=7) == a[:7]
+    assert d.content_digest("hello", length=0) == ""
+    assert d.content_digest("é") == d.content_digest("é".encode())
+    assert d.canonical({"b": 1, "a": [1, 2]}) == d.canonical({"a": [1, 2], "b": 1})
+    assert d.canonical({"a": 1}) != d.canonical({"a": 2})
+    assert d.of_obj({"b": 1, "a": 2}) == d.of_obj({"a": 2, "b": 1})
+    assert d.of_obj({"a": 1}) != d.of_obj({"a": 2})
+    assert len(d.of_obj({"a": 1}, length=6)) == 6
+
+
+def _real(monkeypatch):
+    from ddflow.core import digest
+
+    return digest
+
+
+CONFORMANCE = {"Digest": {"real": _real, "cases": digest_cases}}
+
+
+def test_the_default_adapter_passes_the_digest_cases(monkeypatch):
+    digest_cases(_real(monkeypatch))
+
+
+def test_the_fake_passes_the_digest_cases():
+    digest_cases(FakeDigest())

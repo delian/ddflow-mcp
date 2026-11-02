@@ -2,7 +2,8 @@
 
 Home of the `http` family (urllib.request, urllib.error, http.client, socket): the
 `http-home` import contract lets only this module import them for HTTP. The port is
-`ddflow.adapters.ports.HttpClient`; the fake is `ddflow.adapters.fakes.FakeHttpClient`.
+`HttpClient`, declared below next to its adapter; the fake is
+`ddflow.adapters.fakes.http.FakeHttpClient`.
 
 What it does is what `urllib.request.urlopen` did at every call site before, in one place:
 the same proxies, redirects and TLS defaults, the caller's own timeout, http(s) only.
@@ -34,7 +35,9 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
+
+from .ports import port
 
 __all__ = ["HTTPStatus"]  # re-exported: status names for callers that may not import `http`
 
@@ -207,6 +210,35 @@ def _open(req: urllib.request.Request, timeout: float, on_connect):
     if on_connect is None:
         return urllib.request.urlopen(req, timeout=timeout)  # nosec B310 -- scheme checked
     return _tracked_opener(on_connect).open(req, timeout=timeout)  # nosec B310 -- scheme checked
+
+
+@port
+@runtime_checkable
+class HttpClient(Protocol):
+    """One HTTP exchange, the way every caller makes it.
+
+    Home: `ddflow.adapters.http` (urllib.request / http.client; the one module allowed to
+    import them). Single adapter, `UrllibHttpClient`; the fake is `FakeHttpClient`. The
+    adapter never decides consent or reads configuration: the caller checks both and passes
+    its own timeout.
+    """
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
+        timeout: float,
+        max_bytes: int | None = None,
+        raise_for_status: bool = True,
+        on_connect: Callable[[Any], None] | None = None,
+    ) -> HttpResponse:
+        """Send the request; an `HttpResponse` (status, headers, body bytes). Raises only
+        `HttpError` subclasses: `HttpTimeout`, `HttpConnectionError` (`HttpTlsError`,
+        `HttpSchemeError`), `HttpProtocolError` and, unless `raise_for_status` is false,
+        `HttpStatusError`. `on_connect` receives an object with `abort()` once connected."""
 
 
 class UrllibHttpClient:
