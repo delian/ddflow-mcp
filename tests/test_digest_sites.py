@@ -147,6 +147,11 @@ def test_harness_session_id_is_injective_and_never_empty():
     d16 = D.content_digest(raw, length=16)
     assert sessions.harness_session_id(raw) == "h-ab-" + sha256(raw.encode("utf-8"))
     assert sessions.harness_session_id(raw) != sessions.harness_session_id("ab-" + d16)
+    # A lone surrogate (a surrogateescape-decoded env var) neither raises nor empties.
+    assert sessions.harness_session_id("\udc80") == "h-" + sha256(
+        "\udc80".encode("utf-8", "surrogatepass")
+    )
+    assert sessions.harness_session_id("a\udc80b/c")  # non-empty, no raise
 
 
 def test_queue_file_names_keep_their_digest(tmp_path):
