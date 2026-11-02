@@ -197,7 +197,6 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
     t = _now(now)
     _check_caps(cfg, _state(log), sender, to_item, to_agent, shp.files, t)
     sid = sid or new_id()
-    blob = R.store_blob(log.root, clean)
     ref, verdict = "", probe or R.UNAVAILABLE
     if repo is not None:
         ref_try = R.ref_name(to_item, sid)
@@ -208,6 +207,7 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
                 "on their branch and propose again"
             )
         ref, verdict = cut.ref, cut.probe
+    blob = R.store_blob(log.root, clean)  # after the cut: a refused patch leaves no blob
     log.append(
         "suggestion.proposed",
         sid,
