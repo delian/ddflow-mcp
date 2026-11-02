@@ -222,14 +222,14 @@ class _Scan:
                 fresh = False
         return out
 
-    def programs_of(self, e: ast.AST) -> list[str]:
+    def programs_of(self, e: ast.AST, *, shell: bool = False) -> list[str]:
         """The programs one command argument names: one for an argv list or a name bound to
-        one, every command of a shell string (``a && b | c`` names a, b and c)."""
+        one; for a string, every command of the shell line when ``shell`` (``a && b | c``
+        names a, b and c), else the string is the program path itself (``os.execv``)."""
         if isinstance(e, ast.Constant) and isinstance(e.value, str):
-            found = []
-            for word in self._shell_commands(e.value):
-                found.append(_base(word))
-            return found or [DYNAMIC]
+            if not shell:
+                return [_base(e.value)] if e.value else [DYNAMIC]
+            return [_base(word) for word in self._shell_commands(e.value)] or [DYNAMIC]
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
         elif isinstance(e, ast.Name):
@@ -281,7 +281,11 @@ class _Scan:
         if name in _GIT:
             self.add("program", "git", node)
         elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL:
-            for program in self.programs_of(arg) if arg is not None else [DYNAMIC]:
+            shell = name in _SHELL or any(
+                k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True
+                for k in node.keywords
+            )
+            for program in self.programs_of(arg, shell=shell) if arg is not None else [DYNAMIC]:
                 self.add("program", program, node)
         elif name in ("shutil.which", "ddflow.infra.fsio.which"):
             lit = arg.value if isinstance(arg, ast.Constant) else None

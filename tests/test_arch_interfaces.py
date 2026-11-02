@@ -400,3 +400,13 @@ def test_the_census_modules_import_no_os_family():
     fams = {f.family: set(f.importers) for f in A.scan(ROOT).families}
     for family in ("subprocess", "http", "shutil", "clock-env", "sqlite3", "fsio"):
         assert not fams[family] & set(I.SELF_MODULES), family
+
+
+def test_a_string_is_a_shell_line_only_for_shell_calls(tmp_path: Path):
+    src = (
+        "import os\nimport subprocess\n"
+        'os.execv("/tmp/foo|bar", [])\n'
+        'subprocess.run("git status & uv sync", shell=True)\n'
+    )
+    c = I.scan(_tree(tmp_path, {"sh.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "git", "uv"}
