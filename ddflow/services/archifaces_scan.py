@@ -103,6 +103,26 @@ class Site:
 _ARG_KEYWORDS = ("args", "argv", "cmd", "command", "key", "path", "file")
 
 
+def _is_redirect(token: str) -> bool:
+    return set(token) <= set("<>&|;()") and ("<" in token or ">" in token)
+
+
+def _unquoted_newlines_to_semicolons(line: str) -> str:
+    """A newline outside quotes separates commands (shlex would read it as blank space)."""
+    out, quote = [], ""
+    for ch in line:
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "\n":
+            out.append(" ; ")
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
 def _keyword_arg(node: ast.Call) -> ast.AST | None:
     """The first argument given by keyword (``subprocess.run(args=[...])``), when none is
     positional."""
@@ -221,25 +241,28 @@ class _Scan:
         """The first word of every command in a shell line, quotes respected (``git commit -m
         'a && b'`` is one command), ``VAR=x`` prefixes skipped; the first word alone when the
         line does not tokenize."""
+        lex = shlex.shlex(
+            _unquoted_newlines_to_semicolons(line), posix=True, punctuation_chars=True
+        )
+        lex.whitespace_split = True
+        try:
+            tokens = list(lex)
+        except ValueError:
+            return line.split()[:1]
         out: list[str] = []
-        for text in line.split("\n"):  # a newline separates commands; shlex would eat it
-            lex = shlex.shlex(text, posix=True, punctuation_chars=True)
-            lex.whitespace_split = True
-            try:
-                tokens = list(lex)
-            except ValueError:
-                return [*out, *text.split()[:1]]
-            fresh, skip = True, False
-            for t in tokens:
-                if skip:  # the target of a redirection (`2>&1`, `> file`) is not a command
-                    skip = False
-                elif t in _SHELL_OPS:
-                    fresh = True
-                elif set(t) <= set("<>&|;()") and ("<" in t or ">" in t):
-                    skip = True
-                elif fresh and "=" not in t.split("/")[0]:
-                    out.append(t)
-                    fresh = False
+        fresh, skip = True, False
+        for i, t in enumerate(tokens):
+            if skip:  # the target of a redirection (`2>&1`, `> file`) is not a command
+                skip = False
+            elif t in _SHELL_OPS:
+                fresh = True
+            elif _is_redirect(t):
+                skip = True
+            elif t.isdigit() and i + 1 < len(tokens) and _is_redirect(tokens[i + 1]):
+                continue  # a file descriptor in front of a redirection (`2>/dev/null`)
+            elif fresh and "=" not in t.split("/")[0]:
+                out.append(t)
+                fresh = False
         return out
 
     def programs_of(self, e: ast.AST, *, shell: bool = False) -> list[str]:

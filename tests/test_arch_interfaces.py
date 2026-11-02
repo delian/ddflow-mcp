@@ -452,3 +452,11 @@ def test_third_round_review_findings_stay_fixed(tmp_path: Path):
         )
     )
     assert {f.family for f in sub.families if f.kind == "program"} == {"cd", "git", "grep"}
+
+
+def test_shell_lines_with_quoted_newlines_and_fd_redirections(tmp_path: Path):
+    src = (
+        'import os\nos.system("git commit -m \'a\\nb\' && ls")\nos.system("2>/dev/null uv sync")\n'
+    )
+    c = I.scan(_tree(tmp_path, {"q.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"git", "ls", "uv"}
