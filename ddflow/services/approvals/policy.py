@@ -22,8 +22,10 @@ from typing import Any
 from ...config import Config
 from ...core import clock
 from ...core.handlers.asks import EXPIRED, PENDING, asks_of
+from ...core.records.gates import GateOutcome
 from .. import gate_accept as GA
 from ..ask import engine as E
+from ..gates.defs import pipeline_for, required_gates
 from . import request as R
 from .canon import Canon
 
@@ -58,6 +60,24 @@ def _measured_baseline_red(it, gate: str, cfg: Config) -> bool:
     return not GA.refusal(it, gate)
 
 
+_UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.value)
+
+
+def _unavailable_unmet_only(it, _target: str, cfg: Config) -> bool:
+    """`complete_unavailable`: every unmet REQUIRED gate of the item's pipeline has an
+    `unavailable` or `partial` outcome (a worktree gone before a gate could run, or a
+    command gate that reported partway) and there is at least one. A `failed` gate, a
+    silent (never run) gate, or any outcome outside {unavailable, partial} fails the
+    condition, so a genuinely-failed gate is NEVER auto-approved -- that is the whole
+    point of the rule. The other completion blockers (an open bug, unfinished sub-tasks)
+    are not gates and are not weighed here: the completion site's verdict guards them."""
+    required = set(required_gates(cfg))
+    unmet = [
+        g for g in pipeline_for(it, cfg) if g in required and not it.gate_satisfied(g, True)
+    ]
+    return bool(unmet) and all(it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL for g in unmet)
+
+
 RULES: dict[str, Rule] = {
     r.id: r
     for r in (
@@ -78,7 +98,7 @@ RULES: dict[str, Rule] = {
             "complete.force",
             "complete an item whose unmet completion condition is an unavailable tool/gate, "
             "inside the standing window",
-            _true,
+            _unavailable_unmet_only,
         ),
         Rule(
             "claim_unavailable",

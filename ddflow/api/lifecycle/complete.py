@@ -40,6 +40,16 @@ from .heartbeat import _commit_events, _inbox, _waiters
 from .planning import plan_for
 
 
+def _only_unavailable(v) -> bool:
+    """Would the standing `complete_unavailable` rule answer this completion: its ONLY unmet
+    conditions are required gates recorded `unavailable`/`partial`. There must be a single
+    blocker (the "required gate(s) not passed" one) and every unmet required gate a coverage
+    gap -- never a failure, silence, an open bug or unfinished sub-tasks."""
+    if not v.unmet_gates or len(v.blockers) != 1:
+        return False
+    return set(v.unmet_gates) <= set(v.coverage_gaps)
+
+
 def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base):
     """(force, event fields, refusal): an agent's `--approval` turns an unmet-conditions refusal
     into a recorded override, never over a failed review gate and never for a person."""
@@ -205,6 +215,17 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             forced=False,
             **base,
         )
+    if not v.may_complete and not force and not hard and not approval and _only_unavailable(v):
+        # An agent's ROUTINE refusal (no `--approval`) of a completion whose ONLY unmet
+        # required gates are `unavailable`/`partial` is exactly what the standing
+        # `complete_unavailable` rule pre-authorised within the window: answer it and
+        # complete recorded `policy:complete_unavailable` with the digest. An explicit
+        # `--approval request` stays a person ask (Bef8d328af3), and a failure or silence
+        # is never auto-answered -- `_only_unavailable` and the rule's own predicate both
+        # refuse it, so this never weakens a genuinely-failed gate.
+        ok, auto_stamp, _why = _approved_force(log, cfg, item, v.blockers, "", agent)
+        if ok:
+            force, stamp = True, {"approval": auto_stamp}
     if not v.may_complete and not force:
         return O.refused(
             "item.completed",
