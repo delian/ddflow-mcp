@@ -59,7 +59,9 @@ def _auto_complete_unavailable(log, cfg, item, v, hard, approval, agent, force, 
     this never weakens a genuinely-failed gate."""
     if v.may_complete or force or hard or approval or not _only_unavailable(v):
         return force, stamp
-    ok, auto_stamp, _why = _approved_force(log, cfg, item, v.blockers, "", agent)
+    ok, auto_stamp, _why = _approved_force(
+        log, cfg, item, v.blockers, "", agent, v.unmet_gates
+    )
     return (True, {"approval": auto_stamp}) if ok else (force, stamp)
 
 
@@ -74,13 +76,17 @@ def _override_by_approval(log, cfg, item, v, hard, force, approval, agent, base)
     return True, {"approval": stamp}, None
 
 
-def _approved_force(log, cfg, item: str, blockers: list[str], approval: str, agent: str):
+def _approved_force(
+    log, cfg, item: str, blockers: list[str], approval: str, agent: str, unmet_gates: list[str] = ()
+):
     """(force, stamp, refusal) for an agent spending an operator's approval of overriding exactly
-    ``blockers`` on ``item`` (verb complete.force). Not filed on every refusal: `--approval request`."""
+    ``blockers`` on ``item`` (verb complete.force). Not filed on every refusal: `--approval request`.
+    ``unmet_gates`` names the verdict's unmet required gates so the standing `complete_unavailable`
+    predicate checks exactly the gates the verdict flagged, never a re-derived list."""
     if not AP.agent_marker(agent):
         return False, {}, "--approval is an agent's route; a person uses --force"
     canon = Canon(
-        verb="complete.force", agent=log.agent_id, item=item,
+        verb="complete.force", agent=log.agent_id, item=item, target=",".join(sorted(unmet_gates)),
         state=content_digest("\n".join(sorted(blockers))),
     )  # fmt: skip
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
