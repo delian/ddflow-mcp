@@ -32,6 +32,7 @@ from .tool_types import (
     UNAVAILABLE,
     Finding,
     RunResult,
+    ToolParseError,
     ToolProbe,
     ToolRun,
     ToolRunner,
