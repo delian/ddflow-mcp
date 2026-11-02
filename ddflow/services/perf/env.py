@@ -103,10 +103,13 @@ def cache_state(dirs: Iterable[Path]) -> str:
     unreadable = False
     for d in ds:
         try:
-            if d.is_dir() and any(d.iterdir()):
-                return "warm"
+            with os.scandir(d) as it:
+                if any(True for _ in it):
+                    return "warm"
+        except (FileNotFoundError, NotADirectoryError):
+            continue  # no such cache: that is what cold means
         except OSError:
-            unreadable = True
+            unreadable = True  # exists but cannot be looked at: the probe did not run
     return UNAVAILABLE if unreadable else "cold"
 
 

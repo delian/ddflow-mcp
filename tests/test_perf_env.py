@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 import json
+import re
 import socket
 from pathlib import Path
 
@@ -118,10 +119,11 @@ def test_unlistable_cache_is_unavailable_not_cold(tmp_path: Path):
     d.mkdir()
     d.chmod(0)
     try:
-        if not _listable(d):
+        if not _listable(d):  # running as root can list anything: nothing to prove then
             assert E.cache_state([d]) == "unavailable"
     finally:
         d.chmod(0o700)
+    assert E.cache_state([tmp_path / "missing"]) == "cold"
 
 
 def _listable(d: Path) -> bool:
@@ -153,9 +155,6 @@ def test_cache_state(tmp_path: Path):
     assert E.cache_state([d]) == "warm"
 
 
-MIN_IDENT = 3  # shorter names collide with the fixed stamp vocabulary, not with a leak
-
-
 def _identifiers(tmp_path: Path) -> list[str]:
     try:
         user = getpass.getuser()
@@ -164,15 +163,44 @@ def _identifiers(tmp_path: Path) -> list[str]:
     paths = (tmp_path, Path.home())
     names = [socket.gethostname(), user, tmp_path.name]
     names += [str(p) for p in paths] + [p.as_posix() for p in paths]
-    return [n for n in names if len(n) > MIN_IDENT]
+    return [n for n in names if n]
+
+
+def _assert_closed_vocabulary(fp) -> None:
+    """Every fact is an int, a bool or a word from a closed set: nothing free-form can carry
+    a hostname, user or path, whatever those are called."""
+    words = {
+        "load": {"idle", "busy", "saturated", "unavailable"},
+        "cache": {"warm", "cold", "unavailable"},
+        "cgroup": {"limited", "unlimited", "unavailable"},
+        "vm": {"unknown", "no"},
+        "os": {"Linux", "Darwin", "Windows", "unavailable"},
+    }
+    for k, v in fp.facts.items():
+        if k in words:
+            assert v in words[k], (k, v)
+        elif k in ("container",):
+            assert isinstance(v, bool)
+        elif k in ("cpu_count", "xdist_workers", "parallel_cap"):
+            assert v == "unavailable" or isinstance(v, int), (k, v)
+        elif k == "python":
+            assert re.fullmatch(r"\d+\.\d+|unavailable", str(v)), v
+        elif k == "ddflow":
+            assert re.fullmatch(r"[0-9][0-9A-Za-z.+-]*|unavailable", str(v)), v
+        elif k == "git_head":
+            assert re.fullmatch(r"[0-9a-f]{12}|unavailable", str(v)), v
+        else:
+            raise AssertionError(f"unexpected fact {k}")
 
 
 def test_collect_runs_here_and_leaks_nothing(tmp_path: Path):
     fp = E.collect(tmp_path, parallel_cap=2, xdist_workers=1, cache_dirs=[tmp_path / "none"])
+    _assert_closed_vocabulary(fp)
     blob = "\n".join([fp.key, fp.cond, json.dumps(fp.facts, ensure_ascii=False), fp.stamp()])
-    for vocab in ["env:", *fp.facts, *map(str, fp.facts.values())]:  # fixed, non-identifying words
-        blob = blob.replace(vocab, "")
+    vocab = {str(v) for v in fp.facts.values()} | set(fp.facts) | {"env"}
     for secret in _identifiers(tmp_path):
+        if secret in vocab:
+            continue  # a fixed word; _assert_closed_vocabulary proves it is not a leak
         assert secret not in blob
         assert json.dumps(secret)[1:-1] not in blob
     assert fp.stamp().startswith(f"env:{fp.key}/{fp.cond}")
