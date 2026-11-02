@@ -185,17 +185,16 @@ def _h_reopened(st: State, ev: Event) -> None:
 
 def _h_item_reworked(st: State, ev: Event) -> None:
     """A re-claim of an item that had already merged reopens that stale merge: the landing
-    is no longer `merged_sha`, so it and the merge/ci gates clear and the work is re-merged
-    (and ci re-run) from scratch. Other gate outcomes are left: a rework re-runs them over
-    the new work in the normal order (B-rework-of-merged-item-keeps-stale-merge)."""
+    is no longer `merged_sha`, so it clears, and the item's gates clear with it -- a rework
+    re-gates the new work in the normal order, exactly like `item.reopened`
+    (B-rework-of-merged-item-keeps-stale-merge)."""
     it = st.items.get(ev.subject)
     if it is None:
         return
     it.merged_sha = ""
     it.landed_before = ""
     it.landed_after = ""
-    it.gates.pop("merge", None)
-    it.gates.pop("ci", None)
+    it.gates = {}
 
 
 def _h_unblocked(st: State, ev: Event) -> None:

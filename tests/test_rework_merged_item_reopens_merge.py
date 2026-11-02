@@ -48,6 +48,7 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
     _git(tree, "add", ".")
     _git(tree, "commit", "-qm", "work")
     if with_ci:
+        run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "e")
         run_cli(repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "e")
     assert run_cli(repo, "merge", "T1")[0] == 0
     sha = fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
@@ -57,7 +58,7 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
 
 def test_reclaiming_a_merged_item_reopens_the_stale_merge(repo):
     """The re-claim of a merged item is a rework: the recorded merge no longer stands, so
-    `merged_sha` and the merge/ci gates clear instead of a stale [x] surviving to complete."""
+    `merged_sha` and every gate outcome clear (no stale [x] survives to completion)."""
     _merged(repo, with_ci=True)
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, out + err
@@ -66,6 +67,7 @@ def test_reclaiming_a_merged_item_reopens_the_stale_merge(repo):
     assert it.merged_sha == ""
     assert it.gate_outcome("merge") == ""
     assert it.gate_outcome("ci") == ""
+    assert it.gate_outcome("implement") == ""  # rework re-gates, no stale pass survives
 
 
 def test_a_gate_run_after_rework_runs_in_the_new_tree(repo):

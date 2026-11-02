@@ -173,7 +173,7 @@ def _reopen_stale_merge(log, parked, item: str) -> dict[str, str]:
     new work is a rework, and leaving the old merge standing made `gate run` answer "merged,
     the merge removed its worktree" and record UNAVAILABLE over the new work while the
     merge gate still showed [x] (B-rework-of-merged-item-keeps-stale-merge). The claim
-    writes `item.reworked`, which clears those, and says so, so the rework re-merges.
+    writes `item.reworked`, which clears those and the item's gates, so the rework re-merges.
     """
     if parked is None or not parked.merged_sha:
         return {}
@@ -181,7 +181,7 @@ def _reopen_stale_merge(log, parked, item: str) -> dict[str, str]:
     return {
         "reopened_merge": (
             f"{item} had already merged ({parked.merged_sha[:12]}); the re-claim reopened "
-            f"it: merged_sha and the merge/ci gates are cleared, so it re-merges from scratch."
+            f"it: merged_sha and the item's gates are cleared, so it re-merges from scratch."
         )
     }
 
