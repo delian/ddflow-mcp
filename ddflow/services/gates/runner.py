@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import signal
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -365,10 +366,36 @@ def _blocked_on(output: str) -> str:
     return found[-1].strip() if found else ""
 
 
+#: The signals that mean the run was CUT OFF from outside (a harness timeout, a `kill`, a
+#: terminal hangup/interrupt), not a verdict. A crash (SIGSEGV, SIGABRT, SIGBUS, SIGFPE,
+#: SIGILL) is the command's own failure and stays FAILED -- only these read as unavailable.
+_CUT_OFF_SIGNALS = frozenset({"SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGKILL"})
+
+
+def _signal_death(code: int | None) -> str:
+    """The delivery signal that cut a command's process off from outside, else "".
+
+    Python reports a signalled DIRECT child as a NEGATIVE return code (``-N``): that is the
+    one trustworthy form, because a shell only reports the positive ``128+N`` for a child of
+    a COMPOUND command it survived, and that is indistinguishable from a command that exits
+    that code itself (``exit 137`` would read as "killed by SIGKILL" and downgrade a real
+    failure to UNAVAILABLE). A kill read as ``failed`` was what left a cut-off ``ci`` run
+    stuck as "queued 11m of 15m elapsed" forever (B8664a1e0c6).
+    """
+    if not isinstance(code, int) or isinstance(code, bool) or code >= 0:
+        return ""
+    try:
+        name = signal.Signals(-code).name
+    except ValueError:
+        return ""
+    return name if name in _CUT_OFF_SIGNALS else ""
+
+
 def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     """`(outcome, reason)` for a command that RAN. The reason is "" for a plain pass/fail.
 
     The gate's declared exit codes and output patterns first, then the POSIX default.
+    A command killed by a signal is UNAVAILABLE (its checks were cut off, not failed).
     A pattern that does not compile is UNAVAILABLE naming the knob: a broken verdict
     rule decides nothing, and guessing either way would be a verdict nobody gave.
     """
@@ -392,6 +419,12 @@ def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     if code in gdef.partial_exits:
         return Classified(
             GateOutcome.PARTIAL, f"exit {code} is declared PARTIAL for this gate (partial_exits)"
+        )
+    if death := _signal_death(code):
+        return Classified(
+            GateOutcome.UNAVAILABLE,
+            f"the command was killed by {death} (exit {code}): the run was cut off before it "
+            f"finished, so there is no verdict. Not a failing check.",
         )
     if code != 0:
         return Classified(GateOutcome.FAILED, "")

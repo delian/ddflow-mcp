@@ -42,7 +42,7 @@ def test_a_tree_whose_item_is_merged_and_released_takes_the_next_claim(repo):
     tree = _first_item_worked_in_the_harness_tree(repo)
     code, out, err = run_cli(tree, "merge", "T1")
     assert code == OK, out + err
-    assert run_cli(tree, "release", "T1")[0] == OK
+    assert run_cli(tree, "release", "T1")[0] in (OK, NOTHING)  # the merge already released it
     code, out, err = run_cli(tree, "claim", "T2")
     assert code == OK, out + err
 
@@ -58,7 +58,7 @@ def test_unmerged_commits_still_hold_the_tree(repo):
 def test_uncommitted_changes_still_hold_the_tree(repo):
     tree = _first_item_worked_in_the_harness_tree(repo)
     assert run_cli(tree, "merge", "T1")[0] == OK
-    assert run_cli(tree, "release", "T1")[0] == OK
+    assert run_cli(tree, "release", "T1")[0] in (OK, NOTHING)  # the merge already released it
     (tree / "a.py").write_text("a = 2  # more of T1's work, not committed\n")
     code, out, err = run_cli(tree, "claim", "T2")
     assert code == REFUSED, out + err
@@ -66,6 +66,7 @@ def test_uncommitted_changes_still_hold_the_tree(repo):
 
 def test_a_live_lease_still_holds_the_tree(repo):
     tree = _first_item_worked_in_the_harness_tree(repo)
+    run_cli(repo, "config", "--set", "lease.release_at_merge", "false")  # hold to complete
     assert run_cli(tree, "merge", "T1")[0] == OK
     code, out, err = run_cli(tree, "claim", "T2")
     assert code == REFUSED, out + err
