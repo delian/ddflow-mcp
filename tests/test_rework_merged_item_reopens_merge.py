@@ -68,6 +68,7 @@ def test_reclaiming_a_merged_item_reopens_the_stale_merge(repo):
     _merged(repo, with_ci=True)
     before = fold(EventLog(repo).read_all(), strict=False).items["T1"]
     assert before.gate_outcome("ci") == "passed"  # a stale ci outcome exists to be reopened
+    assert before.gate_outcome("implement") == "passed"  # a stale implement pass exists too
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, out + err
     assert "reopened" in out + err  # the claim says the stale merge was reopened
