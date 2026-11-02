@@ -13,8 +13,8 @@ Only the items below differ.
    `ddflow next --json`, fan each ready item to one window/terminal agent each (the
    dispatched process claims its OWN item — ddflow's exclusive lease refuses a duplicate)
    mapping `tier:fast|balanced|deep` to model choice, and a re-read of `next` after each
-   merge or park. Stop only on empty scope (no ready, no held/blocked, none in flight) or
-   a question/operator gate. Within one request keep going — claim, run the gates, merge —
+   merge or park. Stop only on empty scope — `ddflow next` reports no ready and no
+   held/blocked (an in-flight item is held by its lease) — or a question/operator gate. Within one request keep going — claim, run the gates, merge —
    re-reading `next` after each merge or park until the scope is empty; end the request
    with `ddflow_next` and `ddflow_cadence` output only as the handoff to the next
    invocation. Nothing persists between requests, so printing the handoff IS the restart
