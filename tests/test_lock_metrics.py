@@ -271,3 +271,30 @@ def test_each_merge_is_scored_against_its_own_lease():
         0.5
     )  # src/c.py was not under docs/*.md
     assert d["items_with_undeclared_writes"] == 1
+
+
+def test_false_serialization_uses_the_files_of_the_leases_that_collided():
+    log = Log()
+    for t in "AB":
+        log.task(t, "src/*.py")
+    log.claim("a", "A", T0 - 500, "src/*.py")
+    merged(log, "A", T0 - 450, "A1")
+    log.release("a", "A", T0 - 400)
+    log.claim("a", "A", T0, "src/*.py")
+    merged(log, "A", T0 + 900, "A2")
+    log.release("a", "A", T0 + 1000)
+    log.add("lease.waiting", "B", "b", T0 + 50, at=T0 + 50, globs=["src/*.py"], holder="a", on=[])
+    log.claim("b", "B", T0 + 1000, "src/*.py")
+    merged(log, "B", T0 + 1500, "B2")
+    log.release("b", "B", T0 + 1600)
+    log.claim("b", "B", T0 + 2000, "src/*.py")  # a later lease of B also touches common.txt
+    merged(log, "B", T0 + 2100, "B1")
+    log.release("b", "B", T0 + 2200)
+    files = {
+        ("A10", "A11"): ["common.txt"], ("B10", "B11"): ["common.txt"],
+        ("A20", "A21"): ["src/a.py"], ("B20", "B21"): ["src/b.py"],
+    }  # fmt: skip
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    w = M.run(log.events, st, cfg, now, view="locks", probes=Fake(files, {})).metrics["waits"]
+    assert w["classified"] == 1 and w["false_serialization"]["spans"] == 1

@@ -121,23 +121,31 @@ def _landing_files(probes: Probes | None, m: Landing, cache: dict) -> list[str] 
     return cache[(m.before, m.after)]
 
 
-def _actual(ctx: Context, probes: Probes | None, item: str, cache: dict) -> frozenset | None:
-    """Files all the item's merges changed; None when git (or the log) cannot say."""
-    parts = [_landing_files(probes, m, cache) for m in ctx.facts.landings.get(item, ())]
+def _actual(
+    ctx: Context, probes: Probes | None, item: str, cache: dict, lease: Lease | None = None
+) -> frozenset | None:
+    """Files the item's merges changed (those inside ``lease`` when given); None when git (or
+    the log) cannot say."""
+    lands = [
+        m
+        for m in ctx.facts.landings.get(item, ())
+        if lease is None or (lease.start <= m.at and (lease.end is None or m.at <= lease.end))
+    ]
+    parts = [_landing_files(probes, m, cache) for m in lands]
     if not parts or any(p is None for p in parts):
         return None
     return frozenset(f for p in parts for f in p or ())
 
 
-def _blockers(ctx: Context, item: str, since: float) -> list[str]:
+def _blockers(ctx: Context, item: str, since: float) -> list[Lease]:
     """Other items holding a lease at ``since`` whose globs overlap the waiter's."""
     mine = _declared_of(ctx, item, since)
     out = []
     for lease in ctx.facts.leases:
         live = lease.start <= since and (lease.end is None or lease.end > since)
         if live and lease.item != item and any(G.overlap(x, y) for x in mine for y in lease.globs):
-            out.append(lease.item)
-    return sorted(set(out))
+            out.append(lease)
+    return out
 
 
 def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> dict:
@@ -151,8 +159,9 @@ def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> di
         began, secs = min(before), claim - min(before)
         spans.append(secs)
         blockers = _blockers(ctx, item, began)
-        mine = _actual(ctx, probes, item, cache)
-        theirs = [_actual(ctx, probes, b, cache) for b in blockers]
+        own = next((x for x in ctx.facts.leases if x.item == item and x.start == claim), None)
+        mine = _actual(ctx, probes, item, cache, own)
+        theirs = [_actual(ctx, probes, b.item, cache, b) for b in blockers]
         if not blockers or mine is None or any(t is None for t in theirs):
             continue
         classified, class_s = classified + 1, class_s + secs
