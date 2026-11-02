@@ -229,3 +229,15 @@ def test_a_failed_lint_check_keeps_ci_from_being_baseline_red() -> None:
     tests = Check("unit tests + end-to-end scenarios", False)
     assert BL.only_tests_failed([Check("ruff check", True), tests, Check("command", False)])
     assert not BL.only_tests_failed([Check("ruff check", False), tests])
+
+
+def test_a_malformed_cache_is_dropped_not_fatal_and_a_name_after_equals_matches(repo) -> None:
+    from ddflow.api import gate_baseline as GB
+
+    sha = "a" * 40
+    path = repo / BL.CACHE_DIR / f"{sha}.{BL.digest('')[:12]}.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"ids": {"a": {}, "b": true}}')
+    BL.cache_store(repo, sha, {"c": True}, 3600)
+    assert BL.cache_load(repo, sha, 3600) == {"c": True}
+    assert GB._names(f"--deselect={ID}", ID)

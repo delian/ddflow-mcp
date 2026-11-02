@@ -45,7 +45,9 @@ def apply(  # noqa: PLR0913, PLR0917
     probe = gdef
     if gate == "ci":  # `ddflow ci run` is no pytest: the whole failing list is kept aside, and
         probe = _unit_tests_def(repo, cfg) or gdef
-        ids = [] if TS.fail_fast(probe.command) else _ci_ids(repo, cfg, ev, ids)
+        ids = _ci_ids(repo, cfg, ev, ids)
+        if len(ids) > 1 and TS.fail_fast(probe.command):
+            ids = []  # a run stopped at its first failure lists one of many
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
@@ -100,7 +102,7 @@ def _linked(repo: Path, agent: str, ids: list[str]) -> str:
 
 def _names(text: str, test_id: str) -> bool:
     """Does ``text`` name ``test_id`` as a whole id (not inside a longer one or a path)?"""
-    left = r"(?:(?<![^\s,;(`'\"\[]))"  # start, or after a space or opening punctuation
+    left = r"(?:(?<![^\s,;(`'\"\[=]))"  # start, or after a space or opening punctuation
     right = r"(?=$|[\s,;)`'\"\]]|[.:](?:\s|$))"
     return re.search(left + re.escape(test_id) + right, text) is not None
 

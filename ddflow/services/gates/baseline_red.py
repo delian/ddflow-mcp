@@ -56,7 +56,7 @@ def on_base(
                 "ids": ids, "still_failing": [i for i in ids if known[i]]}  # fmt: skip
     todo = [i for i in ids if i not in known]
     outcomes: list[str] = []
-    cmd = ""
+    cmds: list[str] = []
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-base.", quiet=True) as tree:
         if tree.path is None:
             return {"red": False, "why": "no scratch worktree of the base could be made"}
@@ -66,6 +66,7 @@ def on_base(
             cmd = TS.run_command(gdef.command, part, tree.path)
             if not cmd:
                 return {"red": False, "why": "the gate's command does not run pytest"}
+            cmds.append(cmd)
             outcome, seen = _chunk(replace(gdef, command=cmd), tree.path, part, run)
             outcomes.append(outcome)
             if seen is not None:
@@ -75,7 +76,7 @@ def on_base(
     red = all(known.get(i) for i in ids)
     return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,
             "outcome": "failed" if red or "failed" in outcomes else (outcomes[-1] if outcomes else ""),
-            "command": cmd,
+            "command": cmds[0] if len(cmds) == 1 else "; ".join(cmds),
             "ids": ids, "still_failing": failing}  # fmt: skip
 
 

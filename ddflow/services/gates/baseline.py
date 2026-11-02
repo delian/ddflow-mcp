@@ -44,7 +44,7 @@ def cache_load(
     clock_now = CLOCK.wall() if now is None else now
     try:
         seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
-        return {str(k): bool(v[0]) for k, v in seen.items() if clock_now - float(v[1]) <= ttl_s}
+        return {str(k): bool(v[0]) for k, v in seen.items() if _fresh(v, clock_now, ttl_s)}
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return {}
 
@@ -74,7 +74,7 @@ def cache_store(
             held = {}
         now = CLOCK.wall()
         merged = {
-            **{k: v for k, v in held.items() if now - float(v[1]) <= ttl_s},
+            **{k: v for k, v in held.items() if _fresh(v, now, ttl_s)},
             **{i: [f, now] for i, f in results.items()},
         }
         path.parent.mkdir(parents=True, exist_ok=True)
