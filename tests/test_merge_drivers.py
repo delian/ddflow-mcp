@@ -113,6 +113,12 @@ def test_unreadable_baseline_is_not_a_pass(repo: Path, monkeypatch) -> None:
         return real(self, *a, **k)
 
     monkeypatch.setattr(Path, "read_text", deny)
+    real_run = MD.G.run
+    monkeypatch.setattr(
+        MD.G,
+        "run",
+        lambda r, *a, **k: real_run(r, "nonsense-cmd") if a[0] == "show" else real_run(r, *a, **k),
+    )
     found = MD.check_baselines(repo, Config.load(repo))
     assert len(found) == 1 and "unavailable" in found[0]
 
@@ -122,3 +128,11 @@ def test_check_and_install_together_are_refused(repo: Path) -> None:
 
     out = PF.pins_regenerate(repo, verb="drivers", install=True, check=True, start=repo)
     assert out.exit == 1 and "separate steps" in out.reason
+
+
+def test_check_reads_the_staged_blob_not_the_working_tree(repo: Path) -> None:
+    (repo / "base" / "a.txt").write_text("z\na\n")
+    _git(repo, "add", "base/a.txt")
+    (repo / "base" / "a.txt").write_text("a\nz\n")  # resolved but not staged
+    found = MD.check_baselines(repo, Config.load(repo))
+    assert len(found) == 1 and "not sorted" in found[0]

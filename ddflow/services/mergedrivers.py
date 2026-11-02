@@ -110,6 +110,10 @@ def plan(repo: Path, cfg: Config) -> Plan:
         line = SF.union_line(g)
         if not any(ch.isspace() for ch in g) and not _have(repo, line):
             p.attrs.append(line)
+    for g in SF.committed_append_only(repo):  # apply writes these too (shared_files)
+        line = SF.union_line(g)
+        if not any(ch.isspace() for ch in g) and not _have(repo, line) and line not in p.attrs:
+            p.attrs.append(line)
     if cfg.pins.after_merge != "off":
         p.regenerate = [PM._attr_line(repo, f) for f in pin_files(repo, cfg)]
     if cfg.pins.mergiraf:
@@ -143,18 +147,27 @@ def apply(repo: Path, cfg: Config) -> list[str]:
 def check_baselines(repo: Path, cfg: Config) -> list[str]:
     """The ratchet's check of the union: each tracked baseline file that is not sorted, has a
     repeated entry or holds a conflict marker, as a sentence naming the remedy."""
-    tracked = G.git_paths(repo, "ls-files") or []
+    tracked = G.git_paths(repo, "ls-files")
+    if tracked is None:
+        return [
+            "git could not list the tracked files: the baseline check is unavailable, not passed;"
+            " retry `ddflow pins drivers --check` (MCP: ddflow_pins document=drivers check=true)"
+        ]
     bad: list[str] = []
     for path in tracked:
         if not is_shared(path, cfg.pins.baseline_globs):
             continue
-        try:
-            text = (Path(repo) / path).read_text("utf-8")
-        except OSError as exc:
-            bad.append(
-                f"{path} could not be read ({exc.strerror}): the check is unavailable for it"
-            )
-            continue
+        staged = G.run(repo, "show", f":{path}")  # the blob a commit would carry
+        if staged.ok:
+            text = staged.out + "\n"
+        else:
+            try:
+                text = (Path(repo) / path).read_text("utf-8")
+            except OSError as exc:
+                bad.append(
+                    f"{path} could not be read ({exc.strerror}): the check is unavailable for it"
+                )
+                continue
         rows = [r for r in text.splitlines() if r.strip() and not r.startswith("#")]
         if _MARK.search(text):
             bad.append(
