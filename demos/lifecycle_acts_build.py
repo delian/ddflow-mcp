@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 
 from harness import McpClient
-
 from lifecycle_data import (
     ACCOUNT_PY,
     ACCOUNT_TEST,

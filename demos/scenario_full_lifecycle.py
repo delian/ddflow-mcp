@@ -40,7 +40,6 @@ from __future__ import annotations
 import json
 
 from harness import McpClient, Scenario
-
 from lifecycle_acts_build import act2_phase_one_in_parallel, act3_subtasks_and_a_bug
 from lifecycle_acts_change import act4_close_the_phase, act5_requirements_change_mid_flight
 from lifecycle_acts_finish import (
