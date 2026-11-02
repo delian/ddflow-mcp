@@ -8,6 +8,8 @@ import re
 import socket
 from pathlib import Path
 
+import pytest
+
 from ddflow.services.perf import env as E
 
 
@@ -119,8 +121,9 @@ def test_unlistable_cache_is_unavailable_not_cold(tmp_path: Path):
     d.mkdir()
     d.chmod(0)
     try:
-        if not _listable(d):  # running as root can list anything: nothing to prove then
-            assert E.cache_state([d]) == "unavailable"
+        if _listable(d):
+            pytest.skip("root can list a mode-0 directory: no unreadable cache to build")
+        assert E.cache_state([d]) == "unavailable"
     finally:
         d.chmod(0o700)
     assert E.cache_state([tmp_path / "missing"]) == "cold"
