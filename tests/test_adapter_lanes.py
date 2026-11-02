@@ -55,8 +55,8 @@ def spec(**kw) -> L.LaunchSpec:
 
 
 def settle(lane, h) -> None:
-    deadline = time.time() + 10
-    while lane.status(h).state == "running" and time.time() < deadline:
+    deadline = time.monotonic() + 10
+    while lane.status(h).state == "running" and time.monotonic() < deadline:
         time.sleep(0.02)
 
 
@@ -118,10 +118,11 @@ def test_the_fake_keeps_the_newest_events_when_the_buffer_is_small():
 
 
 def test_the_fake_stopped_early_reports_stopped_and_can_refuse():
-    f = FakeLane(TRANSCRIPT)
+    f = FakeLane(TRANSCRIPT, capabilities=("steer",))
     h = f.start(spec())
     f.stop(h)
     assert f.status(h).state == "stopped"
+    assert f.steer(h, "late").status == "failed" and not h.steered
     no = FakeLane(refuse=L.unavailable("no agent here"))
     assert no.start(spec()).status == "unavailable"
 

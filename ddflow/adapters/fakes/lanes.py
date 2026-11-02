@@ -85,6 +85,8 @@ class FakeLane:
     def steer(self, h: FakeHandle, text: str) -> L.Result:
         if "steer" not in h.capabilities:
             return L.unavailable("the fake lane was built without the steer capability")
+        if h.stopped or h.cursor >= len(h.script):
+            return L.failed("the fake lane has ended: nothing to steer")
         h.steered.append(text)
         return L.ok("recorded")
 
