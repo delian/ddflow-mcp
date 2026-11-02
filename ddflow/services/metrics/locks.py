@@ -147,6 +147,20 @@ def _blockers(ctx: Context, item: str, since: float, mine: tuple[str, ...]) -> l
     return out
 
 
+def _false_wait(
+    ctx: Context, probes: Probes | None, item: str, began: float, claim: float, cache: dict
+) -> bool | None:
+    """Was this wait false serialization (waiter and every blocker wrote disjoint files)?
+    None when it cannot be classified: no blocker found, or git could not say."""
+    own = next((x for x in ctx.facts.leases if x.item == item and x.start == claim), None)
+    blockers = _blockers(ctx, item, began, own.globs if own else _declared_of(ctx, item))
+    mine = _actual(ctx, probes, item, cache, own)
+    theirs = [_actual(ctx, probes, b.item, cache, b) for b in blockers]
+    if not blockers or mine is None or any(t is None for t in theirs):
+        return None
+    return all(mine.isdisjoint(t or ()) for t in theirs)
+
+
 def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> dict:
     spans, false_s, class_s, classified, false_n = [], 0.0, 0.0, 0, 0
     for item, queued in ctx.facts.waits.items():
@@ -157,15 +171,10 @@ def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> di
             continue
         began, secs = min(before), claim - min(before)
         spans.append(secs)
-        own = next((x for x in ctx.facts.leases if x.item == item and x.start == claim), None)
-        blockers = _blockers(ctx, item, began, own.globs if own else _declared_of(ctx, item))
-        mine = _actual(ctx, probes, item, cache, own)
-        theirs = [_actual(ctx, probes, b.item, cache, b) for b in blockers]
-        if not blockers or mine is None or any(t is None for t in theirs):
-            continue
-        classified, class_s = classified + 1, class_s + secs
-        if all(mine.isdisjoint(t or ()) for t in theirs):
-            false_n, false_s = false_n + 1, false_s + secs
+        false = _false_wait(ctx, probes, item, began, claim, cache)
+        if false is not None:
+            classified, class_s = classified + 1, class_s + secs
+            false_n, false_s = false_n + false, false_s + secs * false
     return {
         "spans": stat(spans, minimum),
         "total_s": sum(spans),
