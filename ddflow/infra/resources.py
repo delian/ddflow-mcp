@@ -59,15 +59,13 @@ class Resources:
 
 def from_rusage(ru: Any, source: str = WAIT4, platform: str | None = None) -> Resources:
     """A `Resources` from a ``struct_rusage`` (or anything with its attributes)."""
-    # macOS fills ru_inblock/ru_oublock with 0 whatever the command did: unknown, not zero.
-    io = (platform or sys.platform) != "darwin"
     return Resources(
         source,
         round(ru.ru_utime, 3),
         round(ru.ru_stime, 3),
         maxrss_kb(ru.ru_maxrss, platform),
-        int(ru.ru_inblock) if io else None,
-        int(ru.ru_oublock) if io else None,
+        int(ru.ru_inblock),
+        int(ru.ru_oublock),
     )
 
 
