@@ -199,6 +199,7 @@ def test_collect_runs_here_and_leaks_nothing(tmp_path: Path, monkeypatch):
         monkeypatch.setenv(var, user)
     monkeypatch.setenv("HOSTNAME", host)
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     fp = E.collect(repo, parallel_cap=2, xdist_workers=1, cache_dirs=[repo / "none"])
     _assert_closed_vocabulary(fp)
     blob = "\n".join([fp.key, fp.cond, json.dumps(fp.facts, ensure_ascii=False), fp.stamp()])
