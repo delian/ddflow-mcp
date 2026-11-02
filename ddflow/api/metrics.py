@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import metrics as M
+from ..services.metrics.lockgit import GitProbes
 from ._base import _load
 
 
@@ -25,7 +26,7 @@ def run_metrics(
     now: float | None = None,
     agent: str = "",
 ) -> O.Outcome:
-    """One of the metrics views (summary, forecast, retro, skips, lanes, stages). Exit 2 when the
+    """One of the metrics views (summary, forecast, retro, skips, lanes, stages, locks). Exit 2 when the
     log holds too little to compute a figure: never a zero standing in for one."""
     log, cfg, st = _load(repo, agent)
     at = time.time() if now is None else now
@@ -39,6 +40,7 @@ def run_metrics(
         phase=phase or "",
         since=since or "",
         group_by=group_by or "",
+        probes=GitProbes(repo) if view == "locks" else None,
     )
     data = {
         "view": view or "summary",
