@@ -7,19 +7,16 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
-import threading
-import traceback
 from pathlib import Path
 from typing import Any
 
+from ...adapters.mcp import StdioServer
 from ...infra import proc as PROC
 from ...infra.worktree import repo_root
 from .. import mcp_upgrade as _upgrade
 from ..mcp_protocol import SERVER_INFO
-from ..mcp_protocol import err as _err
 from ..mcp_protocol import modern_check as _modern_check
 from ..mcp_protocol import modernize as _modernize
 from ._offload import _offload, _offloaded
@@ -51,45 +48,35 @@ def serve(
     if offload is None:
         offload = stdin is None
 
-    out_lock = threading.Lock()
-
-    def notify(frame: dict[str, Any]) -> None:
-        with out_lock:
-            outp.write(json.dumps(frame) + "\n")
-            outp.flush()
-
+    transport = StdioServer(
+        lambda line: (outp.write(line + "\n"), outp.flush()),
+        log=lambda text: print(text, file=sys.stderr),
+    )
+    notify = transport.notify
     srv.notify = notify
-    relays = []
-    for raw in inp:
-        line = raw.strip()
-        if not line:
-            continue
-        try:
-            msg = json.loads(line)
-        except json.JSONDecodeError as exc:
-            notify(_err(None, -32700, f"parse error: {exc}"))
-            continue
-        if offload and _offloaded(msg):
-            era = _modern_check(msg)
-            if isinstance(era, dict):  # refused before a worker is spent on it
-                notify(era)
-                continue
-            # The worker's answer is already modern (it runs `handle`); this also shapes
-            # the replies `_offload` makes itself -- busy, failed to start, no answer.
-            send = notify if era is None else lambda f: notify(_modernize("tools/call", f))
-            relays = [r for r in relays if r.is_alive()]
-            if (relay := _offload(srv, msg, send, len(relays))) is not None:
-                relays.append(relay)
-            continue
-        try:
-            reply = srv.handle(msg)
-        except Exception as exc:
-            print(traceback.format_exc(), file=sys.stderr)
-            reply = _err(msg.get("id"), -32603, f"internal error: {exc}")
-        if reply is not None:
-            notify(reply)
+    relays: list = []
+
+    def intercept(msg: dict[str, Any], send: Any) -> bool:
+        nonlocal relays
+        if not (offload and _offloaded(msg)):
+            return False
+        era = _modern_check(msg)
+        if isinstance(era, dict):  # refused before a worker is spent on it
+            send(era)
+            return True
+        # The worker's answer is already modern (it runs `handle`); this also shapes
+        # the replies `_offload` makes itself -- busy, failed to start, no answer.
+        reply = send if era is None else lambda f: send(_modernize("tools/call", f))
+        relays = [r for r in relays if r.is_alive()]
+        if (relay := _offload(srv, msg, reply, len(relays))) is not None:
+            relays.append(relay)
+        return True
+
+    def after() -> None:
         if srv.reexec_pending and _reexec_ready(inp, relays):
             _upgrade.execute(srv, PROC.replace_process)
+
+    transport.serve(inp, srv.handle, intercept=intercept, after=after)
     for relay in relays:
         relay.join()
 
