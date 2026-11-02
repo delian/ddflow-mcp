@@ -1105,7 +1105,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 501 knobs.
+cadences, and the rest of the 519 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5308,7 +5308,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 501): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 519): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5886,7 +5886,7 @@ declared once and persists — see
 
 ## Configuration
 
-501 knobs across 49 sections, every one documented in place and listed, with its default
+519 knobs across 49 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5953,8 +5953,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ce9dd561da11 -->
-<details><summary>All 501 knobs across 49 sections</summary>
+<!-- ddflow:begin README/knobs sha=2d94c5b6734a -->
+<details><summary>All 519 knobs across 49 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -5969,6 +5969,7 @@ long default is left to `ddflow config --explain`.
 | `lease.wait_queue` | `false` |  |
 | `lease.idle_max_s` | `900` |  |
 | `lease.hold_max_s` | `3600` |  |
+| `lease.release_at_merge` | `true` |  |
 | `lease.break_on_timeout` | `false` |  |
 | `lease.inbox_max_chars` | `2000` |  |
 | `lease.inbox_max_pending` | `50` |  |
@@ -6104,6 +6105,7 @@ long default is left to `ddflow config --explain`.
 | `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
 | `schedule.phase_full_suite` | `"require"` | `off` \| `require` \| `run` |
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
+| `schedule.optimizer` | `"greedy-v1"` |  |
 | `schedule.bugs_first` | `true` |  |
 | `schedule.dx_priority` | `8` |  |
 | `schedule.bug_priority` | `10` |  |
@@ -6150,6 +6152,8 @@ long default is left to `ddflow config --explain`.
 | `sensitivity.model_allowed` | `[]` |  |
 | `sensitivity.egress_doors` | `["search", "recall", "brief", "export"]` |  |
 | `companions.probe_cache_ttl_s` | `300` |  |
+| `companions.tool_probe_timeout_s` | `20.0` |  |
+| `companions.tool_run_timeout_s` | `300.0` |  |
 | `cadence.integration_tests_every_tasks` | `5` |  |
 | `cadence.architecture_review_every_phases` | `2` |  |
 | `cadence.mutation_tests_every_phases` | `3` |  |
@@ -6250,6 +6254,12 @@ long default is left to `ddflow config --explain`.
 | `metrics.grid_max_folds` | `24` |  |
 | `metrics.stage_size_small` | `50` |  |
 | `metrics.stage_size_large` | `300` |  |
+| `metrics.lock_probe_max` | `50` |  |
+| `metrics.lock_red_main_window_s` | `86400` |  |
+| `metrics.lock_falsifier_conflict_pct` | `5` |  |
+| `metrics.lock_falsifier_red_main_pct` | `10` |  |
+| `metrics.lock_revert_key` | `"locks.mode"` |  |
+| `metrics.lock_revert_value` | `"strict"` |  |
 | `review.max_rounds` | `2` |  |
 | `review.settle_all_refuted` | `true` |  |
 | `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
@@ -6331,6 +6341,11 @@ long default is left to `ddflow config --explain`.
 | `pins.parallel` | `4` |  |
 | `pins.progress_s` | `30` |  |
 | `pins.merge_check` | `"fast"` | `fast` \| `all` \| `off` |
+| `pins.baseline_globs` | `[]` |  |
+| `pins.mergiraf` | `false` |  |
+| `pins.mergiraf_globs` | `["*.py"]` |  |
+| `pins.mergiraf_min_git` | `"2.44"` |  |
+| `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
 | `quality.max_file_bytes` | `30000` |  |
 | `waves.auto_stamp` | `true` |  |
@@ -6340,6 +6355,9 @@ long default is left to `ddflow config --explain`.
 | `merge_queue.eta_default_s` | `900` |  |
 | `merge_queue.eta_history` | `5` |  |
 | `merge_queue.keep_history` | `50` |  |
+| `merge_queue.auto_run` | `"on"` | `on` \| `off` |
+| `merge_queue.auto_run_after_s` | `120` |  |
+| `merge_queue.auto_run_max_parallel` | `1` |  |
 | `chore.globs` | (long: see `ddflow config --explain`) |  |
 | `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
 | `digest.escalate_after` | `"1h, 24h"` |  |
