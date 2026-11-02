@@ -35,6 +35,15 @@ def _aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
                 root = a.name.split(".")[0]  # `import os.path` binds `os`
                 if root in READS:
                     mods[a.asname or root] = root
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and not node.level
+            and (node.module or "").split(".")[0] in READS
+            and node.module not in READS
+        ):
+            for a in node.names:  # `from os.path import os` re-exports the module itself
+                if a.name in READS:
+                    mods[a.asname or a.name] = a.name
         elif isinstance(node, ast.ImportFrom) and node.module in READS and not node.level:
             for a in node.names:
                 if a.name == "*":  # `from time import *` binds every public name
@@ -87,6 +96,7 @@ def test_the_counter_sees_calls_and_aliases_but_not_text_or_an_injected_port():
     assert count_reads(ast.parse(port)) == 0
     own = "import os\nclass C:\n    def __init__(self): self.os = os\n    def f(self): return self.os.environ\n"
     assert count_reads(ast.parse(own)) == 1
+    assert count_reads(ast.parse("from os.path import os\nos.environ\n")) == 1
     assert count_reads(ast.parse("from time import *\nx = time() + monotonic()\n")) == 2
     assert count_reads(ast.parse("import os.path\nos.environ['HOME']\n")) == 1
     assert count_reads(ast.parse("import time\ntime.time = lambda: 1\n")) == 0  # a store is no read
