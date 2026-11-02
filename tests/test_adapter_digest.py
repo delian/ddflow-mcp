@@ -20,7 +20,7 @@ def digest_cases(d) -> None:
     assert d.of_obj({"b": 1, "a": 2}) == d.of_obj({"a": 2, "b": 1})
     assert d.of_obj({"a": 1}) != d.of_obj({"a": 2})
     assert len(d.of_obj({"a": 1}, length=6)) == 6
-    assert d.of_obj({"a": 1}, size=10**7, length=1) == d.of_obj({"a": 1}, size=10**7)[:1]
+    assert d.of_obj({"a": 1}, size=64, length=1) == d.of_obj({"a": 1}, size=64)[:1]
     assert len(d.of_obj({"a": 1}, size=48)) == 96  # `size` is bytes, however large
 
 
@@ -39,3 +39,8 @@ def test_the_default_adapter_passes_the_digest_cases(monkeypatch):
 
 def test_the_fake_passes_the_digest_cases():
     digest_cases(FakeDigest())
+
+
+def test_the_fake_builds_no_more_than_it_keeps():
+    """`length` bounds the work: a huge `size` with `length=1` must not build a huge string."""
+    assert len(FakeDigest().of_obj({"a": 1}, size=10**9, length=1)) == 1
