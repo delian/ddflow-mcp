@@ -1,7 +1,7 @@
 """Shipped stand-ins for the ACP wire ports: `FakeAcpAgent` and `FakeAcpClient`.
 
-`FakeAcpAgent` replays a scripted session (`Script`): the same updates and permission asks on
-every prompt, in memory, no pipe and no process. `FakeAcpClient` calls the agent's `handle`
+`FakeAcpAgent` replays a scripted session (`Script`): the same updates on every prompt (the
+permission asks are put by the client fake), in memory, no pipe and no process. `FakeAcpClient` calls the agent's `handle`
 directly, maps the updates it streamed and answers its asks through the caller's policy.
 `FakeAcpClient(mode=...)` scripts the failure a real agent can show: `silent` (timeout,
 unknown), `gone` and `closed` (the stream ended) and `unavailable` (it could not start). The
@@ -19,7 +19,8 @@ from . import fake
 
 @dataclass
 class Script:
-    """What the fake agent does on a prompt: stream `events`, ask each of `asks`."""
+    """What a prompt does: the agent streams `events`; the fake CLIENT puts each of `asks` to its
+    permission policy (the agent half has no read loop to await an answer)."""
 
     events: list[dict[str, Any]] = field(default_factory=list)
     asks: list[dict[str, Any]] = field(default_factory=list)
@@ -44,7 +45,8 @@ class FakeAcpAgent:
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method, params = msg.get("method"), msg.get("params") or {}
         if method == "session/cancel":
-            if (session := self.sessions.get(params.get("sessionId"))) is not None:
+            sid = params.get("sessionId") if isinstance(params, dict) else None
+            if isinstance(sid, str) and (session := self.sessions.get(sid)) is not None:
                 session.cancelled = True
             return None
         if "id" not in msg:
@@ -78,7 +80,8 @@ class FakeAcpAgent:
             for update in self.script.events:
                 note = {"sessionId": sid, "update": update}
                 self.sent.append({"jsonrpc": "2.0", "method": "session/update", "params": note})
-            stop = A.CANCELLED if session.cancelled else self.script.stop_reason
+            cancelled, session.cancelled = session.cancelled, False  # a cancel ends ONE turn
+            stop = A.CANCELLED if cancelled else self.script.stop_reason
             return A.ok(mid, {"stopReason": stop})
         return A.err(mid, A.METHOD_NOT_FOUND, f"method not found: {method}")
 

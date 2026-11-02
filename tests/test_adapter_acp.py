@@ -53,7 +53,7 @@ class _Peer:
         msg = json.loads(line)
         if self.mode in ("silent", "closed"):
             return
-        if "method" not in msg and self.asking:  # the client's answer to our ask
+        if "method" not in msg and self.asking is not None:  # the client's answer to our ask
             mid, outcome = self.asking, msg["result"]["outcome"]
             self.asking = None
             stop = "end_turn" if outcome.get("outcome") == "selected" else "cancelled"
@@ -196,6 +196,10 @@ def test_a_cancel_during_a_prompt_makes_the_stop_reason_cancelled():
     agent.sessions[sid].cancelled = True
     done = agent.handle(A.request(2, "session/prompt", {"sessionId": sid, "prompt": []}))
     assert done["result"]["stopReason"] == "cancelled"
+    again = agent.handle(A.request(3, "session/prompt", {"sessionId": sid, "prompt": []}))
+    assert again["result"]["stopReason"] == "end_turn"  # the cancel ended one turn only
+    for bad in ({"sessionId": []}, ["s1"]):
+        assert agent.handle({"jsonrpc": "2.0", "method": "session/cancel", "params": bad}) is None
 
 
 @pytest.mark.parametrize(

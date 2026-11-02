@@ -204,9 +204,10 @@ class AcpStdioAgent:
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method, params = msg.get("method"), msg.get("params") or {}
         if method == "session/cancel":
-            if (session := self.sessions.get(params.get("sessionId"))) is not None:
+            sid = params.get("sessionId") if isinstance(params, dict) else None
+            if isinstance(sid, str) and (session := self.sessions.get(sid)) is not None:
                 session.cancelled = True
-            return None
+            return None  # a notification: a malformed one is ignored, never raised
         if "id" not in msg:
             return None
         if (refusal := check_request(msg)) is not None:
@@ -251,7 +252,8 @@ class AcpStdioAgent:
             self._wire.notify({"jsonrpc": "2.0", "method": "session/update", "params": params})
 
         stop = self._on_prompt(session, prompt_text(params.get("prompt")), emit)
-        return ok(mid, {"stopReason": CANCELLED if session.cancelled else stop})
+        cancelled, session.cancelled = session.cancelled, False  # a cancel ends ONE turn
+        return ok(mid, {"stopReason": CANCELLED if cancelled else stop})
 
     def serve(self, lines: Iterable[str]) -> None:
         self._wire.serve(lines, self.handle)
