@@ -151,9 +151,11 @@ def test_operator_may_do_any_but_an_agent_cannot_claim_it(sender, owner, cfg, re
 def test_unanswered_lists_open_and_seen_only(sender, owner, cfg) -> None:
     _send(sender, cfg, sid="SG1")
     _send(sender, cfg, sid="SG2")
+    _send(sender, cfg, sid="SG3")
     E.move(owner, "accepted", "SG2")
+    E.move(owner, "seen", "SG3", system=True)
     st = fold(owner.read_all(), strict=False)
-    assert [r["id"] for r in E.unanswered(st, to_agent="owner")] == ["SG1"]
+    assert [r["id"] for r in E.unanswered(st, to_agent="owner")] == ["SG1", "SG3"]
 
 
 @pytest.mark.parametrize(
@@ -271,12 +273,12 @@ def test_no_base_records_the_probe_unavailable_not_clean(repo, sender, cfg) -> N
 
 def test_shape_ignores_look_alike_lines_and_message_bodies() -> None:
     body = (
-        "Subject: [PATCH] t\n\n@@ -1 +1 @@\n+foo\n-bar\ndiff --git a/other b/other\n\n---\n"
+        "Subject: [PATCH] t\n\n@@ -1 +1 @@\n+foo\n-bar\ndiff --git a/other b/other\n@@ -1 +1 @@\n-q\n+r\n\n---\n"
         "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n-- old\n+++ new\n ctx\n"
         "+GIT binary patch\n"
     )
     s = P.shape(body.replace("@@ -1,2 +1,2 @@", "@@ -1,2 +1,3 @@"))
-    assert s.files in (("other", "x"), ("x",))
+    assert s.files == ("x",)
     assert (s.added, s.removed) == (2, 1) and not s.binary
 
 
@@ -343,3 +345,9 @@ def test_lock_suffixes_are_all_dropped_and_the_operator_may_mark_seen(
     person = A.resolve_actor(cfg, "me")
     E.move(EventLog(repo, "me"), "seen", "SG1", actor=person)
     assert _row(owner, "SG1")["state"] == "seen"
+
+
+def test_a_reason_that_is_not_text_is_no_reason(sender, owner, cfg) -> None:
+    _send(sender, cfg, sid="SG1")
+    owner.append("suggestion.rejected", "SG1", {"id": "SG1", "reason": None})
+    assert _row(owner, "SG1")["state"] == "open"

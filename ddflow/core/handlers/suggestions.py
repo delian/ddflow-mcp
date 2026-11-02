@@ -112,7 +112,8 @@ def _mover(state: str):
             return
         froms, who, needs_reason = MOVES[state]
         role = _role(row, ev)
-        reason = str(ev.data.get("reason", ""))
+        raw = ev.data.get("reason", "")
+        reason = raw if isinstance(raw, str) else ""
         if row["state"] not in froms or role not in (*who, OPERATOR):
             return  # not from this state, or not this author's move: nothing changes
         if needs_reason and not reason.strip():

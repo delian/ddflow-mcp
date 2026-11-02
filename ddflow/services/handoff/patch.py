@@ -51,7 +51,12 @@ def shape(patch: str) -> Shape:
     in_binary = False
     header = False  # between a `diff --git` line and its first hunk
     old = new = 0  # lines still owed by the open hunk
-    for line in patch.splitlines():
+    lines = patch.splitlines()
+    if lines and lines[0].startswith(("From ", "Subject:", "From:")):
+        # a format-patch: the message ends at the first `---` line; a diff quoted in it is text
+        cut = next((i for i, ln in enumerate(lines) if ln == "---"), -1)
+        lines = lines[cut + 1 :] if cut >= 0 else []
+    for line in lines:
         if old > 0 or new > 0:
             a, r, old, new = _body(line, old, new)
             added, removed = added + a, removed + r
