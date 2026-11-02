@@ -12,8 +12,10 @@ from pathlib import Path
 
 from ..infra import git as G
 
-#: The baseline of exempt files, relative to the repository root.
-BASELINE = "tests/guard_baselines/file_size_baseline.txt"
+#: The baseline of exempt files, relative to the repository root. It lives outside
+#: `tests/guard_baselines/` (that directory is reserved for the architecture guards,
+#: which assert nothing else is there).
+BASELINE = "tests/file_size_baseline.txt"
 
 #: Files named in the doctor note before the rest are counted.
 SHOWN = 5
@@ -71,7 +73,11 @@ def violations(repo: Path, limit: int) -> list[str]:
         elif size > base[rel][0]:
             bad.append(f"{rel} grew to {size} bytes (baseline {base[rel][0]}): split it")
     for rel in sorted(set(base) - set(over)):
-        bad.append(f"{rel} is no longer over {limit} bytes: delete its line from {BASELINE}")
+        recorded, reason = base[rel]
+        bad.append(
+            f"{rel} is no longer over {limit} bytes: delete its line from {BASELINE}: "
+            f"`{rel} | {recorded} | {reason}`"
+        )
     return bad
 
 

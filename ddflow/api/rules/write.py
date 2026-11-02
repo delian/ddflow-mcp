@@ -24,6 +24,13 @@ from .dedup import RuleDedupAnswer
 DEFAULT_RULE_PRIORITY = 50
 
 
+def _update_manifest(repo: Path, storage: RulesStorage) -> None:
+    """Rewrite ``DDFLOW.md`` from the store: the one render every write and update uses."""
+    manifest_content = rules_manifest(storage)
+    manifest_path = repo / "DDFLOW.md"
+    replace_text(manifest_path, manifest_content)
+
+
 def rules_manifest(storage: RulesStorage) -> str:
     """Generate DDFLOW.md manifest from stored rules.
 
@@ -177,10 +184,7 @@ def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") ->
         extended_content = f"{rule.content}\n\n---\n\n{new_content}"
         rule, _event_fields = storage.update(rule_id, content=extended_content)
 
-        # Update the manifest
-        manifest_content = rules_manifest(storage)
-        manifest_path = repo / "DDFLOW.md"
-        replace_text(manifest_path, manifest_content)
+        _update_manifest(repo, storage)
 
         return _record_in_log(
             repo,

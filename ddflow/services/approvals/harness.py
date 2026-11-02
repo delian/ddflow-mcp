@@ -20,15 +20,18 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from ...config import Config
 from ...config_sections._layers import LAYERS, layer_path, read_toml
 from ...core import clock
 from ...core.model import fold
+from .. import configwrite as CW
 from ..actors import resolve_actor
 from ..ask import engine as E
 
@@ -44,6 +47,13 @@ TYPED_PROOF = "typed:"
 GRADE_T3_CHAT = "L2-typed"
 KNOB_T3 = "approvals.accept_chat_for_t3"
 _TRUE = ("1", "true", "yes", "on")
+
+#: Kilo holds its session transcripts in SQLite, not JSONL, at this standard path (a pinned
+#: fact from the operator's machine; sessions/memory also live under `~/.local/share/kilo/`).
+#: A surfaced AskUserQuestion is a `part` row whose `data.tool` is `question` and whose answer
+#: is the person's selected option in `state.metadata.answers` -- the harness-written record.
+KILO_DB = Path("~/.local/share/kilo/kilo.db").expanduser()
+KILO_TOOL = "question"
 
 
 def _forbidden(cfg: Config) -> bool:
@@ -106,19 +116,64 @@ def labels(ask_id: str) -> tuple[str, str]:
     return (f"Approve {ask_id}", f"Deny {ask_id}")
 
 
-def payload(row: dict[str, Any]) -> dict[str, Any]:
-    """The AskUserQuestion input the agent must send, unaltered."""
+#: The "approve + standing window" choice: how long it opens the window (hours, the window's
+#: cap) and which generic standing rules it switches on. It is COUNT-independent of the
+#: retry-threshold knob: this is the operator's IN-QUESTION opt-in, the retry rule is the
+#: ask-refused-count fallback.
+WINDOW_CHOICE_HOURS = 24
+WINDOW_CHOICE_POLICY = (
+    "complete_unavailable",
+    "claim_unavailable",
+    "skip_after_unavailable",
+    "accept_baseline_red",
+)
+
+
+def window_label(ask_id: str) -> str:
+    """The third AskUserQuestion option a GENERIC request offers: approve AND open the window."""
+    return f"Approve {ask_id} + standing window ({WINDOW_CHOICE_HOURS}h)"
+
+
+def _generic(cfg: Config, row: dict[str, Any]) -> bool:
+    """May a request of this verb be answered with the standing-window choice? The generic
+    T2 class the window pre-authorises (`[approvals].standing_verbs`), nothing else."""
+    return row["verb"] in cfg.approvals.standing_verbs and row["min_level"] <= LEVEL
+
+
+def _outcome(answer: str, ask_id: str) -> str | None:
+    """The outcome an accepted answer expresses: approved (plain or +window), denied, or None."""
+    yes, no = labels(ask_id)
+    if answer in (yes, window_label(ask_id)):
+        return E.APPROVED
+    return E.DENIED if answer == no else None
+
+
+def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
+    """The AskUserQuestion input the agent must send, unaltered. A generic request also offers
+    the standing-window choice (approve + open the window for the generic T2 class)."""
     yes, no = labels(row["id"])
+    options = [
+        {"label": yes, "description": "approve exactly this command, once"},
+        {"label": no, "description": "deny it"},
+    ]
+    if _generic(cfg, row):
+        options.append(
+            {
+                "label": window_label(row["id"]),
+                "description": (
+                    f"approve this command AND pre-authorise the generic T2 class for "
+                    f"{WINDOW_CHOICE_HOURS}h: sets approvals.standing_window_s and switches on "
+                    f"the generic approvals.policy rules"
+                ),
+            }
+        )
     return {
         "questions": [
             {
                 "question": row["text"],
                 "header": "Approval",
                 "multiSelect": False,
-                "options": [
-                    {"label": yes, "description": "approve exactly this command, once"},
-                    {"label": no, "description": "deny it"},
-                ],
+                "options": options,
             }
         ]
     }
@@ -134,6 +189,30 @@ def _files(cfg: Config, since: float) -> list[Path]:
         if base.is_dir():
             found += [p for p in base.rglob("*.jsonl") if p.stat().st_mtime >= since]
     return sorted(found, key=lambda p: p.stat().st_mtime)
+
+
+def _is_sqlite(path: Path) -> bool:
+    """Is this file a SQLite database (Kilo's transcript store)? Told by the magic header,
+    never by its name: a `.jsonl` the store happens to be must not be opened as one."""
+    try:
+        with path.open("rb") as fh:
+            return fh.read(16) == b"SQLite format 3\x00"
+    except OSError:
+        return False
+
+
+def _kilo_dbs(cfg: Config) -> list[Path]:
+    """The Kilo transcript stores to read: every `[approvals].transcript_dirs` entry that is a
+    SQLite database file (the configurable path) plus Kilo's default store when it exists."""
+    dbs: list[Path] = []
+    seen: set[Path] = set()
+    for base in [*_dirs(cfg), KILO_DB]:
+        if base in seen:
+            continue
+        seen.add(base)
+        if base.is_file() and _is_sqlite(base):
+            dbs.append(base)
+    return dbs
 
 
 def _text(answer: Any) -> str:
@@ -246,14 +325,70 @@ def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested
     return found
 
 
+def _kilo_answer(state: Any, question: str) -> str:
+    """The answer text a completed Kilo `question` part holds for exactly ``question``, or ""."""
+    if not isinstance(state, dict) or state.get("status") != "completed":
+        return ""
+    _input = state.get("input")
+    _meta = state.get("metadata")
+    if not isinstance(_input, dict) or not isinstance(_meta, dict):
+        return ""  # a ``question`` part whose input/metadata is not a dict holds no answer
+    questions = _input.get("questions")
+    answers = _meta.get("answers")
+    if not isinstance(questions, list) or not isinstance(answers, list):
+        return ""
+    for i, q in enumerate(questions):
+        if isinstance(q, dict) and q.get("question") == question:
+            ans = answers[i] if i < len(answers) else None
+            return ans[0] if isinstance(ans, list) and len(ans) == 1 else ""
+    return ""
+
+
+def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Attested]:
+    """The accepted answer to exactly ``question`` in one Kilo transcript store (``marker`` is
+    the ask id: every question part about it contains it). Only the harness-written `question`
+    tool part counts -- its `state.metadata.answers` holds the option the person picked; text
+    the agent wrote is not such a part, and a T3 act never counts (its filter wants a typed
+    answer, which this is not)."""
+    found: list[Attested] = []
+    try:
+        con = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error:
+        return found
+    try:
+        rows = con.execute(
+            "SELECT id, time_created, data FROM part "
+            "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
+            "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
+            (KILO_TOOL, since * 1000, marker),
+        ).fetchall()
+    except sqlite3.Error:
+        return found  # not a readable Kilo store (wrong schema, locked, missing): nothing there
+    finally:
+        con.close()
+    for pid, created, raw in rows:
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            continue
+        ans = _kilo_answer(data.get("state"), question)
+        if ans:
+            found.append(Attested(f"kilo:{pid}", ans, clock.iso_at(created / 1000), path.name))
+    return found
+
+
 def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     """Every accepted answer to this request's question, from transcripts touched since the
-    request was filed (oldest first)."""
+    request was filed (oldest first, both channels: an answer read after it was asked cannot
+    sit before one read before it)."""
     since = clock.epoch(row["requested_at"], default=0.0)
     hits: list[Attested] = []
     for path in _files(cfg, since):
         hits += scan(path, row["text"], row["id"])
         hits += scan_typed(path, row, cfg.approvals.min_digest_chars)
+    for db in _kilo_dbs(cfg):
+        hits += scan_kilo(db, row["text"], row["id"], since)
+    hits.sort(key=lambda h: clock.epoch(h.at, default=0.0))
     return hits
 
 
@@ -267,11 +402,12 @@ def find(cfg: Config, row: dict[str, Any], *, typed_only: bool = False) -> Attes
 
 def verify(row: dict[str, Any], cfg: Config) -> bool:
     """Re-check a recorded harness answer from the transcript (the level verifier): the proof
-    tool_use id must still be there, answered the way the row records. A later duplicate answer
-    to the same question does not undo it."""
-    yes, no = labels(row["id"])
-    want = yes if row.get("outcome") == E.APPROVED else no
-    return any(h.tool_use_id == row.get("proof") and h.answer == want for h in find_all(cfg, row))
+    tool_use id must still be there, answered the way the row records (approve, +window, or
+    deny). A later duplicate answer to the same question does not undo it."""
+    return any(
+        h.tool_use_id == row.get("proof") and _outcome(h.answer, row["id"]) == row.get("outcome")
+        for h in find_all(cfg, row)
+    )
 
 
 def t3_refusal(row: dict[str, Any]) -> str:
@@ -282,9 +418,13 @@ def t3_refusal(row: dict[str, Any]) -> str:
     )
 
 
-def attest(log, cfg: Config, ask_id: str, *, now: float | None = None) -> tuple[bool, str]:
+def attest(
+    log, cfg: Config, ask_id: str, *, repo: Path | None = None, now: float | None = None
+) -> tuple[bool, str]:
     """Record the harness-attested answer to ``ask_id``. (ok, message); the ask engine still
-    enforces expiry, digest and single answer."""
+    enforces expiry, digest and single answer. The standing-window choice also opens the window
+    (sets `approvals.standing_window_s` and switches on the generic `approvals.policy` rules) as
+    the person's own config, when ``repo`` names the repository."""
     if not cfg.approvals.accept_harness:
         return False, "the harness channel is off ([approvals].accept_harness)"
     row = E.get(fold(log.read_all(), strict=False), ask_id)
@@ -301,10 +441,9 @@ def attest(log, cfg: Config, ask_id: str, *, now: float | None = None) -> tuple[
             f"no answer to {ask_id} in the transcripts under {', '.join(cfg.approvals.transcript_dirs)}"
             f": put `ddflow approvals ask {ask_id}` to the person with AskUserQuestion first"
         )
-    yes, no = labels(ask_id)
-    outcome = {yes: E.APPROVED, no: E.DENIED}.get(hit.answer)
+    outcome = _outcome(hit.answer, ask_id)
     if outcome is None:
-        return False, f"the answer {hit.answer!r} is neither {yes!r} nor {no!r}"
+        return False, f"the answer {hit.answer!r} is none of the labels for {ask_id}"
     actor = resolve_actor(
         cfg,
         f"harness:{Path(hit.file).stem}",
@@ -318,7 +457,27 @@ def attest(log, cfg: Config, ask_id: str, *, now: float | None = None) -> tuple[
         )  # fmt: skip
     except E.AskRefused as exc:
         return False, str(exc)
-    return True, f"{ask_id} {outcome} by the person who answered in {hit.file} ({hit.at})"
+    tail = ""
+    if hit.answer == window_label(ask_id):
+        if repo is None:
+            tail = " (the standing window was not written: no repository path)"
+        else:
+            res = CW.apply_edit(
+                repo,
+                CW.SetPairs(
+                    (
+                        ("approvals.standing_window_s", WINDOW_CHOICE_HOURS * 3600),
+                        ("approvals.policy", list(WINDOW_CHOICE_POLICY)),
+                    )
+                ),
+                layer="file",
+                person=True,
+            )
+            if res.error:
+                tail = f" (approved, but the standing window could not be enabled: {res.error})"
+            else:
+                tail = f"; enabled the standing window for {WINDOW_CHOICE_HOURS}h (generic policy rules on)"
+    return True, f"{ask_id} {outcome} by the person who answered in {hit.file} ({hit.at}){tail}"
 
 
 E.LEVEL_VERIFIERS[VIA] = verify

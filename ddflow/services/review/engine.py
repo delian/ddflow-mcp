@@ -8,17 +8,15 @@ reviewer endpoint or command, and parses its verdict; the ``review`` scheduler i
 from __future__ import annotations
 
 import dataclasses
-import http.client
 import json
 import os
 import re
 import sys
 import time as _time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
+from ...adapters.http import HttpIncompleteRead, HttpProtocolError, HttpStatusError
 from ...core import unidiff
 from ...infra import proc as P
 from ...infra.container import rewrite_localhost
@@ -250,18 +248,27 @@ def _chat_command(
 
 
 def _cut_off(exc: Exception) -> str:
-    """An `http.client.HTTPException`, which is no `OSError`: most often a response that
+    """An `HttpProtocolError` (urllib's `http.client.HTTPException`): most often a response that
     stopped mid-read (`IncompleteRead`). Never a `TRUNCATED`, so never retried as one.
 
     The everyday cause is hedging: the winning copy shuts a loser's socket while the
     loser is reading its answer. Uncaught, it escaped `_chat` and crashed the whole
     review, whose contract is never to raise (bug Bf948d29d37).
     """
-    if isinstance(exc, http.client.IncompleteRead):
-        return f"connection cut off mid-response: {exc!r}"
+    if isinstance(exc, HttpIncompleteRead):
+        return f"connection cut off mid-response: {exc}"
     # The rest of the family is the endpoint, not the reply: an InvalidURL from a bad
     # base_url port, a BadStatusLine from a proxy that does not speak HTTP (critic).
-    return f"bad HTTP exchange with the endpoint: {exc!r}"
+    return f"bad HTTP exchange with the endpoint: {exc}"
+
+
+def _post(url: str, body: bytes, headers: dict, timeout_s: float):
+    """One POST through the package's HTTP client (`_client`, swappable by a test), its
+    socket handed to the running hedged copy so it can be cancelled."""
+    pkg = sys.modules[__package__]
+    return pkg._client().request(
+        "POST", url, headers=headers, body=body, timeout=timeout_s, on_connect=_attach_to_running
+    )
 
 
 def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tuple[dict | None, str]:
@@ -276,24 +283,22 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
     silently covered two thirds of the backends.
     """
 
-    req = urllib.request.Request(
-        rewrite_localhost(url),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers},
-    )
+    data = json.dumps(payload).encode(
+        "utf-8"
+    )  # a payload that cannot be encoded is the caller's bug
     try:
-        _open_ = sys.modules[__package__]._open
-
-        with _open_(req, timeout=timeout_s) as resp:
-            return json.loads(resp.read().decode("utf-8", "replace")), ""
-    except urllib.error.HTTPError as exc:
-        return None, f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
+        resp = _post(
+            rewrite_localhost(url), data, {"Content-Type": "application/json", **headers}, timeout_s
+        )
+        return json.loads(resp.body.decode("utf-8", "replace")), ""
+    except HttpStatusError as exc:
+        return None, f"HTTP {exc.status}: {exc.body[:300].decode('utf-8', 'replace')}"
     except TimeoutError:
         return None, _no_answer_in_time(timeout_s)
-    except (urllib.error.URLError, OSError) as exc:
-        return None, f"unreachable: {exc}"
-    except http.client.HTTPException as exc:
+    except HttpProtocolError as exc:
         return None, _cut_off(exc)
+    except OSError as exc:
+        return None, f"unreachable: {exc}"
     except (ValueError, json.JSONDecodeError) as exc:
         return None, f"bad response body: {exc}"
 
@@ -448,29 +453,28 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     if not got.value and got.reason:
         return "", got.reason
     key = got.value
-    req = urllib.request.Request(
-        rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            **({"Authorization": f"Bearer {key}"} if key else {}),
-        },
-    )
+    data = json.dumps(payload).encode("utf-8")  # outside the try: see `_post_json`
     try:
-        _open_ = sys.modules[__package__]._open
-
-        with _open_(req, timeout=timeout_s) as resp:
-            body = json.loads(resp.read().decode("utf-8", "replace"))
-    except urllib.error.HTTPError as exc:
+        resp = _post(
+            rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
+            data,
+            {
+                "Content-Type": "application/json",
+                **({"Authorization": f"Bearer {key}"} if key else {}),
+            },
+            timeout_s,
+        )
+        body = json.loads(resp.body.decode("utf-8", "replace"))
+    except HttpStatusError as exc:
         return "", review_keys.scrub(
-            f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}", key
+            f"HTTP {exc.status}: {exc.body[:300].decode('utf-8', 'replace')}", key
         )
     except TimeoutError:
         return "", _no_answer_in_time(timeout_s)
-    except (urllib.error.URLError, OSError) as exc:
-        return "", review_keys.scrub(f"unreachable: {exc}", key)
-    except http.client.HTTPException as exc:
+    except HttpProtocolError as exc:
         return "", review_keys.scrub(_cut_off(exc), key)
+    except OSError as exc:
+        return "", review_keys.scrub(f"unreachable: {exc}", key)
     except (ValueError, json.JSONDecodeError) as exc:
         return "", review_keys.scrub(f"bad response body: {exc}", key)
     try:
@@ -588,11 +592,14 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
     """
 
     try:
-        _open_ = sys.modules[__package__]._open
-
-        with _open_(rewrite_localhost(url), timeout=timeout_s) as r:
-            return _HTTP_OK_FLOOR <= r.status < _HTTP_SERVER_ERROR
-    except urllib.error.HTTPError as exc:
-        return exc.code < _HTTP_SERVER_ERROR
-    except (urllib.error.URLError, OSError):
+        pkg = sys.modules[__package__]
+        r = pkg._client().request(
+            "GET",
+            rewrite_localhost(url),
+            timeout=timeout_s,
+            raise_for_status=False,
+            on_connect=_attach_to_running,
+        )
+    except OSError:  # HttpError is one; the adapter wraps the rest
         return False
+    return _HTTP_OK_FLOOR <= r.status < _HTTP_SERVER_ERROR

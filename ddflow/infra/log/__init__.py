@@ -7,7 +7,7 @@ not each shard's tail: a shard two clones wrote under one id is not monotone (B1
 Reading exploits the same append-only property: `read_all` re-parses only the bytes
 APPENDED since the last read, because parsing is 84% of a read's cost (97 ms of 115 ms
 at 20,000 events) and a line already parsed cannot have changed. This is why the log is
-never compacted — see `tests/test_log_read_cache.py` for the probe that declined it.
+never compacted — see `tests/test_log_read_cache_ceiling.py` for the probe that declined it.
 
 The `Event` record itself lives in `core.events`: it is a value with no I/O, and the
 domain layer needs it without needing this.

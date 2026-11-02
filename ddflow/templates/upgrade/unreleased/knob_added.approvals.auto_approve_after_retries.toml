@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.auto_approve_after_retries"
+new = "0"
+why = "Retry-threshold auto-approve (RETRY-THRESHOLD): after the same generic T2 verb is filed+refused N times for the same item, auto-answer as policy:auto-after-retries and notify; 0 = off."

@@ -1,0 +1,28 @@
+# The `ignore_imports` allowlist of the .importlinter contract `http-home` (urllib, http and
+# socket are imported only by ddflow.adapters.http), which tests/test_architecture_import_contracts.py
+# joins back into the contract before it runs import-linter.
+#
+# Each entry is an import that breaks the contract TODAY. An entry may only be removed,
+# never added: a new violation fails the contract, and an entry that no longer matches
+# any import fails too. When a refactor moves an import, edit its entry in the same
+# change; never add one to make a new import pass. An entry marked "home" is permanent:
+# the one module allowed to own that import.
+#
+# The roots are the unit (an external package is squashed to its root), so the entries that
+# remain are not HTTP: `urllib.parse` / `urllib.request.url2pathname` string helpers and
+# `socket.gethostname`, awaiting a pure home (see the ADP-http report).
+ignore_imports = [
+    # home
+    "ddflow.adapters.http -> urllib",
+    "ddflow.adapters.http -> http",
+    "ddflow.adapters.http -> socket",
+    # not HTTP, still to move (a pure URL/host home for them is a follow-up task)
+    "ddflow.infra.hostinfo -> socket",
+    "ddflow.infra.release_index -> urllib",
+    "ddflow.services.approvals.harness -> urllib",
+    "ddflow.services.docscheck -> urllib",
+    "ddflow.services.doctypes.rule_content -> urllib",
+    "ddflow.services.install_info -> urllib",
+    "ddflow.services.review_keys -> urllib",
+    "ddflow.services.upstream_delivery -> urllib",
+]

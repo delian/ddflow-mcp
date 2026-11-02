@@ -36,14 +36,11 @@ BASELINE: dict[str, tuple[str, ...]] = {
     "http": (
         "ddflow.infra.hostinfo",
         "ddflow.infra.release_index",
+        "ddflow.services.approvals.harness",
         "ddflow.services.docscheck",
-        "ddflow.services.docscheck_net",
         "ddflow.services.doctypes.rule_content",
         "ddflow.services.install_info",
-        "ddflow.services.review.engine",
-        "ddflow.services.review.transport",
         "ddflow.services.review_keys",
-        "ddflow.services.upstream_dedupe",
         "ddflow.services.upstream_delivery",
     ),
     "sqlite3": (
@@ -311,8 +308,9 @@ def test_violations_are_importers_outside_the_home():
     assert reports["fsio"].home == ("ddflow.infra.fsio",)
     assert reports["hashlib"].home == ("ddflow.core.digest",)
     assert reports["tomlkit"].home == ("ddflow.infra.tomlcfg",)
-    assert reports["http"].home == ()
-    assert reports["http"].violations == reports["http"].importers
+    assert reports["http"].home == ("ddflow.adapters.http",)
+    assert "ddflow.adapters.http" in reports["http"].importers
+    assert "ddflow.adapters.http" not in reports["http"].violations
 
 
 def test_ratchet_violations_match_baseline():
