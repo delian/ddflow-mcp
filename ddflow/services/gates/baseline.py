@@ -106,6 +106,13 @@ def read_full(repo: Path, sha: str) -> list[str]:
     return [str(i) for i in ids] if sha and data.get("sha") == sha and isinstance(ids, list) else []
 
 
+def only_tests_failed(checks) -> bool:
+    """Did the ci run fail ONLY in its tests? A failed lint, build or secrets check is no test
+    failure, so a red that includes one is never baseline-red. A check counts as the tests when
+    its name says so (the hook "unit tests + end-to-end scenarios") or it is the run's own exit."""
+    return all(c.ok or c.id == "command" or "test" in c.id.lower() for c in checks)
+
+
 def test_files_of(ids: list[str]) -> list[str]:
     """The test files of ``ids`` ("tests/test_a.py::T::t" -> "tests/test_a.py")."""
     return sorted({i.split("::", 1)[0] for i in ids})

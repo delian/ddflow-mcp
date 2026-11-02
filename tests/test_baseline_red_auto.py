@@ -216,3 +216,11 @@ def test_ci_with_a_failure_not_on_the_base_stays_failed_and_says_so(repo, monkey
     assert outcome == "failed"
     assert "test_lookup_latency_budget" in why and "timing flake" in why
     assert ev["baseline"]["new_failures"] == [ids[-1]]
+
+
+def test_a_failed_lint_check_keeps_ci_from_being_baseline_red() -> None:
+    from ddflow.services.ci.types import Check
+
+    tests = Check("unit tests + end-to-end scenarios", False)
+    assert BL.only_tests_failed([Check("ruff check", True), tests, Check("command", False)])
+    assert not BL.only_tests_failed([Check("ruff check", False), tests])
