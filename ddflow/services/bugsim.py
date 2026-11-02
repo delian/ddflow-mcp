@@ -140,9 +140,9 @@ def _overlap_scores(
     scores: dict[tuple[str, str], float] = {}
     for r in records:
         for other, s in index.query(r, limit=None):
-            if other == r["id"] or s <= 0.0:
+            if other == str(r["id"]) or s <= 0.0:
                 continue
-            k = _key(r["id"], other)
+            k = _key(str(r["id"]), other)
             scores[k] = max(scores.get(k, 0.0), s)
     return scores
 
