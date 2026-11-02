@@ -176,7 +176,7 @@ def _git(repo, *args):
     import subprocess
 
     out = subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        ["git", "-C", str(repo), "-c", "commit.gpgsign=false", "-c", "user.name=t", "-c", "user.email=t@t", *args],
         capture_output=True, text=True, check=True,
     )  # fmt: skip
     return out.stdout.strip()
@@ -203,3 +203,14 @@ def test_git_probes_read_files_and_conflicts_through_infra_git(tmp_path):
     assert p.files(base, main) == ["f.txt"]  # ddflow's own state is not a written file
     assert p.conflicts(main, side) is True and p.conflicts(base, side) is False
     assert p.conflicts(main, "0" * 40) is None and p.files("", main) is None
+
+
+def test_declared_counts_an_item_with_any_merge_inside_the_window():
+    log = seeded()
+    merged(log, "A", T0 + 1900, "A2")  # A's first merge (T0+800) is before the window, this one in
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    probes = Fake({**FILES, ("A20", "A21"): ["src/a.py"]}, CONFLICTS)
+    since = f"{int(now - (T0 + 1000))}s"
+    ans = M.run(log.events, st, cfg, now, view="locks", since=since, probes=probes)
+    assert ans.metrics["declared"]["items"] == 3

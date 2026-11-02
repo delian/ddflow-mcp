@@ -166,7 +166,11 @@ def _declared(ctx: Context, probes: Probes | None, minimum: int, cache: dict) ->
     untouched, outside, wrote, items = [], [], 0, 0
     for item in ctx.facts.landings:
         declared, actual = _declared_of(ctx, item), _actual(ctx, probes, item, cache)
-        if not declared or actual is None or not ctx.in_scope(item, ctx.facts.landings[item][0].at):
+        if (
+            not declared
+            or actual is None
+            or not any(ctx.in_scope(item, m.at) for m in ctx.facts.landings[item])
+        ):
             continue
         items += 1
         untouched.append(
