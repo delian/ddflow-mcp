@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "self_assessment.auto_file"
+new = "true"
+why = "Whether the defensive self-assessment pass files each not-yet-tracked defect it names, by default."
+impact = "additive"

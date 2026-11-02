@@ -4,6 +4,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_archdeps": [
+  "ddflow_view action=archdeps",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_batch": [
   "ddflow_task action=batch",
   "0.2.8",
@@ -279,6 +284,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_phase_complete": [
+  "ddflow_task action=phase_complete",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_pins": [
   "ddflow_view action=pins",
   "0.2.8",
@@ -444,6 +454,16 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_session_ask": [
+  "ddflow_session action=ask",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_session_asks": [
+  "ddflow_session action=asks",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_session_end": [
   "ddflow_session action=end",
   "0.2.8",
@@ -466,6 +486,11 @@
  ],
  "ddflow_session_start": [
   "ddflow_session action=start",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_session_withdraw": [
+  "ddflow_session action=withdraw",
   "0.2.8",
   "1.0"
  ],
