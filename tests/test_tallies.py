@@ -20,6 +20,7 @@ from ddflow import api
 from ddflow.config import Config
 from ddflow.core import progress as PR
 from ddflow.infra.log import EventLog
+from ddflow.services.identity import HARNESS_MARKERS
 from ddflow.services import progress_line as PL
 from ddflow.services.export import kind_roadmap, registry
 from ddflow.services.export import query as Q
@@ -71,6 +72,14 @@ def test_state_counts_lists_every_state_in_order_zeros_included():
         "blocked": 0,
         "abandoned": 1,
     }
+
+
+@pytest.fixture(autouse=True)
+def _not_an_agent_shell(monkeypatch):
+    """`run_cli` subprocesses inherit the environment; with a harness marker set, `complete
+    --force` is refused as an agent's override (exit 3). Run as a person at a terminal."""
+    for var in ("DDFLOW_AGENT", *HARNESS_MARKERS):
+        monkeypatch.delenv(var, raising=False)
 
 
 def _ok(repo, *argv):
