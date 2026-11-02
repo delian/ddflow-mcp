@@ -148,3 +148,21 @@ def test_cli_and_mcp_return_the_stages_view(repo):
     mcp = tool_json(rpc_call(Server(repo), "ddflow_metrics", view="stages"))
     assert cli["view"] == mcp["view"] == "stages"
     assert set(cli) == set(mcp)
+
+
+def test_no_slowest_item_still_names_a_runnable_next_call():
+    log = Log()
+    log.task("Q")
+    log.claim("a1", "Q", T0)  # claimed, never finished: a queue wait, no claim to merge
+    nxt = run(log).metrics["next"]
+    assert "<" not in nxt["cli"] and "<" not in nxt["mcp"]
+
+
+def test_a_gate_figure_alone_counts_as_a_figure_and_implement_needs_a_start():
+    log = Log()
+    log.task("Q")
+    log.claim("a1", "Q", T0)
+    log.add("gate.passed", "Q", "a1", T0 + 50, gate="research", by="a1", evidence={"elapsed_s": 40})
+    ans = run(log)
+    assert ans.ok  # the gate run is a figure even where no stage reaches the minimum alone
+    assert stages(ans)["implement"]["n"] == 0  # no gate.started: no boundary, not a guess

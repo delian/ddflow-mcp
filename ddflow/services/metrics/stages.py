@@ -94,9 +94,10 @@ def _waits(span: Span, ctx: Context) -> dict[str, float]:
     return got
 
 
-def _first_gate(span: Span, outs: list[Outcome], ctx: Context) -> dict[str, float]:
+def _first_gate(span: Span, ctx: Context) -> dict[str, float]:
+    """implement: first claim to the first gate run starting. A gate with no recorded start
+    gives no boundary, so the stage is left unmeasured rather than guessed."""
     firsts = [t for t in ctx.facts.starts_of(span.item) if t >= span.first_claim]
-    firsts += [o.at for o in outs if o.at >= span.first_claim]
     return {"implement": min(firsts) - span.first_claim} if firsts else {}
 
 
@@ -138,7 +139,7 @@ def _item_samples(span: Span, outs: list[Outcome], runs: list[tuple[Outcome, flo
     """stage -> the one figure this item gives it (absent when the log cannot say)."""
     return {
         **_waits(span, ctx),
-        **_first_gate(span, outs, ctx),
+        **_first_gate(span, ctx),
         **_gates(runs),
         **_merge(span, outs, ctx),
         **_rework(outs),
@@ -211,15 +212,20 @@ def build(ctx: Context, group_by: str = "") -> dict:
         n = sum(1 for rows in members.values() for r in rows if name in r)
         if n < max(minimum, 1):
             unavailable[name] = f"{n} items with a sample, need {minimum}"
-    item = slowest or "<item id>"
+    cli, mcp = f"ddflow metrics retro {slowest}", f"ddflow_metrics view=retro item={slowest}"
+    if not slowest:  # no item gave a claim-to-merge: name a call that runs as written
+        cli, mcp = (
+            "ddflow metrics stages --group-by phase",
+            "ddflow_metrics view=stages group_by=phase",
+        )
     return {
         "group_by": group_by,
         "groups": groups,
         "not_measured": dict(NOT_MEASURED),
         "unavailable": unavailable,
         "next": {
-            "cli": f"ddflow metrics retro {item}",
-            "mcp": f"ddflow_metrics view=retro item={item}",
+            "cli": cli,
+            "mcp": mcp,
             "note": "the slowest item's timeline names its biggest gap; "
             "regroup with --group-by phase|kind|size|agent",
         },
