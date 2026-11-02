@@ -73,6 +73,11 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
 def _drivers(repo: Path, cfg: Config, *, check: bool, install: bool) -> O.Outcome:
     """`pins drivers`: show the merge-driver lines; `--install` (the consent) writes them;
     `--check` verifies the merged baselines are still sorted and unique."""
+    if check and install:
+        return O.failed(
+            "pins",
+            "--check and --install are separate steps: run `ddflow pins drivers --install`, then `ddflow pins drivers --check` (MCP: ddflow_pins document=drivers install=true, then check=true)",
+        )
     if check:
         bad = MD.check_baselines(repo, cfg)
         return (
@@ -90,6 +95,8 @@ def _drivers(repo: Path, cfg: Config, *, check: bool, install: bool) -> O.Outcom
         return O.nothing("pins", "merge drivers already set up")
     p = MD.plan(repo, cfg)
     note = "\n".join(p.lines()) or "nothing to add: the merge drivers are already set up"
+    if p.unavailable and p.empty():
+        note = "\n".join(p.lines())  # the unavailable lines, never "already set up"
     if not p.empty():
         note += f"\nwrite these with: {MD.NEXT_CLI}  (MCP: {MD.NEXT_MCP})"
     return O.ok("pins", note=note)

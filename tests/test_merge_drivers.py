@@ -22,6 +22,7 @@ def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "init", "-q", "-b", "main")
     _git(tmp_path, "config", "user.email", "a@b.c")
     _git(tmp_path, "config", "user.name", "t")
+    _git(tmp_path, "config", "commit.gpgsign", "false")
     (tmp_path / ".ddflow").mkdir()
     (tmp_path / ".ddflow" / "config.toml").write_text('[pins]\nbaseline_globs = ["base/*.txt"]\n')
     (tmp_path / "base").mkdir()
@@ -114,3 +115,10 @@ def test_unreadable_baseline_is_not_a_pass(repo: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "read_text", deny)
     found = MD.check_baselines(repo, Config.load(repo))
     assert len(found) == 1 and "unavailable" in found[0]
+
+
+def test_check_and_install_together_are_refused(repo: Path) -> None:
+    from ddflow.api import pin_files as PF
+
+    out = PF.pins_regenerate(repo, verb="drivers", install=True, check=True, start=repo)
+    assert out.exit == 1 and "separate steps" in out.reason
