@@ -20,6 +20,7 @@ def env_conformance(e: Env) -> None:
     assert snap[VAR] == "on"
     snap[VAR] = "changed"  # a copy: changing it changes nothing
     assert e.get(VAR) == "on"
+    assert e.snapshot()[VAR] == "on"  # and a fresh one each time
 
 
 def _real(monkeypatch) -> E.SystemEnv:
