@@ -29,6 +29,7 @@
  "ddflow/services/inbox.py": 2,
  "ddflow/services/install_info.py": 4,
  "ddflow/services/lane_headless.py": 3,
+ "ddflow/services/lanerelease.py": 1,
  "ddflow/services/lanes/capacity.py": 2,
  "ddflow/services/lanes/opencode.py": 1,
  "ddflow/services/lanes/redraw.py": 1,
