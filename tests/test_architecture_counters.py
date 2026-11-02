@@ -22,6 +22,7 @@ from architecture_guards_support import (
     _dotted,
     _kept_key,
     _kept_unreferenced,
+    _measure,
     _module_baselines,
     _modules,
     _parse_duplicates,
@@ -138,8 +139,20 @@ def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> No
     modules = {_dotted(p) for p in _modules()}
     for kind in COUNTERS:
         if kind in PER_MODULE:
-            stray = sorted(set(_module_baselines(kind)) - modules)
+            baselines = _module_baselines(kind)
+            stray = sorted(set(baselines) - modules)
             assert not stray, f"{kind}: a baseline file for a module that does not exist: {stray}"
+            # A per-module counter keeps its directory exactly while some module still
+            # has sites (a module with no sites has no file, and git tracks no empty
+            # directory): deleting the directory would leave every site unbaselined, so
+            # require it here for each counter rather than subtracting every PER_MODULE
+            # name above and reading their absence as "nothing to check".
+            sites = _measure(kind)
+            assert bool(sites) == bool(baselines), (
+                f"{kind} has {len(sites)} sites but {len(baselines)} baselined module(s); "
+                "a per-module counter's directory exists exactly while some module still "
+                "has sites"
+            )
         else:
             _baseline(kind)
     _kept_unreferenced()
