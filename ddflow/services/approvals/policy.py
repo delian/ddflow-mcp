@@ -25,6 +25,7 @@ from ...core.handlers.asks import EXPIRED, PENDING, asks_of
 from ...core.records.gates import GateOutcome
 from .. import gate_accept as GA
 from ..ask import engine as E
+from ..gates.defs import pipeline_for, required_gates
 from . import request as R
 from .canon import Canon
 
@@ -63,16 +64,22 @@ _UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.va
 
 
 def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
-    """`complete_unavailable`: the completion site names the gates its verdict left unmet in
-    ``target`` (comma-separated gate ids, e.g. ``"unit_tests"``), and this predicate checks
-    that each is recorded `unavailable` or `partial` (a worktree gone before a gate could run,
-    or a command gate that reported partway). WHICH gates are unmet is the verdict's decision
-    (a `not_applicable` gate, a chore's skipped gate or a person-accepted partial is NOT
-    unmet, and lives in `Verdict.unmet_gates`): this predicate only guarantees that none of
-    the gates the verdict flagged is a failure or silence, so a genuinely-failed gate is NEVER
-    auto-approved -- the whole point of the rule leaves the unmet facts in one place."""
-    gates = [g for g in target.split(",") if g] if target else []
-    return bool(gates) and all(it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL for g in gates)
+    """`complete_unavailable`: every unmet required gate of the item's pipeline must be
+    `unavailable` or `partial` (a worktree gone before it could run, or a command gate that
+    reported partway), and `target` -- the verdict's unmet gates the completion site names --
+    must name at least one. A `failed` gate or a silent (never run) required gate fails the
+    OVER-FIRE guard below and always blocks the auto-answer, whatever `target` names: a
+    genuinely-failed gate is NEVER auto-approved, the whole point of the rule. WHICH gates are
+    unmet is the verdict's decision (a not_applicable gate, a chore's skip, a person-accepted
+    partial is NOT unmet and lives in `Verdict.unmet_gates`), so this never re-derives that."""
+    required = set(required_gates(cfg))
+    for g in pipeline_for(it, cfg):
+        if g in required and not it.gate_satisfied(g, True) and not (
+            it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        ):
+            return False
+    names = [g for g in (target or "").split(",") if g]
+    return bool(names) and all(it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL for g in names)
 
 
 RULES: dict[str, Rule] = {
