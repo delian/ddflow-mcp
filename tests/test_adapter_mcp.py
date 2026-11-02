@@ -73,11 +73,11 @@ def _default(mode="ok"):
     return server, W.StdioClient(starter, ["srv"], poll_s=0.01), lambda: sent
 
 
-def _fake(mode="ok"):
-    server = FakeMcpServer(
+def _fake(mode="ok", server_cls=FakeMcpServer, client_cls=FakeMcpClient):
+    server = server_cls(
         TOOLS, {"boom": W.ToolError("no")}, server_info={"name": "fake-mcp", "version": "9"}
     )
-    return server, FakeMcpClient(server, mode=mode), lambda: server.sent
+    return server, client_cls(server, mode=mode), lambda: server.sent
 
 
 MAKERS = {"default": _default, "fake": _fake}
@@ -162,12 +162,12 @@ def test_the_server_answers_ping_unknown_methods_and_never_a_notification(make):
 CONFORMANCE = {
     "McpClient": {
         "real": lambda monkeypatch: _default()[1],
-        "fake": lambda: _fake()[1],
+        "fake": lambda cls: _fake(client_cls=cls)[1],
         "cases": _client_cases,
     },
     "McpServer": {
         "real": lambda monkeypatch: _default()[0],
-        "fake": lambda: _fake()[0],
+        "fake": lambda cls: _fake(server_cls=cls)[0],
         "cases": _server_cases,
     },
 }

@@ -6,6 +6,6 @@ Atomic writes, temporary files and locks.
 
 - **Default adapter:** `ddflow.infra.fsio` today.
 - **Fake:** none yet (baseline `tests/ports_without_fake/Fsio.txt`)
-- **Conformance cases:** with the fake.
+- **Conformance cases:** none yet (they arrive with the fake).
 
 The pattern is in [README.md](README.md).

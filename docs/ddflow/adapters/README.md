@@ -12,7 +12,8 @@ edits no shared file (ADP-modular-registry).
 - **A port** is a `typing.Protocol` named for the family's noun, marked `@port`. It lives in
   its family module `ddflow/adapters/<family>.py`, beside its default adapter.
   `ddflow/adapters/ports.py` is only the shared base: the marker and the discovery helpers.
-- **The default adapter** is the ONE implementation in that module. A second implementation
+- **The default adapter** is the ONE implementation, in that module once the family's home
+  has moved in (ADP-migrate-homes; until then the family page names where it is). A second implementation
   of a single-adapter family is a bug. A family with several adapters holds them in a
   `Registry[Port]` (`ddflow/adapters/registry.py`) keyed by `name`; configuration picks one.
 - **The fake** is a `@fake class Fake<Port>` in `ddflow/adapters/fakes/<family>.py`, shipped

@@ -12,7 +12,8 @@ default adapter (D-adapters-answers):
   `subprocess`: `infra.proc` is the one home of it), `initialize`, list and call tools, with
   timeout and unavailable semantics. It probes the companions and tests our own server.
 
-Pure standard library; imports no other ddflow layer. The shipped stand-ins are
+Pure standard library; imports no other ddflow layer (`.ports`, the stdlib-only marker, is
+the same layer). The shipped stand-ins are
 `FakeMcpServer` and `FakeMcpClient` in `ddflow.adapters.fakes.mcp`; the same cases run
 against both (tests/test_adapter_mcp.py).
 """

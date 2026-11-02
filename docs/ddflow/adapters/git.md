@@ -6,6 +6,6 @@ Every git call, as a value rather than an exception where the exit code is the a
 
 - **Default adapter:** `ddflow.infra.git` today.
 - **Fake:** none yet (baseline `tests/ports_without_fake/Git.txt`)
-- **Conformance cases:** with the fake.
+- **Conformance cases:** none yet (they arrive with the fake).
 
 The pattern is in [README.md](README.md).

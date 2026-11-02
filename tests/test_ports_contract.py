@@ -238,6 +238,7 @@ def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
         f"{sorted(baseline - _CEILING)}: the baseline may only shrink; a new port needs a fake"
     )
     have, ports = set(F.FAKES), set(_ports())
+    assert baseline <= ports, f"a baseline file for no port: {sorted(baseline - ports)}; delete it"
     missing = ports - have
     assert missing <= baseline, (
         f"a port without a fake: {sorted(missing - baseline)}. Add ddflow/adapters/fakes/"
@@ -253,6 +254,7 @@ def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
 @pytest.mark.parametrize("name", sorted(F.FAKES))
 def test_a_registered_fake_satisfies_its_runtime_checkable_port(name: str):
     assert isinstance(F.FAKES[name](), _ports()[name]), f"Fake{name} does not satisfy {name}"
+    assert issubclass(F.FAKES[name], _ports()[name]), "the `@port` marker must not break issubclass"
 
 
 def test_the_fakes_are_shipped_in_the_adapters_package():
@@ -282,7 +284,7 @@ def test_every_fake_has_a_conformance_case_and_a_real_adapter():
     for name in sorted(F.FAKES):
         entry = _conformance(name)
         assert callable(entry["real"]) and callable(entry["cases"]), (
-            f"{name}: CONFORMANCE needs `real` (monkeypatch -> adapter) and `cases` (adapter)"
+            f"{name}: CONFORMANCE needs `real` (monkeypatch -> adapter), `cases` (adapter) and optionally `fake` (registered class -> instance)"
         )
 
 
@@ -290,7 +292,8 @@ def test_every_fake_has_a_conformance_case_and_a_real_adapter():
 def test_adapter_and_fake_pass_the_same_cases(name: str, monkeypatch):
     entry = _conformance(name)
     entry["cases"](entry["real"](monkeypatch))
-    entry["cases"](entry.get("fake", F.FAKES[name])())
+    # always the REGISTERED fake; a family's `fake` factory only wires it up (cls -> instance)
+    entry["cases"](entry.get("fake", lambda cls: cls())(F.FAKES[name]))
 
 
 def test_the_registry_has_one_implementation_and_core_re_exports_it():

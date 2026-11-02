@@ -104,10 +104,12 @@ def test_the_shared_files_name_no_family_that_has_its_own_files():
     """A family named in a shared file is a family that had to edit it."""
     import ddflow.adapters as A
 
-    names = (set(P.discover(A)) | set(F.FAKES)) - LEGACY
-    assert names, "discovery found nothing"
+    every = set(P.discover(A)) | set(F.FAKES)
+    assert every, "discovery found nothing"
     for rel in FORMER_SHARED:
         text = (ROOT / rel).read_text("utf-8")
+        # only the shrink-only baseline ceiling may still name the legacy ports
+        names = every - LEGACY if rel == "tests/test_ports_contract.py" else every
         named = sorted(n for n in names if n in text)
         assert not named, f"{rel} names {named}: it is a per-family file now, not a shared list"
 

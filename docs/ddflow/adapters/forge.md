@@ -6,6 +6,6 @@ A forge reached through its CLI, holding no token and speaking no HTTP. Multi-ad
 
 - **Default adapter:** `ddflow.infra.forge` today.
 - **Fake:** none yet (baseline `tests/ports_without_fake/Forge.txt`)
-- **Conformance cases:** with the fake.
+- **Conformance cases:** none yet (they arrive with the fake).
 
 The pattern is in [README.md](README.md).
