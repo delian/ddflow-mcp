@@ -45,12 +45,11 @@ MCP_METHODS = frozenset(
         "notifications/tools/list_changed",
     }
 )
-# The programs ddflow knows by name: a shell line that names one as a word runs it.
+# The programs ddflow knows by name (the program homes in `archifaces`).
 AGENT_CLIS = ("claude", "codex", "kilo", "opencode", "vibe")
 TOOLS = ("roborev", "gitleaks", "pre-commit", "pip-audit", "uv", "uvx", "npm", "npx", "node")
 PLATFORM = ("python", "ddflow", "ddflow-mcp", "docker", "systemd-run", "sh", "bash")
 KNOWN_PROGRAMS = frozenset({"git", "gh", "glab", *AGENT_CLIS, *TOOLS, *PLATFORM})
-_WORD = re.compile(r"[A-Za-z0-9_.+-]+")
 
 ACP_METHODS = frozenset(
     {
@@ -223,24 +222,25 @@ class _Scan:
 
     def programs_of(self, e: ast.AST, *, line: bool = False) -> list[str]:
         """The program one command argument names: the head of an argv list or of a name bound
-        to one; a string is the program path itself (``os.execv``), or, when ``line``, a
-        shell LINE: the shell (``sh``) plus every known program the line names as a word. The
-        census does not parse shell grammar (quotes, comments and continuations are a parser's
-        business, unbounded); naming a known program in any word position over-reports, never
-        under-reports. No live site passes a literal line."""
+        to one; a string is the program path itself (``os.execv``). A call that runs a shell
+        (a shell function, ``shell=True``) runs ``sh`` and nothing more is inferred: the census
+        does not parse shell grammar (any word-matching over- or under-reports), and the
+        guard's job is only that every shell invocation sit behind an adapter. For ``shell=True``
+        with an argv list the program named by the list is recorded too."""
+        out: list[str] = ["sh"] if line else []
         if isinstance(e, ast.Constant) and isinstance(e.value, str):
-            if line:
-                named = sorted(w for w in set(_WORD.findall(e.value)) if w in KNOWN_PROGRAMS)
-                return ["sh", *(w for w in named if w != "sh")]
-            return [_base(e.value)] if e.value else [DYNAMIC]
+            return out or ([_base(e.value)] if e.value else [DYNAMIC])
+        got: str | None = None
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
-        elif isinstance(e, ast.Name):
-            vals = self.argv0.get(e.id, set())
+        elif isinstance(e, ast.Name) and not line:
+            vals = self.argv0.get(e.id) or self.consts.get(e.id, set())
             got = next(iter(vals)) if len(vals) == 1 and DYNAMIC not in vals else None
-        else:
-            got = None
-        return [_base(got) if got else DYNAMIC]
+        if got:
+            out.append(_base(got))
+        elif not out:
+            out.append(DYNAMIC)
+        return out
 
     # -- recording --------------------------------------------------------------------
     def add(self, kind: str, family: str, node: ast.AST, detail: str = "") -> None:
@@ -298,6 +298,9 @@ class _Scan:
         for prefix, family in _NET_PREFIX:
             if name.startswith(prefix):
                 self.add("network", family, node, name)
+                if name.endswith("Connection") and isinstance(arg, ast.Constant):
+                    if isinstance(arg.value, str) and arg.value:  # a hard-coded endpoint
+                        self.add("network", f"host:{arg.value.lower()}", node, arg.value)
                 break
 
     def _env_arg(self, node: ast.AST, arg: ast.AST | None) -> None:
@@ -317,7 +320,7 @@ class _Scan:
             if up.attr in ("get", "pop", "setdefault", "__getitem__") and isinstance(
                 call, ast.Call
             ):
-                self._env_arg(call, call.args[0] if call.args else None)
+                self._env_arg(call, call.args[0] if call.args else _keyword_arg(call))
             elif up.attr in ("copy", "items", "keys", "values", "__iter__"):
                 self.add("env", ALL_ENV, node)
         elif (

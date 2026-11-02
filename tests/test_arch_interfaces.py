@@ -221,7 +221,11 @@ def test_network_calls_and_hardcoded_hosts(tmp_path: Path):
     assert ("http", _line(NET, "HTTPSConnection")) in got
     assert ("socket", _line(NET, "socket.socket()")) in got
     hosts = {f for f, _l in got if f.startswith("host:")}
-    assert hosts == {"host:hooks.example.net", "host:feed.example.io"}
+    assert hosts == {
+        "host:api.example.com",
+        "host:hooks.example.net",
+        "host:feed.example.io",
+    }
     assert all("pw" not in s.detail for f in c.families for s in f.sites)  # userinfo dropped
 
 
@@ -372,9 +376,9 @@ def test_review_findings_stay_fixed(tmp_path: Path):
     # a URL is a host, never a managed file
     assert {f.family for f in c.families if f.kind == "managed-file"} == {".git/hooks"}
     assert "host:example.com" in {f.family for f in c.families}
-    # a shell LINE runs the shell and names the known programs in it (no grammar is parsed)
+    # a shell LINE runs the shell: one `sh` site, nothing is inferred from the line
     progs = {f.family for f in c.families if f.kind == "program"}
-    assert progs == {"sh", "git", "pre-commit"}
+    assert progs == {"sh"}
     # `os.environ[k] += x` reads k
     assert ("PATH", "ddflow/rev.py", _line(REVIEW, "+=")) in _sites(c, "env")
     # a bare string statement does not decide which protocol a jsonrpc literal belongs to
@@ -399,7 +403,7 @@ def test_second_round_review_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"more.py": MORE}))
     hooks = {s.line for f in c.families if f.family == ".git/hooks" for s in f.sites}
     assert hooks == {_line(MORE, 'Path(".git").joinpath'), _line(MORE, "c = p.joinpath")}
-    assert {f.family for f in c.families if f.kind == "program"} == {"sh", "git"}
+    assert {f.family for f in c.families if f.kind == "program"} == {"sh"}
 
 
 def test_the_census_modules_import_no_os_family():
@@ -416,7 +420,7 @@ def test_a_string_is_a_shell_line_only_for_shell_calls(tmp_path: Path):
         'subprocess.run("git status & uv sync", shell=True)\n'
     )
     c = I.scan(_tree(tmp_path, {"sh.py": src}))
-    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "sh", "git", "uv"}
+    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "sh"}
 
 
 THIRD = """\
@@ -437,8 +441,6 @@ def test_third_round_review_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"third.py": THIRD}))
     assert {f.family for f in c.families if f.kind == "program"} == {
         "sh",
-        "git",
-        "pre-commit",
         "gh",
         "uv",
     }
@@ -461,3 +463,16 @@ def test_mcp_adapter_and_its_fake_are_the_protocol_home(tmp_path: Path):
     c = I.scan(_tree(tmp_path, files))
     mcp = next(f for f in c.families if f.kind == "protocol" and f.family == "mcp")
     assert {s.module for s in mcp.violations} == {"ddflow.surfaces.x"}
+
+
+def test_fourth_round_findings_stay_fixed(tmp_path: Path):
+    src = (
+        "import os\nimport subprocess\n"
+        'PROG = "roborev"\n'
+        "subprocess.run(PROG)\n"
+        'os.environ.get(key="KW_ENV")\n'
+        'subprocess.run(["echo", "hi"], shell=True)\n'
+    )
+    c = I.scan(_tree(tmp_path, {"f.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"roborev", "sh", "echo"}
+    assert {f.family for f in c.families if f.kind == "env"} == {"KW_ENV"}

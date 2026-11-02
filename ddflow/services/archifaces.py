@@ -11,7 +11,7 @@ A family's *home* is the planned ADP-* task that puts it behind a port; its *hom
 are the ddflow modules already allowed to touch it (empty while no adapter exists), and a
 *violation* is a call site outside them. The ratchet counts violations per (kind, family,
 file): a NEW key or a grown count fails, a shrunk one asks for a lower baseline, so the
-committed baseline (``tests/guard_baselines/arch_interfaces.txt``) only shrinks and survives a
+committed baseline (``tests/arch_baselines/arch_interfaces.txt``) only shrinks and survives a
 line shift. The scan is the AST of ``repo/ddflow`` (`archifaces_scan`), seconds, no execution.
 """
 
@@ -51,6 +51,7 @@ PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
     **dict.fromkeys(AGENT_CLIS, ("ADP-agent-lanes", ())),
     **dict.fromkeys(TOOLS, ("ADP-tools", ())),
     **dict.fromkeys(PLATFORM, ("ADP-platform", ())),
+    "sh": ("ADP-platform", _RUNNER),  # a shell entry point of the process runner itself
 }
 KIND_HOMES: dict[str, str] = {"managed-file": "ADP-managed-files", "env": "ADP-clock-env"}
 PROTOCOL_HOMES: dict[str, str] = {
