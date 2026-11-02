@@ -10,14 +10,15 @@ Only the items below differ.
 2. **Iteration runs in the background; the operator is the exception, not the driver.**
    Orchestrate from a BACKGROUND surface — a second window or a terminal agent — so the
    operator's chat is never blocked by a foreground loop: one read of
-   `ddflow next --json`, claim each ready item, then fan the claimed items to one
-   window/terminal agent each mapping `tier:fast|balanced|deep` to model choice, and a
-   re-read of `next` after each merge or park. Stop only on the empty scope (no ready, no
-   held/blocked, none in flight) or an operator answer. Within one request keep going —
-   claim, run the gates, merge — then end with `ddflow_next` and `ddflow_cadence` output;
-   nothing persists between requests, so printing them IS the handoff, and the wave
-   position is ddflow's own committed event log. These loop facts are the `[orchestration]`
-   record in `ddflow/harnesses/vscode.toml`.
+   `ddflow next --json`, fan each ready item to one window/terminal agent each (the
+   dispatched process claims its OWN item — ddflow's exclusive lease refuses a duplicate)
+   mapping `tier:fast|balanced|deep` to model choice, and a re-read of `next` after each
+   merge or park. Stop only on empty scope (no ready, no held/blocked, none in flight) or
+   a question/operator gate. Within one request keep going — claim, run the gates, merge —
+   then end with `ddflow_next` and `ddflow_cadence` output; nothing persists between
+   requests, so printing them IS the handoff, and the wave position is ddflow's own
+   committed event log. These loop facts are the `[orchestration]` record in
+   `ddflow/harnesses/vscode.toml`.
 3. **Subagents.** None with worktree isolation. For parallelism open a second window on
    the same repo, or run another agent in a terminal; ddflow's leases coordinate
    *processes*, so each claims its own item and gets its own worktree.

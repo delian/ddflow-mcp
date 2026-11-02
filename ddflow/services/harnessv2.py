@@ -85,9 +85,9 @@ class Orchestration:
     The loop is harness-agnostic: read ``ddflow next``'s ready set, CLAIM each ready item,
     fan each claimed item to a subagent by its ``tier`` hint, re-read ``next`` after each
     merge or park, wait in the background (never a foreground poll), persist the wave
-    position, and stop only on an empty scope (no ready, held or in-flight items) or a
-    question/operator gate. This record names a harness's primitives for those steps; its
-    driver delta and command/agent files are the emitted prose instances.
+    position, and stop only on an empty scope (no ready, held, blocked or in-flight items)
+    or a question/operator gate. This record names a harness's primitives for those steps;
+    its driver delta and command/agent files are the emitted prose instances.
     """
 
     none: bool = False
