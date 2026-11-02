@@ -139,6 +139,8 @@ class AcpSession(Outcome):
     cwd: str = ""
     mcp_servers: list[dict[str, Any]] = field(default_factory=list)
     cancelled: bool = False
+    #: A turn is running: only then does a cancel apply (an idle cancel is a no-op).
+    active: bool = False
 
 
 @dataclass
@@ -203,10 +205,12 @@ class AcpStdioAgent:
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method, params = msg.get("method"), msg.get("params") or {}
+        if not isinstance(params, dict):
+            params = {}
         if method == "session/cancel":
-            sid = params.get("sessionId") if isinstance(params, dict) else None
+            sid = params.get("sessionId")
             if isinstance(sid, str) and (session := self.sessions.get(sid)) is not None:
-                session.cancelled = True
+                session.cancelled = session.active
             if "id" in msg:  # request-shaped by mistake: a request is always answered
                 return err(msg["id"], INVALID_PARAMS, "session/cancel is a notification")
             return None  # a malformed one is ignored, never raised
@@ -253,8 +257,12 @@ class AcpStdioAgent:
             params = {"sessionId": sid, "update": update}
             self._wire.notify({"jsonrpc": "2.0", "method": "session/update", "params": params})
 
-        stop = self._on_prompt(session, prompt_text(params.get("prompt")), emit)
-        cancelled, session.cancelled = session.cancelled, False  # a cancel ends ONE turn
+        session.active, session.cancelled = True, False
+        try:
+            stop = self._on_prompt(session, prompt_text(params.get("prompt")), emit)
+        finally:
+            session.active = False
+        cancelled, session.cancelled = session.cancelled, False
         return ok(mid, {"stopReason": CANCELLED if cancelled else stop})
 
     def serve(self, lines: Iterable[str]) -> None:
@@ -400,15 +408,16 @@ class AcpStdioClient:
     def _on_other(self, msg, result, permission, on_event) -> None:
         """A frame that is not our answer: an update to map, or a request of the agent's."""
         method = msg.get("method")
+        params = msg.get("params")
+        params = params if isinstance(params, dict) else {}
         if method == "session/update":
-            update = (msg.get("params") or {}).get("update")
+            update = params.get("update")
             if isinstance(update, dict):
                 event = lane_event(update)
                 result.events.append(event)
                 if on_event is not None:
                     on_event(event)
         elif method == "session/request_permission" and "id" in msg:
-            params = msg.get("params") or {}
             chosen = permission(params) if permission is not None else None
             call = params.get("toolCall")
             title = str(call.get("title", "")) if isinstance(call, dict) else ""

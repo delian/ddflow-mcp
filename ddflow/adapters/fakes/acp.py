@@ -44,10 +44,12 @@ class FakeAcpAgent:
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method, params = msg.get("method"), msg.get("params") or {}
+        if not isinstance(params, dict):
+            params = {}
         if method == "session/cancel":
-            sid = params.get("sessionId") if isinstance(params, dict) else None
+            sid = params.get("sessionId")
             if isinstance(sid, str) and (session := self.sessions.get(sid)) is not None:
-                session.cancelled = True
+                session.cancelled = session.active
             return None
         if "id" not in msg:
             return None
@@ -87,7 +89,7 @@ class FakeAcpAgent:
         for update in self.script.events:
             note = {"sessionId": sid, "update": update}
             self.sent.append({"jsonrpc": "2.0", "method": "session/update", "params": note})
-        cancelled, session.cancelled = session.cancelled, False  # a cancel ends ONE turn
+        cancelled, session.cancelled = session.cancelled, False
         return A.ok(mid, {"stopReason": A.CANCELLED if cancelled else self.script.stop_reason})
 
     def serve(self, lines) -> None:
@@ -177,6 +179,7 @@ class FakeAcpClient:
             result.permissions.append((title, chosen or ""))
             if not chosen:
                 result.stop_reason = A.CANCELLED
+                break  # a refused ask ends the turn: no further asks are put
         return result
 
     def cancel(self, session_id: str) -> bool:

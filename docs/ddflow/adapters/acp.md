@@ -11,4 +11,4 @@ ACP is JSON-RPC over stdio. The agent half answers `initialize`, `session/new` (
 
 The pattern is in [README.md](README.md).
 
-Cancel semantics: `session/cancel` marks the session, and the NEXT turn that finishes reports `cancelled` once (the flag is then cleared). `AcpStdioAgent.serve` reads one frame at a time, so a cancel is seen between turns; a caller that needs to interrupt a running turn feeds frames from a second thread and watches `session.cancelled` inside `on_prompt`.
+Cancel semantics: `session/cancel` applies only to a turn in flight (`session.active`); an idle cancel is a no-op. The turn that was cancelled reports `cancelled` and the flag is then cleared. `AcpStdioAgent.serve` reads one frame at a time, so over it a cancel is only seen between turns (and so ignored): a caller that must interrupt a running turn feeds frames from a second thread and watches `session.cancelled` inside `on_prompt`.

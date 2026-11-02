@@ -173,7 +173,11 @@ def test_the_agent_streams_updates_and_keeps_the_injected_mcp_servers(which):
     ]
     assert agent.sessions[sid].mcp_servers == servers and agent.sessions[sid].cwd == "/w"
     agent.handle(A.request(2, "session/prompt", {"sessionId": sid, "prompt": []}))
-    agent.handle({"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": sid}})
+    cancel = {"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": sid}}
+    agent.handle(cancel)  # idle: a no-op
+    assert agent.sessions[sid].cancelled is False
+    agent.sessions[sid].active = True  # a turn in flight (a second reader thread delivers this)
+    agent.handle(cancel)
     assert agent.sessions[sid].cancelled is True
 
 
@@ -207,9 +211,17 @@ def test_a_cancel_sent_as_a_request_is_answered_and_a_bad_tool_call_title_is_ref
 
 
 def test_a_cancel_during_a_prompt_makes_the_stop_reason_cancelled():
-    agent = A.AcpStdioAgent(lambda line: None, on_prompt=lambda s, t, emit: "end_turn")
+    cancel = {"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": "s1"}}
+    turns = []
+
+    def on_prompt(session, text, emit):
+        turns.append(1)
+        if len(turns) == 1:
+            agent.handle(cancel)  # what a second reader thread delivers mid-turn
+        return "end_turn"
+
+    agent = A.AcpStdioAgent(lambda line: None, on_prompt=on_prompt)
     sid = agent.handle(A.request(1, "session/new", {"cwd": "/w"}))["result"]["sessionId"]
-    agent.sessions[sid].cancelled = True
     done = agent.handle(A.request(2, "session/prompt", {"sessionId": sid, "prompt": []}))
     assert done["result"]["stopReason"] == "cancelled"
     again = agent.handle(A.request(3, "session/prompt", {"sessionId": sid, "prompt": []}))
