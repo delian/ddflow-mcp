@@ -104,6 +104,14 @@ def _cut_ready(
     p.ready = taken
 
 
+def _ordered(ctx: PlanCtx, candidates: list[Item]) -> list[Item]:
+    """The candidates in the configured optimizer's order."""
+    terms = order_terms(ctx)
+    by_id = {i.id: i for i in candidates}
+    cands = [Candidate(i.id, terms(i)) for i in candidates]
+    return [by_id[x.id] for x in get_optimizer(ctx.cfg.schedule.optimizer).order({}, cands)]
+
+
 def plan(
     state: State,
     cfg: Config,
@@ -147,11 +155,7 @@ def plan(
 
     bugs = frozenset(bug_items(state, cfg)) if cfg.schedule.bugs_first else frozenset()
     ctx = PlanCtx(state, cfg, agent, now, live, in_cycle, p.cycles, bugs)
-    terms = order_terms(ctx)
-    by_cand = {i.id: i for i in candidates}
-    cands = [Candidate(i.id, terms(i)) for i in candidates]
-    placed = get_optimizer(cfg.schedule.optimizer).order({}, cands)
-    for it in (by_cand[x.id] for x in placed):
+    for it in _ordered(ctx, candidates):
         if it.terminal:
             continue
         if it.state == REVIEW:
