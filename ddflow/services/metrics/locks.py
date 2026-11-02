@@ -112,17 +112,25 @@ def _declared_of(ctx: Context, item: str, at: float | None = None) -> tuple[str,
     return mine[0].globs if mine else ()
 
 
-def _actual(ctx: Context, probes: Probes | None, item: str, cache: dict) -> frozenset | None:
-    """Files the item's merges changed; None when git (or the log) cannot say."""
-    if item in cache:
-        return cache[item]
+def _actual(
+    ctx: Context, probes: Probes | None, item: str, cache: dict, windowed: bool = False
+) -> frozenset | None:
+    """Files the item's merges changed (``windowed``: only merges inside the view); None when
+    git (or the log) cannot say."""
+    key = (item, windowed)
+    if key in cache:
+        return cache[key]
     got: frozenset | None = None
-    lands = [m for m in ctx.facts.landings.get(item, ()) if m.before and m.after]
+    lands = [
+        m
+        for m in ctx.facts.landings.get(item, ())
+        if m.before and m.after and (not windowed or ctx.in_scope(item, m.at))
+    ]
     if probes is not None and lands:
         parts = [probes.files(m.before, m.after) for m in lands]
         if all(p is not None for p in parts):
             got = frozenset(f for p in parts for f in p or ())
-    cache[item] = got
+    cache[key] = got
     return got
 
 
@@ -171,14 +179,13 @@ def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> di
 
 def _declared(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> dict:
     untouched, outside, wrote, items = [], [], 0, 0
-    for item in ctx.facts.landings:
-        declared = _declared_of(ctx, item, ctx.facts.landings[item][0].at)
-        actual = _actual(ctx, probes, item, cache)
-        if (
-            not declared
-            or actual is None
-            or not any(ctx.in_scope(item, m.at) for m in ctx.facts.landings[item])
-        ):
+    for item, lands in ctx.facts.landings.items():
+        inside = [m for m in lands if ctx.in_scope(item, m.at)]
+        if not inside:
+            continue
+        declared = _declared_of(ctx, item, inside[0].at)
+        actual = _actual(ctx, probes, item, cache, windowed=True)
+        if not declared or actual is None:
             continue
         items += 1
         untouched.append(

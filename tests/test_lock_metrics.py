@@ -230,3 +230,22 @@ def test_declared_globs_come_from_the_lease_held_at_the_merge():
     d = M.run(log.events, st, cfg, now, view="locks", probes=probes).metrics["declared"]
     assert d["actual_outside_declared_share"] == pytest.approx(0.0)
     assert d["declared_untouched_share"] == pytest.approx(0.0)
+
+
+def test_declared_is_scored_on_the_in_window_merge_only():
+    log = Log()
+    log.task("A", "x")
+    log.claim("a", "A", T0, "old/*.py")
+    merged(log, "A", T0 + 100, "A")
+    log.release("a", "A", T0 + 150)
+    log.claim("a", "A", T0 + 200, "src/*.py")
+    merged(log, "A", T0 + 1900, "B")
+    log.release("a", "A", T0 + 2000)
+    st, cfg, now = frozen(log)
+    cfg.metrics.min_samples = 1
+    probes = Fake({("A0", "A1"): ["old/x.py"], ("B0", "B1"): ["src/a.py"]}, {})
+    since = f"{int(now - (T0 + 1000))}s"
+    d = M.run(log.events, st, cfg, now, view="locks", since=since, probes=probes).metrics[
+        "declared"
+    ]
+    assert d["items"] == 1 and d["actual_outside_declared_share"] == pytest.approx(0.0)
