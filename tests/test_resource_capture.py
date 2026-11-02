@@ -18,7 +18,7 @@ posix_only = pytest.mark.skipif(sys.platform == "win32", reason="rusage is POSIX
 _PY = shlex.quote(sys.executable)
 _BURN = (
     "import time\n"
-    "buf = bytearray(200 * 1024 * 1024)\n"
+    "buf = bytearray(150 * 1024 * 1024)\n"
     "for i in range(0, len(buf), 4096): buf[i] = 1\n"
     "end = time.process_time() + 0.4\n"
     "while time.process_time() < end: pass\n"
@@ -39,6 +39,11 @@ def _ru(**kw):
 def test_maxrss_is_normalised_to_kb_per_platform():
     assert R.maxrss_kb(2048, "linux") == 2048
     assert R.maxrss_kb(2048 * 1024, "darwin") == 2048
+
+
+def test_macos_block_io_is_unknown_not_zero():
+    got = R.from_rusage(_ru(ru_inblock=0, ru_oublock=0), platform="darwin")
+    assert (got.io_in_blocks, got.io_out_blocks) == (None, None)
 
 
 def test_from_rusage_fake_gives_the_evidence_fields():
@@ -72,7 +77,7 @@ def test_real_child_that_allocates_and_burns_cpu_is_measured():
     assert r.ok, r.err
     res = r.resources
     assert res is not None and res.source == "wait4"
-    assert res.maxrss_kb >= 180 * 1024
+    assert res.maxrss_kb >= 130 * 1024
     assert res.cpu_user_s + res.cpu_sys_s >= 0.35
 
 
@@ -82,7 +87,7 @@ def test_each_command_gets_its_own_numbers_not_a_running_total():
     heavy = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60).resources
     again = P.run_shell("true", timeout_s=20).resources
     assert cheap.source == again.source == "wait4"
-    assert heavy.maxrss_kb >= 180 * 1024
+    assert heavy.maxrss_kb >= 130 * 1024
     assert again.maxrss_kb < heavy.maxrss_kb  # not the earlier child's high-water mark
     assert again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
 
