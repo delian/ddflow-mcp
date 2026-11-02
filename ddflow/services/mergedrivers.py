@@ -174,7 +174,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         if _MARK.search(text):
             bad.append(
                 f"{path} has conflict markers: resolve them by hand, keep both sides' entries,"
-                f" `LC_ALL=C sort -u -o {path} {path}`, then `ddflow pins drivers --check`"
+                f" `LC_ALL=C sort -u -o {path} {path}`, `git add {path}`, then `ddflow pins drivers --check`"
                 " (MCP: ddflow_pins document=drivers check=true)"
             )
             continue
@@ -187,7 +187,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         )
         if why:
             bad.append(
-                f"{path} {why} after the union merge: `LC_ALL=C sort -u -o {path} {path}`, commit, then"
+                f"{path} {why} after the union merge: `LC_ALL=C sort -u -o {path} {path}`, `git add {path}`, then"
                 " `ddflow pins drivers --check`"
                 " (MCP: ddflow_pins document=drivers check=true)"
             )
