@@ -4117,7 +4117,7 @@ mechanisms to keep current.
 
 A **torn final line** from an append that died mid-write is reported by `ddflow doctor`
 and re-read until the writer completes it, never marked consumed. Every guarantee here is
-mutation-verified in `tests/test_log_read_cache.py` — including that the digest covers the
+mutation-verified in `tests/test_log_read_cache_*.py` — including that the digest covers the
 whole prefix rather than a trailing window of it, which a smaller fixture cannot tell
 apart.
 
