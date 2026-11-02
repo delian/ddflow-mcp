@@ -41,6 +41,11 @@ def test_maxrss_is_normalised_to_kb_per_platform():
     assert R.maxrss_kb(2048 * 1024, "darwin") == 2048
 
 
+def test_macos_block_io_is_unknown_not_zero():
+    got = R.from_rusage(_ru(ru_inblock=0, ru_oublock=0), platform="darwin")
+    assert (got.io_in_blocks, got.io_out_blocks) == (None, None)
+
+
 def test_from_rusage_fake_gives_the_evidence_fields():
     ev = R.from_rusage(_ru(), platform="linux").evidence()
     assert ev == {
