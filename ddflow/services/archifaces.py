@@ -148,6 +148,8 @@ def counts(census: InterfaceCensus) -> dict[Key, int]:
 def format_baseline(census: InterfaceCensus) -> str:
     """The committed baseline text: one JSON ``[kind, family, path, count]`` per line, sorted
     (JSON so that any file name round-trips)."""
+    if census.unparsed:  # a baseline written now would drop what those files hold
+        raise ValueError(f"cannot write a baseline: unparsed {', '.join(census.unparsed)}")
     rows = sorted(counts(census).items())
     return "".join(json.dumps([k, fam, p, n]) + "\n" for (k, fam, p), n in rows)
 

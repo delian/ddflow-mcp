@@ -99,8 +99,8 @@ def _interfaces(repo: Path, kind: str, baseline: bool) -> O.Outcome:
         grew, shrank = I.ratchet(census, I.parse_baseline(committed.read_text()))
         if kind:  # the ratchet shown matches the kind shown
             grew, shrank = (
-                tuple(x for x in grew if x.startswith(f"{kind} ")),
-                tuple(x for x in shrank if x.startswith(f"{kind} ")),
+                tuple(x for x in grew if x.startswith((f"{kind} ", "unparsed "))),
+                tuple(x for x in shrank if x.startswith((f"{kind} ", "unparsed "))),
             )
         data["ratchet"] = {"grew": list(grew), "shrank": list(shrank), "baseline": I.BASELINE_PATH}
         text += f"\nratchet vs {I.BASELINE_PATH}: {len(grew)} new or grown, {len(shrank)} to lower"

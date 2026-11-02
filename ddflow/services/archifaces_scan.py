@@ -19,7 +19,9 @@ DYNAMIC = "<dynamic>"
 ALL_ENV = "<all>"
 
 # Dotted names (import aliases resolved) of the calls that start a process.
-_SUBPROCESS = {f"subprocess.{n}" for n in ("run", "Popen", "call", "check_call", "check_output")}
+_SUBPROCESS = {
+    f"subprocess.{n}" for n in ("run", "Popen", "call", "check_call", "check_output")
+} | {"asyncio.create_subprocess_exec"}
 _PROC = {
     f"ddflow.infra.proc.{n}" for n in ("run", "popen", "capture", "spawn_stdio", "replace_process")
 }
@@ -28,6 +30,7 @@ _SHELL = {f"ddflow.infra.proc.{n}" for n in ("run_shell", "spawn_shell")} | {
     "os.popen",
     "subprocess.getoutput",
     "subprocess.getstatusoutput",
+    "asyncio.create_subprocess_shell",
 }
 _GIT = {
     f"ddflow.infra.git.{n}" for n in ("run", "status_run", "paths", "files", "status", "unmerged")
@@ -52,6 +55,15 @@ MCP_METHODS = frozenset(
         "notifications/initialized",
         "notifications/cancelled",
         "notifications/tools/list_changed",
+        "notifications/resources/list_changed",
+        "notifications/resources/updated",
+        "notifications/prompts/list_changed",
+        "notifications/progress",
+        "notifications/message",
+        "resources/templates/list",
+        "resources/subscribe",
+        "logging/setLevel",
+        "completion/complete",
     }
 )
 # The programs ddflow knows by name (the program homes in `archifaces`).
@@ -97,8 +109,9 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
+_ENVIRON = ("os.environ", "os.environb")
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
-_URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
+_URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?(\[[0-9a-f:.]+\]|[^/:?#\s{}\[\]]+)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -288,9 +301,9 @@ class _Scan:
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
                 if self.literals and id(node) not in self.prose:
                     self._literal_site(node, file_protocols)
-            elif isinstance(node, ast.Attribute) and self.dotted(node) == "os.environ":
+            elif isinstance(node, ast.Attribute) and self.dotted(node) in _ENVIRON:
                 self._environ(node)
-            elif isinstance(node, ast.Name) and self.alias.get(node.id) == "os.environ":
+            elif isinstance(node, ast.Name) and self.alias.get(node.id) in _ENVIRON:
                 self._environ(node)
         return sorted(self.out.values(), key=lambda s: (s.path, s.line, s.kind, s.family))
 
@@ -333,6 +346,8 @@ class _Scan:
     def _env_arg(self, node: ast.AST, arg: ast.AST | None) -> None:
         if isinstance(arg, ast.Name) and len(self.consts.get(arg.id, ())) == 1:
             arg = ast.Constant(value=next(iter(self.consts[arg.id])))  # a name bound to a string
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, bytes):  # os.environb
+            arg = ast.Constant(value=arg.value.decode("latin-1"))
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             self.add("env", arg.value, node)
         else:

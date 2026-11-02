@@ -550,3 +550,32 @@ def test_the_ratchet_shown_matches_the_kind_shown(tmp_path: Path):
     every = API.archdeps(root, interfaces="all").data["ratchet"]["grew"]
     only = API.archdeps(root, interfaces="env").data["ratchet"]["grew"]
     assert len(every) == 2 and len(only) == 1 and only[0].startswith("env ")
+
+
+def test_eighth_round_findings_stay_fixed(tmp_path: Path):
+    import pytest
+
+    from ddflow.api import arch_deps as API
+
+    src = (
+        "import asyncio\nimport os\n"
+        'asyncio.create_subprocess_exec("git", "status")\n'
+        'asyncio.create_subprocess_shell("x")\n'
+        'os.environb[b"BYTES_VAR"]\n'
+        'M = "notifications/resources/list_changed"\n'
+        'U = "http://[::1]:8080/api"\n'
+    )
+    c = I.scan(_tree(tmp_path, {"e8.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"git", "sh"}
+    assert {f.family for f in c.families if f.kind == "env"} == {"BYTES_VAR"}
+    assert {f.family for f in c.families if f.kind == "protocol"} == {"mcp"}
+    assert "host:[::1]" in {f.family for f in c.families if f.kind == "network"}
+    # an unparsed file: no baseline can be written, and a kind-scoped ratchet still shows it
+    (tmp_path / "ddflow" / "bad.py").write_text("def f(:\n")
+    broken = I.scan(tmp_path)
+    with pytest.raises(ValueError):
+        I.format_baseline(broken)
+    (tmp_path / "tests" / "arch_baselines").mkdir(parents=True)
+    (tmp_path / I.BASELINE_PATH).write_text("")
+    grew = API.archdeps(tmp_path, interfaces="env").data["ratchet"]["grew"]
+    assert any(g.startswith("unparsed ") for g in grew)
