@@ -43,7 +43,11 @@ class FakeMcpServer:
         if "id" not in msg:
             return None
         mid, method = msg["id"], msg.get("method", "")
-        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+        if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
+            return W.err(mid, W.INVALID_REQUEST, "not a JSON-RPC 2.0 request")
+        if msg.get("params") is not None and not isinstance(msg["params"], dict):
+            return W.err(mid, W.INVALID_PARAMS, "`params` must be an object")
+        params = msg.get("params") or {}
         if method == "initialize":
             want = params.get("protocolVersion")
             version = want if want in W.SERVED_VERSIONS else W.SERVED_VERSIONS[0]
@@ -93,6 +97,8 @@ class FakeMcpServer:
                     reply = answer(msg)
                 except Exception as exc:
                     reply = W.err(msg.get("id"), W.INTERNAL_ERROR, f"internal error: {exc}")
+                    if "id" not in msg:
+                        reply = None
                 if reply is not None:
                     self.sent.append(reply)
             if after is not None:

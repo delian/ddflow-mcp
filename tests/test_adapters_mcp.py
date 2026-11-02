@@ -119,7 +119,7 @@ def test_tools_are_listed_and_called_and_a_tool_refusal_is_an_error_result(make)
 def test_calls_before_connect_are_unavailable_not_passed(make):
     _, client, _ = make()
     assert client.list_tools(1).status == W.UNAVAILABLE
-    assert client.call("echo", {}, 1).answered is False
+    assert client.call("echo", {}, 1).status == W.UNAVAILABLE
 
 
 @pytest.mark.parametrize(
@@ -247,3 +247,16 @@ def test_a_scripted_exception_is_an_error_outcome_for_the_fake_client():
     client.connect(1)
     got = client.call("echo", {}, 1)
     assert got.status == W.ERROR and got.error["code"] == W.INTERNAL_ERROR
+
+
+def test_a_malformed_request_is_refused_and_a_failing_notification_is_not_answered(make):
+    server, _, sent = make()
+    bare = server.handle({"id": 1, "method": "ping"})
+    assert bare["error"]["code"] == W.INVALID_REQUEST
+    old = server.handle({"jsonrpc": "1.0", "id": 2, "method": "ping"})
+    assert old["error"]["code"] == W.INVALID_REQUEST
+    arr = server.handle({"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": [1]})
+    assert arr["error"]["code"] == W.INVALID_PARAMS
+    boom = lambda msg: 1 / 0  # noqa: E731
+    server.serve([W.encode({"jsonrpc": "2.0", "method": "ping"}) + "\n"], boom)
+    assert sent() == []

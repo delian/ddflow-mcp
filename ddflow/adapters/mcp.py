@@ -65,7 +65,8 @@ def err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any
 
 
 def encode(frame: dict[str, Any]) -> str:
-    """One frame as a line (no newline): the only encoder, so framing changes in one place."""
+    """One frame as a line (no newline): the only encoder, so framing changes in one place.
+    `json.dumps` defaults are kept on purpose (no behaviour change from the hand-rolled loop)."""
     return json.dumps(frame)
 
 
@@ -208,9 +209,13 @@ class StdioServer:
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         mid, method = msg.get("id"), msg.get("method", "")
-        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
         if "id" not in msg:
             return None  # a notification is never answered
+        if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
+            return err(mid, INVALID_REQUEST, "not a JSON-RPC 2.0 request")
+        if msg.get("params") is not None and not isinstance(msg["params"], dict):
+            return err(mid, INVALID_PARAMS, "`params` must be an object")
+        params = msg.get("params") or {}
         if method == "initialize":
             want = params.get("protocolVersion")
             version = want if want in self.versions else self.versions[0]
@@ -277,6 +282,8 @@ class StdioServer:
                 except Exception as exc:
                     self._log(traceback.format_exc())
                     reply = err(msg.get("id"), INTERNAL_ERROR, f"internal error: {exc}")
+                    if "id" not in msg:
+                        reply = None  # a notification is never answered, even when it fails
                 if reply is not None:
                     self.notify(reply)
             if after is not None:
