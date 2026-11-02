@@ -358,6 +358,19 @@ def parse(text: str, name: str) -> Harness:
     return h
 
 
+def _parse_dir(directory: Path) -> tuple[Harness, ...]:
+    """Every descriptor under ``directory``, ranked, each file's id checked against its name."""
+    found = [
+        parse(p.read_text(encoding="utf-8"), p.stem) for p in sorted(directory.glob("*.toml"))
+    ]
+    ranks: dict[int, str] = {}
+    for h in found:
+        if h.rank in ranks:
+            raise DescriptorError(f"{h.id}.toml: rank {h.rank} is also {ranks[h.rank]}'s")
+        ranks[h.rank] = h.id
+    return tuple(sorted(found, key=lambda h: h.rank))
+
+
 _cache: dict[Path, tuple[Harness, ...]] = {}
 
 
@@ -365,14 +378,42 @@ def load(directory: Path | None = None) -> tuple[Harness, ...]:
     """Every descriptor under ``directory`` (default: the shipped set), ordered by rank."""
     root = directory or HARNESS_DIR
     if root not in _cache:
-        found = [parse(p.read_text(encoding="utf-8"), p.stem) for p in sorted(root.glob("*.toml"))]
-        ranks: dict[int, str] = {}
-        for h in found:
-            if h.rank in ranks:
-                raise DescriptorError(f"{h.id}.toml: rank {h.rank} is also {ranks[h.rank]}'s")
-            ranks[h.rank] = h.id
-        _cache[root] = tuple(sorted(found, key=lambda h: h.rank))
+        _cache[root] = _parse_dir(root)
     return _cache[root]
+
+
+def project_dir(root: Path) -> Path:
+    """A project's descriptor overrides: ``.ddflow/harnesses.d`` (decision D-DRV-1: every
+    descriptor value is data a project may override). A ``<id>.toml`` here replaces the
+    shipped descriptor of the same id's rank and a new id adds an agent ddflow ships none
+    for (bug B-drv-descriptor-override-missing)."""
+    return Path(root) / ".ddflow" / "harnesses.d"
+
+
+def load_in(root: Path | None, directory: Path | None = None) -> tuple[Harness, ...]:
+    """The descriptors a project sees: the shipped set with the project's overrides applied.
+
+    ``root`` is the project root; ``None`` means the shipped set only. Each override under
+    ``project_dir(root)`` replaces the shipped descriptor of the same id, and one with no
+    shipped counterpart adds an agent, all in rank order.
+    """
+    shipped = load(directory)
+    if root is None:
+        return shipped
+    over_dir = project_dir(root)
+    over = _parse_dir(over_dir) if over_dir.is_dir() else ()
+    if not over:
+        return shipped
+    over_by_id = {h.id: h for h in over}
+    merged = [over_by_id.get(h.id, h) for h in shipped] + [
+        h for h in over if h.id not in {s.id for s in shipped}
+    ]
+    ranks: dict[int, str] = {}
+    for h in merged:
+        if h.rank in ranks:
+            raise DescriptorError(f"{h.id}.toml: rank {h.rank} is also {ranks[h.rank]}'s")
+        ranks[h.rank] = h.id
+    return tuple(sorted(merged, key=lambda h: h.rank))
 
 
 #: The shipped descriptors by id, in rank order, loaded on first use (`load`).
