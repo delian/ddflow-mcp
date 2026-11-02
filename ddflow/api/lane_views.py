@@ -10,11 +10,11 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
-from ..core.schedule import plan
 from ..services import flowstate as FL
 from ..services import lanes as LN
 from ..services.lanes.redraw import watch as _watch
 from ._base import _load
+from .lifecycle.planning import plan_for
 
 VIEWS = ("state", "brief", "advise")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
@@ -32,7 +32,8 @@ def lanes(
     at = time.time() if now is None else now
     limit = FL.limit_for(Path(repo), cfg, st, log.read_all)
     events = log.read_all()
-    ledger = LN.build(events, st, cfg, at, plan(st, cfg, now=at, agent=NOBODY, parallel=limit))
+    offer = plan_for(Path(repo), log, cfg, st, purpose="view", agent=NOBODY, now=at, events=events)
+    ledger = LN.build(events, st, cfg, at, offer)
     # Every field of the wire shape is always set, so a "nothing" answer is the same body
     # on both surfaces (no null-padded lead).
     data: dict = {
