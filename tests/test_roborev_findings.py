@@ -301,6 +301,7 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     import inspect
 
     from ddflow.surfaces import mcp as M
+    from ddflow.surfaces.mcp import _core as MC
 
     read = inspect.getsource(M.Server._m_resources_read)  # the `resources/read` handler
     assert "fold(" not in read, f"resources/read still folds the log itself:\n{read}"
@@ -308,8 +309,10 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     assert "RESOURCE_BY_URI" in read and read.count("resource.read(") == 1, (
         f"one path, one call:\n{read}"
     )
-    table = inspect.getsource(M)
-    table = table[table.index("RESOURCES: tuple") : table.index("class Server")]
+    # The table lives in the split package's `_core` module; `RESOURCE_BY_URI` is derived
+    # from it right after, so the whole table is the slice between the two.
+    table = inspect.getsource(MC)
+    table = table[table.index("RESOURCES: tuple") : table.index("RESOURCE_BY_URI")]
     assert "fold(" not in table and "EventLog" not in table, "a resource folds the log itself"
 
 
