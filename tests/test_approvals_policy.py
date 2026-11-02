@@ -251,6 +251,28 @@ def test_complete_unavailable_does_not_answer_a_non_required_unavailable_gate(pr
     assert not got.ok and got.ask_id  # nothing required is blocked: a person is asked
 
 
+def test_complete_unavailable_requires_a_gate_of_the_items_pipeline(proj):
+    """`target` must name a required, still-unmet gate OF THE ITEM'S PIPELINE: a required gate
+    not on it (e.g. a gate removed from this kind's pipeline) is never auto-answered."""
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "unit_tests": GateRecord(gate="unit_tests", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+            "ci": GateRecord(gate="ci", outcome="unavailable"),
+        },
+    )
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    cfg.gates.required = ["implement", "unit_tests", "merge", "ci"]  # ci is NOT a task gate
+    assert PO.RULES["complete_unavailable"].when(it, "ci", cfg) is False
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False  # already passed
+
+
 def _only_unavailable_repo(repo, unit):
     """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
     required gate is `unit_tests` = `unit`. reviewer independence is off so the completion
