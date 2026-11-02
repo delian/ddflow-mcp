@@ -13,6 +13,8 @@ from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
 from ..services import ci_marker as CM
+from ..services.flakes import failed_tests
+from ..services.gates import baseline as BL
 from ..services.gates.handrecord import CI_RUN
 from ._base import _load
 from .ci import lease_tick, status
@@ -152,6 +154,15 @@ def run(
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
     )  # fmt: skip
     data = res.as_data()
+    if not res.ok and res.failures:  # the evidence caps the list; the whole one is kept aside
+        everyone = [f["id"] for f in failed_tests(res.output)]
+        if len(everyone) > len(res.failures.get("failed_tests") or ()):
+            data["failed_tests_total"] = len(everyone)
+        other = [
+            c for c in res.checks if not c.ok and c.id != "command"
+        ]  # a failed hook is not tests
+        if not other and (kept := BL.write_full(repo, res.sha, everyone)):
+            data["failing_ids_file"] = kept
     if res.scope:
         data["scope_line"] = CM.marker_line(res.scope)
     if log_to is not None and not res.ok:  # a pass keeps no log

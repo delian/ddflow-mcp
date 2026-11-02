@@ -23,6 +23,8 @@ from . import baseline as BL
 
 GATES = ("ci", "unit_tests")
 SHOWN = 5
+#: Ids run on the base at once: under `flakes.MAX_FAILED_TESTS`, which cuts a run's listed failures.
+CHUNK = 40
 #: Said in the evidence: the comparison is only as clean as a fresh checkout is.
 ISOLATION = (
     "fresh detached worktree of the base; the project's own command ran in it, so an "
@@ -52,18 +54,29 @@ def on_base(
     if all(i in known for i in ids):
         return {"red": all(known[i] for i in ids), "cached": True, "base": base, "base_sha": sha,
                 "ids": ids, "still_failing": [i for i in ids if known[i]]}  # fmt: skip
+    todo = [i for i in ids if i not in known]
+    outcomes: list[str] = []
+    cmd = ""
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-base.", quiet=True) as tree:
         if tree.path is None:
             return {"red": False, "why": "no scratch worktree of the base could be made"}
-        cmd = TS.run_command(gdef.command, ids, tree.path)
-        if not cmd:
-            return {"red": False, "why": "the gate's command does not run pytest"}
-        outcome, ev = run(replace(gdef, command=cmd), tree.path)
-    failing = ev.get("failed_tests") or []
-    red = outcome == "failed" and all(i in failing for i in ids)
-    if outcome in ("passed", "failed"):  # a run that could not run says nothing about the base
-        BL.cache_store(repo, sha, {i: i in failing for i in ids}, ttl_s, gdef.command)
-    return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha, "outcome": outcome, "command": cmd,
+        # Chunks stay under the evidence cap on listed failures, so a run's list is never cut.
+        for start in range(0, len(todo), CHUNK):
+            part = todo[start : start + CHUNK]
+            cmd = TS.run_command(gdef.command, part, tree.path)
+            if not cmd:
+                return {"red": False, "why": "the gate's command does not run pytest"}
+            outcome, ev = run(replace(gdef, command=cmd), tree.path)
+            outcomes.append(outcome)
+            failing_here = set(ev.get("failed_tests") or ())
+            if outcome in ("passed", "failed") and not ev.get("failed_tests_more"):
+                # a run that could not run says nothing about the base
+                known.update({i: i in failing_here for i in part})
+                BL.cache_store(repo, sha, {i: i in failing_here for i in part}, ttl_s, gdef.command)
+    failing = [i for i in ids if known.get(i)]
+    red = all(known.get(i) for i in ids)
+    return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,
+            "outcome": "failed" if red else (outcomes[-1] if outcomes else ""), "command": cmd,
             "ids": ids, "still_failing": failing}  # fmt: skip
 
 

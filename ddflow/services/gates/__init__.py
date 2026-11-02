@@ -35,7 +35,7 @@ treated as "no problem".
 
 from __future__ import annotations
 
-from .baseline import auto_decision, cache_load, cache_store, test_files_of  # noqa: F401
+from .baseline import auto_decision, cache_load, cache_store, read_full, test_files_of, write_full  # noqa: F401
 from .baseline_red import bug_id, candidate_ids, on_base, reason_text  # noqa: F401
 from .defs import (  # noqa: F401
     DEFAULT_GATES,

@@ -65,6 +65,38 @@ def cache_store(
         return
 
 
+FULL_DIR = Path(".ddflow") / "local" / "ci-failing"
+#: What the outcome evidence keeps of a long failing list; the whole list is in a file.
+SAMPLE = 50
+
+
+def write_full(repo: Path, sha: str, ids: list[str]) -> str:
+    """Keep EVERY failing test id of a run on ``sha`` in a local file (the gate evidence holds
+    only a capped sample): returns its path relative to ``repo``, "" when it could not be
+    written. A large red suite spills here instead of being cut."""
+    if not sha or not ids:
+        return ""
+    rel = FULL_DIR / f"{sha[:40]}.json"
+    try:
+        path = Path(repo) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fsio.ensure_ignored_dir(path.parent)
+        atomic_write(path, json.dumps({"sha": sha, "ids": list(dict.fromkeys(ids))}))
+    except OSError:
+        return ""
+    return str(rel)
+
+
+def read_full(repo: Path, sha: str) -> list[str]:
+    """The whole failing list `write_full` kept for ``sha`` ([] when there is none)."""
+    try:
+        data = json.loads((Path(repo) / FULL_DIR / f"{sha[:40]}.json").read_text(encoding="utf-8"))
+        ids = data["ids"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return [str(i) for i in ids] if sha and data.get("sha") == sha and isinstance(ids, list) else []
+
+
 def test_files_of(ids: list[str]) -> list[str]:
     """The test files of ``ids`` ("tests/test_a.py::T::t" -> "tests/test_a.py")."""
     return sorted({i.split("::", 1)[0] for i in ids})

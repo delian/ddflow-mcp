@@ -139,3 +139,80 @@ def test_an_open_bug_naming_the_ids_is_linked_not_refiled(repo) -> None:
     assert GB._linked(repo, "worker", [ID]) == bug
     assert GB._linked(repo, "worker", ["tests/other.py::t"]) == ""
     assert GB._linked(repo, "worker", [ID[:-1]]) == ""  # the start of a longer id is not the id
+
+
+def _ci_project(repo, n: int, *, extra_fail: str = "") -> None:
+    """A project whose `ci` gate runs `ddflow ci run` over a fake pytest failing ``n`` tests on
+    the base too (and ``extra_fail`` only in the item's tree)."""
+    run_cli(repo, "init")
+    (repo / "bin").mkdir()
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_x.py").write_text("def test_a():\n    pass\n")
+    extra = (
+        f"if os.path.exists(os.path.join(here, '..', 'newfail')): names.append({extra_fail!r})\n"
+        if extra_fail
+        else ""
+    )
+    (repo / "bin" / "pytest").write_text(
+        "#!/usr/bin/env python3\nimport os, sys\n"
+        "here = os.path.dirname(os.path.abspath(__file__))\n"
+        f"every = [f'tests/test_big.py::test_{{i:03d}}' for i in range({n})]\n"
+        "asked = [a for a in sys.argv[1:] if '::' in a]\n"
+        "names = [a for a in asked if a in every] if asked else list(every)\n"
+        + extra
+        + "print('=== short test summary info ===')\n"
+        "for t in names:\n    print(f'FAILED {t} - boom')\n"
+        "print(f'{len(names)} failed in 0.1s')\nsys.exit(1 if names else 0)\n"
+    )
+    (repo / "bin" / "pytest").chmod(0o755)
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write('\n[ci]\ncommand = "./bin/pytest -q tests/"\ntests_scope = "full"\n')
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "./bin/pytest -q tests/"\ncwd = "repo"\n'
+    )
+    run_cli(repo, "config", "worktree.enabled", "false")
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
+    code, _o, err = run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    assert code == 0, err
+    code, _o, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
+    assert code == 0, err
+
+
+def test_ci_red_only_from_a_large_baseline_failing_list_is_partial(repo) -> None:
+    from ddflow.services.gates import baseline as BL
+
+    _ci_project(repo, 120)  # more than the evidence keeps
+    run_cli(repo, "--json", "gate", "run", "T1", "ci", agent="worker")
+    it = _state(repo).items["T1"]
+    ci = it.gates["ci"]
+    assert ci.outcome == "partial", (ci.outcome, ci.reason)
+    base = ci.evidence["baseline"]
+    assert base["red"] is True and len(base["ids"]) == 120
+    assert base["auto"]["accepted"] is True
+    sha = ci.evidence["ci_scope"]["sha"]
+    assert len(BL.read_full(repo, sha)) == 120
+    # unit_tests is not held back by a partial baseline-red ci
+    out = json.loads(run_cli(repo, "--json", "gate", "run", "T1", "unit_tests", agent="worker")[1])
+    assert "refusal" not in out, out
+
+
+def test_ci_with_a_failure_not_on_the_base_stays_failed_and_says_so(repo, monkeypatch) -> None:
+    from ddflow.api import gate_baseline as GB
+
+    ids = [f"tests/t.py::test_{i}" for i in range(80)] + [
+        "tests/test_timing.py::test_lookup_latency_budget"
+    ]
+    monkeypatch.setattr(GB, "_ci_ids", lambda *a: ids)
+    monkeypatch.setattr(GB, "_unit_tests_def", lambda *a: SimpleNamespace(command="pytest"))
+    monkeypatch.setattr(BR, "on_base", lambda *a: {"red": False, "still_failing": ids[:-1]})
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    ev: dict = {"ci_scope": {"sha": "abc"}}
+    it = SimpleNamespace(id="T1", base="main")
+    gdef = SimpleNamespace(command="ddflow ci run")
+    outcome, why = GB.apply(repo, cfg, "a", it, "ci", gdef, "failed", ev, None, False)
+    assert outcome == "failed"
+    assert "test_lookup_latency_budget" in why and "timing flake" in why
+    assert ev["baseline"]["new_failures"] == [ids[-1]]
