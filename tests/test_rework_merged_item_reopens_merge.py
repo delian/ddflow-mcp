@@ -48,8 +48,14 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
     _git(tree, "add", ".")
     _git(tree, "commit", "-qm", "work")
     if with_ci:
-        run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "e")
-        run_cli(repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "e")
+        code, out, err = run_cli(
+            repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "e"
+        )
+        assert code == 0, out + err
+        code, out, err = run_cli(
+            repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "e"
+        )
+        assert code == 0, out + err
     assert run_cli(repo, "merge", "T1")[0] == 0
     sha = fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
     assert sha, "the merge records a merged_sha"
@@ -60,6 +66,8 @@ def test_reclaiming_a_merged_item_reopens_the_stale_merge(repo):
     """The re-claim of a merged item is a rework: the recorded merge no longer stands, so
     `merged_sha` and every gate outcome clear (no stale [x] survives to completion)."""
     _merged(repo, with_ci=True)
+    before = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    assert before.gate_outcome("ci") == "passed"  # a stale ci outcome exists to be reopened
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, out + err
     assert "reopened" in out + err  # the claim says the stale merge was reopened
