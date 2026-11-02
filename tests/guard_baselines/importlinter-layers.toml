@@ -19,5 +19,5 @@ ignore_imports = [
     "ddflow.core.schedule.* -> ddflow.config",
     # services -> views
     "ddflow.services.enforce.views -> ddflow.views.markdown",
-    "ddflow.services.sessions -> ddflow.views.markdown",
+    "ddflow.services.sessions._reconstruct -> ddflow.views.markdown",
 ]

@@ -82,6 +82,7 @@ EXEMPT: dict[str, str] = {
             "item.unblocked",
             "item.completed",
             "item.reopened",
+            "item.reworked",
             "item.abandoned",
             "item.resolved",
             "phase.removed",

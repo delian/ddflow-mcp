@@ -271,14 +271,22 @@ def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str 
 def harness_session_id(raw: str) -> str:
     """The ddflow session id for a harness's own session id (one session per conversation)."""
     raw = str(raw)
-    safe = safe_filename(raw, repl="", max=48)
-    if not safe:
+    if not raw:
         return ""
-    if safe != raw:
-        # Sanitising or truncating made distinct ids collide; a digest keeps them apart.
-
-        safe += "-" + content_digest(raw, length=16)
-    return f"h-{safe}"
+    safe = safe_filename(raw, repl="", max=48)
+    if safe == raw:
+        return f"h-{raw}"
+    # Sanitising or truncating changed the raw (or emptied it). Digest the FULL raw: the
+    # 64-hex suffix makes the id longer than any clean id (`safe == raw` caps at 48), so a
+    # sanitised id can never collide with the clean id that spells its digest back, and an
+    # id like '///' that sanitises to nothing still gets a non-empty id. (`surrogatepass`
+    # keeps a lone-surrogate harness id, e.g. from a surrogateescape-decoded env var, from
+    # raising here.)
+    return (
+        f"h-{safe}-{content_digest(raw, errors='surrogatepass')}"
+        if safe
+        else f"h-{content_digest(raw, errors='surrogatepass')}"
+    )
 
 
 def capture_prompt(
