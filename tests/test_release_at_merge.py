@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
+from test_merge_queue import _finish, proj  # noqa: F401
 
 
 def _git(where: Path, *args: str) -> None:
@@ -53,7 +54,8 @@ def test_merge_releases_the_lease_and_a_waiter_can_claim_the_file(repo, monkeypa
     assert not _item(repo, "T1").get("lease"), "the merge landed but the lease is still held"
     code, out, err = run_cli(repo, "claim", "T2", agent="beta")
     assert code == 0, out + err
-    assert tree.exists() or "worktree" in out  # the tree is kept for the completion steps
+    # the merge's own tree disposal is unchanged; the item and its recorded gates remain
+    assert _item(repo, "T1")["state"] != "done"
 
 
 def test_a_waiter_is_woken_ready_by_the_merge(repo, monkeypatch):
@@ -93,3 +95,15 @@ def test_the_knob_off_holds_the_lease_to_complete(repo, monkeypatch):
     assert tree.exists()
     assert run_cli(repo, "merge", "T1", agent="alpha")[0] == 0
     assert _item(repo, "T1")["lease"], "release_at_merge = false keeps the old hold"
+    assert run_cli(repo, "claim", "T2", agent="beta")[0] != 0, "the files stay held"
+
+
+def test_a_merge_through_the_queue_releases_at_the_merge(proj):  # noqa: F811
+    """The integrator lands with the ordinary merge, so the release is recorded at the merge
+    (note 'merged'), not only by the integrator's own complete."""
+    _finish(proj, "T1")
+    assert run_cli(proj, "queue", "add", "T1", agent="t1")[0] == 0
+    assert run_cli(proj, "queue", "run", agent="integrator")[0] == 0
+    code, out, err = run_cli(proj, "--json", "history", "--item", "T1", "--kind", "lease.released")
+    assert code == 0, out + err
+    assert '"merged"' in out or "merged" in out, out

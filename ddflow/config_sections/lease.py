@@ -64,7 +64,7 @@ class LeaseConfig:
     )
     release_at_merge: bool = knob(
         True,
-        doc="The lease ends when `ddflow merge` has landed the branch and recorded it (also when the merge queue's integrator lands it), not when the item completes: 33.5% of all lease-hours fell after the merge, held while completion waited on approvals or an absent agent, and no one else could change the files. The worktree and branch stay for the completion steps, `complete` needs no lease, a waiter is woken ready, and a merge that fails keeps the lease. Off: the lease is held to `complete`, as before.",
+        doc="The lease ends when `ddflow merge` has landed the branch and recorded it (also when the merge queue's integrator lands it), not when the item completes: 33.5% of all lease-hours fell after the merge, held while completion waited on approvals or an absent agent, and no one else could change the files. `merge` disposes of the tree as before, `complete` needs no lease, a waiter is woken ready, and a merge that fails keeps the lease. Off: the lease is held to `complete`, as before.",
     )
     break_on_timeout: bool = knob(
         False,

@@ -44,8 +44,7 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
 
 def _release_at_merge(log, cfg, item: str) -> bool:
     """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
-    are free for a waiter, whose `wait` reads the release as ready. The worktree and branch
-    stay for the completion steps; `complete` needs no lease. `[lease].release_at_merge`
+    are free for a waiter, whose `wait` reads the release as ready. `complete` needs no lease. `[lease].release_at_merge`
     off keeps the hold to complete. Only reached after a landing, so a failed merge keeps it."""
     if not cfg.lease.release_at_merge:
         return False
@@ -225,7 +224,6 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
-    freed = _release_at_merge(log, cfg, item)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.
     back_merged, back_failed = [], []
@@ -234,6 +232,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         (back_merged if br.ok else back_failed).append(
             extra if br.ok else f"{extra}: {br.err or br.out}"
         )
+    # After the back-merges: a hotfix whose back-merge failed still needs its files to retry.
+    freed = False if back_failed else _release_at_merge(log, cfg, item)
     human_gate = GM.record_merge(
         log,
         cfg,
