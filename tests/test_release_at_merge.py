@@ -45,7 +45,7 @@ def _two_items(repo: Path, monkeypatch) -> Path:
 
 
 def test_merge_releases_the_lease_and_a_waiter_can_claim_the_file(repo, monkeypatch):
-    tree = _two_items(repo, monkeypatch)
+    _two_items(repo, monkeypatch)
     code, out, err = run_cli(repo, "claim", "T2", agent="beta")
     assert code != 0, "the file is held, so the waiter is refused before the merge"
     assert _item(repo, "T1")["lease"]
@@ -70,7 +70,7 @@ def test_a_waiter_is_woken_ready_by_the_merge(repo, monkeypatch):
 def test_a_failed_merge_keeps_the_lease(repo, monkeypatch):
     tree = _two_items(repo, monkeypatch)
     (tree / "c.txt").write_text("dirty\n")  # uncommitted: the merge is refused
-    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    code, _out, _err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code != 0
     assert _item(repo, "T1")["lease"], "a refused merge must keep the lease"
 
@@ -109,4 +109,4 @@ def test_a_merge_through_the_queue_releases_at_the_merge(proj):  # noqa: F811
     body = json.loads(out)
     events = body["events"] if isinstance(body, dict) else body
     notes = [e.get("data", e).get("note") for e in events]
-    assert 'merged' in notes, out
+    assert "merged" in notes, out
