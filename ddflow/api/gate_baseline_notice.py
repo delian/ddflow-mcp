@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..core.digest import content_digest
 from ..core.handlers.asks import asks_of
 from ..core.model import fold
 from ..services import gate_accept as GA
@@ -22,12 +23,17 @@ RULE = "baseline_red_auto"
 SHOWN = 8
 
 
+def marker(item: str, gate: str, ids: list[str]) -> str:
+    """Leads the recorded text (a cut cannot remove it): which failing set this told."""
+    return f"[{RULE} {item}.{gate} {content_digest(','.join(sorted(ids)))[:10]}]"
+
+
 def notice_text(item: str, gate: str, ids: list[str], bug: str) -> str:
     shown = ", ".join(ids[:SHOWN]) + (f" (+{len(ids) - SHOWN} more)" if len(ids) > SHOWN else "")
     return (
         f"{item}.{gate} is PARTIAL and was accepted automatically as baseline-red: {shown} fail "
         f"on the base branch too and are not in the item's reach. Bug: {bug or 'not filed'}. "
-        f"Fix the base; to withdraw the acceptance set `ddflow config gates.baseline_red_auto off`."
+        f"A test failing only in the item (a timing flake such as test_lookup_latency_budget) is a NEW failure and keeps the gate failed. Fix the base; to withdraw the acceptance set `ddflow config gates.baseline_red_auto off`."
     )
 
 
@@ -51,11 +57,13 @@ def notify(repo: Path, agent: str, item: str, gate: str) -> bool:
     canon = Canon(verb="approve.partial", agent=log.agent_id or agent or "ddflow", item=item,
                   target=gate, state=GA.digest(it, gate))  # fmt: skip
     state = fold(log.read_all(), strict=False)
-    text = notice_text(item, gate, ids, str(base.get("bug") or ""))
-    if _said(state, canon, text):
+    mark = marker(item, gate, ids)
+    if _said(state, canon, mark):
         return False
+    text = f"{mark} " + notice_text(item, gate, ids, str(base.get("bug") or ""))
+    PO.record_auto(log, cfg, canon, text, RULE)  # the durable record: the inbox below is advisory
     if cfg.gates.baseline_red_notify_to:
-        why = LR.notify(
+        LR.notify(
             repo,
             cfg,
             cfg.gates.baseline_red_notify_to,
@@ -64,9 +72,6 @@ def notify(repo: Path, agent: str, item: str, gate: str) -> bool:
             reason="message",
             sender=canon.agent,
         )
-        if why:  # not told: leave no record, so the next run tries again
-            return False
-    PO.record_auto(log, cfg, canon, text, RULE)
     return True
 
 

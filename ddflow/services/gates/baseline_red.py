@@ -69,7 +69,12 @@ def on_base(
             outcome, ev = run(replace(gdef, command=cmd), tree.path)
             outcomes.append(outcome)
             failing_here = set(ev.get("failed_tests") or ())
-            if outcome in ("passed", "failed") and not ev.get("failed_tests_more"):
+            # Only a run that listed what failed, and was not cut short by `-x`, says which of
+            # the ids PASS on the base; a bare "failed" with no ids is an infrastructure fault.
+            whole = outcome == "passed" or (
+                outcome == "failed" and failing_here and not TS.fail_fast(gdef.command)
+            )
+            if whole and not ev.get("failed_tests_more"):
                 # a run that could not run says nothing about the base
                 known.update({i: i in failing_here for i in part})
                 BL.cache_store(repo, sha, {i: i in failing_here for i in part}, ttl_s, gdef.command)

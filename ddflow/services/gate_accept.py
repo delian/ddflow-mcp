@@ -151,8 +151,8 @@ def approve(
                     f" A baseline-red partial needs no request: `gate run` accepts it itself (CLI "
                     f"`ddflow gate run {item_id} {gate}`, MCP ddflow_gate action=run); an explicit "
                     f"request is for a person and bypasses the standing rule."
-                    if not refusal(it, gate)
-                    else ""
+                    if auto_ids(it, gate, cfg)
+                    else next_step(it, item_id, gate)
                 )
             )
         proxy = decision.stamp

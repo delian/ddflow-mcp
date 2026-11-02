@@ -105,7 +105,9 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
-    red = _ci_baseline_red(it)  # measured baseline-red: the gate runs, it does not wait for ci
+    red = _ci_baseline_red(
+        it, tree
+    )  # measured baseline-red: the gate runs, it does not wait for ci
     if not failed_sel and not red and (why := _ci_not_passed_here(cfg, it, tree)):
         return Scope("full", why, needs_ci="ci" in _pipeline(cfg, it, tree))
     try:
@@ -132,17 +134,21 @@ def _pipeline(cfg, it, tree: Path) -> list[str]:
         return G.pipeline_for(it, cfg)
 
 
-def _ci_baseline_red(it) -> bool:
+def _ci_baseline_red(it, tree: Path | None = None) -> bool:
     """Whether the item's ci gate is PARTIAL because its failing tests were measured failing on
     the base too (D-baseline-red-auto-accept): that is no reason to refuse to start this gate."""
     ci = it.gates.get("ci")
     base = (ci.evidence or {}).get("baseline") if ci is not None else None
-    return bool(
+    if not (
         ci is not None
         and ci.outcome == "partial"
         and isinstance(base, dict)
         and base.get("red") is True
-    )
+    ):
+        return False
+    # measured on THIS tree: a baseline-red ci of another commit proves nothing about this one
+    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    return tree is None or (bool(ran) and ran == G.normal_fingerprint(G.tree_identity(tree)))
 
 
 def _ci_failed_selected(it) -> bool:

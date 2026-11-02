@@ -97,7 +97,7 @@ def _linked(repo: Path, agent: str, ids: list[str]) -> str:
 
 def _names(text: str, test_id: str) -> bool:
     """Does ``text`` name ``test_id`` as a whole id (not as the start of a longer one)?"""
-    return re.search(rf"(?<![\w:/.\[-]){re.escape(test_id)}(?![\w\]\[:-])", text) is not None
+    return re.search(rf"(?<![\w:/.\[-]){re.escape(test_id)}(?![\w\]\[:-]|\.\w)", text) is not None
 
 
 def _ci_ids(repo, cfg, ev: dict[str, Any], capped: list[str]) -> list[str]:

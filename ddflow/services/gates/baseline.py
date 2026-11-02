@@ -62,6 +62,8 @@ def cache_store(
             held = json.loads(path.read_text(encoding="utf-8"))["ids"]
         except (OSError, ValueError, KeyError, TypeError):
             held = {}
+        if not isinstance(held, dict):
+            held = {}
         now = time.time()
         merged = {
             **{k: v for k, v in held.items() if now - float(v[1]) <= ttl_s},
@@ -70,7 +72,7 @@ def cache_store(
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)
         atomic_write(path, json.dumps({"sha": sha, "ids": merged}))
-    except (OSError, ValueError, IndexError, TypeError):
+    except (OSError, ValueError, IndexError, TypeError, KeyError, AttributeError):
         return
 
 
