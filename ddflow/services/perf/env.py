@@ -75,7 +75,7 @@ def in_container(exists: Callable[[str], bool] | None = None) -> bool:
     return ex("/.dockerenv") or ex("/run/.containerenv")
 
 
-def cgroup_state(read: Reader = _read_file) -> str:
+def cgroup_state(read: Reader = _read_file, v1_unlimited_bytes: int = V1_UNLIMITED_BYTES) -> str:
     """limited | unlimited | unavailable, from cgroup v2 then v1 cpu and memory limits."""
     seen: list[bool] = []
     cpu = read("/sys/fs/cgroup/cpu.max")
@@ -86,7 +86,7 @@ def cgroup_state(read: Reader = _read_file) -> str:
         seen.append(mem.strip() != "max")
     v1mem = read("/sys/fs/cgroup/memory/memory.limit_in_bytes")
     if v1mem is not None and v1mem.strip().isdigit():
-        seen.append(int(v1mem.strip()) < V1_UNLIMITED_BYTES)
+        seen.append(int(v1mem.strip()) < v1_unlimited_bytes)
     quota = read("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
     if quota is not None and quota.strip():
         seen.append(quota.strip() != "-1")

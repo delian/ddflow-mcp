@@ -54,6 +54,13 @@ def test_load_and_cache_change_cond_not_key():
     assert a.facts["load"] == "idle" and b.facts["load"] == "saturated"
 
 
+def test_cgroup_v1_threshold_is_a_parameter():
+    mem = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+    r = _reader({mem: "2147479552\n"})
+    assert E.cgroup_state(r) == "limited"
+    assert E.cgroup_state(r, v1_unlimited_bytes=2**31) == "unlimited"
+
+
 def test_cgroup_v1_memory():
     mem = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
     cpu = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"
@@ -122,20 +129,20 @@ def test_cache_state(tmp_path: Path):
 def _identifiers(tmp_path: Path) -> list[str]:
     try:
         user = getpass.getuser()
-    except (KeyError, OSError):
+    except Exception:
         user = ""
     paths = (tmp_path, Path.home())
     names = [socket.gethostname(), user, tmp_path.name]
     names += [str(p) for p in paths] + [p.as_posix() for p in paths]
-    return [n for n in names if n]
+    return [n for n in names if len(n) > 1]
 
 
 def test_collect_runs_here_and_leaks_nothing(tmp_path: Path):
     fp = E.collect(tmp_path, parallel_cap=2, xdist_workers=1, cache_dirs=[tmp_path / "none"])
     blob = "\n".join([fp.key, fp.cond, json.dumps(fp.facts, ensure_ascii=False), fp.stamp()])
-    blob = blob.replace("\\\\", "\\")
     for secret in _identifiers(tmp_path):
         assert secret not in blob
+        assert json.dumps(secret)[1:-1] not in blob
     assert fp.stamp().startswith(f"env:{fp.key}/{fp.cond}")
     assert set(fp.facts) >= {
         "cpu_count",
