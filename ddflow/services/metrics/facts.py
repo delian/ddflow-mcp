@@ -40,6 +40,9 @@ class Outcome:
     #: Seconds of ``elapsed_s`` spent queued for the host suite lock or an admission slot
     #: (B1d51fb9da1); None for an older log, which never recorded it.
     waited_s: float | None = None
+    #: Lines the tree differed from HEAD by when the verdict was recorded (insertions plus
+    #: deletions of the evidence's ``diff_stat``); None when the evidence carried none.
+    changed_lines: int | None = None
 
 
 @dataclass
@@ -83,7 +86,15 @@ class Facts:
     #: (item, at) of every bug filed against an item.
     bugs: list[tuple[str, float]] = field(default_factory=list)
     agents: dict[str, list[float]] = field(default_factory=dict)  # agent -> its event times
+    #: item -> when each `lease.waiting` (a refused claim queued behind another lease) began.
+    waits: dict[str, list[float]] = field(default_factory=dict)
+    #: item -> when each `worktree.merged` landed its branch.
+    merges: dict[str, list[float]] = field(default_factory=dict)
     state: State | None = None
+
+    def starts_of(self, item: str) -> list[float]:
+        """When any gate run of ``item`` started."""
+        return [t for (it, _gate), ts in self.starts.items() if it == item for t in ts]
 
     def first_event(self) -> float | None:
         times = [t for ts in self.agents.values() for t in ts[:1]]
@@ -98,6 +109,16 @@ def _ordered(events: Sequence[Event]) -> list[tuple[float, Event]]:
 def _float(value) -> float | None:
     ok = isinstance(value, int | float) and not isinstance(value, bool) and value >= 0
     return float(value) if ok else None
+
+
+def _changed_lines(evidence: dict) -> int | None:
+    stat = evidence.get("diff_stat")
+    if not isinstance(stat, dict):
+        return None
+    parts = [_float(stat.get("insertions")), _float(stat.get("deletions"))]
+    return (
+        int(sum(p for p in parts if p is not None)) if any(p is not None for p in parts) else None
+    )
 
 
 def _outcome(at: float, ev: Event) -> Outcome | None:
@@ -118,6 +139,7 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         reason=str(d.get("reason") or ""),
         elapsed_s=_float(evidence.get("elapsed_s")),
         waited_s=_float(evidence.get("waited_s")),
+        changed_lines=_changed_lines(evidence),
     )
 
 
@@ -147,6 +169,11 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
         _lease_event(facts, span, at, ev, held)
     elif kind == "gate.started" and isinstance(d.get("gate"), str):
         facts.starts.setdefault((ev.subject, d["gate"]), []).append(at)
+    elif kind == "lease.waiting":
+        since = _float(d.get("at"))
+        facts.waits.setdefault(ev.subject, []).append(since if since is not None else at)
+    elif kind == "worktree.merged":
+        facts.merges.setdefault(ev.subject, []).append(at)
     elif kind == "bug.found" and isinstance(d.get("item"), str) and d["item"]:
         facts.bugs.append((d["item"], at))
     elif kind.startswith("gate."):
