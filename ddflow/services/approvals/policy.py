@@ -64,15 +64,16 @@ _UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.va
 
 
 def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
-    """`complete_unavailable`: every gate `target` names -- the verdict's unmet required
-    gates the completion site passes -- must be a REQUIRED gate whose recorded outcome is
-    `unavailable` or `partial` (a non-required gate, or a required gate already passed,
-    never answers). A required gate recorded `failed` ALWAYS blocks, whatever `target`
-    names (the OVER-FIRE guard below): a genuinely-failed gate is NEVER auto-approved.
-    A required gate that is excused/never-run is the verdict's own decision
-    (`Verdict.unmet_gates` excludes a not_applicable/`applies_when`-excused gate, a
-    chore's skip, a person-accepted partial), so it is not re-judged here and never
-    spuriously blocks an otherwise-only-unavailable completion."""
+    """`complete_unavailable`: `target` -- the FULL `Verdict.unmet_gates` list the
+    completion site (`_auto_complete_unavailable`) passes, never a caller-derived subset --
+    must be non-empty, and every gate it names a REQUIRED gate recorded `unavailable`
+    (a tool could not run) or `partial` (it reported partway). A required gate recorded
+    `failed` ALWAYS blocks, whatever `target` names (the OVER-FIRE guard below), and a
+    never-run (silent) required gate blocks the same way -- its empty outcome is neither
+    `unavailable` nor `partial`, so the outcome check refuses it. An excused required
+    gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
+    already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
+    the verdict alone knows what `applies_when` excused."""
     required = set(required_gates(cfg))
     for g in required:
         if it.gate_outcome(g) == GateOutcome.FAILED.value:
