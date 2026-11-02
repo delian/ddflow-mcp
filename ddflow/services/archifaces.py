@@ -27,8 +27,9 @@ from .archifaces_scan import ALL_ENV, DYNAMIC, Site, sites_in  # noqa: F401  (re
 
 # Where the committed ratchet baseline lives, relative to the repository root.
 BASELINE_PATH = "tests/arch_baselines/arch_interfaces.txt"
-# The census's own modules hold the pattern tables (method names, file names, program names)
-# as data; counting them would make every edit of a table a "new call site".
+# The census's own modules hold the pattern tables (method names, file names, URLs) as string
+# literals, data and not use: their LITERAL kinds are left out (counting them would make every
+# edit of a table a "new call site"); their calls (programs, env reads, sockets) still count.
 SELF_MODULES = ("ddflow.services.archifaces", "ddflow.services.archifaces_scan")
 KINDS = ("program", "protocol", "managed-file", "env", "network")
 _RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
@@ -94,15 +95,19 @@ def scan(repo: Path) -> InterfaceCensus:
     unparsed: list[str] = []
     for path in sorted(p for p in pkg.rglob("*.py") if "__pycache__" not in p.parts):
         module = _dotted(repo, path)
-        if module in SELF_MODULES:
-            continue
         try:
             tree = ast.parse(path.read_bytes())
         except (OSError, SyntaxError, ValueError):
             unparsed.append(module)
             continue
         rel = path.relative_to(repo).as_posix()
-        for s in sites_in(tree, module, rel, is_init=path.name == "__init__.py"):
+        for s in sites_in(
+            tree,
+            module,
+            rel,
+            is_init=path.name == "__init__.py",
+            literals=module not in SELF_MODULES,
+        ):
             by_key.setdefault((s.kind, s.family), []).append(s)
     rows = []
     for (kind, family), sites in sorted(
@@ -137,8 +142,9 @@ def format_baseline(census: InterfaceCensus) -> str:
 def parse_baseline(text: str) -> dict[Key, int]:
     out: dict[Key, int] = {}
     for raw in text.split("\n"):
-        if raw.strip() and not raw.startswith("#"):
-            kind, family, path, n = json.loads(raw)
+        line = raw.strip()
+        if line and not line.startswith("#"):
+            kind, family, path, n = json.loads(line)
             out[(kind, family, path)] = int(n)
     return out
 

@@ -83,7 +83,7 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
-_SHELL_OPS = frozenset({"&&", "||", ";", "|", "&", "\n"})
+_SHELL_OPS = frozenset({"&&", "||", ";", "|", "&"})
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
 
@@ -100,13 +100,28 @@ class Site:
     detail: str = ""
 
 
+_ARG_KEYWORDS = ("args", "argv", "cmd", "command", "key", "path", "file")
+
+
+def _keyword_arg(node: ast.Call) -> ast.AST | None:
+    """The first argument given by keyword (``subprocess.run(args=[...])``), when none is
+    positional."""
+    for k in node.keywords:
+        if k.arg in _ARG_KEYWORDS:
+            return k.value
+    return None
+
+
 def _base(program: str) -> str:
     return program.rsplit("/", 1)[-1] or program
 
 
 class _Scan:
-    def __init__(self, tree: ast.Module, module: str, path: str, is_init: bool) -> None:
+    def __init__(
+        self, tree: ast.Module, module: str, path: str, is_init: bool, literals: bool = True
+    ) -> None:
         self.tree, self.module, self.path = tree, module, path
+        self.literals = literals
         # ONE traversal feeds every pass below (the walk dominates the scan's cost).
         self.parent: dict[int, ast.AST] = {}
         self.nodes: list[ast.AST] = []
@@ -119,13 +134,14 @@ class _Scan:
                 todo.append(kid)
         self.alias: dict[str, str] = {}
         self._aliases(module.split("."), is_init)
-        self.prose = {
-            id(n.value)
-            for n in self.nodes
-            if isinstance(n, ast.Expr)
-            and isinstance(n.value, ast.Constant)
-            and isinstance(n.value.value, str)
-        }
+        # string statements (docstrings, bare f-strings) are prose: they produce no hit
+        self.prose: set[int] = set()
+        for n in self.nodes:
+            if isinstance(n, ast.Expr):
+                if isinstance(n.value, ast.Constant) and isinstance(n.value.value, str):
+                    self.prose.add(id(n.value))
+                elif isinstance(n.value, ast.JoinedStr):
+                    self.prose.update(id(k) for k in ast.walk(n.value))
         self.consts: dict[str, set[str]] = {}
         self.argv0: dict[str, set[str]] = {}
         self._assignments()
@@ -205,21 +221,25 @@ class _Scan:
         """The first word of every command in a shell line, quotes respected (``git commit -m
         'a && b'`` is one command), ``VAR=x`` prefixes skipped; the first word alone when the
         line does not tokenize."""
-        lex = shlex.shlex(line, posix=True, punctuation_chars=True)
-        lex.whitespace_split = True
-        try:
-            tokens = list(lex)
-        except ValueError:
-            words = line.split()
-            return words[:1]
         out: list[str] = []
-        fresh = True
-        for t in tokens:
-            if t in _SHELL_OPS:
-                fresh = True
-            elif fresh and "=" not in t.split("/")[0]:
-                out.append(t)
-                fresh = False
+        for text in line.split("\n"):  # a newline separates commands; shlex would eat it
+            lex = shlex.shlex(text, posix=True, punctuation_chars=True)
+            lex.whitespace_split = True
+            try:
+                tokens = list(lex)
+            except ValueError:
+                return [*out, *text.split()[:1]]
+            fresh, skip = True, False
+            for t in tokens:
+                if skip:  # the target of a redirection (`2>&1`, `> file`) is not a command
+                    skip = False
+                elif t in _SHELL_OPS:
+                    fresh = True
+                elif set(t) <= set("<>&|;()") and ("<" in t or ">" in t):
+                    skip = True
+                elif fresh and "=" not in t.split("/")[0]:
+                    out.append(t)
+                    fresh = False
         return out
 
     def programs_of(self, e: ast.AST, *, shell: bool = False) -> list[str]:
@@ -263,7 +283,7 @@ class _Scan:
                 if not self._is_div(self.parent.get(id(node))):
                     self._git_hooks_join(node)
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-                if id(node) not in self.prose:
+                if self.literals and id(node) not in self.prose:
                     self._literal_site(node, file_protocols)
             elif isinstance(node, ast.Attribute) and self.dotted(node) == "os.environ":
                 self._environ(node)
@@ -277,7 +297,7 @@ class _Scan:
 
     def _call(self, node: ast.Call) -> None:
         name = self.dotted(node.func) or ""
-        arg = node.args[0] if node.args else None
+        arg = node.args[0] if node.args else _keyword_arg(node)
         if name in _GIT:
             self.add("program", "git", node)
         elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL:
@@ -387,6 +407,10 @@ class _Scan:
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
 
 
-def sites_in(tree: ast.Module, module: str, path: str, *, is_init: bool = False) -> list[Site]:
-    """Every interface call site in the parsed module, sorted by path then line."""
-    return _Scan(tree, module, path, is_init).run()
+def sites_in(
+    tree: ast.Module, module: str, path: str, *, is_init: bool = False, literals: bool = True
+) -> list[Site]:
+    """Every interface call site in the parsed module, sorted by path then line.
+    ``literals=False`` leaves out the string-literal kinds (protocol methods, file names,
+    URL hosts) for the census's own modules, whose pattern tables are data, not use."""
+    return _Scan(tree, module, path, is_init, literals).run()

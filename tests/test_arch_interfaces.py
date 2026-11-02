@@ -324,11 +324,18 @@ def test_api_view_carries_interfaces_and_baseline_text():
 
 
 def test_the_census_does_not_count_its_own_pattern_tables(tmp_path: Path):
-    # the scanner's tables name "AGENTS.md", "tools/call", ...: they are data, not call sites
-    src = 'X = "AGENTS.md"\nY = "tools/call"\n'
+    # the scanner's tables name "AGENTS.md", "tools/call", ...: data, not call sites; but a
+    # real call inside a census module (an env read here) is still counted
+    src = 'import os\nX = "AGENTS.md"\nY = "tools/call"\nZ = os.getenv("REAL")\n'
     root = _tree(tmp_path, {"services/archifaces_scan.py": src, "services/real.py": src})
     c = I.scan(root)
-    assert {s.path for f in c.families for s in f.sites} == {"ddflow/services/real.py"}
+    mine = {(f.kind, f.family) for f in c.families for s in f.sites if "scan" in s.path}
+    assert mine == {("env", "REAL")}
+    assert {f.kind for f in c.families for s in f.sites if "real" in s.path} == {
+        "env",
+        "managed-file",
+        "protocol",
+    }
     live = I.scan(ROOT)
     assert not [s for f in live.families for s in f.sites if s.module in I.SELF_MODULES]
 
@@ -410,3 +417,31 @@ def test_a_string_is_a_shell_line_only_for_shell_calls(tmp_path: Path):
     )
     c = I.scan(_tree(tmp_path, {"sh.py": src}))
     assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "git", "uv"}
+
+
+THIRD = """\
+import os
+import shutil
+import subprocess
+
+
+def f():
+    f"opencode.json"
+    os.system("git status\\npre-commit run && make > /dev/null 2>&1")
+    subprocess.run(args=["gh", "pr"])
+    return os.getenv(key="KW_VAR"), shutil.which(cmd="uv")
+"""
+
+
+def test_third_round_review_findings_stay_fixed(tmp_path: Path):
+    c = I.scan(_tree(tmp_path, {"third.py": THIRD}))
+    assert {f.family for f in c.families if f.kind == "program"} == {
+        "git",
+        "pre-commit",
+        "make",
+        "gh",
+        "uv",
+    }
+    assert {f.family for f in c.families if f.kind == "env"} == {"KW_VAR"}
+    assert not [f for f in c.families if f.kind == "managed-file"]  # a bare f-string is prose
+    assert I.parse_baseline(" # indented comment\n\n") == {}
