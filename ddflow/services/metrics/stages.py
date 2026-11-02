@@ -102,7 +102,7 @@ def _first_gate(span: Span, outs: list[Outcome], ctx: Context) -> dict[str, floa
     if not starts:
         return {}
     first = min(starts)
-    if any(span.first_claim <= o.at < first for o in outs):
+    if any(span.first_claim <= o.at <= first for o in outs):
         return {}
     return {"implement": first - span.first_claim}
 

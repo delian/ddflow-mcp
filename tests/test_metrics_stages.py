@@ -175,3 +175,14 @@ def test_implement_is_unmeasured_when_an_earlier_run_has_no_recorded_start():
     log.add("gate.passed", "Q", "a1", T0 + 10, gate="research", by="a1", evidence={"elapsed_s": 10})
     log.add("gate.started", "Q", "a1", T0 + 100, gate=R)
     assert stages(run(log))["implement"]["n"] == 0  # not 100: the first run began earlier
+
+
+def test_implement_is_unmeasured_when_a_verdict_lands_at_the_first_recorded_start():
+    log = Log()
+    log.task("Q")
+    log.claim("a1", "Q", T0)
+    log.add(
+        "gate.passed", "Q", "a1", T0 + 100, gate="research", by="a1", evidence={"elapsed_s": 100}
+    )
+    log.add("gate.started", "Q", "a1", T0 + 100, gate=R)
+    assert stages(run(log))["implement"]["n"] == 0
