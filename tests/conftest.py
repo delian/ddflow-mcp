@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -188,3 +189,19 @@ def add_block(repo, block, *, shared=False, own="", person=False, agent=""):
     if res.error:
         raise ValueError(res.error)
     return res.path
+
+
+#: The project a real ddflow 0.1.3 built: the starting point of the upgrade-apply tests.
+_OLD_PROJECT = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
+
+
+@pytest.fixture
+def old(tmp_path: Path) -> Path:
+    r = tmp_path / "old"
+    shutil.copytree(_OLD_PROJECT, r)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
+    for k, v in (("user.email", "t@e.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        subprocess.run(["git", "-C", str(r), "config", k, v], check=True)
+    subprocess.run(["git", "-C", str(r), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(r), "commit", "-qm", "old"], check=True)
+    return r

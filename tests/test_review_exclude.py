@@ -50,6 +50,36 @@ def test_nothing_matching_returns_the_diff_untouched():
     assert REX.filter_diff(diff, ["*.ambr"]) == (diff, REX.Excluded())
 
 
+def test_a_single_star_directory_glob_leaves_out_the_whole_subtree():
+    diff = (
+        _sec("ddflow/templates/upgrade/unreleased/knob_added.x.toml")
+        + _sec("ddflow/templates/upgrade/unreleased/sub/knob_added.y.toml")
+        + _sec("ddflow/templates/upgrade/changes.toml")
+    )
+    kept, gone = REX.filter_diff(diff, ["ddflow/templates/upgrade/unreleased/*"])
+    assert "unreleased" not in kept
+    assert "changes.toml" in kept
+    assert [p for p, _ in gone.files] == [
+        "ddflow/templates/upgrade/unreleased/knob_added.x.toml",
+        "ddflow/templates/upgrade/unreleased/sub/knob_added.y.toml",
+    ]
+
+
+def test_a_glob_metacharacter_prefix_still_means_one_level():
+    diff = _sec("a/top.py") + _sec("a/b/c.py")
+    kept, gone = REX.filter_diff(diff, ["*/*"])
+    assert [p for p, _ in gone.files] == ["a/top.py"]
+    assert "a/b/c.py" in kept
+
+
+def test_a_root_only_pattern_does_not_recurse():
+    for pat in ["/*", "//*"]:
+        diff = _sec("root.txt") + _sec("sub/nested.txt")
+        kept, gone = REX.filter_diff(diff, [pat])
+        assert [p for p, _ in gone.files] == ["root.txt"]
+        assert "sub/nested.txt" in kept
+
+
 def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     seen = tmp_path / "seen.txt"
     cli = tmp_path / "fake-reviewer"

@@ -25,9 +25,9 @@ would read an eager ``from .claim import ...`` here as a latent parent<->child c
 
 from __future__ import annotations
 
-import importlib
 import time as time  # re-exported: callers replace leases.time to fake the clock
-from typing import Any
+
+from ddflow.core import _reexport
 
 from ...core.admission import shared_globs as shared_globs  # re-exported
 
@@ -122,19 +122,5 @@ _SUBMODULE_OF = {
     "renew_window": "lifecycle",
 }
 
-_MODULES: dict[str, Any] = {}
-
-
-def __getattr__(name: str) -> Any:
-    sub = _SUBMODULE_OF.get(name)
-    if sub is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    mod = _MODULES.get(sub)
-    if mod is None:
-        mod = importlib.import_module(f"{__name__}.{sub}")
-        _MODULES[sub] = mod
-    return getattr(mod, name)
-
-
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(_SUBMODULE_OF))
+_reexport.reexport(globals(), _SUBMODULE_OF, __name__)
+del _reexport

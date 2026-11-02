@@ -38,6 +38,13 @@ from typing import Any
 # dependencies, so this cannot cycle; a relative `from .. import` would read as a layer.
 # A plain import, never importlib.metadata: installed metadata is stale in a source tree.
 from ddflow import __version__ as _VERSION
+from ddflow.adapters.mcp import (  # noqa: F401 -- the one wire encoder, re-exported
+    INVALID_PARAMS,
+    SERVED_VERSIONS,
+    UNSUPPORTED_PROTOCOL_VERSION,
+    err,
+    ok,
+)
 
 #: The LEGACY revisions: negotiated once, by `initialize`, for the life of the process.
 #: Newest first: an unknown version is answered with the first. `2025-11-25`
@@ -47,7 +54,7 @@ from ddflow import __version__ as _VERSION
 #: result with `isError` (SEP-1303), tool names keep to `[A-Za-z0-9_.-]{1,128}`
 #: (SEP-986), and the input schemas name no `$schema`, so they read as JSON Schema
 #: 2020-12, its default dialect (SEP-1613).
-SUPPORTED_PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
+SUPPORTED_PROTOCOLS = SERVED_VERSIONS  # one list: declared with the wire adapter
 SERVER_INFO = {"name": "ddflow", "version": _VERSION, "title": "ddflow work-queue kernel"}
 
 # -- the modern (stateless) revisions ---------------------------------------------------
@@ -74,8 +81,6 @@ META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
 #: with no connection to declare it on, a stateless request names its caller itself --
 #: here, or with the `as_agent` argument, which wins when both are given.
 META_AGENT = "ddflow/agent"
-UNSUPPORTED_PROTOCOL_VERSION = -32022
-INVALID_PARAMS = -32602
 
 #: `ttlMs` per cacheable method (`CacheableResult`). The tool list and the resource list
 #: are fixed for the life of the process (`listChanged` is false), so a client may keep
@@ -91,17 +96,6 @@ CACHE_TTL_MS = {
     "server/discover": 0,
 }
 CACHE_SCOPE = "private"
-
-
-def ok(mid: Any, result: dict[str, Any]) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": mid, "result": result}
-
-
-def err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any]:
-    error: dict[str, Any] = {"code": code, "message": message}
-    if data is not None:
-        error["data"] = data
-    return {"jsonrpc": "2.0", "id": mid, "error": error}
 
 
 def capabilities() -> dict[str, Any]:

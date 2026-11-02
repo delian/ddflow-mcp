@@ -182,7 +182,7 @@ closes an item mechanically and `ddflow import --verify` reports exactly this cl
   a compaction DOES survive a `merge=union` merge, but two divergent compactions merge to
   neither side's result and out of Lamport order. Growth is answered by B86 instead —
   making the read cheap, not the log short. The ratchet's allowlist is now empty.
-  *`tests/test_log_read_cache.py`, `docs/RESEARCH.md` §R-log.*
+  *`tests/test_log_read_cache_*.py`, `docs/RESEARCH.md` §R-log.*
 
 - **B166 — beyond ~100k events the read is still O(log).** The tail-parse cache
   (B86) makes a WARM read cheap, and a warm read needs a long-lived process — an MCP

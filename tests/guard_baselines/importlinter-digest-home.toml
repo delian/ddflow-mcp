@@ -1,5 +1,5 @@
 # The `ignore_imports` allowlist of the .importlinter contract `digest-home` (hashlib is
-# imported only by ddflow.core.digest), which tests/test_architecture_guards.py joins
+# imported only by ddflow.core.digest), which tests/test_architecture_import_contracts.py joins
 # back into the contract before it runs import-linter.
 #
 # Each entry is an import that breaks the contract TODAY. An entry may only be removed,

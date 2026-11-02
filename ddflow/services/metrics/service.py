@@ -22,9 +22,12 @@ from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
 from .skips import audit
+from .stages import build as stages_build
+from .stages import has_figures as stages_ok
+from .stages import text as stages_text
 from .summary import build, has_figures
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes")
+VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages")
 
 
 @dataclass
@@ -52,6 +55,16 @@ def parse_since(text: str, now: float) -> float | None:
             f"--since {text!r}: use a duration such as 7d or 12h, or a date YYYY-MM-DD"
         ) from None
     return clock.epoch(f"{day.isoformat()}T00:00:00Z") if isinstance(day, date) else None
+
+
+def _stages(ctx: Context, group_by: str) -> Answer:
+    try:
+        data = stages_build(ctx, group_by)
+    except ValueError as exc:
+        return Answer(False, str(exc), failed=True)
+    ok = stages_ok(data)
+    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any stage"
+    return Answer(ok, "" if ok else why, metrics=data, text=stages_text(data))
 
 
 def run(
@@ -88,6 +101,8 @@ def run(
         t = timeline(events, facts, item)
         reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
         return Answer(not reason, reason, metrics=t, text=text_retro(t))
+    if view == "stages":
+        return _stages(ctx, group_by)
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))

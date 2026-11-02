@@ -13,8 +13,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lease_contest_support import _REPRO, _acq, _ev
 from test_identity_upgrade import _claimed_before_the_upgrade, _derived, _lease
-from test_lease_contest import _REPRO, _acq, _ev
 
 from ddflow import api
 from ddflow.infra import claimref as CR
