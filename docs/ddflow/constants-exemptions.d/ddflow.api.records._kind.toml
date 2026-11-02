@@ -1,0 +1,5 @@
+[knob]
+"ddflow/api/records/_kind.py:CELL_MAX" = 'records.cell_max'
+"ddflow/api/records/_kind.py:DEFAULT_LIMIT" = 'records.default_limit'
+"ddflow/api/records/_kind.py:MAX_LIMIT" = 'records.max_limit'
+"ddflow/api/records/_kind.py:MAX_SCAN" = 'records.max_scan'

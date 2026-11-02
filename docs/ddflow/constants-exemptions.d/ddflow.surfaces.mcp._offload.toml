@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/surfaces/mcp/_offload.py:MAX_WORKERS" = 'fixed shape of an internal transport (worker pool, per-record trim of a machine-readable field)'
