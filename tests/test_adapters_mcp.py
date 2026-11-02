@@ -254,8 +254,9 @@ def test_a_malformed_request_is_refused_and_a_failing_notification_is_not_answer
     bare = server.handle({"id": 1, "method": "ping"})
     assert bare["error"]["code"] == W.INVALID_REQUEST
     assert server.handle({"jsonrpc": "2.0", "id": 9})["error"]["code"] == W.INVALID_REQUEST
-    odd = server.handle({"jsonrpc": "2.0", "id": {}, "method": "ping"})
-    assert odd["error"]["code"] == W.INVALID_REQUEST and odd["id"] is None
+    for bad_id in ({}, True, [1]):
+        odd = server.handle({"jsonrpc": "2.0", "id": bad_id, "method": "ping"})
+        assert odd["error"]["code"] == W.INVALID_REQUEST and odd["id"] is None
     old = server.handle({"jsonrpc": "1.0", "id": 2, "method": "ping"})
     assert old["error"]["code"] == W.INVALID_REQUEST
     arr = server.handle({"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": [1]})

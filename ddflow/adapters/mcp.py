@@ -64,6 +64,11 @@ def err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any
     return {"jsonrpc": "2.0", "id": mid, "error": error}
 
 
+def valid_id(mid: Any) -> bool:
+    """A JSON-RPC id is a string, a number or null; a boolean is none of them."""
+    return mid is None or (isinstance(mid, str | int | float) and not isinstance(mid, bool))
+
+
 def encode(frame: dict[str, Any]) -> str:
     """One frame as a line (no newline): the only encoder, so framing changes in one place.
     `json.dumps` defaults are kept on purpose (no behaviour change from the hand-rolled loop)."""
@@ -211,7 +216,7 @@ class StdioServer:
         mid, method = msg.get("id"), msg.get("method")
         if "id" not in msg:
             return None  # a notification is never answered
-        if mid is not None and not isinstance(mid, str | int | float):
+        if not valid_id(mid):
             return err(None, INVALID_REQUEST, "`id` must be a string, a number or null")
         if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
             return err(mid, INVALID_REQUEST, "not a JSON-RPC 2.0 request")
