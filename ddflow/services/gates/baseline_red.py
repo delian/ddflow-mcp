@@ -66,23 +66,30 @@ def on_base(
             cmd = TS.run_command(gdef.command, part, tree.path)
             if not cmd:
                 return {"red": False, "why": "the gate's command does not run pytest"}
-            outcome, ev = run(replace(gdef, command=cmd), tree.path)
+            outcome, seen = _chunk(replace(gdef, command=cmd), tree.path, part, run)
             outcomes.append(outcome)
-            failing_here = set(ev.get("failed_tests") or ())
-            # Only a run that listed what failed, and was not cut short by `-x`, says which of
-            # the ids PASS on the base; a bare "failed" with no ids is an infrastructure fault.
-            whole = outcome == "passed" or (
-                outcome == "failed" and failing_here and not TS.fail_fast(gdef.command)
-            )
-            if whole and not ev.get("failed_tests_more"):
-                # a run that could not run says nothing about the base
-                known.update({i: i in failing_here for i in part})
-                cache_store(repo, sha, {i: i in failing_here for i in part}, ttl_s, gdef.command)
+            if seen is not None:
+                known.update(seen)
+                cache_store(repo, sha, seen, ttl_s, gdef.command)
     failing = [i for i in ids if known.get(i)]
     red = all(known.get(i) for i in ids)
     return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,
             "outcome": "failed" if red else (outcomes[-1] if outcomes else ""), "command": cmd,
             "ids": ids, "still_failing": failing}  # fmt: skip
+
+
+def _chunk(gdef, cwd: Path, part: list[str], run) -> tuple[str, dict[str, bool] | None]:
+    """``(outcome, {id: failed on the base})`` of one chunk; None for the second when the run
+    cannot say which ids PASS: it could not run, listed nothing, listed a cut list, or stopped
+    at the first failure (`-x`)."""
+    outcome, ev = run(gdef, cwd)
+    failing = set(ev.get("failed_tests") or ())
+    whole = outcome == "passed" or (
+        outcome == "failed" and failing and not TS.fail_fast(gdef.command)
+    )
+    if not whole or ev.get("failed_tests_more"):
+        return outcome, None
+    return outcome, {i: i in failing for i in part}
 
 
 def bug_id(ids: list[str], sha: str) -> str:

@@ -12,6 +12,7 @@ from ..infra import worktree as W
 from ..services import testscope as TSC
 from ..services.gates import baseline as BL
 from ..services.gates import baseline_red as BR
+from ..services.gates.defs import load_gates
 from . import gate_passed_failures as PF
 from ._base import _load
 from .knowledge.bugs import bug_found
@@ -109,6 +110,4 @@ def _ci_ids(repo, cfg, ev: dict[str, Any], capped: list[str]) -> list[str]:
 
 def _unit_tests_def(repo, cfg):
     """The gate that runs pytest: ci's failing ids are run on the base with ITS command."""
-    from ..services.gates.defs import load_gates
-
     return load_gates(repo, cfg).get("unit_tests")

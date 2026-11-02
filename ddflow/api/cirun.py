@@ -99,6 +99,25 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
     return "" if out.ok else out.reason
 
 
+def _keep_failing_ids(repo: Path, res) -> dict:
+    """The evidence caps the list of failing tests; the whole one is kept aside (read by
+    `gate_baseline` to measure a red ci against the base), with a note when it cannot be."""
+    if res.ok or not res.failures:
+        return {}
+    everyone = [f["id"] for f in failed_tests(res.output)]
+    out: dict = {}
+    if len(everyone) > len(res.failures.get("failed_tests") or ()):
+        out["failed_tests_total"] = len(everyone)
+    if not BL.only_tests_failed(res.checks):
+        names = ", ".join(c.id for c in res.checks if not c.ok)
+        out["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
+    elif kept := BL.write_full(repo, res.sha, everyone):
+        out["failing_ids_file"] = kept
+    else:
+        out["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
+    return out
+
+
 def _item_ref(repo: Path, it) -> tuple[str, str]:
     """``(ref, why)``: what ``ddflow ci run <item id>`` checks. The item's branch while it
     exists; once the merge deleted it, the commit the item landed as; else why there is none."""
@@ -154,17 +173,7 @@ def run(
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
     )  # fmt: skip
     data = res.as_data()
-    if not res.ok and res.failures:  # the evidence caps the list; the whole one is kept aside
-        everyone = [f["id"] for f in failed_tests(res.output)]
-        if len(everyone) > len(res.failures.get("failed_tests") or ()):
-            data["failed_tests_total"] = len(everyone)
-        if not BL.only_tests_failed(res.checks):
-            names = ", ".join(c.id for c in res.checks if not c.ok)
-            data["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
-        elif kept := BL.write_full(repo, res.sha, everyone):
-            data["failing_ids_file"] = kept
-        else:
-            data["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
+    data.update(_keep_failing_ids(repo, res))
     if res.scope:
         data["scope_line"] = CM.marker_line(res.scope)
     if log_to is not None and not res.ok:  # a pass keeps no log

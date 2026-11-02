@@ -16,10 +16,10 @@ adds what makes it cheap and decides what follows from it:
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...core.digest import content_digest as digest
 from ...infra import fsio
 from ...infra.tomlcfg import atomic_write
@@ -41,7 +41,7 @@ def cache_load(
     (each id has its own age); {} when none."""
     if ttl_s <= 0:
         return {}
-    clock_now = time.time() if now is None else now
+    clock_now = CLOCK.wall() if now is None else now
     try:
         seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
         return {str(k): bool(v[0]) for k, v in seen.items() if clock_now - float(v[1]) <= ttl_s}
@@ -64,7 +64,7 @@ def cache_store(
             held = {}
         if not isinstance(held, dict):
             held = {}
-        now = time.time()
+        now = CLOCK.wall()
         merged = {
             **{k: v for k, v in held.items() if now - float(v[1]) <= ttl_s},
             **{i: [f, now] for i, f in results.items()},
