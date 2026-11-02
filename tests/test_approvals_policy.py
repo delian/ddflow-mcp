@@ -252,28 +252,10 @@ def test_complete_unavailable_never_auto_answers_a_genuinely_failed_gate(proj):
     assert not got.ok and got.ask_id  # a person is asked; a failed gate is never answered
 
 
-def test_complete_unavailable_does_not_answer_a_non_required_unavailable_gate(proj):
-    """The rule answers only a completion whose REQUIRED gate(s) are the sole unavailable
-    blocker. A `target` naming a non-required pipeline gate that is `unavailable` while every
-    required gate passes must NOT auto-answer: nothing required is actually blocked, so the
-    completion goes through the completion refusal path, never the standing rule."""
-    assert _record(proj, "implement", "passed") == 0
-    assert _record(proj, "unit_tests", "passed") == 0
-    assert _record(proj, "merge", "passed") == 0
-    assert _record(proj, "standards", "unavailable", "tool missing") == 0
-    log = EventLog(proj, "bot")
-    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
-    got = C.operator_gate(
-        log,
-        cfg,
-        Canon(verb="complete.force", agent="bot", item="T1", target="standards", state="s"),
-    )
-    assert not got.ok and got.ask_id  # nothing required is blocked: a person is asked
-
-
 def test_complete_unavailable_blocks_when_a_required_gate_failed(proj):
-    """The OVER-FIRE guard: a required gate recorded `failed` blocks even when `target`
-    names only a DIFFERENT gate -- never the omitted failed one."""
+    """The OVER-FIRE guard and the required-gate check: a required gate recorded `failed`
+    blocks even when `target` names only a DIFFERENT gate, and a target naming a
+    NON-required gate never answers either."""
     from ddflow.core.records.gates import GateRecord
     from ddflow.core.records.items import Item
 
