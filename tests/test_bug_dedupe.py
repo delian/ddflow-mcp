@@ -116,6 +116,7 @@ def test_apply_links_only_the_real_duplicates_onto_the_canonical(repo):
     dupes = st.links["B2"].linked(relation="duplicate_of")
     assert "B1" in dupes, f"the younger duplicate was not linked onto B1: {out}"
     assert st.bugs["B2"].open, "--apply closed a duplicate (it must never auto-close)"
+    assert st.bugs["B1"].open, "--apply closed the canonical bug"
     b3 = st.links.get("B3")
     assert b3 is None or b3.linked() == set(), "a distinct bug was linked as a duplicate"
     # The link settles the pair for `ddflow dupes` still (nothing is closed here).
