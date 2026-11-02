@@ -73,7 +73,11 @@ def violations(repo: Path, limit: int) -> list[str]:
         elif size > base[rel][0]:
             bad.append(f"{rel} grew to {size} bytes (baseline {base[rel][0]}): split it")
     for rel in sorted(set(base) - set(over)):
-        bad.append(f"{rel} is no longer over {limit} bytes: delete its line from {BASELINE}")
+        recorded, reason = base[rel]
+        bad.append(
+            f"{rel} is no longer over {limit} bytes: delete its line from {BASELINE}: "
+            f"`{rel} | {recorded} | {reason}`"
+        )
     return bad
 
 
