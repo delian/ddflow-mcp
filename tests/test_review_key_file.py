@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from ddflow.adapters.fakes.http import FakeHttpClient
+from ddflow.adapters.http import HttpProtocolError
 from ddflow.services import review as RV
 from ddflow.services import review_keys as RK
 from ddflow.services.lanes import endpoint as EP
@@ -118,30 +120,19 @@ def test_status_and_hints_name_but_never_show(tmp_path):
 # -- the three kinds ---------------------------------------------------------------------
 
 
-class _Resp:
-    def __init__(self, body):
-        self._b = json.dumps(body).encode()
-
-    def read(self):
-        return self._b
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-
 def _capture(monkeypatch, body):
-    seen = {}
+    """Reviewer HTTP on the fake client; `seen` holds the first request as the adapter would get it."""
+    http = FakeHttpClient().when(body=json.dumps(body))
+    monkeypatch.setattr(RV, "_client", lambda: http)
 
-    def fake_open(req, timeout=0):
-        seen["url"] = req.full_url
-        seen["headers"] = {k.lower(): v for k, v in req.header_items()}
-        return _Resp(body)
+    class Seen(dict):
+        def __missing__(self, key):
+            call = http.calls[0]
+            return {"url": call.url, "headers": {k.lower(): v for k, v in call.headers.items()}}[
+                key
+            ]
 
-    monkeypatch.setattr(RV, "_open", fake_open)
-    return seen
+    return Seen()
 
 
 def _rev(kind, tmp_path, **kw):
@@ -189,14 +180,8 @@ def test_unreadable_key_file_is_unavailable_for_every_kind(kind, tmp_path, monke
 
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "gemini"])
 def test_a_server_echoing_the_key_does_not_leak_it(kind, tmp_path, monkeypatch):
-    import urllib.error
-
-    def boom(req, timeout=0):
-        raise urllib.error.HTTPError(
-            req.full_url, 401, "no", {}, io.BytesIO(f"bad key {FAKE}".encode())
-        )
-
-    monkeypatch.setattr(RV, "_open", boom)
+    http = FakeHttpClient().when(status=401, body=f"bad key {FAKE}")
+    monkeypatch.setattr(RV, "_client", lambda: http)
     fn = {"openai": RV._chat_openai, "anthropic": RV._chat_anthropic, "gemini": RV._chat_gemini}[
         kind
     ]
@@ -328,10 +313,9 @@ def test_a_bad_env_key_is_refused_for_the_openai_kind_too(tmp_path, monkeypatch)
 def test_a_malformed_status_line_echoing_the_key_is_scrubbed(tmp_path, monkeypatch):
     import http.client
 
-    def boom(req, timeout=0):
-        raise http.client.BadStatusLine(f"HTTP/1.1 999 {FAKE}")
-
-    monkeypatch.setattr(RV, "_open", boom)
+    cause = http.client.BadStatusLine(f"HTTP/1.1 999 {FAKE}")
+    http = FakeHttpClient().when(raises=HttpProtocolError(repr(cause), cause=cause))
+    monkeypatch.setattr(RV, "_client", lambda: http)
     _text, err = RV._chat_openai(_rev("openai", tmp_path), "s", "u", 5)
     assert err and FAKE not in err
 

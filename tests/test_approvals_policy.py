@@ -63,6 +63,35 @@ def _cfg(**over):
     return cfg
 
 
+def _record(repo, gate, outcome, reason=""):
+    return run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        gate,
+        "--outcome",
+        outcome,
+        *(["--reason", reason] if reason else []),
+    )[0]
+
+
+def _only_unavailable_gate(repo, *outcomes):
+    """Record a "merged" T1 whose ONLY unmet required gate is `unit_tests`: the other two
+    required gates (implement, merge) pass, and `unit_tests` gets each named `outcome` in
+    turn. ``outcomes = ("unavailable",)`` (or ``("partial",)``) is exactly what the standing
+    `complete_unavailable` predicate answers; ``("failed",)`` is NEVER answered."""
+    assert _record(repo, "implement", "passed") == 0
+    assert _record(repo, "merge", "passed") == 0
+    for outcome in outcomes:
+        why = (
+            "worktree gone before it could run"
+            if outcome == "unavailable"
+            else ("a failing test" if outcome == "failed" else "ran partway")
+        )
+        assert _record(repo, "unit_tests", outcome, why) == 0
+
+
 def test_the_rules_ship_off_and_ask_a_person(proj):
     log = EventLog(proj, "bot")
     got = C.operator_gate(log, Config(), _canon(proj, log), reason="r")
@@ -161,6 +190,23 @@ def test_a_standing_rule_is_consulted_before_the_request_hint_of_a_no_auto_site(
     assert not C.operator_gate(log, Config(), canon, auto=False).ok
 
 
+def test_an_explicit_request_is_not_auto_answered_by_a_standing_rule(proj, monkeypatch):
+    """Bef8d328af3: `--approval request` files a request and waits for a person; a standing
+    rule answers refusals the agent did NOT make an explicit request of, never the request."""
+    _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    _only_unavailable_gate(proj, "unavailable")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", target="unit_tests", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    # without `--approval request` the standing rule still answers (the window is open) ...
+    assert C.operator_gate(log, cfg, canon).ok
+    # ... but an explicit request files an ask and is never answered by the standing rule.
+    got = C.operator_gate(log, cfg, canon, approval_id=C.REQUEST)
+    assert not got.ok and got.ask_id
+    row = asks_of(_state(proj))[got.ask_id]
+    assert row["policy"] is False and row["answered_by"] == ""
+
+
 def _frozen_clock(monkeypatch):
     from datetime import UTC, datetime
 
@@ -175,7 +221,8 @@ def test_a_windowed_rule_answers_complete_force_with_its_digest_while_the_window
 ):
     _frozen_clock(monkeypatch)
     log = EventLog(proj, "bot")
-    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    _only_unavailable_gate(proj, "unavailable")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", target="unit_tests", state="s")
     cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
     got = C.operator_gate(log, cfg, canon)
     assert got.ok and got.stamp["via"] == "policy" and got.stamp["policy"] == "complete_unavailable"
@@ -183,6 +230,80 @@ def test_a_windowed_rule_answers_complete_force_with_its_digest_while_the_window
     assert row["policy"] is True and row["answered_by"] == "policy:complete_unavailable"
     assert row["digest"] == canon.digest()
     assert PO.window_start(_state(proj), cfg) > 0.0  # the fold persisted the opened window
+
+
+def test_complete_unavailable_never_auto_answers_a_genuinely_failed_gate(proj):
+    """The rule answers only `unavailable`/`partial`. A `unit_tests` that genuinely FAILED is
+    never auto-approved: the operator is asked instead of a standing answer `policy:`."""
+    _only_unavailable_gate(proj, "failed")
+    log = EventLog(proj, "bot")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    got = C.operator_gate(
+        log,
+        cfg,
+        Canon(
+            verb="complete.force",
+            agent="bot",
+            item="T1",
+            target="unit_tests",
+            state="unit_tests failed",
+        ),
+    )
+    assert not got.ok and got.ask_id  # a person is asked; a failed gate is never answered
+
+
+def test_complete_unavailable_blocks_when_a_required_gate_failed(proj):
+    """The OVER-FIRE guard and the required-gate check: a required gate recorded `failed`
+    blocks even when `target` names only a DIFFERENT gate, and a target naming a
+    NON-required gate never answers either."""
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "unit_tests": GateRecord(gate="unit_tests", outcome="failed"),
+            "merge": GateRecord(gate="merge", outcome="unavailable"),
+        },
+    )
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    assert PO.RULES["complete_unavailable"].when(it, "merge", cfg) is False  # unit_tests failed
+    assert PO.RULES["complete_unavailable"].when(it, "lint", cfg) is False  # lint not required
+
+
+def _only_unavailable_repo(repo, unit):
+    """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
+    required gate is `unit_tests` = `unit`. reviewer independence is off so the completion
+    verdict has no other blocker, mirroring `tests/test_accept_partial_gate.py`."""
+    run_cli(repo, "init")
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write(
+            "\n[agent]\nreviewer_family_must_differ = false\n"
+            '[approvals]\nstanding_window_s = 86400\npolicy = ["complete_unavailable"]\n'
+        )
+    run_cli(repo, "workflow", "pipeline", "task", "implement,unit_tests,merge")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", "--no-worktree", agent="bot")
+    _only_unavailable_gate(repo, unit)
+
+
+def test_a_routine_completion_auto_answers_only_an_unavailable_gate_end_to_end(repo):
+    _only_unavailable_repo(repo, "unavailable")
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 0, (out, err)
+    ev = [e for e in EventLog(repo, "bot").read_all() if e.kind == "item.completed"][-1]
+    assert ev.data["approval"]["policy"] == "complete_unavailable"
+    assert ev.data["forced"] is True and ev.data["overridden"]
+    assert ev.data["approval"]["digest"]
+
+
+def test_a_routine_completion_never_auto_answers_a_failed_gate_end_to_end(repo):
+    _only_unavailable_repo(repo, "failed")
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 3, (out, err)
+    assert _state(repo).items["T1"].state != "done"
 
 
 def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_asked(
@@ -193,7 +314,8 @@ def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_ask
 
     frozen = _frozen_clock(monkeypatch)
     log = EventLog(proj, "bot")
-    canon = Canon(verb="complete.force", agent="bot", item="T1", state="s")
+    _only_unavailable_gate(proj, "unavailable")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", target="unit_tests", state="s")
     claim = Canon(verb="claim.force", agent="bot", item="T1", state="s")
     cfg = _cfg(
         policy=["complete_unavailable", "claim_unavailable"],

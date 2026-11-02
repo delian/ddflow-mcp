@@ -8,7 +8,6 @@ report read a config file and, at most, run a bounded probe (see ``.model``).
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import select
 import shutil
@@ -18,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ...adapters import mcp as W
 from ...infra import fsio
 from ...infra import proc as P
 from .model import _ANSI, Companion, load
@@ -32,9 +32,6 @@ _VERIFY_PROTOCOL = "2025-03-26"
 
 #: Most of a server's output kept while waiting for its answer.
 _MAX_BUF = 1 << 20
-
-#: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
-_ECHO_MARK = b'"method": "initialize"'
 
 #: How long to keep polling for a child's exit once its stdout has closed. The pipe's EOF
 #: can be read before the waitable status exists: a process closes its descriptors during
@@ -58,43 +55,6 @@ class Verification:
     detail: str
     server: dict = field(default_factory=dict)
     elapsed_s: float = 0.0
-
-
-def _reply_to(buf: bytes, want_id: int) -> tuple[dict | None, bytes]:
-    """The first complete JSON-RPC *response* to `want_id` in `buf`, and the rest.
-
-    A response has `result` or `error` and no `method`: a request echoed back (`cat`) or a
-    server's own notification is not one. Lines that are not JSON are skipped -- a server
-    may log to stdout before it speaks.
-    """
-    while b"\n" in buf:
-        line, buf = buf.split(b"\n", 1)
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            continue
-        if (
-            isinstance(msg, dict)
-            and msg.get("jsonrpc") == "2.0"
-            and msg.get("id") == want_id
-            and "method" not in msg
-            and ("result" in msg or "error" in msg)
-        ):
-            return msg, buf
-    return None, buf
-
-
-def _describe_answer(msg: dict) -> tuple[str, dict]:
-    """(detail, server facts) for a JSON-RPC response to `initialize`."""
-    result = msg.get("result")
-    if not isinstance(result, dict):
-        return "answered initialize with a JSON-RPC error (it speaks the protocol)", {}
-    info = result.get("serverInfo")
-    server = dict(info) if isinstance(info, dict) else {}
-    if result.get("protocolVersion"):
-        server["protocolVersion"] = result["protocolVersion"]
-    who = " ".join(str(server[k]) for k in ("name", "version") if server.get(k))
-    return f"answered initialize ({who or 'no serverInfo'})", server
 
 
 def _exit_info(proc: P.Popen) -> os.waitid_result | None:
@@ -156,6 +116,54 @@ def _keep(buf: bytes, chunk: bytes) -> bytes:
     return (buf + chunk)[-_MAX_BUF:]
 
 
+class _ProcessChannel:
+    """A launched server as lines (`W.Channel`): reads its stdout with `select`, never more
+    than `_MAX_BUF` kept, so a newline-free flood neither grows memory nor defeats a timeout."""
+
+    def __init__(self, proc: P.Popen) -> None:
+        self.proc, self._buf = proc, b""
+
+    def send(self, line: str) -> None:
+        assert self.proc.stdin is not None
+        self.proc.stdin.write((line + "\n").encode())
+        self.proc.stdin.flush()
+
+    def receive(self, timeout_s: float) -> str | None:
+        assert self.proc.stdout is not None
+        fd, deadline = self.proc.stdout.fileno(), time.monotonic() + timeout_s
+        while b"\n" not in self._buf:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return None
+            ready, _, _ = select.select([fd], [], [], left)
+            if not ready:
+                continue  # the pipe is still open: a wrapper's child may yet answer
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                raise EOFError  # nothing holds the pipe any more
+            self._buf += chunk
+            if (
+                b"\n" not in self._buf
+            ):  # trim only a line still unfinished: a cut never eats its newline
+                self._buf = _keep(b"", self._buf)
+        line, self._buf = self._buf.split(b"\n", 1)
+        return line.decode("utf-8", "replace")
+
+    def close(self) -> None:
+        _stop(self.proc)
+
+
+class _ProcessStarter:
+    """The `W.Starter` for `verify_one`: starts the server with its stderr in `err`."""
+
+    def __init__(self, err) -> None:
+        self.err, self.proc = err, None
+
+    def __call__(self, argv: list[str], env: dict[str, str] | None) -> _ProcessChannel:
+        self.proc = P.spawn_stdio(argv, env=env, stderr=self.err)
+        return _ProcessChannel(self.proc)
+
+
 def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verification:
     """Launch `command args` and require a JSON-RPC answer to `initialize`.
 
@@ -175,21 +183,9 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
     exe = shutil.which(c.command)
     if not exe:
         return done(False, f"`{c.command}` is not on PATH")
-    request = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": _VERIFY_PROTOCOL,
-            "capabilities": {},
-            "clientInfo": {"name": "ddflow-verify", "version": "0"},
-        },
-    }
     with fsio.scratch_file() as err:
-        try:
-            proc = P.spawn_stdio([exe, *c.args], env={**os.environ, **c.env}, stderr=err)
-        except OSError as exc:
-            return done(False, f"could not launch `{c.command}`: {exc}")
+        starter = _ProcessStarter(err)
+        client = W.StdioClient(starter, [exe, *c.args], {**os.environ, **c.env})
 
         def stderr_tail() -> str:
             err.seek(0, os.SEEK_END)
@@ -199,53 +195,39 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
             return f" stderr: {lines[-1][:160]}" if lines else ""
 
         try:
-            try:
-                assert proc.stdin is not None and proc.stdout is not None
-                proc.stdin.write((json.dumps(request) + "\n").encode())
-                proc.stdin.flush()
-            except OSError:
+            hello = client.connect(timeout_s, version=_VERIFY_PROTOCOL)
+            if hello.status == W.UNAVAILABLE:
+                return done(False, f"could not launch `{c.command}`: {hello.detail}")
+            if hello.answered:
+                return done(True, hello.detail, hello.server)
+            if hello.status == W.ECHOED:
+                return done(
+                    False,
+                    f"`{c.command}` echoed the request back and sent no answer within "
+                    f"{timeout_s:g}s: not a server",
+                )
+            if hello.status == W.TIMEOUT:
+                return done(
+                    None,
+                    f"no answer to `initialize` within {timeout_s:g}s -- could not tell "
+                    f"(a cold `npx` cache is slow; a binary that is not a server never answers)."
+                    + stderr_tail(),
+                )
+            proc = starter.proc
+            if hello.detail == W.CLOSED_BEFORE_READ:
                 return done(False, f"`{c.command}` exited before reading a request.{stderr_tail()}")
-            fd = proc.stdout.fileno()
-            buf, deadline, echoed_at = b"", t0 + timeout_s, 0.0
-            while True:
-                left = deadline - time.monotonic()
-                if left <= 0 and echoed_at:
-                    return done(
-                        False,
-                        f"`{c.command}` echoed the request back and sent no answer within "
-                        f"{timeout_s:g}s: not a server",
-                    )
-                if left <= 0:
-                    return done(
-                        None,
-                        f"no answer to `initialize` within {timeout_s:g}s -- could not tell "
-                        f"(a cold `npx` cache is slow; a binary that is not a server never answers)."
-                        + stderr_tail(),
-                    )
-                ready, _, _ = select.select([fd], [], [], min(left, 0.5))
-                if not ready:
-                    continue  # the pipe is still open: a wrapper's child may yet answer
-                chunk = os.read(fd, 65536)
-                if not chunk:
-                    break  # EOF: nothing holds the pipe any more
-                buf = _keep(buf, chunk)
-                if not echoed_at and _ECHO_MARK in buf:
-                    echoed_at = time.monotonic()  # a log line may precede the (slow) answer
-                msg, buf = _reply_to(buf, 1)
-                if msg is not None:
-                    return done(True, *_describe_answer(msg))
             from . import (
                 _EXIT_GRACE_S,  # late-bound: honours monkeypatch of the package attr
                 _await_exit,  # late-bound: honours monkeypatch of the package attr
             )
 
-            grace = min(_EXIT_GRACE_S, max(0.0, deadline - time.monotonic()))
+            grace = min(_EXIT_GRACE_S, max(0.0, t0 + timeout_s - time.monotonic()))
             how = _exit_how(_await_exit(proc, grace))
             return done(
                 False, f"`{c.command}` {how} without answering `initialize`." + stderr_tail()
             )
         finally:
-            _stop(proc)
+            client.close()  # stops the server and everything it started
 
 
 def verify(

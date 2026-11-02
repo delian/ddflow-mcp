@@ -24,6 +24,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from ddflow.adapters.fakes.http import FakeHttpClient
+from ddflow.adapters.http import HttpProtocolError
 from ddflow.services import review as R
 from ddflow.services.review import PARTIAL, REVIEWED, Reviewer, review
 
@@ -248,26 +250,10 @@ def test_halves_never_lose_a_file(monkeypatch):
 # -- a cancelled copy cut off mid-read (bug Bf948d29d37) -------------------------------
 
 
-class _CutOff:
-    """A response whose socket the winning copy shut while this one was reading it."""
-
-    status = 200
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def read(self, *a):
-        import http.client
-
-        raise http.client.IncompleteRead(b"", 154)
-
-
 @pytest.mark.parametrize("kind", ["openai", "anthropic", "gemini"])
 def test_a_response_cut_off_mid_read_is_an_error_not_a_crash(monkeypatch, kind):
-    monkeypatch.setattr(R, "_open", lambda *a, **k: _CutOff())
+    http = FakeHttpClient().when(raises="incomplete")  # the socket was shut mid-read
+    monkeypatch.setattr(R, "_client", lambda: http)
     monkeypatch.setenv("K", "key")
     rev = Reviewer(name="r", kind=kind, base_url="http://x", model="m", api_key_env="K")
     content, err = R._chat(rev, "s", "u", 5)
@@ -278,10 +264,9 @@ def test_a_response_cut_off_mid_read_is_an_error_not_a_crash(monkeypatch, kind):
 def test_other_http_client_errors_are_named_and_never_retried_as_truncation(monkeypatch, exc):
     import http.client
 
-    def boom(*a, **k):
-        raise getattr(http.client, exc)("nonsense")
-
-    monkeypatch.setattr(R, "_open", boom)
+    cause = getattr(http.client, exc)("nonsense")
+    fake = FakeHttpClient().when(raises=HttpProtocolError(repr(cause), cause=cause))
+    monkeypatch.setattr(R, "_client", lambda: fake)
     content, err = R._chat(Reviewer(name="r", base_url="http://x", model="m"), "s", "u", 5)
     assert content == "" and exc in err and "cut off" not in err, err
     assert not err.startswith(R.TRUNCATED)

@@ -1280,7 +1280,7 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips or lanes."
+          "description": "summary (default), forecast, retro, skips, lanes or stages."
          },
          "lane": {
           "type": "string",
@@ -1288,7 +1288,7 @@
          },
          "group_by": {
           "type": "string",
-          "description": "Group the outcome rates by gate (default), reviewer, agent, kind or phase."
+          "description": "Group the outcome rates by gate (default), reviewer, agent, kind or phase; with stages: phase, kind, size or agent."
          },
          "run": {
           "type": "boolean",

@@ -57,7 +57,7 @@ class ApprovalsConfig:
     )
     policy_max_uses: int = knob(
         1,
-        doc="How many times one standing rule may approve the same item and target (default 1). A rule past its cap falls back to asking a person.",
+        doc="How many times one standing rule may approve the SAME item and target (default 1): the cap is counted per item+target, so a backlog of DISTINCT items is not limited by it -- each item gets its own use, and a completed item needs no more approvals (the standing `complete_unavailable` use completes it once and it is done). A rule past its cap falls back to asking a person. An explicit `--approval request` is ALWAYS reserved for a person (never answered by a standing rule, never counted against this cap), whatever the window or the cap say.",
     )
     policy_unavailable_runs: int = knob(
         3,
