@@ -56,7 +56,9 @@ class FakeAcpAgent:
         mid = msg["id"]
         if method == "initialize":
             want = params.get("protocolVersion")
-            version = want if want in A.SERVED_VERSIONS else A.SERVED_VERSIONS[0]
+            version = (
+                want if type(want) is int and want in A.SERVED_VERSIONS else A.SERVED_VERSIONS[0]
+            )
             return A.ok(
                 mid,
                 {"protocolVersion": version, "agentCapabilities": {}, "agentInfo": self.agent_info},
