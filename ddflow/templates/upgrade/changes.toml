@@ -2516,3 +2516,10 @@ impact = "additive"
 [[release]]
 version = "0.2.10"
 date = "2026-10-24"
+
+[[release.change]]
+kind = "knob_added"
+key = "lease.release_at_merge"
+new = "true"
+why = "Whether the lease ends when the merge lands (default) instead of at complete; off restores the hold to complete."
+impact = "additive"

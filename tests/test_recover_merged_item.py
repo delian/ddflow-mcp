@@ -62,6 +62,9 @@ def _merged(
     if gates:  # outcomes recorded while the work is still in its tree, as the pipeline wants
         for g in _DOC_GATES:
             run_cli(repo, "gate", "record", item, g, "--outcome", "passed", "--evidence", f"{g} ok")
+    # These tests are about a lapsed lease on a merged item, which the merge itself no longer
+    # leaves behind unless [lease].release_at_merge is off (LK-release-at-merge).
+    run_cli(repo, "config", "--set", "lease.release_at_merge", "false")
     assert LC.merge(repo, item, agent="worker", keep=keep).exit == 0
     EventLog(repo, "worker").append(
         "session.started", "s1", {"agent": "worker", "model": "claude-opus-5"}
