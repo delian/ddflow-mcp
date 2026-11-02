@@ -118,3 +118,11 @@ def test_apply_links_only_the_real_duplicates_onto_the_canonical(repo):
     assert st.links["B3"].linked() == set(), "a distinct bug was linked as a duplicate"
     # The link settles the pair for `ddflow dupes` still (nothing is closed here).
     assert run_cli(repo, "dupes")[0] == 2
+
+
+def test_apply_is_idempotent_a_re_run_offers_nothing(repo):
+    """The settled pair is never re-offered or re-linked (the finding a bare `--apply`
+    re-link would hide): a second sweep reports nothing once the duplicate is linked."""
+    _file_two(repo)
+    assert run_cli(repo, "bug", "dedupe", "--apply")[0] == 0
+    assert run_cli(repo, "bug", "dedupe")[0] == 2

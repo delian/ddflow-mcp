@@ -81,6 +81,8 @@ def bug_dedupe(
             if _settled(canonical, did, st):
                 continue  # already linked or dismissed: reported once, never linked twice
             dupes.append(_dupe_entry(canonical, did, scores, fl))
+        if not dupes:
+            continue  # every pair of the cluster was already settled: nothing left to offer
         clusters.append(
             {"canonical": canonical, "duplicates": dupes, "cause": bugsim.shared_cause(records, group)}
         )
