@@ -229,6 +229,15 @@
   
   '''
 # ---
+# name: test_help[ddflow archdeps]
+  '''
+  usage: ddflow archdeps [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow batch]
   '''
   usage: ddflow batch [-h] [--edits EDITS] [--file FILE] [--dry-run]
@@ -1808,18 +1817,19 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes}
-                          summary (default), forecast, retro <id>, skips or lanes
+    {summary,forecast,retro,skips,lanes,stages}
+                          summary (default), forecast, retro <id>, skips, lanes or stages
     item                  with retro: the item id
   
   options:
     -h, --help            show this help message and exit
     --phase PHASE         limit to one phase
     --since SINCE         only since a duration back (7d, 12h) or a date YYYY-MM-DD
-    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase
+    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase;
+                          stages: phase, kind, size, agent
   
   '''
 # ---
@@ -1920,6 +1930,20 @@
   
   '''
 # ---
+# name: test_help[ddflow phase complete]
+  '''
+  usage: ddflow phase complete [-h] [--approval APPROVAL] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help           show this help message and exit
+    --approval APPROVAL  an agent: 'request' files an approval request (the operator answers in
+                         chat), then the approval id; a person completes directly
+  
+  '''
+# ---
 # name: test_help[ddflow phase list]
   '''
   usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
@@ -1938,15 +1962,16 @@
 # ---
 # name: test_help[ddflow phase]
   '''
-  usage: ddflow phase [-h] {add,close,list} ...
+  usage: ddflow phase [-h] {add,close,complete,list} ...
   
   positional arguments:
-    {add,close,list}
-      close           close a phase whose work predates ddflow
-      list            list phases with done/total progress
+    {add,close,complete,list}
+      close               close a phase whose work predates ddflow
+      complete            retire a phase whose every task is done or abandoned
+      list                list phases with done/total progress
   
   options:
-    -h, --help        show this help message and exit
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -3380,15 +3405,15 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,sync,watch,waves}
       init                create .ddflow/ in this repository
-      phase               add, list or close a phase
+      phase               add, list, complete or close a phase
       task                add a task
       split               split an item into sub-tasks in place, keeping its id and history
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
@@ -3498,6 +3523,8 @@
                           DDFLOW_AGENT)
       list                list tasks, phases, bugs, research notes, lessons or sessions (what
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
+      archdeps            the external-dependency census: families, importing modules, home,
+                          violations
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -3538,6 +3565,7 @@
     'ddflow approvals show',
     'ddflow approvals withdraw',
     'ddflow approve',
+    'ddflow archdeps',
     'ddflow batch',
     'ddflow bisect',
     'ddflow block',
@@ -3645,6 +3673,7 @@
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',
+    'ddflow phase complete',
     'ddflow phase list',
     'ddflow pins',
     'ddflow plan',

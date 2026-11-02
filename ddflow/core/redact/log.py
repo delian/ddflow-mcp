@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 #: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "phase.completed": ("evidence",),
     "memory.redacted": ("reason",),
     "approval.granted": ("note",),
     "ask.answered": ("answer",),
@@ -113,6 +114,7 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("phase.completed", "kind"): "a kind word",
     ("lane.released_for_gate", "holder"): "an agent id compared with the lease's holder",
     ("lane.released_for_gate", "author"): "a family or model id compared at completion",
     ("lane.released_for_gate", "judgement"): "gate ids",
@@ -315,6 +317,18 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("def.updated", "provenance"): "ids of origin",
 }
 
+#: `(kind, field)` pairs that are compared byte-for-byte and are never a URL or a path, so
+#: the network pass must skip them: a gated-command verb word is compared with the canonical
+#: verb (`approvals.consume`), and one whose site ends in `.local` must not be rewritten into
+#: `[REDACTED:host]` (bug B31f83a9d7b). Other verbatim fields that CAN carry a private host
+#: (url, path, worktree, branch, tags, globs) keep the network pass (bug Ba2df74d558).
+LOG_NO_NETWORK_FIELDS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("ask.requested", "verb"),
+        ("ask.consumed", "verb"),
+    }
+)
+
 
 def redact_network(text: str) -> str:
     """`text` with only its private addresses and private host names marked: the pass a
@@ -360,12 +374,16 @@ def redact_event_data(
     The declared text fields (`LOG_TEXT_FIELDS`) are redacted; so is every field that is not
     a known lookup (`LOG_VERBATIM_NAMES`, `LOG_VERBATIM_FIELDS`): unknown is not text-free.
     A lookup keeps its bytes except a private address or host in it, `lookup_network`
-    (`[session].redact_lookup_network`; bug Ba2df74d558)."""
+    (`[session].redact_lookup_network`; bug Ba2df74d558); a field in `LOG_NO_NETWORK_FIELDS`
+    is compared byte-for-byte and keeps its bytes exactly."""
     text = LOG_TEXT_FIELDS.get(kind, ())
     out = {}
     for k, v in data.items():
         if k not in text and (k in LOG_VERBATIM_NAMES or (kind, k) in LOG_VERBATIM_FIELDS):
-            out[k] = network_leaves(v) if lookup_network else v
+            if (kind, k) in LOG_NO_NETWORK_FIELDS:
+                out[k] = v
+            else:
+                out[k] = network_leaves(v) if lookup_network else v
         else:
             out[k] = redact_leaves(v, redactor)
     return out

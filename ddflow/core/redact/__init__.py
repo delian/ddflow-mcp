@@ -61,6 +61,7 @@ _SUBMODULE_OF = {
     "Redactor": "profiles",
     "redact_argv": "profiles",
     # log
+    "LOG_NO_NETWORK_FIELDS": "log",
     "LOG_TEXT_FIELDS": "log",
     "LOG_TEXT_NAMES": "log",
     "LOG_VERBATIM_FIELDS": "log",

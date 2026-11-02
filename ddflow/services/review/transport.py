@@ -1,21 +1,17 @@
 """Tracked transports, cancellation, and endpoint probing.
 
 Split out of ``ddflow/services/review.py``: the ``_Cancel`` hedge-cancellation
-machinery, the socket-tracked ``_open`` opener, and ``probe_endpoint``/``detect``.
+machinery, the HTTP client accessor ``_client``, and ``probe_endpoint``/``detect``.
 """
 
 from __future__ import annotations
 
 import contextlib
-import http.client
 import json
-import socket
 import threading
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any
 
+from ...adapters.http import HttpClient, HttpError, default_client
 from ...infra import proc as P
 from ...infra.container import rewrite_localhost
 from .model import WELL_KNOWN_ENDPOINTS
@@ -69,7 +65,7 @@ def _abort(thing: Any) -> None:
         if isinstance(thing, P.Popen):
             P.kill_group(thing)  # the shell AND the reviewer it started
         else:
-            thing.shutdown(socket.SHUT_RDWR)
+            thing.abort()  # an HTTP connection handed over by the client (`on_connect`)
     except (OSError, ProcessLookupError):
         pass
 
@@ -85,47 +81,11 @@ def _attach_to_running(thing: Any) -> None:
         token.attach(thing)
 
 
-class _TrackedHTTP(http.client.HTTPConnection):
-    def connect(self) -> None:
-        super().connect()
-        _attach_to_running(self.sock)
-
-
-class _TrackedHTTPS(http.client.HTTPSConnection):
-    def connect(self) -> None:
-        super().connect()
-        _attach_to_running(self.sock)
-
-
-class _TrackedHTTPHandler(urllib.request.HTTPHandler):
-    def http_open(self, req):
-        return self.do_open(_TrackedHTTP, req)
-
-
-class _TrackedHTTPSHandler(urllib.request.HTTPSHandler):
-    def https_open(self, req):
-        return self.do_open(_TrackedHTTPS, req, context=self._context)
-
-
-#: `urlopen`'s own opener -- proxies, redirects, TLS defaults -- except that each
-#: connection's socket is handed to the copy that opened it, so it can be cancelled.
-_OPENER = urllib.request.build_opener(_TrackedHTTPHandler, _TrackedHTTPSHandler)
-
-
-def _open(target: str | urllib.request.Request, *, timeout: float):
-    """`urlopen`, for http(s) only. Every reviewer HTTP call goes through here.
-
-    `urlopen` follows any scheme it knows, `file:` included, and reviewer URLs come from
-    configuration: `base_url = "file:///..."` -- a typo, or a config someone else wrote --
-    made `probe_endpoint` read a local file and report its contents as model ids
-    (reproduced in tests/test_review_urls.py). Refused as a `URLError`, which every
-    caller already treats as "unreachable". Flagged by bandit B310.
-    """
-    url = target.full_url if isinstance(target, urllib.request.Request) else target
-    scheme = urllib.parse.urlsplit(url).scheme.lower()
-    if scheme not in ("http", "https"):
-        raise urllib.error.URLError(f"only http(s) reviewer endpoints; refusing {scheme!r}")
-    return _OPENER.open(target, timeout=timeout)  # nosec B310 -- scheme checked above
+def _client() -> HttpClient:
+    """The HTTP client every reviewer call goes through (the `HttpClient` port's default
+    adapter); a test swaps it for `FakeHttpClient`. Each call passes `on_connect=
+    _attach_to_running`, so the winning hedged copy can cut a loser's socket."""
+    return default_client()
 
 
 def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
@@ -137,9 +97,9 @@ def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
 
     url = rewrite_localhost(base_url).rstrip("/") + "/models"
     try:
-        with _open(url, timeout=timeout_s) as resp:
-            body = json.loads(resp.read().decode("utf-8", "replace"))
-    except (urllib.error.URLError, OSError, ValueError, json.JSONDecodeError):
+        resp = _client().request("GET", url, timeout=timeout_s, on_connect=_attach_to_running)
+        body = json.loads(resp.body.decode("utf-8", "replace"))
+    except (HttpError, ValueError, json.JSONDecodeError):
         return []
     return [m.get("id", "") for m in body.get("data", []) if m.get("id")]
 

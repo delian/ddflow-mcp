@@ -216,10 +216,10 @@ config/     config_sections/               read by every layer; imports none of 
                                            Above `core`: core is handed its knobs.
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
             handlers/, defs.py, clock.py,
-            graph.py, globs.py, redact/,
-            ports.py
-adapters/   proc/, git/, fsio/,            the default implementations of the ports in
-            tomlcfg/, digest/, forge/      core/ports.py. The BOTTOM layer (below).
+            graph.py, globs.py, redact/
+adapters/   ports.py, registry.py,         one module per family: port (Protocol) and
+            fakes/, <family>.py            default adapter, the one Registry[T], shipped
+                                           fakes. The BOTTOM layer (below).
 ```
 
 
@@ -246,28 +246,19 @@ declaration first hid the dependency graph that this ranking exists to expose.
 
 ## Adapter model
 
-Where a seam ddflow owns lives, decided once (D-adapters-answers), in four sentences:
+Every outside dependency (a subprocess, git, a file, a forge, a model endpoint) is reached
+through a **port** (a `typing.Protocol`) so it can be swapped or faked: one default adapter
+(beside the port once its home has moved in), a shipped fake, and one set of conformance
+cases that runs against both (the few ports still without a fake are a baseline that only
+shrinks).
+`ddflow.adapters` is the BOTTOM layer: every layer may import it, it imports no other.
+`core` uses only our own adapters, so it sits under `core` (`.importlinter` `layers`), and the
+one `Registry[T]` lives in `ddflow/adapters/registry.py` (`core/registry.py` re-exports it).
 
-- **A port** is a `Protocol`, declared in `core/ports.py` and nowhere else. It is pure
-  (stdlib only), so declaring a seam never drags disk, network or subprocess into `core`.
-  A port's methods mirror the module its default adapter is extracted from, so a fake can
-  be dropped in where that module is imported.
-- **The default adapter** lives in `ddflow/adapters/<family>/`, the bottom layer of the
-  contract above. A family with ONE adapter has exactly one implementation — a second is a
-  bug. A family with SEVERAL adapters registers them in one `core.registry.Registry[T]`
-  (`Registry[Forge]`, keyed by the adapter's `name`); `forge` is the worked example
-  (GitHub, GitLab), and `ci`, `notify` and `supervisors` follow it.
-- **The fake** is a `Fake<Port>` in `tests/fakes/`, the one permitted stand-in, imported
-  only by tests. One port, one default, one fake.
-- **Naming**: a port is the family's noun, no suffix (`Proc`, `Git`, `Fsio`, `Toml`,
-  `Digest`, `Forge`); the re-export convention keeps the old import path working.
-
-The homes being moved in are `infra.proc`, `infra.git`, `infra.fsio`, `infra.tomlcfg` and
-`core.digest`. Each keeps a thin compatibility re-export at its old path until its
-import-linter baseline is empty, then the shim is deleted (ADP-migrate-homes) — no
-behaviour change for existing callers. `core/ports.py` is pinned by
-`tests/test_ports_contract.py` to stay a declaration (Protocols only, stdlib only, under
-20 KB, the families above and no others).
+Each family is its own files, so adding one edits no shared file: the pattern, the
+add-a-port steps and one page per family are in [docs/ddflow/adapters/](ddflow/adapters/README.md)
+(D-adapters-answers, -2, -3; pinned by `tests/test_ports_contract.py` and
+`tests/test_adapter_modularity.py`).
 
 ## Module map
 |---|---|
@@ -308,6 +299,15 @@ its own module's code and its constants fragment —
 [`docs/ddflow/decisions/split-convention.md`](ddflow/decisions/split-convention.md)). The
 constants a module declares live one file per module under
 `docs/ddflow/constants-exemptions.d/<dotted.module>.toml`, never in a shared register.
+
+**File size (r-small-files).** A tracked `.py` file, source or test, over
+`[quality].max_file_bytes` (default 30000 bytes) is split into a package whose `__init__`
+keeps the old import path, so a lease covers a small file and a small-context model can read
+it. `tests/test_file_size_ratchet.py` fails a new oversized file and an exempt file that grew;
+the exemptions are the shrink-only baseline `tests/guard_baselines/file_size_baseline.txt`
+(`path | bytes | reason`, one per line; a split deletes its own line). `ddflow doctor` lists
+the files over the limit. The per-area `MAX_*_LINES` caps in the layout tests are line caps
+with their own reasons and stay.
 
 **Dependencies.** Two runtime dependencies, both pure Python: **Jinja2** (the prompt and
 export templates) and **tomlkit** (config write-back that keeps comments and layout),

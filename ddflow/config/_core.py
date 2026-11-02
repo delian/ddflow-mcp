@@ -44,12 +44,14 @@ from ..config_sections.metrics import MetricsConfig
 from ..config_sections.pins import PinsConfig
 from ..config_sections.plan import PlanConfig
 from ..config_sections.prompts import PromptsConfig
+from ..config_sections.quality import QualityConfig
 from ..config_sections.rag import RagConfig
 from ..config_sections.reinstruct import ReinstructConfig
 from ..config_sections.release import ReleaseConfig
 from ..config_sections.review import ReviewConfig
 from ..config_sections.rules import RulesConfig
 from ..config_sections.schedule import SIGNALS, ScheduleConfig, merge_signals
+from ..config_sections.self_assessment import SelfAssessmentConfig
 from ..config_sections.sensitivity import SensitivityConfig
 from ..config_sections.session import SessionConfig
 from ..config_sections.swarm import SwarmConfig
@@ -152,6 +154,7 @@ class Config:
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
     plan: PlanConfig = field(default_factory=PlanConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
     waves: WavesConfig = field(default_factory=WavesConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
@@ -170,6 +173,7 @@ class Config:
     triggers: TriggersConfig = field(default_factory=TriggersConfig)
     rag: RagConfig = field(default_factory=RagConfig)
     docs: DocsConfig = field(default_factory=DocsConfig)
+    self_assessment: SelfAssessmentConfig = field(default_factory=SelfAssessmentConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "local" | "env",
     #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong

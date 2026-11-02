@@ -320,21 +320,31 @@ def record_policy(
     command: Command,
     rule_id: str,
     agent: str,
+    notify: int = 0,
 ) -> str:
     """A standing rule approved this command (RA-policy): the request, its answer by
     ``policy:<rule>`` (not a person: ``human`` false, ``policy`` true) and its single spend, in one
-    transaction. Returns the ask id. Never reachable through `answer`: policy is no answer source."""
+    transaction. Returns the ask id. Never reachable through `answer`: policy is no answer source.
+    ``notify`` nonzero marks an operator notification on the answer (the retry-threshold rule:
+    `approvals log` and `doctor` surface it)."""
     with log.transaction():
         asked = request(log, cfg, subject=subject, digest=digest, text=text, command=command)
-        log.append(
-            "ask.answered",
-            asked.id,
-            {
-                "id": asked.id, "outcome": APPROVED, "digest": digest, "by": f"policy:{rule_id}",
-                "role": "policy", "via": "policy", "human": False, "coded": False,
-                "source": "policy", "level": 1, "policy": True,
-            },
-        )  # fmt: skip
+        answered = {
+            "id": asked.id,
+            "outcome": APPROVED,
+            "digest": digest,
+            "by": f"policy:{rule_id}",
+            "role": "policy",
+            "via": "policy",
+            "human": False,
+            "coded": False,
+            "source": "policy",
+            "level": 1,
+            "policy": True,
+        }
+        if notify:
+            answered["notify"] = notify
+        log.append("ask.answered", asked.id, answered)
         log.append(
             "ask.consumed",
             asked.id,

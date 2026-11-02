@@ -24,8 +24,8 @@ from ddflow.config_sections._docs import KNOB_DOCS
 CONFIG_INIT = Path(C.__file__)
 CONFIG_DIR = CONFIG_INIT.parent
 #: `config.py` was 2,445 lines with every section in it; the split into `config/` keeps
-#: each submodule under 30k chars ([r-small-files]).
-MAX_MODULE_CHARS = 30000
+#: each submodule under the one size limit, the knob [quality].max_file_bytes ([r-small-files]).
+MAX_MODULE_BYTES = C.Config().quality.max_file_bytes
 
 
 def _dataclasses_in(path: Path) -> list[str]:
@@ -51,9 +51,9 @@ def _section_types() -> dict[str, type]:
 
 def test_each_config_submodule_is_small():
     for path in CONFIG_DIR.glob("*.py"):
-        size = len(path.read_text("utf-8"))
-        assert size < MAX_MODULE_CHARS, (
-            f"{path.name} is {size} chars; a new knob belongs in config_sections/"
+        size = path.stat().st_size
+        assert MAX_MODULE_BYTES == 0 or size <= MAX_MODULE_BYTES, (  # 0: the check is off
+            f"{path.name} is {size} bytes; a new knob belongs in config_sections/"
         )
 
 

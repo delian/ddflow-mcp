@@ -1,48 +1,56 @@
-"""The adapter model, pinned: `ddflow/core/ports.py` is the one place a port is declared,
-and declaring a port is the nothing-else it does.
+"""The adapter model, pinned, generically: it iterates the families it DISCOVERS, so a new port
+adds no line here (ADP-modular-registry).
 
-The pattern itself — where ports and adapters live, how a family names its default and its
-fake, and when a family registers its several adapters in `core.registry.Registry[T]` — is
-written in `docs/ARCHITECTURE.md` ("Adapter model"). This file is the machine check that
-the code half of that one document does not drift from it, in the same way a layering rule
-written only in prose decayed into a dependency graph.
+A family is `ddflow/adapters/<family>.py` (its `@port` Protocol and default adapter),
+`ddflow/adapters/fakes/<family>.py` (`@fake class Fake<Port>`), `tests/test_adapter_<family>.py`
+(a `CONFORMANCE` table) and `docs/ddflow/adapters/<family>.md`; `ddflow.adapters.ports` finds
+the ports and `ddflow.adapters.fakes` the fakes by scanning those packages in sorted module
+order. The pattern is in `docs/ddflow/adapters/README.md`. This file is the machine check that
+the code half does not drift from it, the way a layering rule written only in prose decayed
+into a dependency graph.
 
-A port is a declaration, not an implementation: if `ddflow/core/ports.py` grows code, it is
-a second implementation of the seam it declares, which is exactly the bug the guards retire.
+A port is a declaration, not an implementation: a `@port` class with a body is a second
+implementation of the seam it declares, which is exactly the bug the guards retire.
 """
 
 from __future__ import annotations
 
 import ast
+import importlib
 from pathlib import Path
 
 import pytest
 
-from ddflow.core import ports as P
+import ddflow.adapters as A
+from ddflow.adapters import fakes as F
+from ddflow.adapters import ports as P
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
-PORTS_PATH = PKG / "core" / "ports.py"
-
-#: The families that have a port. `forge` is the multi-adapter family (GitHub, GitLab,
-#: registered in a `Registry[Forge]`); the other five have one default implementation each.
-FAMILIES = {"Proc", "Git", "Fsio", "Toml", "Digest", "Forge"}
+PORTS_PATH = PKG / "adapters" / "ports.py"
+BASELINES = PKG.parent / "tests" / "ports_without_fake"
 
 
 def _ports() -> dict[str, type]:
-    """Every public `Protocol` `ddflow/core/ports.py` declares, by its class name."""
-    declared = P.Protocol
-    return {
-        name: value
-        for name, value in vars(P).items()
-        if isinstance(value, type) and value is not declared and issubclass(value, declared)
-    }
+    """Every `@port` Protocol under `ddflow/adapters`, by class name (discovered)."""
+    return P.discover(A)
 
 
-def test_the_port_families_are_exactly_the_declared_seams():
-    assert set(_ports()) == FAMILIES, (
-        "a port appeared or vanished without touching this contract test: a new seam is a "
-        "declared change of model, not a surprise of the next refactor."
-    )
+def _family(cls: type) -> str:
+    return cls.__module__.rsplit(".", 1)[1]
+
+
+def test_the_ports_are_found_by_scanning_not_listed():
+    found = _ports()
+    assert found, "discovery found no port"
+    for name, cls in found.items():
+        assert isinstance(cls, type) and getattr(cls, "_is_protocol", False), (
+            f"{name} is no Protocol"
+        )
+        assert cls.__module__ == f"ddflow.adapters.{_family(cls)}"
+    assert P.module_names(A) == sorted(P.module_names(A)), "module scan must be sorted"
+    assert list(found) == [
+        n for m in P.module_names(A) for n in found if found[n].__module__.endswith(f".{m}")
+    ], "ports must come in sorted module order"
 
 
 def _opaque(node: ast.AST) -> ast.AST | None:
@@ -63,9 +71,9 @@ def _opaque(node: ast.AST) -> ast.AST | None:
 
 def _runs_code(expr: ast.expr) -> bool:
     """An expression in a decorator or base position that executes at class-definition
-    time. ``@runtime_checkable`` marks a port without running the port code, and a bare
+    time. ``@port`` and ``@runtime_checkable`` mark a port without running the port code, and a bare
     name is a reference; anything else (a call, an attribute) is code."""
-    return not (isinstance(expr, ast.Name) and expr.id == "runtime_checkable")
+    return not (isinstance(expr, ast.Name) and expr.id in ("runtime_checkable", "port"))
 
 
 def _literal(expr: ast.expr | None) -> bool:
@@ -74,8 +82,8 @@ def _literal(expr: ast.expr | None) -> bool:
     (`exec(...)`, `frozenset(...)`) runs code, so it is not a literal, however cheap the code."""
     if expr is None or isinstance(expr, ast.Constant):
         return True
-    if isinstance(expr, ast.Name) and expr.id in ("None", "True", "False"):
-        return True
+    if isinstance(expr, ast.Name) and (expr.id in ("None", "True", "False") or expr.id.isupper()):
+        return True  # an ALL_CAPS module constant is a reference, not code
     if isinstance(expr, ast.Tuple | ast.List | ast.Set):
         return all(_literal(e) for e in expr.elts)
     if isinstance(expr, ast.Dict):
@@ -126,24 +134,30 @@ def _class_code(node: ast.ClassDef) -> list[str]:
     return out
 
 
-def test_ports_are_declarations_only():
-    """`ddflow/core/ports.py` holds a docstring, imports and `Protocol` classes, and every
-    method in them is a docstring or `...` — nothing runs, not in a body, a decorator or a
-    base."""
-    tree = ast.parse(PORTS_PATH.read_text("utf-8"), str(PORTS_PATH))
-    statements: list[str] = []
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom | ast.Import):
-            continue
-        if isinstance(node, ast.ClassDef):
-            statements += _class_code(node)
-            continue
-        if _opaque(node) is None:
-            continue  # the module docstring
-        statements.append(ast.dump(node))
+def _port_nodes(path: Path) -> list[ast.ClassDef]:
+    """The `@port` class definitions in one module's source."""
+    tree = ast.parse(path.read_text("utf-8"), str(path))
+    return [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.ClassDef)
+        and any(isinstance(d, ast.Name) and d.id == "port" for d in n.decorator_list)
+    ]
+
+
+def _module_path(cls: type) -> Path:
+    return PKG.parent / (cls.__module__.replace(".", "/") + ".py")
+
+
+@pytest.mark.parametrize("name", sorted(_ports()))
+def test_a_port_is_a_declaration_only(name: str):
+    """A `@port` class holds a docstring and member declarations, and every method in it is a
+    docstring or `...` -- nothing runs, not in a body, a decorator or a base."""
+    nodes = [n for n in _port_nodes(_module_path(_ports()[name])) if n.name == name]
+    assert len(nodes) == 1, f"{name}: one definition, not {len(nodes)} (r-reuse-core)"
+    statements = _class_code(nodes[0])
     assert not statements, (
-        f"ports.py runs code: {statements}. A port declares; the default adapter in "
-        "ddflow/adapters/ implements it."
+        f"{name} runs code: {statements}. A port declares; the default adapter implements it."
     )
 
 
@@ -165,11 +179,9 @@ def test_literal_classifies_signed_and_container_defaults():
     assert _literal(ast.parse("exec('print(1)')").body) is False
 
 
-def test_ports_import_no_ddflow_module_and_no_io():
-    """A port is pure: `core` takes no disk, network or subprocess, and `ddflow.adapters`
-    (which the ports describe) is below `core`, so the port's types must come from the
-    standard library alone. Checked for a plain `import subprocess` and a relative import
-    into `ddflow` too, not only for `from ddflow...`."""
+def test_the_ports_base_imports_the_standard_library_alone():
+    """`ports.py` is the base every family imports: it names no ddflow module (not even by a
+    relative import) and no I/O module, so a family cannot be pulled in by it."""
     io_modules = {"subprocess", "socket", "urllib", "http", "sqlite3", "shutil", "tempfile"}
     tree = ast.parse(PORTS_PATH.read_text("utf-8"), str(PORTS_PATH))
     offenders: list[str] = []
@@ -188,62 +200,147 @@ def test_ports_import_no_ddflow_module_and_no_io():
     assert not offenders, f"ports.py must import the standard library alone, not {offenders}"
 
 
-def test_ports_module_is_under_twenty_kib():
-    assert PORTS_PATH.stat().st_size < 20 * 1024, (
-        "r-small-files: ddflow/core/ports.py grew past 20 KB; the default impls live in "
-        "ddflow/adapters/, not here."
+@pytest.mark.parametrize("path", sorted((PKG / "adapters").rglob("*.py")), ids=lambda p: p.name)
+def test_every_adapter_module_is_under_twenty_kib(path: Path):
+    assert path.stat().st_size < 20 * 1024, (
+        f"r-small-files: {path.relative_to(PKG.parent)} grew past 20 KB; split the family."
     )
 
 
 def test_a_single_adapter_family_has_no_name_and_a_multi_adapter_family_has_one():
     """`name` is the registry's key, so only a family with SEVERAL adapters carries it:
-    `Forge` is the worked example (`Registry[Forge]`, keyed by name); `proc`, `git`, `fsio`,
-    `tomlcfg` and `digest` each have one default implementation, and a second one is a bug,
-    not a registry entry."""
+    `Forge` is the worked example (`Registry[Forge]`, keyed by name); every other family has
+    one default implementation, and a second one is a bug, not a registry entry."""
     ports = _ports()
-    multi = ports["Forge"]
-    assert "name" in multi.__annotations__, "Forge must declare `name` (its registry key)"
-    single = set(ports) - {"Forge"}
-    for family in sorted(single):
+    assert "name" in ports["Forge"].__annotations__, "Forge must declare `name`"
+    for family in sorted(set(ports) - {"Forge"}):
         assert "name" not in ports[family].__annotations__, (
             f"{family} is a single-adapter family; a `name` there invites a registry with "
             "one entry."
         )
 
 
-class _FakeProbe:
-    """A nominal stand-in for a `Proc`, proving the port is duck-typed, not nominal."""
-
-    def run(self, *args, **kwargs):
-        return ("run", args, kwargs)
-
-    def capture(self, argv, *, timeout=None, **kwargs):
-        return ("capture", argv, timeout)
-
-    def spawn_shell(self, line, **kwargs):
-        return ("spawn_shell", line)
+#: The ceiling the baseline may never exceed: the ports still without a fake when the ratchet
+#: began. A SHRINK-ONLY ratchet (D-unify 4): a fake lands with the task that migrates its
+#: home and its file in `tests/ports_without_fake/` is deleted in the same
+#: change; a file for any other port fails here, so a new port cannot be excused.
+_CEILING = frozenset({"Proc", "Git", "Fsio", "Toml", "Forge"})
 
 
-def test_a_nominal_fake_satisfies_a_runtime_checkable_port():
-    """`isinstance` accepts a stand-in with the port's methods — the property that lets a
-    fake in `tests/fakes/` be dropped in where the adapter module is imported."""
-    assert isinstance(_FakeProbe(), P.Proc)
+def _without_fake() -> set[str]:
+    return {p.stem for p in BASELINES.glob("*.txt")}
 
 
-def test_the_fake_stays_in_tests_and_is_the_only_second_implementation():
-    """One port, one default and one fake: the fake is the ONE permitted stand-in, and it
-    is a tests helper (`tests/fakes/`), never shipped code in `ddflow/`."""
-    assert not (PKG / "fakes").exists(), (
-        "fakes belong in tests/fakes/; a ddflow/fakes/ package would ship test doubles."
+def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
+    """Fakes ship in `ddflow.adapters.fakes` (D-adapters-answers-2) and register under the
+    port's name; no port may lack one except those with a baseline file, which only shrinks."""
+    baseline = _without_fake()
+    assert baseline <= _CEILING, (
+        f"{sorted(baseline - _CEILING)}: the baseline may only shrink; a new port needs a fake"
     )
+    have, ports = set(F.FAKES), set(_ports())
+    assert baseline <= ports, f"a baseline file for no port: {sorted(baseline - ports)}; delete it"
+    missing = ports - have
+    assert missing <= baseline, (
+        f"a port without a fake: {sorted(missing - baseline)}. Add ddflow/adapters/fakes/"
+        "<family>.py with a `@fake` class; do not add a baseline file."
+    )
+    assert not (baseline & have), (
+        f"{sorted(baseline & have)} now have a fake: delete their files in "
+        "tests/ports_without_fake/ so the ratchet shrinks."
+    )
+    assert have <= ports, f"a fake for no port: {sorted(have - ports)}"
 
 
-@pytest.mark.parametrize("family", sorted(FAMILIES))
-def test_every_port_documents_its_home(family: str):
+@pytest.mark.parametrize("name", sorted(F.FAKES))
+def test_a_registered_fake_satisfies_its_runtime_checkable_port(name: str):
+    assert isinstance(F.FAKES[name](), _ports()[name]), f"Fake{name} does not satisfy {name}"
+    assert issubclass(F.FAKES[name], _ports()[name]), "the `@port` marker must not break issubclass"
+
+
+def test_the_fakes_are_shipped_in_the_adapters_package():
+    assert (PKG / "adapters" / "fakes" / "__init__.py").is_file()
+    assert not (PKG / "fakes").exists(), "fakes live in ddflow/adapters/fakes, not ddflow/fakes"
+
+
+def test_fakes_register_in_sorted_module_order():
+    """No hash or filesystem order decides which fake wins: sorted module names do."""
+    found = F.collect(F)
+    mods = P.module_names(F, frozenset())
+    assert mods == sorted(mods), "the fake module scan must be sorted"
+    expect = [n for m in mods for n, c in found.items() if c.__module__ == f"{F.__name__}.{m}"]
+    assert list(found) == expect and all(F.FAKES[n] is c for n, c in found.items())
+    assert sorted(F.FAKES) == sorted(found)
+    assert found, "fake discovery found nothing"
+    assert {c.__module__.rsplit(".", 1)[1] for c in found.values()} == {
+        m for m in mods if m != "__init__"
+    }, "every module of the fakes package must hold a fake"
+    assert all(getattr(F, c.__name__) is c for c in found.values()), "Fake<Port> stays importable"
+
+
+# -- conformance: one set of cases, run against the adapter and its fake ----------------
+
+
+def _conformance(name: str) -> dict:
+    """The family's `CONFORMANCE[name]` from `tests/test_adapter_<family>.py`."""
+    family = _family(_ports()[name])
+    module = importlib.import_module(f"tests.test_adapter_{family}")
+    return module.CONFORMANCE[name]
+
+
+def test_every_fake_has_a_conformance_case_and_a_real_adapter():
+    for name in sorted(F.FAKES):
+        entry = _conformance(name)
+        assert callable(entry["real"]) and callable(entry["cases"]), (
+            f"{name}: CONFORMANCE needs `real` (monkeypatch -> adapter), `cases` (adapter) and optionally `fake` (registered class -> instance)"
+        )
+
+
+@pytest.mark.parametrize("name", sorted(F.FAKES))
+def test_adapter_and_fake_pass_the_same_cases(name: str, monkeypatch):
+    entry = _conformance(name)
+    entry["cases"](entry["real"](monkeypatch))
+    # always the REGISTERED fake; a family's `fake` factory only wires it up (cls -> instance)
+    registered = F.FAKES[name]  # read before the factory runs: it may not swap the class
+    made = entry.get("fake", lambda cls: cls())(registered)
+    assert type(made) is registered, f"the `fake` factory must build the registered Fake{name}"
+    entry["cases"](made)
+
+
+def test_the_registry_has_one_implementation_and_core_re_exports_it():
+    """r-reuse-core: `adapters` is the bottom layer and cannot import `core`, so the ONE
+    `Registry[T]` lives in `ddflow.adapters.registry`; `ddflow.core.registry` is a re-export
+    of the same objects, not a second copy."""
+    from ddflow.adapters import registry as A
+    from ddflow.core import registry as C
+
+    assert C.Registry is A.Registry and C.DuplicateName is A.DuplicateName
+    assert C.UnknownName is A.UnknownName and C.Lazy is A.Lazy
+    assert (PKG / "core" / "registry.py").stat().st_size < 2048, "core/registry.py is a shim"
+    assert F.FAKES.what == "fake" and isinstance(F.FAKES, A.Registry)
+
+
+def test_the_old_core_ports_path_is_gone():
+    assert not (PKG / "core" / "ports.py").exists(), "ports live in ddflow/adapters/ports.py"
+
+
+def test_the_layer_contract_puts_adapters_at_the_bottom():
+    text = (PKG.parent / ".importlinter").read_text("utf-8")
+    block = text.split("[importlinter:contract:layers]", 1)[1].split("[importlinter:", 1)[0]
+    layers = [
+        ln.strip()
+        for ln in block.split("layers =", 1)[1].splitlines()
+        if ln.strip().startswith("ddflow.")
+    ]
+    assert layers[-2:] == ["ddflow.core", "ddflow.adapters"], layers
+
+
+@pytest.mark.parametrize("name", sorted(_ports()))
+def test_every_port_documents_its_home(name: str):
     """A port names where its default adapter lives, so the "where" half of the model is
     next to the code half, not only in the architecture document."""
-    doc = _ports()[family].__doc__ or ""
+    doc = _ports()[name].__doc__ or ""
     assert "ddflow.adapters." in doc, (
-        f"{family} does not name its home in ddflow/adapters/: the port is the seam, and "
+        f"{name} does not name its home in ddflow/adapters/: the port is the seam, and "
         "the doc says where the default lands."
     )

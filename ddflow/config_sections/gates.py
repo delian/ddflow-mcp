@@ -81,6 +81,12 @@ class GatesConfig:
         True,
         doc="Permit `ddflow gate skip <id> --reason '...'`. The reason is mandatory and is recorded in the event log, so a skip is auditable rather than invisible.",
     )
+    skip_followup: str = knob(
+        "auto",
+        doc="When a gate is recorded skipped (`ddflow gate skip <id> <gate> --reason ...`, or a hand-recorded `outcome=skipped`), `auto` files ONE future follow-up task whose scope is ONLY to re-run that gate on that item later (run `ddflow gate run <id> <gate>` and record the honest outcome); the follow-up is the log entry, the reminder and the effort to re-run the gate -- not to repair the gate-check code nor to redo the item's payload. It is dropped when the item is abandoned, and settles when the item completes or the gate is re-recorded non-skipped. `warn` reports the follow-up in the skip output and files nothing; `off` does neither. A skip today records nothing extra: only `auto` adds the follow-up.",
+        choices=("auto", "warn", "off"),
+        strictest=("auto", "always files the follow-up, so a skipped gate is never forgotten"),
+    )
     require_outcome: bool = knob(
         True,
         doc="Every gate in the pipeline must carry SOME recorded outcome before an item completes — passed, failed, unavailable, partial, or an explicit `gate skip --reason`. Silence is not a pass, for the same reason UNAVAILABLE is not. With this false, `required` alone blocks and the other gates become documentation. Default true: the fixed order is the point of the pipeline.",
