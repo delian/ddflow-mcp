@@ -177,6 +177,6 @@ def driver_for(transport: str) -> Lane | Result:
     return factory()
 
 
-def advertise(driver: Capable, wanted: set[str] | frozenset[str]) -> frozenset[str]:
+def advertise(driver: Capable | Lane, wanted: set[str] | frozenset[str]) -> frozenset[str]:
     """``wanted`` limited to what the driver can do, and to the known vocabulary."""
     return frozenset(wanted) & CAPABILITIES & driver.capabilities
