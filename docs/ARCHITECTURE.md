@@ -248,7 +248,8 @@ declaration first hid the dependency graph that this ranking exists to expose.
 
 Every outside dependency (a subprocess, git, a file, a forge, a model endpoint) is reached
 through a **port** (a `typing.Protocol`) so it can be swapped or faked: one default adapter
-beside the port, a shipped fake, and one set of conformance cases that runs against both.
+beside the port, a shipped fake, and one set of conformance cases that runs against both
+(the few ports still without a fake are a baseline that only shrinks).
 `ddflow.adapters` is the BOTTOM layer: every layer may import it, it imports no other.
 `core` uses only our own adapters, so it sits under `core` (`.importlinter` `layers`), and the
 one `Registry[T]` lives in `ddflow/adapters/registry.py` (`core/registry.py` re-exports it).
