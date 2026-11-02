@@ -86,12 +86,12 @@ def _mergiraf_plan(repo: Path, cfg: Config, plan: Plan) -> None:
     need = _min_git(cfg)
     if shutil.which(MERGIRAF) is None:
         plan.unavailable.append(
-            f"the `{MERGIRAF}` binary is not on PATH; ddflow installs nothing, install it yourself, then `{NEXT_CLI}`"
+            f"the `{MERGIRAF}` binary is not on PATH; ddflow installs nothing, install it yourself, then `{NEXT_CLI}` (MCP: {NEXT_MCP})"
         )
     if have is None or have < need:
         got = "unknown" if have is None else f"{have[0]}.{have[1]}"
         plan.unavailable.append(
-            f"git {need[0]}.{need[1]} or later is needed for the recommended setup, found {got}"
+            f"git {need[0]}.{need[1]} or later is needed for the recommended setup, found {got}; upgrade git, then `{NEXT_CLI}` (MCP: {NEXT_MCP})"
         )
     if plan.unavailable:
         return
@@ -128,8 +128,12 @@ def apply(repo: Path, cfg: Config) -> list[str]:
         acts += [f"added '{a}' to .gitattributes" for a in p.attrs]
     for key, val in p.config.items():
         if G.run(repo, "config", "--local", "--get", f"merge.{key}").out.strip() != val:
-            G.run(repo, "config", "--local", f"merge.{key}", val)
-            acts.append(f"set git config merge.{key}")
+            r = G.run(repo, "config", "--local", f"merge.{key}", val)
+            acts.append(
+                f"set git config merge.{key}"
+                if r.ok
+                else f"could not set git config merge.{key}: {r.err or 'git failed'}"
+            )
     acts += [f"added '{x}' to .gitattributes" for x in SF.sync_attributes(repo)]
     acts += PM.install(repo, cfg)
     return acts
@@ -145,13 +149,18 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
             continue
         try:
             text = (Path(repo) / path).read_text("utf-8")
-        except OSError:
+        except OSError as exc:
+            bad.append(f"{path} could not be read ({exc.strerror}): the check is unavailable for it")
             continue
         rows = [r for r in text.splitlines() if r.strip() and not r.startswith("#")]
+        if _MARK.search(text):
+            bad.append(
+                f"{path} has conflict markers: resolve them by hand, keep both sides' entries,"
+                f" `sort -u -o {path} {path}`, then `ddflow pins drivers --check`"
+            )
+            continue
         why = (
-            "has conflict markers"
-            if _MARK.search(text)
-            else "is not sorted"
+            "is not sorted"
             if rows != sorted(rows)
             else "repeats an entry"
             if len(rows) != len(set(rows))
@@ -159,6 +168,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         )
         if why:
             bad.append(
-                f"{path} {why} after the union merge: sort it (`sort -u -o {path} {path}`) and commit"
+                f"{path} {why} after the union merge: `sort -u -o {path} {path}`, commit, then"
+                " `ddflow pins drivers --check`"
             )
     return bad

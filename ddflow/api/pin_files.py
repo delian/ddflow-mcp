@@ -75,10 +75,19 @@ def _drivers(repo: Path, cfg: Config, *, check: bool, install: bool) -> O.Outcom
     `--check` verifies the merged baselines are still sorted and unique."""
     if check:
         bad = MD.check_baselines(repo, cfg)
-        return O.failed("pins", "; ".join(bad)) if bad else O.ok("pins", note="baselines are sorted")
+        return (
+            O.failed("pins", "; ".join(bad))
+            if bad
+            else O.ok("pins", note="baselines are sorted and unique")
+        )
     if install:
+        gaps = [f"unavailable: {u}" for u in MD.plan(repo, cfg).unavailable]
         acts = MD.apply(repo, cfg)
-        return O.ok("pins", installed=acts) if acts else O.nothing("pins", "merge drivers already set up")
+        if acts:
+            return O.ok("pins", installed=acts, note="\n".join(gaps))
+        if gaps:  # a driver that could not be set up is not "already set up"
+            return O.nothing("pins", "; ".join(gaps))
+        return O.nothing("pins", "merge drivers already set up")
     p = MD.plan(repo, cfg)
     note = "\n".join(p.lines()) or "nothing to add: the merge drivers are already set up"
     if not p.empty():

@@ -94,3 +94,25 @@ def test_keep_mergiraf_needs_more_than_the_threshold() -> None:
     assert MD.keep_mergiraf(11, 100, 10)
     assert not MD.keep_mergiraf(10, 100, 10)
     assert not MD.keep_mergiraf(0, 0, 10)
+
+
+def test_install_reports_unavailable_mergiraf_not_success(repo: Path, monkeypatch) -> None:
+    from ddflow.api import pin_files as PF
+
+    (repo / ".ddflow" / "config.toml").write_text("[pins]\nmergiraf = true\n")
+    monkeypatch.setattr(MD.shutil, "which", lambda _n: None)
+    out = PF.pins_regenerate(repo, verb="drivers", install=True, start=repo)
+    assert out.exit == 2 and "unavailable" in out.reason and "binary" in out.reason
+
+
+def test_unreadable_baseline_is_not_a_pass(repo: Path, monkeypatch) -> None:
+    real = Path.read_text
+
+    def deny(self, *a, **k):
+        if self.name == "a.txt":
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", deny)
+    found = MD.check_baselines(repo, Config.load(repo))
+    assert len(found) == 1 and "unavailable" in found[0]
