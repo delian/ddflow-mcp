@@ -42,3 +42,11 @@ def test_a_directory_inside_the_owned_root_is_removed(sandbox) -> None:
     (owned / "d" / "f").write_text("x", "utf-8")
     remove_owned(str(owned / "d"), owned)
     assert not (owned / "d").exists()
+
+
+def test_a_symlink_is_dropped_without_following_it(sandbox) -> None:
+    _, owned = sandbox
+    (owned / "important").mkdir()
+    (owned / "link").symlink_to(owned / "important", target_is_directory=True)
+    remove_owned(owned / "link", owned)
+    assert (owned / "important").is_dir() and not (owned / "link").is_symlink()

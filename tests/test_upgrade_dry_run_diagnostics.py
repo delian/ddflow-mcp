@@ -332,6 +332,9 @@ def test_a_pip_install_that_fails_leaves_the_transcript_and_so_does_an_unwritabl
     monkeypatch.setattr(DR.P, "capture", venv_then_pip_fails)
     blocked = tmp_path / "a-file"
     blocked.write_text("not a directory", "utf-8")
+    sysdir = tmp_path / "systmp"  # the "system temp directory" the fallback uses is ours alone
+    sysdir.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(sysdir))
     report = DR.run_all(options(tmp_path, root, old=None, build_old=True, diag_dir=blocked / "d"))
     try:
         assert report.exit_code == 2 and report.diagnostics

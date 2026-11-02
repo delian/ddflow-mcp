@@ -19,7 +19,10 @@ def remove_owned(target: str | Path | None, root: str | Path) -> None:
     if not path.is_absolute():
         raise ValueError(f"refusing to delete: relative target {str(target)!r}")
     base = Path(root).resolve()
-    resolved = path.resolve()
+    resolved = path.parent.resolve() / path.name  # the link itself, not where it points
     if resolved == base or base not in resolved.parents:
         raise ValueError(f"refusing to delete {str(target)!r}: not strictly inside {str(base)!r}")
-    shutil.rmtree(resolved, ignore_errors=True)
+    if path.is_symlink():  # the link is ours to drop; never follow it to its target
+        path.unlink()
+    else:
+        shutil.rmtree(path, ignore_errors=True)
