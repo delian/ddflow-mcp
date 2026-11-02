@@ -1,10 +1,10 @@
 id = "r-small-files"
-title = "Keep every file under 20 KB: split into a package of smaller modules"
+title = "Split any Python file over 30 KB into a module or package: small files lock fewer parallel agents and fit small context windows"
 tags = ["size", "context", "split"]
 scope = "project"
 priority = 90
 globs = ["ddflow/**", "tests/**"]
 created = "2026-10-12T16:15:30.603483+00:00"
-updated = "2026-10-12T16:15:30.603493+00:00"
+updated = "2026-11-01T17:18:46.955322+00:00"
 
-Decision D-small-files (operator 2026-10-12). A .py file over [quality].max_file_bytes (20 KB, about 5k tokens) is split by cohesion into a package: one concern per module, a thin __init__ facade that keeps the old import path, a module docstring saying what the module holds. Applies to tests too. Do not add to a file that is over the limit: split first, or list the exemption with a reason. A ratchet test fails a new oversized file or an exempt file that grew. Goal: a 128k-context model can read the whole change.
+Decisions D-small-files and D-small-files-30k (operator 2026-11-01). WHY: a lease covers a file, so one big file serialises every agent that needs any part of it, and a small-context LLM cannot read a big file or its diff. RULE: a .py file over [quality].max_file_bytes (default 30000 bytes, about 7k tokens) is split by cohesion into a package: one concern per module, a thin __init__ facade that keeps the old import path and re-exports the public names, a module docstring saying what the module holds. Applies to tests too (split by feature under one package or several test modules). WHEN: if the file you are about to edit is over the limit, or your change would push it over, split it FIRST as its own change (own task, own lease, no behaviour change, the full tests green before and after), then make your change in the small module; never add to an over-limit file. Aim well under the limit for new modules. After a split, the tasks that name the old path must be re-pointed (the path-move tooling MV-* does this; until then update the globs yourself). Exemptions are listed in one shrink-only baseline with a reason; a ratchet fails a new oversized file or an exempt file that grew. The standards gate and reviewers check it.
