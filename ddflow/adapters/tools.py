@@ -104,7 +104,7 @@ def spec_from_row(row: dict[str, Any]) -> ToolSpec:
         raise ValueError(f"tool {tid!r}: unknown parser {parser!r}. Known: {', '.join(PARSERS)}")
     try:
         re.compile(str(row.get("version_re", r"(\d+)")))
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         raise ValueError(f"tool {tid!r}: version_re is not a regular expression: {exc}") from exc
     extra = {k: str(row[k]) for k in ("version_re", "pin", "install", "title") if k in row}
     return ToolSpec(
@@ -127,18 +127,27 @@ def _load_table() -> list[ToolSpec]:
 SPECS: Registry[ToolSpec] = Registry("external tool", key=lambda s: s.id, loader=_load_table)
 
 
-def _version_key(text: str) -> tuple[int, ...]:
-    return tuple(int(n) for n in _NUM.findall(text))
+_CORE = re.compile(r"v?(\d+(?:\.\d+)*)(.*)", re.DOTALL)
+
+
+def _version_key(text: str) -> tuple[tuple[int, ...], bool]:
+    """(the numeric core, is it a pre-release): "8.30.0-rc.1" is ((8, 30, 0), True)."""
+    m = _CORE.search(text.strip())
+    if not m:
+        return (), False
+    return tuple(int(n) for n in m.group(1).split(".")), bool(re.search(r"[A-Za-z]", m.group(2)))
 
 
 def version_at_least(version: str, pin: str) -> bool | None:
     """Is ``version`` >= ``pin``, comparing dotted numbers part by part ("8.30.10" > "8.30.1",
-    "8.30" == "8.30.0"). None when either holds no number: not knowing is not a pass."""
-    have, want = _version_key(version), _version_key(pin)
+    "8.30" == "8.30.0"); a pre-release ("8.30.0-rc.1") is older than its release. None when
+    either holds no number: not knowing is not a pass."""
+    (have, pre), (want, _) = _version_key(version), _version_key(pin)
     if not have or not want:
         return None
     size = max(len(have), len(want))
-    return have + (0,) * (size - len(have)) >= want + (0,) * (size - len(want))
+    have, want = have + (0,) * (size - len(have)), want + (0,) * (size - len(want))
+    return have > want or (have == want and not pre)
 
 
 class TableTool:

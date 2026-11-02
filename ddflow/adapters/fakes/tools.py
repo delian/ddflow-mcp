@@ -70,7 +70,7 @@ class FakeExternalTool:
             )
         if p.code != 0:
             return ToolProbe(self.name, False, reason=f"exited {p.code}", hint=self._install)
-        m = re.search(r"\d+(?:\.\d+)+", p.out + p.err)
+        m = re.search(r"\d+(?:\.\d+)+", p.out + "\n" + p.err)
         return ToolProbe(self.name, True, m.group(0) if m else "", hint=self._install)
 
     def run(self, args: list[str] | None = None, *, cwd: str | None = None) -> ToolRun:

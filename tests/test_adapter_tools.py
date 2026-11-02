@@ -469,3 +469,40 @@ def test_a_parse_error_reason_names_only_the_exception_type():
     t.parse = lambda out: (_ for _ in ()).throw(ToolParseError('row {"Secret":"hunter2"}'))
     r = t.run()
     assert "hunter2" not in r.reason and "ToolParseError" in r.reason
+
+
+def test_the_array_that_runs_to_the_end_is_the_report():
+    out = '["starting scan"]\nlog\n    []\n[{"rule": "r1"}]\n'
+    assert [f.rule for f in TP.PARSERS["normalized"]("t", out)] == ["r1"]
+
+
+@pytest.mark.parametrize(
+    ("version", "pin", "want"),
+    [
+        ("8.30.0-rc.1", "8.30.0", False),
+        ("8.30.1-rc.1", "8.30.0", True),
+        ("v8.30.0", "8.30.0", True),
+    ],
+)
+def test_a_prerelease_is_older_than_its_release(version, pin, want):
+    assert T.version_at_least(version, pin) is want
+
+
+def test_a_pathological_version_regex_is_refused_as_a_value_error():
+    row = {
+        "id": "x",
+        "argv": ["x"],
+        "version_argv": ["x", "-v"],
+        "version_re": "a{100000000000000000000000}",
+    }
+    with pytest.raises(ValueError, match="version_re"):
+        T.spec_from_row(row)
+
+
+def test_precommit_reads_a_note_after_the_state():
+    assert [f.rule for f in TP.PARSERS["pre-commit"]("p", "mypy.....Failed (exit 1)\n")] == ["mypy"]
+
+
+def test_the_fake_does_not_join_stdout_and_stderr_digits():
+    f = FakeExternalTool("s", probe=RunResult(True, 0, "v1.2", "3"))
+    assert f.probe().version == "1.2"

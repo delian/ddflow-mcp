@@ -42,13 +42,19 @@ def _json_list(output: str, what: str) -> list[Any]:
     if not text:
         return []
     starts = [m.start(1) for m in re.finditer(r"(?m)^[ \t]*(\[)", text)]
+    first: list[Any] | None = None
     for at in starts:
         try:
-            value, _ = json.JSONDecoder().raw_decode(text[at:])
+            value, end = json.JSONDecoder().raw_decode(text[at:])
         except ValueError:
             continue
-        if isinstance(value, list):
-            return value
+        if not isinstance(value, list):
+            continue
+        if not text[at + end :].strip():
+            return value  # the array that runs to the end of the output is the report
+        first = value if first is None else first
+    if first is not None:
+        return first
     # The output is not echoed: a scanner's text can hold the secret it found.
     raise ToolParseError(f"{what}: no JSON array in the output ({len(text)} characters)")
 
@@ -100,7 +106,7 @@ def parse_gitleaks(tool: str, output: str) -> list[Finding]:
 
 #: A pre-commit result line: ``<hook name>....Failed`` (the dots pad to the terminal width).
 _HOOK_LINE = re.compile(
-    r"^(?P<hook>[A-Za-z0-9_(\[].*?)\.{3,}(?:\(.*\))?\s*(?P<state>Passed|Failed|Skipped)\s*$"
+    r"^(?P<hook>[A-Za-z0-9_(\[].*?)\.{3,}(?:\(.*?\))?\s*(?P<state>Passed|Failed|Skipped)\s*(?:\(.*\))?$"
 )
 
 
