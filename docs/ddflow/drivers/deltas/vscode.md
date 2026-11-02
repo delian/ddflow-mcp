@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/vscode ddflow=0.2.10 fmt=1 sha=6ce5bd7ca7b3 -->
+<!-- ddflow:begin drivers/deltas/vscode ddflow=0.2.10 fmt=1 sha=55f22ea89421 -->
 # Delta: VS Code (any agent)
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -15,13 +15,13 @@ Only the items below differ.
    dispatched process claims its OWN item — ddflow's exclusive lease refuses a duplicate)
    mapping `tier:fast|balanced|deep` to model choice, and a re-read of `next` after each
    merge or park. Keep the wave alive until each dispatched window/terminal has exited
-   (merged or parked) and `ddflow next` reports nothing ready; stop only on that empty
-   scope or a question/operator gate. Within one request keep going — claim, run the gates, merge —
-   re-reading `next` after each merge or park until the scope is empty; end the request
-   with `ddflow_next` and `ddflow_cadence` output only as the handoff to the next
-   invocation. Nothing persists between requests, so printing the handoff IS the restart
-   point, and the wave position is ddflow's own committed event log. These loop facts are
-   the `[orchestration]` record in `ddflow/harnesses/vscode.toml`.
+   (merged or parked) and `ddflow next` reports no ready and no held/blocked; stop only on
+   that empty scope or a question/operator gate. Within one request run the gates — merge or
+   park — re-reading `next` after each until the scope is empty; end the request with
+   `ddflow_next` and `ddflow_cadence` output only as the handoff to the next invocation.
+   Nothing persists between requests, so printing the handoff IS the restart point, and the
+   wave position is the committed event log. These loop facts are the `[orchestration]`
+   record in `ddflow/harnesses/vscode.toml`.
 3. **Subagents.** None with worktree isolation. For parallelism open a second window on
    the same repo, or run another agent in a terminal; ddflow's leases coordinate
    *processes*, so each claims its own item and gets its own worktree.
