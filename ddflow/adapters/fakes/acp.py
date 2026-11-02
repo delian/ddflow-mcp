@@ -46,6 +46,8 @@ class FakeAcpAgent:
         method, params = msg.get("method"), msg.get("params") or {}
         if not isinstance(params, dict):
             params = {}
+        if method == "session/cancel" and "id" in msg:  # a request is always answered
+            return A.err(msg["id"], A.INVALID_PARAMS, "session/cancel is a notification")
         if method == "session/cancel":
             sid = params.get("sessionId")
             if isinstance(sid, str) and (session := self.sessions.get(sid)) is not None:
@@ -175,7 +177,8 @@ class FakeAcpClient:
                 on_event(event)
         for ask in self.agent.script.asks:
             chosen = permission(ask) if permission is not None else None
-            title = str((ask.get("toolCall") or {}).get("title", ""))
+            call = ask.get("toolCall")
+            title = str(call.get("title", "")) if isinstance(call, dict) else ""
             result.permissions.append((title, chosen or ""))
             if not chosen:
                 result.stop_reason = A.CANCELLED

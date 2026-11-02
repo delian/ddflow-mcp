@@ -292,3 +292,31 @@ CONFORMANCE = {
         "cases": _agent_cases,
     },
 }
+
+
+def test_errors_and_malformed_frames_come_back_as_outcomes_not_exceptions(make):
+    client = make()
+    client.connect(1)
+    if make is _fake:  # the default's scripted peer asks for permission whatever the session
+        assert client.prompt("missing", "hi", 1).status == A.ERROR
+    assert client.new_session(None, [], 1).status == A.ERROR
+    reply = A.AcpStdioAgent(lambda line: None, on_prompt=_on_prompt).handle(
+        A.request(1, "session/cancel", {"sessionId": "s1"})
+    )
+    assert reply["error"]["code"] == A.INVALID_PARAMS
+    assert FakeAcpAgent().handle(A.request(2, "session/cancel", {}))["error"]["code"] == (
+        A.INVALID_PARAMS
+    )
+
+
+def test_the_default_client_ignores_array_params_on_an_update_and_an_ask():
+    peer = _Peer()
+    client = A.AcpStdioClient(lambda argv, env: peer, ["x"], poll_s=0.01)
+    result = A.PromptResult(A.OK)
+    client._on_other(
+        {"jsonrpc": "2.0", "method": "session/update", "params": ["x"]}, result, None, None
+    )
+    ask = {"jsonrpc": "2.0", "id": 3, "method": "session/request_permission", "params": ["x"]}
+    client.connect(1)
+    client._on_other(ask, result, None, None)
+    assert result.events == [] and result.permissions == [("", "")]
