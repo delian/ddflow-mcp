@@ -112,26 +112,21 @@ def _declared_of(ctx: Context, item: str, at: float | None = None) -> tuple[str,
     return mine[0].globs if mine else ()
 
 
-def _actual(
-    ctx: Context, probes: Probes | None, item: str, cache: dict, windowed: bool = False
-) -> frozenset | None:
-    """Files the item's merges changed (``windowed``: only merges inside the view); None when
-    git (or the log) cannot say."""
-    key = (item, windowed)
-    if key in cache:
-        return cache[key]
-    got: frozenset | None = None
-    lands = [
-        m
-        for m in ctx.facts.landings.get(item, ())
-        if m.before and m.after and (not windowed or ctx.in_scope(item, m.at))
-    ]
-    if probes is not None and lands:
-        parts = [probes.files(m.before, m.after) for m in lands]
-        if all(p is not None for p in parts):
-            got = frozenset(f for p in parts for f in p or ())
-    cache[key] = got
-    return got
+def _landing_files(probes: Probes | None, m: Landing, cache: dict) -> list[str] | None:
+    """Files one merge changed; None when git (or the log) cannot say."""
+    if probes is None or not (m.before and m.after):
+        return None
+    if (m.before, m.after) not in cache:
+        cache[(m.before, m.after)] = probes.files(m.before, m.after)
+    return cache[(m.before, m.after)]
+
+
+def _actual(ctx: Context, probes: Probes | None, item: str, cache: dict) -> frozenset | None:
+    """Files all the item's merges changed; None when git (or the log) cannot say."""
+    parts = [_landing_files(probes, m, cache) for m in ctx.facts.landings.get(item, ())]
+    if not parts or any(p is None for p in parts):
+        return None
+    return frozenset(f for p in parts for f in p or ())
 
 
 def _blockers(ctx: Context, item: str, since: float) -> list[str]:
@@ -178,23 +173,23 @@ def _waits(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> di
 
 
 def _declared(ctx: Context, probes: Probes | None, minimum: int, cache: dict) -> dict:
-    untouched, outside, wrote, items = [], [], 0, 0
+    """Each merge inside the view is scored against the globs of the lease held at that merge."""
+    untouched, outside, wrote, items = [], [], set(), set()
     for item, lands in ctx.facts.landings.items():
-        inside = [m for m in lands if ctx.in_scope(item, m.at)]
-        if not inside:
-            continue
-        declared = tuple(sorted({g for m in inside for g in _declared_of(ctx, item, m.at)}))
-        actual = _actual(ctx, probes, item, cache, windowed=True)
-        if not declared or actual is None:
-            continue
-        items += 1
-        untouched.append(
-            sum(not any(G.inside(f, g) for f in actual) for g in declared) / len(declared)
-        )
-        if actual:
+        for m in (m for m in lands if ctx.in_scope(item, m.at)):
+            declared, actual = _declared_of(ctx, item, m.at), _landing_files(probes, m, cache)
+            if not declared or actual is None:
+                continue
+            items.add(item)
+            untouched.append(
+                sum(not any(G.inside(f, g) for f in actual) for g in declared) / len(declared)
+            )
             out = [f for f in actual if not any(G.inside(f, g) for g in declared)]
-            outside.append(len(out) / len(actual))
-            wrote += bool(out)
+            if actual:
+                outside.append(len(out) / len(actual))
+            if out:
+                wrote.add(item)
+    items, wrote = len(items), len(wrote)
     enough = items >= max(minimum, 1)
     mean = lambda xs: sum(xs) / len(xs) if xs and enough else None  # noqa: E731
     return {
