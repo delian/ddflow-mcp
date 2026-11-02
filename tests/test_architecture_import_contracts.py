@@ -89,8 +89,9 @@ def test_import_contracts(tmp_path: Path) -> None:
 
 def _dist_name(req: str) -> str:
     """The PEP 508 distribution name an optional-dependency requirement declares: the part
-    before the first version/extras/marker separator (``rapidfuzz>=3.14.6`` -> ``rapidfuzz``)."""
-    return re.split(r"[<>=!~;\s\[]", req, maxsplit=1)[0].strip()
+    before the first version/extras/marker/direct-reference separator
+    (``rapidfuzz>=3.14.6`` -> ``rapidfuzz``, ``name@url`` -> ``name``)."""
+    return re.split(r"[@<>=!~;\s\[]", req, maxsplit=1)[0].strip()
 
 
 #: Distribution name (as pyproject declares it) -> the top-level import name its package
@@ -105,31 +106,39 @@ _EXTRA_IMPORTS: dict[str, str] = {
 }
 
 
+def _undeclared_imports(extras: dict[str, list[str]]) -> dict[str, str | None]:
+    """Declared packages the one-adapter contract does not confine, keyed by distribution
+    name: a package with no ``_EXTRA_IMPORTS`` entry (value ``None``), or whose import name
+    is not in ``forbidden_modules``. Read from pyproject's package list, never a hard-coded
+    module list, so a package added under an existing extra is checked too."""
+    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
+    problems: dict[str, str | None] = {}
+    for reqs in extras.values():
+        for req in reqs:
+            dist = _dist_name(req)
+            imp = _EXTRA_IMPORTS.get(dist)
+            if imp is None or imp not in named:
+                problems[dist] = imp
+    return problems
+
+
 def test_every_extra_has_a_contract() -> None:
     """Each package an optional extra declares is named in the one-adapter contract, so an
     extra -- or a package added under an existing extra -- cannot exist without its import
-    being confined to one module. The check reads pyproject's package list, not a
-    hard-coded module list, so a package added under an existing extra is checked too."""
+    being confined to one module."""
     extras = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"].get(
         "optional-dependencies", {}
     )
-    dists = {_dist_name(req) for reqs in extras.values() for req in reqs}
-    assert dists == set(_EXTRA_IMPORTS), (
-        f"pyproject declares packages {sorted(dists)}; the import-name map knows "
-        f"{sorted(_EXTRA_IMPORTS)} (add an entry for each new package, remove a stale one)"
-    )
-    named = set(_contracts()["extras-one-adapter"]["forbidden_modules"].split())
-    unconfined = {d: i for d, i in _EXTRA_IMPORTS.items() if i not in named}
-    assert not unconfined, f"extras whose import names are not forbidden: {unconfined}"
+    problems = _undeclared_imports(extras)
+    assert not problems, f"extras whose import names are not forbidden: {problems}"
 
 
 def test_package_added_under_existing_extra_is_checked() -> None:
     """Regression for B-arch-guard-extras-hardcoded: a package added under an existing
-    extra is checked against the contract. The old hard-coded module list never compared
-    pyproject's packages, so it missed such a package; the pyproject-derived set flags it."""
-    extras = {"rag": ["model2vec>=0.9.0", "numpy>=1.26"]}
-    dists = {_dist_name(req) for reqs in extras.values() for req in reqs}
-    assert "numpy" in dists - set(_EXTRA_IMPORTS)
+    extra whose import is not confined is reported. The old guard iterated a hard-coded
+    module list, never pyproject's packages, so it missed such a package."""
+    problems = _undeclared_imports({"rag": ["model2vec>=0.9.0", "numpy>=1.26"]})
+    assert problems == {"numpy": None}
 
 
 def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
