@@ -47,6 +47,28 @@ def file_tasks_call(repo, a: dict, agent: str):
     )
 
 
+def _bug_dedupe_render(out, a):
+    data = out.data
+    if not data.get("clusters"):
+        return ""  # the executor says why instead
+    lines = []
+    for c in data["clusters"]:
+        dupes = ", ".join(f"{d['id']} ({d['score']:.2f})" for d in c["duplicates"]) or "(none)"
+        cause = f"   shared: {c['cause']}" if c.get("cause") else ""
+        lines.append(f"{c['canonical']} ~ {dupes}")
+        if cause:
+            lines.append(cause)
+    if lines:
+        lines.append(f"matcher: {data.get('semantic', '')}")
+    applied = data.get("applied") or []
+    if applied:
+        lines.append(
+            f"linked {', '.join(applied)} onto their canonical (nothing closed); "
+            f"settle any left with `ddflow link <dup> --duplicate-of <canonical>`"
+        )
+    return "\n".join(lines)
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("research",),
@@ -270,6 +292,44 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="List what would be filed; write nothing.",
                 cli_help="list what would be filed",
+            ),
+        ),
+    ),
+    Command(
+        path=("bug", "dedupe"),
+        summary="cluster near-duplicate OPEN bugs by symptom + root cause; --apply links the younger ones onto each cluster's canonical",
+        tool="ddflow_bug_dedupe",
+        family="ddflow_bug",
+        action="dedupe",
+        tier="standard",
+        description="Cluster the OPEN bugs that describe one root cause under different "
+        "wordings (symptom + root-cause matching: the TF-IDF overlap engine plus the "
+        "semantic embedder when [rag] names one), and report each cluster's canonical "
+        "bug id, its duplicate ids and the shared cause. apply: link each younger "
+        "duplicate onto its cluster's canonical member with `ddflow link --duplicate-of` "
+        "-- nothing is ever closed here; a duplicate bug is closed only once its "
+        "original is fixed. Nothing close: exit 2.",
+        call=lambda repo, a, agent: _api().bug_dedupe(
+            repo,
+            apply=bool(a.get("apply")),
+            floor=a.get("floor"),
+            agent=agent,
+        ),
+        payload=("clusters", "count", "applied", "floor", "semantic", "scanned"),
+        render=_bug_dedupe_render,
+        wire_shape=(("bug", "dedupe"), {}),
+        params=(
+            Param(
+                "apply",
+                type="boolean",
+                help="Link each younger duplicate onto its cluster's canonical member (a `duplicate_of` link; nothing is closed).",
+                cli_help="link each younger duplicate onto its cluster's canonical (nothing is closed)",
+            ),
+            Param(
+                "floor",
+                type="number",
+                help="Minimum score at which two bugs cluster (default: [dedupe].show_floor).",
+                cli_help="minimum score to cluster (default: [dedupe].show_floor)",
             ),
         ),
     ),
