@@ -6,7 +6,9 @@ module was imported: `import time as t`, `from time import time as now`, `from o
 environ`. The baseline `tests/ratchets/clock_env.json` holds the count each file had when the
 ports landed; it only SHRINKS: a file may not read more, and a file that reads fewer must lower
 its number here (or drop its entry). Migrate a site by taking a `Clock` / `Env` argument
-(ddflow/adapters/clock.py, env.py). After a migration, lower the baseline with
+(ddflow/adapters/clock.py, env.py). Limits, by design: the counter is by name, so an assignment
+alias (`_os = os`) or `x.time.monotonic()` on a non-module are not told apart (the second
+over-counts, which only fails loud). After a migration, lower the baseline with
 `uv run python -m tests.test_adapters_clock_env`; it refuses to raise any number.
 """
 
@@ -57,12 +59,6 @@ def count_reads(tree: ast.AST) -> int:
                 mod = mods.get(v.id)
             else:
                 mod = v.attr if isinstance(v, ast.Attribute) and v.attr in READS else None
-                if (
-                    isinstance(v, ast.Attribute)
-                    and isinstance(v.value, ast.Name)
-                    and v.value.id == "self"
-                ):
-                    mod = None
             if mod and node.attr in READS[mod]:
                 n += 1
     return n
@@ -89,6 +85,8 @@ def test_the_counter_sees_calls_and_aliases_but_not_text_or_an_injected_port():
     assert count_reads(ast.parse(aliased)) == 3  # each from-import counts where it is used
     port = "class X:\n    def __init__(self, c): self._time = c\n    def f(self): return self._time.monotonic()\n"
     assert count_reads(ast.parse(port)) == 0
+    own = "import os\nclass C:\n    def __init__(self): self.os = os\n    def f(self): return self.os.environ\n"
+    assert count_reads(ast.parse(own)) == 1
     assert count_reads(ast.parse("from time import *\nx = time() + monotonic()\n")) == 2
     assert count_reads(ast.parse("import os.path\nos.environ['HOME']\n")) == 1
     assert count_reads(ast.parse("import time\ntime.time = lambda: 1\n")) == 0  # a store is no read
@@ -115,9 +113,13 @@ def test_the_baseline_is_tight_so_a_migration_must_lower_it():
 
 
 if __name__ == "__main__":
+    import sys
+
+    if not BASELINE.exists() and "--init" not in sys.argv:
+        raise SystemExit("no baseline: refusing to invent one; pass --init to create it first time")
     old = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}
     new = measure()
-    up = {f: (old.get(f, 0), n) for f, n in new.items() if BASELINE.exists() and n > old.get(f, 0)}
+    up = {f: (old.get(f, 0), n) for f, n in new.items() if n > old.get(f, 0) and BASELINE.exists()}
     if up:
         raise SystemExit(f"refusing to RAISE the baseline (was, now): {up}")
     BASELINE.parent.mkdir(exist_ok=True)
