@@ -94,11 +94,17 @@ def _waits(span: Span, ctx: Context) -> dict[str, float]:
     return got
 
 
-def _first_gate(span: Span, ctx: Context) -> dict[str, float]:
-    """implement: first claim to the first gate run starting. A gate with no recorded start
-    gives no boundary, so the stage is left unmeasured rather than guessed."""
-    firsts = [t for t in ctx.facts.starts_of(span.item) if t >= span.first_claim]
-    return {"implement": min(firsts) - span.first_claim} if firsts else {}
+def _first_gate(span: Span, outs: list[Outcome], ctx: Context) -> dict[str, float]:
+    """implement: first claim to the first gate run starting. Unmeasured when no run recorded
+    a start, or when a verdict landed before the first start (an earlier run whose start
+    is missing would make the boundary a guess)."""
+    starts = [t for t in ctx.facts.starts_of(span.item) if t >= span.first_claim]
+    if not starts:
+        return {}
+    first = min(starts)
+    if any(span.first_claim <= o.at < first for o in outs):
+        return {}
+    return {"implement": first - span.first_claim}
 
 
 def _gates(runs: list[tuple[Outcome, float]]) -> dict[str, float]:
@@ -139,7 +145,7 @@ def _item_samples(span: Span, outs: list[Outcome], runs: list[tuple[Outcome, flo
     """stage -> the one figure this item gives it (absent when the log cannot say)."""
     return {
         **_waits(span, ctx),
-        **_first_gate(span, ctx),
+        **_first_gate(span, outs, ctx),
         **_gates(runs),
         **_merge(span, outs, ctx),
         **_rework(outs),
@@ -226,8 +232,12 @@ def build(ctx: Context, group_by: str = "") -> dict:
         "next": {
             "cli": cli,
             "mcp": mcp,
-            "note": "the slowest item's timeline names its biggest gap; "
-            "regroup with --group-by phase|kind|size|agent",
+            "note": (
+                "the slowest item's timeline names its biggest gap"
+                if slowest
+                else "no item has a claim-to-merge yet; regroup to see where the figures are"
+            )
+            + "; groups: phase, kind, size, agent",
         },
     }
 

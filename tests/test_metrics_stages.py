@@ -166,3 +166,12 @@ def test_a_gate_figure_alone_counts_as_a_figure_and_implement_needs_a_start():
     ans = run(log)
     assert ans.ok  # the gate run is a figure even where no stage reaches the minimum alone
     assert stages(ans)["implement"]["n"] == 0  # no gate.started: no boundary, not a guess
+
+
+def test_implement_is_unmeasured_when_an_earlier_run_has_no_recorded_start():
+    log = Log()
+    log.task("Q")
+    log.claim("a1", "Q", T0)
+    log.add("gate.passed", "Q", "a1", T0 + 10, gate="research", by="a1", evidence={"elapsed_s": 10})
+    log.add("gate.started", "Q", "a1", T0 + 100, gate=R)
+    assert stages(run(log))["implement"]["n"] == 0  # not 100: the first run began earlier
