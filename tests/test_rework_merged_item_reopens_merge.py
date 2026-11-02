@@ -53,7 +53,7 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
         )
         assert code == 0, out + err
         code, out, err = run_cli(
-            repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "e"
+            repo, "gate", "skip", "T1", "ci", "--reason", "the stale ci gate is reopened by the rework"
         )
         assert code == 0, out + err
     assert run_cli(repo, "merge", "T1")[0] == 0
@@ -67,7 +67,7 @@ def test_reclaiming_a_merged_item_reopens_the_stale_merge(repo):
     `merged_sha` and every gate outcome clear (no stale [x] survives to completion)."""
     _merged(repo, with_ci=True)
     before = fold(EventLog(repo).read_all(), strict=False).items["T1"]
-    assert before.gate_outcome("ci") == "passed"  # a stale ci outcome exists to be reopened
+    assert before.gate_outcome("ci") == "skipped"  # a stale ci outcome exists to be reopened
     assert before.gate_outcome("implement") == "passed"  # a stale implement pass exists too
     code, out, err = run_cli(repo, "--json", "claim", "T1")
     assert code == 0, out + err
