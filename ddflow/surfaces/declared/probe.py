@@ -14,6 +14,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("probe",),
         summary="would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell)",
         tool="ddflow_probe",
+        tier="standard",
         family="ddflow_lease",
         action="probe",
         description=(
