@@ -23,7 +23,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .archdeps import _dotted
-from .archifaces_scan import ALL_ENV, DYNAMIC, Site, sites_in  # noqa: F401  (re-exported)
+from .archifaces_scan import (  # noqa: F401  (re-exported)
+    AGENT_CLIS,
+    ALL_ENV,
+    DYNAMIC,
+    PLATFORM,
+    TOOLS,
+    Site,
+    sites_in,
+)
 
 # Where the committed ratchet baseline lives, relative to the repository root.
 BASELINE_PATH = "tests/arch_baselines/arch_interfaces.txt"
@@ -34,19 +42,15 @@ SELF_MODULES = ("ddflow.services.archifaces", "ddflow.services.archifaces_scan")
 KINDS = ("program", "protocol", "managed-file", "env", "network")
 _RUNNER = ("ddflow.infra.proc", "ddflow.infra.git")
 
-_AGENT_CLIS = ("claude", "codex", "kilo", "opencode", "vibe")
-_TOOLS = ("roborev", "gitleaks", "pre-commit", "pip-audit", "uv", "uvx", "npm", "npx", "node")
-_PLATFORM = ("python", "ddflow", "ddflow-mcp", "docker", "systemd-run", "sh", "bash")
-
 # (planned home task, modules already allowed) per program family; the default is ADP-tools.
 PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
     "git": ("ADP-git", ("ddflow.infra.git",)),
     "gh": ("ADP-forge", ("ddflow.infra.forge",)),
     "glab": ("ADP-forge", ("ddflow.infra.forge",)),
     DYNAMIC: ("ADP-tools", _RUNNER),
-    **dict.fromkeys(_AGENT_CLIS, ("ADP-agent-lanes", ())),
-    **dict.fromkeys(_TOOLS, ("ADP-tools", ())),
-    **dict.fromkeys(_PLATFORM, ("ADP-platform", ())),
+    **dict.fromkeys(AGENT_CLIS, ("ADP-agent-lanes", ())),
+    **dict.fromkeys(TOOLS, ("ADP-tools", ())),
+    **dict.fromkeys(PLATFORM, ("ADP-platform", ())),
 }
 KIND_HOMES: dict[str, str] = {"managed-file": "ADP-managed-files", "env": "ADP-clock-env"}
 PROTOCOL_HOMES: dict[str, str] = {

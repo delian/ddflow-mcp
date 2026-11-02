@@ -372,9 +372,9 @@ def test_review_findings_stay_fixed(tmp_path: Path):
     # a URL is a host, never a managed file
     assert {f.family for f in c.families if f.kind == "managed-file"} == {".git/hooks"}
     assert "host:example.com" in {f.family for f in c.families}
-    # a shell LINE runs the shell: one `sh` site, its commands are not parsed
+    # a shell LINE runs the shell and names the known programs in it (no grammar is parsed)
     progs = {f.family for f in c.families if f.kind == "program"}
-    assert progs == {"sh"}
+    assert progs == {"sh", "git", "pre-commit"}
     # `os.environ[k] += x` reads k
     assert ("PATH", "ddflow/rev.py", _line(REVIEW, "+=")) in _sites(c, "env")
     # a bare string statement does not decide which protocol a jsonrpc literal belongs to
@@ -399,7 +399,7 @@ def test_second_round_review_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"more.py": MORE}))
     hooks = {s.line for f in c.families if f.family == ".git/hooks" for s in f.sites}
     assert hooks == {_line(MORE, 'Path(".git").joinpath'), _line(MORE, "c = p.joinpath")}
-    assert {f.family for f in c.families if f.kind == "program"} == {"sh"}
+    assert {f.family for f in c.families if f.kind == "program"} == {"sh", "git"}
 
 
 def test_the_census_modules_import_no_os_family():
@@ -416,7 +416,7 @@ def test_a_string_is_a_shell_line_only_for_shell_calls(tmp_path: Path):
         'subprocess.run("git status & uv sync", shell=True)\n'
     )
     c = I.scan(_tree(tmp_path, {"sh.py": src}))
-    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "sh"}
+    assert {f.family for f in c.families if f.kind == "program"} == {"foo|bar", "sh", "git", "uv"}
 
 
 THIRD = """\
@@ -435,7 +435,13 @@ def f():
 
 def test_third_round_review_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"third.py": THIRD}))
-    assert {f.family for f in c.families if f.kind == "program"} == {"sh", "gh", "uv"}
+    assert {f.family for f in c.families if f.kind == "program"} == {
+        "sh",
+        "git",
+        "pre-commit",
+        "gh",
+        "uv",
+    }
     assert {f.family for f in c.families if f.kind == "env"} == {"KW_VAR"}
     assert not [f for f in c.families if f.kind == "managed-file"]  # a bare f-string is prose
     assert I.parse_baseline(" # indented comment\n\n") == {}

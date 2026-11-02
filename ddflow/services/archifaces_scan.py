@@ -45,6 +45,13 @@ MCP_METHODS = frozenset(
         "notifications/tools/list_changed",
     }
 )
+# The programs ddflow knows by name: a shell line that names one as a word runs it.
+AGENT_CLIS = ("claude", "codex", "kilo", "opencode", "vibe")
+TOOLS = ("roborev", "gitleaks", "pre-commit", "pip-audit", "uv", "uvx", "npm", "npx", "node")
+PLATFORM = ("python", "ddflow", "ddflow-mcp", "docker", "systemd-run", "sh", "bash")
+KNOWN_PROGRAMS = frozenset({"git", "gh", "glab", *AGENT_CLIS, *TOOLS, *PLATFORM})
+_WORD = re.compile(r"[A-Za-z0-9_.+-]+")
+
 ACP_METHODS = frozenset(
     {
         "session/new",
@@ -217,11 +224,14 @@ class _Scan:
     def programs_of(self, e: ast.AST, *, shell: bool = False) -> list[str]:
         """The program one command argument names: the head of an argv list or of a name bound
         to one; a string is the program path itself (``os.execv``), or, for a shell call, a
-        shell LINE: the program run is the shell (``sh``) and its commands are not parsed here
-        (a shell grammar is not the census's business; no live site passes a literal line)."""
+        shell LINE: the shell (``sh``) plus every known program the line names as a word. The
+        census does not parse shell grammar (quotes, comments and continuations are a parser's
+        business, unbounded); naming a known program in any word position over-reports, never
+        under-reports. No live site passes a literal line."""
         if isinstance(e, ast.Constant) and isinstance(e.value, str):
             if shell:
-                return ["sh"]
+                named = sorted(w for w in set(_WORD.findall(e.value)) if w in KNOWN_PROGRAMS)
+                return ["sh", *(w for w in named if w != "sh")]
             return [_base(e.value)] if e.value else [DYNAMIC]
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
