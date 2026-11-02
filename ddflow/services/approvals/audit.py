@@ -8,6 +8,7 @@ verb's level, and the standing limits of the channels in use). All read the fold
 from __future__ import annotations
 
 import time
+from datetime import timedelta
 from typing import Any
 
 from ...config import Config
@@ -17,8 +18,6 @@ from ..ask import engine as E
 from . import harness as H
 from . import policy as PO
 from . import relayed as RL
-
-DAY_S = 86400
 
 
 def _commands(state) -> list[dict[str, Any]]:
@@ -173,7 +172,7 @@ def _red_base_note(cfg: Config, state, now: float) -> list[str]:
         for r in _commands(state)
         if r["policy"]
         and r["answered_by"] == "policy:baseline_red_auto"
-        and now - clock.epoch(r["answered_at"], default=0.0) <= DAY_S
+        and now - clock.epoch(r["answered_at"], default=0.0) <= timedelta(days=1).total_seconds()
     )
     if not cfg.gates.baseline_red_rate_warn or recent < cfg.gates.baseline_red_rate_warn:
         return []
