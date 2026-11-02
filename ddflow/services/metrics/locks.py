@@ -183,7 +183,7 @@ def _declared(ctx: Context, probes: Probes | None, minimum: int, cache: dict) ->
         inside = [m for m in lands if ctx.in_scope(item, m.at)]
         if not inside:
             continue
-        declared = _declared_of(ctx, item, inside[0].at)
+        declared = tuple(sorted({g for m in inside for g in _declared_of(ctx, item, m.at)}))
         actual = _actual(ctx, probes, item, cache, windowed=True)
         if not declared or actual is None:
             continue
