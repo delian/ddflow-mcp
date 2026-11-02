@@ -160,7 +160,9 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
     for path in tracked:
         if not is_shared(path, cfg.pins.baseline_globs):
             continue
-        q = shlex.quote(path)
+        q = shlex.quote(
+            f"./{path}"
+        )  # ./ keeps a leading - or : from reading as an option or pathspec magic
         staged = G.run(
             repo, "show", f":./{path}"
         )  # ./ keeps `1:x` a path, not a stage; the blob a commit would carry
