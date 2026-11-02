@@ -49,23 +49,25 @@ class FakeMcpServer:
             return W.err(mid, W.INVALID_PARAMS, "`params` must be an object")
         params = msg.get("params") or {}
         if method == "initialize":
-            want = params.get("protocolVersion")
-            version = want if want in W.SERVED_VERSIONS else W.SERVED_VERSIONS[0]
-            return W.ok(
-                mid,
-                {
-                    "protocolVersion": version,
-                    "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": self.server_info,
-                    "instructions": self.instructions,
-                },
-            )
+            return W.ok(mid, self._initialize(params))
         if method == "ping":
             return W.ok(mid, {})
         if method == "tools/list":
             return W.ok(mid, {"tools": self.tools})
         if method != "tools/call":
             return W.err(mid, W.METHOD_NOT_FOUND, f"method not found: {method}")
+        return self._tools_call(mid, params)
+
+    def _initialize(self, params: dict[str, Any]) -> dict[str, Any]:
+        want = params.get("protocolVersion")
+        return {
+            "protocolVersion": want if want in W.SERVED_VERSIONS else W.SERVED_VERSIONS[0],
+            "capabilities": {"tools": {"listChanged": False}},
+            "serverInfo": self.server_info,
+            "instructions": self.instructions,
+        }
+
+    def _tools_call(self, mid: Any, params: dict[str, Any]) -> dict[str, Any]:
         name, args = params.get("name"), params.get("arguments", {})
         if not isinstance(name, str) or not isinstance(args, dict):
             return W.err(mid, W.INVALID_PARAMS, "tools/call needs a string `name` and object")
