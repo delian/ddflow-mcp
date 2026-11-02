@@ -11,23 +11,23 @@ from ddflow.services.perf import env as E
 
 
 def _reader(files: dict[str, str]):
-    return lambda p: files.get(p)
+    return files.get
 
 
 def _facts(**kw):
-    base = dict(
-        cpu_count=8,
-        load_ratio=0.1,
-        xdist_workers=4,
-        parallel_cap=3,
-        system="Linux",
-        python_version="3.12.4",
-        ddflow_version="0.2.10",
-        git_head="a" * 40,
-        cache="warm",
-        container=False,
-        cgroup="unlimited",
-    )
+    base = {
+        "cpu_count": 8,
+        "load_ratio": 0.1,
+        "xdist_workers": 4,
+        "parallel_cap": 3,
+        "system": "Linux",
+        "python_version": "3.12.4",
+        "ddflow_version": "0.2.10",
+        "git_head": "a" * 40,
+        "cache": "warm",
+        "container": False,
+        "cgroup": "unlimited",
+    }
     base.update(kw)
     return E.fingerprint(**base)
 

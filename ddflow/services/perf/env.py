@@ -99,21 +99,34 @@ def _num(v: int | None) -> object:
     return UNAVAILABLE if v is None else v
 
 
+@dataclass(frozen=True)
+class Raw:
+    """Already-probed facts; ``None`` or empty means the probe could not run."""
+
+    cpu_count: int | None
+    load_ratio: float | None
+    xdist_workers: int | None
+    parallel_cap: int | None
+    system: str
+    python_version: str
+    ddflow_version: str
+    git_head: str
+    cache: str | None
+    container: bool
+    cgroup: str
+
+
 def fingerprint(
+    raw: Raw | None = None,
     *,
-    cpu_count: int | None,
-    load_ratio: float | None,
-    xdist_workers: int | None,
-    parallel_cap: int | None,
-    system: str,
-    python_version: str,
-    ddflow_version: str,
-    git_head: str,
-    cache: str | None,
-    container: bool,
-    cgroup: str,
     load_bands: tuple[float, float] = DEFAULT_LOAD_BANDS,
+    **kw: object,
 ) -> Fingerprint:
+    r = raw or Raw(**kw)  # type: ignore[arg-type]
+    cpu_count, load_ratio, system = r.cpu_count, r.load_ratio, r.system
+    xdist_workers, parallel_cap = r.xdist_workers, r.parallel_cap
+    python_version, ddflow_version = r.python_version, r.ddflow_version
+    git_head, cache, container, cgroup = r.git_head, r.cache, r.container, r.cgroup
     vm = "unknown" if system == "Darwin" or (container and cgroup == UNAVAILABLE) else "no"
     facts: dict[str, object] = {
         "cpu_count": _num(cpu_count),
@@ -162,7 +175,7 @@ def collect(
         ratio = os.getloadavg()[0] / cpus if cpus else None
     except (OSError, AttributeError):
         ratio = None
-    return fingerprint(
+    raw = Raw(
         cpu_count=cpus,
         load_ratio=ratio,
         xdist_workers=xdist_workers,
@@ -174,5 +187,5 @@ def collect(
         cache=cache_state(cache_dirs),
         container=in_container(exists),
         cgroup=cgroup_state(read),
-        load_bands=load_bands,
     )
+    return fingerprint(raw, load_bands=load_bands)
