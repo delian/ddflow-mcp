@@ -54,7 +54,7 @@ def test_merge_releases_the_lease_and_a_waiter_can_claim_the_file(repo, monkeypa
     assert not _item(repo, "T1").get("lease"), "the merge landed but the lease is still held"
     code, out, err = run_cli(repo, "claim", "T2", agent="beta")
     assert code == 0, out + err
-    # the merge's own tree disposal is unchanged; the item and its recorded gates remain
+    # the merge only ends the lease: the item is not completed by it
     assert _item(repo, "T1")["state"] != "done"
 
 
