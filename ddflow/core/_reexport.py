@@ -14,9 +14,13 @@ the public keys of the map, so ``from pkg import *`` resolves the lazy names too
 package's final name-defining statement; a package that wants a narrower ``__all__`` sets its
 own AFTER this call.
 
-Installed from a package ``__init__.py`` with one line::
+Installed from a package ``__init__.py`` under the PRIVATE module name, so the helper
+itself never becomes a public name of the package (or of the ``__all__`` it writes)::
 
-    reexport(globals(), _SUBMODULE_OF, __name__)
+    from ddflow.core import _reexport
+    ...
+    _reexport.reexport(globals(), _SUBMODULE_OF, __name__)
+    del _reexport
 """
 
 from __future__ import annotations
