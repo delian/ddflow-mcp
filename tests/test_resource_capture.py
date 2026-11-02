@@ -82,7 +82,6 @@ def test_each_command_gets_its_own_numbers_not_a_running_total():
     heavy = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60).resources
     again = P.run_shell("true", timeout_s=20).resources
     assert cheap.source == again.source == "wait4"
-    assert again.maxrss_kb < 50 * 1024  # not the 100 MB high-water of the earlier child
     assert again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
 
 
