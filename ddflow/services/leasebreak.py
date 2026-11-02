@@ -88,6 +88,13 @@ def progress_at(events: Iterable[Any], item_id: str, lease: Lease, activity: Act
     return best
 
 
+def _live_gate(repo, item_id: str) -> bool:
+    """True when a command gate run on ``item_id`` is still alive on this host: a running
+    gate is work in flight, never idleness (B-long-ci-run-holds-globs-while-waiter-asks-yield)."""
+    from .gates import running as RUN
+
+    return bool(repo is not None and RUN.live_runs(repo, item_id))
+
 def judge(
     cfg,
     events: Iterable[Any],
@@ -96,12 +103,15 @@ def judge(
     waiters: Iterable[str],
     now: float,
     activity: Activity,
+    repo=None,
 ) -> Verdict | None:
     """The verdict on a lease contended by ``waiters``, or None when nobody contends it or
     it is within its limits (or the limits are off)."""
     waiting = tuple(sorted(set(waiters)))
     idle_max, hold_max = cfg.lease.idle_max_s, cfg.lease.hold_max_s
     if not waiting or not (idle_max or hold_max):
+        return None
+    if _live_gate(repo, item_id):
         return None
     idle = now - progress_at(events, item_id, lease, activity)
     breakable = bool(hold_max) and idle >= hold_max
@@ -121,13 +131,15 @@ def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
     return out
 
 
-def verdicts(st: State, cfg, events: list[Any], now: float, activity: Activity) -> list[Verdict]:
+def verdicts(
+    st: State, cfg, events: list[Any], now: float, activity: Activity, repo=None
+) -> list[Verdict]:
     """Every yield-requested or breakable lease standing now (recorded waits only), by idle time."""
     live = st.active_leases(now, cfg.lease.grace_s)
     out = []
     for item_id, waiters in contended(st, cfg, now).items():
         lease = live.get(item_id)
-        v = lease and judge(cfg, events, item_id, lease, waiters, now, activity)
+        v = lease and judge(cfg, events, item_id, lease, waiters, now, activity, repo)
         if v:
             out.append(v)
     return sorted(out, key=lambda v: (-v.idle_s, v.item))
@@ -199,7 +211,7 @@ def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
     """The operator's lines for every standing yield-requested or breakable lease, each
     with its idle time (DX-lease-yield-doctor-status): `ddflow doctor` lists what the
     holder's brief and heartbeat only tell the holder."""
-    return [yield_text(v) for v in verdicts(st, cfg, events, time.time(), tree_activity(root))]
+    return [yield_text(v) for v in verdicts(st, cfg, events, time.time(), tree_activity(root), root)]
 
 
 def stale_glob_notes(repo: Path, st: State) -> list[str]:

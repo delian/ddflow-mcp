@@ -89,7 +89,7 @@ def _progress_block(log, cfg, st, held_ids: list[str]) -> str:
     now = time.time()
     lines = [
         f"- {LB.yield_text(v)}"
-        for v in LB.verdicts(st, cfg, events, now, LB.tree_activity(log.root))
+        for v in LB.verdicts(st, cfg, events, now, LB.tree_activity(log.root), log.root)
         if v.item in held_ids
     ]
     lines += [f"- {LB.notice_text(n)}" for n in LB.broken_notices(events, log.agent_id, st)]

@@ -109,6 +109,20 @@ def dead_runs(repo: Path, item: str = "") -> list[Marker]:
     return out
 
 
+def live_runs(repo: Path, item: str) -> list[Marker]:
+    """Markers of ``item`` whose process is still alive on this host (the reverse of
+    `dead_runs`): a running gate is work in flight, whatever commit it runs on."""
+    d = _dir(repo, item)
+    if not d.is_dir():
+        return []
+    out: list[Marker] = []
+    for path in sorted(d.glob("*.running.*.json")):
+        m = _read(path)
+        if m is not None and H.same_host(m.host) and _is_live(m):
+            out.append(m)
+    return out
+
+
 def _is_live(m: Marker) -> bool:
     now = proc_start(m.pid) if m.pid_start else ""
     return alive(m.pid) and not (m.pid_start and now and now != m.pid_start)
