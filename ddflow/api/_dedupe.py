@@ -8,7 +8,9 @@ prompt or note -- calls ``check_add`` BEFORE it writes, and applies what comes b
 * an **extension** -- the text goes onto the existing record as a ``record.extended``
   and no new id is made -- when the answer is ``merge_into X`` / ``duplicate_of X`` and X
   is still open and unclaimed (or the text is an exact copy of such a record); ``extends X``
-  is never an extension: it files a new record linked to X (see ``LINK_ONLY_KINDS``);
+  extends only a kind outside ``LINK_ONLY_KINDS`` such as a bug, lesson or memory, and files
+  a new record linked to X for a kind in ``LINK_ONLY_KINDS`` (task, phase, research,
+  decision);
 * otherwise **fields** for the add event: a link to X when X is claimed, in progress or
   closed (a NEW record, so nothing is lost), and the ``dedupe`` answer, which is recorded
   for every answer including ``new``.
@@ -196,9 +198,9 @@ def record_state(
 
 def extendable(st, rid: str, kind: str, *, now: float | None = None, grace_s: int = 0) -> bool:
     """May text be appended to ``rid``? Only while nobody is relying on it as written: an
-    OPEN, UNCLAIMED task or phase, an unresolved bug, a lesson or decision not superseded,
-    research, a live memory. Claimed, running, done, fixed or superseded: file a new
-    record that links to it instead."""
+    OPEN, UNCLAIMED task or phase, an unresolved bug, a lesson not superseded, research, a
+    live memory. A decision is NEVER appended to (D-no-deletion). Claimed, running, done,
+    fixed, superseded or a decision: file a new record that links to it instead."""
     if kind in ("task", "phase"):
         it = st.items.get(rid)
         return bool(it and it.state == "open" and not _held(it, now, grace_s))
@@ -209,8 +211,9 @@ def extendable(st, rid: str, kind: str, *, now: float | None = None, grace_s: in
         ls = st.lessons.get(rid)
         return bool(ls and not ls.superseded_by)
     if kind == "decision":
-        dc = st.decisions.get(rid)
-        return bool(dc and not dc.superseded_by and dc.status in ("", "accepted", "proposed"))
+        # Never editable in place (D-no-deletion; B-decision-extends-mutates-old-record):
+        # no answer appends text or globs to a decision.
+        return False
     return kind in ("research", "memory")
 
 
