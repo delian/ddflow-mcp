@@ -126,8 +126,8 @@ def _breaker_streak(pair: list[dict[str, Any]]) -> int:
     """Rejections in a row, newest ANSWER first, up to an acceptance (answer order, not the
     order the suggestions were sent in)."""
     streak = 0
-    for r in sorted(pair, key=_answered_at, reverse=True):
-        if r["state"] in (ACCEPTED, APPLIED):
+    for r in sorted(pair, key=lambda r: (_answered_at(r), r["id"]), reverse=True):
+        if r["state"] in (ACCEPTED, APPLIED, "countered"):
             break
         streak += r["state"] == REJECTED
     return streak
@@ -196,6 +196,7 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
     t = _now(now)
     _check_caps(cfg, _state(log), sender, to_item, to_agent, shp.files, t)
     sid = sid or new_id()
+    blob = R.store_blob(log.root, clean)  # content-addressed: an unused one is inert
     ref, verdict = "", probe or R.UNAVAILABLE
     if repo is not None:
         ref_try = R.ref_name(to_item, sid)
@@ -206,7 +207,6 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
                 "on their branch and propose again"
             )
         ref, verdict = cut.ref, cut.probe
-    blob = R.store_blob(log.root, clean)  # after the cut: a refused patch leaves no blob
     log.append(
         "suggestion.proposed",
         sid,

@@ -48,8 +48,15 @@ def _part(text: str, fallback: str) -> str:
 
 
 def ref_name(owner: str, sid: str) -> str:
-    """`refs/ddflow/suggest/OWNER/ID`, each part made a safe ref component."""
-    return f"{NAMESPACE}/{_part(owner, 'owner')}/{_part(sid, 'id')}"
+    """`refs/ddflow/suggest/OWNER/ID`, each part made a safe ref component. A part that had to
+    be changed gets a short digest of the original appended, so two different inputs never
+    share a ref."""
+
+    def one(text: str, fallback: str) -> str:
+        part = _part(text, fallback)
+        return part if part == text else f"{part}-{B.address(text.encode())[7:15]}"
+
+    return f"{NAMESPACE}/{one(owner, 'owner')}/{one(sid, 'id')}"
 
 
 def store_blob(root: Path | str, patch: str) -> str:

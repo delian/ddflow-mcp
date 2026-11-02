@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_FILE = re.compile(r"^diff --git a/(?P<a>.+?) b/(?P<b>.+)$")
+_FILE = re.compile(r'^diff --git "?a/(?P<a>.+?)"? "?b/(?P<b>.+?)"?$')
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
 
@@ -57,6 +57,9 @@ def shape(patch: str) -> Shape:
         cut = next((i for i, ln in enumerate(lines) if ln == "---"), -1)
         lines = lines[cut + 1 :] if cut >= 0 else []
     for line in lines:
+        if (old > 0 or new > 0) and _FILE.match(line):
+            malformed = True  # a file header where the hunk header promised more lines
+            old = new = 0
         if old > 0 or new > 0:
             a, r, old, new = _body(line, old, new)
             added, removed = added + a, removed + r
