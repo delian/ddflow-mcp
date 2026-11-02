@@ -19,8 +19,9 @@ from .ports import port
 class Env(Protocol):
     """Process environment, read-only. Home: `ddflow.adapters.env` (`SystemEnv`); fake `FakeEnv`."""
 
-    def get(self, name: str, default: str = "") -> str:
-        """The variable's value, or `default` when it is not set."""
+    def get(self, name: str, default: str | None = None) -> str | None:
+        """The variable's value, or `default` (None unless given) when it is not set; an empty
+        value is returned as "", so unset and empty stay apart, as in `os.environ.get`."""
 
     def snapshot(self) -> dict[str, str]:
         """A copy of every variable now."""
@@ -29,7 +30,7 @@ class Env(Protocol):
 class SystemEnv:
     """The default adapter: `os.environ`, read live. Stateless."""
 
-    def get(self, name: str, default: str = "") -> str:
+    def get(self, name: str, default: str | None = None) -> str | None:
         return os.environ.get(name, default)
 
     def snapshot(self) -> dict[str, str]:

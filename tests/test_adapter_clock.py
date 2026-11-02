@@ -17,7 +17,7 @@ def clock_conformance(c: Clock) -> None:
     assert isinstance(w0, float) and isinstance(m0, float)
     c.sleep(0.0)
     c.sleep(-5)  # negative waits not at all and does not raise
-    assert c.monotonic() >= m0
+    assert c.monotonic() >= m0 and c.wall() >= w0 - 1  # nothing ran backwards
     now = c.now_utc()
     assert now.tzinfo is not None and now.utcoffset().total_seconds() == 0
     assert abs(now.timestamp() - c.wall()) < 5
@@ -65,3 +65,13 @@ def test_the_fake_moves_only_when_told_and_sleep_advances_both_clocks():
     assert (c.wall(), c.monotonic(), c.slept) == (103.0, 8.0, [3])
     c.jump_wall(-50)
     assert (c.wall(), c.monotonic()) == (53.0, 8.0)  # monotonic ignores a wall-clock change
+
+
+def test_the_fake_refuses_to_run_backwards():
+    import pytest
+
+    c = FakeClock()
+    with pytest.raises(ValueError):
+        c.advance(-1)
+    c.sleep(-1)  # like the port: a negative wait waits not at all
+    assert c.monotonic() == 1000.0 and c.wall() == 1_700_000_000.0

@@ -14,7 +14,7 @@ class FakeEnv:
     def __init__(self, values: Mapping[str, str] | None = None) -> None:
         self.values = dict(values or {})
 
-    def get(self, name: str, default: str = "") -> str:
+    def get(self, name: str, default: str | None = None) -> str | None:
         return self.values.get(name, default)
 
     def snapshot(self) -> dict[str, str]:

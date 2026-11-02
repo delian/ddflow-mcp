@@ -34,7 +34,9 @@ class FakeClock:
         self.advance(max(0.0, seconds))
 
     def advance(self, seconds: float) -> None:
-        """Move both clocks forward."""
+        """Move both clocks forward (a negative amount is refused: time does not run back)."""
+        if seconds < 0:
+            raise ValueError("a clock does not run backwards; use jump_wall for wall time")
         self._wall += seconds
         self._mono += seconds
 

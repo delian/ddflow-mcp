@@ -1,12 +1,13 @@
 """Ratchet (D-unify 4): no NEW direct clock or environment reads in core and services.
 
 `time.time()`, `time.monotonic()`, `os.environ` and `os.getenv` are counted with `ast` (so a
-docstring or comment never counts) per file under ddflow/core and ddflow/services. The
-baseline `tests/ratchets/clock_env.json` holds the count each file had when the ports landed;
-it only SHRINKS: a file may not read more, and a file that reads fewer must lower its number
-here (or drop its entry). Migrate a site by taking a `Clock` / `Env` argument
-(ddflow/adapters/clock.py, env.py). Regenerate after a migration with
-`uv run python -m tests.test_adapters_clock_env` and review the diff: it must only go down.
+docstring or comment never counts) per file under ddflow/core and ddflow/services, however the
+module was imported: `import time as t`, `from time import time as now`, `from os import
+environ`. The baseline `tests/ratchets/clock_env.json` holds the count each file had when the
+ports landed; it only SHRINKS: a file may not read more, and a file that reads fewer must lower
+its number here (or drop its entry). Migrate a site by taking a `Clock` / `Env` argument
+(ddflow/adapters/clock.py, env.py). After a migration, lower the baseline with
+`uv run python -m tests.test_adapters_clock_env`; it refuses to raise any number.
 """
 
 from __future__ import annotations
@@ -18,24 +19,49 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = Path(__file__).resolve().parent / "ratchets" / "clock_env.json"
 LAYERS = ("ddflow/core", "ddflow/services")
+#: module -> the attributes of it that are a direct read
+READS = {"time": {"time", "monotonic"}, "os": {"environ", "getenv"}}
 
 
-def _tail(node: ast.expr) -> str:
-    return node.id if isinstance(node, ast.Name) else getattr(node, "attr", "")
+def _aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
+    """(local name -> module it stands for, local name -> 'module.attr' it was imported as)."""
+    mods: dict[str, str] = {}
+    names: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name in READS:
+                    mods[a.asname or a.name] = a.name
+        elif isinstance(node, ast.ImportFrom) and node.module in READS and not node.level:
+            for a in node.names:
+                if a.name in READS[node.module]:
+                    names[a.asname or a.name] = f"{node.module}.{a.name}"
+    return mods, names
 
 
 def count_reads(tree: ast.AST) -> int:
-    """Direct reads: `time.time()`, `time.monotonic()` (any alias ending in `time`),
-    `os.environ` and `os.getenv`."""
+    """Direct reads of the host clock or environment. A receiver counts when it is a name bound
+    to the module (`time`, `os`, or an alias) or any `<x>.time` / `<x>.os` module reference
+    (`_leases.time.time()`); an injected port stored as `self._time` does not."""
+    mods, names = _aliases(tree)
     n = 0
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Attribute):
-            continue
-        base = _tail(node.value)
-        if node.attr in ("time", "monotonic") and base.lstrip("_") == "time":
+        if isinstance(node, ast.Name) and node.id in names and isinstance(node.ctx, ast.Load):
             n += 1
-        elif node.attr in ("environ", "getenv") and base == "os":
-            n += 1
+        elif isinstance(node, ast.Attribute):
+            v = node.value
+            if isinstance(v, ast.Name):
+                mod = mods.get(v.id)
+            else:
+                mod = v.attr if isinstance(v, ast.Attribute) and v.attr in READS else None
+                if (
+                    isinstance(v, ast.Attribute)
+                    and isinstance(v.value, ast.Name)
+                    and v.value.id == "self"
+                ):
+                    mod = None
+            if mod and node.attr in READS[mod]:
+                n += 1
     return n
 
 
@@ -49,9 +75,17 @@ def measure() -> dict[str, int]:
     return found
 
 
-def test_the_counter_sees_calls_and_attributes_but_not_text():
-    src = 'import os, time\n"""time.time() os.environ"""\n# os.getenv\nx = time.time() + _t.time.monotonic()\ny = os.environ.get("A") or os.getenv("B")\n'
+def test_the_counter_sees_calls_and_aliases_but_not_text_or_an_injected_port():
+    src = (
+        'import os, time\n"""time.time() os.environ"""\n# os.getenv\n'
+        "x = time.time() + _t.time.monotonic()\ny = os.environ.get('A') or os.getenv('B')\n"
+    )
     assert count_reads(ast.parse(src)) == 4
+    aliased = "import time as mytime\nfrom time import time as now\nfrom os import environ\n"
+    aliased += "def f(): return mytime.monotonic() + now() + environ['HOME']\n"
+    assert count_reads(ast.parse(aliased)) == 3  # each from-import counts where it is used
+    port = "class X:\n    def __init__(self, c): self._time = c\n    def f(self): return self._time.monotonic()\n"
+    assert count_reads(ast.parse(port)) == 0
 
 
 def test_no_file_reads_the_clock_or_environment_directly_more_than_its_baseline():
@@ -75,5 +109,10 @@ def test_the_baseline_is_tight_so_a_migration_must_lower_it():
 
 
 if __name__ == "__main__":
+    old = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}
+    new = measure()
+    up = {f: (old.get(f, 0), n) for f, n in new.items() if old and n > old.get(f, 0)}
+    if up:
+        raise SystemExit(f"refusing to RAISE the baseline (was, now): {up}")
     BASELINE.parent.mkdir(exist_ok=True)
-    BASELINE.write_text(json.dumps(measure(), indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    BASELINE.write_text(json.dumps(new, indent=1, sort_keys=True) + "\n", encoding="utf-8")

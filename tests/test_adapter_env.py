@@ -11,9 +11,10 @@ VAR = "DDFLOW_TEST_ENV_PORT"
 
 
 def env_conformance(e: Env) -> None:
-    """The factories set VAR=on and leave VAR_MISSING unset."""
+    """The factories set VAR=on and VAR_EMPTY="" and leave VAR_MISSING unset."""
     assert e.get(VAR) == "on"
-    assert e.get(VAR + "_MISSING") == ""
+    assert e.get(VAR + "_MISSING") is None
+    assert e.get(VAR + "_EMPTY") == ""  # set but empty is not unset
     assert e.get(VAR + "_MISSING", "dflt") == "dflt"
     snap = e.snapshot()
     assert snap[VAR] == "on"
@@ -23,12 +24,17 @@ def env_conformance(e: Env) -> None:
 
 def _real(monkeypatch) -> E.SystemEnv:
     monkeypatch.setenv(VAR, "on")
+    monkeypatch.setenv(VAR + "_EMPTY", "")
     monkeypatch.delenv(VAR + "_MISSING", raising=False)
     return E.SystemEnv()
 
 
 CONFORMANCE = {
-    "Env": {"real": _real, "fake": lambda cls: cls({VAR: "on"}), "cases": env_conformance}
+    "Env": {
+        "real": _real,
+        "fake": lambda cls: cls({VAR: "on", VAR + "_EMPTY": ""}),
+        "cases": env_conformance,
+    }
 }
 
 
@@ -47,7 +53,7 @@ def test_the_adapter_reads_the_live_environment_each_call(monkeypatch):
 def test_the_fake_never_sees_the_machine_environment(monkeypatch):
     monkeypatch.setenv(VAR, "host")
     f = FakeEnv()
-    assert f.get(VAR) == "" and f.snapshot() == {}
+    assert f.get(VAR) is None and f.snapshot() == {}
     f.set(VAR, "x")
     assert f.get(VAR) == "x"
     f.unset(VAR)
