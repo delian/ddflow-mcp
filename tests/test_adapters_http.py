@@ -324,17 +324,15 @@ def test_the_fake_raises_an_exception_instance_as_given():
 
 # -- the contract's blind spot: import-linter sees ROOTS (`urllib`, `http`) -------------
 
-#: What a module outside the home may still import from the network roots, as (module,
+#: What a module outside the home may still import from the network roots, as (file, module,
 #: name) -- name None for a plain `import`: string helpers, never a way to open a
-#: connection. `urllib.parse` is allowed anywhere. `http-home`'s baseline lists these
-#: modules only because the contract cannot tell `urllib.parse` from `urllib.request`; this
-#: test can, so a baseline entry cannot hide a `urllib.request` or `http.client` import.
+#: connection. `urllib.parse` (either form) is allowed anywhere. `http-home`'s baseline lists
+#: these modules only because the contract cannot tell `urllib.parse` from `urllib.request`;
+#: this test can, so a baseline entry cannot hide a `urllib.request` or `http.client` import,
+#: and the two odd ones are named per file.
 _ALLOWED_OUTSIDE_HOME = {
-    ("urllib.request", "url2pathname"),  # a file: URL to a path (install_info)
-    (
-        "socket",
-        None,
-    ),  # socket.gethostname (infra/hostinfo): not HTTP; a host-info home is a follow-up
+    ("ddflow/services/install_info.py", "urllib.request", "url2pathname"),  # file: URL -> path
+    ("ddflow/infra/hostinfo.py", "socket", None),  # gethostname: not HTTP; follow-up task
 }
 
 
@@ -352,6 +350,15 @@ def _network_imports(source: str) -> list[tuple[str, str | None]]:
     return out
 
 
+def _pure_helper(file: str, mod: str, name: str | None) -> bool:
+    """`urllib.parse` in either form, or one of the named per-file exceptions."""
+    return (
+        mod.startswith("urllib.parse")
+        or (mod, name) == ("urllib", "parse")
+        or (file, mod, name) in _ALLOWED_OUTSIDE_HOME
+    )
+
+
 def test_no_module_outside_the_home_can_open_a_connection():
     from pathlib import Path
 
@@ -361,7 +368,7 @@ def test_no_module_outside_the_home_can_open_a_connection():
         for path in sorted(root.rglob("*.py"))
         if path != root / "adapters" / "http.py"
         for mod, name in _network_imports(path.read_text("utf-8"))
-        if not mod.startswith("urllib.parse") and (mod, name) not in _ALLOWED_OUTSIDE_HOME
+        if not _pure_helper(path.relative_to(root.parent).as_posix(), mod, name)
     ]
     assert not offenders, (
         "only ddflow/adapters/http.py may open connections (urllib.request, urllib.error, "
@@ -375,6 +382,10 @@ def test_the_blind_spot_check_sees_a_network_import_hiding_behind_an_allowed_roo
         ("http.client", "HTTPConnection"),
     ]
     assert _network_imports("from . import http\nimport json\n") == []
+    assert _pure_helper("ddflow/a.py", "urllib", "parse")
+    assert not _pure_helper("ddflow/a.py", "socket", None)  # only hostinfo may import socket
+    assert not _pure_helper("ddflow/a.py", "urllib", "request")
+    assert _pure_helper("ddflow/infra/hostinfo.py", "socket", None)
 
 
 def test_cancelling_a_hedged_copy_aborts_the_connection_the_client_handed_over():
@@ -395,3 +406,13 @@ def test_cancelling_a_hedged_copy_aborts_the_connection_the_client_handed_over()
     assert Handle.aborted == 2 and token.cancelled
     sock = type("S", (), {"shutdown": lambda self, how: (_ for _ in ()).throw(OSError("gone"))})()
     R._abort(H._Tracked(sock))
+
+
+def test_the_fake_hands_on_connect_a_connection_that_records_abort():
+    f = FakeHttpClient().when(body="x")
+    got = []
+    f.request("GET", "http://a/", timeout=1, on_connect=got.append)
+    f.request("GET", "http://a/", timeout=1)
+    assert got == f.connections and len(got) == 1  # only the request that asked got one
+    got[0].abort()
+    assert f.connections[0].aborted

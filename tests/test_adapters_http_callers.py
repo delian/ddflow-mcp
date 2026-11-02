@@ -67,3 +67,24 @@ def test_docs_link_silence_carries_the_reason_not_a_stack_trace():
     http = FakeHttpClient().when(raises="connect_timeout")
     res = N.check_remote(_texts("https://e.test/a"), 1, http)
     assert "timed out" in res.unavailable and not res.findings
+
+
+@pytest.mark.parametrize(
+    ("script", "alive"),
+    [
+        ({"status": 200}, True),
+        ({"status": 401}, True),  # a server answering 401/404 still is a server
+        ({"status": 404}, True),
+        ({"status": 500}, False),
+        ({"raises": "connection"}, False),
+        ({"raises": "timeout"}, False),
+        ({"raises": "protocol"}, False),
+    ],
+)
+def test_the_reviewer_url_probe_counts_any_non_5xx_answer_as_listening(monkeypatch, script, alive):
+    from ddflow.services import review as R
+
+    http = FakeHttpClient().when(**script)
+    monkeypatch.setattr(R, "_client", lambda: http)
+    assert R._url_ok("http://example.test/v1") is alive
+    assert http.calls[0].raise_for_status is False

@@ -59,6 +59,18 @@ class HttpCall:
     raise_for_status: bool
 
 
+class FakeConnection:
+    """What `on_connect` receives from the fake: the handle a real client hands over, with
+    `abort()` recorded instead of a socket shut."""
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.aborted = False
+
+    def abort(self) -> None:
+        self.aborted = True
+
+
 @dataclass
 class _Rule:
     method: str | None
@@ -76,6 +88,8 @@ class FakeHttpClient:
     added; the first whose method and URL match answers (a `once` rule is then spent)."""
 
     calls: list[HttpCall] = field(default_factory=list)
+    #: One `FakeConnection` per request that was given an `on_connect`, in call order.
+    connections: list[FakeConnection] = field(default_factory=list)
     _rules: list[_Rule] = field(default_factory=list)
 
     def when(
@@ -118,6 +132,9 @@ class FakeHttpClient:
             HttpCall(method, url, dict(headers or {}), body, timeout, max_bytes, raise_for_status)
         )
         require_http_url(url)
+        if on_connect is not None:  # a real client calls it once the socket is connected
+            self.connections.append(FakeConnection(url))
+            on_connect(self.connections[-1])
         for rule in self._rules:
             if rule.once and rule.used:
                 continue

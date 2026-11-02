@@ -283,12 +283,12 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
     silently covered two thirds of the backends.
     """
 
+    data = json.dumps(payload).encode(
+        "utf-8"
+    )  # a payload that cannot be encoded is the caller's bug
     try:
         resp = _post(
-            rewrite_localhost(url),
-            json.dumps(payload).encode("utf-8"),
-            {"Content-Type": "application/json", **headers},
-            timeout_s,
+            rewrite_localhost(url), data, {"Content-Type": "application/json", **headers}, timeout_s
         )
         return json.loads(resp.body.decode("utf-8", "replace")), ""
     except HttpStatusError as exc:
@@ -453,10 +453,11 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     if not got.value and got.reason:
         return "", got.reason
     key = got.value
+    data = json.dumps(payload).encode("utf-8")  # outside the try: see `_post_json`
     try:
         resp = _post(
             rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
-            json.dumps(payload).encode("utf-8"),
+            data,
             {
                 "Content-Type": "application/json",
                 **({"Authorization": f"Bearer {key}"} if key else {}),
