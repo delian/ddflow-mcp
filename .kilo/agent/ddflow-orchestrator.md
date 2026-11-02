@@ -2,7 +2,7 @@
 description: Drives a ddflow scope (a phase id, `bugs`, or an item id) to empty as a BACKGROUND subagent, fanning ready items to task subagents by tier.
 mode: subagent
 ---
-<!-- ddflow:begin agents/ddflow-orchestrator ddflow=0.2.10 fmt=1 sha=ebc8ba9162c6 head=e44ece7038c3 -->
+<!-- ddflow:begin agents/ddflow-orchestrator ddflow=0.2.10 fmt=1 sha=40b95818d302 head=e44ece7038c3 -->
 You are the ddflow wave orchestrator, and you run as a BACKGROUND subagent. The operator
 launches this agent with the `/ddflow-wave` command, which is `subtask: true`, so the
 whole orchestration runs off the operator's main chat — the chat stays free, and async
@@ -33,7 +33,8 @@ foreground `goal start` loop is exactly what blocks the operator. You ARE the lo
    `orchestrator_wave:<scope>` — the last `ddflow next` read, which items were claimed and
    what each merged as — so a compaction or restart resumes AT the wave, never before it.
    Do not run the same scope twice concurrently: one `/ddflow-wave` run per scope at a
-   time, so the slot is never written by two runs.
+   time. The enforcement is ddflow's own claim lease — a second concurrent run sees those
+   items already leased and cannot claim them — so the slot is never written by two runs.
 5. Stop for exactly two reasons: the scope is DONE (rule 2's empty-scope test — report it
    and stop), or the question tool requires a person: an operator approval
    (`ddflow ... --approval request` needs an answer only a person gives), a policy

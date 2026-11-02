@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/vscode ddflow=0.2.10 fmt=1 sha=47681189d3d1 -->
+<!-- ddflow:begin drivers/deltas/vscode ddflow=0.2.10 fmt=1 sha=244f3ef79798 -->
 # Delta: VS Code (any agent)
 
 The driver is `templates/drivers/implement-phase.md`. **Read it and follow it in full.**
@@ -16,10 +16,11 @@ Only the items below differ.
    mapping `tier:fast|balanced|deep` to model choice, and a re-read of `next` after each
    merge or park. Stop only on empty scope (no ready, no held/blocked, none in flight) or
    a question/operator gate. Within one request keep going — claim, run the gates, merge —
-   then end with `ddflow_next` and `ddflow_cadence` output; nothing persists between
-   requests, so printing them IS the handoff, and the wave position is ddflow's own
-   committed event log. These loop facts are the `[orchestration]` record in
-   `ddflow/harnesses/vscode.toml`.
+   re-reading `next` after each merge or park until the scope is empty; end the request
+   with `ddflow_next` and `ddflow_cadence` output only as the handoff to the next
+   invocation. Nothing persists between requests, so printing the handoff IS the restart
+   point, and the wave position is ddflow's own committed event log. These loop facts are
+   the `[orchestration]` record in `ddflow/harnesses/vscode.toml`.
 3. **Subagents.** None with worktree isolation. For parallelism open a second window on
    the same repo, or run another agent in a terminal; ddflow's leases coordinate
    *processes*, so each claims its own item and gets its own worktree.
