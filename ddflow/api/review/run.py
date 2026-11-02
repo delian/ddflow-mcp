@@ -30,6 +30,7 @@ from .diff import diff_for
 from .findings import _announce_rerun, _link_refuted
 from .gate import (
     _early_refusal,
+    _ends_on_signal,
     _intent_missing,
     _log_started,
     _misplaced,
@@ -52,6 +53,7 @@ from .scope import _budget, _cite_grant, _justification, _mark_partial_retry, _s
 from .triaging import _reviewed_snapshot, _why_outcome
 
 
+@_ends_on_signal
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,

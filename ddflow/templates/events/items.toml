@@ -17,9 +17,17 @@ name = "item.reopened"
 doc = "A completed item was reopened."
 
 [[kind]]
+name = "item.reworked"
+doc = "A re-claim reopened an item's already-merged state, clearing its merge and ci gates."
+
+[[kind]]
 name = "item.started"
 doc = "An item was started."
 
 [[kind]]
 name = "item.unblocked"
 doc = "A blocked item was unblocked."
+
+[[kind]]
+name = "phase.completed"
+doc = "A phase was deliberately retired after its tasks settled."

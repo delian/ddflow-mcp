@@ -100,18 +100,13 @@ def test_the_container_host_rewrite_applies_to_every_reviewer_backend(monkeypatc
     from ddflow.services import review as R
 
     monkeypatch.setattr(container, "in_container", lambda: True)
-    seen: list[str] = []
+    from ddflow.adapters.fakes.http import FakeHttpClient
 
-    class _Boom(OSError):
-        pass
-
-    def _fake_urlopen(req, timeout=0):
-        seen.append(req.full_url)
-        raise _Boom("not really opening a socket")
-
-    # Every reviewer request goes through `_open`'s opener (cancellable sockets).
-    monkeypatch.setattr(R._OPENER, "open", _fake_urlopen)
+    # Every reviewer request goes through the package's HTTP client (cancellable sockets).
+    http = FakeHttpClient().when(raises="connection")
+    monkeypatch.setattr(R, "_client", lambda: http)
     R._post_json("http://127.0.0.1:11434/v1/messages", {}, {}, 5)
+    seen = [c.url for c in http.calls]
     assert seen and "127.0.0.1" not in seen[0], (
         f"inside a container the reviewer's loopback endpoint is the CONTAINER's "
         f"loopback, so this request goes nowhere: {seen}"

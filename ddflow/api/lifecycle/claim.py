@@ -166,6 +166,26 @@ def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
     )
 
 
+def _reopen_stale_merge(log, claimed, item: str) -> dict[str, str]:
+    """A re-claim of an item that had already merged reopens that stale merge, or {}.
+
+    `merged_sha` (and the landing pair) survive a merge; a re-claim that binds a tree for
+    new work is a rework, and leaving the old merge standing made `gate run` answer "merged,
+    the merge removed its worktree" and record UNAVAILABLE over the new work while the
+    merge gate still showed [x] (B-rework-of-merged-item-keeps-stale-merge). The claim
+    writes `item.reworked`, which clears those and the item's gates, so the rework re-merges.
+    """
+    if claimed is None or not claimed.merged_sha:
+        return {}
+    log.append("item.reworked", item, {"sha": claimed.merged_sha})
+    return {
+        "reopened_merge": (
+            f"{item} had already merged ({claimed.merged_sha[:12]}); the re-claim reopened "
+            f"it: merged_sha and the item's gates are cleared, so it re-merges from scratch."
+        )
+    }
+
+
 def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
     """Take back what a refused claim acquired -- and ONLY that.
 
@@ -277,16 +297,16 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
     st = localize(fold(events, strict=False), log, time.time())
-    parked = st.items.get(item)
+    claimed = st.items.get(item)
     no_worktree = no_worktree or (
-        parked is not None and not needs_tree(parked)
+        claimed is not None and not needs_tree(claimed)
     )  # `no-worktree` tag
-    if parked is not None and parked.state == REVIEW and not force:
+    if claimed is not None and claimed.state == REVIEW and not force:
         # Claiming it would let a push ride into the request its reviewers already
         # judged -- and while it ran, `pr sync` would stop watching the request at all.
         return O.refused(
             "item.claimed",
-            f"{item} is in review ({parked.pr.url if parked.pr else 'its request'}); the "
+            f"{item} is in review ({claimed.pr.url if claimed.pr else 'its request'}); the "
             f"reviewers have it. `ddflow pr sync` brings it back if they request changes. "
             f"--force to take it back anyway.",
             id=item,
@@ -296,13 +316,13 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
     bug_globs = None
-    if want is None and parked is not None and not parked.globs and not parked.globs_declared:
-        want, bug_globs = _bug_default(st, cfg, parked, log.agent_id)  # its bug declared files
+    if want is None and claimed is not None and not claimed.globs and not claimed.globs_declared:
+        want, bug_globs = _bug_default(st, cfg, claimed, log.agent_id)  # its bug declared files
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
     if held_before:
-        want = _widened(want, prior, parked)
+        want = _widened(want, prior, claimed)
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
@@ -341,6 +361,10 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
     out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    # A re-claim of an already-merged item reopens its stale merge, recorded only once the
+    # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
+    # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
+    out.data.update(_reopen_stale_merge(log, claimed, item))
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
     if bug_globs:
