@@ -564,14 +564,15 @@ class _RehearsalSteps:
             )
         if done.returncode not in (O.OK, O.REFUSED):
             problems.append(f"complete exited {done.returncode}")
-        # a refusal (no independent reviewer ran) is the design: release, never force
+        # a refusal (no independent reviewer ran) is the design: release, never force. The merge
+        # already released the lease (nothing to release is fine, LK-release-at-merge)
         left = (
             self.ddflow(self.new, repo, "release", "DRY-1", agent=a)
             if done.returncode == O.REFUSED
             else done
         )
         took = self.ddflow(self.new, repo, "claim", "DRY-1", agent=b)
-        if done.returncode == O.REFUSED and (left.returncode != 0 or took.returncode != 0):
+        if done.returncode == O.REFUSED and (left.returncode not in (O.OK, O.NOTHING) or took.returncode != 0):
             problems.append(
                 f"after the honest release {b} could not take the task ({left.returncode}, {took.returncode})"
             )

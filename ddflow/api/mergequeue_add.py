@@ -18,6 +18,7 @@ from ..services import leases as L
 from ..services import mergequeue as MQ
 from ._base import _load
 from .lifecycle.author import _author_model, _recorded_identity
+from .mergequeue_start import start_integrator
 
 
 def _unit_tests(cfg, unit_tests: bool | None) -> bool:
@@ -150,6 +151,7 @@ def queue_add(
                 "lease_released": None,
                 "inbox_note": f"hand-over failed part-way ({exc!r}); `ddflow show {item}` says whether the lease is gone",
             }
+    run = _kick(repo, freed, agent)
     row = _row(repo, cfg, item)
     where = f"position {row.get('position', 0)}" if row.get("position") else entry.state
     return O.ok(
@@ -164,9 +166,28 @@ def queue_add(
             f"{item} {'queued' if added else 'was already queued'} ({where}); "
             f"`ddflow queue run` integrates it, `ddflow queue status` shows the line."
             + (f" {LR.ready_text(item)}" if freed.get("released") else "")
+            + (f" {run['text']}" if run.get("text") else "")
         ),
         **freed,
+        **({"integrator_run": run} if run else {}),
     )
+
+
+def _kick(repo: Path, freed: dict, agent: str) -> dict:
+    """After a release is accepted: start the integrator (single flight, see
+    `mergequeue_start`). {} when nothing was released; never fails the add."""
+    if not freed.get("released"):
+        return {}
+    try:
+        got = start_integrator(repo, agent=agent)
+    except Exception as exc:  # the entry holds custody; the tick starts it later
+        got = {"started": False, "reason": f"could not start the integrator ({exc!r})"}
+    got["text"] = (
+        f"Integrator started as job {got['job']} (log {got['log']})."
+        if got["started"]
+        else f"Integrator not started: {got['reason']}"
+    )
+    return got
 
 
 def _hand_over(repo: Path, cfg, log, it, entry: MQ.Entry, plan: dict) -> dict:
@@ -203,6 +224,7 @@ def queue_status(repo: Path, *, agent: str = "") -> O.Outcome:
         repo, window=cfg.merge_queue.eta_history, default_s=cfg.merge_queue.eta_default_s
     )
     who = MQ.holder(repo)
+    warn = LR.warning(repo, cfg, _st)
     waiting = [r for r in rows if r["state"] in (MQ.QUEUED, MQ.RUNNING)]
     return O.ok(
         "queue.status",
@@ -210,5 +232,6 @@ def queue_status(repo: Path, *, agent: str = "") -> O.Outcome:
         waiting=len(waiting),
         parked=sum(1 for r in rows if r["state"] == MQ.PARKED),
         integrator=who,
+        warning=warn,
         eta_s=waiting[-1]["eta_s"] if waiting else 0,
     )
