@@ -112,6 +112,12 @@ def test_a_command_that_never_started_has_no_resources(tmp_path):
 
 
 @posix_only
+def test_a_timed_out_capture_still_reports_a_delta():
+    c = P.capture([sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.3)
+    assert c.timed_out and c.resources is not None and c.resources.source == "delta"
+
+
+@posix_only
 def test_capture_reports_an_approximate_delta():
     c = P.capture([sys.executable, "-c", "print(1)"], timeout=20)
     assert c.resources is not None and c.resources.source == "delta"

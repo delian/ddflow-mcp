@@ -134,6 +134,8 @@ def capture(
             timeout=timeout,
             check=False,
         )
+    except subprocess.TimeoutExpired as exc:  # it started and was killed: what it cost, as a delta
+        return Captured(error=exc, resources=R.measure(None, before))
     except (subprocess.SubprocessError, OSError) as exc:
         return Captured(error=exc)
     # `run` is the seam the call sites patch, and `subprocess.run` hands back no Popen, so

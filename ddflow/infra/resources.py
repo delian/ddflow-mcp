@@ -28,14 +28,10 @@ except ImportError:  # pragma: no cover - Windows
 
 WAIT4, DELTA, UNAVAILABLE = "wait4", "delta", "unavailable"
 
-#: ru_maxrss is bytes on macOS, KB on Linux and the BSDs.
-_MAXRSS_DIVISOR = 1024 if sys.platform == "darwin" else 1
-
 
 def maxrss_kb(raw: int | float, platform: str | None = None) -> int:
     """``ru_maxrss`` as KB for ``platform`` (default: this host)."""
-    div = (1024 if platform == "darwin" else 1) if platform is not None else _MAXRSS_DIVISOR
-    return int(raw) // div
+    return int(raw) // (1024 if (platform or sys.platform) == "darwin" else 1)
 
 
 @dataclass(frozen=True)
