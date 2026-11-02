@@ -25,6 +25,20 @@ LAYERS = ("ddflow/core", "ddflow/services")
 READS = {"time": {"time", "monotonic"}, "os": {"environ", "getenv"}}
 
 
+def _from_import(node: ast.ImportFrom, mods: dict[str, str], names: dict[str, str]) -> None:
+    root = (node.module or "").split(".")[0]
+    if node.level or root not in READS:
+        return
+    for a in node.names:
+        if node.module != root:  # `from os.path import os` re-exports the module itself
+            if a.name in READS:
+                mods[a.asname or a.name] = a.name
+        elif a.name == "*":  # `from time import *` binds every public name
+            names.update({n: f"{root}.{n}" for n in READS[root]})
+        elif a.name in READS[root]:
+            names[a.asname or a.name] = f"{root}.{a.name}"
+
+
 def _aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
     """(local name -> module it stands for, local name -> 'module.attr' it was imported as)."""
     mods: dict[str, str] = {}
@@ -35,21 +49,8 @@ def _aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
                 root = a.name.split(".")[0]  # `import os.path` binds `os`
                 if root in READS:
                     mods[a.asname or root] = root
-        elif (
-            isinstance(node, ast.ImportFrom)
-            and not node.level
-            and (node.module or "").split(".")[0] in READS
-            and node.module not in READS
-        ):
-            for a in node.names:  # `from os.path import os` re-exports the module itself
-                if a.name in READS:
-                    mods[a.asname or a.name] = a.name
-        elif isinstance(node, ast.ImportFrom) and node.module in READS and not node.level:
-            for a in node.names:
-                if a.name == "*":  # `from time import *` binds every public name
-                    names.update({n: f"{node.module}.{n}" for n in READS[node.module]})
-                elif a.name in READS[node.module]:
-                    names[a.asname or a.name] = f"{node.module}.{a.name}"
+        elif isinstance(node, ast.ImportFrom):
+            _from_import(node, mods, names)
     return mods, names
 
 
