@@ -54,30 +54,40 @@ def on_base(
     if all(i in known for i in ids):
         return {"red": all(known[i] for i in ids), "cached": True, "base": base, "base_sha": sha,
                 "ids": ids, "still_failing": [i for i in ids if known[i]]}  # fmt: skip
-    todo = [i for i in ids if i not in known]
+    ran = _run_chunks(repo, sha, gdef, [i for i in ids if i not in known], run, ttl_s)
+    if isinstance(ran, str):  # why nothing could be measured
+        return {"red": False, "why": ran}
+    outcomes, cmds, seen = ran
+    known.update(seen)
+    red = all(known.get(i) for i in ids)
+    return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,
+            "outcome": "failed" if red or "failed" in outcomes else (outcomes[-1] if outcomes else ""),
+            "command": "; ".join(cmds), "ids": ids,
+            "still_failing": [i for i in ids if known.get(i)]}  # fmt: skip
+
+
+def _run_chunks(repo: Path, sha: str, gdef, todo: list[str], run, ttl_s: int):
+    """``(outcomes, commands, {id: failed on the base})`` of running ``todo`` on a scratch
+    checkout of ``sha`` in chunks under the evidence cap on listed failures (a run's list is
+    never cut); or the reason it could not."""
     outcomes: list[str] = []
     cmds: list[str] = []
+    known: dict[str, bool] = {}
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-base.", quiet=True) as tree:
         if tree.path is None:
-            return {"red": False, "why": "no scratch worktree of the base could be made"}
-        # Chunks stay under the evidence cap on listed failures, so a run's list is never cut.
+            return "no scratch worktree of the base could be made"
         for start in range(0, len(todo), CHUNK):
             part = todo[start : start + CHUNK]
             cmd = TS.run_command(gdef.command, part, tree.path)
             if not cmd:
-                return {"red": False, "why": "the gate's command does not run pytest"}
+                return "the gate's command does not run pytest"
             cmds.append(cmd)
             outcome, seen = _chunk(replace(gdef, command=cmd), tree.path, part, run)
             outcomes.append(outcome)
             if seen is not None:
                 known.update(seen)
                 cache_store(repo, sha, seen, ttl_s, gdef.command)
-    failing = [i for i in ids if known.get(i)]
-    red = all(known.get(i) for i in ids)
-    return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha,
-            "outcome": "failed" if red or "failed" in outcomes else (outcomes[-1] if outcomes else ""),
-            "command": cmds[0] if len(cmds) == 1 else "; ".join(cmds),
-            "ids": ids, "still_failing": failing}  # fmt: skip
+    return outcomes, cmds, known
 
 
 def _chunk(gdef, cwd: Path, part: list[str], run) -> tuple[str, dict[str, bool] | None]:
