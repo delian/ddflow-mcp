@@ -20,6 +20,7 @@ against both (tests/test_adapters_mcp.py).
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 import traceback
@@ -65,8 +66,12 @@ def err(mid: Any, code: int, message: str, *, data: Any = None) -> dict[str, Any
 
 
 def valid_id(mid: Any) -> bool:
-    """A JSON-RPC id is a string, a number or null; a boolean is none of them."""
-    return mid is None or (isinstance(mid, str | int | float) and not isinstance(mid, bool))
+    """A JSON-RPC id is a string, a finite number or null; a boolean and NaN are none."""
+    if isinstance(mid, bool):
+        return False
+    if isinstance(mid, float):
+        return math.isfinite(mid)
+    return mid is None or isinstance(mid, str | int)
 
 
 def encode(frame: dict[str, Any]) -> str:
