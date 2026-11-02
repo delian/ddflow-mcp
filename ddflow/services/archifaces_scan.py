@@ -284,24 +284,30 @@ class _Scan:
         if name in _GIT:
             self.add("program", "git", node)
         elif name in _SUBPROCESS | _PROC | _EXEC | _SHELL:
-            shell = name in _SHELL or any(
-                k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True
-                for k in node.keywords
-            )
-            for program in self.programs_of(arg, line=shell) if arg is not None else [DYNAMIC]:
-                self.add("program", program, node)
+            self._process(node, name, arg)
         elif name in ("shutil.which", "ddflow.infra.fsio.which"):
             lit = arg.value if isinstance(arg, ast.Constant) else None
             self.add("program", _base(lit) if isinstance(lit, str) else DYNAMIC, node)
         elif name in ("os.getenv", "os.getenvb"):
             self._env_arg(node, arg)
-        for prefix, family in _NET_PREFIX:
-            if name.startswith(prefix):
-                self.add("network", family, node, name)
-                if name.endswith("Connection") and isinstance(arg, ast.Constant):
-                    if isinstance(arg.value, str) and arg.value:  # a hard-coded endpoint
-                        self.add("network", f"host:{arg.value.lower()}", node, arg.value)
-                break
+        self._network(node, name, arg)
+
+    def _process(self, node: ast.Call, name: str, arg: ast.AST | None) -> None:
+        shell = name in _SHELL or any(
+            k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True
+            for k in node.keywords
+        )
+        for program in self.programs_of(arg, line=shell) if arg is not None else [DYNAMIC]:
+            self.add("program", program, node)
+
+    def _network(self, node: ast.Call, name: str, arg: ast.AST | None) -> None:
+        family = next((f for prefix, f in _NET_PREFIX if name.startswith(prefix)), "")
+        if not family:
+            return
+        self.add("network", family, node, name)
+        if name.endswith("Connection") and isinstance(arg, ast.Constant) and arg.value:
+            if isinstance(arg.value, str):  # a hard-coded endpoint
+                self.add("network", f"host:{arg.value.lower()}", node, arg.value)
 
     def _env_arg(self, node: ast.AST, arg: ast.AST | None) -> None:
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
