@@ -41,6 +41,15 @@ def test_the_fake_passes_the_digest_cases():
     digest_cases(FakeDigest())
 
 
-def test_the_fake_builds_no_more_than_it_keeps():
-    """`length` bounds the work: a huge `size` with `length=1` must not build a huge string."""
+def test_the_fake_builds_no_more_than_it_keeps(monkeypatch):
+    """`length` bounds the work: a huge `size` with `length=1` must not build a huge string,
+    counted in hash rounds, not in output length."""
+    import zlib
+
+    from ddflow.adapters.fakes import digest as module
+
+    rounds = []
+    real = zlib.crc32
+    monkeypatch.setattr(module.zlib, "crc32", lambda *a: rounds.append(1) or real(*a))
     assert len(FakeDigest().of_obj({"a": 1}, size=10**9, length=1)) == 1
+    assert len(rounds) <= 4, f"{len(rounds)} rounds for one kept character"

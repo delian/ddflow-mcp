@@ -301,10 +301,9 @@ def test_adapter_and_fake_pass_the_same_cases(name: str, monkeypatch):
     entry = _conformance(name)
     entry["cases"](entry["real"](monkeypatch))
     # always the REGISTERED fake; a family's `fake` factory only wires it up (cls -> instance)
-    made = entry.get("fake", lambda cls: cls())(F.FAKES[name])
-    assert isinstance(made, F.FAKES[name]), (
-        f"the `fake` factory must build the registered Fake{name}"
-    )
+    registered = F.FAKES[name]  # read before the factory runs: it may not swap the class
+    made = entry.get("fake", lambda cls: cls())(registered)
+    assert type(made) is registered, f"the `fake` factory must build the registered Fake{name}"
     entry["cases"](made)
 
 
