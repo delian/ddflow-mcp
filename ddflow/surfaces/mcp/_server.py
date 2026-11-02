@@ -16,6 +16,7 @@ from ddflow.core import agentname as AN
 
 from ...api.harness import HR
 from ...config import Config
+from ...core import outcome as O
 from ...infra import harness_identity
 from ...infra.log import EventLog
 from .. import mcp_next as _NEXT
@@ -210,6 +211,18 @@ class Server(_Handlers):
 
     def _invoke_marked(self, spec, args, agent, per_call, params):
         """Run a tool's typed `api`; the connection facts it needs are passed in."""
+        # `own_identity` tools act only as the CONNECTION's identity: the per-call
+        # `as_agent` is a claim the stdio transport does not authenticate, so naming a
+        # different agent to read or withdraw "that agent's own" asks is refused here
+        # rather than answered under a spoofable name (B6335d3482d).
+        if spec.get("own_identity") and self._someone_else(per_call):
+            own = self.agent or _default_agent(self.repo)[0]
+            return O.refused(
+                "mcp.identity",
+                f"the per-call name {per_call!r} does not name this connection ({own!r}); "
+                "over MCP the name is not authenticated, so reading or withdrawing asks "
+                "as another agent is refused (B6335d3482d).",
+            )
         # `called_from` only where the tool asks for it. `claim` is the one
         # operation whose behaviour depends on WHERE the caller is standing
         # rather than which repo it is in: an agent whose harness already put
