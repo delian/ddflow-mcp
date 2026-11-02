@@ -21,6 +21,22 @@ from .._base import _load
 from .pairs import link_record
 
 
+def _settled(a: str, b: str, st) -> bool:
+    """Whether the pair (a, b) is already answered, in either direction: a recorded link or
+    a `distinct` dismissal. A pair answered once is never re-offered or re-linked."""
+    for x, y in ((a, b), (b, a)):
+        lk = st.links.get(x)
+        if lk is not None and (y in lk.linked() or y in lk.dismissed()):
+            return True
+    return False
+
+
+def _dupe_entry(canonical: str, did: str, scores, fl: float) -> dict[str, Any]:
+    """One duplicate row: its id and its best score to the canonical member."""
+    k = (canonical, did) if canonical < did else (did, canonical)
+    return {"id": did, "score": scores.get(k, fl)}
+
+
 def bug_dedupe(
     repo: Path,
     *,
@@ -57,12 +73,14 @@ def bug_dedupe(
     groups, scores = bugsim.cluster(records, floor=fl, vectors=vectors)
     clusters: list[dict[str, Any]] = []
     applied: list[str] = []
+    failed: list[str] = []
     for group in groups:
         canonical = group[0]
         dupes = []
         for did in group[1:]:
-            k = (canonical, did) if canonical < did else (did, canonical)
-            dupes.append({"id": did, "score": scores.get(k, fl)})
+            if _settled(canonical, did, st):
+                continue  # already linked or dismissed: reported once, never linked twice
+            dupes.append(_dupe_entry(canonical, did, scores, fl))
         clusters.append(
             {"canonical": canonical, "duplicates": dupes, "cause": bugsim.shared_cause(records, group)}
         )
@@ -71,13 +89,12 @@ def bug_dedupe(
                 out = link_record(
                     repo, dup["id"], "duplicate_of", canonical, reason="bug dedupe --apply", agent=agent
                 )
-                if not out.ok:
-                    return out
-                applied.append(dup["id"])
+                (applied if out.ok else failed).append(dup["id"])
     data: dict[str, Any] = {
         "clusters": clusters,
         "count": len(clusters),
         "applied": applied,
+        "failed": failed,
         "floor": fl,
         "semantic": note or "semantic + overlap",
         "scanned": len(records),

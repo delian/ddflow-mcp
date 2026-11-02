@@ -325,13 +325,19 @@ def _bug_semantic(repo: Path, cfg: Config, st, rec: Record, found: sim.Assessmen
     added = [sim.Candidate(i, "bug", s, ("semantic",)) for i, s in hits if i not in existing]
     if not added:
         return found
-    asks = any(c.score >= cfg.dedupe.ask_threshold for c in added) and (
-        found.words >= cfg.dedupe.min_words
+    # The action is the STRONGEST of the token matcher's and the semantic add's -- a token
+    # `warn` is a warning, never downgraded to `show`, and a semantic hit asks the same way
+    # one does (score at the ask threshold with enough words). `found` is not `ask`/`off`
+    # here (those return early), so only `none`/`show`/`warn` reach this point.
+    asks = found.action == "warn" or (
+        any(c.score >= cfg.dedupe.ask_threshold for c in added)
+        and found.words >= cfg.dedupe.min_words
     )
-    action = "show"
-    if asks:
-        action = "ask" if cfg.dedupe.on_match == "ask" else "warn"
-    return sim.Assessment(action, [*found.candidates, *added], found.words)
+    if not asks:
+        return sim.Assessment("show", [*found.candidates, *added], found.words)
+    return sim.Assessment(
+        "ask" if cfg.dedupe.on_match == "ask" else "warn", [*found.candidates, *added], found.words
+    )
 
 
 def _bad_answer(st, rec: Record, answer: Answer) -> str:

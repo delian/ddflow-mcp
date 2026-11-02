@@ -115,6 +115,6 @@ def test_apply_links_only_the_real_duplicates_onto_the_canonical(repo):
     st = fold(EventLog(repo).read_all())
     dupes = st.links["B2"].linked(relation="duplicate_of")
     assert "B1" in dupes, f"the younger duplicate was not linked onto B1: {out}"
-    assert "B1" not in st.links["B3"].linked(), "a distinct bug was linked as a duplicate"
+    assert st.links["B3"].linked() == set(), "a distinct bug was linked as a duplicate"
     # The link settles the pair for `ddflow dupes` still (nothing is closed here).
     assert run_cli(repo, "dupes")[0] == 2

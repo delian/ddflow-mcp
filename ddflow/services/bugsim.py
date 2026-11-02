@@ -84,7 +84,7 @@ def semantic_hits(
     return scored[:limit] if limit else scored, ""
 
 
-def shared_cause(records: Mapping[str, Mapping[str, Any]], ids: Sequence[str]) -> str:
+def shared_cause(records: Sequence[Mapping[str, Any]], ids: Sequence[str]) -> str:
     """The content words every member of a cluster shares (the symptom/root-cause in
     common), in the canonical's order, capped. "" when none is common -- a cluster held
     together by semantics alone has its cause in the canonical's own headline, not here."""
@@ -126,15 +126,14 @@ def cluster(
     n = len(ids)
     if n < _MIN_CLUSTER:
         return [], {}
-    pos = {rid: i for i, rid in enumerate(ids)}
-    scores = _overlap_scores(records, pos)
+    scores = _overlap_scores(records)
     if vectors is not None:
         _merge_semantic(scores, ids, vectors)
     return [m for m in _components(ids, scores, floor) if len(m) >= _MIN_CLUSTER], scores
 
 
 def _overlap_scores(
-    records: Sequence[Mapping[str, Any]], pos: Mapping[str, int]
+    records: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[str, str], float]:
     """Every pair the TF-IDF index scores above zero, keyed canonically, best score kept."""
     index = sim.build(records)
@@ -143,7 +142,7 @@ def _overlap_scores(
         for other, s in index.query(r, limit=None):
             if other == r["id"] or s <= 0.0:
                 continue
-            k = _key(r["id"], other, pos)
+            k = _key(r["id"], other)
             scores[k] = max(scores.get(k, 0.0), s)
     return scores
 
@@ -159,7 +158,7 @@ def _merge_semantic(
         for j in range(i + 1, len(ids)):
             s = embed.cosine(vs[i], vs[j])
             if s > 0.0:
-                k = (ids[i], ids[j]) if ids[i] < ids[j] else (ids[j], ids[i])
+                k = _key(ids[i], ids[j])
                 scores[k] = max(scores.get(k, 0.0), s)
 
 
@@ -193,7 +192,6 @@ def _components(
     return [grouped[r] for r in order]
 
 
-def _key(a: str, b: str, pos: Mapping[str, int]) -> tuple[str, str]:
-    """The canonical (min position, then min id) key of an unordered pair."""
-    ia, ib = pos[a], pos[b]
-    return (a, b) if ia < ib else (b, a)
+def _key(a: str, b: str) -> tuple[str, str]:
+    """The canonical key of an unordered pair, by id string, as `cluster` documents."""
+    return (a, b) if a < b else (b, a)
