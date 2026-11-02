@@ -102,8 +102,22 @@ def patterns(
 
 
 def _hit(path: str, pats: list[str], pinned: list[str]) -> bool:
-    if any(globs.match(path, g, bare_any_depth=True) for g in pats):
-        return True
+    for g in pats:
+        if globs.match(path, g, bare_any_depth=True):
+            return True
+        # A literal directory glob `dir/*` leaves out the whole subtree, like `dir/**`:
+        # git's `*` stops at `/`, so `ddflow/templates/upgrade/unreleased/*` read as
+        # "did not apply" to a nested fragment (Be05960132b). Only a non-empty concrete
+        # directory prefix recurses -- `*/*` still names one level under any directory,
+        # and `/*` (or `//*`) still names the root level, not everything below it.
+        if g.endswith("/*"):
+            d = g[:-2].lstrip("/")
+            if (
+                d
+                and not any(c in d for c in "*?[")
+                and globs.match(path, d + "/**", bare_any_depth=True)
+            ):
+                return True
     # A pin file is an exact path (or a directory), never an any-depth pattern.
     return any(path == f or (f.endswith("/") and path.startswith(f)) for f in pinned)
 
