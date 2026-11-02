@@ -274,7 +274,7 @@ def prompt(
     if not cfg.session.log_prompts:
         return 0
     clean, n = redact(text, cfg)
-    if _recorded_recently(log, clean, auto_only=True):
+    if not relayed_by and _recorded_recently(log, clean, auto_only=True):
         return n
     log.append(
         "session.prompt",
