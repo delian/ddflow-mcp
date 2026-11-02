@@ -51,7 +51,10 @@ def test_a_signal_killed_command_is_unavailable_not_failed():
 
 def test_a_positive_shell_exit_is_not_read_as_a_signal_death():
     # `sh -c 'exit 137'` ran to a verdict and exited 137; no signal was delivered. It must
-    # read as FAILED, not as "killed by SIGKILL" (a shell's 128+N is ambiguous).
+    # read as FAILED, not as "killed by SIGKILL" (a shell's 128+N is ambiguous). 129 is
+    # SIGHUP's shell form (git exits 129 for a usage error): it is a cut-off signal, so no
+    # positive cut-off shell exit may be read as a signal death either.
+    assert classify_exit(_gate(), 129, "")[0] == "failed"
     assert classify_exit(_gate(), 137, "")[0] == "failed"
     assert classify_exit(_gate(), 143, "")[0] == "failed"
 
