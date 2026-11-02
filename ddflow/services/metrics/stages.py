@@ -94,15 +94,21 @@ def _waits(span: Span, ctx: Context) -> dict[str, float]:
     return got
 
 
+def _unstarted(span: Span, o: Outcome, ctx: Context) -> bool:
+    """A verdict whose own gate has no recorded start between the claim and the verdict."""
+    began = ctx.facts.starts.get((span.item, o.gate), ())
+    return not any(span.first_claim <= t <= o.at for t in began)
+
+
 def _first_gate(span: Span, outs: list[Outcome], ctx: Context) -> dict[str, float]:
     """implement: first claim to the first gate run starting. Unmeasured when no run recorded
-    a start, or when a verdict landed before the first start (an earlier run whose start
-    is missing would make the boundary a guess)."""
+    a start, or when a verdict at or before the first start belongs to a run with no start
+    of its own (that run began earlier, so the boundary would be a guess)."""
     starts = [t for t in ctx.facts.starts_of(span.item) if t >= span.first_claim]
     if not starts:
         return {}
     first = min(starts)
-    if any(span.first_claim <= o.at <= first for o in outs):
+    if any(span.first_claim <= o.at <= first and _unstarted(span, o, ctx) for o in outs):
         return {}
     return {"implement": first - span.first_claim}
 

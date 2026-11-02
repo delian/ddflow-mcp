@@ -186,3 +186,12 @@ def test_implement_is_unmeasured_when_a_verdict_lands_at_the_first_recorded_star
     )
     log.add("gate.started", "Q", "a1", T0 + 100, gate=R)
     assert stages(run(log))["implement"]["n"] == 0
+
+
+def test_an_instant_gate_that_did_start_keeps_implement_measured():
+    log = Log()
+    log.task("Q")
+    log.claim("a1", "Q", T0)
+    log.add("gate.started", "Q", "a1", T0 + 100, gate=R)
+    log.add("gate.passed", "Q", "a1", T0 + 100, gate=R, by="r", evidence={"elapsed_s": 0})
+    assert stages(run(log))["implement"]["p50_s"] == pytest.approx(100)
