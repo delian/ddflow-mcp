@@ -172,8 +172,9 @@ def test_naming_another_agent_reads_or_withdraws_nothing(proj):
     """The per-call `as_agent` is not authenticated: bot's connection naming mallory must
     neither list nor withdraw mallory's asks (B6335d3482d)."""
     theirs = ask(proj, "mallory", "T2")
-    _out, err = call(proj, "ddflow_session", agent="mallory", conn="bot", action="asks")
+    out, err = call(proj, "ddflow_session", agent="mallory", conn="bot", action="asks")
     assert err, "bot named mallory and read mallory's asks"
+    assert theirs not in json.dumps(out)  # the refused read leaks no ask id
     _out, err = call(
         proj, "ddflow_session", agent="mallory", conn="bot", action="withdraw", id=theirs
     )

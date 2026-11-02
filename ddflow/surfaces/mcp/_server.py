@@ -219,10 +219,9 @@ class Server(_Handlers):
             own = self.agent or _default_agent(self.repo)[0]
             return O.refused(
                 "mcp.identity",
-                f"the per-call name {per_call!r} does not name this connection ({own!r}), "
-                "and over MCP it is not authenticated: reading or withdrawing asks as "
-                "another agent is refused. Identify the connection as that agent "
-                f"(`ddflow_identify`) to manage {per_call}'s own asks.",
+                f"the per-call name {per_call!r} does not name this connection ({own!r}); "
+                "over MCP the name is not authenticated, so reading or withdrawing asks "
+                "as another agent is refused (B6335d3482d).",
             )
         # `called_from` only where the tool asks for it. `claim` is the one
         # operation whose behaviour depends on WHERE the caller is standing
