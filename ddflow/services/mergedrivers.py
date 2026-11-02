@@ -18,6 +18,7 @@ the merge will do. Git is reached through `infra.git` only.
 from __future__ import annotations
 
 import re
+import shlex
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -159,6 +160,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
     for path in tracked:
         if not is_shared(path, cfg.pins.baseline_globs):
             continue
+        q = shlex.quote(path)
         staged = G.run(
             repo, "show", f":./{path}"
         )  # ./ keeps `1:x` a path, not a stage; the blob a commit would carry
@@ -174,7 +176,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         if _MARK.search(text):
             bad.append(
                 f"{path} has conflict markers: resolve them by hand, keep both sides' entries,"
-                f" `LC_ALL=C sort -u -o {path} {path}`, `git add {path}`, then `ddflow pins drivers --check`"
+                f" `LC_ALL=C sort -u -o {q} {q}`, `git add -- {q}`, then `ddflow pins drivers --check`"
                 " (MCP: ddflow_pins document=drivers check=true)"
             )
             continue
@@ -187,7 +189,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         )
         if why:
             bad.append(
-                f"{path} {why} after the union merge: `LC_ALL=C sort -u -o {path} {path}`, `git add {path}`, then"
+                f"{path} {why} after the union merge: `LC_ALL=C sort -u -o {q} {q}`, `git add -- {q}`, then"
                 " `ddflow pins drivers --check`"
                 " (MCP: ddflow_pins document=drivers check=true)"
             )
