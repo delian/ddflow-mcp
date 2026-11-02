@@ -81,10 +81,17 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
             "command": gdef.command,
             "timed_out": True,
             "elapsed_s": round(p.elapsed_s, 1),
+            **_cost_evidence(p),
         }
     if p.kind == cmdrunner.NOT_FOUND:
         return {"reason": p.reason, "command": gdef.command, "exit": p.code}
     return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
+
+
+def _cost_evidence(p: Any) -> dict[str, Any]:
+    """cpu_user_s, cpu_sys_s, maxrss_kb, io_*_blocks and resources_source of the run, when measured
+    (PM-resource-capture); a run that carries none adds nothing."""
+    return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
 def _runs_whole_suite(gdef: GateDef) -> bool:
@@ -297,6 +304,7 @@ def run_command_gate(
         **command_layer_evidence(gdef, cwd),
         "exit": p.code,
         "elapsed_s": round(p.elapsed_s, 1),
+        **_cost_evidence(p),
         **output_evidence(out),
         # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
         **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
