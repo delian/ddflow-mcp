@@ -6,7 +6,7 @@ gives (``facts.collect``; nothing is folded a second way) into:
 
 * ``queue_wait``     ready (dependencies done) to first claim;
 * ``lease_wait``     first `lease.waiting` of the item to its first claim (a slice of the queue wait);
-* ``implement``      first claim to the first gate event;
+* ``implement``      first claim to the first `gate.started` (unmeasured when none was recorded);
 * ``gate:<name>``    per gate, run time with the host-lock wait (``waited_s``) taken out, and the wait itself;
 * ``review_wait``    between review rounds: first review start to last review verdict, less the time
                      inside the reviews (items with two or more timed review rounds only);
