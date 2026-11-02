@@ -2,7 +2,8 @@
 
 Many tasks edit the same few files one line at a time. These get a git merge driver, so the
 merge is clean and the probe (`git merge-tree` honours `.gitattributes` drivers) sees the same
-result as the real merge.
+result as the real merge for union and Mergiraf. For pins, the probe sees keep-ours; the
+post-merge hook (which merge-tree does not run) then regenerates.
 
 | Kind of file | Driver | Declared in |
 | --- | --- | --- |

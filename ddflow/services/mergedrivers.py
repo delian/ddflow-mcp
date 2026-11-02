@@ -71,7 +71,8 @@ def _git_version(repo: Path) -> tuple[int, int] | None:
 
 def _min_git(cfg: Config) -> tuple[int, int]:
     m = re.match(r"(\d+)\.(\d+)", cfg.pins.mergiraf_min_git.strip())
-    return (int(m[1]), int(m[2])) if m else (2, 44)
+    # never below 2.44: the driver line uses %P, which older git does not know
+    return max((int(m[1]), int(m[2])), (2, 44)) if m else (2, 44)
 
 
 def keep_mergiraf(solved: int, total: int, min_pct: int) -> bool:
@@ -159,6 +160,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
             bad.append(
                 f"{path} has conflict markers: resolve them by hand, keep both sides' entries,"
                 f" `sort -u -o {path} {path}`, then `ddflow pins drivers --check`"
+                " (MCP: ddflow_pins document=drivers check=true)"
             )
             continue
         why = (
@@ -172,5 +174,6 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
             bad.append(
                 f"{path} {why} after the union merge: `sort -u -o {path} {path}`, commit, then"
                 " `ddflow pins drivers --check`"
+                " (MCP: ddflow_pins document=drivers check=true)"
             )
     return bad
