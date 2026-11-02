@@ -1,5 +1,5 @@
 # The `ignore_imports` of .importlinter contract `surfaces-through-api` whose source is ddflow.surfaces.mcp._serve.
-# See tests/test_architecture_guards.py: entries only shrink, never grow.
+# See tests/test_architecture_import_contracts.py: entries only shrink, never grow.
 ignore_imports = [
     "ddflow.surfaces.mcp._serve -> ddflow.infra.proc",
     "ddflow.surfaces.mcp._serve -> ddflow.infra.worktree",

@@ -11,8 +11,7 @@ import json
 import threading
 from typing import Any
 
-from ...adapters.http import HttpError, default_client
-from ...adapters.ports import HttpClient
+from ...adapters.http import HttpClient, HttpError, default_client
 from ...infra import proc as P
 from ...infra.container import rewrite_localhost
 from .model import WELL_KNOWN_ENDPOINTS
