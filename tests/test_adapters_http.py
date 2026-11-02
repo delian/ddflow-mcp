@@ -445,3 +445,13 @@ def test_a_peer_that_hangs_up_before_any_response_is_connected_when_the_socket_w
     with pytest.raises(H.HttpConnectionError) as exc:
         H.UrllibHttpClient().request("GET", "http://a/", timeout=1, on_connect=got.append)
     assert exc.value.connected and len(got) == 1
+
+
+def test_a_hangup_is_connected_even_when_no_on_connect_was_asked_for(monkeypatch):
+    def hangup(req, timeout=None):
+        raise urllib.error.URLError(http.client.RemoteDisconnected("closed before any response"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", hangup)
+    with pytest.raises(H.HttpConnectionError) as exc:
+        H.UrllibHttpClient().request("GET", "http://a/", timeout=1)
+    assert exc.value.connected

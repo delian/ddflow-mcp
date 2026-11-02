@@ -141,6 +141,15 @@ def _classify(exc: BaseException) -> HttpError:
     return HttpConnectionError(str(exc), reason=exc)
 
 
+def _hung_up(exc: BaseException) -> bool:
+    """A failure only an established connection can have: the peer accepted, then dropped it
+    (`RemoteDisconnected`, a reset, a broken pipe), whether or not `on_connect` was asked for."""
+    cause = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    return isinstance(
+        cause, http.client.RemoteDisconnected | ConnectionResetError | BrokenPipeError
+    )
+
+
 def require_http_url(url: str) -> None:
     """Raise `HttpSchemeError` unless ``url`` is http(s): `urlopen` follows `file:` too, and
     an address from a config file must never read a local file (bandit B310)."""
@@ -250,7 +259,7 @@ class UrllibHttpClient:
         except (OSError, http.client.HTTPException) as exc:
             err = _classify(exc)
             if isinstance(err, HttpConnectionError):
-                err.connected = opened or up
+                err.connected = opened or up or _hung_up(exc)
             raise err from exc
 
 
