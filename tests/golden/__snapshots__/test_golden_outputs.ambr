@@ -932,6 +932,39 @@
           A distinctive identifier the change defines, edits or removes selects the
           tests that spell it, unless more than this many tests do (default 30): then
           it is a word, not a name.
+      gates.baseline_red_auto = 'on'   [default]
+          Whether a ci or unit_tests gate whose every failing test ddflow MEASURED as
+          failing on the base branch too (evidence `baseline.red`), and none of which
+          sits in a file the item changed or reaches by import, is accepted
+          AUTOMATICALLY (decision D-baseline-red-auto-accept): the gate stays
+          `partial` and shows as accepted-baseline-red, never passed; `complete`
+          warns; the coordinator is told through the inbox and the approvals log,
+          naming the test ids; a bug tagged baseline-red is filed or linked by test
+          id. 'on' (default) accepts; 'off' leaves every such partial to a person
+          (`ddflow approve <id> <gate>`). A failed gate, a new failing test, an
+          unavailable probe and a failure in the item's own files are never accepted.
+          Change it for the project (`ddflow config gates.baseline_red_auto off`), for
+          this machine (add --local), per run (DDFLOW_GATES_BASELINE_RED_AUTO), or
+          over MCP with `ddflow_configure`. An unrecognised value in a config file is
+          warned about, reported by `doctor` and falls back to 'off', the strictest
+          (every baseline-red partial waits for a person); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
+      gates.baseline_cache_ttl_s = 86400   [default]
+          Seconds a measurement of the base branch (which tests fail on one base
+          commit) is reused (default 86400; 0 = never reuse). It is kept per base sha
+          under `.ddflow/local/baseline/`, shared by every item, so a second item
+          costs a comparison, not a run; it expires on its own when the base moves,
+          since a new base has a new sha.
+      gates.baseline_red_rate_warn = 10   [default]
+          Automatic baseline-red acceptances in the last 24 hours from which `ddflow
+          doctor` notes that the base branch is red and what to fix (default 10; 0 =
+          never note).
+      gates.baseline_red_notify_to = 'coordinator'   [default]
+          The inbox (agent name) told, once, when a baseline-red partial is accepted
+          automatically (`[gates].baseline_red_auto`): the message names the item, the
+          gate and the failing test ids and the bug. Empty = no inbox message (the
+          approvals log and `ddflow doctor` still show it).
       gates.scrub_env = ['DDFLOW_AGENT', 'DDFLOW_SESSION_ID', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID']   [default]
           Environment variables removed from the environment a gate command and the CI
           command run with. Default: the identity variables ddflow reads

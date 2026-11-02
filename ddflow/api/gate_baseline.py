@@ -8,12 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from ..infra import worktree as W
+from ..services import testscope as TSC
+from ..services.gates import baseline as BL
 from ..services.gates import baseline_red as BR
 from . import gate_passed_failures as PF
+from ._base import _load
 from .knowledge.bugs import bug_found
 
 
-def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tuple[str, str]:
+def apply(  # noqa: PLR0913, PLR0917
+    repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast, cwd=None
+) -> tuple[str, str]:
     """``(outcome, reason)``: ``partial`` plus the baseline-red reason when every failing
     test fails on the base too, else ``result`` and "". Notes the check in ``ev``.
 
@@ -37,12 +42,13 @@ def apply(repo, cfg, agent, it, gate, gdef, result, ev, rerun, fail_fast) -> tup
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
-    found = BR.on_base(repo, base, gdef, ids, rerun)
+    found = BR.on_base(repo, base, gdef, ids, rerun, cfg.gates.baseline_cache_ttl_s)
     ev["baseline"] = found
     if not found["red"]:
         return result, why
-    bug = _file(repo, agent, it.id, gate, ids, found)
+    bug = _linked(repo, agent, ids) or _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
+    found["auto"] = BL.auto(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
     reason = BR.reason_text(ids, bug)
     if why:
         ev["reason"] = reason  # the headline names the base, not the superseded "NOT a pass"
@@ -59,9 +65,19 @@ def _file(
         item=item,
         agent=agent,
         severity="high",
+        tags="baseline-red",
         summary=(
             f"{found['base']} ({sha[:8]}) is red: {', '.join(ids)} fail on it as well as in "
             f"{item}'s {gate} gate (baseline-red)"
         ),
     )
     return str(out.data.get("id", "")) if out.exit == 0 else ""
+
+
+def _linked(repo: Path, agent: str, ids: list[str]) -> str:
+    """The open bug whose text already names every one of ``ids`` (dedup by test id), or ""."""
+    _log, _cfg, st = _load(repo, agent)
+    for b in st.bugs.values():
+        if not (b.fixed_at or b.invalid_at) and all(i in b.summary for i in ids):
+            return b.id
+    return ""

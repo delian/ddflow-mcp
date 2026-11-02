@@ -18,6 +18,8 @@ from . import harness as H
 from . import policy as PO
 from . import relayed as RL
 
+DAY_S = 86400
+
 
 def _commands(state) -> list[dict[str, Any]]:
     return sorted(
@@ -125,6 +127,7 @@ def findings(state, cfg: Config, *, now: float | None = None, events=()) -> list
         f"{n} approval(s) granted by standing rule {who} (not a person)"
         for who, n in sorted(by_rule.items())
     ]
+    out.extend(_red_base_note(cfg, state, now))
     out.extend(RL.uses(events, state))
     out.extend(standing_notes(cfg, state))
     return out
@@ -160,3 +163,22 @@ def standing_notes(cfg: Config, state) -> list[str]:
             "a command reviewer is the one T3 act a typed chat answer may approve (L2-typed)"
         )
     return notes
+
+
+def _red_base_note(cfg: Config, state, now: float) -> list[str]:
+    """The note that the base branch is red, once automatic baseline-red acceptances reach
+    `[gates].baseline_red_rate_warn` in a day (D-baseline-red-auto-accept)."""
+    recent = sum(
+        1
+        for r in _commands(state)
+        if r["policy"]
+        and r["answered_by"] == "policy:baseline_red_auto"
+        and now - clock.epoch(r["answered_at"], default=0.0) <= DAY_S
+    )
+    if not cfg.gates.baseline_red_rate_warn or recent < cfg.gates.baseline_red_rate_warn:
+        return []
+    return [
+        f"the base branch is red: {recent} baseline-red partial(s) were accepted automatically "
+        "in the last 24 hours ([gates].baseline_red_rate_warn); fix the bugs tagged "
+        "baseline-red (`ddflow bug list`) so gates can pass again"
+    ]

@@ -240,3 +240,21 @@ def apply(
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.
                 return _approved(log, cfg, canon, reason, RETRY_RULE_ID, notify=n)
     return None
+
+
+def record_auto(log, cfg: Config, canon: Canon, text: str, rule_id: str) -> str:
+    """Record, in the approvals log, an acceptance ddflow made itself under ``rule_id`` (the
+    automatic baseline-red acceptance): answered by `policy:<rule>`, notifying the operator
+    in `approvals log` and `doctor`. Returns the ask id."""
+    return E.record_policy(
+        log,
+        cfg,
+        subject=canon.subject(),
+        digest=canon.digest(),
+        text=R.render(canon, text, cfg.approvals.reason_chars)
+        + f"\n  accepted automatically: {rule_id}",
+        command=R.command_of(canon, cfg),
+        rule_id=rule_id,
+        agent=canon.agent,
+        notify=1,
+    )

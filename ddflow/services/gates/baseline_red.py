@@ -19,6 +19,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
+from . import baseline as BL
 
 GATES = ("ci", "unit_tests")
 SHOWN = 5
@@ -36,14 +37,21 @@ def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) 
     return list(ev.get("failed_tests") or [])
 
 
-def on_base(repo: Path, base: str, gdef, ids: list[str], run: Callable[[Any, Path], tuple]) -> dict:
+def on_base(
+    repo: Path, base: str, gdef, ids: list[str], run: Callable[[Any, Path], tuple], ttl_s: int = 0
+) -> dict:
     """Run ``ids`` alone on ``base``: ``{"red": bool, ...}``. ``run(gdef, cwd)`` executes a
-    command gate and returns (outcome, evidence)."""
+    command gate and returns (outcome, evidence). With ``ttl_s`` > 0 what was measured on this
+    base sha is kept (`services.gates.baseline`): ids already measured are not run again."""
     if not ids:  # all() of nothing is True: no named test is no attribution
         return {"red": False, "why": "no failing test id to run on the base"}
     sha = W.rev(repo, base)
     if not sha:
         return {"red": False, "why": f"base {base} does not resolve"}
+    known = BL.load(repo, sha, ttl_s)
+    if all(i in known for i in ids):
+        return {"red": all(known[i] for i in ids), "cached": True, "base": base, "base_sha": sha,
+                "ids": ids, "still_failing": [i for i in ids if known[i]]}  # fmt: skip
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-base.", quiet=True) as tree:
         if tree.path is None:
             return {"red": False, "why": "no scratch worktree of the base could be made"}
@@ -53,6 +61,8 @@ def on_base(repo: Path, base: str, gdef, ids: list[str], run: Callable[[Any, Pat
         outcome, ev = run(replace(gdef, command=cmd), tree.path)
     failing = ev.get("failed_tests") or []
     red = outcome == "failed" and all(i in failing for i in ids)
+    if outcome in ("passed", "failed"):  # a run that could not run says nothing about the base
+        BL.store(repo, sha, {i: i in failing for i in ids}, ttl_s)
     return {"red": red, "isolation": ISOLATION, "base": base, "base_sha": sha, "outcome": outcome, "command": cmd,
             "ids": ids, "still_failing": failing}  # fmt: skip
 
