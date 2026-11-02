@@ -65,7 +65,13 @@ def _cfg(**over):
 
 def _record(repo, gate, outcome, reason=""):
     return run_cli(
-        repo, "gate", "record", "T1", gate, "--outcome", outcome,
+        repo,
+        "gate",
+        "record",
+        "T1",
+        gate,
+        "--outcome",
+        outcome,
         *(["--reason", reason] if reason else []),
     )[0]
 
@@ -78,8 +84,10 @@ def _only_unavailable_gate(repo, *outcomes):
     assert _record(repo, "implement", "passed") == 0
     assert _record(repo, "merge", "passed") == 0
     for outcome in outcomes:
-        why = "worktree gone before it could run" if outcome == "unavailable" else (
-            "a failing test" if outcome == "failed" else "ran partway"
+        why = (
+            "worktree gone before it could run"
+            if outcome == "unavailable"
+            else ("a failing test" if outcome == "failed" else "ran partway")
         )
         assert _record(repo, "unit_tests", outcome, why) == 0
 
@@ -230,8 +238,17 @@ def test_complete_unavailable_never_auto_answers_a_genuinely_failed_gate(proj):
     _only_unavailable_gate(proj, "failed")
     log = EventLog(proj, "bot")
     cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
-    got = C.operator_gate(log, cfg, Canon(verb="complete.force", agent="bot", item="T1",
-                                          target="unit_tests", state="unit_tests failed"))
+    got = C.operator_gate(
+        log,
+        cfg,
+        Canon(
+            verb="complete.force",
+            agent="bot",
+            item="T1",
+            target="unit_tests",
+            state="unit_tests failed",
+        ),
+    )
     assert not got.ok and got.ask_id  # a person is asked; a failed gate is never answered
 
 
@@ -246,8 +263,11 @@ def test_complete_unavailable_does_not_answer_a_non_required_unavailable_gate(pr
     assert _record(proj, "standards", "unavailable", "tool missing") == 0
     log = EventLog(proj, "bot")
     cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
-    got = C.operator_gate(log, cfg, Canon(verb="complete.force", agent="bot", item="T1",
-                                          target="standards", state="s"))
+    got = C.operator_gate(
+        log,
+        cfg,
+        Canon(verb="complete.force", agent="bot", item="T1", target="standards", state="s"),
+    )
     assert not got.ok and got.ask_id  # nothing required is blocked: a person is asked
 
 
