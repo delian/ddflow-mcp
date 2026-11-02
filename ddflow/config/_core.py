@@ -13,6 +13,7 @@ from ..config_sections._docs import KNOB_DOCS, RENAMED
 from ..config_sections._layers import layer_path, read_toml
 from ..config_sections.agent import AgentConfig
 from ..config_sections.approvals import ApprovalsConfig
+from ..config_sections.handoff import HandoffConfig
 from ..config_sections.bugs import BugsConfig
 from ..config_sections.cadence import CadenceConfig
 from ..config_sections.chore import ChoreConfig
@@ -161,6 +162,7 @@ class Config:
     digest: DigestConfig = field(default_factory=DigestConfig)
     grants: GrantsConfig = field(default_factory=GrantsConfig)
     approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
+    handoff: HandoffConfig = field(default_factory=HandoffConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     release: ReleaseConfig = field(default_factory=ReleaseConfig)
     mcp: McpConfig = field(default_factory=McpConfig)

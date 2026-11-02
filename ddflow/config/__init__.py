@@ -93,6 +93,7 @@ from ._core import (  # noqa: F401
     GatesConfig,
     GovernConfig,
     GrantsConfig,
+    HandoffConfig,
     HealthConfig,
     HooksConfig,
     IdsConfig,

@@ -68,6 +68,15 @@ _CONFIG = "who changed a setting or approved a tool; the setting itself lives in
 #: Every other kind, and why it is not duplicate-checked. The gate records of an item
 #: (`GATE_RECORDS`, state) are exempt by name below.
 EXEMPT: dict[str, str] = {
+    "suggestion.expired": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.superseded": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.withdrawn": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.countered": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.rejected": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.applied": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.accepted": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.seen": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.proposed": "a patch and its reason are compared by the handoff service, which owns the duplicate rule (services.handoff)",
     "phase.completed": "records the deliberate retire of a settled phase: no authored text beyond its evidence",
     "lane.released_for_gate": "a machine record of a release: ids and gate names, no authored text",
     "memory.redacted": "a redaction marker names the superseded event id and why; memory_add writes it, not an authored add to duplicate-check",

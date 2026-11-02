@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "handoff.ttl_s"
+new = "86400"
+why = "Seconds a suggestion may stay unanswered before the expiry sweep. (D-handoff-peers, LK-sg-events)."
+impact = "additive"

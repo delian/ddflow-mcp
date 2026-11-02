@@ -1105,7 +1105,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 493 knobs.
+cadences, and the rest of the 501 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5308,7 +5308,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 493): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 501): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5886,7 +5886,7 @@ declared once and persists — see
 
 ## Configuration
 
-493 knobs across 48 sections, every one documented in place and listed, with its default
+501 knobs across 49 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5953,8 +5953,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=9e2b142dae3c -->
-<details><summary>All 493 knobs across 48 sections</summary>
+<!-- ddflow:begin README/knobs sha=ce9dd561da11 -->
+<details><summary>All 501 knobs across 49 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6364,6 +6364,14 @@ long default is left to `ddflow config --explain`.
 | `approvals.accept_chat_for_t3` | `false` |  |
 | `approvals.forbid_chat_for_t3` | `false` |  |
 | `approvals.require_approval` | `[]` |  |
+| `handoff.max_files` | `3` |  |
+| `handoff.max_lines` | `60` |  |
+| `handoff.max_bytes` | `65536` |  |
+| `handoff.max_open_per_owner_file` | `5` |  |
+| `handoff.min_interval_s` | `30` |  |
+| `handoff.reject_breaker` | `3` |  |
+| `handoff.ttl_s` | `86400` |  |
+| `handoff.kinds` | `["fix", "gate_fix", "refactor", "doc"]` |  |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
