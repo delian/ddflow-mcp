@@ -33,7 +33,7 @@ def test_load_in_reads_shipped_when_there_is_no_project(tmp_path):
 
 def test_a_project_override_replaces_the_shipped_descriptor(tmp_path):
     (tmp_path / ".ddflow" / "harnesses.d").mkdir(parents=True)
-    override = _GOOD.replace('id = "demo"', 'id = "claude"').replace("rank = 99", "rank = 1")
+    override = _GOOD.replace('id = "demo"', 'id = "claude"').replace("rank = 99", "rank = 0")
     (tmp_path / ".ddflow" / "harnesses.d" / "claude.toml").write_text(override)
     by_id = {h.id: h for h in harnessreg.load_in(tmp_path)}
     assert by_id["claude"].family == "demo", "the override replaces the shipped descriptor"
