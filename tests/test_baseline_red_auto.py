@@ -104,7 +104,7 @@ def test_a_run_that_could_not_run_is_not_cached_and_never_red(repo) -> None:
     got = BR.on_base(repo, "main", gdef, [ID], lambda g, c: ("unavailable", {}), 3600)
     assert got["red"] is False
     sha = got["base_sha"]
-    assert BL.load(repo, sha, 3600) == {}
+    assert BL.cache_load(repo, sha, 3600) == {}
 
 
 def test_an_unavailable_or_failed_gate_is_never_accepted() -> None:

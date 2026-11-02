@@ -48,7 +48,7 @@ def apply(  # noqa: PLR0913, PLR0917
         return result, why
     bug = _linked(repo, agent, ids) or _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
-    found["auto"] = BL.auto(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
+    found["auto"] = BL.auto_decision(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
     reason = BR.reason_text(ids, bug)
     if why:
         ev["reason"] = reason  # the headline names the base, not the superseded "NOT a pass"

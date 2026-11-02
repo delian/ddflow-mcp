@@ -32,7 +32,7 @@ def _path(repo: Path, sha: str) -> Path:
     return Path(repo) / CACHE_DIR / f"{sha[:40]}.json"
 
 
-def load(repo: Path, sha: str, ttl_s: int, now: float | None = None) -> dict[str, bool]:
+def cache_load(repo: Path, sha: str, ttl_s: int, now: float | None = None) -> dict[str, bool]:
     """``{test id: failed on this base}`` measured so far; {} when none or older than ``ttl_s``."""
     if ttl_s <= 0:
         return {}
@@ -45,12 +45,12 @@ def load(repo: Path, sha: str, ttl_s: int, now: float | None = None) -> dict[str
     return {str(k): bool(v) for k, v in seen.items()} if fresh and isinstance(seen, dict) else {}
 
 
-def store(repo: Path, sha: str, results: dict[str, bool], ttl_s: int) -> None:
+def cache_store(repo: Path, sha: str, results: dict[str, bool], ttl_s: int) -> None:
     """Merge ``results`` into the cache of ``sha`` (best effort: a failed write costs a rerun)."""
     if ttl_s <= 0 or not results:
         return
     try:
-        merged = {**load(repo, sha, ttl_s), **results}
+        merged = {**cache_load(repo, sha, ttl_s), **results}
         path = _path(repo, sha)
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)
@@ -59,12 +59,12 @@ def store(repo: Path, sha: str, results: dict[str, bool], ttl_s: int) -> None:
         return
 
 
-def failing_files(ids: list[str]) -> list[str]:
+def test_files_of(ids: list[str]) -> list[str]:
     """The test files of ``ids`` ("tests/test_a.py::T::t" -> "tests/test_a.py")."""
     return sorted({i.split("::", 1)[0] for i in ids})
 
 
-def auto(
+def auto_decision(
     cfg, tree: Path, base: str, ids: list[str], found: dict[str, Any], limits: dict[str, int]
 ) -> dict[str, Any]:
     """``{"accepted": bool, "why": str, ...}``: may the baseline-red partial of ``ids`` be
@@ -81,7 +81,7 @@ def auto(
     if sel.full:
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     reached = {t.path for t in (*sel.tests, *sel.cut)} | set(sel.changed)
-    inside = [f for f in failing_files(ids) if f in reached]
+    inside = [f for f in test_files_of(ids) if f in reached]
     if inside:
         return {
             **out,
