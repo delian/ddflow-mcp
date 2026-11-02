@@ -48,7 +48,7 @@ dir = ".opencode/agents"
 
 [orchestration]
 loop = "subtask"
-dispatch = "opencode config/zen agent (one item each)"
+dispatch = "opencode config/zen agent (one claimed item each)"
 wait = "background task + ddflow wait"
 persist = "printed ddflow next + cadence"
 stop = "Ask and stop"

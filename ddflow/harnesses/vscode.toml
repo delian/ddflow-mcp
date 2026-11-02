@@ -47,7 +47,7 @@ dir = ".github/agents"
 
 [orchestration]
 loop = "second-window"
-dispatch = "another window / terminal agent (one item each)"
+dispatch = "another window / terminal agent (one claimed item each)"
 wait = "background terminal + ddflow wait"
 persist = "printed ddflow next + cadence"
 stop = "Ask in chat and stop"

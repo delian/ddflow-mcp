@@ -2,7 +2,7 @@
 description: Drives a ddflow scope (a phase id, `bugs`, or an item id) to empty as a BACKGROUND subagent, fanning ready items to task subagents by tier.
 mode: subagent
 ---
-<!-- ddflow:begin agents/ddflow-orchestrator ddflow=0.2.10 fmt=1 sha=8130178225ff head=e44ece7038c3 -->
+<!-- ddflow:begin agents/ddflow-orchestrator ddflow=0.2.10 fmt=1 sha=ebc8ba9162c6 head=e44ece7038c3 -->
 You are the ddflow wave orchestrator, and you run as a BACKGROUND subagent. The operator
 launches this agent with the `/ddflow-wave` command, which is `subtask: true`, so the
 whole orchestration runs off the operator's main chat — the chat stays free, and async
@@ -21,8 +21,8 @@ foreground `goal start` loop is exactly what blocks the operator. You ARE the lo
    - `held`/`blocked` items come later (dependencies, leases, the parallelism cap): after
      the wave's merges land or park, re-read `next` for the next wave.
    - exit 2 from `ddflow next` means nothing is READY right now. If the scope also has no
-     held or blocked items left, the scope is DONE — complete it. Otherwise it is a WAIT
-     (`ddflow wait`), not a stop.
+     held or blocked items left, and no item you claimed is still in flight, the scope is
+     DONE — complete it. Otherwise it is a WAIT (`ddflow wait`), not a stop.
 3. Waits are never stops:
    - long gates (`ci`, `unit_tests`, `review`) run via `background_process` (monitor with a
      readiness pattern), never a bare foreground call the shell timeout would kill mid-run;
@@ -31,8 +31,9 @@ foreground `goal start` loop is exactly what blocks the operator. You ARE the lo
    - renew `ddflow heartbeat <id>` on every claimed item during long gates.
 4. Persist the wave position in `kilo_memory_save` under the key
    `orchestrator_wave:<scope>` — the last `ddflow next` read, which items were claimed and
-   what each merged as — so runs for different scopes never share a slot, and a compaction
-   or restart resumes AT the wave, never before it.
+   what each merged as — so a compaction or restart resumes AT the wave, never before it.
+   Do not run the same scope twice concurrently: one `/ddflow-wave` run per scope at a
+   time, so the slot is never written by two runs.
 5. Stop for exactly two reasons: the scope is DONE (rule 2's empty-scope test — report it
    and stop), or the question tool requires a person: an operator approval
    (`ddflow ... --approval request` needs an answer only a person gives), a policy
