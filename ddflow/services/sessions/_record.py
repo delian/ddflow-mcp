@@ -113,19 +113,23 @@ def _recorded_recently(
     auto_only: bool = False,
     now: float | None = None,
 ) -> bool:
-    """True when `clean` was already recorded as a prompt inside the window before `now`
+    """True when `clean` was already recorded as a prompt inside the window around `now`
     (default: the current time).
 
     `subject` restricts the match to one session (a hook that fired twice for one
     conversation). `auto_only` restricts it to hook-captured prompts, for an AGENT's own
-    record of words the hook already took. Known limit: an agent in a harness WITHOUT a
-    hook that types words identical to another session's capture within the window is
-    treated as the copy; the capture holds the same words, so no text is lost.
+    record of words the hook already took. The window is an absolute distance in EITHER
+    direction: a slow earlier hook can write its record after a later hook fired, so the
+    later hook's ``now`` is the earlier hook's "future", and an age-only check would count
+    that record as recent and drop a genuinely-second prompt (B7b632b294c). Known limit: an
+    agent in a harness WITHOUT a hook that types words identical to another session's
+    capture within the window is treated as the copy; the capture holds the same words, so
+    no text is lost.
     """
     for ev in log.read_all():
         if ev.kind != "session.prompt" or ev.data.get("text") != clean:
             continue
-        if _age_s(ev.ts, now) > window:
+        if abs(_age_s(ev.ts, now)) > window:
             continue
         if subject and ev.subject != subject:
             continue
@@ -216,18 +220,23 @@ def plan_adoptions(events: list, cfg: Config | None = None) -> list[tuple[str, s
     order they must be appended -- pure, so `services.repairs` can show them before writing.
 
     Nearest is the session whose start is the latest one not after the orphan, else the
-    earliest; with no session at all, one implicit session is opened first.
+    earliest; with no session at all, one implicit session is opened first. Starts and
+    orphans are ordered as instants (`clock.epoch`), never as text: '...:00Z' would
+    otherwise sort after '...:00.500000Z' because 'Z' follows '.' (Bff458ced2c).
     """
-    starts = sorted((e.ts, e.subject) for e in events if e.kind == "session.started" and e.subject)
+    starts = sorted(
+        (clock.epoch(e.ts), e.subject) for e in events if e.kind == "session.started" and e.subject
+    )
     out: list[tuple[str, str, dict]] = []
     for o in unadopted_orphans(events):
+        o_ts = clock.epoch(o.ts)
         if starts:
-            before = [sid for ts, sid in starts if ts <= o.ts]
+            before = [sid for ts, sid in starts if ts <= o_ts]
             sid = before[-1] if before else starts[0][1]
         else:
             sid = new_session_id(cfg, events)
             out.append(("session.started", sid, {"model": "", "tool": "", "implicit": True}))
-            starts = [(o.ts, sid)]
+            starts = [(o_ts, sid)]
         out.append((o.kind, sid, {**o.data, "adopted_from": o.id, "orphan_at": o.ts}))
     return out
 
@@ -315,4 +324,5 @@ def note(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = 
 
 
 def end(log: EventLog, session_id: str, *, summary: str = "") -> None:
-    log.append("session.ended", session_id, {"summary": summary})
+    clean, _ = redact(summary, _cfg_of(log))
+    log.append("session.ended", session_id, {"summary": clean})
