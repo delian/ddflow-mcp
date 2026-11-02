@@ -50,3 +50,11 @@ def test_a_symlink_is_dropped_without_following_it(sandbox) -> None:
     (owned / "link").symlink_to(owned / "important", target_is_directory=True)
     remove_owned(owned / "link", owned)
     assert (owned / "important").is_dir() and not (owned / "link").is_symlink()
+
+
+def test_a_symlink_inside_the_removed_tree_is_not_followed_out_of_it(sandbox) -> None:
+    cwd, owned = sandbox
+    (owned / "d").mkdir()
+    (owned / "d" / "out").symlink_to(cwd, target_is_directory=True)
+    remove_owned(owned / "d", owned)
+    assert not (owned / "d").exists() and (cwd / "sentinel.txt").exists()
