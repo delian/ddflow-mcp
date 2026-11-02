@@ -36,25 +36,26 @@ def _int(value: Any) -> int:
 
 
 def _json_list(output: str, what: str) -> list[Any]:
-    """The first JSON array in ``output``: a tool may log a line or two before its report, so
+    """The last top-level JSON array in ``output``: a tool may log a line or two before its report, so
     each line start is tried. Empty output is an empty report; anything else is an error."""
     text = output.strip()
     if not text:
         return []
     starts = [m.start(1) for m in re.finditer(r"(?m)^[ \t]*(\[)", text)]
-    first: list[Any] | None = None
+    found: list[list[Any]] = []
+    covered = 0  # arrays nested inside one already read are not candidates
     for at in starts:
+        if at < covered:
+            continue
         try:
             value, end = json.JSONDecoder().raw_decode(text[at:])
         except (ValueError, RecursionError):
             continue
-        if not isinstance(value, list):
-            continue
-        if not text[at + end :].strip():
-            return value  # the array that runs to the end of the output is the report
-        first = value if first is None else first
-    if first is not None:
-        return first
+        if isinstance(value, list):
+            found.append(value)
+            covered = at + end
+    if found:
+        return found[-1]  # a wrapper's log line may come first; the report is the last array
     # The output is not echoed: a scanner's text can hold the secret it found.
     raise ToolParseError(f"{what}: no JSON array in the output ({len(text)} characters)")
 

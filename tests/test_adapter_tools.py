@@ -520,3 +520,13 @@ def test_pre_release_detection_is_exact(version, pin, want):
 def test_a_deeply_nested_array_is_a_parse_error_not_a_crash():
     with pytest.raises(ToolParseError):
         TP.PARSERS["normalized"]("t", "[" * 100000)
+
+
+def test_the_last_array_is_the_report_even_with_trailing_log_text_and_nested_arrays():
+    out = '[]\n[\n  {"rule": "r1", "tags": [\n  ["x"]]}\n]\nscan complete\n'
+    assert [f.rule for f in TP.PARSERS["normalized"]("t", out)] == ["r1"]
+
+
+def test_two_different_prereleases_of_one_core_are_not_ordered_so_not_a_pass():
+    assert T.version_at_least("1.0.0-rc.1", "1.0.0-rc.2") is False
+    assert T.version_at_least("1.0.0-rc.2", "1.0.0-rc.2") is True

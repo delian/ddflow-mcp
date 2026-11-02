@@ -131,12 +131,14 @@ _CORE = re.compile(r"v?(\d+(?:\.\d+)*)([^\s+]*)")
 _PRE = re.compile(r"^[-._]?(?:a|b|c|rc|alpha|beta|dev|pre|preview)(?:[-._]?\d+)?\b", re.IGNORECASE)
 
 
-def _version_key(text: str) -> tuple[tuple[int, ...], bool]:
-    """(the numeric core, is it a pre-release): "8.30.0-rc.1" is ((8, 30, 0), True)."""
+def _version_key(text: str) -> tuple[tuple[int, ...], str]:
+    """(the numeric core, the pre-release tag or ""): "8.30.0-rc.1" is ((8, 30, 0), "-rc.1")."""
     m = _CORE.search(text.strip())
     if not m:
-        return (), False
-    return tuple(int(n) for n in m.group(1).split(".")), bool(_PRE.match(m.group(2)))
+        return (), ""
+    return tuple(int(n) for n in m.group(1).split(".")), (
+        m.group(2) if _PRE.match(m.group(2)) else ""
+    )
 
 
 def version_at_least(version: str, pin: str) -> bool | None:
@@ -149,7 +151,11 @@ def version_at_least(version: str, pin: str) -> bool | None:
         return None
     size = max(len(have), len(want))
     have, want = have + (0,) * (size - len(have)), want + (0,) * (size - len(want))
-    return have > want or (have == want and (not pre or want_pre))
+    if have != want:
+        return have > want
+    # Same core: a release satisfies anything; two pre-releases are ordered only when identical
+    # (their order is not read, and not knowing is not a pass).
+    return not pre or pre == want_pre
 
 
 class TableTool:
