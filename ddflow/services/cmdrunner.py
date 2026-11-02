@@ -182,6 +182,8 @@ class CommandRun:
     redactions: dict[str, int] = field(default_factory=dict)
     #: Seconds spent waiting for an admission slot.
     waited_s: float = 0.0
+    #: What the command cost (`infra.resources.Resources`); None when it never ran.
+    resources: Any = None
 
     @property
     def ran(self) -> bool:
@@ -390,6 +392,7 @@ class CommandRunner:
 
     def _finish(self, run: CommandRun, p: P.ShellResult) -> CommandRun:
         raw = p.out + p.err
+        run.resources = p.resources
         run.out, run.err = p.out, p.err
         run.digest = content_digest(raw, "blake2b", size=8, errors="replace")
         run.output_bytes = len(raw)

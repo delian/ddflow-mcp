@@ -71,6 +71,11 @@ class Verdict:
     #: Gates in the pipeline that could not run. Recorded on the event as a coverage
     #: gap, so a completion never silently implies they passed.
     coverage_gaps: list[str] = field(default_factory=list)
+    #: Required gates whose outcome is not settled (never passed, never an excused skip,
+    #: never a person-accepted partial): the "required gate(s) not passed" blocker names
+    #: EXACTLY these, so a completion site can tell a gap that is only unavailable/partial
+    #: from one that is a failure, silence or something else, without restating the list.
+    unmet_gates: list[str] = field(default_factory=list)
     independence: str = ""
     kind: str = "task"
     #: "gate: why" for each gate the ACTUAL diff excused (`applies_when`), with the paths
@@ -278,6 +283,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     v.warnings += why_not
 
     missing = _unsettled(cfg, it, excused, s, required, state)
+    v.unmet_gates = missing
     v.warnings += _accepted_warnings(state, it, s, required, missing)
     if missing:
         v.blockers.append(

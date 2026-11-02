@@ -1,8 +1,8 @@
 """The `HttpClient` port: the default adapter's behaviour and the fake's.
 
 No network: the adapter's urllib calls are replaced by scripted ones (`ScriptedUrllib`), and
-the fake never opens a socket. The same conformance cases run against both in
-tests/test_ports_contract.py (`http_conformance`).
+the fake never opens a socket. The same conformance cases run against both: here, and generically in
+tests/test_ports_contract.py through `CONFORMANCE`.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pytest
 from ddflow.adapters import http as H
 from ddflow.adapters.fakes import FAKES
 from ddflow.adapters.fakes.http import ERRORS, FakeHttpClient, UnscriptedRequest
-from ddflow.adapters.ports import HttpClient
+from ddflow.adapters.http import HttpClient
 
 
 class _Resp(io.BytesIO):
@@ -122,6 +122,14 @@ def http_conformance(c) -> None:
         c.request("GET", "file:///etc/passwd", timeout=3)
     with pytest.raises(OSError):  # every error of the family is an OSError
         c.request("GET", "http://a/connection", timeout=3)
+
+
+CONFORMANCE = {
+    "HttpClient": {
+        "real": ScriptedUrllib,
+        "cases": http_conformance,
+    },  # no network: scripted urllib
+}
 
 
 # -- the default adapter ----------------------------------------------------------------

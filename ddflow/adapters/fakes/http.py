@@ -25,6 +25,7 @@ from ..http import (
     HttpTlsError,
     require_http_url,
 )
+from . import fake
 
 #: One error of each class the real client raises, by the name `raises=` takes.
 ERRORS: dict[str, Callable[[str], BaseException]] = {
@@ -82,6 +83,7 @@ class _Rule:
     used: int = 0
 
 
+@fake
 @dataclass
 class FakeHttpClient:
     """Scripted replies in, recorded calls out. Rules are tried in the order they were

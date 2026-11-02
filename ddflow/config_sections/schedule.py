@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..adapters.optimizer import OPTIMIZERS
 from ._docs import declare, int_at_least, knob
 
 #: Every signal the adaptive flow controller can read: the host ones
@@ -129,6 +130,14 @@ def _signals_problem(v: Any) -> str:
     return ""
 
 
+def _optimizer_problem(name: Any) -> str:
+    return (
+        ""
+        if isinstance(name, str) and name in OPTIMIZERS
+        else f"unknown optimizer {name!r}: one of {', '.join(OPTIMIZERS)}"
+    )
+
+
 @declare("schedule")
 @dataclass
 class ScheduleConfig:
@@ -222,6 +231,11 @@ class ScheduleConfig:
         doc="What ddflow does about a lease deadlock (a cycle of agents waiting on each other's files) that nothing declared: 'propose' (default) reports the `needs` edge it would add; 'apply' adds it, as a logged task.updated event marked auto-order, so the circle cannot recur (`ddflow update --needs` drops it); 'off' does nothing. It never touches a done, abandoned or decide item, an item tagged no-auto-order, or adds an edge that would close a needs cycle.",
         choices=("off", "propose", "apply"),
         strictest=("propose", "a deadlock is reported, never rewired by a typo"),
+    )
+    optimizer: str = knob(
+        "greedy-v1",
+        doc="Which optimizer orders the ready set and cuts it to the free slots (default `greedy-v1`: the order keys bugs first, priority, id, and a greedy cut that never offers two overlapping items). An unknown name is refused with the names known. An optimizer only reorders and cuts: hard constraints stay `needs` and `globs`.",
+        check=_optimizer_problem,
     )
     bugs_first: bool = knob(
         True,

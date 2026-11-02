@@ -1,0 +1,101 @@
+"""The `Optimizer` port: the default adapter (greedy-v1) and the fake pass the same cases.
+
+`CONFORMANCE` is read by the generic contract test (tests/test_ports_contract.py).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from ddflow.adapters import optimizer as O
+from ddflow.adapters.fakes import FAKES
+from ddflow.adapters.fakes.optimizer import FakeOptimizer
+from ddflow.adapters.optimizer import Candidate, Optimizer, Slots
+
+
+def _c(id_: str, bug: bool = False, prio: int = 100, *globs: str, tree: bool = True) -> Candidate:
+    return Candidate(id_, (("bugs_first", not bug), ("priority", prio)), tuple(globs), (), tree)
+
+
+def _overlap(c: Candidate, taken) -> str:
+    for t in taken:
+        if set(c.globs) & set(t.globs):
+            return t.id
+    return ""
+
+
+def optimizer_cases(o) -> None:
+    items = [_c("c", False, 5), _c("a", False, 5), _c("b", True, 50), _c("d", False, 1)]
+    # ordered: bugs first, then priority, then id; every item once, each with its terms
+    placed = o.order({}, items)
+    assert sorted(p.id for p in placed) == list("abcd")
+    assert placed[0].id == "b"  # a bug fix is offered first
+    assert [p.rank for p in placed] == [0, 1, 2, 3]
+    assert all(p.terms for p in placed)
+    assert all(o.explain(p) for p in placed)
+    # deterministic: the input order does not matter (a total order)
+    assert [p.id for p in o.order({}, items[::-1])] == [p.id for p in placed]
+    # an unknown ctx key is ignored (open mapping: lock-wait signals arrive later)
+    assert [p.id for p in o.order({"lock_wait": {"a": 9}}, items)] == [p.id for p in placed]
+    # cut: never more than the flight slots, nor tree-needing items than the tree slots
+    ready = [_c("x"), _c("y"), _c("z", tree=False)]
+    r = o.cut({}, ready, Slots(2, 1))
+    assert r.ids("taken") == ["x", "z"] and r.ids("cut") == ["y"]
+    assert o.cut({}, ready, Slots(0, 0)).ids("taken") == []
+    # an overlapping item is reported with the taken item it clashes with, not dropped
+    lap = [_c("p", False, 1, "src/*"), _c("q", False, 1, "src/*"), _c("r", False, 1, "doc/*")]
+    r = o.cut({}, lap, Slots(3, 3), clash=_overlap)
+    assert r.ids("taken") == ["p", "r"]
+    assert [(v.id, v.other) for v in r.verdicts if v.what == "clash"] == [("q", "p")]
+    # a held item takes no slot and is not offered to the overlap check
+    r = o.cut({}, lap, Slots(3, 3), hold=lambda c: c.id == "p", clash=_overlap)
+    assert r.ids("held") == ["p"] and r.ids("taken") == ["q", "r"]
+    # one verdict per item, in walk order
+    assert [v.id for v in r.verdicts] == ["p", "q", "r"]
+
+
+def _real(monkeypatch):
+    return O.get_optimizer("greedy-v1")
+
+
+CONFORMANCE = {"Optimizer": {"real": _real, "cases": optimizer_cases}}
+
+
+def test_the_adapter_and_the_fake_satisfy_the_port():
+    assert isinstance(O.GreedyV1(), Optimizer)
+    assert isinstance(FakeOptimizer(), Optimizer)
+    assert FAKES["Optimizer"] is FakeOptimizer
+    assert O.OptimizerPort is O.Optimizer
+
+
+def test_the_adapter_passes_the_conformance_cases(monkeypatch):
+    optimizer_cases(_real(monkeypatch))
+
+
+def test_the_fake_passes_the_conformance_cases():
+    optimizer_cases(FakeOptimizer())
+
+
+def test_the_default_is_registered_and_an_unknown_name_lists_those_known():
+    assert O.get_optimizer("") is O.get_optimizer("greedy-v1")
+    with pytest.raises(KeyError, match="greedy-v1"):
+        O.get_optimizer("nope")
+
+
+def test_greedy_orders_bugs_then_priority_then_id():
+    got = O.get_optimizer().order(
+        {}, [_c("c", False, 5), _c("a", False, 5), _c("b", True, 50), _c("d", False, 1)]
+    )
+    assert [p.id for p in got] == ["b", "d", "a", "c"]
+
+
+def test_explain_itemises_the_terms():
+    p = O.get_optimizer().order({}, [_c("b", True, 50)])[0]
+    assert O.get_optimizer().explain(p) == "b: rank 0 by bugs_first=0, priority=50"
+
+
+def test_the_fake_pins_an_order_and_records_calls():
+    f = FakeOptimizer(ranking=["z", "a"])
+    got = f.order({"k": 1}, [_c("a"), _c("m"), _c("z")])
+    assert [p.id for p in got] == ["z", "a", "m"]
+    assert f.calls == [("order", {"k": 1})]

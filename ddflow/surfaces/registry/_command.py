@@ -128,6 +128,13 @@ class Command:
     wants_called_from: bool = False
     #: The tool reports progress while it runs (``on_progress``), for a call that takes minutes.
     wants_progress: bool = False
+    #: The tool may act only as the CONNECTION's own identity: over MCP the per-call
+    #: ``as_agent`` is a claim the surface cannot authenticate, so a call naming a
+    #: DIFFERENT agent than the connection is refused by the engine before this tool runs
+    #: (B6335d3482d). The `ddflow_session` ``asks``/``withdraw`` verbs bound "my own asks"
+    #: to it; ``ask`` files a request under the identity it is given, which is attribution,
+    #: not a read of another agent's record.
+    own_identity: bool = False
     #: argparse's ``formatter_class`` and ``epilog`` for this command's help.
     formatter_class: Any = None
     epilog: str = ""
@@ -234,6 +241,8 @@ class Command:
             entry["wants_called_from"] = True
         if self.wants_progress:
             entry["wants_progress"] = True
+        if self.own_identity:
+            entry["own_identity"] = True
         if self.deprecated:
             entry["deprecated"] = dict(self.deprecated)
         if aliases := self.tool_alias_list():

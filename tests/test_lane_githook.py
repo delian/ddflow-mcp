@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from safe_cleanup import remove_owned
 
 from ddflow.services.swarm import githook as GH
 
@@ -213,15 +214,13 @@ def test_a_hook_added_after_install_runs_and_removed_one_does_not_break(lane, tm
 
 
 def test_install_twice_then_uninstall_unsets_and_a_missing_dir_still_restores(lane, tmp_path):
-    import shutil
-
     _, wt = lane
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     GH.install(wt, invocation=stub(tmp_path, "exit 0"))
     GH.uninstall(wt)
     assert unset(wt)
     GH.install(wt)
-    shutil.rmtree(GH.hook_dir(wt))
+    remove_owned(GH.hook_dir(wt), wt.resolve().parent)
     assert "removed" in GH.uninstall(wt) and not GH.installed(wt)
     assert unset(wt)
 

@@ -1833,18 +1833,19 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes}
-                          summary (default), forecast, retro <id>, skips or lanes
+    {summary,forecast,retro,skips,lanes,stages}
+                          summary (default), forecast, retro <id>, skips, lanes or stages
     item                  with retro: the item id
   
   options:
     -h, --help            show this help message and exit
     --phase PHASE         limit to one phase
     --since SINCE         only since a duration back (7d, 12h) or a date YYYY-MM-DD
-    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase
+    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase;
+                          stages: phase, kind, size, agent
   
   '''
 # ---

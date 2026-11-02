@@ -1280,7 +1280,7 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips or lanes."
+          "description": "summary (default), forecast, retro, skips, lanes or stages."
          },
          "lane": {
           "type": "string",
@@ -1288,7 +1288,7 @@
          },
          "group_by": {
           "type": "string",
-          "description": "Group the outcome rates by gate (default), reviewer, agent, kind or phase."
+          "description": "Group the outcome rates by gate (default), reviewer, agent, kind or phase; with stages: phase, kind, size or agent."
          },
          "run": {
           "type": "boolean",
@@ -1301,6 +1301,14 @@
          "diff": {
           "type": "string",
           "description": "check: a git base; report only the extracted surface added since it."
+         },
+         "interfaces": {
+          "type": "string",
+          "description": "Census the interfaces that are not imports: 'all' or one kind (program, protocol, managed-file, env, network): programs run, wire protocols, other tools' files, environment variables, network endpoints."
+         },
+         "baseline": {
+          "type": "boolean",
+          "description": "With interfaces: print the ratchet baseline text instead of the report."
          },
          "stamp": {
           "type": "boolean",

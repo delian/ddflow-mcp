@@ -140,7 +140,8 @@ def test_a_tree_bound_to_a_released_item_is_where_the_next_item_is_worked(repo):
     _git(tree, "add", "z.py")
     _git(tree, "commit", "-qm", "T0")
     assert run_cli(tree, "merge", "T0")[0] == OK
-    assert run_cli(tree, "release", "T0")[0] == OK
+    # the merge released the lease itself (LK-release-at-merge): a further release has nothing to do
+    assert run_cli(tree, "release", "T0")[0] in (OK, NOTHING)
     assert run_cli(tree, "claim", "T1", "--no-worktree")[0] == OK
     (tree / "a.py").write_text("a = 1\n")
     _git(tree, "add", "a.py")

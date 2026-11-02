@@ -15,8 +15,7 @@ import json
 from collections.abc import Callable
 from urllib.parse import urlparse
 
-from ..adapters.http import default_client
-from ..adapters.ports import HttpClient
+from ..adapters.http import HttpClient, default_client
 from ..core.events import version_key
 
 #: The public Python package index's JSON API; `[upgrade].index_url` replaces it for a

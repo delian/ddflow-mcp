@@ -1,4 +1,4 @@
-"""The `metrics` command, declared once: summary, forecast, retro, skips and lanes views.
+"""The `metrics` command, declared once: summary, forecast, retro, skips, lanes and stages views.
 
 `surfaces/parsers/metrics.py` registers the command-line half and `surfaces/tools/__init__.py`
 takes the MCP entry (D-unify 4). Read-only: it appends no event and starts no process.
@@ -27,6 +27,10 @@ COMMANDS: tuple[Command, ...] = (
             "view=forecast: the critical-path ETA of a phase as a P50..P90 estimate. "
             "view=retro + item: that item's timeline and its biggest gap (why it was slow). "
             "view=skips: the gate-skip audit. view=lanes: lane utilisation on an hourly grid. "
+            "view=stages: the cycle-time split (queue wait, lease wait, implement, per-gate run and "
+            "host-lock wait, review wait, merge wait, claim to merge, rework rounds, gate re-runs), "
+            "group_by phase, kind, size (changed lines) or agent; stages whose events ddflow does "
+            "not record yet are listed as not measured, never 0. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(
@@ -43,11 +47,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips or lanes.",
-                cli_help="summary (default), forecast, retro <id>, skips or lanes",
+                help="summary (default), forecast, retro, skips, lanes or stages.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes or stages",
                 positional=True,
                 nargs="?",
-                choices=("summary", "forecast", "retro", "skips", "lanes"),
+                choices=("summary", "forecast", "retro", "skips", "lanes", "stages"),
                 default=None,
             ),
             Param(
@@ -72,8 +76,8 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "group_by",
-                help="Group the outcome rates by gate (default), reviewer, agent, kind or phase.",
-                cli_help="group outcome rates by gate (default), reviewer, agent, kind or phase",
+                help="Group the outcome rates by gate (default), reviewer, agent, kind or phase; with stages: phase, kind, size or agent.",
+                cli_help="group outcome rates by gate (default), reviewer, agent, kind or phase; stages: phase, kind, size, agent",
                 default="",
             ),
         ),

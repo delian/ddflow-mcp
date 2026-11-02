@@ -5,8 +5,7 @@ of anything that talks MCP (a companion probe, our own server's callers) runs wi
 a real server. `FakeMcpClient(mode=...)` scripts the failure a real server can show: `silent`
 (no answer: timeout, unknown), `gone` (the stream closed), `echo` (our request came back) and
 `unavailable` (it could not start). The same cases run against these and the default adapters
-(tests/test_adapters_mcp.py). Registered in `FAKES` under the port's name once `ports.py`
-declares the two ports (see ADP-mcp, waiting on ADP-http's files).
+(tests/test_adapter_mcp.py). Registered in `FAKES` under the port's name by `@fake`.
 """
 
 from __future__ import annotations
@@ -16,8 +15,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from .. import mcp as W
+from . import fake
 
 
+@fake
 class FakeMcpServer:
     """A declared tool table answered in memory; records what it was asked and told."""
 
@@ -105,6 +106,7 @@ class FakeMcpServer:
                 after()
 
 
+@fake
 class FakeMcpClient:
     """A client wired to a `FakeMcpServer`, scripted by `mode` (see the module docstring)."""
 

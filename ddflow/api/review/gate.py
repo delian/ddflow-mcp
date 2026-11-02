@@ -63,6 +63,42 @@ def _log_started(log, it, item: str, gate: str) -> None:
         log.append("gate.started", item, {"gate": gate})
 
 
+#: The synthetic key of the per-item review lock: it names no gate, so it never collides
+#: with a command gate's started-marker, and a dead one is skipped by the dead-run sweep.
+_REVIEW_LOCK_GATE = "review"
+
+
+def _claim_or_refuse_twin(repo: Path, item: str, sha: str) -> tuple[Any, O.Outcome | None]:
+    """(marker, refusal): claim the per-ITEM review lock, or refuse a second review of the
+    same item while one is live (B8664a1e0c6). Its record is per item, not per gate or per
+    commit, so a second `ddflow review` of the item -- any gate, any commit -- races the
+    first for the same gate records, and the first to take the lock reviews while the second
+    sees its marker and refuses. Held across the WHOLE call (all of the item's gates), not
+    per gate. The lock uses a synthetic key that is no gate, so it never collides with a
+    command gate's marker and a dead one is skipped by the sweep. (None, None) when there is
+    no item (nothing is recorded, nothing to race); a marker the filesystem could not write
+    is refused too, because without it a concurrent review could not be refused."""
+    if not item:
+        return None, None
+    marker, twin = RUN.claim_started(repo, item, _REVIEW_LOCK_GATE, sha, same_commit=False)
+    if twin is not None:
+        return None, O.nothing(
+            "review",
+            f"this item's gates are already being reviewed (pid {twin.pid}, since "
+            f"{twin.at}); wait for it -- a second review would only race it for the one "
+            f"outcome and pay the reviewer twice. A review can start once the first ends.",
+            id=item,
+        )
+    if marker is None:
+        return None, O.nothing(
+            "review",
+            f"the review could not write its started-marker for {item}; refusing rather "
+            f"than run without the concurrent-review lock",
+            id=item,
+        )
+    return marker, None
+
+
 def _unknown_item(repo: Path, item: str, agent: str, gate: str) -> O.Outcome | None:
     """A refusal for an `item` the queue does not hold, else None.
 

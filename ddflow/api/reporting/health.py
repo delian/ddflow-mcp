@@ -26,6 +26,7 @@ from ...services import external as EX
 from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
+from ...services import lanerelease as LR
 from ...services import launchers as LA
 from ...services import leasebreak as LBR
 from ...services import leases as L
@@ -342,6 +343,7 @@ def doctor(
         notes.append(UP.skipped_kinds_advice(st))
 
     notes.extend(UP.doctor_notes(st))
+    notes.extend(LR.warning(repo, cfg, st).splitlines())  # released entries with no integrator
     notes.extend(US.doctor_notes(repo, st))  # a start check that never reached an answer
     if release := UC.proposal(repo, cfg):  # a newer ddflow release (D-self-upgrade 2)
         notes.append(release)
