@@ -275,3 +275,17 @@ def test_the_version_fact_reads_the_results_own_protocol_version_not_server_info
 def test_the_unavailable_fake_keeps_the_offered_version_too():
     _, client, _ = _fake("unavailable")
     assert client.connect(1, version="2024-11-05").protocol.offered == "2024-11-05"
+
+
+def test_a_close_right_after_the_answer_keeps_the_handshake_ok():
+    server = W.StdioServer(tools=TOOLS, call=_call)
+
+    class Dies(_Loop):
+        def send(self, line):
+            if "notifications" in line:
+                raise BrokenPipeError
+            super().send(line)
+
+    client = W.StdioClient(lambda argv, env: Dies(server, "ok"), ["srv"], poll_s=0.01)
+    hello = client.connect(1)
+    assert hello.status == W.OK and hello.speaks_mcp is True and "it did answer" in hello.detail

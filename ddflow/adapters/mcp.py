@@ -425,7 +425,7 @@ class StdioClient:
             if not self._send(
                 json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
             ):
-                hello.status, hello.detail = EOF, CLOSED_BEFORE_READ
+                hello.detail += "; closed before `notifications/initialized` (it did answer)"
         elif first.status == ERROR:
             hello.detail = describe_answer({"error": first.error})[0]
         return hello

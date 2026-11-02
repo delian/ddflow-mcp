@@ -39,6 +39,7 @@ from typing import Any
 # A plain import, never importlib.metadata: installed metadata is stale in a source tree.
 from ddflow import __version__ as _VERSION
 from ddflow.adapters.mcp import (  # noqa: F401 -- the one wire encoder, re-exported
+    INVALID_PARAMS,
     SERVED_VERSIONS,
     UNSUPPORTED_PROTOCOL_VERSION,
     err,
@@ -80,7 +81,6 @@ META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
 #: with no connection to declare it on, a stateless request names its caller itself --
 #: here, or with the `as_agent` argument, which wins when both are given.
 META_AGENT = "ddflow/agent"
-INVALID_PARAMS = -32602
 
 #: `ttlMs` per cacheable method (`CacheableResult`). The tool list and the resource list
 #: are fixed for the life of the process (`listChanged` is false), so a client may keep
