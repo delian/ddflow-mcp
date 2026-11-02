@@ -120,15 +120,20 @@ class LaneHandle(Protocol):
     capabilities: frozenset[str]
 
 
+class Capable(Protocol):
+    """What `advertise` needs of a lane: the capabilities it has."""
+
+    capabilities: frozenset[str]
+
+
 @port
 @runtime_checkable
 class Lane(Protocol):
     """One implementation per transport, registered by name in `TRANSPORTS`; the default is
     ``process-headless`` (`ddflow.services.lane_headless`, home planned in ddflow.adapters.lanes).
-    ``capabilities`` is the most the transport can do; a handle's own set
+    A lane object also carries ``capabilities`` (the most the transport can do, see `Capable`:
+    a data member cannot sit in a Protocol that is checked with issubclass); a handle's own set
     (``LaneHandle.capabilities``) is what this lane can."""
-
-    capabilities: frozenset[str]
 
     def start(self, spec: LaunchSpec) -> LaneHandle | Result:
         """Launch. A Result (unavailable or failed) when it cannot; never raises for that."""
@@ -172,6 +177,6 @@ def driver_for(transport: str) -> Lane | Result:
     return factory()
 
 
-def advertise(driver: Lane, wanted: set[str] | frozenset[str]) -> frozenset[str]:
+def advertise(driver: Capable, wanted: set[str] | frozenset[str]) -> frozenset[str]:
     """``wanted`` limited to what the driver can do, and to the known vocabulary."""
     return frozenset(wanted) & CAPABILITIES & driver.capabilities
