@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 import time
@@ -14,9 +15,10 @@ from ddflow.infra import resources as R
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="rusage is POSIX only")
 
+_PY = shlex.quote(sys.executable)
 _BURN = (
     "import time\n"
-    "buf = bytearray(150 * 1024 * 1024)\n"
+    "buf = bytearray(100 * 1024 * 1024)\n"
     "for i in range(0, len(buf), 4096): buf[i] = 1\n"
     "end = time.process_time() + 0.4\n"
     "while time.process_time() < end: pass\n"
@@ -40,7 +42,7 @@ def test_maxrss_is_normalised_to_kb_per_platform():
 
 
 def test_from_rusage_fake_gives_the_evidence_fields():
-    ev = R.from_rusage(_ru()).evidence()
+    ev = R.from_rusage(_ru(), platform="linux").evidence()
     assert ev == {
         "cpu_user_s": round(1.2345, 3),
         "cpu_sys_s": 0.5,
@@ -56,7 +58,8 @@ def test_measure_prefers_wait4_then_delta_then_unavailable(monkeypatch):
     before, after = _ru(), _ru(ru_utime=2.2345, ru_inblock=10, ru_maxrss=4096)
     monkeypatch.setattr(R, "children_snapshot", lambda: after)
     d = R.measure(SimpleNamespace(rusage=None), before)
-    assert (d.source, d.cpu_user_s, d.io_in_blocks, d.maxrss_kb) == ("delta", 1.0, 7, 4096)
+    # peak rss is a high-water mark, not a difference: unknown (None) in a delta, never a guess
+    assert (d.source, d.cpu_user_s, d.io_in_blocks, d.maxrss_kb) == ("delta", 1.0, 7, None)
     monkeypatch.setattr(R, "children_snapshot", lambda: None)
     u = R.measure(SimpleNamespace(rusage=None), None)
     assert u.source == "unavailable"
@@ -65,34 +68,34 @@ def test_measure_prefers_wait4_then_delta_then_unavailable(monkeypatch):
 
 @posix_only
 def test_real_child_that_allocates_and_burns_cpu_is_measured():
-    r = P.run_shell(f"{sys.executable} -c '{_BURN}'", timeout_s=60)
+    r = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60)
     assert r.ok, r.err
     res = r.resources
     assert res is not None and res.source == "wait4"
-    assert res.maxrss_kb >= 140 * 1024
+    assert res.maxrss_kb >= 90 * 1024
     assert res.cpu_user_s + res.cpu_sys_s >= 0.35
 
 
 @posix_only
 def test_each_command_gets_its_own_numbers_not_a_running_total():
     cheap = P.run_shell("true", timeout_s=20).resources
-    P.run_shell(f"{sys.executable} -c '{_BURN}'", timeout_s=60)
+    heavy = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60).resources
     again = P.run_shell("true", timeout_s=20).resources
     assert cheap.source == again.source == "wait4"
-    assert again.maxrss_kb < 50 * 1024  # not the 150 MB high-water of the earlier child
-    assert again.cpu_user_s + again.cpu_sys_s < 0.3
+    assert again.maxrss_kb < 50 * 1024  # not the 100 MB high-water of the earlier child
+    assert again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
 
 
 @posix_only
 def test_a_process_tree_is_attributed_to_the_shell_line():
-    line = f"{sys.executable} -c '{_BURN}' & wait"
+    line = f"{_PY} -c '{_BURN}' & wait"
     res = P.run_shell(line, timeout_s=60).resources
     assert res.cpu_user_s + res.cpu_sys_s >= 0.35
 
 
 @posix_only
 def test_a_timed_out_command_still_reports_what_it_cost():
-    r = P.run_shell(f"{sys.executable} -c 'while True: pass'", timeout_s=0.8)
+    r = P.run_shell(f"{_PY} -c 'while True: pass'", timeout_s=0.8)
     assert r.timed_out and r.resources is not None
     # A killed tree's unreaped descendants are not the shell's to report: only that numbers
     # exist (never a fabricated zero for "unavailable") is promised.

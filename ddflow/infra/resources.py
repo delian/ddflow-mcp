@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from types import SimpleNamespace
 from typing import Any
 
 try:  # POSIX only
@@ -77,6 +78,9 @@ def metered(base: type) -> type:
     that may import subprocess) that keeps the kernel's rusage of its own reap in ``rusage``
     (None until reaped): the reap calls ``os.wait4`` instead of ``os.waitpid``."""
 
+    if not hasattr(base, "_try_wait"):  # a CPython that renamed it: say so, never degrade quietly
+        raise RuntimeError(f"{base!r} has no _try_wait: resources.metered cannot hook its reap")
+
     class MeteredPopen(base):  # type: ignore[valid-type, misc]
         rusage: Any = None
 
@@ -103,14 +107,23 @@ def children_snapshot() -> Any:
 
 
 def _delta(before: Any, after: Any, platform: str | None = None) -> Resources:
-    class _D:  # maxrss of RUSAGE_CHILDREN is a high-water mark: the after value, not a difference
-        ru_utime = max(0.0, after.ru_utime - before.ru_utime)
-        ru_stime = max(0.0, after.ru_stime - before.ru_stime)
-        ru_maxrss = after.ru_maxrss
-        ru_inblock = max(0, after.ru_inblock - before.ru_inblock)
-        ru_oublock = max(0, after.ru_oublock - before.ru_oublock)
-
-    return from_rusage(_D, DELTA, platform)
+    """cpu and block io as differences. Peak rss is NOT: RUSAGE_CHILDREN's ru_maxrss is a
+    high-water mark over every child ever reaped, so no difference is this command's peak and
+    the value stays None (unknown), never a number that could be another child's. The delta is
+    process-wide: any child reaped meanwhile (the owner-watch reaper's watcher, another thread's
+    command) is counted too, which is why it is marked ``delta``."""
+    got = from_rusage(
+        SimpleNamespace(
+            ru_utime=max(0.0, after.ru_utime - before.ru_utime),
+            ru_stime=max(0.0, after.ru_stime - before.ru_stime),
+            ru_maxrss=0,
+            ru_inblock=max(0, after.ru_inblock - before.ru_inblock),
+            ru_oublock=max(0, after.ru_oublock - before.ru_oublock),
+        ),
+        DELTA,
+        platform,
+    )
+    return replace(got, maxrss_kb=None)
 
 
 def measure(p: Any, before: Any) -> Resources:
