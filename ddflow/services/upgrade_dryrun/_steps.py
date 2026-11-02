@@ -572,7 +572,9 @@ class _RehearsalSteps:
             else done
         )
         took = self.ddflow(self.new, repo, "claim", "DRY-1", agent=b)
-        if done.returncode == O.REFUSED and (left.returncode not in (O.OK, O.NOTHING) or took.returncode != 0):
+        if done.returncode == O.REFUSED and (
+            left.returncode not in (O.OK, O.NOTHING) or took.returncode != 0
+        ):
             problems.append(
                 f"after the honest release {b} could not take the task ({left.returncode}, {took.returncode})"
             )

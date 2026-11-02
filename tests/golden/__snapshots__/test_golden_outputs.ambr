@@ -475,6 +475,14 @@
           gates are kept for it to be restored (DX-park-and-resume). An uncontended
           lease is never broken, however old; a lease that shows progress never is. 0
           = never (the old behaviour).
+      lease.release_at_merge = True   [default]
+          The lease ends when `ddflow merge` has landed the branch and recorded it
+          (also when the merge queue's integrator lands it), not when the item
+          completes: 33.5% of all lease-hours fell after the merge, held while
+          completion waited on approvals or an absent agent, and no one else could
+          change the files. `merge` disposes of the tree as before, `complete` needs
+          no lease, a waiter is woken ready, and a merge that fails keeps the lease.
+          Off: the lease is held to `complete`, as before.
       lease.break_on_timeout = False   [default]
           A claim that meets a breakable lease breaks it by itself. Off (default): the
           waiter must say so (`ddflow claim --break`), so breaking another agent's
@@ -1297,6 +1305,12 @@
           never rewired by a typo); `config --set`, `ddflow_configure` and the
           environment refuse it, and so does loading ddflow's own source tree, where
           the file and the code are one commit.
+      schedule.optimizer = 'greedy-v1'   [default]
+          Which optimizer orders the ready set and cuts it to the free slots (default
+          `greedy-v1`: the order keys bugs first, priority, id, and a greedy cut that
+          never offers two overlapping items). An unknown name is refused with the
+          names known. An optimizer only reorders and cuts: hard constraints stay
+          `needs` and `globs`.
       schedule.bugs_first = True   [default]
           Offer bug fixes before features (default true). A task is a bug fix when it
           carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record
@@ -2813,6 +2827,32 @@
           without making a merge wait for a test suite); `config --set`,
           `ddflow_configure` and the environment refuse it, and so does loading
           ddflow's own source tree, where the file and the code are one commit.
+      pins.baseline_globs = []   [default]
+          Sorted, one-entry-per-line baseline files many tasks edit one line at a time
+          (an allowlist, a ratchet baseline): ["tests/baseline/*.txt"]. `ddflow pins
+          drivers --install` writes "<glob> merge=union" for each, so two tasks' added
+          lines both survive; `pins drivers` (no flag) shows the lines first, and
+          `pins drivers --check` verifies the merged file is still sorted, unique and
+          free of conflict markers. Pin files and golden indexes are not listed here:
+          they take the regenerating driver from [pins] recipes. Append-only logs are
+          [lease].append_only_globs.
+      pins.mergiraf = False   [default]
+          Opt-in EVALUATION of Mergiraf (a syntax-aware merge driver) for
+          [pins].mergiraf_globs. Off: nothing about it is read or written. On: `pins
+          drivers` lists the lines and git config it would add and whether the
+          `mergiraf` binary and the minimum git are present; nothing is installed for
+          you, and a missing binary or old git is reported unavailable.
+      pins.mergiraf_globs = ['*.py']   [default]
+          Files Mergiraf would merge when [pins].mergiraf is on. Mergiraf supports
+          Python.
+      pins.mergiraf_min_git = '2.44'   [default]
+          Oldest git (major.minor) for which the recommended Mergiraf setup works (it
+          needs the %P placeholder of git 2.44). An older git is reported unavailable
+          and the driver is not written.
+      pins.mergiraf_keep_pct = 10   [default]
+          Mergiraf is kept only if, replayed over past merges, it resolves more than
+          this percent of the textual conflicts (`pins drivers --check` judges numbers
+          you give it); below that the evaluation says drop it.
       plan.warn_missing_globs = True   [default]
           Whether `claim` and `plan check` WARN about a task whose declared literal
           globs (no wildcard) name files that do not exist, with the nearest existing
@@ -2821,6 +2861,14 @@
           file is named like an existing sibling (or exists under that name
           elsewhere). It is a warning, never a refusal: the claim is made and the plan
           check keeps its exit code. `false`: no such check.
+      quality.max_file_bytes = 30000   [default]
+          A tracked .py file (source and tests) larger than this many BYTES (default
+          30000, about 7k tokens) is OVER the limit (r-small-files): split it by
+          cohesion into a package that keeps the old import path. `ddflow doctor`
+          lists the files over it; tests/test_file_size_ratchet.py fails a new one and
+          an exempt one that grew (the exemptions are the shrink-only baseline
+          tests/file_size_baseline.txt). An organisation that wants the limit held for
+          every clone sets and locks it in its shared config. 0 turns the check off.
       waves.auto_stamp = True   [default]
           Keep the derived `wave:N` tags (wave 0 = no open prerequisite, task-level or
           inherited; wave N = 1 + the highest wave among open prerequisites) current
@@ -2856,6 +2904,28 @@
       merge_queue.keep_history = 50   [default]
           How many finished (merged or parked) entries the queue keeps for `ddflow
           queue status` and the ETA; older ones are deleted when an entry is added.
+      merge_queue.auto_run = 'on'   [default]
+          Whether ddflow itself starts the integrator (`ddflow queue run`) so a queued
+          entry never waits with nobody to land it. 'on': accepting a release at
+          enqueue starts one detached integrator run through the job machinery (a job
+          with its log path; none is started while one is alive), and a tick started
+          by any ddflow command starts it again when an entry has waited longer than
+          `auto_run_after_s` with no integrator alive. 'off': nothing is started;
+          `ddflow queue run` by hand still works, and `brief`, `queue status` and
+          `doctor` still warn when entries wait with nobody integrating. No daemon is
+          involved. An unrecognised value in a config file is warned about, reported
+          by `doctor` and falls back to 'off', the strictest (ddflow starts no process
+          on its own; the queue is run by hand); `config --set`, `ddflow_configure`
+          and the environment refuse it, and so does loading ddflow's own source tree,
+          where the file and the code are one commit.
+      merge_queue.auto_run_after_s = 120   [default]
+          Seconds a queued entry waits with no integrator alive before the tick starts
+          one, and before `brief`, `queue status` and `doctor` call the wait a
+          problem. Applies when `auto_run` is on (the warning applies always).
+      merge_queue.auto_run_max_parallel = 1   [default]
+          How many automatically started integrator jobs may be alive at once. The
+          queue's own lock still lets only one integrate, so more than 1 only matters
+          for a very short overlap while one ends and the next starts.
       chore.globs = ['.ddflow/rules/**', '.mailmap', 'DDFLOW.md', 'docs/ddflow/decisions/**', 'docs/ddflow/QUEUE.md', 'docs/ddflow/LESSONS.md', 'docs/ddflow/LESSONS-SUMMARY.md']   [default]
           The chore class: files `ddflow chore commit FILES -m MSG` may commit, merge
           and COMPLETE with no reviewer (rules, .mailmap, DDFLOW.md, decision records,
@@ -2921,9 +2991,12 @@
           that a person (not a script holding the session) answered or that the
           transcript was not edited by the agent's own user; `ddflow doctor` says so.
       approvals.transcript_dirs = ['~/.claude/projects']   [default]
-          Where the harness channel looks for session transcripts (`*.jsonl`) that
-          hold the answer to an approval question (default ~/.claude/projects). Only
-          files modified since the request was filed are read.
+          Where the harness channel looks for session transcripts that hold the answer
+          to an approval question (default ~/.claude/projects). Each entry is either a
+          directory of Claude Code `*.jsonl` transcripts or a SQLite database file
+          (Kilo's store); Kilo's own default store `~/.local/share/kilo/kilo.db` is
+          also read when it exists. Only transcripts modified since the request was
+          filed are read.
       approvals.expiry_warn_s = 600   [default]
           How many seconds before the end of its use window `ddflow approvals log`
           starts to say an approved-but-unspent request will expire unused (default
@@ -2942,12 +3015,36 @@
           approval answered by `policy:<id>`, never by a person. An agent's edit of
           this knob is a `config.set`, which needs a person's approval.
       approvals.policy_max_uses = 1   [default]
-          How many times one standing rule may approve the same item and target
-          (default 1). A rule past its cap falls back to asking a person.
+          How many times one standing rule may approve the SAME item and target
+          (default 1): the cap is counted per item+target, so a backlog of DISTINCT
+          items is not limited by it -- each item gets its own use, and a completed
+          item needs no more approvals (the standing `complete_unavailable` use
+          completes it once and it is done). A rule past its cap falls back to asking
+          a person. An explicit `--approval request` is ALWAYS reserved for a person
+          (never answered by a standing rule, never counted against this cap),
+          whatever the window or the cap say.
       approvals.policy_unavailable_runs = 3   [default]
           How many recorded `unavailable` runs of a review gate the rule
           `skip_after_unavailable` needs before it lets an agent skip that gate's
           failure (default 3).
+      approvals.auto_approve_after_retries = 0   [default]
+          Retry threshold (default 0 = off): after the SAME generic T2 verb
+          (`complete.force`, `claim.force`, `gate.skip.failed_review`,
+          `approve.partial`) has been filed and refused this many times for the same
+          item -- each time the operator was asked and did not answer, counted across
+          EVERY agent -- ddflow AUTO-ANSWERS the next filing as a standing rule
+          recorded `policy:auto-after-retries` (the request's digest preserved) and
+          NOTIFIES the operator, surfaced in `ddflow approvals log` and `ddflow
+          doctor`, rather than asking a person again. Distinct from
+          `standing_window_s`, which is TIME-based and carries no per-use
+          notification: this is COUNT-based and always notifies. Not gated by the
+          standing window nor `policy_max_uses`: the threshold is the whole condition,
+          and every auto-answer above it is on the record so `doctor` and `approvals
+          log` show each one. Once armed, it stays armed: the refusals are asks the
+          log keeps for its life (an expired ask was still asked and left unanswered),
+          so later filings of that verb for that item keep auto-approving with a
+          notification until the operator lowers this knob. 0 turns it off. An agent's
+          edit of this knob is a `config.set`, which needs a person's approval.
       approvals.standing_window_s = 3600   [default]
           How long, in seconds, the STANDING AUTO-APPROVE WINDOW stays open (default
           3600, one hour; capped at 86400, 24 hours -- a value above it is refused).
@@ -3722,6 +3819,16 @@
       docs.command_timeout_s = 20   [default]
           Seconds one `--help` walk step, one count command or the `lint_command` may
           run before the check records it as not run (a note) instead of waiting.
+      self_assessment.auto_file = True   [default]
+          Whether the defensive self-assessment pass runs by default (default true):
+          at session end, at phase end, before context compaction, and whenever
+          assessment text names a defect, each not-yet-tracked defect it names is
+          filed as a bug (`bug found --scope ddflow ...`) and one that reads like an
+          existing record is skipped, never duplicated. A bug filed this way is filed
+          with `--no-task` when the fix already ships in the finding commit. Turn it
+          off per layer (later wins): the code default is overridden by
+          `<repo>/.ddflow/config.toml`, then `<repo>/.ddflow/local/config.toml`, then
+          `DDFLOW_SELF_ASSESSMENT_AUTO_FILE`.
   
     ''',
   )

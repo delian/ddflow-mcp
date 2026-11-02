@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "approvals.standing_verbs"
+new = '["complete.force", "claim.force", "gate.skip.failed_review", "approve.partial"]'
+why = "The generic T2 verbs the standing auto-approve window pre-authorises (the whole generic T2 class)."
+impact = "additive"

@@ -282,7 +282,7 @@ def _pins_regenerate(a, c: Ctx) -> int:
 
 def cmd_pins(a, c: Ctx) -> int:
     """Which text of an instruction file is pinned by a test, and which is free."""
-    if a.document in ("regenerate", "merge-driver"):
+    if a.document in ("regenerate", "merge-driver", "drivers"):
         return _pins_regenerate(a, c)
     tests = tuple(t.strip() for t in (a.tests or "").split(",") if t.strip())
     out = A.pins(c.repo, a.document, tests=tests, min_chars=a.min_needle, top=a.top)
