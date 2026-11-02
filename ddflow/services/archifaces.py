@@ -22,7 +22,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .archdeps import _dotted
+from .archdeps import STDLIB_HOMES, _dotted
 from .archifaces_scan import (  # noqa: F401  (re-exported)
     AGENT_CLIS,
     ALL_ENV,
@@ -66,6 +66,8 @@ def home_of(kind: str, family: str) -> tuple[str, tuple[str, ...]]:
         return PROGRAM_HOMES.get(family, ("ADP-tools", ()))
     if kind == "protocol":
         return PROTOCOL_HOMES.get(family, "ADP-lane-transport"), ()
+    if kind == "network":  # the import census already declares the http home: one list
+        return "ADP-http", STDLIB_HOMES.get("http", ())
     return KIND_HOMES.get(kind, "ADP-http"), ()
 
 

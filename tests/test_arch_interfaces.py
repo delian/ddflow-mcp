@@ -445,3 +445,11 @@ def test_third_round_review_findings_stay_fixed(tmp_path: Path):
     assert {f.family for f in c.families if f.kind == "env"} == {"KW_VAR"}
     assert not [f for f in c.families if f.kind == "managed-file"]  # a bare f-string is prose
     assert I.parse_baseline(" # indented comment\n\n") == {}
+
+
+def test_network_home_is_the_import_census_http_home(tmp_path: Path):
+    src = 'import urllib.request\nurllib.request.urlopen("x")\n'
+    c = I.scan(_tree(tmp_path, {"adapters/http.py": src, "services/other.py": src}))
+    http = next(f for f in c.families if f.kind == "network" and f.family == "http")
+    assert {s.module for s in http.violations} == {"ddflow.services.other"}
+    assert http.home_modules == A.STDLIB_HOMES["http"]
