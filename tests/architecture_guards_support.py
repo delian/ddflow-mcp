@@ -5,6 +5,11 @@ and the census functions), the committed-baseline readers and the ratchet compar
 here; the guards that use them are in test_architecture_guards.py (the ratchet),
 test_architecture_import_contracts.py and test_architecture_counters.py. The how and why
 of the ratchets is in the docstring of test_architecture_guards.py.
+
+RENAME MAP (pytest node ids; every id keeps its name and parametrization, only the module changes):
+  unchanged in tests/test_architecture_guards.py: test_ratchet
+  tests/test_architecture_guards.py::<name> -> tests/test_architecture_import_contracts.py::<name> for: test_import_contracts, test_every_extra_has_a_contract, test_a_split_allowlist_joins_one_file_per_source_module
+  tests/test_architecture_guards.py::<name> -> tests/test_architecture_counters.py::<name> for: test_counter_counts_what_it_says, test_duplicate_parser_refuses_a_run_that_measured_nothing, test_kept_unreferenced_functions_are_still_defined_and_unreferenced, test_the_unreferenced_census_counts_what_it_says, test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there, test_a_per_module_ratchet_compares_each_module_with_its_own_file, test_every_per_module_baseline_is_a_positive_count_in_its_own_file, test_a_counter_whose_last_module_reached_zero_has_no_directory
 """
 
 from __future__ import annotations
