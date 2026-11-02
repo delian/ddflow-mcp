@@ -115,8 +115,6 @@ def _mover(state: str):
         reason = str(ev.data.get("reason", ""))
         if row["state"] not in froms or role not in (*who, OPERATOR):
             return  # not from this state, or not this author's move: nothing changes
-        if role == OPERATOR and state == SEEN:
-            return
         if needs_reason and not reason.strip():
             return  # a rejection or a counter without its reason is not an answer
         row["state"] = state

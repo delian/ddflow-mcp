@@ -323,3 +323,23 @@ def test_a_header_that_understates_its_hunk_is_malformed(sender, cfg) -> None:
 def test_format_patch_signature_is_not_a_removed_line() -> None:
     s = P.shape(PATCH + "-- \n2.43.0\n")
     assert (s.added, s.removed, s.malformed) == (1, 0, False)
+
+
+def test_signature_dashes_in_a_message_binary_bodies_and_one_sided_lies() -> None:
+    msg = "Subject: [PATCH] t\n\nbody\n-- \nnote\n---\n" + PATCH
+    assert P.shape(msg).files == ("a.py",)
+    binary = "diff --git a/i.png b/i.png\nGIT binary patch\nliteral 3\n+abc\n-def\n\n"
+    b = P.shape(binary)
+    assert b.binary and not b.malformed and b.lines == 0
+    lie = "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,1 +1,1 @@\n+a\n+b\n"
+    assert P.shape(lie).malformed
+
+
+def test_lock_suffixes_are_all_dropped_and_the_operator_may_mark_seen(
+    sender, owner, cfg, repo
+) -> None:
+    assert R.ref_name("o", "a.lock.lock").endswith("/o/a")
+    _send(sender, cfg, sid="SG1")
+    person = A.resolve_actor(cfg, "me")
+    E.move(EventLog(repo, "me"), "seen", "SG1", actor=person)
+    assert _row(owner, "SG1")["state"] == "seen"

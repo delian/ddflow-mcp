@@ -31,7 +31,6 @@ from ...core.handlers.suggestions import (
     OPEN,
     OPERATOR,
     REJECTED,
-    SEEN,
     UNANSWERED,
     suggestions_of,
 )
@@ -266,7 +265,7 @@ def move(
     mine = "owner" if agent == row["to_agent"] else "sender" if agent == row["from_agent"] else ""
     if not role and mine in who:
         role = mine
-    if role not in (*who, OPERATOR) or (role == OPERATOR and state == SEEN):
+    if role not in (*who, OPERATOR):
         raise SuggestionRefused(
             f"{agent} may not mark a suggestion {state}: only {' or '.join(who)} (or the operator)"
             f" can; the owner is {row['to_agent']}, the sender {row['from_agent']}"

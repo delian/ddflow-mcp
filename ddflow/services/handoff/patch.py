@@ -28,7 +28,8 @@ class Shape:
 
 
 def _body(line: str, old: int, new: int) -> tuple[int, int, int, int]:
-    """One line inside a hunk: (added, removed, old left, new left)."""
+    """One line inside a hunk: (added, removed, old left, new left). A line the header did not
+    announce for its side leaves a negative count, which `shape` reads as malformed."""
     if line.startswith("+"):
         return 1, 0, old, new - 1
     if line.startswith("-"):
@@ -47,20 +48,25 @@ def shape(patch: str) -> Shape:
     files: list[str] = []
     added = removed = 0
     binary = malformed = False
+    in_binary = False
     header = False  # between a `diff --git` line and its first hunk
     old = new = 0  # lines still owed by the open hunk
     for line in patch.splitlines():
         if old > 0 or new > 0:
             a, r, old, new = _body(line, old, new)
             added, removed = added + a, removed + r
-        elif line == "-- ":
+            malformed = malformed or old < 0 or new < 0
+            old, new = max(old, 0), max(new, 0)
+        elif line == "-- " and files:
             break  # the format-patch signature: nothing after it is diff
         elif m := _FILE.match(line):
-            header = True
+            header, in_binary = True, False
             if m["b"] not in files:
                 files.append(m["b"])
         elif files and line.startswith(_BINARY):
-            binary = True
+            binary = in_binary = True  # its base85 body may begin with + or -
+        elif in_binary:
+            pass
         elif header and line.startswith(("--- ", "+++ ")):
             pass
         elif files and (h := _HUNK.match(line)):

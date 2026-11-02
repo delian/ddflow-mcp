@@ -42,7 +42,8 @@ def _part(text: str, fallback: str) -> str:
     while ".." in out:
         out = out.replace("..", ".")
     out = out.strip(".-")
-    out = out.removesuffix(".lock").strip(".-")
+    while out.endswith(".lock"):
+        out = out.removesuffix(".lock").strip(".-")
     return out or fallback
 
 
