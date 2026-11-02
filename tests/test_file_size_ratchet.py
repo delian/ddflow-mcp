@@ -56,7 +56,9 @@ def test_a_baselined_file_may_shrink_but_not_grow_and_a_stale_line_fails(tmp_pat
     base.write_text(f"big.py | {size - 1} | legacy\n")
     assert "grew" in FS.violations(repo, FIXTURE_LIMIT)[0]
     (repo / "big.py").write_text("x = 1\n")
-    assert "delete its line" in FS.violations(repo, FIXTURE_LIMIT)[0]
+    msg = FS.violations(repo, FIXTURE_LIMIT)[0]
+    assert "delete its line" in msg
+    assert f"big.py | {size - 1} | legacy" in msg, "the message quotes the exact line to delete"
 
 
 def test_doctor_note_lists_the_files_over_the_limit(tmp_path):
