@@ -270,3 +270,8 @@ def test_the_version_fact_reads_the_results_own_protocol_version_not_server_info
     server = FakeMcpServer(TOOLS, server_info={"name": "x", "protocolVersion": "2024-11-05"})
     server._initialize = lambda params: {"serverInfo": server.server_info}
     assert FakeMcpClient(server).connect(1).protocol.supported is None
+
+
+def test_the_unavailable_fake_keeps_the_offered_version_too():
+    _, client, _ = _fake("unavailable")
+    assert client.connect(1, version="2024-11-05").protocol.offered == "2024-11-05"

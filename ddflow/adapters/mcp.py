@@ -74,6 +74,22 @@ def valid_id(mid: Any) -> bool:
     return mid is None or isinstance(mid, str | int)
 
 
+def check_request(msg: dict[str, Any]) -> dict[str, Any] | None:
+    """The JSON-RPC error that refuses `msg` as a request, or None when it is well formed
+    (a notification, having no id, is never refused: it is never answered). The server and
+    its fake share it, so the validation is written once."""
+    if "id" not in msg:
+        return None
+    mid = msg["id"]
+    if not valid_id(mid):
+        return err(None, INVALID_REQUEST, "`id` must be a string, a number or null")
+    if msg.get("jsonrpc") != "2.0" or not isinstance(msg.get("method"), str):
+        return err(mid, INVALID_REQUEST, "not a JSON-RPC 2.0 request")
+    if msg.get("params") is not None and not isinstance(msg["params"], dict):
+        return err(mid, INVALID_PARAMS, "`params` must be an object")
+    return None
+
+
 def encode(frame: dict[str, Any]) -> str:
     """One frame as a line (no newline): the only encoder, so framing changes in one place.
     `json.dumps` defaults are kept on purpose (no behaviour change from the hand-rolled loop)."""
@@ -218,15 +234,11 @@ class StdioServer:
             self._write(encode(frame))
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
-        mid, method = msg.get("id"), msg.get("method")
         if "id" not in msg:
             return None  # a notification is never answered
-        if not valid_id(mid):
-            return err(None, INVALID_REQUEST, "`id` must be a string, a number or null")
-        if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
-            return err(mid, INVALID_REQUEST, "not a JSON-RPC 2.0 request")
-        if msg.get("params") is not None and not isinstance(msg["params"], dict):
-            return err(mid, INVALID_PARAMS, "`params` must be an object")
+        mid, method = msg["id"], msg.get("method")
+        if (refusal := check_request(msg)) is not None:
+            return refusal
         params = msg.get("params") or {}
         if method == "initialize":
             want = params.get("protocolVersion")

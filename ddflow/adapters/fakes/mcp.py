@@ -43,12 +43,8 @@ class FakeMcpServer:
         if "id" not in msg:
             return None
         mid, method = msg["id"], msg.get("method")
-        if not W.valid_id(mid):
-            return W.err(None, W.INVALID_REQUEST, "`id` must be a string, a number or null")
-        if msg.get("jsonrpc") != "2.0" or not isinstance(method, str):
-            return W.err(mid, W.INVALID_REQUEST, "not a JSON-RPC 2.0 request")
-        if msg.get("params") is not None and not isinstance(msg["params"], dict):
-            return W.err(mid, W.INVALID_PARAMS, "`params` must be an object")
+        if (refusal := W.check_request(msg)) is not None:
+            return refusal
         params = msg.get("params") or {}
         if method == "initialize":
             return W.ok(mid, self._initialize(params))
@@ -130,7 +126,9 @@ class FakeMcpClient:
 
     def connect(self, timeout_s: float, *, version: str = W.OFFER_VERSION) -> W.Handshake:
         if self.mode == "unavailable":
-            return W.Handshake(W.UNAVAILABLE, detail="could not start (scripted)")
+            return W.Handshake(
+                W.UNAVAILABLE, detail="could not start (scripted)", protocol=W.Negotiation(version)
+            )
         bad = self._failure()
         if bad is not None:
             return W.Handshake(**vars(bad), protocol=W.Negotiation(version))
