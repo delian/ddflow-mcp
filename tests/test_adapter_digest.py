@@ -50,6 +50,11 @@ def test_the_fake_builds_no_more_than_it_keeps(monkeypatch):
 
     rounds = []
     real = zlib.crc32
-    monkeypatch.setattr(module.zlib, "crc32", lambda *a: rounds.append(1) or real(*a))
+
+    def counted(*args):
+        rounds.append(1)
+        assert len(rounds) <= 4, "more hash rounds than one kept character needs"  # stop at once
+        return real(*args)
+
+    monkeypatch.setattr(module.zlib, "crc32", counted)
     assert len(FakeDigest().of_obj({"a": 1}, size=10**9, length=1)) == 1
-    assert len(rounds) <= 4, f"{len(rounds)} rounds for one kept character"
