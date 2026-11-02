@@ -493,3 +493,27 @@ def test_fifth_round_findings_stay_fixed(tmp_path: Path):
     c = I.scan(_tree(tmp_path, {"g.py": src}))
     assert {f.family for f in c.families if f.kind == "program"} == {"git", "python", "sh", "uv"}
     assert {f.family for f in c.families if f.kind == "env"} == {"KEYED"}
+
+
+def test_sixth_round_findings_stay_fixed(tmp_path: Path):
+    src = (
+        "import http.client\nimport os\nimport subprocess\n"
+        'subprocess.getstatusoutput("x")\n'
+        'os.execl("/usr/bin/git", "git")\n'
+        'http.client.HTTPConnection(host="kw.example.com")\n'
+        "f = os.environ.items\n"
+        "ARGV = ['uv']\nARGV = 'tool'\nsubprocess.run(ARGV)\n"
+    )
+    c = I.scan(_tree(tmp_path, {"s.py": src}))
+    assert {f.family for f in c.families if f.kind == "program"} == {"sh", "git", "<dynamic>"}
+    assert "host:kw.example.com" in {f.family for f in c.families if f.kind == "network"}
+    assert not [f for f in c.families if f.kind == "env"]  # a bound method reads nothing
+
+
+def test_a_file_that_stops_parsing_is_not_a_shrink(tmp_path: Path):
+    root = _tree(tmp_path, {"a.py": 'import os\nos.getenv("A_VAR")\n'})
+    base = I.parse_baseline(I.format_baseline(I.scan(root)))
+    (root / "ddflow" / "a.py").write_text("def f(:\n")
+    census = I.scan(root)
+    assert census.unparsed == ("ddflow.a",)
+    assert I.ratchet(census, base) == ((), ())

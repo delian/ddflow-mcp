@@ -167,13 +167,15 @@ def ratchet(
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """(grew, shrank): sites NEW or more than baselined, and baseline entries now too high."""
     now = counts(census)
+    # a file that stopped parsing is reported in `unparsed`; its sites did not go away
+    broken = {m.replace(".", "/") + ext for m in census.unparsed for ext in (".py", "/__init__.py")}
     grew, shrank = [], []
     for key in sorted(now):
         was = baseline.get(key, 0)
         if now[key] > was:
             grew.append(f"{key[0]} {key[1]} in {key[2]}: {now[key]} site(s), baseline {was}")
     for key in sorted(baseline):
-        if now.get(key, 0) < baseline[key]:
+        if now.get(key, 0) < baseline[key] and key[2] not in broken:
             shrank.append(
                 f"{key[0]} {key[1]} in {key[2]}: {now.get(key, 0)} site(s), baseline {baseline[key]}"
             )

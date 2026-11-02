@@ -32,7 +32,14 @@ _SHELL = {f"ddflow.infra.proc.{n}" for n in ("run_shell", "spawn_shell")} | {
 _GIT = {
     f"ddflow.infra.git.{n}" for n in ("run", "status_run", "paths", "files", "status", "unmerged")
 }
-_EXEC = {f"os.{n}" for n in ("execv", "execve", "execvp", "execvpe", "posix_spawn", "posix_spawnp")}
+_EXEC = {
+    f"os.{n}"
+    for n in (
+        *("execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe"),
+        *("spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp"),
+        *("spawnvpe", "posix_spawn", "posix_spawnp"),
+    )
+}
 
 MCP_METHODS = frozenset(
     {
@@ -106,7 +113,7 @@ class Site:
     detail: str = ""
 
 
-_ARG_KEYWORDS = ("args", "argv", "cmd", "command", "key", "path", "file")
+_ARG_KEYWORDS = ("args", "argv", "cmd", "command", "key", "path", "file", "host")
 
 
 def _keyword_arg(node: ast.Call) -> ast.AST | None:
@@ -240,7 +247,12 @@ class _Scan:
         if isinstance(e, (ast.List, ast.Tuple)):
             got = self._head(e.elts[0]) if e.elts else None
         elif isinstance(e, ast.Name):
-            vals = self.argv0.get(e.id) or (set() if line else self.consts.get(e.id, set()))
+            both = e.id in self.argv0 and e.id in self.consts  # bound to a list AND a string
+            vals = (
+                set()
+                if both
+                else self.argv0.get(e.id) or (set() if line else self.consts.get(e.id, set()))
+            )
             got = next(iter(vals)) if len(vals) == 1 and DYNAMIC not in vals else None
         elif isinstance(e, ast.Attribute):
             got = self._head(e)  # sys.executable
@@ -337,7 +349,9 @@ class _Scan:
                 call, ast.Call
             ):
                 self._env_arg(call, call.args[0] if call.args else _keyword_arg(call))
-            elif up.attr in ("copy", "items", "keys", "values", "__iter__"):
+            elif up.attr in ("copy", "items", "keys", "values", "__iter__") and (
+                isinstance(call, ast.Call) and call.func is up
+            ):
                 self.add("env", ALL_ENV, node)
         elif (
             isinstance(up, ast.Compare)
