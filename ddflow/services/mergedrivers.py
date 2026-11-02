@@ -116,6 +116,8 @@ def plan(repo: Path, cfg: Config) -> Plan:
             p.attrs.append(line)
     if cfg.pins.after_merge != "off":
         p.regenerate = [PM._attr_line(repo, f) for f in pin_files(repo, cfg)]
+        if p.regenerate:
+            p.regenerate.append("post-merge hook running `ddflow pins regenerate --after-merge`")
     if cfg.pins.mergiraf:
         _mergiraf_plan(repo, cfg, p)
     return p
@@ -172,7 +174,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         if _MARK.search(text):
             bad.append(
                 f"{path} has conflict markers: resolve them by hand, keep both sides' entries,"
-                f" `sort -u -o {path} {path}`, then `ddflow pins drivers --check`"
+                f" `LC_ALL=C sort -u -o {path} {path}`, then `ddflow pins drivers --check`"
                 " (MCP: ddflow_pins document=drivers check=true)"
             )
             continue
@@ -185,7 +187,7 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         )
         if why:
             bad.append(
-                f"{path} {why} after the union merge: `sort -u -o {path} {path}`, commit, then"
+                f"{path} {why} after the union merge: `LC_ALL=C sort -u -o {path} {path}`, commit, then"
                 " `ddflow pins drivers --check`"
                 " (MCP: ddflow_pins document=drivers check=true)"
             )

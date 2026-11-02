@@ -45,14 +45,27 @@ def test_apply_makes_two_branch_adds_merge_cleanly(repo: Path) -> None:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "attrs")
     _git(repo, "checkout", "-qb", "x")
+    (repo / "base" / "a.txt").write_text("a\nb\nm\nz\n")  # both sides insert after a
+    _git(repo, "commit", "-qam", "x")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "base" / "a.txt").write_text("a\nn\nm\nz\n")
+    _git(repo, "commit", "-qam", "main")
+    _git(repo, "merge", "-q", "--no-edit", "x")  # a conflict would raise
+    # union keeps both sides' lines but not their order: the ratchet check catches that
+    assert sorted((repo / "base" / "a.txt").read_text().split()) == ["a", "b", "m", "n", "z"]
+    found = MD.check_baselines(repo, Config.load(repo))
+    assert len(found) == 1 and "not sorted" in found[0]
+
+
+def test_without_the_union_line_the_same_adds_conflict(repo: Path) -> None:
+    _git(repo, "checkout", "-qb", "x")
     (repo / "base" / "a.txt").write_text("a\nb\nm\nz\n")
     _git(repo, "commit", "-qam", "x")
     _git(repo, "checkout", "-q", "main")
-    (repo / "base" / "a.txt").write_text("a\nm\nn\nz\n")
+    (repo / "base" / "a.txt").write_text("a\nn\nm\nz\n")
     _git(repo, "commit", "-qam", "main")
-    _git(repo, "merge", "-q", "--no-edit", "x")  # a conflict would raise
-    assert (repo / "base" / "a.txt").read_text().split() == ["a", "b", "m", "n", "z"]
-    assert MD.check_baselines(repo, Config.load(repo)) == []
+    with pytest.raises(subprocess.CalledProcessError):
+        _git(repo, "merge", "-q", "--no-edit", "x")
 
 
 def test_check_baselines_names_unsorted_duplicate_and_markers(repo: Path) -> None:
