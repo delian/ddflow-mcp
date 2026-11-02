@@ -397,7 +397,7 @@ class StdioClient:
         hello = Handshake(**vars(first), protocol=Negotiation(version))
         if first.status == OK:
             hello.detail, hello.server = describe_answer({"result": first.result})
-            hello.protocol = negotiate(version, hello.server.get("protocolVersion"))
+            hello.protocol = negotiate(version, first.result.get("protocolVersion"))
             self._send(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
         elif first.status == ERROR:
             hello.detail = describe_answer({"error": first.error})[0]

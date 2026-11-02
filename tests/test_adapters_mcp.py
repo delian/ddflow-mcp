@@ -261,3 +261,9 @@ def test_a_malformed_request_is_refused_and_a_failing_notification_is_not_answer
     boom = lambda msg: 1 / 0  # noqa: E731
     server.serve([W.encode({"jsonrpc": "2.0", "method": "ping"}) + "\n"], boom)
     assert sent() == []
+
+
+def test_the_version_fact_reads_the_results_own_protocol_version_not_server_info():
+    server = FakeMcpServer(TOOLS, server_info={"name": "x", "protocolVersion": "2024-11-05"})
+    server._initialize = lambda params: {"serverInfo": server.server_info}
+    assert FakeMcpClient(server).connect(1).protocol.supported is None

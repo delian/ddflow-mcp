@@ -137,7 +137,7 @@ class FakeMcpClient:
             return W.Handshake(**vars(reply), protocol=W.Negotiation(version))
         self.connected = True
         detail, server = W.describe_answer({"result": reply.result})
-        proto = W.negotiate(version, server.get("protocolVersion"))
+        proto = W.negotiate(version, reply.result.get("protocolVersion"))
         return W.Handshake(W.OK, reply.result, detail=detail, server=server, protocol=proto)
 
     def _ask(self, method: str, params: dict[str, Any] | None) -> W.Outcome:
