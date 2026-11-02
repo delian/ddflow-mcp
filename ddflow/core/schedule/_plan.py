@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
+from ...adapters.optimizer import Candidate, Slots, get_optimizer
 from ...config import Config
 from .. import flowcontrol as FC
 from ..admission import glob_conflict
 from ..graph import find_cycles
 from ..model import REVIEW, RUNNING, Item, State
-from ._filters import PlanCtx, item_blocker, order_key
+from ._filters import PlanCtx, item_blocker, order_terms
 from ._parallel import _cap_words, parallel_line
 from ._readiness import Blocked, Plan, unpickable
 from ._resources import bug_items, interrupted, needs_tree
@@ -29,33 +30,55 @@ def _cut_ready(
     hold: Callable[[Item], Blocked | None] | None,
 ) -> None:
     """Trim ``p.ready`` to the free slots, in place, never offering two overlapping items."""
-    # Cut the ready list conflict-aware: walk it in offer order and take an item only when
-    # it overlaps nothing already taken (two offered items that overlap make the second
-    # claim refuse). An overlapping item is not dropped -- it stays queued, blocked with
-    # the offered item it waits behind.
+    # Cut the ready list conflict-aware, by the configured optimizer: it walks the offer order
+    # and takes an item only when it overlaps nothing already taken (two offered items that
+    # overlap make the second claim refuse). An overlapping item is not dropped -- it stays
+    # queued, blocked with the offered item it waits behind.
+    by_id = {it.id: it for it in p.ready}
+    cands = [
+        Candidate(it.id, (), tuple(it.globs), tuple(it.tags), needs_tree(it)) for it in p.ready
+    ]
+    holds: dict[str, Blocked] = {}
+    clashes: dict[str, object] = {}
+
+    def held_fn(c: Candidate) -> bool:
+        held = hold(by_id[c.id]) if hold else None
+        if held is not None:
+            holds[c.id] = held
+        return held is not None
+
+    def clash_fn(c: Candidate, taken: Sequence[Candidate]) -> str:
+        it = by_id[c.id]
+        clash = glob_conflict(
+            state, cfg, it, list(it.globs), against="offered", others=[by_id[t.id] for t in taken]
+        )
+        if not clash:
+            return ""
+        clashes[c.id] = clash
+        return clash.item
+
+    result = get_optimizer(cfg.schedule.optimizer).cut(
+        {}, cands, Slots(flight_slots, tree_slots), hold=held_fn, clash=clash_fn
+    )
     taken: list[Item] = []
     cut: list[Item] = []
-    trees = 0  # taken items that will make a worktree
-    for it in p.ready:
-        held = hold(it) if hold else None
-        if held is not None:
-            p.blocked.append(held)
-            continue
-        clash = glob_conflict(state, cfg, it, list(it.globs), against="offered", others=taken)
-        if clash:
-            other, pair = clash.item, clash.pair
+    for v in result.verdicts:
+        it = by_id[v.id]
+        if v.what == "held":
+            p.blocked.append(holds[v.id])
+        elif v.what == "clash":
+            pair = clashes[v.id].pair  # type: ignore[attr-defined]
             p.blocked.append(
                 Blocked(
                     it.id,
                     "conflict",
-                    f"globs overlap {other} ({pair[0]} vs {pair[1]}) offered in this plan",
-                    [other],
+                    f"globs overlap {v.other} ({pair[0]} vs {pair[1]}) offered in this plan",
+                    [v.other],
                 )
             )
             p.overlapped.append(it.id)
-        elif len(taken) < flight_slots and (not needs_tree(it) or trees < tree_slots):
+        elif v.what == "taken":
             taken.append(it)
-            trees += needs_tree(it)
         else:
             cut.append(it)
     if cut:
@@ -79,6 +102,14 @@ def _cut_ready(
             p.blocked.append(Blocked(it.id, "state", why, holders))
             p.capped.append(it.id)
     p.ready = taken
+
+
+def _ordered(ctx: PlanCtx, candidates: list[Item]) -> list[Item]:
+    """The candidates in the configured optimizer's order."""
+    terms = order_terms(ctx)
+    by_id = {i.id: i for i in candidates}
+    cands = [Candidate(i.id, terms(i)) for i in candidates]
+    return [by_id[x.id] for x in get_optimizer(ctx.cfg.schedule.optimizer).order({}, cands)]
 
 
 def plan(
@@ -124,7 +155,7 @@ def plan(
 
     bugs = frozenset(bug_items(state, cfg)) if cfg.schedule.bugs_first else frozenset()
     ctx = PlanCtx(state, cfg, agent, now, live, in_cycle, p.cycles, bugs)
-    for it in sorted(candidates, key=order_key(ctx)):
+    for it in _ordered(ctx, candidates):
         if it.terminal:
             continue
         if it.state == REVIEW:

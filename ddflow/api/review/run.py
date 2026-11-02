@@ -13,6 +13,7 @@ from ...services import prompts as P
 from ...services import review as RV
 from ...services import review_exclude as REX
 from ...services import review_manifest as RM
+from ...services.gates import running as RUN
 from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
@@ -29,6 +30,7 @@ from .delta import _head_of
 from .diff import diff_for
 from .findings import _announce_rerun, _link_refuted
 from .gate import (
+    _claim_or_refuse_twin,
     _early_refusal,
     _ends_on_signal,
     _intent_missing,
@@ -89,9 +91,17 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     if refused is not None:  # a refusal is falsy
         return refused
     asked = list(dict.fromkeys(g.strip() for g in gate.split(",") if g.strip()))
-    if len(asked) > 1:
-        return _review_gates(asked, args)
-    return _review_gate(**{**args, "gate": asked[0] if asked else gate})
+    _l, _c, _st = _load(repo, agent)
+    taken = _head_of(repo, _st.items.get(item), branch, commit)
+    marker, twin_refusal = _claim_or_refuse_twin(repo, item, taken)
+    if twin_refusal is not None:  # a refusal is falsy
+        return twin_refusal
+    try:
+        if len(asked) > 1:
+            return _review_gates(asked, args)
+        return _review_gate(**{**args, "gate": asked[0] if asked else gate})
+    finally:
+        RUN.clear_started(marker)
 
 
 _LENSES = {

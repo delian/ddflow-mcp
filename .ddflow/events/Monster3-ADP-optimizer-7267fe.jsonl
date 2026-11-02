@@ -1,0 +1,2 @@
+{"agent":"Monster3-ADP-optimizer-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e8587f6d2b20d2cbcce30545b","kind":"ddflow.seen","lamport":127792,"schema":1,"subject":"ddflow","ts":"2026-11-02T09:13:38.758042Z"}
+{"agent":"Monster3-ADP-optimizer-7267fe","data":{"gate":"rubber_duck"},"id":"e90d4c4563c4ece585c3abfe9","kind":"gate.started","lamport":127793,"schema":1,"subject":"ADP-optimizer","ts":"2026-11-02T09:13:38.785574Z"}

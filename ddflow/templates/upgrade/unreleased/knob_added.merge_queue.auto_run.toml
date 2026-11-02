@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge_queue.auto_run"
+new = "\"on\""
+why = "LC-integrator-trigger: ddflow starts one detached integrator when a release is accepted and a tick restarts it when entries wait; \"off\" starts nothing."
+impact = "additive"
