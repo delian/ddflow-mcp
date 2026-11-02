@@ -445,3 +445,7 @@ def test_third_round_review_findings_stay_fixed(tmp_path: Path):
     assert {f.family for f in c.families if f.kind == "env"} == {"KW_VAR"}
     assert not [f for f in c.families if f.kind == "managed-file"]  # a bare f-string is prose
     assert I.parse_baseline(" # indented comment\n\n") == {}
+    sub = I.scan(
+        _tree(tmp_path, {"sub.py": 'import os\nos.system("(cd x && git status) | grep y")\n'})
+    )
+    assert {f.family for f in sub.families if f.kind == "program"} == {"cd", "git", "grep"}

@@ -83,7 +83,7 @@ _NET_PREFIX = (
 )
 # The host of a URL literal, userinfo dropped (a regex, not urllib: that import would make this
 # very module an importer of the http family it measures).
-_SHELL_OPS = frozenset({"&&", "||", ";", "|", "&"})
+_SHELL_OPS = frozenset({"&&", "||", ";", "|", "&", "(", ")"})
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?([^/:?#\s{}\[\]]+)", re.IGNORECASE)
 
