@@ -58,6 +58,9 @@ KNOWN_UNREAD: dict[str, str] = {
     # on the allowlist rather than a fake read behind dead code (the roborev standards
     # finding on fix-B-ci-main-constants-ratchet).
     "swarm.launch_templates_file": "declared for the pending lane-launch scheduler tick; no reachable code reads it yet",
+    # Declared for the `pins drivers --check` mergiraf evaluation (mergedrivers.keep_mergiraf);
+    # that caller is not yet wired, so nothing reads it yet.
+    "pins.mergiraf_keep_pct": "declared for the `pins drivers --check` mergiraf keep/drop evaluation; keep_mergiraf has no caller yet",
 }
 
 
