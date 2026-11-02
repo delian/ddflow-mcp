@@ -158,16 +158,14 @@ def check_baselines(repo: Path, cfg: Config) -> list[str]:
         if not is_shared(path, cfg.pins.baseline_globs):
             continue
         staged = G.run(repo, "show", f":{path}")  # the blob a commit would carry
-        if staged.ok:
-            text = staged.out + "\n"
-        else:
-            try:
-                text = (Path(repo) / path).read_text("utf-8")
-            except OSError as exc:
-                bad.append(
-                    f"{path} could not be read ({exc.strerror}): the check is unavailable for it"
-                )
-                continue
+        if not staged.ok:
+            bad.append(
+                f"{path}: its staged content could not be read ({staged.err or 'git failed'}); the"
+                " check is unavailable for it, not passed -- fix the index, then `ddflow pins"
+                " drivers --check` (MCP: ddflow_pins document=drivers check=true)"
+            )
+            continue
+        text = staged.out + "\n"
         rows = [r for r in text.splitlines() if r.strip() and not r.startswith("#")]
         if _MARK.search(text):
             bad.append(
