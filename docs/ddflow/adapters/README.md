@@ -10,7 +10,8 @@ edits no shared file (ADP-modular-registry).
 ## The pattern
 
 - **A port** is a `typing.Protocol` named for the family's noun, marked `@port`. It lives in
-  its family module `ddflow/adapters/<family>.py`, beside its default adapter.
+  its family module `ddflow/adapters/<family>.py`, beside its default adapter once the home has
+  moved in (ADP-migrate-homes).
   `ddflow/adapters/ports.py` is only the shared base: the marker and the discovery helpers.
 - **The default adapter** is the ONE implementation, in that module once the family's home
   has moved in (ADP-migrate-homes; until then the family page names where it is). A second implementation

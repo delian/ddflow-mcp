@@ -267,6 +267,7 @@ def test_fakes_register_in_sorted_module_order():
     """No hash or filesystem order decides which fake wins: sorted module names do."""
     found = F.collect(F)
     mods = P.module_names(F, frozenset())
+    assert mods == sorted(mods), "the fake module scan must be sorted"
     expect = [n for m in mods for n, c in found.items() if c.__module__ == f"{F.__name__}.{m}"]
     assert list(found) == expect and all(F.FAKES[n] is c for n, c in found.items())
     assert sorted(F.FAKES) == sorted(found)
@@ -300,7 +301,11 @@ def test_adapter_and_fake_pass_the_same_cases(name: str, monkeypatch):
     entry = _conformance(name)
     entry["cases"](entry["real"](monkeypatch))
     # always the REGISTERED fake; a family's `fake` factory only wires it up (cls -> instance)
-    entry["cases"](entry.get("fake", lambda cls: cls())(F.FAKES[name]))
+    made = entry.get("fake", lambda cls: cls())(F.FAKES[name])
+    assert isinstance(made, F.FAKES[name]), (
+        f"the `fake` factory must build the registered Fake{name}"
+    )
+    entry["cases"](made)
 
 
 def test_the_registry_has_one_implementation_and_core_re_exports_it():
