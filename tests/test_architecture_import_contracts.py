@@ -143,7 +143,7 @@ def test_every_extra_has_a_contract() -> None:
         "optional-dependencies", {}
     )
     problems = _unconfined(extras)
-    assert not problems, f"extras whose imports are not confined: {problems}"
+    assert not problems, f"extras whose packages are unconfined: {problems}"
 
 
 def test_package_added_under_existing_extra_is_checked(monkeypatch) -> None:
