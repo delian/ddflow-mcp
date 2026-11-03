@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config
+from ...core import leasesnap as H
 from ...core.admission import new_file_globs, shared_globs
 from ...core.model import DEFAULT_LEASE_TTL_S, fold
 from ...infra.localstore import LocalStore, StoreUnreadable
@@ -137,8 +138,6 @@ def _continues(
     ran (a crash, another clone's shard, the knob switched off for a while), the config moved,
     or the file aged out: it is rebuilt from the log instead of being refreshed as if current.
     """
-    from ..enforce import hooksnap as H
-
     name0, before, after = shard
     if not (isinstance(cur, dict) and isinstance(cur.get("leases"), dict)):
         return False
@@ -187,8 +186,6 @@ def apply(
     without it the snapshot is trusted only if it is otherwise current. A write that fails
     removes the file, so the hook reads "missing" (fail open, said) rather than an old picture.
     """
-    from ..enforce import hooksnap as H  # late: the enforce package imports this one's parent
-
     store = LocalStore(Path(log.root) / ".ddflow" / "local")
     try:
         # The stamp is taken before AND after the load and must agree with itself and be readable:
@@ -196,14 +193,14 @@ def apply(
         stamp = H.config_stamp(log.root)
         cfg = Config.load(log.root)
         if stamp != H.config_stamp(log.root) or H.UNREADABLE_CONFIG in stamp:
-            _discard(store, H)
+            _discard(store)
             return False
         shard = log.shard.name
         if not cfg.locks.snapshot:
-            _discard(store, H)  # off: a file left from before would be an old picture
+            _discard(store)  # off: a file left from before would be an old picture
             return False
     except Exception:
-        _discard(store, H)
+        _discard(store)
         return False
 
     def step(cur: Any) -> dict[str, Any]:
@@ -229,11 +226,11 @@ def apply(
             store.remove(H.NAME)  # torn: rebuilt on the next pass
         except Exception:
             break
-    _discard(store, H)
+    _discard(store)
     return False
 
 
-def _discard(store: LocalStore, H: Any) -> None:
+def _discard(store: LocalStore) -> None:
     """Make the file unusable: removed, or when it cannot be removed, overwritten with a document
     whose config stamp matches no config (stale at once, whatever the age limit), so a hook never trusts the picture it holds."""
     try:

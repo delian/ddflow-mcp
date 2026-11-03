@@ -24,9 +24,9 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ...core import leasesnap as hooksnap
 from ...core.bookkeeping import SELF_MANAGED
 from ...core.globs import inside
-from ..enforce import hooksnap
 
 #: Always refused: the conformance probe's path (never a real project path).
 PROBE_DIR = "ddflow-hook-probe"
