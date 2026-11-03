@@ -19,9 +19,15 @@ from ..core.records.state import State
 #: run, which is neither a pass nor a block.
 UNKNOWN = (
     "could not tell what this task changed (git could not list it): the undeclared-write "
-    "check did not run. Repair the worktree, then re-run `ddflow gate status <id>` "
-    "(MCP: ddflow_gate action=status id=<id>)"
+    "check did not run. Repair the worktree, then re-run `ddflow gate status {id}` "
+    "(MCP: ddflow_gate action=status id={id})"
 )
+
+
+def unknown(item: str) -> str:
+    """`UNKNOWN` naming ``item`` in the exact call."""
+    return UNKNOWN.format(id=item)
+
 
 #: ddflow's own bookkeeping commits are never the item's to declare.
 _OWN = (".ddflow/**",)
@@ -41,7 +47,7 @@ def verdict_notice(state: State, cfg, item_id: str, repo: Path) -> tuple[str, bo
     """(notice, whether it blocks `complete`): blocking only for a known undeclared write
     under ``undeclared_write = block``; a check that could not run only warns."""
     text = undeclared_report(state, cfg, item_id, repo=repo)
-    return text, bool(text) and text != UNKNOWN and cfg.locks.undeclared_write == "block"
+    return text, bool(text) and text != unknown(item_id) and cfg.locks.undeclared_write == "block"
 
 
 def split(paths: list[str], declared: list[str]) -> tuple[list[str], list[str]]:
@@ -92,7 +98,7 @@ def undeclared_report(
         return ""  # nothing declared: there is no declaration to be wrong about
     changed = _read(read)(repo, it)
     if changed is None:
-        return UNKNOWN
+        return unknown(item_id)
     undeclared, _ = split(changed, list(it.globs))
     if not undeclared:
         return ""
@@ -141,7 +147,7 @@ def _habits(state: State, cfg, it, repo: Path, read) -> dict[str, int]:
     counts: dict[str, int] = {}
     for o in past[: cfg.locks.suggest_history]:
         changed = _read(read)(repo, o)
-        undeclared = split(changed, list(o.globs))[0] if changed is not None else []
+        undeclared = split(changed, list(o.globs or []))[0] if changed is not None else []
         for g in directory_globs(undeclared):
             counts[g] = counts.get(g, 0) + 1
     return counts

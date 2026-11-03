@@ -53,7 +53,9 @@ def test_undeclared_report_clean_off_and_unknown():
     st = _state(_task("T", ["a/**"]))
     cfg = Config()
     assert OG.undeclared_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["a/1"]})) == ""
-    assert OG.undeclared_report(st, cfg, "T", repo=REPO, read=_reader({"T": None})) == OG.UNKNOWN
+    assert OG.undeclared_report(st, cfg, "T", repo=REPO, read=_reader({"T": None})) == OG.unknown(
+        "T"
+    )
     cfg.locks.undeclared_write = "off"
     assert OG.undeclared_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["z"]})) == ""
 
@@ -70,7 +72,7 @@ def test_block_blocks_only_a_known_write_never_unknown():
         assert OG.verdict_notice(st, cfg, "T", REPO)[1] is True
         mod._read = lambda read: _reader({"T": None})
         text, blocks = OG.verdict_notice(st, cfg, "T", REPO)
-        assert text == OG.UNKNOWN and blocks is False
+        assert text == OG.unknown("T") and blocks is False
     finally:
         mod._read = orig
     cfg.locks.undeclared_write = "warn"
@@ -125,7 +127,7 @@ def test_cli_call_quotes_globs_and_bookkeeping_only_diff_offers_no_narrowing():
     assert (
         OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": [".ddflow/x"]})) == ""
     )
-    assert "gate status" in OG.UNKNOWN
+    assert "gate status T" in OG.unknown("T")
 
 
 def test_no_narrowing_is_offered_when_every_glob_is_untouched():
