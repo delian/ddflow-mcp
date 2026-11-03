@@ -1624,6 +1624,14 @@
           cached like a positive one; an INCONCLUSIVE one never is, because 'could not
           tell' is a transient fact and caching it would make a blip stick for the
           whole window. 0 disables the cache.
+      companions.tool_probe_timeout_s = 20.0   [default]
+          How long an external tool's version probe (roborev, gitleaks, pre-commit,
+          ...) may take, in seconds, through the ExternalTool port. A probe that does
+          not answer in time is 'could not tell', never 'absent' and never a pass.
+      companions.tool_run_timeout_s = 300.0   [default]
+          How long an external tool's run (a scan, a review, a hook run) may take, in
+          seconds, through the ExternalTool port. A run that does not finish in time
+          is unavailable, never a pass.
       cadence.integration_tests_every_tasks = 5   [default]
           Run the FULL test suite (`ddflow ci run --full`) after this many completed
           tasks. An item's ci and unit_tests gates run only the tests its change
@@ -2260,6 +2268,31 @@
       metrics.stage_size_large = 300   [default]
           Changes above this many lines are large in `ddflow metrics stages --group-by
           size`; between the small and the large bound they are medium.
+      metrics.lock_probe_max = 50   [default]
+          Most recent merges `ddflow metrics locks` replays through `git merge-tree
+          --write-tree` (branch tip onto the target as it was before the merge) to
+          count textual conflicts. Each probe is a few milliseconds; the cap bounds
+          the cost on a long log. 0 probes none and the conflict rate is reported
+          unavailable.
+      metrics.lock_red_main_window_s = 86400   [default]
+          A merge counts as red-main in `ddflow metrics locks` when a bug is filed
+          against its item within this many seconds after the merge landed.
+      metrics.lock_falsifier_conflict_pct = 5   [default]
+          The recorded falsifier of the observed-file locking (R-lock-landscape-
+          verified): when textual merge conflicts exceed this percent of merges,
+          `ddflow metrics locks` says the new locking has tripped and names the knob
+          in `lock_revert_knob`.
+      metrics.lock_falsifier_red_main_pct = 10   [default]
+          The second recorded falsifier: red-main bugs above this percent of merges
+          trip it, with the same advice.
+      metrics.lock_revert_key = 'locks.mode'   [default]
+          The setting that switches the lock lifecycle back to the strict mode, named
+          in `ddflow metrics locks` when a falsifier trips, with the exact `ddflow
+          config --set` and `ddflow_configure` call (the [locks] section is added by
+          the lock-lifecycle knob register). Change it if your organisation locks the
+          mode under another name.
+      metrics.lock_revert_value = 'strict'   [default]
+          The value of `lock_revert_key` that is the strict mode.
       review.max_rounds = 2   [default]
           How many cross-family review rounds one gate (rubber_duck, critic) may have
           on one item, full and delta alike (default 2; 0 = unlimited; decision
