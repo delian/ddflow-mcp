@@ -3159,6 +3159,39 @@
           engine's own writes, so it has no approval route. A person at a terminal is
           unaffected. An agent's edit of this knob is a `config.set`, which needs a
           person's approval.
+      handoff.max_files = 3   [default]
+          The most files one suggestion may touch (default 3; D-handoff-peers). A
+          bigger change is an ordinary task, not a suggestion. 0 refuses every
+          suggestion.
+      handoff.max_lines = 60   [default]
+          The most added plus removed lines one suggestion may carry (default 60). A
+          bigger change is an ordinary task.
+      handoff.max_bytes = 65536   [default]
+          The most bytes of patch text one suggestion may carry (default 65536),
+          checked before the patch is parsed or stored.
+      handoff.max_open_per_owner_file = 5   [default]
+          How many suggestions one sender may have open (sent and not yet resolved) to
+          the same owner for the same file (default 5; the operator's answer to
+          D-handoff-peers). When the resolved ones free a place the sender may send
+          more; at the limit it waits for the file's release or opens a task for the
+          rest.
+      handoff.min_interval_s = 30   [default]
+          The fewest seconds between two suggestions from one sender to one owner
+          (default 30; 0 turns the spacing off). Spaces out a burst so an owner is not
+          flooded.
+      handoff.reject_breaker = 3   [default]
+          After this many suggestions in a row from one sender to one owner were
+          REJECTED, the sender may send that owner no more until the owner accepts one
+          or an operator resets it (default 3; 0 turns the breaker off). The refusal
+          names the task to open instead.
+      handoff.ttl_s = 86400   [default]
+          How many seconds a suggestion may stay unanswered before the expiry sweep
+          marks it expired (default 86400, a day; 0 turns time expiry off). The owner
+          is still told to answer; an expired one is re-opened as an ordinary task
+          that needs the owner's item, not lost.
+      handoff.kinds = ['fix', 'gate_fix', 'refactor', 'doc']   [default]
+          The kinds a suggestion may declare (default fix, gate_fix, refactor, doc). A
+          suggestion of any other kind is refused.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
