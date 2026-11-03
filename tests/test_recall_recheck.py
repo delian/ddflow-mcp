@@ -97,23 +97,19 @@ def test_the_reviolated_lesson_is_what_the_tick_resurfaces(repo):
     assert "L-unrelated" not in ids
 
 
-def test_a_recheck_does_not_busy_loop_two_heartbeats_in_the_interval(repo, monkeypatch):
-    """Two heartbeats inside one `recall_recheck_s` interval surface (and record) once --
-    the cadence record bounds it in the log, NOT the `recall_recheck_max` cap, which is set
-    to 0 (no cap) here so the interval alone is what is tested. The interval bound itself is
-    the deterministic `test_a_lesson_is_not_resurfaced_until_the_next_recheck_tick` above;
-    this test only pinches the wiring, so it uses a roomy interval the two subprocess
-    heartbeats sit inside by a wide margin."""
+def test_a_due_heartbeat_resurfaces_and_records_the_run(repo, monkeypatch):
+    """The wiring: once `[cadence].recall_recheck_s` has elapsed the heartbeat surfaces the
+    re-violated lesson and records one `cadence.ran`, with no cap (`recall_recheck_max=0`).
+    The interval bound itself is the clock-free `test_a_lesson_is_not_resurfaced_until_the_next_recheck_tick`
+    above, which passes `now` explicitly -- no wall clock -- so this test only pinches the
+    heartbeat's call to `services.recall`."""
     _queued(repo, agent="beta")
-    monkeypatch.setenv("DDFLOW_CADENCE_RECALL_RECHECK_S", "5")
+    monkeypatch.setenv("DDFLOW_CADENCE_RECALL_RECHECK_S", "2")
     monkeypatch.setenv("DDFLOW_CADENCE_RECALL_RECHECK_MAX", "0")
-    time.sleep(5.3)  # one interval elapses ...
+    time.sleep(2.3)  # one interval elapses: due by a margin, not busy-looped
     code, out, err = run_cli(repo, "heartbeat", "T1", agent="beta")
     assert code == OK, out + err
-    assert LESSON_ID in out + err  # surfaced on this, the next tick
-    code, out, err = run_cli(repo, "heartbeat", "T1", agent="beta")
-    assert code == OK, out + err  # still a good heartbeat, inside the interval ...
-    assert LESSON_ID not in out + err  # ... so nothing is re-surfaced
+    assert LESSON_ID in out + err
     st = fold(EventLog(repo).read_all(), strict=False)
     assert len(st.cadences.get(RC.cadence_id("T1"), [])) == 1
 
