@@ -54,7 +54,6 @@ from .mcp import (
     ok,
     request,
     response_in,
-    send_line,
 )
 from .ports import port
 
