@@ -208,28 +208,8 @@ def triage(
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{GD.triage_line(counts)}"
     )
-    if mirrored:
-        text += f" (also recorded for {', '.join(mirrored)}: the same finding)"
-    settled = _settle_after_cap(
-        log, cfg, st.items[item], gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
-    )
-    text = f"{text}\n{settled}" if settled else text
-    # The mirror answered a sibling gate's same finding too: settle that gate once its
-    # budget is spent, the same as the gate triaged outright (bug
-    # B-combined-review-findings-triaged-twice).
-    for g2 in mirrored:
-        it2 = st.items[item]
-        settled2 = _settle_after_cap(
-            log,
-            cfg,
-            it2,
-            g2,
-            GD.triage_counts(it2, g2) or {},
-            stale=reviewed_other_tree(repo, cfg, st, item, g2),
-        )
-        if settled2:
-            log, cfg, st = _load(repo, agent)
-            text = f"{text}\n{settled2}"
+    extra = _settle_recorded(log, cfg, st, repo, item, gate, counts, mirrored, agent)
+    text = f"{text}\n{extra}" if extra else text
     return O.ok(
         "review.triage",
         id=item,
@@ -361,6 +341,33 @@ def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
         if refuted
         else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
     )
+
+
+def _settle_recorded(log, cfg, st, repo, item, gate, counts, mirrored, agent) -> str:
+    """The lines to append to a triage's text: a note naming the sibling gate(s) the mirror
+    answered, then this gate's settle-after-cap, then any sibling gate the mirror answered
+    whose budget is spent (bug B-combined-review-findings-triaged-twice and its review)."""
+    lines: list[str] = []
+    if mirrored:
+        lines.append(f"(also recorded for {', '.join(mirrored)}: the same finding)")
+    it = st.items[item]
+    settled = _settle_after_cap(
+        log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
+    )
+    if settled:
+        lines.append(settled)
+    for g2 in mirrored:
+        settled2 = _settle_after_cap(
+            log,
+            cfg,
+            it,
+            g2,
+            GD.triage_counts(it, g2) or {},
+            stale=reviewed_other_tree(repo, cfg, st, item, g2),
+        )
+        if settled2:
+            lines.append(settled2)
+    return "\n".join(lines)
 
 
 def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
