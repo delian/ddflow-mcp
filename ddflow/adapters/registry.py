@@ -106,8 +106,8 @@ class Registry(Mapping[str, T], Generic[T]):
             if self._key is None:
                 raise RegistryError(f"{self.what}: give a name, or build the registry with key=")
             name = self._key(item)
-        have = self.table.get(name)
-        if have is not None and not self._replace:
+        if name in self.table and not self._replace:
+            have = self.table[name]
             if self._same_ok and have == item:
                 return item
             suffix = " with another definition" if self._same_ok else ""

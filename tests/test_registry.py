@@ -58,6 +58,13 @@ def test_a_taken_name_is_an_error_unless_the_same_definition_or_replace_is_allow
         _reg(same_ok=True, replace=True)
 
 
+def test_registering_none_twice_is_a_duplicate_not_an_overwrite():
+    r: Registry[object] = Registry("fn")
+    r.register(None, "ghost")
+    with pytest.raises(DuplicateName, match=r"fn .ghost. is already registered$"):
+        r.register(None, "ghost")
+
+
 def test_an_unknown_name_lists_those_known_and_is_a_keyerror_for_mapping_get():
     r = _reg()
     r.register("a:1")
