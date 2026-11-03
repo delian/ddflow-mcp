@@ -92,3 +92,22 @@ def test_a_confirmed_verdict_is_mirrored_to_each_gate_too(repo, tmp_path):
     duck, critic = _duck_and_critic(repo)
     assert critic == {"findings": 1, "refuted": 0, "confirmed": 1, "untriaged": 0}, critic
     assert duck == {"findings": 1, "refuted": 0, "confirmed": 1, "untriaged": 0}, duck
+
+
+def test_mirroring_also_settles_the_sibling_gate_once_its_budget_is_spent(repo, tmp_path):
+    """The mirror answers the sibling gate's copy of the finding, so the sibling gate is
+    settled on refutation the same as the gate triaged outright (budget spent at 1 round)."""
+    _setup(repo, tmp_path)
+    (repo / ".ddflow" / "config.toml").write_text(
+        (repo / ".ddflow" / "config.toml").read_text() + "[review]\nmax_rounds = 1\n"
+    )
+    api.review(repo, gate=GATES, item="T1", branch="feat")
+
+    out = api.triage(
+        repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless"
+    )
+    assert out.exit == OK, out.reason
+
+    it = _state(repo)
+    assert it.gates["critic"].outcome == "passed", "critic must settle once its mirrored finding is answered"
+    assert (it.gates["critic"].evidence or {}).get("passed_on_refutation")

@@ -213,6 +213,23 @@ def triage(
     settled = _settle_after_cap(
         log, cfg, st.items[item], gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
     )
+    text = f"{text}\n{settled}" if settled else text
+    # The mirror answered a sibling gate's same finding too: settle that gate once its
+    # budget is spent, the same as the gate triaged outright (bug
+    # B-combined-review-findings-triaged-twice).
+    for g2 in mirrored:
+        it2 = st.items[item]
+        settled2 = _settle_after_cap(
+            log,
+            cfg,
+            it2,
+            g2,
+            GD.triage_counts(it2, g2) or {},
+            stale=reviewed_other_tree(repo, cfg, st, item, g2),
+        )
+        if settled2:
+            log, cfg, st = _load(repo, agent)
+            text = f"{text}\n{settled2}"
     return O.ok(
         "review.triage",
         id=item,
@@ -220,8 +237,9 @@ def triage(
         finding=finding,
         verdict=verdict,
         counts=counts,
-        text=f"{text}\n{settled}" if settled else text,
-        passed_on_refutation="ON REFUTATION" in settled,
+        mirrored=mirrored,
+        text=text,
+        passed_on_refutation="ON REFUTATION" in text,
     )
 
 
