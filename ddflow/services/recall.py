@@ -78,4 +78,4 @@ def due(st: State, item: str, cfg: Config, now: float) -> bool:
 
 def run_note(hits: list[tuple[str, float]]) -> dict[str, Any]:
     """The `cadence.ran` evidence for one re-scoring: what it surfaced and how much."""
-    return {"surfaced": [rid for rid, _ in hits], "scores": {rid: score for rid, score in hits}}
+    return {"surfaced": [rid for rid, _ in hits], "scores": dict(hits)}
