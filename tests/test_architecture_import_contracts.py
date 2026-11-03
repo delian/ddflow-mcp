@@ -6,6 +6,7 @@ extra is confined to one adapter. Helpers: architecture_guards_support.py.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -130,8 +131,10 @@ def test_graph_internal_names_every_contract() -> None:
     contracts in ``CONTRACTS`` -- no missing name, no extra, and a matching count."""
     text = (ROOT / "docs/ddflow/research/graph-internal.md").read_text("utf-8")
     row = next(line for line in text.splitlines() if "Import-linter contracts" in line)
-    _, _, after = row.partition("contracts:")
-    named = {name.strip() for name in after.split(")", 1)[0].split(",") if name.strip()}
-    assert named == set(CONTRACTS), (
-        f"Import-linter row names {sorted(named)}; CONTRACTS is {sorted(CONTRACTS)}"
+    match = re.search(r"\((\d+) contracts: ([^)]+)\)", row)
+    assert match is not None, f"Import-linter row has no '(N contracts: ...)' list: {row!r}"
+    count, names = int(match.group(1)), match.group(2)
+    named = {name.strip() for name in names.split(",") if name.strip()}
+    assert (count, named) == (len(CONTRACTS), set(CONTRACTS)), (
+        f"Import-linter row: {count} contracts {sorted(named)}; CONTRACTS is {sorted(CONTRACTS)}"
     )
