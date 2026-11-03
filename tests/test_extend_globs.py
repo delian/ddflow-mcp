@@ -1,5 +1,8 @@
-"""An add answered `extends X` carries its --globs onto X (bug decision-extends-drops-globs):
-unioned, reported in the output, on the API, the CLI and MCP."""
+"""What an add answered `merge_into X` / `duplicate_of X` does to the target's globs, and
+what `extends X` does not: appending unions the globs onto the extended record (bug
+decision-extends-drops-globs), but `extends` files a NEW record linked to X -- never
+writing onto a decision (B-decision-extends-mutates-old-record) -- on the API, the CLI
+and MCP."""
 
 from __future__ import annotations
 
@@ -33,7 +36,9 @@ def seed_decision(repo, globs=""):
     A.decision_add(repo, Draft(id="D-old", title=FIRST, decision=FIRST, globs=globs), agent="a")
 
 
-def test_decision_extends_unions_the_globs(repo):
+def test_decision_extends_files_a_new_linked_record_and_leaves_the_target(repo):
+    """B-decision-extends-mutates-old-record: `extends` on a decision must not edit the old
+    record -- the new decision text and globs go on a NEW record linked to it."""
     seed_decision(repo, "src/a.py")
     out = A.decision_add(
         repo,
@@ -46,9 +51,13 @@ def test_decision_extends_unions_the_globs(repo):
         ),
         agent="a",
     )
-    assert out.exit == 0 and out.data["extended"] == "D-old"
-    assert out.data["globs_added"] == ["src/b.py"]
-    assert state(repo).decisions["D-old"].globs == ["src/a.py", "src/b.py"]
+    assert out.exit == 0 and out.data["id"] == "D-new" and "extended" not in out.data, out
+    st = state(repo)
+    assert st.decisions["D-old"].globs == ["src/a.py"]
+    assert st.decisions["D-old"].decision == FIRST and st.decisions["D-old"].title == FIRST
+    assert st.decisions["D-new"].globs == ["src/a.py", "src/b.py"]
+    assert st.decisions["D-new"].decision == SECOND  # the new decision text is filed, not dropped
+    assert st.links["D-new"].linked("extends") == {"D-old"}
 
 
 def test_decision_extends_onto_a_globless_decision(repo):
@@ -57,19 +66,23 @@ def test_decision_extends_onto_a_globless_decision(repo):
         repo, "decision", "add", "--id", "D-new", "--title", SECOND, "--decision", SECOND,
         "--globs", "src/x.py", "--extends", "D-old",
     )  # fmt: skip
-    assert state(repo).decisions["D-old"].globs == ["src/x.py"]
+    st = state(repo)
+    assert "D-new" in st.decisions and st.decisions["D-old"].globs == []
+    assert st.decisions["D-new"].globs == ["src/x.py"]
+    assert st.links["D-new"].linked("extends") == {"D-old"}
 
 
-def test_cli_says_which_globs_were_added(repo):
+def test_cli_decision_extends_reports_the_new_record(repo):
     seed_decision(repo)
     rc, out, err = run_cli(
         repo, "decision", "add", "--id", "D-new", "--title", SECOND, "--decision", SECOND,
         "--globs", "src/x.py", "--extends", "D-old",
     )  # fmt: skip
-    assert rc == 0 and "src/x.py" in out + err
+    assert rc == 0, err
+    assert "D-new" in out
 
 
-def test_mcp_decision_extends_carries_the_globs(repo):
+def test_mcp_decision_extends_files_a_new_record_with_the_globs(repo):
     seed_decision(repo)
     reply = Server(repo).handle(
         {
@@ -89,8 +102,11 @@ def test_mcp_decision_extends_carries_the_globs(repo):
         }
     )
     body = json.loads(reply["result"]["content"][0]["text"])
-    assert body["globs_added"] == ["src/m.py"]
-    assert state(repo).decisions["D-old"].globs == ["src/m.py"]
+    assert body["id"] == "D-new" and "extended" not in body
+    st = state(repo)
+    assert st.decisions["D-old"].globs == []
+    assert st.decisions["D-new"].globs == ["src/m.py"]
+    assert st.links["D-new"].linked("extends") == {"D-old"}
 
 
 @pytest.mark.parametrize("kind", ["task", "phase"])

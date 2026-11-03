@@ -98,18 +98,23 @@ def test_a_refused_add_leads_with_the_candidates_and_the_options(filed_as, tool)
     assert events(repo) == before
 
 
-@pytest.mark.parametrize("tool", sorted(CALLS))
+@pytest.mark.parametrize("tool", sorted(t for t in CALLS if t != "ddflow_decision_add"))
 def test_relation_extends_answers_the_refusal(filed_as, tool):
     repo = filed_as(tool)
     args, old = CALLS[tool]
-    # A task, phase or research note is only APPENDED to when the answer says so.
-    relation = "merge_into" if tool in LINK_ONLY else "extends"
+    # A task, phase or research note is only APPENDED to when the answer says so; the rest
+    # (bug, lesson, memory) append on `extends`. A decision is never appended to: its
+    # `extends` files a new record and its `merge_into` is refused (tests below).
+    relation = "merge_into" if tool in APPENDS_ON_MERGE else "extends"
     body, result = call(repo, tool, relation=f"{relation}:{old}", **args)
     assert result["_meta"]["exit"] == 0, body
     assert body["extended"] == old and body["relation"] == "extends"
 
 
-LINK_ONLY = ("ddflow_task_add", "ddflow_phase_add", "ddflow_research_add")
+#: tools where `extends` files a NEW record linked to the target (never writing onto it).
+LINK_ONLY = ("ddflow_task_add", "ddflow_phase_add", "ddflow_research_add", "ddflow_decision_add")
+#: of LINK_ONLY, the subset whose `merge_into` answer appends to the target.
+APPENDS_ON_MERGE = ("ddflow_task_add", "ddflow_phase_add", "ddflow_research_add")
 
 
 @pytest.mark.parametrize("tool", LINK_ONLY)
@@ -119,6 +124,16 @@ def test_relation_extends_files_a_new_linked_record(filed_as, tool):
     body, result = call(repo, tool, relation=f"extends:{old}", **args)
     assert result["_meta"]["exit"] == 0, body
     assert body["id"] == args["id"] and body.get("extended") is None
+
+
+def test_relation_merge_into_a_decision_is_refused(filed_as):
+    repo = filed_as("ddflow_decision_add")
+    args, old = CALLS["ddflow_decision_add"]
+    before = events(repo)
+    _body, result = call(repo, "ddflow_decision_add", relation=f"merge_into:{old}", **args)
+    assert result["_meta"]["exit"] == 3
+    assert "never edited in place" in result["content"][-1]["text"]
+    assert events(repo) == before  # the refusal writes nothing: no record, no link, no edit
 
 
 @pytest.mark.parametrize("tool", sorted(CALLS))
