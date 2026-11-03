@@ -208,9 +208,7 @@ def triage(
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{GD.triage_line(counts)}"
     )
-    extra, this_refuted = _settle_chain(
-        log, cfg, st, repo, item, gate, counts, mirrored
-    )
+    extra, this_refuted = _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored)
     text = f"{text}\n{extra}" if extra else text
     return O.ok(
         "review.triage",
