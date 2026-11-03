@@ -8,6 +8,7 @@ git read so they are tested without a repository.
 
 from __future__ import annotations
 
+import json
 import shlex
 from collections.abc import Callable
 from pathlib import Path
@@ -73,7 +74,9 @@ def directory_globs(paths: list[str]) -> list[str]:
 
 def update_call(item: str, declared: list[str], extra: list[str]) -> str:
     """The exact call that declares ``extra`` besides ``declared``, CLI and MCP forms."""
-    joined = ",".join([*declared, *extra])
+    every = [*declared, *extra]
+    # A comma inside a glob would be split by the comma form: the JSON list form is exact.
+    joined = json.dumps(every) if any("," in g for g in every) else ",".join(every)
     return (
         f"`ddflow update {item} --globs {shlex.quote(joined)}` "
         f"(MCP: ddflow_task action=update id={item} globs={shlex.quote(joined)})"

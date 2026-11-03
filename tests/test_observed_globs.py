@@ -147,3 +147,7 @@ def test_a_task_with_no_declaration_has_every_write_reported():
 
 def test_mcp_form_quotes_a_path_with_a_space():
     assert "globs='a/**,my dir/*'" in OG.update_call("T", ["a/**"], ["my dir/*"])
+
+
+def test_a_comma_in_a_glob_uses_the_json_list_form():
+    assert """--globs '["a,b/*"]'""" in OG.update_call("T", [], ["a,b/*"])
