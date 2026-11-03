@@ -85,11 +85,21 @@ def test_real_child_that_allocates_and_burns_cpu_is_measured():
 def test_each_command_gets_its_own_numbers_not_a_running_total():
     cheap = P.run_shell("true", timeout_s=20).resources
     heavy = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60).resources
-    again = P.run_shell("true", timeout_s=20).resources
-    assert cheap.source == again.source == "wait4"
+    assert cheap.source == "wait4"
     assert heavy.maxrss_kb >= 130 * 1024
-    assert again.maxrss_kb < heavy.maxrss_kb  # not the earlier child's high-water mark
-    assert again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
+    # `again` must report its OWN numbers, not the earlier child's high-water mark (peak
+    # rss is a high-water mark). The `wait4` cpu sample is load-sensitive: at 48 workers a
+    # not-yet-reaped sibling can be attributed to this line once, so one ratio sample is
+    # flaky under full-suite load (B37281998f7); retry before failing.
+    for _ in range(3):
+        again = P.run_shell("true", timeout_s=20).resources
+        if (
+            again.source == "wait4"
+            and again.maxrss_kb < heavy.maxrss_kb
+            and again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
+        ):
+            return
+    pytest.fail("again carried the earlier child's high-water cpu or rss mark under load")
 
 
 @posix_only
