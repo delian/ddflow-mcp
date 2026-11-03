@@ -109,6 +109,33 @@ def _lease(v: Any) -> dict[str, Any]:
     return out
 
 
+def _stamp(stamp: Any) -> list[list[int]]:
+    if not (
+        isinstance(stamp, list)
+        and all(isinstance(x, list) and all(type(n) is int for n in x) for x in stamp)
+    ):
+        raise ValueError(stamp)
+    return stamp
+
+
+def _fields(data: dict[str, Any], now: float | None, max_age_s: int | None) -> tuple:
+    """Every field of the document, validated; raises on any malformed part."""
+    limit = int(_num(data.get("max_age_s", 0) if max_age_s is None else max_age_s))
+    age = (time.time() if now is None else now) - _num(data["written_at"])
+    if age < -MAX_SKEW_S:
+        raise ValueError(age)  # written in the future: a rolled-back clock or a corrupt file
+    return (
+        limit,
+        age,
+        int(_num(data.get("generation", 0))),
+        int(_num(data.get("grace_s", 0))),
+        {str(k): _lease(v) for k, v in data["leases"].items()},
+        _globs(data.get("shared", [])),
+        _globs(data.get("new_files", [])),
+        _stamp(data.get("config_stamp")),
+    )
+
+
 def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = None) -> Snapshot:
     """The snapshot of ``repo``. ``max_age_s`` overrides the age limit the writer recorded.
     Any malformed part makes the whole snapshot UNREADABLE: never a partial picture."""
@@ -125,20 +152,7 @@ def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = 
     if not isinstance(raw.get("schema"), int) or raw["schema"] > SCHEMA:
         return _bad(NEWER, "was written by a newer ddflow")
     try:
-        limit = int(_num(data.get("max_age_s", 0) if max_age_s is None else max_age_s))
-        age = (time.time() if now is None else now) - _num(data["written_at"])
-        gen = int(_num(data.get("generation", 0)))
-        grace = int(_num(data.get("grace_s", 0)))
-        leases = {str(k): _lease(v) for k, v in data["leases"].items()}
-        shared, new_files = _globs(data.get("shared", [])), _globs(data.get("new_files", []))
-        stamp = data.get("config_stamp")
-        if not (
-            isinstance(stamp, list)
-            and all(isinstance(x, list) and all(type(n) is int for n in x) for x in stamp)
-        ):
-            raise ValueError(stamp)
-        if age < -MAX_SKEW_S:
-            raise ValueError(age)  # written in the future: a rolled-back clock or a corrupt file
+        limit, age, gen, grace, leases, shared, new_files, stamp = _fields(data, now, max_age_s)
     except (TypeError, ValueError, KeyError, OverflowError):
         return _bad(UNREADABLE, f"has malformed content ({p})")
     if stamp != config_stamp(repo):
