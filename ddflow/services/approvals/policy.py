@@ -125,11 +125,11 @@ def window_start(state, cfg: Config) -> float:
     the epoch of the LATEST in-scope standing auto-approval's ``answered_at`` -- the most
     recent fire. In-scope means the answer's verb is inside `[approvals].standing_verbs`,
     so a stale answer from a verb the window no longer covers cannot anchor it. ``max``, never
-    the first: the window stays open for `[approvals].standing_window_s` after the newest fire
-    and re-anchors on each new one, so a later standing fire re-opens the window after the
-    opening fire has lapsed (the first-fire anchor would leave it permanently closed once
-    `standing_window_s` passed). The fold KEEPS every ask row for the life of the log
-    (`use_ttl_s` bounds spending, not retention), so the anchor persists past an answer TTL, and
+    the first: the window stays open for `[approvals].standing_window_s` after the newest fire,
+    re-anchoring on each new one so a later fire keeps it open past the opening fire's lapse
+    (the first-fire anchor would leave it permanently closed once `standing_window_s` passed and
+    no fire followed). The fold KEEPS every ask row for the life of the log (`use_ttl_s` bounds
+    spending, not retention), so the anchor persists past an answer TTL, and
     `approvals log`/`doctor` show what fired within it."""
     starts = [
         clock.epoch(r["answered_at"], default=0.0)

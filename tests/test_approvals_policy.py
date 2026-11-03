@@ -341,8 +341,8 @@ def test_a_later_standing_fire_reopens_a_window_the_opening_fire_has_lapsed(
 ):
     """B06c0d7b617: the window anchors at the LATEST in-scope standing fire, not the first. A
     second standing fire still within the window re-anchors it, so once the OPENING fire is past
-    `standing_window_s` the window is again open (and locked at the second fire) -- the old
-    ``min`` anchor would have left it permanently closed."""
+    `standing_window_s` the window is open at the second fire's anchor -- the old ``min`` anchor
+    would have left it permanently closed."""
     from datetime import timedelta
 
     frozen = _frozen_clock(monkeypatch)
