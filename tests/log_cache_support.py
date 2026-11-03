@@ -36,5 +36,17 @@ def _uncached(repo, agent="a1") -> EventLog:
     return EventLog(repo, agent, log_cfg=LogConfig(reuse_parsed=False))
 
 
+def _pkg_py_files(pkg: Path) -> list[Path]:
+    """The package ``*.py`` files a ratchet actually scans, in a stable order.
+
+    Skip a bytecode-cache DIRECTORY by its component name, not by substring. The loop
+    once matched ``"__pycache__" in str(f)`` on the WHOLE path, so a checkout living under
+    a directory whose name merely contains ``__pycache__`` skipped every file and the
+    ratchet scanned nothing. ``*.py`` never lives inside a real ``__pycache__`` (those
+    hold ``*.pyc``), but matching by component keeps the guard honest if one ever does.
+    """
+    return sorted(f for f in pkg.rglob("*.py") if "__pycache__" not in f.relative_to(pkg).parts)
+
+
 def _ids(events) -> list[str]:
     return [e.id or e.compute_id() for e in events]
