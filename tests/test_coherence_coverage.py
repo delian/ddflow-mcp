@@ -215,6 +215,8 @@ WRITERS_EXEMPT: dict[str, str] = {
     "screen before it is written",
     "api/defs.py:_write_record": "def_record calls it after check_add; def_record_unchecked is "
     "for a writer that ran its own check first (rule add: rules and every other kind)",
+    "services/gates/skip_followup.py:_file": "a generated gate-skip follow-up; its (item, gate) "
+    "is its own dedupe key",
 }
 
 #: CLI verbs (as argv words) that record text: -> "checked" | "own check: ..." | a reason.
@@ -236,6 +238,8 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     ("promote", "add"): WRITERS_EXEMPT["services/promotions.py:add"],
     ("grant", "add"): "a person's recorded permission on one item.gate (refused under an agent "
     "identity), not authored prose that could repeat: the same words are a second grant",
+    ("harness", "add"): "own check: a descriptor file on disk, not a log record; refused when "
+    "the file already exists",
     ("job", "add"): "a long-running process an item waits on, not authored text",
     ("session", "prompt"): EXEMPT["session.prompt"],
     ("session", "note"): EXEMPT["session.note"],
