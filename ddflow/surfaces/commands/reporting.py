@@ -16,6 +16,7 @@ from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ...views.progress import status_tasks_note
 from ..context import FAIL, OK, REFUSED, Ctx
+from ..declared.setup import doctor_history_kwargs
 from ..render import emit_json
 from ..startcost_texts import start_texts
 from ..vocabulary import sources
@@ -452,14 +453,7 @@ def cmd_doctor(a, c: Ctx) -> int:
         parser=parser,
         tools=tools,
         start_texts=start_texts,
-        accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
-        accept_history=bool(getattr(a, "accept_history", False)),
-        history=(
-            str(getattr(a, "history_reason", "") or ""),
-            str(getattr(a, "history_note", "") or ""),
-            str(getattr(a, "history_only", "") or ""),
-            str(getattr(a, "approval", "") or ""),
-        ),
+        **doctor_history_kwargs(a),
     )
     if c.json:
         body = out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
