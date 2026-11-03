@@ -164,7 +164,7 @@ EXPORT_KINDS = [
     "status",
     "worklog",
 ]
-TICKS = ["flow.sample"]
+TICKS = ["flow.sample", "merge_queue.integrator"]
 SEARCH_SOURCES = [
     "records",
     "sessions",
@@ -180,7 +180,7 @@ ITEM_KINDS = ["task", "phase", "bug", "doc", "research", "job"]
 HARNESSES = [
     "claude", "gemini", "codex", "copilot", "vscode", "kilo", "cursor", "kimi", "opencode",
     "glm", "qwen", "antigravity", "devin", "qodo", "tabnine", "aider", "cline", "windsurf",
-    "replit", "openhands", "goose", "cody", "dsh",
+    "replit", "openhands", "goose", "cody", "dsh", "grok",
 ]  # fmt: skip
 
 
@@ -249,8 +249,8 @@ def test_the_item_kinds_stay_a_plain_table_and_the_harnesses_list_the_same_names
 #: Hand-rolled `register*()` functions that mutate a module-level table and have not moved to
 #: `Registry` yet. This set may only shrink: a new seam uses `ddflow.core.registry`.
 HAND_ROLLED = {
-    "ddflow/core/schedule.py:register_filter",
-    "ddflow/core/schedule.py:register_key",
+    "ddflow/core/schedule/_filters.py:register_filter",
+    "ddflow/core/schedule/_filters.py:register_key",
     "ddflow/services/cadence.py:register_due",
     "ddflow/services/guidance/checks.py:register",
     "ddflow/services/guidance/review.py:register_trigger",
