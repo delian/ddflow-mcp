@@ -118,7 +118,11 @@ class Registry(Mapping[str, T], Generic[T]):
     def lazy(self, name: str, target: str) -> None:
         """Register ``name`` as ``"package.module:attr"``, imported when it is first used."""
         if name in self.table and not self._replace:
-            raise DuplicateName(f"{self.what} {name!r} is already registered")
+            have = self.table[name]
+            if self._same_ok and isinstance(have, Lazy) and have.target == target:
+                return
+            suffix = " with another definition" if self._same_ok else ""
+            raise DuplicateName(f"{self.what} {name!r} is already registered{suffix}")
         self.table[name] = Lazy(target)
 
     def unregister(self, name: str) -> None:
