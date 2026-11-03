@@ -184,6 +184,14 @@ def test_parse_accepts_a_minimal_descriptor():
         (lambda t: t + '\n[hooks]\nstyle = "plugin"\ninject = ["prompt"]\n', "no mapping"),
         (lambda t: t + '\n[instructions]\nnative_path = "X.md"\n', "go together"),
         (lambda t: t + '\n[instructions]\nagents_md = "maybe"\n', "agents_md must be one of"),
+        (
+            lambda t: t + '\n[orchestration]\ndispatch = "task"\n',
+            "orchestration.loop names the wave loop primitive",
+        ),
+        (
+            lambda t: t + '\n[orchestration]\nloop = "none"\n',
+            "orchestration.loop must be one of",
+        ),
         (lambda t: t + "\n[mcp", "demo.toml"),
     ],
 )

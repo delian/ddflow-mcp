@@ -30,14 +30,14 @@ CONTINUATION_MECHANISMS = frozenset(
 
 #: The loop primitive a harness runs the orchestration wave loop under. Every value is a
 #: BACKGROUND primitive on purpose: the wave orchestration must never block the operator's
-#: main chat with a foreground loop, so no "goal" or "foreground" value exists to pick.
+#: main chat with a foreground loop, so no "goal" or "foreground" value exists to pick, and
+#: disabling the section is the record's ``none = true`` field, never a loop value.
 ORCHESTRATION_LOOPS = frozenset(
     {
         "background-subagents",  # background task subagents (Kilo's `task` tool)
         "self-paced-command",  # a self-paced slash command (Claude Code's /loop)
         "subtask",  # a background subtask agent (opencode)
         "second-window",  # a second window / terminal process (VS Code)
-        "none",
     }
 )
 
@@ -194,6 +194,8 @@ def check_table(table: Any, name: str, where: str) -> None:
         name, table.get("mechanism"), "continuation.mechanism", CONTINUATION_MECHANISMS, where
     )
     _membership(name, table.get("loop"), "orchestration.loop", ORCHESTRATION_LOOPS, where)
+    if name == "orchestration" and keys and table.get("loop") is None:
+        raise DescriptorError(f"{where}: orchestration.loop names the wave loop primitive")
     if name == "headless" and table.get("autonomy") == "":
         raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
     if "none" in table and table["none"] is True and keys:
