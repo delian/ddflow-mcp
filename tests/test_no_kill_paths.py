@@ -89,11 +89,11 @@ def _calls(path: Path):
                 name = f.attr
                 if name == "system":
                     # `os.system` launches a process; `platform.system` reports the OS
-                    # name. Only a receiver bound to `platform` is the read -- an `os`
-                    # receiver (or `import os as platform`, an unbound name) stays
+                    # name. Only a receiver bound to `platform` by an import is the read --
+                    # an `os` receiver (or `import os as platform`, an unbound name) stays
                     # `system`, so an aliased launcher is still flagged.
                     recv = f.value.id if isinstance(f.value, ast.Name) else ""
-                    name = "platform.system" if bound.get(recv, recv) == "platform" else "system"
+                    name = "platform.system" if bound.get(recv) == "platform" else "system"
             else:
                 name = getattr(f, "id", "")
                 if name == "system" and bound.get(name) == "platform":
@@ -201,3 +201,7 @@ def test_from_os_star_import_bare_system_is_the_launcher(tmp_path: Path):
 
 def test_assigned_os_system_is_the_launcher(tmp_path: Path):
     assert _kill_names("import os\nsystem = os.system\nsystem('pkill foo')\n", tmp_path) == {"system"}
+
+
+def test_assigned_platform_alias_os_system_is_the_launcher(tmp_path: Path):
+    assert _kill_names("import os\nplatform = os\nplatform.system('pkill foo')\n", tmp_path) == {"system"}
