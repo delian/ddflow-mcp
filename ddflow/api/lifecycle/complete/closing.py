@@ -9,7 +9,7 @@ from typing import Any
 
 from ....core import outcome as O
 from ...knowledge import bug_fixed
-from ...knowledge.bug_close import regression_arg_refusal
+from ...knowledge.regression import regression_arg_refusal
 from ...knowledge.self_assessment import auto_file
 
 

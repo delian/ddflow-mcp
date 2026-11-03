@@ -15,8 +15,6 @@ from ._phases import (
     _claims_done,
     _note_withheld,
     _scan_sources,
-    _settle_needed_phases,
-    _settle_phases,
     _triage_found,
     touched_since_import,
 )
@@ -84,9 +82,14 @@ def _cap_or_settle(
         if include_done:
             # AFTER the tasks are in the plan: a phase is finished or not by what is
             # under it once this import has run, not by what was under it before.
-            _settle_phases(plan, state, touched, existing_phases)
+            # Read through the package's lazy re-export at call time, so a monkeypatch on
+            # the package (`IM._settle_phases`) still reaches the caller (the split kept
+            # the one-file invariant that patching the package rebinds the name).
+            sys.modules[__package__]._settle_phases(plan, state, touched, existing_phases)
         else:
-            _settle_needed_phases(plan, deferred_done, state, touched, existing_phases)
+            sys.modules[__package__]._settle_needed_phases(
+                plan, deferred_done, state, touched, existing_phases
+            )
 
 
 def plan_import(

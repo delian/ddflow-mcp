@@ -106,8 +106,8 @@ class Registry(Mapping[str, T], Generic[T]):
             if self._key is None:
                 raise RegistryError(f"{self.what}: give a name, or build the registry with key=")
             name = self._key(item)
-        have = self.table.get(name)
-        if have is not None and not self._replace:
+        if name in self.table and not self._replace:
+            have = self.table[name]
             if self._same_ok and have == item:
                 return item
             suffix = " with another definition" if self._same_ok else ""
@@ -118,7 +118,11 @@ class Registry(Mapping[str, T], Generic[T]):
     def lazy(self, name: str, target: str) -> None:
         """Register ``name`` as ``"package.module:attr"``, imported when it is first used."""
         if name in self.table and not self._replace:
-            raise DuplicateName(f"{self.what} {name!r} is already registered")
+            have = self.table[name]
+            if self._same_ok and isinstance(have, Lazy) and have.target == target:
+                return
+            suffix = " with another definition" if self._same_ok else ""
+            raise DuplicateName(f"{self.what} {name!r} is already registered{suffix}")
         self.table[name] = Lazy(target)
 
     def unregister(self, name: str) -> None:
@@ -148,8 +152,14 @@ class Registry(Mapping[str, T], Generic[T]):
                 if m.name.startswith(self._prefix):
                     importlib.import_module(f"{self._package}.{m.name}")
         if self._loader is not None:
-            for item in list(self._loader()):  # all of them first: a failure registers none
-                self.register(item)
+            before = dict(self.table)
+            try:
+                for item in list(self._loader()):  # all of them first: a failure registers none
+                    self.register(item)
+            except BaseException:
+                self.table.clear()
+                self.table.update(before)
+                raise
         self._ready = True
 
     def get_or_raise(self, name: str) -> T:
