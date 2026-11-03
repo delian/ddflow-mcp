@@ -13,7 +13,6 @@ from ..config_sections._docs import KNOB_DOCS, RENAMED
 from ..config_sections._layers import layer_path, read_toml
 from ..config_sections.agent import AgentConfig
 from ..config_sections.approvals import ApprovalsConfig
-from ..config_sections.handoff import HandoffConfig
 from ..config_sections.bugs import BugsConfig
 from ..config_sections.cadence import CadenceConfig
 from ..config_sections.chore import ChoreConfig
@@ -29,6 +28,7 @@ from ..config_sections.flow import FlowConfig
 from ..config_sections.gates import GatesConfig
 from ..config_sections.govern import GovernConfig
 from ..config_sections.grants import GrantsConfig
+from ..config_sections.handoff import HandoffConfig
 from ..config_sections.health import HealthConfig
 from ..config_sections.hooks import HooksConfig
 from ..config_sections.ids import IdsConfig
