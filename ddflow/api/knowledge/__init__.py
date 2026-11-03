@@ -29,7 +29,7 @@ from .bug_close import (  # noqa: F401
     could_not_run_text,
 )
 from .bug_repro import repro_lead  # noqa: F401
-from .bug_tags import bug_tag  # noqa: F401
+from .bug_tags import bug_tag, found_tags, get_tags, reserved, set_tags  # noqa: F401
 from .bug_void import bug_invalid  # noqa: F401
 from .bugs import (  # noqa: F401
     BUG_REPORT_COMMAND,
@@ -44,8 +44,10 @@ from .bugs import (  # noqa: F401
 from .lessons import LessonDraft, lesson_add, lesson_search, lessons_verify  # noqa: F401
 from .memory import memory_add, memory_forget, memory_list  # noqa: F401
 from .pairs import dupes, link_record, pair_records, pairs_from  # noqa: F401
+from .regression import regression_arg_refusal  # noqa: F401
 from .research import VERDICTS, Finding, research_add  # noqa: F401
 from .retrieval import recall, similar  # noqa: F401
+from .self_assessment import auto_file  # noqa: F401
 from .sessions import (  # noqa: F401
     history,
     session_adopt_orphans,

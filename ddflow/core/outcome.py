@@ -51,6 +51,9 @@ class Verdict(NamedTuple):
 EXIT_NAMES = {OK: "ok", FAIL: "failed", NOTHING: "nothing", REFUSED: "refused"}
 #: The exit a Ctrl-C ends a command with: 128 + SIGINT, as a shell reports it.
 INTERRUPTED = 130
+#: The largest exit code a process reports (an unsigned byte): a listed exit code must
+#: fall in 0..255, so engines validate against this, not a module-local literal.
+MAX_EXIT = 255
 
 
 #: Exits for classes this bottom layer cannot import, by qualified name; a class that can
