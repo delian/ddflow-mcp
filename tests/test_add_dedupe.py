@@ -292,7 +292,8 @@ def test_filing_two_near_duplicate_lessons_is_refused_and_must_be_answered(repo)
     assert again.data["candidates"][0]["id"] == "lesson-1"
     assert "lesson-2" not in state(repo).lessons, "the near-duplicate was silently filed"
     answered = A.lesson_add(
-        repo, A.LessonDraft(title=near, rule=near, id="lesson-2", answer=DD.Answer("new")),
+        repo,
+        A.LessonDraft(title=near, rule=near, id="lesson-2", answer=DD.Answer("new")),
         agent="a",
     )
     assert answered.exit == 0 and "lesson-2" in state(repo).lessons
