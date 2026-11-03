@@ -87,12 +87,13 @@ def test_complete_accepts_a_docs_only_change_with_the_doc_gates_alone(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "write a note", "--globs", "docs/**")
     _worktree_with_change(repo, "docs/note.md")
-    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
+    for gate in ("rules", "implement", "standards", "dedupe"):
         code, out, err = run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "ran it",
             agent="a1",
         )  # fmt: skip
         assert code == 0, (gate, out, err)
+    assert run_cli(repo, "merge", "T1", agent="a1")[0] == 0
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
     assert code == 0, out + err
 
@@ -119,12 +120,13 @@ def test_a_research_item_with_a_docs_diff_runs_the_doc_pipeline_and_completes(re
     st = _state(repo)
     s = G.status(st, cfg, "T1", None, diff=lambda: CO.changed_paths(repo, st.items["T1"]))
     assert s.pipeline == list(cfg.gates.doc_pipeline), s.pipeline
-    for gate in ("rules", "implement", "standards", "dedupe", "merge"):
+    for gate in ("rules", "implement", "standards", "dedupe"):
         code, out, err = run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "ran it",
             agent="a1",
         )  # fmt: skip
         assert code == 0, (gate, out, err)
+    assert run_cli(repo, "merge", "T1", agent="a1")[0] == 0
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
     assert code == 0, out + err
 
