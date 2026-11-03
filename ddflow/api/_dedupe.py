@@ -34,6 +34,7 @@ from ..config import Config
 from ..core import outcome as O
 from ..core import textsim
 from ..infra.store import Store, similar_records
+from ..services import bugsim
 from ..services import searchcore as SC
 from ..services import similar as sim
 from ._dedupe_extend import extend  # noqa: F401  (re-exported: DD.extend)
@@ -293,6 +294,8 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
                 "item": rec.item,
             }
             found = sim.assess(matcher, record, cfg)
+            if rec.kind == "bug":
+                found = _bug_semantic(repo, cfg, st, rec, found)
             shown = (
                 rows(st, matcher, found.candidates, rec.text, grace_s=cfg.lease.grace_s)
                 if found.candidates
@@ -301,6 +304,40 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
             return found, shown, ""
     except (LookupError, OSError) as exc:
         return sim.Assessment("off"), [], f"{type(exc).__name__}: {exc}"
+
+
+def _bug_semantic(repo: Path, cfg: Config, st, rec: Record, found: sim.Assessment) -> sim.Assessment:
+    """Add the bugs the SEMANTIC matcher matches when the token matcher did not already ask.
+
+    Two differently-worded reports of one defect share no content word and escape the
+    overlap engine; the embedder (`services.embed`, the one semantic port, D-unify 2) sees
+    them. This is an ADDITION to `assess`: it never vetoes a token match and never runs
+    when the check is off. When the embedder cannot run it adds nothing and the overlap
+    answer stands, so a filing is never refused that would not have been without it.
+    """
+    if found.action in ("off", "ask"):
+        return found
+    bugs = [r for r in similar_records(st) if r["kind"] == "bug"]
+    hits, _note = bugsim.semantic_hits(repo, cfg, rec.text, bugs, floor=cfg.dedupe.show_floor)
+    if not hits:
+        return found
+    existing = {c.id for c in found.candidates}
+    added = [sim.Candidate(i, "bug", s, ("semantic",)) for i, s in hits if i not in existing]
+    if not added:
+        return found
+    # The action is the STRONGEST of the token matcher's and the semantic add's -- a token
+    # `warn` is a warning, never downgraded to `show`, and a semantic hit asks the same way
+    # one does (score at the ask threshold with enough words). `found` is not `ask`/`off`
+    # here (those return early), so only `none`/`show`/`warn` reach this point.
+    asks = found.action == "warn" or (
+        any(c.score >= cfg.dedupe.ask_threshold for c in added)
+        and found.words >= cfg.dedupe.min_words
+    )
+    if not asks:
+        return sim.Assessment("show", [*found.candidates, *added], found.words)
+    return sim.Assessment(
+        "ask" if cfg.dedupe.on_match == "ask" else "warn", [*found.candidates, *added], found.words
+    )
 
 
 def _bad_answer(st, rec: Record, answer: Answer) -> str:
