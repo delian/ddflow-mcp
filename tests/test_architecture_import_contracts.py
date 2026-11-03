@@ -123,3 +123,13 @@ def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatc
     (directory / "ddflow.b.toml").write_text('ignore_imports = ["ddflow.c -> fcntl"]\n')
     with pytest.raises(AssertionError, match="other modules"):
         _allowlist("fsio-home")
+
+
+def test_graph_internal_names_every_contract() -> None:
+    """``graph-internal.md``'s Import-linter row names every ``.importlinter`` contract, so
+    the doc cannot drift from ``CONTRACTS`` when a contract is added or removed."""
+    text = (ROOT / "docs/ddflow/research/graph-internal.md").read_text("utf-8")
+    row = next(line for line in text.splitlines() if "Import-linter contracts" in line)
+    for contract in CONTRACTS:
+        assert contract in row, f"graph-internal.md Import-linter row omits contract {contract}"
+    assert f"{len(CONTRACTS)} contracts" in row, f"contract count drifted: {row}"
