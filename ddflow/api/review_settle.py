@@ -34,7 +34,7 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
         return out
     gate = out.data.get("gate", "")
     text = out.data.get("text", "")
-    settled = False
+    passed = bool(out.data.get("passed_on_refutation"))
     for g in (gate, *(out.data.get("mirrored") or [])):
         log, cfg, st = _load(repo, kw.get("agent", ""))
         it = st.items.get(item)
@@ -79,5 +79,5 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
             f"{counts['findings']} finding(s) was refuted with its probe; no hand-recording needed"
         )
         if g == gate:
-            settled = True
-    return O.ok("review.triage", **{**out.data, "text": text, "passed_on_refutation": settled})
+            passed = True
+    return O.ok("review.triage", **{**out.data, "text": text, "passed_on_refutation": passed})
