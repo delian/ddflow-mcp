@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from ...core.leasesnap import (  # noqa: F401
     CONFIG_FILES,
+    DOC_SCHEMA,
     MAX_CONFIG_BYTES,
     MAX_SKEW_S,
     MISSING,
@@ -13,7 +14,6 @@ from ...core.leasesnap import (  # noqa: F401
     NEWER,
     OK,
     REFRESH,
-    SCHEMA,
     STALE,
     UNREADABLE,
     UNREADABLE_CONFIG,

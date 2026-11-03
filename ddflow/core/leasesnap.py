@@ -17,16 +17,16 @@ import json
 import math
 import os
 import stat
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..adapters.clock import DEFAULT as CLOCK
 from .digest import hasher
 
 #: The file under `.ddflow/local`, and the one number the file format is versioned by.
 NAME = "lease-snapshot.json"
-SCHEMA = 1
+DOC_SCHEMA = 1
 OK, MISSING, UNREADABLE, STALE, NEWER = "ok", "missing", "unreadable", "stale", "newer"
 
 #: How far ahead of this clock a snapshot's write time may be (clocks of one machine differ little).
@@ -142,7 +142,7 @@ def _leases(table: Any, now: float) -> dict[str, dict[str, Any]]:
 def _fields(data: dict[str, Any], now: float | None, max_age_s: int | None) -> tuple:
     """Every field of the document, validated; raises on any malformed part."""
     limit = int(_num(data.get("max_age_s", 0) if max_age_s is None else max_age_s))
-    t = time.time() if now is None else now
+    t = CLOCK.wall() if now is None else now
     age = t - _num(data["written_at"])
     if age < -MAX_SKEW_S:
         raise ValueError(age)  # written in the future: a rolled-back clock or a corrupt file
@@ -171,7 +171,7 @@ def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = 
     data = raw.get("data") if isinstance(raw, dict) else None
     if not isinstance(data, dict) or not isinstance(data.get("leases"), dict):
         return _bad(UNREADABLE, f"has no lease table ({p})")
-    if not isinstance(raw.get("schema"), int) or raw["schema"] > SCHEMA:
+    if not isinstance(raw.get("schema"), int) or raw["schema"] > DOC_SCHEMA:
         return _bad(NEWER, "was written by a newer ddflow")
     try:
         limit, age, gen, grace, leases, shared, new_files, stamp = _fields(data, now, max_age_s)

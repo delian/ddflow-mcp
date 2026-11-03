@@ -20,7 +20,6 @@ old file, which ages out (`[locks].snapshot_max_age_s`) into the hook's fail-ope
 from __future__ import annotations
 
 import contextlib
-import time
 from pathlib import Path
 from typing import Any
 
@@ -204,7 +203,7 @@ def apply(
         return False
 
     def step(cur: Any) -> dict[str, Any]:
-        now = time.time()
+        now = H.CLOCK.wall()
         if (
             before is not None
             and after is not None
@@ -218,7 +217,7 @@ def apply(
 
     for attempt in (0, 1):
         try:
-            store.update(H.NAME, step, schema=H.SCHEMA, derived=True)
+            store.update(H.NAME, step, schema=H.DOC_SCHEMA, derived=True)
             return True
         except StoreUnreadable:
             if attempt:
@@ -240,7 +239,7 @@ def _discard(store: LocalStore) -> None:
             store.write(
                 H.NAME,
                 {"written_at": 0, "leases": {}, "config_stamp": ["discarded"]},
-                schema=H.SCHEMA,
+                schema=H.DOC_SCHEMA,
                 derived=True,
             )
 
