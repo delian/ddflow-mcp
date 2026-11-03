@@ -168,6 +168,7 @@ COMMANDS: tuple[Command, ...] = (
             no_task=bool(a.get("no_task")),
             answer=_answer(a),
             agent=agent,
+            repro_cmd=a.get("evidence", "") or "",
         ),
         payload=("id", "offer", "fix_task", "fix_task_filed"),
         params=(
@@ -178,6 +179,12 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param("summary", help="What is wrong, in one line.", cli_help="", required=True),
+            Param(
+                "evidence",
+                help="What showed the bug: a command.",
+                mcp_only=True,
+                default="",
+            ),
             Param("item", help="The task it was found in or affects.", cli_help="", default=""),
             Param(
                 "title", help="Short headline.", cli_help="a short headline for the bug", default=""

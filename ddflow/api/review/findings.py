@@ -122,6 +122,57 @@ def _link_refuted(log, it, gate: str, findings) -> list[str]:
     return linked
 
 
+def _mirror_sibling_gates(
+    log,
+    it,
+    *,
+    gate: str,
+    digest: str,
+    verdict: str,
+    probe: str,
+    severity: str,
+    title: str,
+    location: str,
+) -> list[str]:
+    """A combined review stores each finding under every gate it stands for; when a triage
+    gives one gate's copy its verdict, the SAME finding under the other gates answers too
+    (bug B-combined-review-findings-triaged-twice). Appends a `review.triaged` for each
+    sibling gate that carries ``digest`` with no settled verdict yet. Returns those gates.
+    """
+    if it is None:
+        return []
+    mirrored: list[str] = []
+    for g2 in sorted(it.gates or {}):
+        if g2 == gate:
+            continue
+        mine = it.triage.get(g2, {})
+        if mine.get(digest, {}).get("verdict", "") in _SETTLED:
+            continue
+        rec = it.gates.get(g2)
+        found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
+        if not GD.is_triageable(found):
+            continue
+        n = next((i for i, f in enumerate(found, 1) if f.get("digest") == digest), 0)
+        if not n:
+            continue
+        log.append(
+            "review.triaged",
+            it.id,
+            {
+                "gate": g2,
+                "finding": n,
+                "digest": digest,
+                "verdict": verdict,
+                "probe": probe,
+                "severity": severity,
+                "title": title,
+                "location": location,
+            },
+        )
+        mirrored.append(g2)
+    return mirrored
+
+
 _LINE_CITATION = re.compile(r"^\d+(?:\s*[-\u2013]\s*\d+)?$")
 
 

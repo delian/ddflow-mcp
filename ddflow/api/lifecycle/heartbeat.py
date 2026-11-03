@@ -15,6 +15,7 @@ from ...services import healthwatch as HW
 from ...services import inbox as IB
 from ...services import leasebreak as LB
 from ...services import leases as L
+from ...services import recall as RC
 from ...services import waits as WT
 from ...services.cleanup import stranded_text
 from ...services.leaseclock import localize
@@ -62,6 +63,7 @@ def heartbeat(
             waiters=[],
             globs_withheld="",
             yield_requested="",
+            recall="",
         )
     began = time.time()  # before the renewal: the lease is live at this instant once renewed
     renewed = L.renew(log, item)
@@ -92,6 +94,7 @@ def heartbeat(
             globs_withheld=withheld,
             new_reports=_new_report_count(st, item),
             yield_requested=_yield_request(log, cfg, item),
+            recall=_recheck(log, st, cfg, item),
             **_inbox(repo, cfg, cfg.agent.id or log.agent_id, consume=True),
         )
     return O.nothing(
@@ -102,6 +105,7 @@ def heartbeat(
         waiters=[],
         globs_withheld="",
         yield_requested="",
+        recall="",
     )
 
 
@@ -118,7 +122,13 @@ def _the_held_item(repo: Path, st, me: str, called_from) -> tuple[str, O.Outcome
         whose = "this tree carries"
     if len(held) == 1:
         return held[0], None
-    base = {"renewed": False, "waiters": [], "globs_withheld": "", "yield_requested": ""}
+    base = {
+        "renewed": False,
+        "waiters": [],
+        "globs_withheld": "",
+        "yield_requested": "",
+        "recall": "",
+    }
     if not held:
         return "", O.nothing(
             "lease.renewed",
@@ -145,6 +155,36 @@ def _yield_request(log, cfg, item: str) -> str:
     ]
     asked.append(HW.stop_notice(st, item))  # the watchdog's stop request (DX-health-watch)
     return " ".join(t for t in asked if t)
+
+
+def _recheck(log, st, cfg, item: str) -> str:
+    """The mid-work lesson re-surfacing to show on this renewal (Bcd5871e71b), "" when none,
+    or when a re-scoring is not due. Advisory: a lessons corpus that cannot be scored never
+    stops a renewal, it just surfaces nothing -- but the `cadence.ran` is still recorded, so
+    a scoring that raises does not make the next heartbeat re-score too (the very busy-loop
+    the cadence exists to stop)."""
+    if not RC.due(st, item, cfg, time.time()):
+        return ""
+    try:
+        hits = RC.matched_lessons(st, item, cfg)
+    except Exception:
+        hits = []  # scored nothing: recorded below either way, so it stays bounded
+    log.append(
+        "cadence.ran",
+        RC.cadence_id(item),
+        {"result": str(len(hits)), "evidence": RC.run_note(hits)},
+    )
+    if not hits:
+        return ""
+    parts = []
+    for rid, score in hits:
+        les = st.lessons.get(rid)
+        title = les.title if les else rid
+        parts.append(f"{rid} ({score:.2f}) {title}")
+    return (
+        f"re-surfaced {len(hits)} pre-recorded lesson(s) still in force for {item}: "
+        + "; ".join(parts)
+    )
 
 
 def _catch_up_globs(log, cfg, item: str, now: float, holder: str) -> str:

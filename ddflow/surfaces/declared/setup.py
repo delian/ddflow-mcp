@@ -16,6 +16,23 @@ from ..tools._common import _AGENT_KEYS, _api, _configure_reported
 from ..vocabulary import sources
 
 
+def doctor_history_kwargs(a):
+    """The `doctor` keyword arguments that decide how history is replayed, from the CLI args.
+
+    `--accept-history`/`--accept-lost-events` and the four `--history-*` words are read the
+    same way by the declarative `doctor` command and the rendered `ddflow doctor` surface."""
+    return {
+        "accept_lost_events": bool(getattr(a, "accept_lost_events", False)),
+        "accept_history": bool(getattr(a, "accept_history", False)),
+        "history": (
+            str(getattr(a, "history_reason", "") or ""),
+            str(getattr(a, "history_note", "") or ""),
+            str(getattr(a, "history_only", "") or ""),
+            str(getattr(a, "approval", "") or ""),
+        ),
+    }
+
+
 def _self_request(a, agent: str = ""):
     """`ddflow_upgrade`'s `self` argument as the self-upgrade request, None without it."""
     mode = str(a.get("self") or "")
@@ -326,14 +343,7 @@ COMMANDS: tuple[Command, ...] = (
             parser=sources()[0],
             tools=sources()[1],
             start_texts=start_texts,
-            accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
-            accept_history=bool(getattr(a, "accept_history", False)),
-            history=(
-                str(getattr(a, "history_reason", "") or ""),
-                str(getattr(a, "history_note", "") or ""),
-                str(getattr(a, "history_only", "") or ""),
-                str(getattr(a, "approval", "") or ""),
-            ),
+            **doctor_history_kwargs(a),
         ),
         # PROSE, as it has always been: a list of problems with advice attached is
         # what an operator and an agent both want, and `views/human.py` renders it once
