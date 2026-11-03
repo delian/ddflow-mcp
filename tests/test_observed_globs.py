@@ -126,3 +126,10 @@ def test_cli_call_quotes_globs_and_bookkeeping_only_diff_offers_no_narrowing():
         OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": [".ddflow/x"]})) == ""
     )
     assert "gate status" in OG.UNKNOWN
+
+
+def test_no_narrowing_is_offered_when_every_glob_is_untouched():
+    st = _state(_task("T", ["docs/**"]))
+    assert (
+        OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["src/m.py"]})) == ""
+    )

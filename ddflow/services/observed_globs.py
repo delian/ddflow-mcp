@@ -119,6 +119,8 @@ def untouched_report(
     if not untouched:
         return ""
     keep = [g for g in it.globs if g not in untouched]
+    if not keep:
+        return ""  # nothing was written inside any glob: no honest narrowing to offer
     return (
         f"declared but never written: {_list(untouched, cfg.locks.suggest_shown)}. "
         f"Narrow the claim so others can take those files: "
