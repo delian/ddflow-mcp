@@ -34,7 +34,7 @@ MAX_SKEW_S = 60
 
 REFRESH = (
     "any lease call rewrites it: `ddflow heartbeat ITEM` (MCP `ddflow_heartbeat`); until then "
-    "the commit-time lease check (`ddflow check-commit`) is the only check"
+    "the commit-time lease check (`ddflow precommit`) is the only check"
 )
 
 
