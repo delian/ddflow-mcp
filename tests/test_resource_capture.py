@@ -90,7 +90,8 @@ def test_each_command_gets_its_own_numbers_not_a_running_total():
     # `again` must report its OWN numbers, not the earlier child's high-water mark (peak
     # rss is a high-water mark). The `wait4` cpu sample is load-sensitive: at 48 workers a
     # not-yet-reaped sibling can be attributed to this line once, so one ratio sample is
-    # flaky under full-suite load (B37281998f7); retry before failing.
+    # flaky under full-suite load (B37281998f7); sleep between probes so already-done
+    # siblings are reaped before the next sample, then fail if none is clean.
     for _ in range(3):
         again = P.run_shell("true", timeout_s=20).resources
         if (
@@ -99,6 +100,7 @@ def test_each_command_gets_its_own_numbers_not_a_running_total():
             and again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
         ):
             return
+        time.sleep(0.05)
     pytest.fail("again carried the earlier child's high-water cpu or rss mark under load")
 
 
