@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.reviewer_independence"
+new = "\"model\""
+why = "Reviewer independence is a preference (D-reviewer-independence-soft): a different family first, a different model of the author's family accepted as a recorded tier `model`. Existing projects get `model` with this upgrade; to keep the strict rule set `ddflow config --set agent.reviewer_independence family` (an organisation locks it the same way). `off` demands none; the legacy `reviewer_family_must_differ = false` still means off, except that `family` always wins (the strictest setting is never loosened by the legacy boolean)."
+impact = "additive"

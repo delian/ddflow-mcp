@@ -87,11 +87,18 @@ def _reviewer(o: Outcome, ctx: Context) -> str:
     return (o.model or o.by or "(unknown)") if o.gate in PR.REVIEW_GATES else ""
 
 
+def _tier(o: Outcome, ctx: Context) -> str:
+    """The independence tier a review carried: grouping by it gives the fallback rate
+    (the `model` share) and the findings per tier ('' leaves non-review gates out)."""
+    return (o.tier or "(unrecorded)") if o.gate in PR.REVIEW_GATES else ""
+
+
 #: The built-in group-by dimensions of a gate outcome. The reviewer is the model a review
 #: recorded, else whoever recorded the verdict.
 DIMENSIONS: dict[str, Dimension] = {
     "gate": lambda o, ctx: o.gate,
     "reviewer": _reviewer,
+    "tier": _tier,
     "agent": lambda o, ctx: o.by or "(unknown)",
     "kind": _kind,
     "phase": _phase,

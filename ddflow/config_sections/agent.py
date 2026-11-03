@@ -140,7 +140,13 @@ class AgentConfig:
     )
     reviewer_family_must_differ: bool = knob(
         True,
-        doc="Require at least one reviewer from a different pretraining family than the author. A same-family reviewer shares the author's blind spots, so its agreement is not independent evidence.",
+        doc="Legacy switch for `reviewer_independence`: false means `off`; true (the default) defers to `reviewer_independence`. Same-family agreement shares the author's blind spots, which is why a different family is preferred.",
+    )
+    reviewer_independence: str = knob(
+        "model",
+        doc="How independent a reviewer must be of the author (D-reviewer-independence-soft). `family`: at least one reviewer from a different pretraining family (the strictest; pin it for the whole organisation with a lock). `model`: a different family is preferred, and a DIFFERENT MODEL of the author's family also satisfies the gate, recorded as tier `model` -- the normal state for a single-subscription account. `off`: no independence is demanded. The author's own model never counts, and a model no map recognises establishes nothing, at any level. The legacy boolean `reviewer_family_must_differ = false` still means `off`.",
+        choices=("family", "model", "off"),
+        strictest=("family", "an unknown level asks for a reviewer of another family"),
     )
     families: dict[str, str] = knob(
         factory=lambda: dict(FAMILY_HINTS),
@@ -211,3 +217,14 @@ class AgentConfig:
         8,
         doc="How many characters the one-time code of an ask has, when the transport asks for one (a remote channel proves the person got the message by presenting it). Read aloud or typed on a phone, so it avoids look-alike characters; the engine never makes it shorter than 4. Default 8. Change it for the project (`ddflow config --set agent.ask_code_length 6`), for this machine (add --local), per run (DDFLOW_AGENT_ASK_CODE_LENGTH), or over MCP with `ddflow_configure`.",
     )
+
+
+def independence_level(agent: AgentConfig) -> str:
+    """The effective reviewer-independence level: `off` when the legacy boolean
+    `reviewer_family_must_differ` is false, else `[agent].reviewer_independence`."""
+    # A `family` setting (or lock) outranks the legacy boolean: the strictest wins.
+    if agent.reviewer_independence == "family":
+        return "family"
+    if not agent.reviewer_family_must_differ:
+        return "off"
+    return agent.reviewer_independence

@@ -160,12 +160,17 @@ from .reviewers import (  # noqa: F401
     family_of,
     git_state,
     git_state_change,
+    independence_tier,
+    is_author_model,
     is_reviewer_gate,
+    model_tier_of,
+    review_tier,
     reviewer_gates,
     reviewer_independence,
     reviewer_ran,
     router_set,
     run_watching_git,
+    tier_notes,
 )
 from .rounds import delta_rounds, full_rounds, kept_copy, rounds_used, settled_pass  # noqa: F401
 from .runner import (  # noqa: F401

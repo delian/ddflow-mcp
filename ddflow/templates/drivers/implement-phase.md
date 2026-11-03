@@ -170,9 +170,13 @@ Four rules bind across all of them:
    review silently disappears from a project's history.
 2. **Evidence or it did not happen.** Gates in `gates.evidence_required` refuse a bare
    pass. Attach the command, its exit code and its output.
-3. **At least one reviewer must be a different pretraining family than you.** Same-family
-   agreement is not independent evidence — it measures shared priors. `ddflow complete`
-   refuses without it. Pass `--model` on every review so ddflow can tell.
+3. **Prefer a reviewer of a different pretraining family than you.** Same-family
+   agreement shares priors, so a different family comes first. When none is available, a
+   different MODEL of your family also satisfies the gate when `[agent].reviewer_independence`
+   is `model` (the default; `family` allows no fallback, `off` demands none), recorded as
+   tier `model`; your own model never
+   counts, and unless the level is `off` `ddflow complete` refuses a review with no tier. Pass `--model` on every
+   review so ddflow can tell.
 4. **A bug may only change source if a runnable probe demonstrates it**, and that probe
    ships as the regression test in the same commit. Then **revert the fix and watch the
    probe fail** — a probe that passes both ways proves nothing. No probe → record it as
