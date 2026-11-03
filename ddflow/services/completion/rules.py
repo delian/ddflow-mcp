@@ -36,6 +36,7 @@ from .. import chore as CO
 from .. import gate_accept as GA
 from .. import gates as G
 from .. import landed as LD
+from .. import observed_globs as OG
 from .. import review_exclude as RX
 from .. import testselect as TS
 from ..cadence import phase_overdue
@@ -372,9 +373,10 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     readme = readme_report(state, cfg, item_id, repo=repo)
     if readme:
-        # "Could not run" is never a blocker: only a README that is known to be missing is.
         blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
         (v.blockers if blocks else v.warnings).append(readme)
+
+    OG.add_notice(v, state, cfg, item_id, repo)
 
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)

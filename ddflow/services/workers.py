@@ -134,6 +134,24 @@ def resolve(command: str, cfg: Any, files: int | None = None, *, source: Any = N
 _AUTO = re.compile(r"(?<![\w-])-n\s+auto(?![\w-])")
 
 
+def timeout_for(declared_s: int, workers: Workers | None, cfg: Any) -> int:
+    """The wall-clock budget for one command gate's run, corrected for a loaded host
+    (B2efda94671): a run cut below `[ci].max_workers` because the host is loaded or memory
+    is short is proportionally slower — fewer workers carry the same suite — so a timeout
+    sized for an idle host dead-ends the gate in `unavailable` ("timed out") before it can
+    record a real outcome the baseline-red machinery could accept. The budget is scaled up by
+    the cut and capped at `[gates].max_run_timeout_s`; a run at the cap (no cut) keeps
+    `declared_s` unchanged. `workers` is the `Workers` the gate command was resolved with."""
+    if declared_s <= 0:
+        return declared_s
+    cap = int(cfg.gates.max_run_timeout_s or declared_s)
+    hi = workers.inputs.get("max") if workers is not None else 0
+    if hi and 0 < workers.n < hi:
+        scaled = int(declared_s * hi / workers.n)
+        return max(declared_s, min(cap, scaled))
+    return declared_s
+
+
 def localize_auto(text: str, cfg: Any, *, source: Any = None, cores: int | None = None,
                   holding_suite: bool = False,
                   files: int | None = None) -> tuple[str, Workers | None]:  # fmt: skip

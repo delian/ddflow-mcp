@@ -202,12 +202,13 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     with SL.hold(cfg, who) if holds else nullcontext():
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
+        timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
         ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
             cwd=cwd,
             env=env,
-            timeout_s=gdef.timeout_s,
+            timeout_s=timeout_s,
             on_tick=on_tick if ticking else None,
             tick_s=tick_s if ticking else 0,
         )
