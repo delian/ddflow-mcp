@@ -505,6 +505,7 @@ COMMANDS: tuple[Command, ...] = (
             a.get("session", "") or "",
             a.get("text", "") or "",
             item=a.get("item", "") or "",
+            relayed_by=a.get("relayed_by", "") or "",
             agent=agent,
         ),
         payload=("redactions", "session", "how"),
@@ -524,6 +525,13 @@ COMMANDS: tuple[Command, ...] = (
                 tool_required=True,
             ),
             Param("item", help="Item it concerns.", cli_help="", default=""),
+            Param(
+                "relayed_by",
+                help="The coordinator (agent) that relayed the words, when the operator's "
+                "answer reached this agent through a coordinator rather than directly.",
+                cli_help="the coordinator that relayed the words (so the log tells a relay from the operator's own)",
+                default="",
+            ),
         ),
     ),
     Command(

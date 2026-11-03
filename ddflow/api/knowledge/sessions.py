@@ -28,14 +28,21 @@ _EMPTY_SESSION_TEXT = (
 
 
 def session_prompt(
-    repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
+    repo: Path,
+    session: str,
+    text: str,
+    *,
+    item: str = "",
+    relayed_by: str = "",
+    agent: str = "",
 ) -> O.Outcome:
     """Record the operator's own words, with credentials redacted before they touch disk.
 
     Empty or whitespace-only text is refused, recording nothing: an empty prompt in the
     log is a hole `ddflow replay` cannot see as one. A missing session id is not a
     reason to refuse: the latest open session is used, else an implicit one is opened,
-    and `how` says which.
+    and `how` says which. ``relayed_by`` names the coordinator a relay passed the words
+    through (a subagent's answer arrives relayed, not from the operator directly).
     """
 
     if not (text or "").strip():
@@ -48,7 +55,10 @@ def session_prompt(
         return O.ok("session.prompt", redactions=0, session=session, how="off")
     sid, how = S.resolve(log, session)
     return O.ok(
-        "session.prompt", redactions=S.prompt(log, cfg, sid, text, item=item), session=sid, how=how
+        "session.prompt",
+        redactions=S.prompt(log, cfg, sid, text, item=item, relayed_by=relayed_by),
+        session=sid,
+        how=how,
     )
 
 

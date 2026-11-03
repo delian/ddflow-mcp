@@ -490,7 +490,12 @@ def cmd_session(a, c: Ctx) -> int:
             return FAIL
         if a.session_cmd == "prompt":
             out = A.session_prompt(
-                c.repo, a.session, text, item=a.item or "", agent=c.requested_agent
+                c.repo,
+                a.session,
+                text,
+                item=a.item or "",
+                relayed_by=getattr(a, "relayed_by", "") or "",
+                agent=c.requested_agent,
             )
         else:
             out = A.session_note(
