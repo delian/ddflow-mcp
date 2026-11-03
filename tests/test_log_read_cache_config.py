@@ -108,6 +108,15 @@ def test_the_config_knob_is_honoured_by_the_real_entry_points(repo):
         call()
         assert not L._PARSE_CACHE, f"{label} ignored [log] reuse_parsed = false"
 
+    # The OTHER direction: reuse_parsed = TRUE must be honoured too. The =false direction
+    # passes trivially when a call site hard-codes LogConfig(reuse_parsed=False), so it
+    # cannot see that site drop the =true knob — only a populated cache can (rubber_duck
+    # qwen3.8-flash-next-fp8 #6).
+    cfgpath.write_text("[log]\nreuse_parsed = true\n")
+    clear_parse_cache()
+    reporting.loops(repo)
+    assert L._PARSE_CACHE, "api.loops ignored [log] reuse_parsed = true"
+
 
 def event_log_calls_without_config(src: str) -> list[int]:
     """Line numbers of `EventLog(...)` constructions in ``src`` that omit `log_cfg`.
