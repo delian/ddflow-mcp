@@ -98,12 +98,15 @@ def from_log(log: Any, cfg: Config, now: float) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _sizes(log: Any) -> dict[str, int]:
-    """Size of every event shard now: the log's position, cheap (one stat per shard)."""
+def _sizes(log: Any) -> dict[str, int] | None:
+    """Size of every event shard now: the log's position, cheap (one stat per shard). None when
+    a shard cannot be statted: the position is then unknown, never "unchanged"."""
     out: dict[str, int] = {}
-    for sh in log.shards():
-        with contextlib.suppress(OSError):
+    try:
+        for sh in log.shards():
             out[sh.name] = sh.stat().st_size
+    except OSError:
+        return None
     return out
 
 
@@ -122,12 +125,12 @@ def _doc(
         "shared": list(shared_globs(cfg)),
         "new_files": list(new_file_globs(cfg)),
         "agents": _agents(leases),
-        "marks": _sizes(log),
+        "marks": _sizes(log) or {},
         "config_stamp": H.config_stamp(log.root),
     }
 
 
-def _continues(cur: Any, log: Any, cfg: Config, shard: str, before: int, now: float) -> bool:
+def _continues(cur: Any, log: Any, cfg: Config, shard: tuple[str, int, int], now: float) -> bool:
     """Is ``cur`` exactly the picture of the log up to the event being applied?
 
     Only then is projecting that one event enough. Otherwise an earlier update failed or never
@@ -136,7 +139,13 @@ def _continues(cur: Any, log: Any, cfg: Config, shard: str, before: int, now: fl
     """
     from ..enforce import hooksnap as H
 
+    name0, before, after = shard
     if not (isinstance(cur, dict) and isinstance(cur.get("leases"), dict)):
+        return False
+    try:
+        for v in cur["leases"].values():
+            H._lease(v)
+    except (TypeError, ValueError, KeyError):
         return False
     marks, limit = cur.get("marks"), cfg.locks.snapshot_max_age_s
     try:
@@ -147,8 +156,10 @@ def _continues(cur: Any, log: Any, cfg: Config, shard: str, before: int, now: fl
     if not isinstance(marks, dict) or cur.get("config_stamp") != H.config_stamp(log.root):
         return False
     sizes = _sizes(log)
+    if sizes is None or sizes.get(name0) != after:
+        return False  # the shard is not exactly where this event left it: others wrote too
     return all(
-        (marks.get(name, 0) == before) if name == shard else (size == marks.get(name, 0))
+        (marks.get(name, 0) == before) if name == name0 else (size == marks.get(name, 0))
         for name, size in sizes.items()
     )
 
@@ -162,7 +173,13 @@ def _agents(leases: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
 
 
 def apply(
-    log: Any, kind: str, subject: str, data: dict[str, Any], agent: str, before: int | None = None
+    log: Any,
+    kind: str,
+    subject: str,
+    data: dict[str, Any],
+    agent: str,
+    before: int | None = None,
+    after: int | None = None,
 ) -> bool:
     """Bring the snapshot up to date with one event. True when it was written.
 
@@ -172,15 +189,25 @@ def apply(
     """
     from ..enforce import hooksnap as H  # late: the enforce package imports this one's parent
 
-    cfg = Config.load(log.root)
-    if not cfg.locks.snapshot:
-        return False
     store = LocalStore(Path(log.root) / ".ddflow" / "local")
-    shard = log.shard.name
+    try:
+        cfg = Config.load(log.root)
+        shard = log.shard.name
+        if not cfg.locks.snapshot:
+            store.remove(H.NAME)  # off: a file left from before would be an old picture
+            return False
+    except Exception:
+        with contextlib.suppress(Exception):
+            store.remove(H.NAME)
+        return False
 
     def step(cur: Any) -> dict[str, Any]:
         now = time.time()
-        if before is not None and _continues(cur, log, cfg, shard, before, now):
+        if (
+            before is not None
+            and after is not None
+            and _continues(cur, log, cfg, (shard, before, after), now)
+        ):
             leases = {k: dict(v) for k, v in cur["leases"].items()}
             project(leases, kind, subject, data, agent)
         else:
@@ -206,7 +233,7 @@ def appended(log: Any, event: Any, before: int, after: int) -> None:
     """The log's append hook: refresh the snapshot after a lease-relevant event."""
     if event.kind in WATCHED:
         with contextlib.suppress(Exception):
-            apply(log, event.kind, event.subject, event.data, event.agent, before)
+            apply(log, event.kind, event.subject, event.data, event.agent, before, after)
 
 
 if appended not in APPEND_HOOKS:

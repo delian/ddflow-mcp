@@ -10,6 +10,7 @@ import time
 from conftest import run_cli
 
 from ddflow.config import Config
+from ddflow.infra.log import EventLog
 from ddflow.services.enforce import hooksnap as H
 from ddflow.services.leases import snapshot as S
 from ddflow.services.swarm import lanehooks_check as CK
@@ -159,7 +160,9 @@ def test_concurrent_processes_all_land(repo):
     [t.start() for t in threads]
     [t.join() for t in threads]
     assert set(out.values()) == {0}, out
-    assert set(names) <= set(H.read(repo).leases)
+    snap = H.read(repo)
+    assert set(names) <= set(snap.leases)
+    assert snap.generation >= len(names)  # every claim advanced the counter
 
 
 def test_a_missed_event_is_rebuilt_not_refreshed(repo, monkeypatch):
@@ -200,6 +203,9 @@ def test_malformed_content_is_unreadable_never_a_partial_picture(repo):
         {"leases": {"a": "corrupt"}},
         {"leases": {"a": {"holder": "me", "renewed_at": 1, "ttl_s": "nope"}}},
         {"max_age_s": float("inf")},
+        {"leases": {"a": {"holder": "me", "renewed_at": 1, "ttl_s": -1}}},
+        {"written_at": time.time() + 99999},
+        {"config_stamp": "x"},
     ]
     for over in bad:
         _write(repo, **over)
@@ -217,7 +223,7 @@ def test_project_ignores_a_former_holders_late_renewal_and_foreign_release():
     assert leases["T"]["renewed_at"] == 10.0  # the clock only moves forward
     S.project(leases, "lease.released", "T", {"holder": "b"}, "b")
     assert "T" in leases
-    S.project(leases, "item.completed", "T", {"holder": "b"}, "b")
+    S.project(leases, "item.completed", "T", {"holder": "b"}, "a")
     assert leases == {}  # an item that ended holds nothing, whoever ended it
 
 
@@ -228,3 +234,42 @@ def test_snapshot_off_writes_nothing(repo):
     assert run_cli(repo, "claim", "T1")[0] == 0
     assert not H.path_of(repo).exists()
     assert Config.load(repo).locks.snapshot is False
+
+
+def test_an_epoch_mtime_config_is_not_an_absent_one(repo, tmp_path):
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(exist_ok=True)
+    absent = H.config_stamp(repo)
+    cfg.write_text("")
+    import os
+
+    os.utime(cfg, ns=(0, 0))
+    assert H.config_stamp(repo) != absent
+
+
+def test_a_failed_update_removes_the_file_instead_of_leaving_an_old_picture(repo, monkeypatch):
+    _claimed(repo)
+    assert H.read(repo).status == H.OK
+    log = EventLog(repo)
+    monkeypatch.setattr(S.Config, "load", staticmethod(lambda root: 1 / 0))
+    assert S.apply(log, "lease.renewed", "T1", {"at": time.time()}, "x", 0, 0) is False
+    assert H.read(repo).status == H.MISSING
+
+
+def test_a_shard_that_moved_past_the_event_forces_a_rebuild(repo):
+    _claimed(repo)
+    log = EventLog(repo)
+    size = log.shard.stat().st_size
+    # the event claims the shard stood at size-1 -> size-1+1, but the log is larger: not current
+    assert not S._continues(
+        {
+            "leases": {},
+            "written_at": time.time(),
+            "marks": {log.shard.name: 0},
+            "config_stamp": H.config_stamp(repo),
+        },
+        log,
+        Config.load(repo),
+        (log.shard.name, 0, size - 1),
+        time.time(),
+    )

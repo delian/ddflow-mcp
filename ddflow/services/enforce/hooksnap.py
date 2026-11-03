@@ -26,6 +26,9 @@ NAME = "lease-snapshot.json"
 SCHEMA = 1
 OK, MISSING, UNREADABLE, STALE, NEWER = "ok", "missing", "unreadable", "stale", "newer"
 
+#: How far ahead of this clock a snapshot's write time may be (clocks of one machine differ little).
+MAX_SKEW_S = 60
+
 REFRESH = (
     "any lease call rewrites it: `ddflow heartbeat ITEM` (MCP `ddflow_heartbeat`); until then "
     "the commit-time lease check (`ddflow check-commit`) is the only check"
@@ -62,16 +65,17 @@ def path_of(repo: Path | str) -> Path:
 CONFIG_FILES = (Path(".ddflow") / "config.toml", Path(".ddflow") / "local" / "config.toml")
 
 
-def config_stamp(repo: Path | str) -> list[int]:
-    """Modification time (ns) of each config file, 0 when absent: the writer records it and the
+def config_stamp(repo: Path | str) -> list[list[int]]:
+    """(mtime ns, size) of each config file, (-1, -1) when absent: the writer records it and the
     reader compares, so a config edit after the snapshot was written cannot leave a stale
-    `shared` list in force."""
+    `shared` list in force. An epoch mtime cannot be confused with an absent file."""
     out = []
     for rel in CONFIG_FILES:
         try:
-            out.append(os.stat(Path(repo) / rel).st_mtime_ns)
+            st = os.stat(Path(repo) / rel)
+            out.append([st.st_mtime_ns, st.st_size])
         except OSError:
-            out.append(0)
+            out.append([-1, -1])
     return out
 
 
@@ -94,12 +98,15 @@ def _globs(v: Any) -> list[str]:
 def _lease(v: Any) -> dict[str, Any]:
     if not isinstance(v, dict) or not isinstance(v.get("holder"), str):
         raise ValueError(v)
-    return {
+    out = {
         "holder": v["holder"],
         "globs": _globs(v.get("globs", [])),
         "renewed_at": _num(v["renewed_at"]),
         "ttl_s": _num(v["ttl_s"]),
     }
+    if out["renewed_at"] < 0 or out["ttl_s"] < 0:
+        raise ValueError(v)
+    return out
 
 
 def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = None) -> Snapshot:
@@ -125,6 +132,13 @@ def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = 
         leases = {str(k): _lease(v) for k, v in data["leases"].items()}
         shared, new_files = _globs(data.get("shared", [])), _globs(data.get("new_files", []))
         stamp = data.get("config_stamp")
+        if not (
+            isinstance(stamp, list)
+            and all(isinstance(x, list) and all(type(n) is int for n in x) for x in stamp)
+        ):
+            raise ValueError(stamp)
+        if age < -MAX_SKEW_S:
+            raise ValueError(age)  # written in the future: a rolled-back clock or a corrupt file
     except (TypeError, ValueError, KeyError, OverflowError):
         return _bad(UNREADABLE, f"has malformed content ({p})")
     if stamp != config_stamp(repo):
