@@ -176,8 +176,8 @@ Four rules bind across all of them:
    different MODEL of your family also satisfies the gate when `[agent].reviewer_independence`
    is `model` (the default; `family` allows no fallback, `off` demands none), recorded as
    tier `model`. Your own model never counts, and unless the level is `off`,
-   `ddflow complete` refuses a review with no tier. Pass `--model` on every review so the
-   tier can be judged.
+   `ddflow complete` refuses a review with no tier. Pass `--model`
+   on every review so ddflow can tell.
 4. **A bug may only change source if a runnable probe demonstrates it**, and that probe
    ships as the regression test in the same commit. Then **revert the fix and watch the
    probe fail** — a probe that passes both ways proves nothing. No probe → record it as
