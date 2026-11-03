@@ -76,7 +76,7 @@ def update_call(item: str, declared: list[str], extra: list[str]) -> str:
     joined = ",".join([*declared, *extra])
     return (
         f"`ddflow update {item} --globs {shlex.quote(joined)}` "
-        f"(MCP: ddflow_task action=update id={item} globs={joined})"
+        f"(MCP: ddflow_task action=update id={item} globs={shlex.quote(joined)})"
     )
 
 
@@ -97,7 +97,7 @@ def undeclared_report(
     changed = _read(read)(repo, it)
     if changed is None:
         return unknown(item_id)
-    undeclared, _ = split(changed, list(it.globs))
+    undeclared, _ = split(changed, list(it.globs or []))
     if not undeclared:
         return ""
     shown = cfg.locks.suggest_shown
@@ -119,7 +119,7 @@ def untouched_report(
     changed = _read(read)(repo, it)
     if not changed or not it.globs or all(globs.inside(p, ".ddflow/**") for p in changed):
         return ""  # unknown or nothing changed yet: narrowing is not yet knowable
-    _, untouched = split(changed, list(it.globs))
+    _, untouched = split(changed, list(it.globs or []))
     if not untouched:
         return ""
     keep = [g for g in it.globs if g not in untouched]

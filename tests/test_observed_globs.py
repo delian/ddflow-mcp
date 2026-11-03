@@ -141,3 +141,7 @@ def test_a_task_with_no_declaration_has_every_write_reported():
     st = _state(_task("T", []))
     text = OG.undeclared_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["src/a.py"]}))
     assert "src/a.py" in text and "ddflow update T --globs 'src/*'" in text
+
+
+def test_mcp_form_quotes_a_path_with_a_space():
+    assert "globs='a/**,my dir/*'" in OG.update_call("T", ["a/**"], ["my dir/*"])
