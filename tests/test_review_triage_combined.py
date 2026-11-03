@@ -111,3 +111,21 @@ def test_mirroring_also_settles_the_sibling_gate_once_its_budget_is_spent(repo, 
     it = _state(repo)
     assert it.gates["critic"].outcome == "passed", "critic must settle once its mirrored finding is answered"
     assert (it.gates["critic"].evidence or {}).get("passed_on_refutation")
+
+
+def test_the_mirrored_sibling_settles_on_refutation_without_the_budget_spent(repo, tmp_path):
+    """The CLI triage (review_settle) settles EVERY fully-refuted gate the mirror answered,
+    not only the budget-spent path: the sibling gate is passed on refutation under the
+    default config too."""
+    import ddflow.api.review_settle as ST
+
+    _setup(repo, tmp_path)
+    api.review(repo, gate=GATES, item="T1", branch="feat")
+
+    out = ST.triage(repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless")
+    assert out.exit == OK, out.reason
+
+    it = _state(repo)
+    assert it.gates["rubber_duck"].outcome == "passed"
+    assert it.gates["critic"].outcome == "passed", "critic stays settled once its mirrored finding is answered"
+    assert (it.gates["critic"].evidence or {}).get("passed_on_refutation")
