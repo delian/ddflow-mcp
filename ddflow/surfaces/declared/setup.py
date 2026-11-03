@@ -21,16 +21,16 @@ def doctor_history_kwargs(a):
 
     `--accept-history`/`--accept-lost-events` and the four `--history-*` words are read the
     same way by the declarative `doctor` command and the rendered `ddflow doctor` surface."""
-    return dict(
-        accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
-        accept_history=bool(getattr(a, "accept_history", False)),
-        history=(
+    return {
+        "accept_lost_events": bool(getattr(a, "accept_lost_events", False)),
+        "accept_history": bool(getattr(a, "accept_history", False)),
+        "history": (
             str(getattr(a, "history_reason", "") or ""),
             str(getattr(a, "history_note", "") or ""),
             str(getattr(a, "history_only", "") or ""),
             str(getattr(a, "approval", "") or ""),
         ),
-    )
+    }
 
 
 def _self_request(a, agent: str = ""):
