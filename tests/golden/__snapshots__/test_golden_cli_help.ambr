@@ -38,15 +38,16 @@
 # ---
 # name: test_help[ddflow approvals approve]
   '''
-  usage: ddflow approvals approve [-h] [--digest DIGEST] id
+  usage: ddflow approvals approve [-h] [--all] [--digest DIGEST] [ID ...]
   
   positional arguments:
-    id               the request id
+    ID               request id(s); `ID:DIGEST` carries the read-receipt prefix inline
   
   options:
     -h, --help       show this help message and exit
-    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
-                     receipt that you looked at this request, not a secret)
+    --all            approve every currently-pending request; each answer still records that
+                     request's digest
+    --digest DIGEST  the read-receipt prefix, one per id in order (repeat, or spell `ID:DIGEST`)
   
   '''
 # ---
@@ -191,7 +192,8 @@
                           channel)
       attest              record the person's answer from the harness transcript (never from your
                           word)
-      approve             a PERSON approves one request, once (refused under an agent identity)
+      approve             a PERSON approves one request or every pending one, once (refused under an
+                          agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
       revoke              a PERSON takes back an approval that is not spent yet
       withdraw            the asker takes back its own request while it waits
@@ -231,10 +233,14 @@
 # ---
 # name: test_help[ddflow archdeps]
   '''
-  usage: ddflow archdeps [-h]
+  usage: ddflow archdeps [-h] [--interfaces KIND] [--baseline]
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help         show this help message and exit
+    --interfaces KIND  Census the interfaces that are not imports: 'all' or one kind (program,
+                       protocol, managed-file, env, network): programs run, wire protocols, other
+                       tools' files, environment variables, network endpoints.
+    --baseline         With interfaces: print the ratchet baseline text instead of the report.
   
   '''
 # ---
