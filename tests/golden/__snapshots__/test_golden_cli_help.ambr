@@ -38,15 +38,16 @@
 # ---
 # name: test_help[ddflow approvals approve]
   '''
-  usage: ddflow approvals approve [-h] [--digest DIGEST] id
+  usage: ddflow approvals approve [-h] [--all] [--digest DIGEST] [ID ...]
   
   positional arguments:
-    id               the request id
+    ID               request id(s); `ID:DIGEST` carries the read-receipt prefix inline
   
   options:
     -h, --help       show this help message and exit
-    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
-                     receipt that you looked at this request, not a secret)
+    --all            approve every currently-pending request; each answer still records that
+                     request's digest
+    --digest DIGEST  the read-receipt prefix, one per id in order (repeat, or spell `ID:DIGEST`)
   
   '''
 # ---
@@ -191,7 +192,8 @@
                           channel)
       attest              record the person's answer from the harness transcript (never from your
                           word)
-      approve             a PERSON approves one request, once (refused under an agent identity)
+      approve             a PERSON approves one request or every pending one, once (refused under an
+                          agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
       revoke              a PERSON takes back an approval that is not spent yet
       withdraw            the asker takes back its own request while it waits
@@ -231,10 +233,14 @@
 # ---
 # name: test_help[ddflow archdeps]
   '''
-  usage: ddflow archdeps [-h]
+  usage: ddflow archdeps [-h] [--interfaces KIND] [--baseline]
   
   options:
-    -h, --help  show this help message and exit
+    -h, --help         show this help message and exit
+    --interfaces KIND  Census the interfaces that are not imports: 'all' or one kind (program,
+                       protocol, managed-file, env, network): programs run, wire protocols, other
+                       tools' files, environment variables, network endpoints.
+    --baseline         With interfaces: print the ratchet baseline text instead of the report.
   
   '''
 # ---
@@ -854,7 +860,7 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events]
+  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
@@ -862,6 +868,22 @@
     --accept-lost-events  record the present event counts of the shards that lost events (to a
                           force-push, revert, reset or deletion) as known, clearing that PROBLEM;
                           the log is not touched
+    --accept-history      Acknowledge history that cannot be mended in an append-only log (an event
+                          edited by a secret scrub, a Lamport clock regression): records the
+                          findings now open as accepted, with who and why (needs a reason). A person
+                          accepts directly; an agent passes approval=request, the person answers in
+                          chat, and the agent re-runs with the approval id. doctor then reports them
+                          as accepted notes; a changed or new finding is a PROBLEM again
+    --history-reason HISTORY_REASON
+                          why the history is known and accepted (required to accept it)
+    --history-note HISTORY_NOTE
+                          the scrub's commit or a note, recorded with the acceptance
+    --history-only HISTORY_ONLY
+                          accept only these findings: comma-separated event ids or <shard>:<event
+                          number> (default: every open one)
+    --approval APPROVAL   accept-history: an agent's route (`request` files an operator approval to
+                          answer in chat, an approval id records the acceptance); a person accepts
+                          directly
   
   '''
 # ---
@@ -1817,11 +1839,11 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages}
-                          summary (default), forecast, retro <id>, skips, lanes or stages
+    {summary,forecast,retro,skips,lanes,stages,locks}
+                          summary (default), forecast, retro <id>, skips, lanes, stages or locks
     item                  with retro: the item id
   
   options:

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "pins.mergiraf_keep_pct"
+new = "10"
+why = "Merge drivers for baselines, pins and (opt-in) Python files: fewer false merge conflicts (LK-baseline-merge-drivers)."
+impact = "additive"

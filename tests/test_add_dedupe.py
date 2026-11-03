@@ -275,6 +275,30 @@ def test_every_add_kind_runs_the_check(repo):
         assert add(kind, f"{kind}-2", more, DD.Answer("new")).exit == 0, kind
 
 
+def test_filing_two_near_duplicate_lessons_is_refused_and_must_be_answered(repo):
+    """B6d06739825: `lesson add` runs the semantic duplicate check BY ITSELF -- a
+    near-duplicate lesson is refused until answered, never silently filed as a second
+    record. The filing agent does not have to remember `ddflow similar`."""
+    run_cli(repo, "init")
+    text = (
+        "always file a regression test that fails against the unfixed code before you "
+        "apply the fix, so the test proves the bug is fixed rather than merely reported"
+    )
+    first = A.lesson_add(repo, A.LessonDraft(title=text, rule=text, id="lesson-1"))
+    assert first.exit == 0, first
+    near = text.replace("merely reported", "only described")
+    again = A.lesson_add(repo, A.LessonDraft(title=near, rule=near, id="lesson-2"), agent="a")
+    assert again.exit == 3, again
+    assert again.data["candidates"][0]["id"] == "lesson-1"
+    assert "lesson-2" not in state(repo).lessons, "the near-duplicate was silently filed"
+    answered = A.lesson_add(
+        repo,
+        A.LessonDraft(title=near, rule=near, id="lesson-2", answer=DD.Answer("new")),
+        agent="a",
+    )
+    assert answered.exit == 0 and "lesson-2" in state(repo).lessons
+
+
 def test_session_notes_and_prompts_are_never_checked(repo):
     run_cli(repo, "init")
     s = A.session_start(repo, agent="a")

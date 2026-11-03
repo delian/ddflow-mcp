@@ -1,0 +1,2 @@
+[knob]
+"ddflow/services/companions/model.py:DETECT_TIMEOUT_S" = 'companions.detect_timeout_s'

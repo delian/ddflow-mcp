@@ -138,11 +138,22 @@ def test_the_evidence_gate_run_writes_is_what_acceptance_reads(repo, monkeypatch
     monkeypatch.setattr(BR, "candidate_ids", lambda *a: ["t.py::test_x"])
     monkeypatch.setattr(BR, "on_base", lambda *a: {"red": True, "base_sha": "abc"})
     monkeypatch.setattr(GB, "_file", lambda *a, **k: "B1")
+    monkeypatch.setattr(GB, "_linked", lambda *a, **k: "")
     ev: dict = {}
     it = SimpleNamespace(id="T1", base="main")
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="off",
+            unit_tests_max_files=0,
+            unit_tests_hub_importers=0,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
     outcome, why = GB.apply(
         repo,
-        None,
+        cfg,
         "a",
         it,
         "unit_tests",

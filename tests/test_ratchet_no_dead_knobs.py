@@ -38,6 +38,33 @@ KNOWN_UNREAD: dict[str, str] = {
     "prompts.session_brief_header": "read dynamically via dataclasses.fields in _prompt_overrides",
     "prompts.agent_brief": "read dynamically via dataclasses.fields in overrides_from",
     "prompts.agent_report": "read dynamically via dataclasses.fields in overrides_from",
+    # Read dynamically: `secret_shapes.patterns(session, ...)` and the redact engine pull
+    # each redaction regex with `getattr(session, name, None)`, so no source line spells
+    # `.session.redact_patterns` / `.session.redact_extra`.
+    "session.redact_patterns": "read dynamically via getattr(session, name) in core/secret_shapes.py",
+    "session.redact_extra": "read dynamically via getattr(session, name) in core/secret_shapes.py",
+    # Read dynamically: `seedpack.Knobs.from_config` builds each field from
+    # `getattr(cfg.swarm, 'seed_' + field.name)`, so no source line spells `.swarm.seed_<field>`.
+    "swarm.seed_max_tokens": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    "swarm.seed_max_decisions": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    "swarm.seed_max_rules": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    "swarm.seed_max_lessons": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    "swarm.seed_entry_chars": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    "swarm.seed_item_chars": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    "swarm.seed_handoff_chars": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
+    # Declared for the lane-launch scheduler tick (D-swarm-answers Q2/Q6), which is a later
+    # phase: lanes/launch.py::launch takes an already-loaded Template and launch_template.load
+    # has no caller yet, so nothing reads this knob until that tick lands. Deliberately kept
+    # on the allowlist rather than a fake read behind dead code (the roborev standards
+    # finding on fix-B-ci-main-constants-ratchet).
+    "swarm.launch_templates_file": "declared for the pending lane-launch scheduler tick; no reachable code reads it yet",
+    # Declared for the `pins drivers --check` mergiraf evaluation (mergedrivers.keep_mergiraf);
+    # that caller is not yet wired, so nothing reads it yet.
+    "pins.mergiraf_keep_pct": "declared for the `pins drivers --check` mergiraf keep/drop evaluation; keep_mergiraf has no caller yet",
+    # Read through an alias the regex cannot see: `cfg = Config.load(repo).companions` then
+    # `cfg.tool_probe_timeout_s` (ddflow/services/toolrun.py) IS a read of companions.*.
+    "companions.tool_probe_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
+    "companions.tool_run_timeout_s": "read via alias cfg = Config.load(repo).companions in services/toolrun.py",
 }
 
 
@@ -51,9 +78,11 @@ def _file_sources() -> list[str]:
     return [
         p.read_text("utf-8")
         for p in pkg.rglob("*.py")
-        # The config's own definitions are not reads: config.py and its sections package.
-        if p.name != "config.py"
-        and p.relative_to(pkg).parts[0] != "config_sections"
+        # The config's own definitions are not reads: the `config` package (successor of the
+        # old `config.py`) and its `config_sections` package. A reader NAMED `config.py`
+        # (ddflow/api/setup/config.py reads `[enforce].machine_local_keys`) is a READ, not a
+        # definition, so it stays in the scan.
+        if p.relative_to(pkg).parts[0] not in ("config", "config_sections")
         and "__pycache__" not in str(p)
     ]
 

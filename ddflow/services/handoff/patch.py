@@ -1,0 +1,112 @@
+"""Reading a unified diff for the numbers a suggestion is bounded by. Pure: no git, no I/O.
+
+Counts come from the hunk headers (`@@ -a,b +c,d @@`), so a content line that merely looks like a
+file header (`+++ x`), or a commit message above the first `diff --git`, cannot skew them."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+_FILE = re.compile(r'^diff --git "?a/(?P<a>.+?)"? "?b/(?P<b>.+?)"?$')
+_HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
+_BINARY = ("GIT binary patch", "Binary files ")
+
+
+@dataclass(frozen=True)
+class Shape:
+    files: tuple[str, ...]
+    added: int
+    removed: int
+    binary: bool
+    #: +/- lines outside any hunk the headers announced: a header that understates its hunk
+    malformed: bool = False
+
+    @property
+    def lines(self) -> int:
+        return self.added + self.removed
+
+
+def _body(line: str, old: int, new: int) -> tuple[int, int, int, int]:
+    """One line inside a hunk: (added, removed, old left, new left). A line the header did not
+    announce for its side leaves a negative count, which `shape` reads as malformed."""
+    if line.startswith("+"):
+        return 1, 0, old, new - 1
+    if line.startswith("-"):
+        return 0, 1, old - 1, new
+    if line.startswith("\\"):  # "\ No newline at end of file"
+        return 0, 0, old, new
+    return 0, 0, old - 1, new - 1  # a context line
+
+
+def _count(h: re.Match[str], key: str) -> int:
+    return 1 if h[key] is None else int(h[key])
+
+
+class _Reader:
+    """The state of one pass over a diff: the files seen, the counts, and the open hunk."""
+
+    def __init__(self) -> None:
+        self.files: list[str] = []
+        self.added = self.removed = 0
+        self.binary = self.malformed = False
+        self.in_binary = False
+        self.header = False  # between a `diff --git` line and its first hunk
+        self.old = self.new = 0  # lines still owed by the open hunk
+
+    @property
+    def in_hunk(self) -> bool:
+        return self.old > 0 or self.new > 0
+
+    def body(self, line: str) -> None:
+        if _FILE.match(line):
+            self.malformed = True  # a file header where the hunk header promised more lines
+            self.old = self.new = 0
+            self.outside(line)
+            return
+        a, r, self.old, self.new = _body(line, self.old, self.new)
+        self.added += a
+        self.removed += r
+        self.malformed = self.malformed or self.old < 0 or self.new < 0
+        self.old, self.new = max(self.old, 0), max(self.new, 0)
+
+    def outside(self, line: str) -> bool:
+        """One line outside a hunk; True when the diff ends here (the format-patch signature)."""
+        if line == "-- " and self.files:
+            return True
+        if m := _FILE.match(line):
+            self.header, self.in_binary = True, False
+            if m["b"] not in self.files:
+                self.files.append(m["b"])
+        elif not self.files or self.in_binary:
+            pass
+        elif line.startswith(_BINARY):
+            self.binary = self.in_binary = True  # its base85 body may begin with + or -
+        elif self.header and line.startswith(("--- ", "+++ ")):
+            pass
+        elif h := _HUNK.match(line):
+            self.header = False
+            self.old, self.new = _count(h, "old"), _count(h, "new")
+        elif line[:1] in "+-":
+            self.malformed = True
+        return False
+
+
+def _diff_lines(patch: str) -> list[str]:
+    lines = patch.splitlines()
+    if lines and lines[0].startswith(("From ", "Subject:", "From:")):
+        # a format-patch: the message ends at the first `---` line; a diff quoted in it is text
+        cut = next((i for i, ln in enumerate(lines) if ln == "---"), -1)
+        return lines[cut + 1 :] if cut >= 0 else []
+    return lines
+
+
+def shape(patch: str) -> Shape:
+    """The files, added and removed line counts of a `git diff` / `git format-patch` text."""
+    r = _Reader()
+    for line in _diff_lines(patch):
+        if r.in_hunk:
+            r.body(line)
+        elif r.outside(line):
+            break
+    return Shape(tuple(r.files), r.added, r.removed, r.binary, r.malformed)

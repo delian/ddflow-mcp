@@ -122,12 +122,14 @@ RULES: dict[str, Rule] = {
 #: How a standing rule's answer is recorded: `policy:<id>`.
 def window_start(state, cfg: Config) -> float:
     """The start of the standing window: 0.0 before any IN-SCOPE standing rule has fired, else
-    the epoch of the FIRST in-scope standing auto-approval's ``answered_at`` -- the fire that
-    OPENED the window. In-scope means the answer's verb is inside `[approvals].standing_verbs`,
-    so a stale answer from a verb the window no longer covers cannot anchor it. ``min``, never
-    the latest: the window never rolls forward, so `[approvals].standing_window_s` is a hard
-    bound even while uses keep landing. The fold KEEPS every ask row for the life of the log
-    (`use_ttl_s` bounds spending, not retention), so the anchor persists past an answer TTL, and
+    the epoch of the LATEST in-scope standing auto-approval's ``answered_at`` -- the most
+    recent fire. In-scope means the answer's verb is inside `[approvals].standing_verbs`,
+    so a stale answer from a verb the window no longer covers cannot anchor it. ``max``, never
+    the first: the window stays open for `[approvals].standing_window_s` after the newest fire,
+    re-anchoring on each new one so a later fire keeps it open past the opening fire's lapse
+    (the first-fire anchor would leave it permanently closed once `standing_window_s` passed and
+    no fire followed). The fold KEEPS every ask row for the life of the log (`use_ttl_s` bounds
+    spending, not retention), so the anchor persists past an answer TTL, and
     `approvals log`/`doctor` show what fired within it."""
     starts = [
         clock.epoch(r["answered_at"], default=0.0)
@@ -137,7 +139,7 @@ def window_start(state, cfg: Config) -> float:
         and r["verb"] in cfg.approvals.standing_verbs
         and r["answered_by"] != f"policy:{RETRY_RULE_ID}"  # the retry rule never opens the window
     ]
-    return min(starts, default=0.0)
+    return max(starts, default=0.0)
 
 
 def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
@@ -145,7 +147,8 @@ def _window_open(canon: Canon, state, cfg: Config, now: float) -> bool:
 
     Open only when the verb is inside `[approvals].standing_verbs` (the generic T2 scope the
     operator pre-authorised) and either the window has not opened yet -- this fire opens it,
-    anchored at ``now`` -- or it opened fewer than `[approvals].standing_window_s` seconds ago."""
+    anchored at ``now`` -- or the most recent in-scope standing fire was fewer than
+    `[approvals].standing_window_s` seconds ago."""
     if canon.verb not in cfg.approvals.standing_verbs:
         return False
     start = window_start(state, cfg)
@@ -240,3 +243,21 @@ def apply(
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.
                 return _approved(log, cfg, canon, reason, RETRY_RULE_ID, notify=n)
     return None
+
+
+def record_auto(log, cfg: Config, canon: Canon, text: str, rule_id: str) -> str:
+    """Record, in the approvals log, an acceptance ddflow made itself under ``rule_id`` (the
+    automatic baseline-red acceptance): answered by `policy:<rule>`, notifying the operator
+    in `approvals log` and `doctor`. Returns the ask id."""
+    return E.record_policy(
+        log,
+        cfg,
+        subject=canon.subject(),
+        digest=canon.digest(),
+        text=R.render(canon, text, cfg.approvals.reason_chars)
+        + f"\n  accepted automatically: {rule_id}",
+        command=R.command_of(canon, cfg),
+        rule_id=rule_id,
+        agent=canon.agent,
+        notify=1,
+    )

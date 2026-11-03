@@ -1,0 +1,10 @@
+id = "r-adapters"
+title = "Every external dependency goes through a port in ddflow/adapters: one implementation per function, a new port touches only its own files"
+tags = ["architecture", "adapters"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-02T05:51:16.118308+00:00"
+updated = "2026-11-02T05:51:16.118315+00:00"
+
+Decisions D-unify, D-adapters-answers-3 (operator 2026-10-31 and 2026-11-01). WHY: when a function has one port and one default adapter, a change or a swap touches one place, tests use a fake instead of the network or a subprocess, and parallel agents do not collide on shared files. RULE: anything outside our own process or the stdlib (http, mcp, acp, git, filesystem layout, subprocess tools, clocks, environment, sqlite, toml, search, notifications, platform APIs, third-party libraries) is reached only through a typing.Protocol port in ddflow/adapters/<family>.py with its default adapter and registry entry in that module, a fake in ddflow/adapters/fakes/<family>.py, conformance cases run against the adapter and the fake in tests/test_adapter_<family>.py, and one docs page docs/ddflow/adapters/<family>.md. A new port edits none of the former shared files (ports.py, fakes/__init__.py, tests/test_ports_contract.py, docs/ARCHITECTURE.md); discovery is automatic. Services and surfaces import the port, never the third-party package or the subprocess. Never write a second implementation of a function that already has a port: search ddflow/adapters first. Exceptions sit in one shrink-only baseline with a reason. CHECK: the ports contract test, the import-layering test and the adapter baselines. VERIFY by hand: grep the diff for import of a third-party package or subprocess outside ddflow/adapters and ddflow/infra.

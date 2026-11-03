@@ -61,3 +61,27 @@ class PinsConfig:
             "checks the pins the hook may run and names the rest, without making a merge wait for a test suite",
         ),
     )
+
+    # --- git merge drivers for the files every task touches (LK-baseline-merge-drivers) ---
+
+    baseline_globs: list[str] = knob(
+        factory=list,
+        doc='Sorted, one-entry-per-line baseline files many tasks edit one line at a time (an allowlist, a ratchet baseline): ["tests/baseline/*.txt"]. `ddflow pins drivers --install` writes "<glob> merge=union" for each, so two tasks\' added lines both survive; `pins drivers` (no flag) shows the lines first, and `pins drivers --check` verifies the merged file is still sorted, unique and free of conflict markers. Pin files and golden indexes are not listed here: they take the regenerating driver from [pins] recipes. Append-only logs are [lease].append_only_globs.',
+    )
+    mergiraf: bool = knob(
+        False,
+        doc="Opt-in EVALUATION of Mergiraf (a syntax-aware merge driver) for [pins].mergiraf_globs. Off: nothing about it is read or written. On: `pins drivers` lists the lines and git config it would add and whether the `mergiraf` binary and the minimum git are present; nothing is installed for you, and a missing binary or old git is reported unavailable.",
+    )
+    mergiraf_globs: list[str] = knob(
+        factory=lambda: ["*.py"],
+        doc="Files Mergiraf would merge when [pins].mergiraf is on. Mergiraf supports Python.",
+    )
+    mergiraf_min_git: str = knob(
+        "2.44",
+        doc="Oldest git (major.minor) for which the recommended Mergiraf setup works (it needs the %P placeholder of git 2.44). An older git is reported unavailable and the driver is not written.",
+    )
+    mergiraf_keep_pct: int = knob(
+        10,
+        doc="Mergiraf is kept only if, replayed over past merges, it resolves more than this percent of the textual conflicts (`pins drivers --check` judges numbers you give it); below that the evaluation says drop it.",
+        check=int_at_least(0),
+    )

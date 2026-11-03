@@ -16,6 +16,23 @@ from ..tools._common import _AGENT_KEYS, _api, _configure_reported
 from ..vocabulary import sources
 
 
+def doctor_history_kwargs(a):
+    """The `doctor` keyword arguments that decide how history is replayed, from the CLI args.
+
+    `--accept-history`/`--accept-lost-events` and the four `--history-*` words are read the
+    same way by the declarative `doctor` command and the rendered `ddflow doctor` surface."""
+    return {
+        "accept_lost_events": bool(getattr(a, "accept_lost_events", False)),
+        "accept_history": bool(getattr(a, "accept_history", False)),
+        "history": (
+            str(getattr(a, "history_reason", "") or ""),
+            str(getattr(a, "history_note", "") or ""),
+            str(getattr(a, "history_only", "") or ""),
+            str(getattr(a, "approval", "") or ""),
+        ),
+    }
+
+
 def _self_request(a, agent: str = ""):
     """`ddflow_upgrade`'s `self` argument as the self-upgrade request, None without it."""
     mode = str(a.get("self") or "")
@@ -326,7 +343,7 @@ COMMANDS: tuple[Command, ...] = (
             parser=sources()[0],
             tools=sources()[1],
             start_texts=start_texts,
-            accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
+            **doctor_history_kwargs(a),
         ),
         # PROSE, as it has always been: a list of problems with advice attached is
         # what an operator and an agent both want, and `views/human.py` renders it once
@@ -344,6 +361,32 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="record the present event counts of the shards that lost events (to a force-push, revert, reset or deletion) as known, clearing that PROBLEM; the log is not touched",
                 cli_only=True,
+            ),
+            Param(
+                "accept_history",
+                type="boolean",
+                help="Acknowledge history that cannot be mended in an append-only log (an event edited by a secret scrub, a Lamport clock regression): records the findings now open as accepted, with who and why (needs a reason). A person accepts directly; an agent passes approval=request, the person answers in chat, and the agent re-runs with the approval id. doctor then reports them as accepted notes; a changed or new finding is a PROBLEM again",
+            ),
+            Param(
+                "history_reason",
+                type="string",
+                help="why the history is known and accepted (required to accept it)",
+            ),
+            Param(
+                "history_note",
+                type="string",
+                help="the scrub's commit or a note, recorded with the acceptance",
+            ),
+            Param(
+                "history_only",
+                type="string",
+                help="accept only these findings: comma-separated event ids or <shard>:<event number> (default: every open one)",
+            ),
+            Param(
+                "approval",
+                help="accept_history: an agent's route: 'request' files an operator approval the person answers in chat; the approval id then records the acceptance.",
+                default="",
+                cli_help="accept-history: an agent's route (`request` files an operator approval to answer in chat, an approval id records the acceptance); a person accepts directly",
             ),
         ),
     ),

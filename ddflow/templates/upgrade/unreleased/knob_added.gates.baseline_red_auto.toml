@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.baseline_red_auto"
+new = "\"on\""
+why = "Accept a measured baseline-red partial of ci/unit_tests automatically (DX-baseline-red-auto-accept)."
+impact = "additive"

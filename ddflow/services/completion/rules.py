@@ -36,6 +36,7 @@ from .. import chore as CO
 from .. import gate_accept as GA
 from .. import gates as G
 from .. import landed as LD
+from .. import observed_globs as OG
 from .. import review_exclude as RX
 from .. import testselect as TS
 from ..cadence import phase_overdue
@@ -184,12 +185,14 @@ def _unsettled(
         and not (
             CO.skipped_ok(cfg, it, excused, g)
             or it.gate_satisfied(g, True)
-            or (state is not None and GA.accepted(state, it, g).ok)
+            or (state is not None and GA.accepted(state, it, g, cfg).ok)
         )
     ]
 
 
-def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) -> list[str]:
+def _accepted_warnings(
+    state: State, it: Item, s, required, missing: list[str], cfg=None
+) -> list[str]:
     """One warning for each required gate that is PARTIAL and settles only because a person
     accepted that outcome (Bb999d5e20f): it is audited here, and it was not passed."""
     out = []
@@ -200,12 +203,9 @@ def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) 
             and g not in s.not_applicable
             and it.gate_outcome(g) == GA.ACCEPTABLE
         ):
-            got = GA.accepted(state, it, g)
+            got = GA.accepted(state, it, g, cfg)
             if got.ok:
-                out.append(
-                    f"gate {g} is PARTIAL ({it.gates[g].reason[:160]}) and settles only because "
-                    f"a person accepted that outcome: {got.reason}. It was not passed."
-                )
+                out.append(GA.warning(it, g, got.reason, cfg))
     return out
 
 
@@ -284,18 +284,13 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     missing = _unsettled(cfg, it, excused, s, required, state)
     v.unmet_gates = missing
-    v.warnings += _accepted_warnings(state, it, s, required, missing)
+    v.warnings += _accepted_warnings(state, it, s, required, missing, cfg)
     if missing:
         v.blockers.append(
             f"required gate(s) not passed: {', '.join(missing)} (current outcome: "
             + ", ".join(f"{g}={it.gate_outcome(g) or 'not run'}" for g in missing)
             + ")"
-            + "".join(
-                f"; {g} is partial: re-run it, or a person runs `ddflow approve {item_id} {g}` "
-                f"to accept that baseline-red outcome (it stays partial on the record)"
-                for g in missing
-                if it.gate_outcome(g) == GA.ACCEPTABLE and not GA.refusal(it, g)
-            )
+            + "".join(GA.next_step(it, item_id, g) for g in missing if GA.next_step(it, item_id, g))
         )
 
     # ANY item with work beneath it, not only a phase: a task split into sub-tasks is
@@ -378,9 +373,10 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     readme = readme_report(state, cfg, item_id, repo=repo)
     if readme:
-        # "Could not run" is never a blocker: only a README that is known to be missing is.
         blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
         (v.blockers if blocks else v.warnings).append(readme)
+
+    OG.add_notice(v, state, cfg, item_id, repo)
 
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)

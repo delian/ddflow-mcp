@@ -31,6 +31,10 @@ COMMANDS: tuple[Command, ...] = (
             "host-lock wait, review wait, merge wait, claim to merge, rework rounds, gate re-runs), "
             "group_by phase, kind, size (changed lines) or agent; stages whose events ddflow does "
             "not record yet are listed as not measured, never 0. "
+            "view=locks: what the leases cost (hold split: claim to first gate, gates, reviews, last "
+            "review to release, after merge; claim waits and false serialization; declared versus "
+            "written files; merge-tree conflict and red-main rates) and whether the recorded "
+            "falsifiers tripped, with the call that switches back to strict locking. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(
@@ -47,11 +51,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes or stages.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes or stages",
+                help="summary (default), forecast, retro, skips, lanes, stages or locks.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages or locks",
                 positional=True,
                 nargs="?",
-                choices=("summary", "forecast", "retro", "skips", "lanes", "stages"),
+                choices=("summary", "forecast", "retro", "skips", "lanes", "stages", "locks"),
                 default=None,
             ),
             Param(
