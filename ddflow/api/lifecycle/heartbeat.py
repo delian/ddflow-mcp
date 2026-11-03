@@ -122,7 +122,13 @@ def _the_held_item(repo: Path, st, me: str, called_from) -> tuple[str, O.Outcome
         whose = "this tree carries"
     if len(held) == 1:
         return held[0], None
-    base = {"renewed": False, "waiters": [], "globs_withheld": "", "yield_requested": "", "recall": ""}
+    base = {
+        "renewed": False,
+        "waiters": [],
+        "globs_withheld": "",
+        "yield_requested": "",
+        "recall": "",
+    }
     if not held:
         return "", O.nothing(
             "lease.renewed",
