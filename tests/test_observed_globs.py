@@ -151,3 +151,9 @@ def test_mcp_form_quotes_a_path_with_a_space():
 
 def test_a_comma_in_a_glob_uses_the_json_list_form():
     assert """--globs '["a,b/*"]'""" in OG.update_call("T", [], ["a,b/*"])
+
+
+def test_the_json_list_form_round_trips_through_the_globs_parser():
+    from ddflow.core import globspec
+
+    assert globspec.parse(['["a,b/*","c/**"]']) == ["a,b/*", "c/**"]
