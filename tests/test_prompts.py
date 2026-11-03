@@ -143,6 +143,11 @@ def test_eject_a_macro_named_like_a_template_is_listed_once(repo):
         "un-deduped eject listed its path in written AND skipped (the second write saw the "
         "first)"
     )
+    # `--force` rewrites where a file already exists; the dedupe must still write it once
+    # (the un-deduped loop wrote review_user.md twice under force).
+    forced = A(repo, action="eject", force=True)
+    assert forced.ok, forced.reason
+    assert forced.data["written"].count(path) == 1
 
 
 def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
