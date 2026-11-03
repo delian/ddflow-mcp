@@ -228,7 +228,9 @@ COMMANDS: tuple[Command, ...] = (
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,
-            body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports", "recall")),
+            body=lambda out, a: out.body(
+                ("renewed", "waiters", "globs_withheld", "new_reports", "recall")
+            ),
             call_kwargs=L.heartbeat_kwargs,
         ),
         # The item's own tree renews its lease whoever claimed it -- the CLI may resolve a
