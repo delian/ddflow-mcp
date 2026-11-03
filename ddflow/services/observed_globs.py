@@ -123,8 +123,13 @@ def untouched_report(
     if not untouched:
         return ""
     keep = [g for g in it.globs if g not in untouched]
-    if not keep:
-        return ""  # nothing was written inside any glob: no honest narrowing to offer
+    wrote = [] if keep else directory_globs(split(changed, [])[0])
+    if wrote:  # nothing was written inside any glob: replace the declaration by what was
+        return (
+            f"declared but never written: {_list(untouched, cfg.locks.suggest_shown)}; "
+            f"this task wrote {_list(wrote, cfg.locks.suggest_shown)} instead. "
+            f"Re-declare it so others can take those files: {update_call(item_id, [], wrote)}."
+        )
     return (
         f"declared but never written: {_list(untouched, cfg.locks.suggest_shown)}. "
         f"Narrow the claim so others can take those files: "

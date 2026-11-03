@@ -130,11 +130,13 @@ def test_cli_call_quotes_globs_and_bookkeeping_only_diff_offers_no_narrowing():
     assert "gate status T" in OG.unknown("T")
 
 
-def test_no_narrowing_is_offered_when_every_glob_is_untouched():
+def test_every_glob_untouched_offers_to_redeclare_what_was_written():
     st = _state(_task("T", ["docs/**"]))
-    assert (
-        OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["src/m.py"]})) == ""
-    )
+    text = OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["src/m.py"]}))
+    assert "docs/**" in text and "ddflow update T --globs 'src/*'" in text
+    only_log = _reader({"T": [".ddflow/e.json"]})
+    assert OG.untouched_report(st, Config(), "T", repo=REPO, read=only_log) == ""
+    assert "ddflow_gate action=status id=T" in OG.unknown("T")
 
 
 def test_a_task_with_no_declaration_has_every_write_reported():
