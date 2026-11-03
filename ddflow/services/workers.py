@@ -144,7 +144,7 @@ def timeout_for(declared_s: int, workers: "Workers | None", cfg: Any) -> int:
     `declared_s` unchanged. `workers` is the `Workers` the gate command was resolved with."""
     if declared_s <= 0:
         return declared_s
-    cap = int(getattr(cfg.gates, "max_run_timeout_s") or declared_s)
+    cap = int(cfg.gates.max_run_timeout_s or declared_s)
     hi = workers.inputs.get("max") if workers is not None else 0
     if hi and 0 < workers.n < hi:
         return min(cap, int(declared_s * hi / workers.n))
