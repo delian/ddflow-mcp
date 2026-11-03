@@ -224,11 +224,11 @@ COMMANDS: tuple[Command, ...] = (
         description="Renew the lease on an item. Call periodically during long work, "
         "or the lease expires and another agent may take the item.",
         call=L.heartbeat_call,
-        payload=("renewed", "waiters", "globs_withheld", "yield_requested", "wake"),
+        payload=("renewed", "waiters", "globs_withheld", "yield_requested", "recall", "wake"),
         render=L.heartbeat_text,
         cli=CliPolicy(
             notes=L.heartbeat_notes,
-            body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
+            body=lambda out, a: out.body(("renewed", "waiters", "globs_withheld", "new_reports", "recall")),
             call_kwargs=L.heartbeat_kwargs,
         ),
         # The item's own tree renews its lease whoever claimed it -- the CLI may resolve a
