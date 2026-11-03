@@ -830,6 +830,10 @@
           "type": "string",
           "description": "What this session achieved."
          },
+         "relayed_by": {
+          "type": "string",
+          "description": "The coordinator (agent) that relayed the words, when the operator's answer reached this agent through a coordinator rather than directly."
+         },
          "model": {
           "type": "string",
           "description": "Your model id."

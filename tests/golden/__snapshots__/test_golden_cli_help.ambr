@@ -2882,16 +2882,19 @@
 # ---
 # name: test_help[ddflow session prompt]
   '''
-  usage: ddflow session prompt [-h] [--text TEXT] [--item ITEM] [session]
+  usage: ddflow session prompt [-h] [--text TEXT] [--item ITEM] [--relayed-by RELAYED_BY] [session]
   
   positional arguments:
-    session      the SESSION id (from `session start`), not the text; omitted: the latest open
-                 session, else an implicit new one
+    session               the SESSION id (from `session start`), not the text; omitted: the latest
+                          open session, else an implicit new one
   
   options:
-    -h, --help   show this help message and exit
-    --text TEXT  the prompt text; without it, read from piped stdin
+    -h, --help            show this help message and exit
+    --text TEXT           the prompt text; without it, read from piped stdin
     --item ITEM
+    --relayed-by RELAYED_BY
+                          the coordinator that relayed the words (so the log tells a relay from the
+                          operator's own)
   
   '''
 # ---
