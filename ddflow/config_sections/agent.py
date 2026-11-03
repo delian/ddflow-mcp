@@ -217,14 +217,3 @@ class AgentConfig:
         8,
         doc="How many characters the one-time code of an ask has, when the transport asks for one (a remote channel proves the person got the message by presenting it). Read aloud or typed on a phone, so it avoids look-alike characters; the engine never makes it shorter than 4. Default 8. Change it for the project (`ddflow config --set agent.ask_code_length 6`), for this machine (add --local), per run (DDFLOW_AGENT_ASK_CODE_LENGTH), or over MCP with `ddflow_configure`.",
     )
-
-
-def independence_level(agent: AgentConfig) -> str:
-    """The effective reviewer-independence level: `off` when the legacy boolean
-    `reviewer_family_must_differ` is false, else `[agent].reviewer_independence`."""
-    # A `family` setting (or lock) outranks the legacy boolean: the strictest wins.
-    if agent.reviewer_independence == "family":
-        return "family"
-    if not agent.reviewer_family_must_differ:
-        return "off"
-    return agent.reviewer_independence

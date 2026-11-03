@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import Config, family_for, router_set
-from ...config_sections.agent import family_name_of, independence_level
+from ...config_sections.agent import family_name_of
 from ...core.bookkeeping import STATE_EXCLUDE
 from ...core.digest import content_digest, hasher
 from ...core.model import State
@@ -253,6 +253,17 @@ def model_tier_of(state: State, cfg: Config, item_id: str, author_model: str, ga
     return ""
 
 
+def independence_level(cfg: Config) -> str:
+    """The effective reviewer-independence level: `family` when `[agent].reviewer_independence`
+    says so (the strictest wins over the legacy boolean), `off` when the legacy
+    `reviewer_family_must_differ` is false, else the knob."""
+    if cfg.agent.reviewer_independence == "family":
+        return "family"
+    if not cfg.agent.reviewer_family_must_differ:
+        return "off"
+    return cfg.agent.reviewer_independence
+
+
 def tier_notes(it, gates: Mapping[str, GateDef] | None = None) -> list[str]:
     """One neutral line when a recorded review reached tier `model` (a different model of
     the author's family): a normal state, stated once, with the way to a cross-family
@@ -313,7 +324,7 @@ def independence_tier(
     model of the author's family, allowed at level `model`) or `none`. At level `off`
     the tier is `off`. The author's own model never counts; an unrecognised model
     establishes nothing."""
-    level = independence_level(cfg.agent)
+    level = independence_level(cfg)
     if level == "off":
         return "off", "reviewer independence is off ([agent].reviewer_independence)"
     it = state.items.get(item_id)

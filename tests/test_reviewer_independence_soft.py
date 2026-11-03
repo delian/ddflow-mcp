@@ -105,11 +105,9 @@ def test_tier_notes_are_neutral_and_once(log, cfg, gd):
 
 
 def test_family_level_outranks_the_legacy_boolean(cfg):
-    from ddflow.config_sections.agent import independence_level
-
     cfg.agent.reviewer_independence = "family"
     cfg.agent.reviewer_family_must_differ = False
-    assert independence_level(cfg.agent) == "family"
+    assert GR.independence_level(cfg) == "family"
 
 
 def test_a_declared_family_cannot_make_the_authors_own_model_count(cfg):

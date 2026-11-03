@@ -160,6 +160,7 @@ from .reviewers import (  # noqa: F401
     family_of,
     git_state,
     git_state_change,
+    independence_level,
     independence_tier,
     is_author_model,
     is_reviewer_gate,
