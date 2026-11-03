@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ast
 
 import pytest
-from log_cache_support import _cold_cache, _no_version_stamp  # noqa: F401
+from log_cache_support import _cold_cache, _no_version_stamp, _pkg_py_files  # noqa: F401
 
 # -- the invariant the cache rests on ------------------------------------------------
 
@@ -316,9 +316,7 @@ def test_nothing_in_the_package_mutates_an_events_data_dict():
 
     pkg = _p.Path(__file__).resolve().parents[1] / "ddflow"
     offenders = []
-    for f in sorted(pkg.rglob("*.py")):
-        if "__pycache__" in str(f):
-            continue
+    for f in _pkg_py_files(pkg):
         offenders += [
             f"{f.relative_to(pkg.parent)}:{hit}" for hit in data_writes(f.read_text("utf-8"))
         ]
