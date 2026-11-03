@@ -45,7 +45,7 @@ def test_undeclared_report_names_exact_call_cli_and_mcp():
         st, Config(), "T", repo=REPO, read=_reader({"T": ["a/1", "tests/t.py"]})
     )
     assert "tests/t.py" in text
-    assert "ddflow update T --globs a/**,tests/*" in text
+    assert "ddflow update T --globs 'a/**,tests/*'" in text
     assert "ddflow_task action=update id=T globs=a/**,tests/*" in text
 
 
@@ -84,7 +84,7 @@ def test_block_blocks_only_a_known_write_never_unknown():
 def test_untouched_report_offers_narrowing():
     st = _state(_task("T", ["a/**", "docs/**"]))
     text = OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["a/1"]}))
-    assert "docs/**" in text and "ddflow update T --globs a/**" in text
+    assert "docs/**" in text and "ddflow update T --globs 'a/**'" in text
     cfg = Config()
     cfg.locks.suggest_globs = False
     assert OG.untouched_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["a/1"]})) == ""
@@ -108,7 +108,7 @@ def test_learned_suggests_habitual_misses_of_same_tag_tasks():
     found = OG.learned(st, Config(), "N", repo=REPO, read=_reader(table))
     assert found == ["tests/*"]
     text = OG.learned_report(st, Config(), "N", repo=REPO, read=_reader(table))
-    assert "ddflow update N --globs src/**,tests/*" in text
+    assert "ddflow update N --globs 'src/**,tests/*'" in text
     cfg = Config()
     cfg.locks.suggest_globs = False
     assert OG.learned(st, cfg, "N", repo=REPO, read=_reader(table)) == []
@@ -117,3 +117,12 @@ def test_learned_suggests_habitual_misses_of_same_tag_tasks():
 def test_locks_knobs_are_declared():
     cfg = Config()
     assert cfg.locks.undeclared_write == "warn" and cfg.locks.suggest_globs is True
+
+
+def test_cli_call_quotes_globs_and_bookkeeping_only_diff_offers_no_narrowing():
+    assert "--globs 'a/**,my dir/*'" in OG.update_call("T", ["a/**"], ["my dir/*"])
+    st = _state(_task("T", ["a/**"]))
+    assert (
+        OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": [".ddflow/x"]})) == ""
+    )
+    assert "gate status" in OG.UNKNOWN

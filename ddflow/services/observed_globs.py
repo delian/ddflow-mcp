@@ -8,6 +8,7 @@ git read so they are tested without a repository.
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable
 from pathlib import Path
 
@@ -16,7 +17,11 @@ from ..core.records.state import State
 
 #: Returned by `undeclared_report` when git cannot say what changed: the check could not
 #: run, which is neither a pass nor a block.
-UNKNOWN = "could not tell what this task changed (git could not list it): the undeclared-write check did not run"
+UNKNOWN = (
+    "could not tell what this task changed (git could not list it): the undeclared-write "
+    "check did not run. Repair the worktree, then re-run `ddflow gate status <id>` "
+    "(MCP: ddflow_gate action=status id=<id>)"
+)
 
 #: ddflow's own bookkeeping commits are never the item's to declare.
 _OWN = (".ddflow/**",)
@@ -64,7 +69,7 @@ def update_call(item: str, declared: list[str], extra: list[str]) -> str:
     """The exact call that declares ``extra`` besides ``declared``, CLI and MCP forms."""
     joined = ",".join([*declared, *extra])
     return (
-        f"`ddflow update {item} --globs {joined}` "
+        f"`ddflow update {item} --globs {shlex.quote(joined)}` "
         f"(MCP: ddflow_task action=update id={item} globs={joined})"
     )
 
@@ -108,7 +113,7 @@ def untouched_report(
     if not cfg.locks.suggest_globs or it is None or it.removed or it.kind != "task":
         return ""
     changed = _read(read)(repo, it)
-    if not changed or not it.globs:
+    if not changed or not it.globs or all(globs.inside(p, ".ddflow/**") for p in changed):
         return ""  # unknown or nothing changed yet: narrowing is not yet knowable
     _, untouched = split(changed, list(it.globs))
     if not untouched:
