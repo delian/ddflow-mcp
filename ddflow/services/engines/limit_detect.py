@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from ...core.outcome import MAX_EXIT
 from .safety import DEFAULT, EngineError, Limits, expect_keys, safe_regex, search
 from .stream_map import EVENTS
 
-EXIT_MAX = 255
 RESET_SOURCES = ("none", "message", "header", "stream")
 
 
@@ -36,7 +36,7 @@ def parse(table: object, limits: Limits = DEFAULT) -> Spec:
         table, {"exit_codes", "stream_events", "messages", "reset_source"}, "limit_detect"
     )
     codes = t.get("exit_codes", [])
-    if not isinstance(codes, list) or not all(type(c) is int and 0 <= c <= EXIT_MAX for c in codes):
+    if not isinstance(codes, list) or not all(type(c) is int and 0 <= c <= MAX_EXIT for c in codes):
         raise EngineError("limit_detect.exit_codes: a list of integers 0..255")
     evs = t.get("stream_events", [])
     if not isinstance(evs, list) or not all(isinstance(e, str) and e in EVENTS for e in evs):
