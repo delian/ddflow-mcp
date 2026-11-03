@@ -42,7 +42,8 @@ def _flatten_targets(targets: list[ast.expr]) -> list[ast.expr]:
     """Every subscript/name an assignment actually writes, through `Tuple`/`List` targets.
 
     `ev.data['k'], x = 1, 2` parses as ONE `Tuple` target, so returning it whole would
-    hide the subscript inside it from the write scan.
+    hide the subscript inside it from the write scan. A `*ev.data['k'], x = ...` target
+    hides the subscript inside a `Starred`, so unwrap that too.
     """
     out: list[ast.expr] = []
     stack = list(targets)
@@ -50,6 +51,8 @@ def _flatten_targets(targets: list[ast.expr]) -> list[ast.expr]:
         t = stack.pop(0)
         if isinstance(t, ast.Tuple | ast.List):
             stack[0:0] = list(t.elts)
+        elif isinstance(t, ast.Starred):
+            stack[0:0] = [t.value]
         else:
             out.append(t)
     return out
@@ -178,31 +181,38 @@ def _retrack(
 
     An `AnnAssign` with a value (`d: dict = ev.data`) binds an alias exactly like an
     untyped `Assign`, and a rebind to something that is NOT event data (`d = {}`) breaks
-    the alias: a later `d['k'] = 1` then mutates a fresh dict, not the event's.
+    the alias: a later `d['k'] = 1` then mutates a fresh dict, not the event's. A rebind
+    to its own name (`d = d`) keeps the SAME object, so the alias stands.
     """
-    value: ast.expr | None = None
-    bound: list[ast.expr] = []
     if isinstance(node, ast.Assign):
         value = node.value
-        for t in node.targets:
-            if isinstance(t, ast.Name | ast.Attribute):
-                bound.append(t)
-            elif isinstance(t, ast.Tuple | ast.List):
-                bound.extend(e for e in t.elts if isinstance(e, ast.Name | ast.Attribute))
-    elif isinstance(node, ast.AnnAssign) and node.value is not None:
-        value = node.value
-        if isinstance(node.target, ast.Name | ast.Attribute):
-            bound.append(node.target)
-    if value is None:
-        return aliases
-    r = _data_receiver(value)
-    for t in bound:
-        name = ast.unparse(t)
-        if r and r not in allowed:
-            aliases[name] = node.lineno
+        if isinstance(value, ast.Tuple | ast.List):
+            elements = list(value.elts)
+            for t in _flatten_targets(node.targets):
+                elem = elements.pop(0) if elements else t
+                if isinstance(t, ast.Name | ast.Attribute):
+                    _bind_one(aliases, ast.unparse(t), elem, node.lineno, allowed)
         else:
-            aliases.pop(name, None)  # rebound to a non-event value: the stale alias is gone
+            for t in node.targets:
+                if isinstance(t, ast.Name | ast.Attribute):
+                    _bind_one(aliases, ast.unparse(t), value, node.lineno, allowed)
+    elif isinstance(node, ast.AnnAssign) and node.value is not None:
+        if isinstance(node.target, ast.Name | ast.Attribute):
+            _bind_one(aliases, ast.unparse(node.target), node.value, node.lineno, allowed)
     return aliases
+
+
+def _bind_one(
+    aliases: dict[str, int], name: str, value: ast.expr, lineno: int, allowed: set[str]
+) -> None:
+    """`d = ev.data` binds an alias; `d = {}` drops it; `d = d` keeps it."""
+    r = _data_receiver(value)
+    if r and r not in allowed:
+        aliases[name] = lineno  # bound directly to event data -> a new alias
+    elif isinstance(value, ast.Name) and value.id == name and name in aliases:
+        pass  # `d = d` is the same object: the alias stands
+    else:
+        aliases.pop(name, None)  # rebound to a non-event value: the stale alias is gone
 
 
 def data_writes(src: str, allowed: set[str] | None = None) -> list[str]:
@@ -244,6 +254,9 @@ def data_writes(src: str, allowed: set[str] | None = None) -> list[str]:
         "def f(ev):\n    d: dict = ev.data\n    d['k'] = 1\n",  # annotated alias
         "def f(ev):\n    ev.data['k'], x = 1, 2\n",  # subscript hidden in a tuple target
         "class C:\n    d = ev.data\n    d['k'] = 1\n",  # alias mutated in a class body
+        "def f(ev):\n    d, e = ev.data, {}\n    d['k'] = 1\n",  # alias from a tuple unpack
+        "def f(ev):\n    d = ev.data\n    d = d\n    d['k'] = 1\n",  # a self-rebind keeps the alias
+        "def f(ev):\n    *ev.data['k'], x = [1], 2\n",  # subscript inside a starred target
     ],
 )
 def test_the_data_write_detector_catches_every_route(planted):
