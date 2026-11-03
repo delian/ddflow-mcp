@@ -10,7 +10,6 @@ import time
 from conftest import run_cli
 
 from ddflow.config import Config
-from ddflow.infra.log import EventLog
 from ddflow.services.enforce import hooksnap as H
 from ddflow.services.leases import snapshot as S
 from ddflow.services.swarm import lanehooks_check as CK
@@ -36,6 +35,7 @@ def _write(repo, **over):
         },
         "shared": ["docs/X.md"],
         "new_files": [],
+        "config_stamp": H.config_stamp(repo),
     }
     doc.update(over)
     p = H.path_of(repo)
@@ -76,8 +76,7 @@ def test_torn_file_reads_unreadable_and_is_replaced(repo):
     H.path_of(repo).write_text('{"schema": 1, "da')
     snap = H.read(repo)
     assert snap.status == H.UNREADABLE and "ddflow heartbeat" in snap.note
-    log = EventLog(repo)
-    assert S.apply(log, "lease.renewed", "T1", {"at": time.time()}, "x")
+    assert run_cli(repo, "update", "T1", "--globs", "a.py,b.py")[0] == 0
     assert H.read(repo).status == H.OK
 
 
@@ -139,39 +138,74 @@ def test_hook_read_budget_p95_under_30_ms(repo):
     times = []
     for _ in range(200):
         t = time.perf_counter()
-        globs, _shared = CK._mine(repo, "a7")
+        code, msg = CK.verdict(repo, "a7", ["d7/x.py"], repo, repo)
         times.append(time.perf_counter() - t)
-        assert globs
+        assert (code, msg) == (0, "")
     p95 = statistics.quantiles(times, n=20)[-1]
     assert p95 < BUDGET_P95_S, f"p95 {p95 * 1000:.1f} ms"
 
 
-def test_concurrent_writers_all_land(repo):
-    _claimed(repo)
-    log = EventLog(repo)
-    n = 12
-    start = H.read(repo).generation
-    errs: list[BaseException] = []
+def test_concurrent_processes_all_land(repo):
+    run_cli(repo, "init")
+    names = [f"C{i}" for i in range(5)]
+    for n in names:
+        run_cli(repo, "task", "add", n, "--title", n, "--globs", f"{n}/**")
+    out: dict[str, int] = {}
 
-    def go(i):
-        try:
-            S.apply(
-                log,
-                "lease.acquired",
-                f"C{i}",
-                {"holder": f"w{i}", "globs": [f"c{i}"], "at": time.time()},
-                "x",
-            )
-        except BaseException as e:
-            errs.append(e)
+    def go(n):
+        out[n] = run_cli(repo, "claim", n, agent=f"w-{n}")[0]
 
-    threads = [threading.Thread(target=go, args=(i,)) for i in range(n)]
+    threads = [threading.Thread(target=go, args=(n,)) for n in names]
     [t.start() for t in threads]
     [t.join() for t in threads]
+    assert set(out.values()) == {0}, out
+    assert set(names) <= set(H.read(repo).leases)
+
+
+def test_a_missed_event_is_rebuilt_not_refreshed(repo, monkeypatch):
+    _claimed(repo)
+    run_cli(repo, "task", "add", "T2", "--title", "t", "--globs", "b.py")
+    run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "c.py")
+    # T2's claim runs in a process that never registered the hook: the snapshot misses it.
+    monkeypatch.setenv("DDFLOW_LOCKS_SNAPSHOT", "0")
+    assert run_cli(repo, "claim", "T2", agent="other")[0] == 0
+    monkeypatch.delenv("DDFLOW_LOCKS_SNAPSHOT")
+    assert "T2" not in H.read(repo).leases
+    assert run_cli(repo, "claim", "T3", agent="third")[0] == 0
+    assert {"T1", "T2", "T3"} <= set(H.read(repo).leases)
+
+
+def test_a_config_change_after_the_snapshot_makes_it_stale(repo):
+    _claimed(repo)
+    assert run_cli(repo, "config", "lease.shared_globs", '["docs/**"]')[0] == 0
     snap = H.read(repo)
-    assert not errs
-    assert {f"C{i}" for i in range(n)} <= set(snap.leases)
-    assert snap.generation == start + n
+    assert snap.status == H.STALE and "config" in snap.note
+
+
+def test_the_age_limit_is_the_knob(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, "config", "locks.snapshot_max_age_s", "10")[0] == 0
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
+    assert run_cli(repo, "claim", "T1")[0] == 0
+    assert H.read(repo).status == H.OK
+    assert H.read(repo, now=time.time() + 30).status == H.STALE
+
+
+def test_malformed_content_is_unreadable_never_a_partial_picture(repo):
+    bad = [
+        {"written_at": float("nan")},
+        {"written_at": float("-inf")},
+        {"shared": None},
+        {"shared": "src/**"},
+        {"leases": {"a": "corrupt"}},
+        {"leases": {"a": {"holder": "me", "renewed_at": 1, "ttl_s": "nope"}}},
+        {"max_age_s": float("inf")},
+    ]
+    for over in bad:
+        _write(repo, **over)
+        snap = H.read(repo)
+        assert snap.status == H.UNREADABLE, over
+        assert "ddflow_heartbeat" in snap.note
 
 
 def test_project_ignores_a_former_holders_late_renewal_and_foreign_release():
@@ -183,14 +217,14 @@ def test_project_ignores_a_former_holders_late_renewal_and_foreign_release():
     assert leases["T"]["renewed_at"] == 10.0  # the clock only moves forward
     S.project(leases, "lease.released", "T", {"holder": "b"}, "b")
     assert "T" in leases
-    S.project(leases, "item.completed", "T", {}, "a")
-    assert leases == {}
+    S.project(leases, "item.completed", "T", {"holder": "b"}, "b")
+    assert leases == {}  # an item that ended holds nothing, whoever ended it
 
 
 def test_snapshot_off_writes_nothing(repo):
     run_cli(repo, "init")
     assert run_cli(repo, "config", "locks.snapshot", "false")[0] == 0
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
-    run_cli(repo, "claim", "T1")
+    assert run_cli(repo, "claim", "T1")[0] == 0
     assert not H.path_of(repo).exists()
     assert Config.load(repo).locks.snapshot is False

@@ -14,6 +14,8 @@ sentence (a silent pass is the bug this exists to avoid).
 from __future__ import annotations
 
 import json
+import math
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -56,12 +58,53 @@ def path_of(repo: Path | str) -> Path:
     return Path(repo) / ".ddflow" / "local" / NAME
 
 
+#: The files whose change makes a snapshot's shared globs and age limit untrustworthy.
+CONFIG_FILES = (Path(".ddflow") / "config.toml", Path(".ddflow") / "local" / "config.toml")
+
+
+def config_stamp(repo: Path | str) -> list[int]:
+    """Modification time (ns) of each config file, 0 when absent: the writer records it and the
+    reader compares, so a config edit after the snapshot was written cannot leave a stale
+    `shared` list in force."""
+    out = []
+    for rel in CONFIG_FILES:
+        try:
+            out.append(os.stat(Path(repo) / rel).st_mtime_ns)
+        except OSError:
+            out.append(0)
+    return out
+
+
 def _bad(status: str, why: str) -> Snapshot:
     return Snapshot(status, f"ddflow lease snapshot {why}; {REFRESH}.")
 
 
+def _num(v: Any) -> float:
+    if isinstance(v, bool) or not isinstance(v, int | float) or not math.isfinite(v):
+        raise ValueError(v)
+    return float(v)
+
+
+def _globs(v: Any) -> list[str]:
+    if not isinstance(v, list) or not all(isinstance(g, str) for g in v):
+        raise ValueError(v)
+    return list(v)
+
+
+def _lease(v: Any) -> dict[str, Any]:
+    if not isinstance(v, dict) or not isinstance(v.get("holder"), str):
+        raise ValueError(v)
+    return {
+        "holder": v["holder"],
+        "globs": _globs(v.get("globs", [])),
+        "renewed_at": _num(v["renewed_at"]),
+        "ttl_s": _num(v["ttl_s"]),
+    }
+
+
 def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = None) -> Snapshot:
-    """The snapshot of ``repo``. ``max_age_s`` overrides the age limit the writer recorded."""
+    """The snapshot of ``repo``. ``max_age_s`` overrides the age limit the writer recorded.
+    Any malformed part makes the whole snapshot UNREADABLE: never a partial picture."""
     p = path_of(repo)
     try:
         raw = json.loads(p.read_text("utf-8"))
@@ -75,19 +118,24 @@ def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = 
     if not isinstance(raw.get("schema"), int) or raw["schema"] > SCHEMA:
         return _bad(NEWER, "was written by a newer ddflow")
     try:
-        limit = int(data.get("max_age_s", 0) if max_age_s is None else max_age_s)
-        age = (time.time() if now is None else now) - float(data["written_at"])
-        gen = int(data.get("generation", 0))
-        grace = int(data.get("grace_s", 0))
-    except (TypeError, ValueError, KeyError):
-        return _bad(UNREADABLE, f"has bad numbers ({p})")
+        limit = int(_num(data.get("max_age_s", 0) if max_age_s is None else max_age_s))
+        age = (time.time() if now is None else now) - _num(data["written_at"])
+        gen = int(_num(data.get("generation", 0)))
+        grace = int(_num(data.get("grace_s", 0)))
+        leases = {str(k): _lease(v) for k, v in data["leases"].items()}
+        shared, new_files = _globs(data.get("shared", [])), _globs(data.get("new_files", []))
+        stamp = data.get("config_stamp")
+    except (TypeError, ValueError, KeyError, OverflowError):
+        return _bad(UNREADABLE, f"has malformed content ({p})")
+    if stamp != config_stamp(repo):
+        return _bad(STALE, "predates a change of the ddflow config (its shared globs may differ)")
     if limit > 0 and age > limit:
         return _bad(STALE, f"is {int(age)} s old (limit {limit} s, [locks].snapshot_max_age_s)")
     return Snapshot(
         OK,
         generation=gen,
-        leases={str(k): v for k, v in data["leases"].items() if isinstance(v, dict)},
-        shared=[str(g) for g in data.get("shared", [])],
-        new_files=[str(g) for g in data.get("new_files", [])],
+        leases=leases,
+        shared=shared,
+        new_files=new_files,
         grace_s=grace,
     )
