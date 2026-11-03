@@ -19,6 +19,12 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("archdeps",),
         summary="the external-dependency census: families, importing modules, home, violations",
+        description=(
+            "The external-dependency census as a read-only report: every dependency family "
+            "(third-party packages and the stdlib families the adapter migration tracks) with "
+            "its importing modules, declared home and violations; the ratchet that fails a new "
+            "importer is what keeps the report honest. Read-only."
+        ),
         tool="ddflow_archdeps",
         tier="standard",
         reason="",
