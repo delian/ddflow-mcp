@@ -57,3 +57,18 @@ def test_brief_omitting_d1_fails_for_the_money_task(tmp_path):
         lifecycle_support.work(
             sc, client, tmp_path, wt_root, "P1.T1", {"ledger/core/money.py": "x = 1"}
         )
+
+
+def test_brief_mentioning_d10_does_not_stand_in_for_d1(tmp_path):
+    wt_root = tmp_path / "worktrees"
+    wt_root.mkdir()
+    wt = wt_root / "P1.T1"
+    wt.mkdir()
+    # `id="D10"` contains "D1" as a bare substring but is not decision D1: it must
+    # not satisfy the money task's check.
+    client = _MoneyBriefClient('<ddflow-record kind="decision" id="D10">', wt)
+    sc = _Scenario()
+    with pytest.raises(_FailingCheck):
+        lifecycle_support.work(
+            sc, client, tmp_path, wt_root, "P1.T1", {"ledger/core/money.py": "x = 1"}
+        )

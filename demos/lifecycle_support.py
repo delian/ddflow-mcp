@@ -19,9 +19,11 @@ def work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
     sc.check(f"{item} got its own worktree", wt.is_dir() and wt.parent == wt_root, str(wt))
 
     brief = client.tool("ddflow_brief", item=item)[0]
+    # The brief fences a governing decision as `id="D1"`: match that token, not the
+    # bare substring, so a future `D10` decision cannot satisfy (or trip) the check.
     sc.check(
         f"{item}'s brief surfaces decision D1 exactly where it governs {item}'s files",
-        ("D1" in brief)
+        ('id="D1"' in brief)
         == any(rel == "ledger/core/money.py" or rel.startswith("ledger/report/") for rel in files),
         brief[:400],
     )
