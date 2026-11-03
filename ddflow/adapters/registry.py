@@ -117,8 +117,8 @@ class Registry(Mapping[str, T], Generic[T]):
 
     def lazy(self, name: str, target: str) -> None:
         """Register ``name`` as ``"package.module:attr"``, imported when it is first used."""
-        have = self.table.get(name)
-        if have is not None and not self._replace:
+        if name in self.table and not self._replace:
+            have = self.table[name]
             if self._same_ok and isinstance(have, Lazy) and have.target == target:
                 return
             suffix = " with another definition" if self._same_ok else ""

@@ -102,6 +102,13 @@ def test_a_lazy_target_registered_twice_is_a_no_op_when_same_ok():
         r.lazy("join", "os.path:split")
 
 
+def test_a_registered_none_still_blocks_a_lazy_target():
+    r: Registry[object] = Registry("fn")
+    r.register(None, "occupied")
+    with pytest.raises(DuplicateName, match=r"fn .occupied. is already registered$"):
+        r.lazy("occupied", "os.path:join")
+
+
 def test_a_loader_fills_the_registry_once_and_a_failure_is_not_remembered():
     calls = []
 
