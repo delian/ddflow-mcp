@@ -79,6 +79,7 @@
    "waiters",
    "globs_withheld",
    "yield_requested",
+   "recall",
    "wake"
   ],
   "output_schema": {
@@ -91,6 +92,7 @@
     "waiters": {},
     "globs_withheld": {},
     "yield_requested": {},
+    "recall": {},
     "wake": {},
     "export_refresh": {},
     "ci": {},
