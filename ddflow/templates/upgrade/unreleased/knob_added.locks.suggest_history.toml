@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.suggest_history"
+new = "30"
+why = "How many recent finished same-tag tasks are read to learn suggested directories."
+impact = "additive"

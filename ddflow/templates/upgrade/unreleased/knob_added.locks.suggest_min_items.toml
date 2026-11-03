@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.suggest_min_items"
+new = "2"
+why = "A directory is suggested only when this many finished same-tag tasks wrote there outside their globs."
+impact = "additive"
