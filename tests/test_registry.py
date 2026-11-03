@@ -91,6 +91,17 @@ def test_a_lazy_target_imports_when_first_used_and_the_listing_says_so():
         Lazy("nonsense").resolve()
 
 
+def test_a_lazy_target_registered_twice_is_a_no_op_when_same_ok():
+    r: Registry[object] = Registry("fn", same_ok=True)
+    r.lazy("join", "os.path:join")
+    r.lazy("join", "os.path:join")  # the same lazy definition again: a no-op
+    import os.path
+
+    assert r["join"] is os.path.join
+    with pytest.raises(DuplicateName, match="with another definition"):
+        r.lazy("join", "os.path:split")
+
+
 def test_a_loader_fills_the_registry_once_and_a_failure_is_not_remembered():
     calls = []
 
