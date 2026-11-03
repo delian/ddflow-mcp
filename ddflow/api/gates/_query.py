@@ -14,6 +14,7 @@ from ...core import outcome as O
 from ...core.plain import plain
 from ...services import gates as G
 from ...services import grants as GNT
+from ...services import observed_globs as OG
 from ...services import prompts as P
 from ...services.approvals import overrides as OVR
 from ...services.completion import changed_paths, readme_report
@@ -151,6 +152,9 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     if readme:
         lines.append(f"\n  NOTE: {readme}")
 
+    for note in _glob_notes(cfg, st, item, repo, s):
+        lines.append(f"\n  NOTE: {note}")
+
     if granted := GNT.lines(st, item):
         lines.append("\n  " + "\n  ".join(granted))
 
@@ -158,6 +162,17 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     if reports:
         lines.append(f"\n  NOTE: {reports}")
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
+
+
+def _glob_notes(cfg, st, item: str, repo: Path, s) -> list[str]:
+    """Declared-versus-written notices (LK-observed-globs): files written outside the
+    globs, globs never written once the task is ready to merge, and the paths finished
+    tasks of the same tags keep adding."""
+    found = [OG.undeclared_report(st, cfg, item, repo=repo)]
+    if s.current in ("merge", ""):
+        found.append(OG.untouched_report(st, cfg, item, repo=repo))
+    found.append(OG.learned_report(st, cfg, item, repo=repo))
+    return [n for n in found if n]
 
 
 def _list_overrides(log, cfg, st, narrowed: bool) -> O.Outcome:
