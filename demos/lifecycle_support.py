@@ -21,12 +21,15 @@ def work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
     brief = client.tool("ddflow_brief", item=item)[0]
     # The brief fences a governing decision as `id="D1"`: match that token, not the
     # bare substring, so a future `D10` decision cannot satisfy (or trip) the check.
+    # The assertion is both directions on purpose: the scenario is load-bearing on
+    # "scoping by globs, not by broadcast", so D1 must appear exactly for the files
+    # it governs (ledger/core/money.py, ledger/report/**) and not otherwise.
     governs_d1 = any(
         rel == "ledger/core/money.py" or rel.startswith("ledger/report/") for rel in files
     )
     sc.check(
-        f"{item}'s brief surfaces decision D1 where it governs {item}'s files",
-        not governs_d1 or 'id="D1"' in brief,
+        f"{item}'s brief surfaces decision D1 exactly where it governs {item}'s files",
+        ('id="D1"' in brief) == governs_d1,
         brief[:400],
     )
 

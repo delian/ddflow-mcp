@@ -72,3 +72,18 @@ def test_brief_mentioning_d10_does_not_stand_in_for_d1(tmp_path):
         lifecycle_support.work(
             sc, client, tmp_path, wt_root, "P1.T1", {"ledger/core/money.py": "x = 1"}
         )
+
+
+def test_brief_broadcasting_d1_to_an_ungoverned_file_fails(tmp_path):
+    wt_root = tmp_path / "worktrees"
+    wt_root.mkdir()
+    wt = wt_root / "P1.T2"
+    wt.mkdir()
+    # account.py is NOT a file D1 governs; a brief that surfaces D1 for it is the
+    # "broadcast, not scoped" failure the scenario's other assertions exist to catch.
+    client = _MoneyBriefClient('<ddflow-record kind="decision" id="D1">', wt)
+    sc = _Scenario()
+    with pytest.raises(_FailingCheck):
+        lifecycle_support.work(
+            sc, client, tmp_path, wt_root, "P1.T2", {"ledger/core/account.py": "x = 1"}
+        )
