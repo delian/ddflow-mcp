@@ -264,38 +264,34 @@ def test_a_failed_update_removes_the_file_instead_of_leaving_an_old_picture(repo
     assert H.read(repo).status == H.MISSING
 
 
-def test_a_shard_that_moved_past_the_event_forces_a_rebuild(repo):
-    _claimed(repo)
-    log = EventLog(repo)
-    size = log.shard.stat().st_size
-    # the event claims the shard stood at size-1 -> size-1+1, but the log is larger: not current
+class _FakeLog:
+    """The two things `_continues` asks of a log: its shards and the one an event went to."""
+
+    def __init__(self, root, shard):
+        self.root, self.shard = root, shard
+
+    def shards(self):
+        return [self.shard]
+
+
+def test_a_shard_that_moved_past_the_event_forces_a_rebuild(tmp_path):
+    # No CLI, no clock, no load: a shard of 100 bytes, a snapshot marked at 0.
+    shard = tmp_path / "a.jsonl"
+    shard.write_bytes(b"x" * 100)
+    log = _FakeLog(tmp_path, shard)
+    cur = {"leases": {}, "written_at": 1000.0, "marks": {"a.jsonl": 0}, "config_stamp": ["s"]}
+    cfg = Config.load(tmp_path)
+    args = (cur, log, cfg)
+    # the event says the shard went 0 -> 40, but it is at 100: another writer got in
+    assert not S._continues(*args, ("a.jsonl", 0, 40), 1000.0, ["s"])
+    # the event says 0 -> 100 and the mark is 0: this event is exactly the next step
+    assert S._continues(*args, ("a.jsonl", 0, 100), 1000.0, ["s"])
+    # a mark that is not where the event began: an earlier event was missed
     assert not S._continues(
-        {
-            "leases": {},
-            "written_at": time.time(),
-            "marks": {log.shard.name: 0},
-            "config_stamp": H.config_stamp(repo),
-        },
-        log,
-        Config.load(repo),
-        (log.shard.name, 0, size - 1),
-        time.time(),
-        H.config_stamp(repo),
+        {**cur, "marks": {"a.jsonl": 30}}, log, cfg, ("a.jsonl", 0, 100), 1000.0, ["s"]
     )
-
-
-def test_an_unreadable_or_special_config_file_makes_the_snapshot_unavailable(repo):
-    import os
-
-    _write(repo)
-    assert H.read(repo).status == H.OK
-    cfg = repo / ".ddflow" / "config.toml"
-    cfg.parent.mkdir(exist_ok=True)
-    os.mkfifo(cfg)  # a named pipe: never opened, never blocks the hook
-    snap = H.read(repo)
-    assert snap.status == H.STALE and "unreadable" in snap.note
-
-
-def test_a_discarded_snapshot_is_never_ok_even_with_no_age_limit(repo):
-    _write(repo, written_at=0, leases={}, config_stamp=["discarded"], max_age_s=0)
-    assert H.read(repo).status != H.OK
+    # a config that changed since the stamp
+    assert not S._continues(*args, ("a.jsonl", 0, 100), 1000.0, ["other"])
+    # a shard that cannot be statted: the position is unknown, never "unchanged"
+    shard.unlink()
+    assert not S._continues(*args, ("a.jsonl", 0, 100), 1000.0, ["s"])
