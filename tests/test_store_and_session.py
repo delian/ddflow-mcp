@@ -217,3 +217,23 @@ def test_replay_carries_the_phase_and_task_BODIES(log, cfg):
     assert "Duration parsing, statistics, and a CLI over both." in doc
     assert "not fully consumed by the token pattern" in doc
     assert "writes src/parse.py" in doc, "the declared file scope is part of the plan"
+
+
+def test_reconstruction_carries_live_lessons_only(log, cfg):
+    """A retired lesson is neither counted as 'carried forward' nor printed (B6bcc6ab8f0).
+
+    ``len(state.lessons)`` counts retired lessons too, so a superseded lesson read as
+    'carried forward' while its bullet was skipped; the count and the stand-fallback
+    fall when there are no LIVE lessons."""
+    log.append("lesson.recorded", "L1", {"title": "collision", "rule": "check before insert"})
+    log.append(
+        "lesson.recorded",
+        "L2",
+        {"title": "collision (retracted)", "rule": "append to the target", "supersedes": ["L1"]},
+    )
+    st = fold(log.read_all())
+    doc = session.render_reconstruction(st, session.replay(log.read_all()))
+    assert "- Lessons carried forward: 1" in doc, "retired lesson counted as carried forward"
+    assert "- Lessons carried forward: 2" not in doc
+    assert "- **collision (retracted)** — append to the target" in doc
+    assert "- **collision** — check before insert" not in doc, "retired lesson printed as live"
