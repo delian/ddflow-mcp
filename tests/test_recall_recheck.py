@@ -97,19 +97,20 @@ def test_the_reviolated_lesson_is_what_the_tick_resurfaces(repo):
     assert "L-unrelated" not in ids
 
 
-def test_a_recheck_does_not_busy_loop_two_heartbeats_in_a_row(repo, monkeypatch):
-    """After the tick surfaces the lesson and records the run, an immediate second heartbeat
-    adds no second run and re-surfaces nothing -- the cadence record bounds it in the log,
-    whatever the call rate."""
+def test_a_recheck_does_not_busy_loop_two_heartbeats_in_the_interval(repo, monkeypatch):
+    """Two heartbeats inside one `recall_recheck_s` interval surface (and record) once --
+    the cadence record bounds it in the log, NOT the `recall_recheck_max` cap, which is set
+    to 0 (no cap) here so the interval alone is what is tested."""
     _queued(repo, agent="beta")
     monkeypatch.setenv("DDFLOW_CADENCE_RECALL_RECHECK_S", "1")
-    monkeypatch.setenv("DDFLOW_CADENCE_RECALL_RECHECK_MAX", "1")
+    monkeypatch.setenv("DDFLOW_CADENCE_RECALL_RECHECK_MAX", "0")
     time.sleep(1.3)
     code, out, err = run_cli(repo, "heartbeat", "T1", agent="beta")
     assert code == OK, out + err
     assert LESSON_ID in out + err  # surfaced on this, the next tick
     code, out, err = run_cli(repo, "heartbeat", "T1", agent="beta")
-    assert LESSON_ID not in out + err  # bounded: run already recorded, nothing re-surfaced
+    assert code == OK, out + err  # still a good heartbeat ...
+    assert LESSON_ID not in out + err  # ... and nothing re-surfaced inside the interval
     st = fold(EventLog(repo).read_all(), strict=False)
     assert len(st.cadences.get(RC.cadence_id("T1"), [])) == 1
 

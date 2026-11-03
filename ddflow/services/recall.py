@@ -38,7 +38,9 @@ def cadence_id(item: str) -> str:
 
 def matched_lessons(st: State, item: str, cfg: Config) -> list[tuple[str, float]]:
     """The live, uncontested lessons scoring at least `[dedupe].show_floor` against the
-    item's text, best first as ``(id, score)``. An absent item simply matches nothing."""
+    item's text, best first as ``(id, score)``. An absent item simply matches nothing. The
+    item itself can never be among them: it is a task/phase (``st.items``), while these are
+    the ``st.lessons`` records, so a task that is its own topic scores no self."""
     it = st.items.get(item)
     if it is None:
         return []

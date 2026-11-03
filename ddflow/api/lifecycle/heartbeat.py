@@ -160,19 +160,21 @@ def _yield_request(log, cfg, item: str) -> str:
 def _recheck(log, st, cfg, item: str) -> str:
     """The mid-work lesson re-surfacing to show on this renewal (Bcd5871e71b), "" when none,
     or when a re-scoring is not due. Advisory: a lessons corpus that cannot be scored never
-    stops a renewal, it just surfaces nothing."""
+    stops a renewal, it just surfaces nothing -- but the `cadence.ran` is still recorded, so
+    a scoring that raises does not make the next heartbeat re-score too (the very busy-loop
+    the cadence exists to stop)."""
+    if not RC.due(st, item, cfg, time.time()):
+        return ""
     try:
-        if not RC.due(st, item, cfg, time.time()):
-            return ""
         hits = RC.matched_lessons(st, item, cfg)
-        log.append(
-            "cadence.ran",
-            RC.cadence_id(item),
-            {"result": str(len(hits)), "evidence": RC.run_note(hits)},
-        )
-        if not hits:
-            return ""
     except Exception:
+        hits = []  # scored nothing: recorded below either way, so it stays bounded
+    log.append(
+        "cadence.ran",
+        RC.cadence_id(item),
+        {"result": str(len(hits)), "evidence": RC.run_note(hits)},
+    )
+    if not hits:
         return ""
     parts = []
     for rid, score in hits:
