@@ -38,6 +38,23 @@ def _data_receiver(node: ast.AST) -> str | None:
     return None
 
 
+def _flatten_targets(targets: list[ast.expr]) -> list[ast.expr]:
+    """Every subscript/name an assignment actually writes, through `Tuple`/`List` targets.
+
+    `ev.data['k'], x = 1, 2` parses as ONE `Tuple` target, so returning it whole would
+    hide the subscript inside it from the write scan.
+    """
+    out: list[ast.expr] = []
+    stack = list(targets)
+    while stack:
+        t = stack.pop(0)
+        if isinstance(t, ast.Tuple | ast.List):
+            stack[0:0] = list(t.elts)
+        else:
+            out.append(t)
+    return out
+
+
 def _write_targets(node: ast.AST) -> list[ast.expr]:
     """What this statement writes to: `x = `, `x += `, `x: T = ` and `del x` alike.
 
@@ -45,18 +62,23 @@ def _write_targets(node: ast.AST) -> list[ast.expr]:
     of this walked straight past, and `AugAssign` because `ev.data |= {...}` is PEP 584's
     in-place dict merge — the standard way to do the thing this ratchet forbids. Both
     found by the cross-family critic.
+
+    A bare annotation `ev.data['k']: int` has no value, so it writes nothing.
     """
     if isinstance(node, ast.Assign):
-        return list(node.targets)
-    if isinstance(node, ast.AugAssign | ast.AnnAssign):
+        return _flatten_targets(node.targets)
+    if isinstance(node, ast.AnnAssign):
+        return [] if node.value is None else [node.target]
+    if isinstance(node, ast.AugAssign):
         return [node.target]
     if isinstance(node, ast.Delete):
-        return list(node.targets)
+        return _flatten_targets(node.targets)
     return []
 
 
 def _scope_body(scope: ast.AST) -> list[ast.AST]:
-    """Every node lexically inside `scope`, NOT descending into a nested function or class.
+    """Every node lexically inside `scope`, in SOURCE order, NOT descending into a nested
+    function or class.
 
     `ast.walk` descends into everything, which made an alias bound in one function visible
     in every other: `def a(ev): d = ev.data` registered `d` at module level, and an
@@ -64,15 +86,20 @@ def _scope_body(scope: ast.AST) -> list[ast.AST]:
     event. It over-fired rather than under-fired, so it would have shown up as a spurious
     red build rather than a miss — but a ratchet that cries wolf gets switched off, and
     the docstring said "in the same scope" while the code did not.
+
+    Source order matters: an alias must be registered by its `d = ev.data` assignment
+    before the write through it later in the same scope is checked, and a later rebind
+    must invalidate it. The first version built this list in reverse, so a later alias
+    was seen before an earlier write through a rebound name.
     """
     out: list[ast.AST] = []
     stack = list(ast.iter_child_nodes(scope))
     while stack:
-        node = stack.pop()
+        node = stack.pop(0)
         out.append(node)
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
             continue  # its own scope; visited separately
-        stack.extend(ast.iter_child_nodes(node))
+        stack[0:0] = list(ast.iter_child_nodes(node))
     return out
 
 
@@ -116,28 +143,23 @@ def _aliased_data_writes(tree: ast.AST, allowed: set[str]) -> list[str]:
     scopes += [
         n
         for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda)
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef)
     ]
     for scope in scopes:
-        nodes = _scope_body(scope)
         aliases: dict[str, int] = {}
-        for n in nodes:
-            if not isinstance(n, ast.Assign):
-                continue
-            r = _data_receiver(n.value)
-            if not r or r in allowed:
-                continue
-            for t in n.targets:
-                if isinstance(t, ast.Name | ast.Attribute):
-                    aliases[ast.unparse(t)] = n.lineno
-        if not aliases:
-            continue
-        for n in nodes:
+        for n in _scope_body(scope):
+            aliases = _retrack(aliases, n, allowed)
             line = getattr(n, "lineno", 0)
             for t in _write_targets(n):
                 if isinstance(t, ast.Subscript) and ast.unparse(t.value) in aliases:
                     name = ast.unparse(t.value)
                     out.append(f"{line}: {name}[...] written; aliases event data")
+            # `d |= {...}` / `d += ...` through an alias: AugAssign mutates the shared dict
+            # in place, and `ast.AugAssign.target` is the bare name, never a subscript.
+            if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name | ast.Attribute):
+                name = ast.unparse(n.target)
+                if name in aliases:
+                    out.append(f"{line}: {name} |= / +=; aliases event data")
             if (
                 isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Attribute)
@@ -147,6 +169,40 @@ def _aliased_data_writes(tree: ast.AST, allowed: set[str]) -> list[str]:
                 name = ast.unparse(n.func.value)
                 out.append(f"{line}: {name}.{n.func.attr}(); aliases event data")
     return out
+
+
+def _retrack(
+    aliases: dict[str, int], node: ast.AST, allowed: set[str]
+) -> dict[str, int]:
+    """Register or invalidate an alias for the names a statement binds.
+
+    An `AnnAssign` with a value (`d: dict = ev.data`) binds an alias exactly like an
+    untyped `Assign`, and a rebind to something that is NOT event data (`d = {}`) breaks
+    the alias: a later `d['k'] = 1` then mutates a fresh dict, not the event's.
+    """
+    value: ast.expr | None = None
+    bound: list[ast.expr] = []
+    if isinstance(node, ast.Assign):
+        value = node.value
+        for t in node.targets:
+            if isinstance(t, ast.Name | ast.Attribute):
+                bound.append(t)
+            elif isinstance(t, ast.Tuple | ast.List):
+                bound.extend(e for e in t.elts if isinstance(e, ast.Name | ast.Attribute))
+    elif isinstance(node, ast.AnnAssign) and node.value is not None:
+        value = node.value
+        if isinstance(node.target, ast.Name | ast.Attribute):
+            bound.append(node.target)
+    if value is None:
+        return aliases
+    r = _data_receiver(value)
+    for t in bound:
+        name = ast.unparse(t)
+        if r and r not in allowed:
+            aliases[name] = node.lineno
+        else:
+            aliases.pop(name, None)  # rebound to a non-event value: the stale alias is gone
+    return aliases
 
 
 def data_writes(src: str, allowed: set[str] | None = None) -> list[str]:
@@ -183,6 +239,11 @@ def data_writes(src: str, allowed: set[str] | None = None) -> list[str]:
         "self.ev.data['k'] = 1",
         "self.ev.data.update({'k': 1})",
         "rec(item).ev.data['k'] = 1",
+        # The gaps a later review found in the alias route.
+        "def f(ev):\n    d = ev.data\n    d |= {'k': 1}\n",  # PEP 584 through the alias
+        "def f(ev):\n    d: dict = ev.data\n    d['k'] = 1\n",  # annotated alias
+        "def f(ev):\n    ev.data['k'], x = 1, 2\n",  # subscript hidden in a tuple target
+        "class C:\n    d = ev.data\n    d['k'] = 1\n",  # alias mutated in a class body
     ],
 )
 def test_the_data_write_detector_catches_every_route(planted):
@@ -199,6 +260,12 @@ def test_reading_an_events_data_is_not_flagged():
     """The other half: a ratchet that fires on `d.get(...)` would be turned off."""
     assert not data_writes("def f(ev):\n    d = ev.data\n    return d.get('k'), ev.data['j']\n")
     assert not data_writes("out.data['text'] = 'allowlisted: this is an Outcome'")
+
+
+def test_a_bare_annotation_or_rebound_alias_is_not_flagged():
+    """False positives the first alias scan raised: neither writes the event's `data`."""
+    assert not data_writes("def f(ev):\n    ev.data['k']: int\n")
+    assert not data_writes("def f(ev):\n    d = ev.data\n    d = {}\n    d['k'] = 1\n")
 
 
 def test_an_alias_in_one_function_does_not_leak_into_another(repo):
