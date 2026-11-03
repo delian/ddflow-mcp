@@ -8,14 +8,10 @@ raise ``Fail`` for a D1-governed file.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parent.parent)]
-
-import pytest
-
 import lifecycle_support
+import pytest
 
 
 class _MoneyBriefClient:
