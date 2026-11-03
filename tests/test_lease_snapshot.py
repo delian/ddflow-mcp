@@ -282,3 +282,20 @@ def test_a_shard_that_moved_past_the_event_forces_a_rebuild(repo):
         time.time(),
         H.config_stamp(repo),
     )
+
+
+def test_an_unreadable_or_special_config_file_makes_the_snapshot_unavailable(repo):
+    import os
+
+    _write(repo)
+    assert H.read(repo).status == H.OK
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.parent.mkdir(exist_ok=True)
+    os.mkfifo(cfg)  # a named pipe: never opened, never blocks the hook
+    snap = H.read(repo)
+    assert snap.status == H.STALE and "unreadable" in snap.note
+
+
+def test_a_discarded_snapshot_is_never_ok_even_with_no_age_limit(repo):
+    _write(repo, written_at=0, leases={}, config_stamp=["discarded"], max_age_s=0)
+    assert H.read(repo).status != H.OK

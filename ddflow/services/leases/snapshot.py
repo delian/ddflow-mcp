@@ -191,8 +191,13 @@ def apply(
 
     store = LocalStore(Path(log.root) / ".ddflow" / "local")
     try:
-        stamp = H.config_stamp(log.root)  # BEFORE the load: the globs below are of this stamp
+        # The stamp is taken before AND after the load and must agree with itself and be readable:
+        # the globs below are then of exactly that config (a change in between is no snapshot).
+        stamp = H.config_stamp(log.root)
         cfg = Config.load(log.root)
+        if stamp != H.config_stamp(log.root) or H.UNREADABLE_CONFIG in stamp:
+            _discard(store, H)
+            return False
         shard = log.shard.name
         if not cfg.locks.snapshot:
             _discard(store, H)  # off: a file left from before would be an old picture
@@ -230,12 +235,17 @@ def apply(
 
 def _discard(store: LocalStore, H: Any) -> None:
     """Make the file unusable: removed, or when it cannot be removed, overwritten with a document
-    written at the epoch (stale at once), so a hook never trusts the picture it holds."""
+    whose config stamp matches no config (stale at once, whatever the age limit), so a hook never trusts the picture it holds."""
     try:
         store.remove(H.NAME)
     except Exception:
         with contextlib.suppress(Exception):
-            store.write(H.NAME, {"written_at": 0, "leases": {}}, schema=H.SCHEMA, derived=True)
+            store.write(
+                H.NAME,
+                {"written_at": 0, "leases": {}, "config_stamp": ["discarded"]},
+                schema=H.SCHEMA,
+                derived=True,
+            )
 
 
 def appended(log: Any, event: Any, before: int, after: int) -> None:

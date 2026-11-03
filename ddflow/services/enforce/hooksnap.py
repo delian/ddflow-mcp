@@ -16,6 +16,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import stat
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,18 +67,29 @@ def path_of(repo: Path | str) -> Path:
 CONFIG_FILES = (Path(".ddflow") / "config.toml", Path(".ddflow") / "local" / "config.toml")
 
 
+#: A config file larger than this is not read by the hook (it would blow the time budget).
+MAX_CONFIG_BYTES = 1 << 20
+UNREADABLE_CONFIG = "unreadable"
+
+
 def config_stamp(repo: Path | str) -> list[str]:
-    """A digest of each config file's CONTENT ("absent" when it is not there): the writer records
-    it and the reader compares, so a config edit after the snapshot was written cannot leave a
-    stale `shared` list in force, whatever it did to the file's size or mtime."""
+    """A digest of each config file's CONTENT ("absent" when it is not there, "unreadable" when it
+    is there but is not a plain readable file of sane size): the writer records it and the reader
+    compares, so a config edit after the snapshot was written cannot leave a stale `shared` list
+    in force, whatever it did to the file's size or mtime."""
     out = []
     for rel in CONFIG_FILES:
+        p = Path(repo) / rel
         try:
-            out.append(
-                hashlib.sha1((Path(repo) / rel).read_bytes(), usedforsecurity=False).hexdigest()
-            )
-        except OSError:
+            st = os.stat(p)
+            if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CONFIG_BYTES:
+                out.append(UNREADABLE_CONFIG)
+            else:
+                out.append(hashlib.sha1(p.read_bytes(), usedforsecurity=False).hexdigest())
+        except FileNotFoundError:
             out.append("absent")
+        except OSError:
+            out.append(UNREADABLE_CONFIG)
     return out
 
 
@@ -128,7 +141,8 @@ def _leases(table: Any, now: float) -> dict[str, dict[str, Any]]:
 def _fields(data: dict[str, Any], now: float | None, max_age_s: int | None) -> tuple:
     """Every field of the document, validated; raises on any malformed part."""
     limit = int(_num(data.get("max_age_s", 0) if max_age_s is None else max_age_s))
-    age = (time.time() if now is None else now) - _num(data["written_at"])
+    t = time.time() if now is None else now
+    age = t - _num(data["written_at"])
     if age < -MAX_SKEW_S:
         raise ValueError(age)  # written in the future: a rolled-back clock or a corrupt file
     return (
@@ -136,7 +150,7 @@ def _fields(data: dict[str, Any], now: float | None, max_age_s: int | None) -> t
         age,
         int(_num(data.get("generation", 0))),
         int(_num(data.get("grace_s", 0))),
-        _leases(data["leases"], time.time() if now is None else now),
+        _leases(data["leases"], t),
         _globs(data.get("shared", [])),
         _globs(data.get("new_files", [])),
         _stamp(data.get("config_stamp")),
@@ -162,7 +176,12 @@ def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = 
         limit, age, gen, grace, leases, shared, new_files, stamp = _fields(data, now, max_age_s)
     except (TypeError, ValueError, KeyError, OverflowError, AttributeError):
         return _bad(UNREADABLE, f"has malformed content ({p})")
-    if stamp != config_stamp(repo):
+    live = config_stamp(repo)
+    if UNREADABLE_CONFIG in live:
+        return _bad(
+            STALE, "cannot be checked against the ddflow config (a config file is unreadable)"
+        )
+    if stamp != live:
         return _bad(STALE, "predates a change of the ddflow config (its shared globs may differ)")
     if limit > 0 and age > limit:
         return _bad(STALE, f"is {int(age)} s old (limit {limit} s, [locks].snapshot_max_age_s)")
