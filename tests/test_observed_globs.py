@@ -46,7 +46,7 @@ def test_undeclared_report_names_exact_call_cli_and_mcp():
     )
     assert "tests/t.py" in text
     assert "ddflow update T --globs 'a/**,tests/*'" in text
-    assert "ddflow_task action=update id=T globs=a/**,tests/*" in text
+    assert "ddflow_task action=update id=T globs='a/**,tests/*'" in text
 
 
 def test_undeclared_report_clean_off_and_unknown():

@@ -104,7 +104,7 @@ def undeclared_report(
     return (
         f"{len(undeclared)} file(s) written outside the declared globs: "
         f"{_list(undeclared, shown)}. Declare them so other agents see the overlap: "
-        f"{update_call(item_id, list(it.globs), directory_globs(undeclared))}."
+        f"{update_call(item_id, list(it.globs or []), directory_globs(undeclared))}."
     )
 
 
