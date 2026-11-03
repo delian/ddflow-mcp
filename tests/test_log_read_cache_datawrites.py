@@ -157,12 +157,17 @@ def _aliased_data_writes(tree: ast.AST, allowed: set[str]) -> list[str]:
                 if isinstance(t, ast.Subscript) and ast.unparse(t.value) in aliases:
                     name = ast.unparse(t.value)
                     out.append(f"{line}: {name}[...] written; aliases event data")
-            # `d |= {...}` / `d += ...` through an alias: AugAssign mutates the shared dict
-            # in place, and `ast.AugAssign.target` is the bare name, never a subscript.
-            if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name | ast.Attribute):
+            # `d |= {...}` through an alias: the PEP 584 in-place dict merge mutates the
+            # shared dict. Only `|=` mutates a dict in place; `d += {...}` raises TypeError
+            # and leaves the dict unchanged, so an alias `+=` is NOT flagged.
+            if (
+                isinstance(n, ast.AugAssign)
+                and isinstance(n.target, ast.Name | ast.Attribute)
+                and isinstance(n.op, ast.BitOr)
+            ):
                 name = ast.unparse(n.target)
                 if name in aliases:
-                    out.append(f"{line}: {name} |= / +=; aliases event data")
+                    out.append(f"{line}: {name} |= ...; aliases event data")
             if (
                 isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Attribute)
