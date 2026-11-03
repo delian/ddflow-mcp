@@ -1,0 +1,3 @@
+{"agent":"Monster3-fix-B0cdef4bf3a-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e05c3f79122a9f46bcecfa6d5","kind":"ddflow.seen","lamport":132935,"schema":1,"subject":"ddflow","ts":"2026-11-03T17:16:14.322366Z"}
+{"agent":"Monster3-fix-B0cdef4bf3a-7267fe","data":{"ahead":["rules","implement"],"gate":"rubber_duck","policy":"warn"},"id":"e17c2fca472225b19b29446ab","kind":"gate.out_of_order","lamport":132936,"schema":1,"subject":"fix-B0cdef4bf3a","ts":"2026-11-03T17:16:14.365335Z"}
+{"agent":"Monster3-fix-B0cdef4bf3a-7267fe","data":{"gate":"rubber_duck"},"id":"e8e27c4ac41d7b8205fb29822","kind":"gate.started","lamport":132937,"schema":1,"subject":"fix-B0cdef4bf3a","ts":"2026-11-03T17:16:14.834702Z"}
