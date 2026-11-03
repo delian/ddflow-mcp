@@ -179,9 +179,7 @@ def _aliased_data_writes(tree: ast.AST, allowed: set[str]) -> list[str]:
     return out
 
 
-def _retrack(
-    aliases: dict[str, int], node: ast.AST, allowed: set[str]
-) -> dict[str, int]:
+def _retrack(aliases: dict[str, int], node: ast.AST, allowed: set[str]) -> dict[str, int]:
     """Register or invalidate an alias for the names a statement binds.
 
     An `AnnAssign` with a value (`d: dict = ev.data`) binds an alias exactly like an

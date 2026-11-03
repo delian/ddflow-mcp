@@ -64,9 +64,10 @@ def test_triaging_one_gate_of_a_combined_review_answers_the_other(repo, tmp_path
     _setup(repo, tmp_path)
     api.review(repo, gate=GATES, item="T1", branch="feat")
     it = _state(repo)
-    assert it.gates["rubber_duck"].evidence["chunk_findings"] == it.gates["critic"].evidence[
-        "chunk_findings"
-    ]
+    assert (
+        it.gates["rubber_duck"].evidence["chunk_findings"]
+        == it.gates["critic"].evidence["chunk_findings"]
+    )
 
     out = api.triage(
         repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="x = 1 is intended"
@@ -109,7 +110,9 @@ def test_mirroring_also_settles_the_sibling_gate_once_its_budget_is_spent(repo, 
     assert out.exit == OK, out.reason
 
     it = _state(repo)
-    assert it.gates["critic"].outcome == "passed", "critic must settle once its mirrored finding is answered"
+    assert it.gates["critic"].outcome == "passed", (
+        "critic must settle once its mirrored finding is answered"
+    )
     assert (it.gates["critic"].evidence or {}).get("passed_on_refutation")
 
 
@@ -122,12 +125,16 @@ def test_the_mirrored_sibling_settles_on_refutation_without_the_budget_spent(rep
     _setup(repo, tmp_path)
     api.review(repo, gate=GATES, item="T1", branch="feat")
 
-    out = ST.triage(repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless")
+    out = ST.triage(
+        repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless"
+    )
     assert out.exit == OK, out.reason
 
     it = _state(repo)
     assert it.gates["rubber_duck"].outcome == "passed"
-    assert it.gates["critic"].outcome == "passed", "critic stays settled once its mirrored finding is answered"
+    assert it.gates["critic"].outcome == "passed", (
+        "critic stays settled once its mirrored finding is answered"
+    )
     assert (it.gates["critic"].evidence or {}).get("passed_on_refutation")
 
 
@@ -142,6 +149,8 @@ def test_the_budget_spent_triage_keeps_its_passed_on_refutation_flag(repo, tmp_p
     )
     api.review(repo, gate=GATES, item="T1", branch="feat")
 
-    out = ST.triage(repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless")
+    out = ST.triage(
+        repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless"
+    )
     assert out.exit == OK, out.reason
     assert out.data["passed_on_refutation"] is True
