@@ -311,8 +311,11 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     )
     # The table lives in the split package's `_core` module; `RESOURCE_BY_URI` is derived
     # from it right after, so the whole table is the slice between the two.
-    table = inspect.getsource(MC)
-    table = table[table.index("RESOURCES: tuple") : table.index("RESOURCE_BY_URI")]
+    src = inspect.getsource(MC)
+    start = src.index("RESOURCES: tuple")
+    end = src.index("RESOURCE_BY_URI")
+    assert start < end, "RESOURCE_BY_URI must follow the RESOURCES table it derives from"
+    table = src[start:end]
     assert "fold(" not in table and "EventLog" not in table, "a resource folds the log itself"
 
 
