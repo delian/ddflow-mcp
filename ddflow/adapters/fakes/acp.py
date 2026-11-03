@@ -10,6 +10,7 @@ same cases run against these and the default adapters (tests/test_adapter_acp.py
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -95,8 +96,6 @@ class FakeAcpAgent:
         return A.ok(mid, {"stopReason": A.CANCELLED if cancelled else self.script.stop_reason})
 
     def serve(self, lines) -> None:
-        import json
-
         for raw in lines:
             if raw.strip():
                 reply = self.handle(json.loads(raw))

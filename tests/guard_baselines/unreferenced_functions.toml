@@ -52,3 +52,5 @@ baseline = 0
 "ddflow/services/drift.py:set_last_seen" = "DX-drift-notice"
 # The no-key hint for a reviewer listing; DX-reviewers-list-key-hint wires it into api/review.py.
 "ddflow/services/review_keys.py:key_hints" = "DX-reviewers-list-key-hint"
+# The `pins drivers --check` mergiraf keep/drop evaluation (tests/test_merge_drivers.py pins it).
+"ddflow/services/mergedrivers.py:keep_mergiraf" = "B-mergiraf-eval"

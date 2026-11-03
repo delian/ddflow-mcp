@@ -45,13 +45,16 @@ from .mcp import (
     Outcome,
     Starter,
     StdioServer,
+    _ChannelClient,
     check_request,
     describe_answer,
     encode,
     err,
+    finish_answer,
     ok,
     request,
     response_in,
+    send_line,
 )
 from .ports import port
 
@@ -309,7 +312,7 @@ class AcpClient(Protocol):
         """Stop the agent; safe to call twice."""
 
 
-class AcpStdioClient:
+class AcpStdioClient(_ChannelClient):
     """The default `AcpClient`, over an injected `Starter`."""
 
     def __init__(
@@ -385,20 +388,6 @@ class AcpStdioClient:
         frame = {"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": session_id}}
         return self._send(encode(frame))
 
-    def close(self) -> None:
-        channel, self._channel = self._channel, None
-        if channel is not None:
-            channel.close()
-
-    def _send(self, line: str) -> bool:
-        if self._channel is None:
-            return False
-        try:
-            self._channel.send(line)
-            return True
-        except OSError:
-            return False
-
     def _ask(self, method: str, params: dict[str, Any], timeout_s: float) -> Outcome:
         if self._channel is None:
             return Outcome(UNAVAILABLE, detail="not connected: call connect first")
@@ -457,9 +446,7 @@ class AcpStdioClient:
                     if other is not None:
                         seen(other)
                 continue
-            if "result" in msg:
-                return done(OK, result=msg["result"] if isinstance(msg["result"], dict) else {})
-            return done(ERROR, error=msg["error"] if isinstance(msg["error"], dict) else {})
+            return finish_answer(done, msg)
 
 
 def _json(line: str | bytes) -> dict[str, Any] | None:
