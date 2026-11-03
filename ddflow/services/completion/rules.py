@@ -475,7 +475,8 @@ def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> lis
     """The item's OWN branch still holds commits its base lacks. Completing it in that state
     records the work done while those commits never reached the base — a partial land that
     drops them without notice (Bd59dded6a4). The branchless phase is backstopped by
-    `_unmerged_branches`; this is each task's own guard. Git unable to answer is not a blocker."""
+    `_unmerged_branches`; this is each task's own guard. Git unable to answer is treated as
+    unmerged — a conservative blocker, so an unreadable tree cannot silently drop work."""
     if it.kind == "phase" or not it.branch or it.promote_to:
         return []
     base = (
