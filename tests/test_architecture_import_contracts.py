@@ -134,7 +134,10 @@ def test_graph_internal_names_every_contract() -> None:
     match = re.search(r"\((\d+) contracts: ([^)]+)\)", row)
     assert match is not None, f"Import-linter row has no '(N contracts: ...)' list: {row!r}"
     count, names = int(match.group(1)), match.group(2)
-    named = {name.strip() for name in names.split(",") if name.strip()}
-    assert (count, named) == (len(CONTRACTS), set(CONTRACTS)), (
-        f"Import-linter row: {count} contracts {sorted(named)}; CONTRACTS is {sorted(CONTRACTS)}"
+    listed = [name.strip() for name in names.split(",") if name.strip()]
+    assert count == len(listed) == len(set(listed)), (
+        f"Import-linter row: {count} contracts; listed {listed}"
+    )
+    assert set(listed) == set(CONTRACTS), (
+        f"Import-linter row: {count} contracts {sorted(listed)}; CONTRACTS is {sorted(CONTRACTS)}"
     )
