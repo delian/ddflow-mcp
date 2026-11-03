@@ -134,7 +134,7 @@ def resolve(command: str, cfg: Any, files: int | None = None, *, source: Any = N
 _AUTO = re.compile(r"(?<![\w-])-n\s+auto(?![\w-])")
 
 
-def timeout_for(declared_s: int, workers: "Workers | None", cfg: Any) -> int:
+def timeout_for(declared_s: int, workers: Workers | None, cfg: Any) -> int:
     """The wall-clock budget for one command gate's run, corrected for a loaded host
     (B2efda94671): a run cut below `[ci].max_workers` because the host is loaded or memory
     is short is proportionally slower — fewer workers carry the same suite — so a timeout
