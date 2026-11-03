@@ -376,9 +376,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
         (v.blockers if blocks else v.warnings).append(readme)
 
-    note, blocks = OG.verdict_notice(state, cfg, item_id, repo)
-    if note:
-        (v.blockers if blocks else v.warnings).append(note)
+    OG.add_notice(v, state, cfg, item_id, repo)
 
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)

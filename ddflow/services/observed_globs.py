@@ -121,33 +121,55 @@ def untouched_report(
     )
 
 
-def learned(
-    state: State, cfg, item_id: str, *, repo: Path, read: Callable | None = None
-) -> list[str]:
-    """Directory globs that finished tasks sharing a tag with ``item_id`` keep writing
-    outside their own declarations, most recent ``suggest_history`` tasks read, each
-    needed in at least ``suggest_min_items`` of them and not already declared here."""
-    it = state.items.get(item_id)
-    if not cfg.locks.suggest_globs or it is None or not it.tags or not cfg.locks.suggest_history:
-        return []
+def _habits(state: State, cfg, it, repo: Path, read) -> dict[str, int]:
+    """How many finished same-tag tasks (the latest ``suggest_history``) each directory
+    glob was written in outside that task's own declaration."""
     mine = set(it.tags)
     past = [
         o
         for o in state.items.values()
-        if o.id != item_id and o.state == "done" and o.kind == "task" and mine & set(o.tags or ())
+        if o.id != it.id and o.state == "done" and o.kind == "task" and mine & set(o.tags or ())
     ]
-    past.sort(key=lambda o: getattr(o, "completed_at", "") or o.id, reverse=True)
+    past.sort(key=lambda o: o.completed_at or o.id, reverse=True)
     counts: dict[str, int] = {}
     for o in past[: cfg.locks.suggest_history]:
         changed = _read(read)(repo, o)
-        if changed is None:
-            continue
-        undeclared, _ = split(changed, list(o.globs))
+        undeclared = split(changed, list(o.globs))[0] if changed is not None else []
         for g in directory_globs(undeclared):
             counts[g] = counts.get(g, 0) + 1
-    chosen = [g for g, n in counts.items() if n >= cfg.locks.suggest_min_items]
-    chosen = [g for g in chosen if not any(globs.inside(g, d) for d in it.globs or ())]
+    return counts
+
+
+def learned(
+    state: State, cfg, item_id: str, *, repo: Path, read: Callable | None = None
+) -> list[str]:
+    """Directory globs that finished tasks sharing a tag with ``item_id`` keep writing
+    outside their own declarations, needed in at least ``suggest_min_items`` of them and
+    not already declared here."""
+    it = state.items.get(item_id)
+    if not cfg.locks.suggest_globs or it is None or not it.tags or not cfg.locks.suggest_history:
+        return []
+    counts = _habits(state, cfg, it, repo, read)
+    own = it.globs or []
+    chosen = [
+        g
+        for g, n in counts.items()
+        if n >= cfg.locks.suggest_min_items and not any(globs.inside(g, d) for d in own)
+    ]
     return sorted(chosen, key=lambda g: (-counts[g], g))
+
+
+def claim_fields(state: State, cfg, item_id: str, repo: Path) -> dict[str, str]:
+    """The extra `claim` output: the learned suggestion, when there is one."""
+    hint = learned_report(state, cfg, item_id, repo=repo)
+    return {"glob_suggestion": hint} if hint else {}
+
+
+def add_notice(verdict, state: State, cfg, item_id: str, repo: Path) -> None:
+    """Put the undeclared-write notice on ``verdict`` as a blocker or a warning."""
+    text, blocks = verdict_notice(state, cfg, item_id, repo)
+    if text:
+        (verdict.blockers if blocks else verdict.warnings).append(text)
 
 
 def learned_report(
