@@ -1,0 +1,94 @@
+"""A combined review stores each finding under every gate it stands for; triaging the
+finding once -- under one gate -- answers the SAME finding (the same digest) under the
+other gates too, so an agent is not asked to record the same verdict twice (bug
+B-combined-review-findings-triaged-twice).
+"""
+
+from __future__ import annotations
+
+import stat
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
+from helpers import git as _git
+
+import ddflow.api.review as api
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+from ddflow.services import gates as G
+
+GATES = "rubber_duck,critic"
+
+OK = 0
+
+
+def _setup(repo: Path, tmp_path: Path) -> None:
+    """A command reviewer (gemini family) that flags a distinctive ``TRIAGE2COMBO`` line,
+    serving both rubber_duck and critic; a small branch ``feat`` whose diff stays under
+    [review].combined_under_lines, so ONE review is recorded for both gates."""
+    cli = tmp_path / "fake-reviewer"
+    cli.write_text(
+        "#!/bin/sh\nin=$(cat)\n"
+        'case "$in" in *TRIAGE2COMBO*) printf \'FINDING HIGH x.py:1\\ncombo bad line\\n\\n'
+        "STATUS: FINDINGS 1\\n';; *) echo 'STATUS: NO FINDINGS';; esac\n"
+    )
+    cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
+        'model = "gemini-2.5-pro"\nhedge = 1\ngates = ["critic", "rubber_duck"]\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1  # TRIAGE2COMBO\ny = 2\n")
+    _git(repo, "add", "x.py")
+    _git(repo, "commit", "-qm", "work")
+
+
+def _state(repo: Path):
+    return fold(EventLog(repo).read_all(), strict=False).items["T1"]
+
+
+def _duck_and_critic(repo: Path):
+    it = _state(repo)
+    return G.triage_counts(it, "rubber_duck"), G.triage_counts(it, "critic")
+
+
+def test_triaging_one_gate_of_a_combined_review_answers_the_other(repo, tmp_path):
+    """The same digest stands under both gates; one --refuted settles both."""
+    _setup(repo, tmp_path)
+    api.review(repo, gate=GATES, item="T1", branch="feat")
+    it = _state(repo)
+    assert it.gates["rubber_duck"].evidence["chunk_findings"] == it.gates["critic"].evidence[
+        "chunk_findings"
+    ]
+
+    out = api.triage(
+        repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="x = 1 is intended"
+    )
+    assert out.exit == OK, out.reason
+
+    duck, critic = _duck_and_critic(repo)
+    assert duck == {"findings": 1, "refuted": 1, "confirmed": 0, "untriaged": 0}, duck
+    assert critic == {"findings": 1, "refuted": 1, "confirmed": 0, "untriaged": 0}, critic
+
+
+def test_a_confirmed_verdict_is_mirrored_to_each_gate_too(repo, tmp_path):
+    """A --confirmed citation answers the same finding under every gate, not only the one
+    named with --gate."""
+    _setup(repo, tmp_path)
+    api.review(repo, gate=GATES, item="T1", branch="feat")
+
+    out = api.triage(
+        repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="fixed in abc123"
+    )
+    assert out.exit == OK, out.reason
+
+    duck, critic = _duck_and_critic(repo)
+    assert critic == {"findings": 1, "refuted": 0, "confirmed": 1, "untriaged": 0}, critic
+    assert duck == {"findings": 1, "refuted": 0, "confirmed": 1, "untriaged": 0}, duck

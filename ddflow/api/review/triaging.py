@@ -20,7 +20,7 @@ from .._base import _load
 from ..gates import item_tree
 from ..knowledge.regression import _unresolved_tests
 from ..review_finding_ref import resolve as resolve_finding
-from .findings import _chunk_numbers, _finding_listing
+from .findings import _chunk_numbers, _finding_listing, _mirror_sibling_gates
 from .records import _prior_evidence
 
 _NODE = re.compile(r"[\w./-]+\.py::\S+")
@@ -191,12 +191,25 @@ def triage(
             "location": f.get("location", ""),
         },
     )
+    mirrored = _mirror_sibling_gates(
+        log,
+        it,
+        gate=gate,
+        digest=f["digest"],
+        verdict=verdict,
+        probe=probe.strip(),
+        severity=f.get("severity", ""),
+        title=f.get("title", ""),
+        location=f.get("location", ""),
+    )
     log, cfg, st = _load(repo, agent)
     counts = GD.triage_counts(st.items[item], gate) or {}
     text = (
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{GD.triage_line(counts)}"
     )
+    if mirrored:
+        text += f" (also recorded for {', '.join(mirrored)}: the same finding)"
     settled = _settle_after_cap(
         log, cfg, st.items[item], gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
     )
