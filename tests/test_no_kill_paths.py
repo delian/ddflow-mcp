@@ -50,6 +50,40 @@ KILLERS = {"kill_group", "killpg", "terminate", "kill", "send_signal", "system"}
 DELETERS = {"remove", "unlink", "rmtree", "rmdir", "removedirs", "move", "rename", "replace"}
 
 
+def _bound_modules(tree: ast.AST) -> dict[str, str]:
+    # name -> the top-level module the name is bound to, from every import form. `import
+    # os.path` binds the top-level name `os` (the `path` attribute rides on it), and `from
+    # platform import system` binds `system` to the `platform` module, so `os.system()` (the
+    # process launcher) is told apart from `platform.system()` / `system()` (the OS-name
+    # read) by the module it reads, not the receiver's spelling.
+    bound: dict[str, str] = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                bound[a.asname or a.name.split(".")[0]] = a.name.split(".")[0]
+        elif isinstance(n, ast.ImportFrom):
+            top = n.module.split(".")[0] if n.module else ""
+            for a in n.names:
+                bound[a.asname or a.name] = top
+    return bound
+
+
+def _call_name(f: ast.expr, bound: dict[str, str], aliases: dict[str, str]) -> str:
+    """`os.system` is a process launcher; `platform.system` reports the OS name. Only a
+    receiver bound to `platform` by an import is the read -- an `os` receiver stays the
+    launcher, so an aliased launcher (or `import os as platform`) is still flagged."""
+    if isinstance(f, ast.Attribute):
+        name = f.attr
+        if name == "system":
+            recv = f.value.id if isinstance(f.value, ast.Name) else ""
+            name = "platform.system" if bound.get(recv) == "platform" else "system"
+    else:
+        name = getattr(f, "id", "")
+        if name == "system" and bound.get(name) == "platform":
+            name = "platform.system"
+    return aliases.get(name, name)  # `from os import killpg as _kp`; `_kp(...)`
+
+
 def _calls(path: Path):
     tree = ast.parse(path.read_text())
     aliases = {
@@ -59,20 +93,7 @@ def _calls(path: Path):
         for a in n.names
         if a.asname and a.name in KILLERS
     }
-    # name -> the top-level module the name is bound to, from every import form. `import
-    # os.path` binds the top-level name `os` (the `path` attribute rides on it), and `from
-    # platform import system` binds `system` to the `platform` module, so `os.system()` (the
-    # process launcher) is told apart from `platform.system()` / `system()` (the OS-name
-    # read) by the module it reads, not the receiver's spelling.
-    bound = {}
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Import):
-            for a in n.names:
-                bound[a.asname or a.name.split(".")[0]] = a.name.split(".")[0]
-        elif isinstance(n, ast.ImportFrom):
-            top = n.module.split(".")[0] if n.module else ""
-            for a in n.names:
-                bound[a.asname or a.name] = top
+    bound = _bound_modules(tree)
     stack: list[str] = []
 
     def walk(node):
@@ -84,23 +105,7 @@ def _calls(path: Path):
             if isinstance(arg, ast.Constant) and arg.value in KILLERS:  # getattr(os, "kill")
                 yield str(arg.value), node, (stack[-1] if stack else "")
         if isinstance(node, ast.Call):
-            f = node.func
-            if isinstance(f, ast.Attribute):
-                name = f.attr
-                if name == "system":
-                    # `os.system` launches a process; `platform.system` reports the OS
-                    # name. Only a receiver bound to `platform` by an import is the read --
-                    # an `os` receiver (or `import os as platform`, an unbound name) stays
-                    # `system`, so an aliased launcher is still flagged.
-                    recv = f.value.id if isinstance(f.value, ast.Name) else ""
-                    name = "platform.system" if bound.get(recv) == "platform" else "system"
-            else:
-                name = getattr(f, "id", "")
-                if name == "system" and bound.get(name) == "platform":
-                    # `from platform import system` reads the OS name; `from os import
-                    # system` (or `from os import *`) stays the launcher.
-                    name = "platform.system"
-            name = aliases.get(name, name)  # `from os import killpg as _kp`; `_kp(...)`
+            name = _call_name(node.func, bound, aliases)
             yield name, node, (stack[-1] if stack else "")
         for child in ast.iter_child_nodes(node):
             yield from walk(child)
@@ -176,7 +181,9 @@ def test_platform_system_is_the_os_name_read_not_a_killer(tmp_path: Path):
 
 
 def test_os_system_is_a_killer_even_when_imported_as_platform(tmp_path: Path):
-    assert _kill_names("import os as platform\nplatform.system('pkill foo')\n", tmp_path) == {"system"}
+    assert _kill_names("import os as platform\nplatform.system('pkill foo')\n", tmp_path) == {
+        "system"
+    }
 
 
 def test_os_system_stays_a_killer_after_import_os_path(tmp_path: Path):
@@ -200,8 +207,12 @@ def test_from_os_star_import_bare_system_is_the_launcher(tmp_path: Path):
 
 
 def test_assigned_os_system_is_the_launcher(tmp_path: Path):
-    assert _kill_names("import os\nsystem = os.system\nsystem('pkill foo')\n", tmp_path) == {"system"}
+    assert _kill_names("import os\nsystem = os.system\nsystem('pkill foo')\n", tmp_path) == {
+        "system"
+    }
 
 
 def test_assigned_platform_alias_os_system_is_the_launcher(tmp_path: Path):
-    assert _kill_names("import os\nplatform = os\nplatform.system('pkill foo')\n", tmp_path) == {"system"}
+    assert _kill_names("import os\nplatform = os\nplatform.system('pkill foo')\n", tmp_path) == {
+        "system"
+    }
