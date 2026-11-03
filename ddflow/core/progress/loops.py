@@ -215,7 +215,10 @@ def _duplicate_work(state: State, lc, sev: str, cfg: Config | None = None) -> li
     out = []
     by_globs: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for it in state.items.values():
-        if it.removed or it.terminal or not it.globs:
+        # A phase never runs files: its globs scope its tasks rather than claim files, so
+        # a phase and its own task sharing globs is the normal structure, not a conflict
+        # (B-phase-globs-duplicate-work-with-own-task).
+        if it.removed or it.terminal or not it.globs or not it.is_work:
             continue
         by_globs[tuple(sorted(it.globs))].append(it.id)
     waits: dict[str, set[str]] = {}

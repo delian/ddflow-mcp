@@ -58,6 +58,13 @@ def test_a_taken_name_is_an_error_unless_the_same_definition_or_replace_is_allow
         _reg(same_ok=True, replace=True)
 
 
+def test_registering_none_twice_is_a_duplicate_not_an_overwrite():
+    r: Registry[object] = Registry("fn")
+    r.register(None, "ghost")
+    with pytest.raises(DuplicateName, match=r"fn .ghost. is already registered$"):
+        r.register(None, "ghost")
+
+
 def test_an_unknown_name_lists_those_known_and_is_a_keyerror_for_mapping_get():
     r = _reg()
     r.register("a:1")
@@ -89,6 +96,24 @@ def test_a_lazy_target_imports_when_first_used_and_the_listing_says_so():
         r.lazy("join", "os.path:split")
     with pytest.raises(RegistryError, match=r"package.module:attr"):
         Lazy("nonsense").resolve()
+
+
+def test_a_lazy_target_registered_twice_is_a_no_op_when_same_ok():
+    r: Registry[object] = Registry("fn", same_ok=True)
+    r.lazy("join", "os.path:join")
+    r.lazy("join", "os.path:join")  # the same lazy definition again: a no-op
+    import os.path
+
+    assert r["join"] is os.path.join
+    with pytest.raises(DuplicateName, match="with another definition"):
+        r.lazy("join", "os.path:split")
+
+
+def test_a_registered_none_still_blocks_a_lazy_target():
+    r: Registry[object] = Registry("fn")
+    r.register(None, "occupied")
+    with pytest.raises(DuplicateName, match=r"fn .occupied. is already registered$"):
+        r.lazy("occupied", "os.path:join")
 
 
 def test_a_loader_fills_the_registry_once_and_a_failure_is_not_remembered():

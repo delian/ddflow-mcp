@@ -43,7 +43,7 @@ def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str
     A("")
     A(f"- Phases: {len(state.phases())}")
     A(f"- Tasks: {len(state.tasks())}")
-    A(f"- Lessons carried forward: {len(state.lessons)}")
+    A(f"- Lessons carried forward: {sum(1 for ls in state.lessons.values() if ls.live)}")
     A(f"- Architectural decisions in force: {len([d for d in state.decisions.values() if d.live])}")
     A(
         f"- Research notes: {len(state.research)} "
@@ -105,16 +105,15 @@ def _rc_decisions(A, state: State) -> None:
 
 
 def _rc_knowledge(A, state: State) -> None:
-    """Lessons, then the approaches already tried and rejected."""
+    """Lessons in force, then the approaches already tried and rejected."""
     A("## Standing knowledge — read before starting")
     A("")
-    if state.lessons:
+    live = [ls for ls in sorted(state.lessons.values(), key=lambda x: x.at) if ls.live]
+    if live:
         A("These were learned the hard way during the original build. They are inputs,")
         A("not history: applying them is how the rebuild avoids repeating the mistakes.")
         A("")
-        for ls in sorted(state.lessons.values(), key=lambda x: x.at):
-            if not ls.live:
-                continue
+        for ls in live:
             A(f"- **{ls.title}** — {ls.rule}")
     else:
         A("_No lessons were recorded._")

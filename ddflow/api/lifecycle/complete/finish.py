@@ -120,6 +120,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     )
     v.blockers += [b for b in (_phase_suite(repo, cfg, log, st, it, agent),) if b]
     hard = _failed_review(repo, cfg, st, item, v, umbrella)
+    hard += CM._own_branch_unmerged(st, cfg, it, repo)
     if closing:
         # The one blocker the flag is about to clear; every other one still stands.
         v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]

@@ -165,3 +165,13 @@ def test_revoked_gemini_key_is_allowlisted_only_in_event_shards(tmp_path):
     # A .jsonl outside the event dir proves the path scope is the shard directory, not the
     # extension: an overbroad *.jsonl exemption would leave this one firing.
     assert _scan_committed(tmp_path / "outside", "shards/a.jsonl", line) != 0
+
+
+def test_a_fake_sk_fixture_is_allowlisted_only_by_value(tmp_path):
+    # Bug B-push-gitleaks-fixtures: tests/test_lane_launch.py and test_lane_opencode.py name
+    # the fake `sk-test-0123456789abcdef` credential to prove a real one is redacted out of
+    # harness output. The allowlist names exactly that value, so the fixture scans clean
+    # while any other `sk-` value in a test file still fires.
+    assert _scan(tmp_path, 'SECRET = "sk-test-0123456789abcdef"\n') == 0
+    variant = "sk-test-" + "0123456789abcdeX"
+    assert _scan(tmp_path, 'SECRET = "' + variant + '"\n') != 0
