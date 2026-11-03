@@ -13,9 +13,9 @@ sentence (a silent pass is the bug this exists to avoid).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,17 +65,18 @@ def path_of(repo: Path | str) -> Path:
 CONFIG_FILES = (Path(".ddflow") / "config.toml", Path(".ddflow") / "local" / "config.toml")
 
 
-def config_stamp(repo: Path | str) -> list[list[int]]:
-    """(mtime ns, size) of each config file, (-1, -1) when absent: the writer records it and the
-    reader compares, so a config edit after the snapshot was written cannot leave a stale
-    `shared` list in force. An epoch mtime cannot be confused with an absent file."""
+def config_stamp(repo: Path | str) -> list[str]:
+    """A digest of each config file's CONTENT ("absent" when it is not there): the writer records
+    it and the reader compares, so a config edit after the snapshot was written cannot leave a
+    stale `shared` list in force, whatever it did to the file's size or mtime."""
     out = []
     for rel in CONFIG_FILES:
         try:
-            st = os.stat(Path(repo) / rel)
-            out.append([st.st_mtime_ns, st.st_size])
+            out.append(
+                hashlib.sha1((Path(repo) / rel).read_bytes(), usedforsecurity=False).hexdigest()
+            )
         except OSError:
-            out.append([-1, -1])
+            out.append("absent")
     return out
 
 
@@ -109,13 +110,19 @@ def _lease(v: Any) -> dict[str, Any]:
     return out
 
 
-def _stamp(stamp: Any) -> list[list[int]]:
-    if not (
-        isinstance(stamp, list)
-        and all(isinstance(x, list) and all(type(n) is int for n in x) for x in stamp)
-    ):
+def _stamp(stamp: Any) -> list[str]:
+    if not (isinstance(stamp, list) and all(isinstance(x, str) for x in stamp)):
         raise ValueError(stamp)
     return stamp
+
+
+def _leases(table: Any, now: float) -> dict[str, dict[str, Any]]:
+    if not isinstance(table, dict):
+        raise ValueError(table)
+    out = {str(k): _lease(v) for k, v in table.items()}
+    if any(lz["renewed_at"] > now + MAX_SKEW_S for lz in out.values()):
+        raise ValueError("renewed in the future")
+    return out
 
 
 def _fields(data: dict[str, Any], now: float | None, max_age_s: int | None) -> tuple:
@@ -129,7 +136,7 @@ def _fields(data: dict[str, Any], now: float | None, max_age_s: int | None) -> t
         age,
         int(_num(data.get("generation", 0))),
         int(_num(data.get("grace_s", 0))),
-        {str(k): _lease(v) for k, v in data["leases"].items()},
+        _leases(data["leases"], time.time() if now is None else now),
         _globs(data.get("shared", [])),
         _globs(data.get("new_files", [])),
         _stamp(data.get("config_stamp")),
@@ -153,7 +160,7 @@ def read(repo: Path | str, *, now: float | None = None, max_age_s: int | None = 
         return _bad(NEWER, "was written by a newer ddflow")
     try:
         limit, age, gen, grace, leases, shared, new_files, stamp = _fields(data, now, max_age_s)
-    except (TypeError, ValueError, KeyError, OverflowError):
+    except (TypeError, ValueError, KeyError, OverflowError, AttributeError):
         return _bad(UNREADABLE, f"has malformed content ({p})")
     if stamp != config_stamp(repo):
         return _bad(STALE, "predates a change of the ddflow config (its shared globs may differ)")

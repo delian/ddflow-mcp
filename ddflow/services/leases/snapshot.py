@@ -111,10 +111,8 @@ def _sizes(log: Any) -> dict[str, int] | None:
 
 
 def _doc(
-    cur: Any, leases: dict[str, dict[str, Any]], cfg: Config, now: float, log: Any
+    cur: Any, leases: dict[str, dict[str, Any]], cfg: Config, now: float, log: Any, stamp: list[str]
 ) -> dict[str, Any]:
-    from ..enforce import hooksnap as H
-
     gen = cur.get("generation", 0) if isinstance(cur, dict) else 0
     return {
         "generation": int(gen) + 1,
@@ -126,11 +124,13 @@ def _doc(
         "new_files": list(new_file_globs(cfg)),
         "agents": _agents(leases),
         "marks": _sizes(log) or {},
-        "config_stamp": H.config_stamp(log.root),
+        "config_stamp": stamp,
     }
 
 
-def _continues(cur: Any, log: Any, cfg: Config, shard: tuple[str, int, int], now: float) -> bool:
+def _continues(
+    cur: Any, log: Any, cfg: Config, shard: tuple[str, int, int], now: float, stamp: list[str]
+) -> bool:
     """Is ``cur`` exactly the picture of the log up to the event being applied?
 
     Only then is projecting that one event enough. Otherwise an earlier update failed or never
@@ -153,7 +153,7 @@ def _continues(cur: Any, log: Any, cfg: Config, shard: tuple[str, int, int], now
             return False
     except (KeyError, TypeError, ValueError):
         return False
-    if not isinstance(marks, dict) or cur.get("config_stamp") != H.config_stamp(log.root):
+    if not isinstance(marks, dict) or cur.get("config_stamp") != stamp:
         return False
     sizes = _sizes(log)
     if sizes is None or sizes.get(name0) != after:
@@ -191,14 +191,14 @@ def apply(
 
     store = LocalStore(Path(log.root) / ".ddflow" / "local")
     try:
+        stamp = H.config_stamp(log.root)  # BEFORE the load: the globs below are of this stamp
         cfg = Config.load(log.root)
         shard = log.shard.name
         if not cfg.locks.snapshot:
-            store.remove(H.NAME)  # off: a file left from before would be an old picture
+            _discard(store, H)  # off: a file left from before would be an old picture
             return False
     except Exception:
-        with contextlib.suppress(Exception):
-            store.remove(H.NAME)
+        _discard(store, H)
         return False
 
     def step(cur: Any) -> dict[str, Any]:
@@ -206,13 +206,13 @@ def apply(
         if (
             before is not None
             and after is not None
-            and _continues(cur, log, cfg, (shard, before, after), now)
+            and _continues(cur, log, cfg, (shard, before, after), now, stamp)
         ):
             leases = {k: dict(v) for k, v in cur["leases"].items()}
             project(leases, kind, subject, data, agent)
         else:
             leases = from_log(log, cfg, now)  # includes this event: it is already appended
-        return _doc(cur, leases, cfg, now, log)
+        return _doc(cur, leases, cfg, now, log, stamp)
 
     for attempt in (0, 1):
         try:
@@ -224,9 +224,18 @@ def apply(
             store.remove(H.NAME)  # torn: rebuilt on the next pass
         except Exception:
             break
-    with contextlib.suppress(Exception):
-        store.remove(H.NAME)
+    _discard(store, H)
     return False
+
+
+def _discard(store: LocalStore, H: Any) -> None:
+    """Make the file unusable: removed, or when it cannot be removed, overwritten with a document
+    written at the epoch (stale at once), so a hook never trusts the picture it holds."""
+    try:
+        store.remove(H.NAME)
+    except Exception:
+        with contextlib.suppress(Exception):
+            store.write(H.NAME, {"written_at": 0, "leases": {}}, schema=H.SCHEMA, derived=True)
 
 
 def appended(log: Any, event: Any, before: int, after: int) -> None:

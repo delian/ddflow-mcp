@@ -82,12 +82,14 @@ def test_torn_file_reads_unreadable_and_is_replaced(repo):
 
 
 def test_stale_snapshot_is_reported_not_trusted(repo):
-    _write(repo, written_at=time.time() - 4000)
+    old = time.time() - 4000
+    lease = {"holder": "me", "globs": ["a.py"], "renewed_at": old, "ttl_s": 1800}
+    _write(repo, written_at=old, leases={"T1": lease})
     snap = H.read(repo)
     assert snap.status == H.STALE
     assert "snapshot_max_age_s" in snap.note and "ddflow_heartbeat" in snap.note
     assert H.read(repo, max_age_s=0).status == H.OK  # 0 = never stale
-    assert H.read(repo, now=time.time() - 3000).status == H.OK
+    assert H.read(repo, now=old + 1000).status == H.OK
 
 
 def test_newer_format_is_not_read(repo):
@@ -206,6 +208,8 @@ def test_malformed_content_is_unreadable_never_a_partial_picture(repo):
         {"leases": {"a": {"holder": "me", "renewed_at": 1, "ttl_s": -1}}},
         {"written_at": time.time() + 99999},
         {"config_stamp": "x"},
+        {"leases": []},
+        {"leases": {"a": {"holder": "me", "renewed_at": time.time() + 99999, "ttl_s": 0}}},
     ]
     for over in bad:
         _write(repo, **over)
@@ -236,15 +240,19 @@ def test_snapshot_off_writes_nothing(repo):
     assert Config.load(repo).locks.snapshot is False
 
 
-def test_an_epoch_mtime_config_is_not_an_absent_one(repo, tmp_path):
+def test_the_config_stamp_is_the_content_not_the_metadata(repo):
+    import os
+
     cfg = repo / ".ddflow" / "config.toml"
     cfg.parent.mkdir(exist_ok=True)
     absent = H.config_stamp(repo)
-    cfg.write_text("")
-    import os
-
+    cfg.write_text("[locks]\nshared = [1]\n")
     os.utime(cfg, ns=(0, 0))
-    assert H.config_stamp(repo) != absent
+    first = H.config_stamp(repo)
+    assert first != absent  # an epoch mtime is not an absent file
+    cfg.write_text("[locks]\nshared = [2]\n")  # same size
+    os.utime(cfg, ns=(0, 0))  # same mtime
+    assert H.config_stamp(repo) != first
 
 
 def test_a_failed_update_removes_the_file_instead_of_leaving_an_old_picture(repo, monkeypatch):
@@ -272,4 +280,5 @@ def test_a_shard_that_moved_past_the_event_forces_a_rebuild(repo):
         Config.load(repo),
         (log.shard.name, 0, size - 1),
         time.time(),
+        H.config_stamp(repo),
     )
