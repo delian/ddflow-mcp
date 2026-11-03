@@ -129,3 +129,19 @@ def test_the_mirrored_sibling_settles_on_refutation_without_the_budget_spent(rep
     assert it.gates["rubber_duck"].outcome == "passed"
     assert it.gates["critic"].outcome == "passed", "critic stays settled once its mirrored finding is answered"
     assert (it.gates["critic"].evidence or {}).get("passed_on_refutation")
+
+
+def test_the_budget_spent_triage_keeps_its_passed_on_refutation_flag(repo, tmp_path):
+    """Once the budget is spent `_triage` records the gate passed on refutation and returns
+    that flag; the settle loop must preserve it, not overwrite it False."""
+    import ddflow.api.review_settle as ST
+
+    _setup(repo, tmp_path)
+    (repo / ".ddflow" / "config.toml").write_text(
+        (repo / ".ddflow" / "config.toml").read_text() + "[review]\nmax_rounds = 1\n"
+    )
+    api.review(repo, gate=GATES, item="T1", branch="feat")
+
+    out = ST.triage(repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless")
+    assert out.exit == OK, out.reason
+    assert out.data["passed_on_refutation"] is True
