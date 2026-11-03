@@ -158,6 +158,15 @@ def test_package_added_under_existing_extra_is_checked(monkeypatch) -> None:
     assert "acme_noval: not in forbidden_modules" in _unconfined({"rag": ["acme-noval-pkg>=1.0"]})
 
 
+def test_dist_name_reads_the_pep508_name_component() -> None:
+    """``_dist_name`` reads the leading PEP 508 name, however the requirement continues: a
+    plain version, a parenthesized version, or a direct reference."""
+    assert _dist_name("rapidfuzz>=3.14.6") == "rapidfuzz"
+    assert _dist_name("rapidfuzz(>=3.14.6)") == "rapidfuzz"
+    assert _dist_name("mcp@https://example.com/mcp.whl") == "mcp"
+    assert _dist_name("sqlite-vec>=0.1.9") == "sqlite-vec"
+
+
 def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatch) -> None:
     """The loader reads `importlinter-<contract>/<module>.toml`, joins them, and refuses
     an entry filed under another module's name; a missing directory is an empty list."""
