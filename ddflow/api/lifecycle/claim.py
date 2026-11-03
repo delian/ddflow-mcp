@@ -21,6 +21,7 @@ from ...services import choices as CHO
 from ...services import claimguards as GD
 from ...services import flow as FS
 from ...services import leases as L
+from ...services import observed_globs as OG
 from ...services import pins_merge as PM
 from ...services import ports as PT
 from ...services import tree_bin as TB
@@ -367,6 +368,8 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     out.data.update(_reopen_stale_merge(log, claimed, item))
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
+    if hint := OG.learned_report(st, cfg, item, repo=repo):
+        out.data["glob_suggestion"] = hint
     if bug_globs:
         out.data["globs_from_bug"] = bug_globs
     return _with_notes(out, notes)

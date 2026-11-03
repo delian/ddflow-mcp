@@ -102,6 +102,7 @@ from ._core import (  # noqa: F401
     LeaseConfig,
     LessonsConfig,
     LogConfig,
+    LocksConfig,
     LoopsConfig,
     McpConfig,
     MemoryConfig,

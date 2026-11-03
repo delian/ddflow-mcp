@@ -1,0 +1,165 @@
+"""Declared versus written files (LK-observed-globs).
+
+What a task wrote is read by the one reader every completion check uses
+(`services.completion.changed_paths`: landed range, worktree or branch); this module only
+compares it with the lease globs and words the result. Pure comparisons are separate from the
+git read so they are tested without a repository.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+from ..core import globs
+from ..core.records.state import State
+
+#: Returned by `undeclared_report` when git cannot say what changed: the check could not
+#: run, which is neither a pass nor a block.
+UNKNOWN = "could not tell what this task changed (git could not list it): the undeclared-write check did not run"
+
+#: ddflow's own bookkeeping commits are never the item's to declare.
+_OWN = (".ddflow/**",)
+
+
+def _read(read: Callable | None) -> Callable:
+    """The one changed-files reader (`services.completion.changed_paths`), imported late:
+    the completion rule-set imports this module."""
+    if read is not None:
+        return read
+    from .completion.rules import changed_paths
+
+    return changed_paths
+
+
+def verdict_notice(state: State, cfg, item_id: str, repo: Path) -> tuple[str, bool]:
+    """(notice, whether it blocks `complete`): blocking only for a known undeclared write
+    under ``undeclared_write = block``; a check that could not run only warns."""
+    text = undeclared_report(state, cfg, item_id, repo=repo)
+    return text, bool(text) and text != UNKNOWN and cfg.locks.undeclared_write == "block"
+
+
+def split(paths: list[str], declared: list[str]) -> tuple[list[str], list[str]]:
+    """(undeclared paths, declared globs that matched no path). A path is declared when it
+    is inside one of ``declared``; ddflow's own `.ddflow/**` files are not counted."""
+    mine = [p for p in paths if not any(globs.inside(p, g) for g in _OWN)]
+    undeclared = [p for p in mine if not any(globs.inside(p, g) for g in declared)]
+    untouched = [g for g in declared if not any(globs.inside(p, g) for p in mine)]
+    return undeclared, untouched
+
+
+def directory_globs(paths: list[str]) -> list[str]:
+    """The narrowest directory globs covering ``paths`` (``a/b/c.py`` -> ``a/b/*``, a root
+    file as itself): what an agent would declare, never a repo-wide glob."""
+    out: list[str] = []
+    for p in sorted(set(paths)):
+        head, _, _ = p.rpartition("/")
+        g = f"{head}/*" if head else p
+        if g not in out:
+            out.append(g)
+    return out
+
+
+def update_call(item: str, declared: list[str], extra: list[str]) -> str:
+    """The exact call that declares ``extra`` besides ``declared``, CLI and MCP forms."""
+    joined = ",".join([*declared, *extra])
+    return (
+        f"`ddflow update {item} --globs {joined}` "
+        f"(MCP: ddflow_task action=update id={item} globs={joined})"
+    )
+
+
+def _list(items: list[str], shown: int) -> str:
+    more = f" (+{len(items) - shown} more)" if len(items) > shown else ""
+    return ", ".join(items[:shown]) + more
+
+
+def undeclared_report(
+    state: State, cfg, item_id: str, *, repo: Path, read: Callable | None = None
+) -> str:
+    """The notice naming files the task wrote outside its globs and the call that declares
+    them; "" when clean, the mode is `off`, or the item is not an open task;
+    `UNKNOWN` when git cannot say (a warning, never a blocker)."""
+    it = state.items.get(item_id)
+    if cfg.locks.undeclared_write == "off" or it is None or it.removed or it.kind != "task":
+        return ""
+    if not it.globs:
+        return ""  # nothing declared: there is no declaration to be wrong about
+    changed = _read(read)(repo, it)
+    if changed is None:
+        return UNKNOWN
+    undeclared, _ = split(changed, list(it.globs))
+    if not undeclared:
+        return ""
+    shown = cfg.locks.suggest_shown
+    return (
+        f"{len(undeclared)} file(s) written outside the declared globs: "
+        f"{_list(undeclared, shown)}. Declare them so other agents see the overlap: "
+        f"{update_call(item_id, list(it.globs), directory_globs(undeclared))}."
+    )
+
+
+def untouched_report(
+    state: State, cfg, item_id: str, *, repo: Path, read: Callable | None = None
+) -> str:
+    """Declared globs the diff never touched, offered for narrowing when the task is ready
+    to merge; "" when `suggest_globs` is off, git cannot say, or every glob was used."""
+    it = state.items.get(item_id)
+    if not cfg.locks.suggest_globs or it is None or it.removed or it.kind != "task":
+        return ""
+    changed = _read(read)(repo, it)
+    if not changed or not it.globs:
+        return ""  # unknown or nothing changed yet: narrowing is not yet knowable
+    _, untouched = split(changed, list(it.globs))
+    if not untouched:
+        return ""
+    keep = [g for g in it.globs if g not in untouched]
+    return (
+        f"declared but never written: {_list(untouched, cfg.locks.suggest_shown)}. "
+        f"Narrow the claim so others can take those files: "
+        f"{update_call(item_id, keep, [])}."
+    )
+
+
+def learned(
+    state: State, cfg, item_id: str, *, repo: Path, read: Callable | None = None
+) -> list[str]:
+    """Directory globs that finished tasks sharing a tag with ``item_id`` keep writing
+    outside their own declarations, most recent ``suggest_history`` tasks read, each
+    needed in at least ``suggest_min_items`` of them and not already declared here."""
+    it = state.items.get(item_id)
+    if not cfg.locks.suggest_globs or it is None or not it.tags or not cfg.locks.suggest_history:
+        return []
+    mine = set(it.tags)
+    past = [
+        o
+        for o in state.items.values()
+        if o.id != item_id and o.state == "done" and o.kind == "task" and mine & set(o.tags or ())
+    ]
+    past.sort(key=lambda o: getattr(o, "completed_at", "") or o.id, reverse=True)
+    counts: dict[str, int] = {}
+    for o in past[: cfg.locks.suggest_history]:
+        changed = _read(read)(repo, o)
+        if changed is None:
+            continue
+        undeclared, _ = split(changed, list(o.globs))
+        for g in directory_globs(undeclared):
+            counts[g] = counts.get(g, 0) + 1
+    chosen = [g for g, n in counts.items() if n >= cfg.locks.suggest_min_items]
+    chosen = [g for g in chosen if not any(globs.inside(g, d) for d in it.globs or ())]
+    return sorted(chosen, key=lambda g: (-counts[g], g))
+
+
+def learned_report(
+    state: State, cfg, item_id: str, *, repo: Path, read: Callable | None = None
+) -> str:
+    """The learned suggestions as one line naming the call; "" when there are none."""
+    found = learned(state, cfg, item_id, repo=repo, read=read)
+    if not found:
+        return ""
+    it = state.items[item_id]
+    return (
+        f"finished tasks with the same tags keep also writing: "
+        f"{_list(found, cfg.locks.suggest_shown)}. If this one will too: "
+        f"{update_call(item_id, list(it.globs or []), found[: cfg.locks.suggest_shown])}."
+    )

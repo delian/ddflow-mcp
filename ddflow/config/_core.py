@@ -36,6 +36,7 @@ from ..config_sections.imports import ImportConfig
 from ..config_sections.lanes import LanesConfig
 from ..config_sections.lease import LeaseConfig
 from ..config_sections.lessons import LessonsConfig
+from ..config_sections.locks import LocksConfig
 from ..config_sections.log import LogConfig
 from ..config_sections.loops import LoopsConfig
 from ..config_sections.mcp import McpConfig
@@ -145,6 +146,7 @@ class Config:
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
+    locks: LocksConfig = field(default_factory=LocksConfig)
     lanes: LanesConfig = field(default_factory=LanesConfig)
     health: HealthConfig = field(default_factory=HealthConfig)
     govern: GovernConfig = field(default_factory=GovernConfig)
