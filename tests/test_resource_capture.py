@@ -87,21 +87,14 @@ def test_each_command_gets_its_own_numbers_not_a_running_total():
     heavy = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60).resources
     assert cheap.source == "wait4"
     assert heavy.maxrss_kb >= 130 * 1024
-    # `again` must report its OWN numbers, not the earlier child's high-water mark (peak
-    # rss is a high-water mark). The `wait4` cpu sample is load-sensitive: at 48 workers a
-    # not-yet-reaped sibling can be attributed to this line once, so one ratio sample is
-    # flaky under full-suite load (B37281998f7); sleep between probes so already-done
-    # siblings are reaped before the next sample, then fail if none is clean.
-    for _ in range(3):
-        again = P.run_shell("true", timeout_s=20).resources
-        if (
-            again.source == "wait4"
-            and again.maxrss_kb < heavy.maxrss_kb
-            and again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
-        ):
-            return
-        time.sleep(0.05)
-    pytest.fail("again carried the earlier child's high-water cpu or rss mark under load")
+    # Peak rss is a high-water mark: `again` reporting the run's running total would carry
+    # the earlier child's 150 MB mark, so this alone catches the carry-over (B37281998f7).
+    # The cpu ratio the test formerly asserted is load-sensitive -- at 48 workers a
+    # not-yet-reaped sibling is attributed to one wait4 sample -- so it is dropped rather
+    # than made to pass by luck; cpu accounting is covered by the *_burns_cpu test above.
+    again = P.run_shell("true", timeout_s=20).resources
+    assert again.source == "wait4"
+    assert again.maxrss_kb < heavy.maxrss_kb
 
 
 @posix_only
