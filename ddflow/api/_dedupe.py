@@ -6,8 +6,11 @@ prompt or note -- calls ``check_add`` BEFORE it writes, and applies what comes b
 * a **refusal** (exit 3, "possible duplicate") carrying the candidates, when the text
   looks like an existing record and nobody has said what it is;
 * an **extension** -- the text goes onto the existing record as a ``record.extended``
-  and no new id is made -- when the answer is ``extends X`` / ``duplicate_of X`` and X is
-  still open and unclaimed (or the text is an exact copy of such a record);
+  and no new id is made -- when the answer is ``merge_into X`` / ``duplicate_of X`` and X
+  is still open and unclaimed (or the text is an exact copy of such a record); ``extends X``
+  extends only a kind outside ``LINK_ONLY_KINDS`` such as a bug, lesson or memory, and files
+  a new record linked to X for a kind in ``LINK_ONLY_KINDS`` (task, phase, research,
+  decision);
 * otherwise **fields** for the add event: a link to X when X is claimed, in progress or
   closed (a NEW record, so nothing is lost), and the ``dedupe`` answer, which is recorded
   for every answer including ``new``.
@@ -31,6 +34,7 @@ from ..config import Config
 from ..core import outcome as O
 from ..core import textsim
 from ..infra.store import Store, similar_records
+from ..services import bugsim
 from ..services import searchcore as SC
 from ..services import similar as sim
 from ._dedupe_extend import extend  # noqa: F401  (re-exported: DD.extend)
@@ -42,9 +46,11 @@ RELATIONS = ("new", "extends", "duplicate_of", "related")
 #: Also accepted as an answer, never offered: append to the target instead of filing a
 #: record (the old behaviour of ``extends``, now explicit -- B-extends-merges-into-open-target).
 MERGE_INTO = "merge_into"
-#: Records whose OWNER decides what is on them: ``extends`` files a new record linked to
-#: one of these instead of writing onto it.
-LINK_ONLY_KINDS = ("task", "phase", "research")
+#: Kinds ``extends`` files a new record linked to instead of writing onto it: items whose
+#: OWNER decides what is on them (task, phase, research), and decisions, which are never
+#: edited in place (D-no-deletion; B-decision-extends-mutates-old-record). ``merge_into``
+#: still appends to the rest; for a decision it is refused (see ``_point``).
+LINK_ONLY_KINDS = ("task", "phase", "research", "decision")
 #: Words listed to explain one match: enough to see why, few enough to read at a glance.
 SHARED_WORDS = 5
 
@@ -193,9 +199,9 @@ def record_state(
 
 def extendable(st, rid: str, kind: str, *, now: float | None = None, grace_s: int = 0) -> bool:
     """May text be appended to ``rid``? Only while nobody is relying on it as written: an
-    OPEN, UNCLAIMED task or phase, an unresolved bug, a lesson or decision not superseded,
-    research, a live memory. Claimed, running, done, fixed or superseded: file a new
-    record that links to it instead."""
+    OPEN, UNCLAIMED task or phase, an unresolved bug, a lesson not superseded, research, a
+    live memory. A decision is NEVER appended to (D-no-deletion). Claimed, running, done,
+    fixed, superseded or a decision: file a new record that links to it instead."""
     if kind in ("task", "phase"):
         it = st.items.get(rid)
         return bool(it and it.state == "open" and not _held(it, now, grace_s))
@@ -206,8 +212,9 @@ def extendable(st, rid: str, kind: str, *, now: float | None = None, grace_s: in
         ls = st.lessons.get(rid)
         return bool(ls and not ls.superseded_by)
     if kind == "decision":
-        dc = st.decisions.get(rid)
-        return bool(dc and not dc.superseded_by and dc.status in ("", "accepted", "proposed"))
+        # Never editable in place (D-no-deletion; B-decision-extends-mutates-old-record):
+        # no answer appends text or globs to a decision.
+        return False
     return kind in ("research", "memory")
 
 
@@ -287,6 +294,8 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
                 "item": rec.item,
             }
             found = sim.assess(matcher, record, cfg)
+            if rec.kind == "bug":
+                found = _bug_semantic(repo, cfg, st, rec, found)
             shown = (
                 rows(st, matcher, found.candidates, rec.text, grace_s=cfg.lease.grace_s)
                 if found.candidates
@@ -295,6 +304,40 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
             return found, shown, ""
     except (LookupError, OSError) as exc:
         return sim.Assessment("off"), [], f"{type(exc).__name__}: {exc}"
+
+
+def _bug_semantic(repo: Path, cfg: Config, st, rec: Record, found: sim.Assessment) -> sim.Assessment:
+    """Add the bugs the SEMANTIC matcher matches when the token matcher did not already ask.
+
+    Two differently-worded reports of one defect share no content word and escape the
+    overlap engine; the embedder (`services.embed`, the one semantic port, D-unify 2) sees
+    them. This is an ADDITION to `assess`: it never vetoes a token match and never runs
+    when the check is off. When the embedder cannot run it adds nothing and the overlap
+    answer stands, so a filing is never refused that would not have been without it.
+    """
+    if found.action in ("off", "ask"):
+        return found
+    bugs = [r for r in similar_records(st) if r["kind"] == "bug"]
+    hits, _note = bugsim.semantic_hits(repo, cfg, rec.text, bugs, floor=cfg.dedupe.show_floor)
+    if not hits:
+        return found
+    existing = {c.id for c in found.candidates}
+    added = [sim.Candidate(i, "bug", s, ("semantic",)) for i, s in hits if i not in existing]
+    if not added:
+        return found
+    # The action is the STRONGEST of the token matcher's and the semantic add's -- a token
+    # `warn` is a warning, never downgraded to `show`, and a semantic hit asks the same way
+    # one does (score at the ask threshold with enough words). `found` is not `ask`/`off`
+    # here (those return early), so only `none`/`show`/`warn` reach this point.
+    asks = found.action == "warn" or (
+        any(c.score >= cfg.dedupe.ask_threshold for c in added)
+        and found.words >= cfg.dedupe.min_words
+    )
+    if not asks:
+        return sim.Assessment("show", [*found.candidates, *added], found.words)
+    return sim.Assessment(
+        "ask" if cfg.dedupe.on_match == "ask" else "warn", [*found.candidates, *added], found.words
+    )
 
 
 def _bad_answer(st, rec: Record, answer: Answer) -> str:
@@ -433,6 +476,15 @@ def _point(
     if chosen.relation == "related":
         out.fields |= {"related": chosen.target, "dedupe": note}
         out.back_links.append((chosen.target, rec.rid))
+    elif chosen.relation == MERGE_INTO and tkind == "decision":
+        out.refusal = O.refused(
+            rec.event_kind,
+            f"cannot merge into {chosen.target}: a decision is never edited in place "
+            f"(D-no-deletion). Answer extends:{chosen.target} to file this as a new record "
+            f"linked to it.",
+            id=rec.rid,
+            candidates=out.shown,
+        )
     elif chosen.relation == MERGE_INTO and not extendable(
         st, chosen.target, tkind, grace_s=grace_s
     ):

@@ -398,7 +398,21 @@ class McpClient(Protocol):
         """Stop the server; safe to call twice."""
 
 
-class StdioClient:
+class _ChannelClient:
+    """The channel plumbing shared by the stdio clients (mcp `StdioClient`, the ACP client)."""
+
+    _channel: Channel | None
+
+    def close(self) -> None:
+        channel, self._channel = self._channel, None
+        if channel is not None:
+            channel.close()
+
+    def _send(self, line: str) -> bool:
+        return send_line(self._channel, line)
+
+
+class StdioClient(_ChannelClient):
     """The default `McpClient`, over an injected `Starter`."""
 
     def __init__(
@@ -445,19 +459,6 @@ class StdioClient:
     def call(self, name: str, arguments: dict[str, Any], timeout_s: float) -> Outcome:
         return self._ask("tools/call", {"name": name, "arguments": arguments}, timeout_s)
 
-    def close(self) -> None:
-        channel, self._channel = self._channel, None
-        if channel is not None:
-            channel.close()
-
-    def _send(self, line: str) -> bool:
-        try:
-            assert self._channel is not None
-            self._channel.send(line)
-            return True
-        except OSError:
-            return False
-
     def _ask(self, method: str, params: dict[str, Any] | None, timeout_s: float) -> Outcome:
         if self._channel is None:
             return Outcome(UNAVAILABLE, detail="not connected: call connect first")
@@ -490,9 +491,25 @@ class StdioClient:
             if msg is None:
                 echoed = echoed or _is_echo(line, frame)
                 continue
-            if "result" in msg:
-                return done(OK, result=msg["result"] if isinstance(msg["result"], dict) else {})
-            return done(ERROR, error=msg["error"] if isinstance(msg["error"], dict) else {})
+            return finish_answer(done, msg)
+
+
+def send_line(channel, line: str) -> bool:
+    """Write `line` down `channel` when it is connected; False when it is not, or the write fails."""
+    if channel is None:
+        return False
+    try:
+        channel.send(line)
+        return True
+    except OSError:
+        return False
+
+
+def finish_answer(done, msg: dict[str, Any]) -> Outcome:
+    """The `done` verdict for a parsed answer: its object `result` or `error`, or ``{}``."""
+    if "result" in msg:
+        return done(OK, result=msg["result"] if isinstance(msg["result"], dict) else {})
+    return done(ERROR, error=msg["error"] if isinstance(msg["error"], dict) else {})
 
 
 def _is_echo(line: str, frame: dict[str, Any]) -> bool:

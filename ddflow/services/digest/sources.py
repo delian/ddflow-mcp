@@ -280,6 +280,7 @@ EXEMPT_SITES: dict[str, str] = {
     "claim.force": "an immediate act by a person; nothing pends in State",
     "config.set": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "pins.regenerate": "a pending request for it is an 'approval' entry; nothing else pends in State",
+    "history.accept": "a pending request for it is an 'approval' entry; nothing else pends in State",
 }
 
 

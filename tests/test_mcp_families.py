@@ -145,6 +145,17 @@ def test_an_argument_the_action_does_not_take_is_said_with_the_action_and_its_kn
     assert "as_agent" in err and "bogus" not in err.split("Known: ")[1]
 
 
+def test_bug_found_accepts_the_evidence_the_family_schema_advertises():
+    # B-bug-found-mcp-evidence-arg-rejected: `ddflow_bug action=found` refused `evidence`,
+    # whose name and shape the family union schema documents (the argument comes from the
+    # `bug invalid` member). Parity between the schema and the handler: a reported bug is
+    # filed with the evidence that shows it, not refused as an unknown argument.
+    r = FS.route("ddflow_bug", {"action": "found", "summary": "s", "evidence": "probe"})
+    assert not isinstance(r, str)
+    assert r.tool == "ddflow_bug_found"
+    assert r.args.get("evidence") == "probe"
+
+
 def test_a_required_own_action_argument_is_listed_as_op_in_the_description(monkeypatch):
     props = dict(TOOLS["ddflow_queue"]["properties"])
     props["action"] = ("string", "add|run", True)

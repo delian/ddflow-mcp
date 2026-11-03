@@ -1,0 +1,10 @@
+id = "r-tell-dont-discover"
+title = "Tell the agent what to run: every result, refusal and error names the exact next call (MCP and CLI form); help is generated, not typed"
+tags = ["principle", "help", "remote", "no-shell"]
+scope = "project"
+priority = 90
+globs = ["ddflow/**", "integrations/**"]
+created = "2026-11-01T17:00:03.207728+00:00"
+updated = "2026-11-01T17:00:03.207736+00:00"
+
+Decision D-no-shell-principle (operator 2026-11-01): agents burn calls discovering help and options, so ddflow tells them. When you add or change code: (1) any refusal, remedy, note or error that names a command goes through the one next_actions renderer (command id, tool and action, argument shapes, cli template): never hand-written 'run ddflow ...' prose, and the arguments are shaped correctly (the pytest id form for --regression-test, the approval id after the person answered). (2) A new command ships with a head-first usage line, one example, and, when it is a flow agents get wrong, a recipe. (3) Validate every argument before spending anything single-use (an approval, a review round). (4) Counts, tool names and profile text in help are generated from the registry, never typed. (5) Measure: the discovery-overhead metrics must not rise. The standards gate and reviewers check it; the shrink-only ratchet on hard-coded command strings is the machine check.

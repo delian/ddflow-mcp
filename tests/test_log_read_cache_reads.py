@@ -69,6 +69,10 @@ def test_a_torn_tail_is_reported_once_and_read_once_it_is_completed(repo):
         fh.write(head)
     events = log.read_all()
     assert log.skipped_lines == 1, "a torn fragment must be reported, not hidden"
+    assert {e.subject for e in events} == {"T1"}, (
+        "the cached prefix survives while the torn tail is still skipped; if the fold "
+        "dropped the prefix too, this would pass silently"
+    )
     assert "TORN" not in {e.subject for e in events}
 
     tail = b',"lamport":999,"ts":"2026-09-27T00:00:00Z","agent":"a1"}\n'

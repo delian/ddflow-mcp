@@ -29,6 +29,7 @@ from ...services.gates.reviewers import run_watching_git
 from ...services.identity import agent_marker
 from .._base import _load
 from ..gate_baseline import apply as baseline_apply
+from ..gate_baseline_notice import notify as notify_auto
 from ..gate_guard import guard_record
 from ._query import _order_gate, _recorded_since, _resolve
 from ._tree import _no_tree_reason, _where_to_run, item_tree
@@ -230,10 +231,9 @@ def _superseded_run(
 def _mark_or_refuse_twin(repo, item, gate, started_on):
     """Mark, then look, under one lock: of two runs started together the first to take it
     marks and sees no twin; the second sees the first's marker and refuses.
-    Returns (marker, None) to go on, or (marker, the refusal)."""
-    with RUN.start_lock(repo, item, gate):
-        twin = RUN.live_run(repo, item, gate, started_on)
-        marker = None if twin else RUN.mark_started(repo, item, gate, started_on)
+    Returns ``(marker, None)`` to go on, or ``(None, the refusal)`` for a live twin, or
+    ``(None, None)`` when no marker could be written and no twin was seen."""
+    marker, twin = RUN.claim_started(repo, item, gate, started_on)
     if not twin:
         return marker, None
     return None, O.nothing(
@@ -462,7 +462,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
 
     _account_flakes(repo, cfg, it, gate, gdef, cwd, result, ev, rerun, rerun_failed)
     result, red = baseline_apply(
-        repo, cfg, agent, it, gate, gdef, result, ev, rerun, _fail_fast(gdef.command)
+        repo, cfg, agent, it, gate, gdef, result, ev, rerun, _fail_fast(gdef.command), cwd
     )
     reason = red or _failure_reason(gdef, result, ev)
     # Unmeasured here: `run_command_gate` measured the tree the command ran on.
@@ -478,6 +478,8 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
         gates=gates,
         forced=forced,
     )
+    if result == "partial" and ((ev.get("baseline") or {}).get("auto") or {}).get("accepted"):
+        notify_auto(repo, agent, item, gate)
     return result, ev, reason
 
 

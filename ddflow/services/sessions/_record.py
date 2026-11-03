@@ -254,17 +254,33 @@ def adopt_orphans(log: EventLog) -> int:
     return sum(1 for _k, _s, d in planned if "adopted_from" in d)
 
 
-def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = "") -> int:
+def prompt(
+    log: EventLog,
+    cfg: Config,
+    session_id: str,
+    text: str,
+    *,
+    item: str = "",
+    relayed_by: str = "",
+) -> int:
     """Record one operator prompt verbatim (after redaction). Returns redaction count.
 
     Not written again when the prompt hook already captured the same words a moment ago.
+
+    ``relayed_by`` names the coordinator that relayed the person's words to a subagent:
+    an operator answer that reaches an agent through a coordinator must be told apart in
+    the log from the operator's own words (bug B-session-prompt-no-relay-attribution).
     """
     if not cfg.session.log_prompts:
         return 0
     clean, n = redact(text, cfg)
     if _recorded_recently(log, clean, auto_only=True):
         return n
-    log.append("session.prompt", session_id, {"text": clean, "item": item, "redactions": n})
+    log.append(
+        "session.prompt",
+        session_id,
+        {"text": clean, "item": item, "relayed_by": relayed_by, "redactions": n},
+    )
     return n
 
 

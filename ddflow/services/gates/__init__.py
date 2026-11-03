@@ -35,6 +35,15 @@ treated as "no problem".
 
 from __future__ import annotations
 
+from .baseline import (  # noqa: F401
+    auto_decision,
+    cache_load,
+    cache_store,
+    only_tests_failed,
+    read_full,
+    test_files_of,
+    write_full,
+)
 from .baseline_red import bug_id, candidate_ids, on_base, reason_text  # noqa: F401
 from .defs import (  # noqa: F401
     DEFAULT_GATES,
@@ -173,9 +182,11 @@ from .runner import (  # noqa: F401
 from .running import (  # noqa: F401
     Marker,
     RunTerminated,
+    claim_started,
     clear_started,
     dead_runs,
     live_run,
+    live_run_any,
     mark_started,
     start_lock,
     terminating,

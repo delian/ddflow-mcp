@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/inbox.py:READ_CAP" = 'resource-safety bound on how much of one message a reader keeps, whatever a sender asked: it shapes a truncation note, never behaviour, so no operator needs the knob'

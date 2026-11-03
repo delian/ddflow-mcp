@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ast
 
 import pytest
-from log_cache_support import _cold_cache, _no_version_stamp, _uncached  # noqa: F401
+from log_cache_support import _cold_cache, _no_version_stamp, _pkg_py_files, _uncached  # noqa: F401
 
 from ddflow.config import Config, LogConfig
 from ddflow.infra.log import EventLog, clear_parse_cache
@@ -99,14 +99,24 @@ def test_the_config_knob_is_honoured_by_the_real_entry_points(repo):
         server._last_footer_at = 0.0
         M._obligation_footer(server)
 
-    for label, call in (
+    # Both knobs, and the SAME real entry points for each. The =false direction passes
+    # trivially when a call site hard-codes LogConfig(reuse_parsed=False), and a =true
+    # check that hand-picks `reporting.loops` leaves every other entry point untested — so
+    # only this loop sees a site that drops the =true knob (rubber_duck qwen3.8-flash
+    # #2/#6: the added block sat outside the loop and hard-coded reporting.loops).
+    entry_points = (
         ("api.loops", lambda: reporting.loops(repo)),
         ("api.progress", lambda: reporting.progress(repo)),
         ("mcp obligation footer", _footer),
-    ):
-        clear_parse_cache()
-        call()
-        assert not L._PARSE_CACHE, f"{label} ignored [log] reuse_parsed = false"
+    )
+    for setting, want_cache in (("false", False), ("true", True)):
+        cfgpath.write_text(f"[log]\nreuse_parsed = {setting}\n")
+        for label, call in entry_points:
+            clear_parse_cache()
+            call()
+            assert bool(L._PARSE_CACHE) is want_cache, (
+                f"{label} ignored [log] reuse_parsed = {setting}"
+            )
 
 
 def event_log_calls_without_config(src: str) -> list[int]:
@@ -133,7 +143,14 @@ def event_log_calls_without_config(src: str) -> list[int]:
             continue
         if called != "EventLog":
             continue
-        if any(k.arg == "log_cfg" for k in node.keywords):
+        # `log_cfg=None` falls back to `LogConfig()` exactly like omitting it, so it drops
+        # the `[log]` knobs too. `EventLog.__init__` uses `log_cfg or LogConfig()`, so ANY
+        # falsy literal keyed `log_cfg` is an offender, not a pass.
+        if any(
+            k.arg == "log_cfg"
+            and not (isinstance(k.value, ast.Constant) and not k.value.value)
+            for k in node.keywords
+        ):
             continue
         out.append(node.lineno)
     return out
@@ -149,11 +166,27 @@ def event_log_calls_without_config(src: str) -> list[int]:
         ("EventLog(repo, log_cfg=cfg.log)", False),
         ("L.EventLog(repo, log_cfg=cfg.log)", False),
         ('EventLog(repo, "a1", log_cfg=LogConfig(reuse_parsed=False))', False),
+        # `log_cfg=None` falls back to LogConfig() like omitting it, so it drops the knobs.
+        ("EventLog(repo, log_cfg=None)", True),
+        ("L.EventLog(repo, log_cfg=None)", True),
         ("SomethingElse(repo)", False),
     ],
 )
 def test_the_call_site_detector_sees_both_call_forms(src, offends):
     assert bool(event_log_calls_without_config(src)) is offends, src
+
+
+def test_the_pycache_skip_is_by_component_not_substring(tmp_path):
+    """The whole-path `"__pycache__" in str(f)` skip once skipped every file when the
+    checkout itself lived under a directory whose name contains `__pycache__`; the ratchet
+    then passed on nothing. The skip must be a COMPONENT of the file's path inside the
+    package, not a substring of the checkout path."""
+    pkg = tmp_path / "fakecheckout__pycache__dir" / "ddflow"
+    pkg.mkdir(parents=True)
+    (pkg / "mod.py").write_text("EventLog(repo)", encoding="utf-8")
+    assert (pkg / "mod.py") in _pkg_py_files(pkg), (
+        "an `__pycache__` substring in an ancestor skipped the whole package"
+    )
 
 
 def test_every_event_log_call_site_passes_the_log_config():
@@ -169,9 +202,7 @@ def test_every_event_log_call_site_passes_the_log_config():
 
     pkg = _p.Path(__file__).resolve().parents[1] / "ddflow"
     offenders = []
-    for f in sorted(pkg.rglob("*.py")):
-        if "__pycache__" in str(f):
-            continue
+    for f in _pkg_py_files(pkg):
         for line in event_log_calls_without_config(f.read_text("utf-8")):
             where = f"{f.relative_to(pkg.parent)}:{line}"
             if where not in allowed:

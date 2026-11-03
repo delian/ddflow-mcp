@@ -20,7 +20,7 @@ from .._base import _load
 from ..gates import item_tree
 from ..knowledge.regression import _unresolved_tests
 from ..review_finding_ref import resolve as resolve_finding
-from .findings import _chunk_numbers, _finding_listing
+from .findings import _chunk_numbers, _finding_listing, _mirror_sibling_gates
 from .records import _prior_evidence
 
 _NODE = re.compile(r"[\w./-]+\.py::\S+")
@@ -191,15 +191,25 @@ def triage(
             "location": f.get("location", ""),
         },
     )
+    mirrored = _mirror_sibling_gates(
+        log,
+        it,
+        gate=gate,
+        digest=f["digest"],
+        verdict=verdict,
+        probe=probe.strip(),
+        severity=f.get("severity", ""),
+        title=f.get("title", ""),
+        location=f.get("location", ""),
+    )
     log, cfg, st = _load(repo, agent)
     counts = GD.triage_counts(st.items[item], gate) or {}
     text = (
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{GD.triage_line(counts)}"
     )
-    settled = _settle_after_cap(
-        log, cfg, st.items[item], gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
-    )
+    extra, this_refuted = _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored)
+    text = f"{text}\n{extra}" if extra else text
     return O.ok(
         "review.triage",
         id=item,
@@ -207,8 +217,9 @@ def triage(
         finding=finding,
         verdict=verdict,
         counts=counts,
-        text=f"{text}\n{settled}" if settled else text,
-        passed_on_refutation="ON REFUTATION" in settled,
+        mirrored=mirrored,
+        text=text,
+        passed_on_refutation=this_refuted,
     )
 
 
@@ -330,6 +341,34 @@ def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
         if refuted
         else {"findings_fixed": {"confirmed": counts["confirmed"], **rounds}}
     )
+
+
+def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str, bool]:
+    """The lines to append to a triage's text, and whether THIS gate settled ON REFUTATION
+    (scoped to ``gate`` alone, whatever a sibling's mirrored settle says): a note naming the
+    sibling gate(s) the mirror answered, this gate's settle-after-cap, then each mirrored
+    sibling gate's own settle (bug B-combined-review-findings-triaged-twice)."""
+    parts: list[str] = []
+    if mirrored:
+        parts.append(f"(also recorded for {', '.join(mirrored)}: the same finding)")
+    it = st.items[item]
+    settled = _settle_after_cap(
+        log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
+    )
+    if settled:
+        parts.append(settled)
+    for g2 in mirrored:
+        settled2 = _settle_after_cap(
+            log,
+            cfg,
+            it,
+            g2,
+            GD.triage_counts(it, g2) or {},
+            stale=reviewed_other_tree(repo, cfg, st, item, g2),
+        )
+        if settled2:
+            parts.append(settled2)
+    return "\n".join(parts), "ON REFUTATION" in settled
 
 
 def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:

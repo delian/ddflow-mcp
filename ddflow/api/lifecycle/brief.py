@@ -19,6 +19,7 @@ from ...infra.store import Store
 from ...services import choices as CHO
 from ...services import cleanup as CL
 from ...services import gates as G
+from ...services import lanerelease as LR
 from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import searchcore as SC
@@ -58,6 +59,12 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
         "Claim when you are ready to edit; do not hold file globs while only gates, "
         "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
     )
+
+
+def _queue_block(repo: Path, st, cfg) -> str:
+    """Entries waiting in the merge queue with nobody integrating, "" when all is well."""
+    warn = LR.warning(repo, cfg, st)
+    return f"\n\n## Merge queue\n\n{warn}" if warn else ""
 
 
 def _waits_block(st, cfg) -> str:
@@ -354,6 +361,7 @@ def brief(
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
     text += _waits_block(st, cfg)
+    text += _queue_block(repo, st, cfg)
     text += _progress_block(log, cfg, st, held_ids)
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen

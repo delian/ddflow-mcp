@@ -16,6 +16,7 @@ from ...api import surf_reporting as R
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ...views.progress import status_tasks_note
 from ..context import FAIL, OK, REFUSED, Ctx
+from ..declared.setup import doctor_history_kwargs
 from ..render import emit_json
 from ..startcost_texts import start_texts
 from ..vocabulary import sources
@@ -452,10 +453,17 @@ def cmd_doctor(a, c: Ctx) -> int:
         parser=parser,
         tools=tools,
         start_texts=start_texts,
-        accept_lost_events=bool(getattr(a, "accept_lost_events", False)),
+        **doctor_history_kwargs(a),
     )
     if c.json:
-        emit_json(out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order")))
+        body = out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
+        if out.exit == REFUSED:
+            # The agent route needs the refusal (its approval id) from the JSON, not stderr.
+            body = {**body, "reason": out.reason}
+        emit_json(body)
+        return out.exit
+    if out.exit == REFUSED:
+        print(out.reason, file=sys.stderr)
         return out.exit
     print(out.data["text"])
     return out.exit

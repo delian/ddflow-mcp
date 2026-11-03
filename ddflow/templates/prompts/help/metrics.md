@@ -19,6 +19,12 @@ records), so there is nothing to record and nothing to drift. It writes no event
                                      (size = changed lines, bounds `[metrics] stage_size_small/large`).
                                      Claim refusals and human wait are listed as not measured: ddflow
                                      records no event for them yet (P-observe.telemetry), never 0.
+    ddflow metrics locks             what the leases cost: hold split (claim to first gate, gates,
+                                     reviews, last review to release, after merge), claim waits and
+                                     false serialization, declared versus written files, merge-tree
+                                     conflict and red-main rates; says when a falsifier
+                                     (`[metrics] lock_falsifier_*_pct`) tripped and the call that
+                                     switches back to strict locking (`lock_revert_key/value`).
 
 A figure that rests on fewer than `[metrics] min_samples` samples is `n/a`, never 0, and a
 view with no figure at all exits 2 ("not enough data"). The forecast is an ESTIMATE of the
@@ -28,5 +34,5 @@ durations of completed items of its kind, with unlimited agents and no rework.
 Other services add metrics without editing this one: `services.metrics.register(name, fn)`
 (rows with `metric`, `group`, `n`, `value`) and `register_dimension(name, fn)` for a new
 `--group-by`. Over MCP it is `ddflow_metrics` with `view` = summary, forecast, retro, skips,
-lanes or stages. The `[metrics]` knobs set the minimum sample, the forecast draws, seed and percentiles,
+lanes, stages or locks. The `[metrics]` knobs set the minimum sample, the forecast draws, seed and percentiles,
 and the grid.

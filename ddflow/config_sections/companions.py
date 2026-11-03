@@ -18,3 +18,11 @@ class CompanionsConfig:
         300,
         doc="How long a companion detection result stays good, in seconds. Each probe shells out and an npx-based one takes seconds on a cold cache, so a session-start hook that listed companions paid that every time. A NEGATIVE result is cached like a positive one; an INCONCLUSIVE one never is, because 'could not tell' is a transient fact and caching it would make a blip stick for the whole window. 0 disables the cache.",
     )
+    tool_probe_timeout_s: float = knob(
+        20.0,
+        doc="How long an external tool's version probe (roborev, gitleaks, pre-commit, ...) may take, in seconds, through the ExternalTool port. A probe that does not answer in time is 'could not tell', never 'absent' and never a pass.",
+    )
+    tool_run_timeout_s: float = knob(
+        300.0,
+        doc="How long an external tool's run (a scan, a review, a hook run) may take, in seconds, through the ExternalTool port. A run that does not finish in time is unavailable, never a pass.",
+    )
