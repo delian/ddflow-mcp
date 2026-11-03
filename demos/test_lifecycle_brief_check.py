@@ -70,6 +70,23 @@ def test_brief_mentioning_d10_does_not_stand_in_for_d1(tmp_path):
         )
 
 
+def test_brief_mentioning_related_id_d1_does_not_stand_in_for_d1(tmp_path):
+    wt_root = tmp_path / "worktrees"
+    wt_root.mkdir()
+    wt = wt_root / "P1.T1"
+    wt.mkdir()
+    # `related_id="D1"` mentions D1 in a different attribute but is not the D1
+    # record: only the standalone `id="D1"` attribute counts.
+    client = _MoneyBriefClient(
+        '<ddflow-record kind="decision" id="D2" related_id="D1">', wt
+    )
+    sc = _Scenario()
+    with pytest.raises(_FailingCheck):
+        lifecycle_support.work(
+            sc, client, tmp_path, wt_root, "P1.T1", {"ledger/core/money.py": "x = 1"}
+        )
+
+
 def test_brief_broadcasting_d1_to_an_ungoverned_file_fails(tmp_path):
     wt_root = tmp_path / "worktrees"
     wt_root.mkdir()
