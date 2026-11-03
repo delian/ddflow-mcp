@@ -135,3 +135,9 @@ def test_no_narrowing_is_offered_when_every_glob_is_untouched():
     assert (
         OG.untouched_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["src/m.py"]})) == ""
     )
+
+
+def test_a_task_with_no_declaration_has_every_write_reported():
+    st = _state(_task("T", []))
+    text = OG.undeclared_report(st, Config(), "T", repo=REPO, read=_reader({"T": ["src/a.py"]}))
+    assert "src/a.py" in text and "ddflow update T --globs 'src/*'" in text

@@ -94,8 +94,6 @@ def undeclared_report(
     it = state.items.get(item_id)
     if cfg.locks.undeclared_write == "off" or it is None or it.removed or it.kind != "task":
         return ""
-    if not it.globs:
-        return ""  # nothing declared: there is no declaration to be wrong about
     changed = _read(read)(repo, it)
     if changed is None:
         return unknown(item_id)
