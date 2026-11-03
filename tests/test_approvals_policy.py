@@ -335,6 +335,33 @@ def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_ask
     assert after.ask_id != first.ask_id  # a NEW, still-unanswered ask, not the opening one
 
 
+def test_a_later_standing_fire_reopens_a_window_the_opening_fire_has_lapsed(
+    proj,
+    monkeypatch,
+):
+    """B06c0d7b617: the window anchors at the LATEST in-scope standing fire, not the first. A
+    second standing fire still within the window re-anchors it, so once the OPENING fire is past
+    `standing_window_s` the window is again open (and locked at the second fire) -- the old
+    ``min`` anchor would have left it permanently closed."""
+    from datetime import timedelta
+
+    frozen = _frozen_clock(monkeypatch)
+    log = EventLog(proj, "bot")
+    _only_unavailable_gate(proj, "unavailable")
+    canon = Canon(verb="complete.force", agent="bot", item="T1", target="unit_tests", state="s")
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99, standing_window_s=120)
+    first = C.operator_gate(log, cfg, canon)
+    assert first.ok  # the opening fire opens the window, anchored now
+    frozen[0] = frozen[0] + timedelta(seconds=60)  # still within standing_window_s
+    second = C.operator_gate(log, cfg, canon)
+    assert second.ok  # a later fire re-anchors the window (max anchored), never locked at the first
+    # Past standing_window_s of the OPENING fire, but within it of the second: the window is
+    # open at the latest fire (so this fires) and would have lapsed at the first (min would fail).
+    frozen[0] = frozen[0] + timedelta(seconds=cfg.approvals.standing_window_s - 30)
+    got = C.operator_gate(log, cfg, canon)
+    assert got.ok and got.stamp["via"] == "policy"
+
+
 def test_standing_verbs_scopes_what_the_window_covers(proj, monkeypatch):
     _frozen_clock(monkeypatch)
     log = EventLog(proj, "bot")
