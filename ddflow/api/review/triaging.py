@@ -208,7 +208,9 @@ def triage(
         f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
         f"{GD.triage_line(counts)}"
     )
-    extra = _settle_recorded(log, cfg, st, repo, item, gate, counts, mirrored, agent)
+    extra, this_refuted = _settle_chain(
+        log, cfg, st, repo, item, gate, counts, mirrored
+    )
     text = f"{text}\n{extra}" if extra else text
     return O.ok(
         "review.triage",
@@ -219,7 +221,7 @@ def triage(
         counts=counts,
         mirrored=mirrored,
         text=text,
-        passed_on_refutation="ON REFUTATION" in text,
+        passed_on_refutation=this_refuted,
     )
 
 
@@ -343,19 +345,20 @@ def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
     )
 
 
-def _settle_recorded(log, cfg, st, repo, item, gate, counts, mirrored, agent) -> str:
-    """The lines to append to a triage's text: a note naming the sibling gate(s) the mirror
-    answered, then this gate's settle-after-cap, then any sibling gate the mirror answered
-    whose budget is spent (bug B-combined-review-findings-triaged-twice and its review)."""
-    lines: list[str] = []
+def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str, bool]:
+    """The lines to append to a triage's text, and whether THIS gate settled ON REFUTATION
+    (scoped to ``gate`` alone, whatever a sibling's mirrored settle says): a note naming the
+    sibling gate(s) the mirror answered, this gate's settle-after-cap, then each mirrored
+    sibling gate's own settle (bug B-combined-review-findings-triaged-twice)."""
+    parts: list[str] = []
     if mirrored:
-        lines.append(f"(also recorded for {', '.join(mirrored)}: the same finding)")
+        parts.append(f"(also recorded for {', '.join(mirrored)}: the same finding)")
     it = st.items[item]
     settled = _settle_after_cap(
         log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
     )
     if settled:
-        lines.append(settled)
+        parts.append(settled)
     for g2 in mirrored:
         settled2 = _settle_after_cap(
             log,
@@ -366,8 +369,8 @@ def _settle_recorded(log, cfg, st, repo, item, gate, counts, mirrored, agent) ->
             stale=reviewed_other_tree(repo, cfg, st, item, g2),
         )
         if settled2:
-            lines.append(settled2)
-    return "\n".join(lines)
+            parts.append(settled2)
+    return "\n".join(parts), "ON REFUTATION" in settled
 
 
 def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
