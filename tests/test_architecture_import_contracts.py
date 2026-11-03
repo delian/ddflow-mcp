@@ -6,6 +6,7 @@ extra is confined to one adapter. Helpers: architecture_guards_support.py.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -123,3 +124,20 @@ def test_a_split_allowlist_joins_one_file_per_source_module(tmp_path, monkeypatc
     (directory / "ddflow.b.toml").write_text('ignore_imports = ["ddflow.c -> fcntl"]\n')
     with pytest.raises(AssertionError, match="other modules"):
         _allowlist("fsio-home")
+
+
+def test_graph_internal_names_every_contract() -> None:
+    """``graph-internal.md``'s Import-linter row names exactly the ``.importlinter``
+    contracts in ``CONTRACTS`` -- no missing name, no extra, and a matching count."""
+    text = (ROOT / "docs/ddflow/research/graph-internal.md").read_text("utf-8")
+    row = next(line for line in text.splitlines() if "Import-linter contracts" in line)
+    match = re.search(r"\((\d+) contracts: ([^)]+)\)", row)
+    assert match is not None, f"Import-linter row has no '(N contracts: ...)' list: {row!r}"
+    count, names = int(match.group(1)), match.group(2)
+    listed = [name.strip() for name in names.split(",") if name.strip()]
+    assert count == len(listed) == len(set(listed)), (
+        f"Import-linter row: {count} contracts; listed {listed}"
+    )
+    assert set(listed) == set(CONTRACTS), (
+        f"Import-linter row: {count} contracts {sorted(listed)}; CONTRACTS is {sorted(CONTRACTS)}"
+    )
