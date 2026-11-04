@@ -258,6 +258,20 @@ def _race(
                     for other in range(hedge):
                         if other != c:
                             tokens[(i, other)].cancel()
+                elif _retryable(err):
+                    # A chunk lost to its OWN size -- out of tokens, or no answer within the
+                    # bound -- is deterministic: a hedge copy is the SAME chunk with the SAME
+                    # budget and timeout, so it must fail identically. Cancel its twins instead
+                    # of running them: the queued one would otherwise start only after this one
+                    # timed out and spend the SAME timeout_s again, so a lost chunk would wait
+                    # hedge x timeout_s while the tick claimed "cut at timeout_s"
+                    # (B-review-chunk-timeout-not-enforced: chunks were still waiting at 3600s
+                    # on a 1800s timeout). `_retry_truncated` then halves it, which is the
+                    # sanctioned recovery, not an identical re-request.
+                    settled[i] = first_failure.get(i, got)
+                    for other in range(hedge):
+                        if other != c:
+                            tokens[(i, other)].cancel()
                 elif left[i] == 0:
                     settled[i] = first_failure.get(i, got)
                 else:
