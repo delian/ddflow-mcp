@@ -24,7 +24,7 @@ from ddflow.config import Config
 from ddflow.core import admission
 from ddflow.core import schedule as S
 from ddflow.core.model import fold
-from ddflow.core.schedule import conflicts, plan
+from ddflow.core.schedule import _filters, conflicts, plan
 
 GOLDEN = Path(__file__).parent / "golden" / "plan_pipeline.json"
 
@@ -113,9 +113,9 @@ def test_a_registered_filter_and_key_take_part_in_the_plan(log, cfg, monkeypatch
     """A new rule is a registration, not an edit of plan(): this one passes over T2 with
     its own reason, and this key offers the highest id first."""
     _scenario(log)
-    monkeypatch.setattr(S, "FILTERS", dict(S.FILTERS))
-    monkeypatch.setattr(S, "KEYS", dict(S.KEYS))
-    monkeypatch.setattr(S, "ORDER", list(S.ORDER))
+    monkeypatch.setattr(_filters, "FILTERS", dict(_filters.FILTERS))
+    monkeypatch.setattr(_filters, "KEYS", dict(_filters.KEYS))
+    monkeypatch.setattr(_filters, "ORDER", list(_filters.ORDER))
     S.register_filter(
         "no_t2",
         lambda ctx, it: S.Blocked(it.id, "state", "test says no") if it.id == "T2" else None,
@@ -124,7 +124,7 @@ def test_a_registered_filter_and_key_take_part_in_the_plan(log, cfg, monkeypatch
     p = plan(fold(log.read_all()), cfg, agent="me")
     assert any(b.item == "T2" and b.detail == "test says no" for b in p.blocked)
     assert "T2" not in [i.id for i in p.ready]
-    assert S.ORDER == ["bugs_first", "late_first", "priority", "id"]
+    assert _filters.ORDER == ["bugs_first", "late_first", "priority", "id"]
 
 
 def test_glob_conflict_live_skips_own_item_holder_and_other_lines(log, cfg):
