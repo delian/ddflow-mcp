@@ -45,6 +45,11 @@ class HealthConfig:
         doc="A lane whose lease keeps being renewed but which has shown no progress for this many seconds is IDLE (earlier than STALLED, which is stall_s): the correction is a nudge, nothing is taken. 0 turns the check off.",
         check=int_at_least(0),
     )
+    check_budget_s: int = knob(
+        60,
+        doc="`ddflow doctor` times its potentially-expensive checks (the log read, the repairs context, planning and the progress sweep) and reports any single one that takes longer than this many seconds, so a slow check is visible and diagnosed instead of the whole run silently waiting (FOC-doctor-slow). The per-check timings are recorded on the outcome either way. 0 turns the report off.",
+        check=int_at_least(0),
+    )
     reply_s: int = knob(
         600,
         doc="How long a nudge or stop request to a lane may go unanswered (no progress, no release) before the lane is UNRESPONSIVE, which is what lets the watchdog park it and break its lease. 0 turns the check off and the park-and-break follows the stop request at once.",
