@@ -291,19 +291,27 @@ class _SkewedClock:
     """The wait module's clock, ahead of the real one: ``time()`` is real time plus a skew
     that jumps by ``jump`` seconds at the waiter's first sleep. Time passing is driven by
     the test, not by how long the machine takes (B06a0a99c0e: a 1 s TTL, and the waiter
-    started late under load, saw the lease already gone and never waited)."""
+    started late under load, saw the lease already gone and never waited).
+
+    ``monotonic()`` is a per-instance counter advanced by ``sleep``, not the real clock:
+    the wait loop bounds its deadline and its re-check cadence by ``monotonic()``, and a
+    real monotonic makes the deadline a race with a loaded machine (a full suite run has
+    stalled a poll past the deadline before the first re-check, returning "still waiting"
+    with no wake: B-test-wait-expired-lease-flaky-under-load)."""
 
     def __init__(self, jump: float) -> None:
         self.skew, self.jump = 0.0, jump
+        self._monotonic = 0.0
 
     def time(self) -> float:
         return time.time() + self.skew
 
     def monotonic(self) -> float:
-        return time.monotonic()
+        return self._monotonic
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)
+        self._monotonic += seconds
         self.skew = self.jump
 
 
