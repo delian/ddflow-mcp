@@ -178,7 +178,7 @@ def test_the_knob_is_registered_and_defaults_to_warn(repo):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config")
     assert code == 0, err
-    line = next(l for l in out.splitlines() if "merge.require_gates" in l)
+    line = next(ln for ln in out.splitlines() if "merge.require_gates" in ln)
     assert "warn" in line
 
 

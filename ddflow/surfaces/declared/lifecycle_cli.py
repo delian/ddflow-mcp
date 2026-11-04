@@ -519,7 +519,16 @@ MERGE_PAYLOAD = (
 )
 
 #: What a landing flag means nothing for once the item is only being enqueued.
-_NOT_WITH_QUEUE = ("message", "keep", "allow_dirty", "allow_empty", "branch", "model", "force", "approval")
+_NOT_WITH_QUEUE = (
+    "message",
+    "keep",
+    "allow_dirty",
+    "allow_empty",
+    "branch",
+    "model",
+    "force",
+    "approval",
+)
 
 
 def merge_call(repo, a, agent, called_from=None, shell_cwd=None, on_progress=None):
@@ -599,7 +608,9 @@ def merge_body(out, a) -> Any:
     if "queued" in out.data:
         return out.body(MERGE_PAYLOAD)
     local = (
-        () if out.data.get("pr") else tuple(k for k in ("export_refresh", "post_merge_check") if k in out.data)
+        ()
+        if out.data.get("pr")
+        else tuple(k for k in ("export_refresh", "post_merge_check") if k in out.data)
     )
     return out.body(MERGE_PAYLOAD + local)
 
