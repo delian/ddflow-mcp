@@ -36,6 +36,8 @@ COMMANDS: dict[str, tuple[str, str, tuple[str, str] | None, str]] = {
     "status": ("ddflow status", "ddflow_status", ("--by-tag KEY", "by_tag=KEY"), ""),
 }
 #: The board lists `_cut_board` cuts itself.
+#: The shortest a long string is clipped to when one row alone passes the cap.
+MIN_CLIP = 80
 _BOARD_KEYS = ("phases", "unphased", "critical_path")
 #: Lists whose NEWEST rows are the ones a reader wants (kept from the end).
 TAIL_KEYS = frozenset({"completed_tasks"})
@@ -140,9 +142,15 @@ def footer(
     """The one-line footer naming the exact next calls."""
     _cli, _tool, narrow, paged = COMMANDS[command]
     parts: list[str] = []
-    lists = {k: v for k, v in info.items() if k not in ("next_cursor", "task_rows_shown")}
+    lists = {
+        k: v
+        for k, v in info.items()
+        if k not in ("next_cursor", "task_rows_shown", "clipped_strings")
+    }
     if lists:
         parts.append("lists cut: " + ", ".join(f"{k} {v} total" for k, v in sorted(lists.items())))
+    if info.get("clipped_strings"):
+        parts.append(f"long values cut to {info['clipped_strings']} characters")
     if cut_chars:
         parts.append(f"{cut_chars} more character(s) not shown")
     msg = "; ".join(parts) or "output cut"
@@ -193,9 +201,39 @@ def _fit(
         work = _copy_data(original)
         info = _cut_lists(command, work, limit, start)
         size = _size({k: v for k, v in work.items() if k != "text"})
-        if not budget or limit <= 1 or size <= budget:
+        if not budget or size <= budget:
             return work, limit, info
+        if limit <= 1:
+            return _clip_rows(work, info, budget), limit, info
         limit = max(1, limit // 2)
+
+
+def _clip_strings(value: Any, n: int) -> Any:
+    """``value`` with every string longer than ``n`` characters cut (a marker ends it)."""
+    if isinstance(value, str):
+        return value if len(value) <= n else value[:n] + " [...]"
+    if isinstance(value, list):
+        return [_clip_strings(v, n) for v in value]
+    if isinstance(value, dict):
+        return {k: _clip_strings(v, n) for k, v in value.items()}
+    return value
+
+
+def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[str, Any]:
+    """One row (or scalar) that alone passes ``budget``: long strings in the lists are cut,
+    halving, down to 80 characters. Bounded: at most seven halvings."""
+    n = max(MIN_CLIP, budget)
+    for _ in range(8):
+        n = max(MIN_CLIP, n // 2)
+        clipped = {
+            k: (_clip_strings(v, n) if isinstance(v, list) and not k.startswith("_") else v)
+            for k, v in work.items()
+        }
+        if _size({k: v for k, v in clipped.items() if k != "text"}) <= budget or n == MIN_CLIP:
+            break
+    if clipped != work:
+        info["clipped_strings"] = n
+    return clipped
 
 
 def _cut_text(text: Any, budget: int) -> tuple[Any, int]:
@@ -262,10 +300,13 @@ def _annotate(
     work["truncated"] = {
         **old,
         "lists": {
-            k: v for k, v in info.items() if k != "next_cursor" and not k.startswith("_render.")
+            k: v
+            for k, v in info.items()
+            if k not in ("next_cursor", "clipped_strings") and not k.startswith("_render.")
         },
         "shown": limit,
         "chars_cut": cut_chars,
+        **({"clipped_to": info["clipped_strings"]} if "clipped_strings" in info else {}),
     }
     if not full_refused:
         work["truncated"]["all"] = (
@@ -297,10 +338,14 @@ def status_args(repo: Any, a: Any) -> dict[str, Any]:
     return {"full": True}
 
 
-def cut_text(repo: Any, text: str, command: str, a: Any, *, cfg: Any = None) -> str:
-    """A prose answer built by the CLI itself (`status`), cut as `apply` cuts a `text`."""
+def cut_text(
+    repo: Any, text: str, command: str, a: Any, *, cfg: Any = None, footer: str = ""
+) -> str:
+    """A prose answer built by the CLI itself (`status`), cut as `apply` cuts a `text`;
+    ``footer`` (the row cut's, from `footer_of`) is appended when the text itself fits."""
     out = apply(repo, Outcome(command, {"text": text}), command, cfg=cfg, **_full_cursor(a))
-    return out.data["text"]
+    cut = out.data["text"]
+    return f"{cut}\n\n{footer}" if footer and cut == text else cut
 
 
 def _full_cursor(a: Any) -> dict[str, Any]:

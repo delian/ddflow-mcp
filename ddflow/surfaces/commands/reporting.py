@@ -229,7 +229,7 @@ def cmd_status(a, c: Ctx) -> int:
     d = out.data
     r = d["_render"]
     lines = _status_body(d, r)
-    print(OC.cut_text(c.repo, "\n".join(lines), "status", a))
+    print(OC.cut_text(c.repo, "\n".join(lines), "status", a, footer=OC.footer_of(out)))
     return out.exit
 
 

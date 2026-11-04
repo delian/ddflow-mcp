@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from ...core.defaults import DEFAULT_RENDER_DIR
 from ...views.output_caps import cut_text as _cut_text
+from ...views.output_caps import footer_of as _footer_of
 from ...views.output_caps import from_args as _cap
 from ...views.output_caps import status_args as _status_args
 from ..argtypes import _positive_int
@@ -40,7 +41,7 @@ def _status_handler(a, c):
     d = out.data
     r = d["_render"]
     lines = _status_body(d, r, by_tag_lines=tuple(r.get("by_tag_lines") or ()))
-    print(_cut_text(c.repo, "\n".join(lines), "status", a))
+    print(_cut_text(c.repo, "\n".join(lines), "status", a, footer=_footer_of(out)))
     return out.exit
 
 

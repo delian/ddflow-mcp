@@ -115,6 +115,13 @@ def test_recover_is_capped_by_default_and_full_is_off_by_default(repo):
     assert FULL.default is False
 
 
+def test_one_oversized_row_is_clipped_so_the_cap_holds():
+    out = O.ok("doctor", findings=[{"detail": "x" * 100_000}])
+    out = OC.apply(None, out, "doctor", cfg=_cfg(max_chars=1000, max_rows=10))
+    assert len(json.dumps(out.data["findings"])) < 1500
+    assert out.data["truncated"]["clipped_to"] <= 500 and "long values cut" in out.data["_footer"]
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))
