@@ -17,7 +17,13 @@ SAMPLE = 'name = "x"\nn = 3\nflag = true\nitems = [1, 2]\n\n[a]\nk = "v"\n\n[a.b
 def toml_cases(io) -> None:
     assert isinstance(io, TomlIo)
     data = io.loads(SAMPLE)
-    assert data == {"name": "x", "n": 3, "flag": True, "items": [1, 2], "a": {"k": "v", "b": {"z": 1}}}
+    assert data == {
+        "name": "x",
+        "n": 3,
+        "flag": True,
+        "items": [1, 2],
+        "a": {"k": "v", "b": {"z": 1}},
+    }
     assert io.loads("") == {}
     for bad in ("not toml", "a = ", "a = 1\na = 2"):
         with pytest.raises(TomlError):
@@ -56,7 +62,9 @@ def test_the_fake_reads_its_files_and_misses_like_a_file():
 
 def test_the_error_is_a_decode_error_that_prints_and_carries_its_attributes():
     err = TomlError("bad")
-    assert "TOMLDecodeError" in [c.__name__ for c in type(err).__mro__]  # callers' except still works
+    assert "TOMLDecodeError" in [
+        c.__name__ for c in type(err).__mro__
+    ]  # callers' except still works
     assert isinstance(err, ValueError) and str(err) == "bad"
     assert (err.msg, err.lineno, err.colno) == ("bad", 1, 1)
     assert err.args == ("bad", "", 0)
@@ -95,7 +103,11 @@ def test_the_error_survives_pickle_with_its_position():
         TomlLibIo().loads("a = 1\nb = ]\n")
     back = pickle.loads(pickle.dumps(caught.value))
     assert (str(back), back.lineno, back.colno) == (str(caught.value), 2, caught.value.colno)
-    assert (back.args, back.doc, back.pos) == (caught.value.args, caught.value.doc, caught.value.pos)
+    assert (back.args, back.doc, back.pos) == (
+        caught.value.args,
+        caught.value.doc,
+        caught.value.pos,
+    )
 
 
 def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):
