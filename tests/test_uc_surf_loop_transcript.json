@@ -1288,7 +1288,7 @@
    "show"
   ],
   0,
-  "on main: current (none) (no tag)\nnext: 0.1.0  (patch, 7 commit(s), 0 item(s))\n\n## v0.1.0\n\n",
+  "on main: current (none) (no tag)\nnext: 0.1.0  (patch, 10 commit(s), 0 item(s))\n\n## v0.1.0\n\n",
   ""
  ],
  [
@@ -1298,7 +1298,7 @@
    "show"
   ],
   0,
-  "{\n  \"schema\": \"version_show@1\",\n  \"ref\": \"main\",\n  \"current\": \"\",\n  \"current_tag\": \"\",\n  \"next\": \"0.1.0\",\n  \"bump\": \"patch\",\n  \"reasons\": [],\n  \"commits\": 7,\n  \"items\": [],\n  \"notes\": \"## v0.1.0\\n\",\n  \"problems\": [],\n  \"line\": \"current\"\n}\n",
+  "{\n  \"schema\": \"version_show@1\",\n  \"ref\": \"main\",\n  \"current\": \"\",\n  \"current_tag\": \"\",\n  \"next\": \"0.1.0\",\n  \"bump\": \"patch\",\n  \"reasons\": [],\n  \"commits\": 10,\n  \"items\": [],\n  \"notes\": \"## v0.1.0\\n\",\n  \"problems\": [],\n  \"line\": \"current\"\n}\n",
   ""
  ],
  [
