@@ -25,6 +25,7 @@ docs_gate decides when a selected whole-file document regenerates itself; the tr
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from dataclasses import dataclass, field, fields
@@ -174,7 +175,7 @@ def target_of(repo: Path, spec: Spec) -> str:
     """The file ``spec`` means in ``repo``: its path, unless that does not exist and the
     document already lives at one of the kind's other places."""
     for rel in (spec.path, *spec.elsewhere):
-        if (Path(repo) / rel).is_file():
+        if os.path.isfile(Path(repo) / rel):  # unlike Path.is_file, never raises
             return rel
     return spec.path
 

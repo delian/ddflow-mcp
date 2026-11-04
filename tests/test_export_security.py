@@ -174,6 +174,7 @@ def test_no_security_bug_is_stated_as_none_recorded(repo):
     assert data["open"] == [] and data["fixed"] == []
     body = registry.render_body("security", load(repo, [plain]), Filters())
     assert "None recorded." in body and "B1" not in body
+    assert "These are the bugs" not in body  # there are none to point at
 
 
 def test_tags_on_the_bug_or_its_fix_task_select_it_and_invalid_never_lists(repo):
@@ -266,6 +267,8 @@ def test_a_fix_on_a_maintenance_line_clears_that_line_by_ancestry(repo):
     rows = lines_of(collect(repo, events))
     assert rows["1.1"]["vulnerable"] == []
     assert rows["2.0"]["vulnerable"] == ["vulnerable: B1, fixed in 1.1.1"]
+    # 1.1.1 was tagged after 2.0.0, and the highest version is still the current line
+    assert (rows["2.0"]["status"], rows["1.1"]["status"]) == ("supported", "unsupported")
 
 
 # -- disclosure ------------------------------------------------------------------------
@@ -388,6 +391,10 @@ def test_force_in_a_crlf_file_keeps_its_line_ends(repo):
     assert raw.startswith(b"# Ours\r\n\r\n<!-- ddflow:begin") and b"\n" not in raw.replace(
         b"\r\n", b""
     )
+    assert not any(r.edited for r in RG.parse(raw.decode()))
+    cfg = Config.load(repo)
+    assert ops.state_of(repo, cfg, load(repo, []), _spec(cfg))[0] == "fresh"
+    assert _write(repo, []).action == "unchanged"  # the next refresh needs no --force
 
 
 def test_a_created_file_with_redacted_text_is_not_read_back_as_hand_edited(repo):
@@ -411,6 +418,16 @@ def test_an_existing_policy_elsewhere_is_the_target(repo, where):
     res = ops.write_doc(repo, cfg, load(repo, []), spec, force=True)
     assert res.rel == where and not (repo / "SECURITY.md").exists()
     assert ops.state_of(repo, cfg, load(repo, []), spec)[0] == "fresh"
+
+
+def test_an_unreadable_candidate_is_not_a_crash(repo):
+    # a status listing must not die on a directory it may not look into
+    (repo / ".github").mkdir()
+    (repo / ".github").chmod(0)
+    try:
+        assert ops.target_of(repo, _spec(Config.load(repo))) == "SECURITY.md"
+    finally:
+        (repo / ".github").chmod(0o755)
 
 
 def test_root_wins_and_a_configured_path_is_never_second_guessed(repo):
