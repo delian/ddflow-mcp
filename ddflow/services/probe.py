@@ -103,7 +103,13 @@ _LISTED = re.compile(r"conflicting files: ([^;]*)")
 
 def _split_names(said: str, known: tuple[str, ...]) -> tuple[str, ...]:
     """The names in ``conflicting files: a, b;`` read as a sequence of ``known`` paths joined by
-    ", " (backtracking, so ``a`` and ``a,b`` are told apart); () when no reading fits."""
+    ", " (backtracking, so ``a`` and ``a,b`` are told apart); () when no reading fits. A path
+    with ``;`` or ``, `` in it makes the prose ambiguous: the answer is then every path both
+    sides changed, a superset."""
+    if any(";" in n or ", " in n for n in known):
+        # The prose cannot tell such a name from its separators: say every path both sides
+        # changed (a superset of the conflicted ones) rather than a wrong, shorter list.
+        return known
     found = _LISTED.search(said)
     if not found:
         return ()

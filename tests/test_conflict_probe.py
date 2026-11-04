@@ -216,3 +216,9 @@ def test_scratch_paths_tell_a_from_a_comma_b() -> None:
     said = "conflicting files: a, a,b; resolve"
     assert PR._split_names(said, ("a", "a,b")) == ("a", "a,b")
     assert PR._split_names("no list here", ("a",)) == ()
+
+
+def test_scratch_paths_with_separators_in_a_name_give_the_superset() -> None:
+    known = ("a", "a, b", "b")
+    assert PR._split_names("conflicting files: a, b;", known) == known
+    assert PR._split_names("conflicting files: a;b;", ("a;b",)) == ("a;b",)
