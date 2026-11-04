@@ -222,3 +222,9 @@ def test_scratch_paths_with_separators_in_a_name_give_the_superset() -> None:
     known = ("a", "a, b", "b")
     assert PR._split_names("conflicting files: a, b;", known) == known
     assert PR._split_names("conflicting files: a;b;", ("a;b",)) == ("a;b",)
+
+
+def test_scratch_paths_superset_only_when_the_prose_mentions_the_odd_name() -> None:
+    known = ("src/a;b.txt", "src/c.txt")
+    assert PR._split_names("conflicting files: src/c.txt;", known) == ("src/c.txt",)
+    assert PR._split_names("no list here", ("a;b",)) == ()

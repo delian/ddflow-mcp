@@ -106,13 +106,15 @@ def _split_names(said: str, known: tuple[str, ...]) -> tuple[str, ...]:
     ", " (backtracking, so ``a`` and ``a,b`` are told apart); () when no reading fits. A path
     with ``;`` or ``, `` in it makes the prose ambiguous: the answer is then every path both
     sides changed, a superset."""
-    if any(";" in n or ", " in n for n in known):
-        # The prose cannot tell such a name from its separators: say every path both sides
-        # changed (a superset of the conflicted ones) rather than a wrong, shorter list.
-        return known
     found = _LISTED.search(said)
     if not found:
         return ()
+    odd = [n for n in known if (";" in n or ", " in n) and n in said]
+    if odd:
+        # The prose cannot tell such a name from its separators: every path both sides
+        # changed that the prose mentions (a superset) beats a wrong, shorter list.
+        return tuple(n for n in known if n in said)
+    known = tuple(n for n in known if ";" not in n and ", " not in n)
     text = found.group(1).strip()
 
     def parse(rest: str) -> tuple[str, ...] | None:
