@@ -398,25 +398,38 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
     globs = fields.get("globs")
     resources = fields.get("resources")
     with log.transaction():
-        lease, refusal = (
-            L.plan_retarget(log, cfg, it.id, globs, resources)
+        lease, refusal, accepted = (
+            L.plan_retarget(log, cfg, it.id, globs, resources, keep_partial=True)
             if globs is not None or resources is not None
-            else (None, "")
+            else (None, "", None)
         )
         if refusal:
             return O.refused(
                 "item.updated", refusal + _waiting(log, cfg, it, lease, globs, queue), id=it.id
             )
+        withheld = (
+            [g for g in globs if g not in accepted]
+            if globs is not None and accepted is not None
+            else []
+        )
+        if withheld:
+            # Widening that only partly overlaps another lease takes the rest
+            # (B-ddflow-glob-widen-refused-broad): the clashing globs are held back, the
+            # accepted subset becomes the item's and the lease's globs, and the withheld
+            # ones are registered as waiting so the holder is woken when they free up.
+            fields["globs"] = accepted
+            _waiting(log, cfg, it, lease, withheld, queue)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
-            L.retarget(log, it.id, lease, globs, resources)
+            L.retarget(log, it.id, lease, accepted, resources)
     return O.ok(
         "item.updated",
         id=it.id,
         changed=sorted(fields),
         fields=fields,
         lease_retargeted=lease is not None,
-        globs_dropped=_dropped(it, globs),
+        globs_dropped=_dropped(it, accepted),
+        globs_withheld=withheld,
         needs_dropped=[n for n in it.needs if n not in fields["needs"]]
         if "needs" in fields
         else [],

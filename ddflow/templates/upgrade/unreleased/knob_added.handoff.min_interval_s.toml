@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "handoff.min_interval_s"
+new = "30"
+why = "Seconds between two suggestions from one sender to one owner. (D-handoff-peers, LK-sg-events)."
+impact = "additive"

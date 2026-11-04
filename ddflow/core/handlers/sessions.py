@@ -30,6 +30,7 @@ def _h_session_prompt(st: State, ev: Event) -> None:
             "at": ev.ts,
             "text": ev.data.get("text", ""),
             "item": ev.data.get("item", ""),
+            "relayed_by": ev.data.get("relayed_by", ""),
             "seq": len(s.prompts),
         }
     )
@@ -224,6 +225,10 @@ def _h_repair_applied(st: State, ev: Event) -> None:
             "since": str(d.get("since", "")),
             "version": str(d.get("version", "")),
             "events": d.get("events", 0) if isinstance(d.get("events"), int) else 0,
+            # who/why of an operator's acceptance (`services.repairs.accepted`); "" elsewhere
+            "reason": str(d.get("reason", "")),
+            "note": str(d.get("note", "")),
+            "by": str(d.get("by", "")),
             "agent": ev.agent,
             "at": ev.ts,
         }

@@ -129,6 +129,40 @@ def live_run(repo: Path, item: str, gate: str, sha: str) -> Marker | None:
     return None
 
 
+def live_run_any(repo: Path, item: str, gate: str) -> Marker | None:
+    """A run of ``gate`` on ``item`` still going on THIS host on ANY commit, else None. A
+    review locks the ITEM's gate (its record is per item, not per commit), so any live
+    review races for that one record whatever commit it covers -- unlike a command gate run,
+    which locks the exact tree (`live_run`) because a run on a newer tree is a new run."""
+    d = _dir(repo, item)
+    if not d.is_dir():
+        return None
+    for path in sorted(d.glob(f"{gate}.running.*.json")):
+        m = _read(path)
+        if m and m.pid != os.getpid() and H.same_host(m.host) and _is_live(m):
+            return m
+    return None
+
+
+def claim_started(
+    repo: Path, item: str, gate: str, sha: str, *, same_commit: bool = True
+) -> tuple[Marker | None, Marker | None]:
+    """(marker, twin): claim the started-marker for a run of ``gate`` on ``item`` at
+    ``sha``, serialised across processes so of two runs started together exactly one sees
+    the other's marker. With ``same_commit`` (a command gate run) only a run on the SAME
+    tree is a twin; with ``same_commit=False`` (a review) any live run of the item's gate
+    is. The first starter gets ``(marker, None)`` -- it goes on and clears the marker when
+    done -- and the second gets ``(None, twin)`` -- the live marker it must refuse.
+    ``(None, None)`` means no marker could be written (the run that would refuse a
+    concurrent twin cannot): the caller decides whether to refuse or run without the lock.
+    Shared by a command gate run and a review (B8664a1e0c6)."""
+    with start_lock(repo, item, gate):
+        twin = live_run(repo, item, gate, sha) if same_commit else live_run_any(repo, item, gate)
+        if twin is None:
+            return mark_started(repo, item, gate, sha), None
+        return None, twin
+
+
 @contextlib.contextmanager
 def start_lock(repo: Path, item: str, gate: str) -> Iterator[None]:
     """Serialise "mark, then look for a twin" across processes (an flock on a per-gate file),

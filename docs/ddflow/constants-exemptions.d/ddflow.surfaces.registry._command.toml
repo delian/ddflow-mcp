@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/surfaces/registry/_command.py:GROUP_DEPTH" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'
+"ddflow/surfaces/registry/_command.py:MAX_VIA" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'

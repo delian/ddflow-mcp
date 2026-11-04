@@ -170,6 +170,14 @@ class _Handlers:
         agent, per_call, args, bad = self._caller(params, args, modern)
         if bad:
             return _ok(mid, _text(bad, error=True))
+        # A per-call name (`as_agent`, or a `_meta` agent) is the caller's real identity;
+        # its shell is a different process and derives the tree name, which split the
+        # review's attribution from the reviewer (B-ddflow-review-wrong-agent-name).
+        # Recorded for the harness, exactly as a legacy `ddflow_identify` is (Bfad021e8d9),
+        # so the same agent's shell commands — a shelled-out `ddflow review` above all —
+        # take the same name instead of a derived one.
+        if per_call:
+            harness_identity.declare(self.repo, per_call, scope=HR.session_fingerprint(os.environ))
         # The typed path, when this tool has one. No argv, no re-parsing, no
         # scraping stdout, and no swapping process-global streams -- which is what
         # made the string path non-reentrant. `api` is where a protocol adapter

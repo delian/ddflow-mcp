@@ -81,15 +81,59 @@ def test_real_child_that_allocates_and_burns_cpu_is_measured():
     assert res.cpu_user_s + res.cpu_sys_s >= 0.35
 
 
+def _self_peak_kb() -> int:
+    import resource  # POSIX only: the callers are posix_only
+
+    return R.maxrss_kb(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+
+def _touch(mb: int) -> bytearray:
+    buf = bytearray(mb * 1024 * 1024)
+    for i in range(0, len(buf), 4096):
+        buf[i] = 1
+    return buf
+
+
+def _burn_beyond_this_process(extra_mb: int) -> str:
+    """A child line that touches this process's own peak plus ``extra_mb``."""
+    mb = _self_peak_kb() // 1024 + extra_mb
+    return (
+        f"{_PY} -c 'b = bytearray({mb} * 1024 * 1024)\nfor i in range(0, len(b), 4096): b[i] = 1'"
+    )
+
+
+def _assert_each_command_has_its_own_peak() -> None:
+    # A forked child shares its parent's address space until exec, and the kernel folds the
+    # parent's high-water mark into the child's ru_maxrss: a cheap command in a big process
+    # reports that process's peak (B0cdef4bf3a). So no absolute size and no "cheap < heavy"
+    # comparison is stable; the stable facts are relative to this process's own peak.
+    before = _self_peak_kb()
+    heavy = P.run_shell(_burn_beyond_this_process(200), timeout_s=120).resources
+    again = P.run_shell("true", timeout_s=20).resources
+    after = _self_peak_kb()
+    assert heavy.source == again.source == "wait4"
+    # More than anything inheritance could explain: the child's own allocation.
+    assert heavy.maxrss_kb >= before + 150 * 1024
+    # A running total would carry the heavy child's mark into `again`, far above this
+    # process's own peak; an inherited mark never exceeds it (B37281998f7).
+    assert again.maxrss_kb <= after + 64 * 1024
+    assert again.maxrss_kb < heavy.maxrss_kb
+
+
 @posix_only
 def test_each_command_gets_its_own_numbers_not_a_running_total():
+    _assert_each_command_has_its_own_peak()
+
+
+@posix_only
+def test_a_cheap_command_in_a_big_process_does_not_fail_the_per_command_check():
+    """B0cdef4bf3a: with a 400 MB parent, `true` reports ~400 MB (inherited), which broke the
+    fixed-size comparison the test used; the relative one holds in a process of any size."""
+    ballast = _touch(400)
     cheap = P.run_shell("true", timeout_s=20).resources
-    heavy = P.run_shell(f"{_PY} -c '{_BURN}'", timeout_s=60).resources
-    again = P.run_shell("true", timeout_s=20).resources
-    assert cheap.source == again.source == "wait4"
-    assert heavy.maxrss_kb >= 130 * 1024
-    assert again.maxrss_kb < heavy.maxrss_kb  # not the earlier child's high-water mark
-    assert again.cpu_user_s + again.cpu_sys_s < (heavy.cpu_user_s + heavy.cpu_sys_s) / 2
+    assert cheap.maxrss_kb >= 300 * 1024, "premise: the kernel reports the parent's peak"
+    _assert_each_command_has_its_own_peak()
+    assert len(ballast) > 0
 
 
 @posix_only

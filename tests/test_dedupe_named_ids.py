@@ -46,6 +46,15 @@ def test_a_real_near_duplicate_is_still_refused_even_when_it_names_ids(repo):
     assert out.data["candidates"][0]["id"] == "P-view"
 
 
+def test_a_refusal_says_the_item_was_not_added(repo):
+    """Bug Bffe85a63a5: the refusal printed candidate hints but never said the item was
+    NOT created, so a script tailing the output read it as success. Say 'not added'."""
+    body = TEXT + " (see P-acp)"
+    out = A.phase_add(repo, "P-dup", title="P-view", body=body, agent="a")
+    assert out.exit == 3
+    assert "not added" in out.reason, out.reason
+
+
 def test_a_refusal_lists_named_ids_apart_from_the_near_match(repo):
     body = TEXT + " (reuses P-acp and P-spawn)"
     out = A.phase_add(repo, "P-dup", title="P-view", body=body, agent="a")

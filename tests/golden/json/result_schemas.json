@@ -79,6 +79,7 @@
    "waiters",
    "globs_withheld",
    "yield_requested",
+   "recall",
    "wake"
   ],
   "output_schema": {
@@ -91,6 +92,7 @@
     "waiters": {},
     "globs_withheld": {},
     "yield_requested": {},
+    "recall": {},
     "wake": {},
     "export_refresh": {},
     "ci": {},
@@ -2659,6 +2661,116 @@
   },
   "array_schema": null
  },
+ "ddflow_session_ask": {
+  "command": "session_ask",
+  "schema": "session_ask@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "new",
+   "digest"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_ask@1"
+    },
+    "id": {},
+    "new": {},
+    "digest": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_asks": {
+  "command": "session_asks",
+  "schema": "session_asks@1",
+  "shape": "object",
+  "payload": [
+   "agent",
+   "asks"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_asks@1"
+    },
+    "agent": {},
+    "asks": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_session_withdraw": {
+  "command": "session_withdraw",
+  "schema": "session_withdraw@1",
+  "shape": "object",
+  "payload": [
+   "id"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_withdraw@1"
+    },
+    "id": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_archdeps": {
+  "command": "archdeps",
+  "schema": "archdeps@1",
+  "shape": "object",
+  "payload": [
+   "families",
+   "interfaces",
+   "ratchet"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "archdeps@1"
+    },
+    "families": {},
+    "interfaces": {},
+    "ratchet": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_batch": {
   "command": "batch",
   "schema": "batch@1",
@@ -2751,6 +2863,74 @@
     "repointed": {},
     "dry_run": {},
     "released_parent_lease": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_phase_complete": {
+  "command": "phase_complete",
+  "schema": "phase_complete@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "evidence",
+   "tasks",
+   "done",
+   "abandoned"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "phase_complete@1"
+    },
+    "id": {},
+    "evidence": {},
+    "tasks": {},
+    "done": {},
+    "abandoned": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_dedupe": {
+  "command": "bug_dedupe",
+  "schema": "bug_dedupe@1",
+  "shape": "object",
+  "payload": [
+   "clusters",
+   "count",
+   "applied",
+   "floor",
+   "semantic",
+   "scanned"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_dedupe@1"
+    },
+    "clusters": {},
+    "count": {},
+    "applied": {},
+    "floor": {},
+    "semantic": {},
+    "scanned": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

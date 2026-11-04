@@ -117,7 +117,7 @@ def test_the_trimmed_text_still_has_a_home():
     ddflow_identify, and the relation values in the manual (the handshake carries a charter)."""
     ident = TOOLS["ddflow_identify"]["description"]
     assert "as_agent" in ident and "--agent" in ident
-    template = Path(mcp_module.__file__).parent.parent / "templates/prompts/help/manual.md"
+    template = Path(mcp_module.__file__).parent.parent.parent / "templates/prompts/help/manual.md"
     text = template.read_text()
     for value in ("extends:ID", "duplicate_of:ID", "related:ID"):
         assert value in text, value

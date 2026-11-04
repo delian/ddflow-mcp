@@ -24,6 +24,21 @@ if TYPE_CHECKING:
 #: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "suggestion.expired": ("reason",),
+    "suggestion.superseded": ("reason",),
+    "suggestion.withdrawn": ("reason",),
+    "suggestion.countered": (
+        "reason",
+        "counter",
+    ),
+    "suggestion.rejected": ("reason",),
+    "suggestion.applied": ("reason",),
+    "suggestion.accepted": ("reason",),
+    "suggestion.seen": ("reason",),
+    "suggestion.proposed": (
+        "reason",
+        "probe",
+    ),
     "phase.completed": ("evidence",),
     "memory.redacted": ("reason",),
     "approval.granted": ("note",),
@@ -114,6 +129,29 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("suggestion.expired", "role"): "a role word: ddflow or operator",
+    ("suggestion.superseded", "role"): "a role word: ddflow or operator",
+    ("suggestion.superseded", "by_id"): "the id of the replacing suggestion",
+    ("suggestion.withdrawn", "role"): "a role word: ddflow or operator",
+    ("suggestion.countered", "role"): "a role word: ddflow or operator",
+    ("suggestion.rejected", "role"): "a role word: ddflow or operator",
+    ("suggestion.applied", "role"): "a role word: ddflow or operator",
+    ("suggestion.accepted", "role"): "a role word: ddflow or operator",
+    ("suggestion.seen", "role"): "a role word: ddflow or operator",
+    ("suggestion.proposed", "from_item"): "an item id",
+    ("suggestion.proposed", "from_agent"): "an agent id, the audit trail's who",
+    ("suggestion.proposed", "to_item"): "an item id",
+    ("suggestion.proposed", "to_agent"): "an agent id, the audit trail's who",
+    ("suggestion.proposed", "ref"): "a hidden git ref name",
+    ("suggestion.proposed", "patch_id"): "a git patch-id hash that is compared",
+    ("suggestion.proposed", "blob"): "a blob address that is compared",
+    (
+        "suggestion.proposed",
+        "files",
+    ): "the paths the patch touches, compared with the owner's leases",
+    ("suggestion.proposed", "added"): "a number",
+    ("suggestion.proposed", "removed"): "a number",
+    ("suggestion.proposed", "kind"): "a kind word",
     ("phase.completed", "kind"): "a kind word",
     ("lane.released_for_gate", "holder"): "an agent id compared with the lease's holder",
     ("lane.released_for_gate", "author"): "a family or model id compared at completion",

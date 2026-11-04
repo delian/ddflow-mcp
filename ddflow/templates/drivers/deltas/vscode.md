@@ -7,11 +7,20 @@ Only the items below differ.
    Copilot Chat, and any extension that speaks MCP. GitHub Copilot also has surfaces
    outside VS Code (a CLI, a cloud coding agent); those are `github-copilot.md`. Adopt
    **both** if you use Copilot inside VS Code and on the command line.
-2. **Iteration.** Agent mode runs one request to completion: keep going inside that
-   request — claim, run the gates, merge — and re-read `ddflow next` after each merge.
-   Across requests do ONE task, then end your reply with `ddflow_next` and
-   `ddflow_cadence` output — nothing persists those between requests, so printing them
-   IS the handoff.
+2. **Iteration runs in the background; the operator is the exception, not the driver.**
+   Orchestrate from a BACKGROUND surface — a second window or a terminal agent — so the
+   operator's chat is never blocked by a foreground loop: one read of
+   `ddflow next --json`, fan each ready item to one window/terminal agent each (the
+   dispatched process claims its OWN item — ddflow's exclusive lease refuses a duplicate)
+   mapping `tier:fast|balanced|deep` to model choice, and a re-read of `next` after each
+   merge or park. Keep the wave alive until each dispatched window/terminal has exited
+   (merged or parked) and `ddflow next` reports no ready and no held/blocked; stop only on
+   that empty scope or a question/operator gate. Within one request run the gates — merge or
+   park — re-reading `next` after each until the scope is empty; end the request with
+   `ddflow_next` and `ddflow_cadence` output only as the handoff to the next invocation.
+   Nothing persists between requests, so printing the handoff IS the restart point, and the
+   wave position is the committed event log. These loop facts are the `[orchestration]`
+   record in `ddflow/harnesses/vscode.toml`.
 3. **Subagents.** None with worktree isolation. For parallelism open a second window on
    the same repo, or run another agent in a terminal; ddflow's leases coordinate
    *processes*, so each claims its own item and gets its own worktree.

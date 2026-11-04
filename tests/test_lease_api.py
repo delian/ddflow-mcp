@@ -122,7 +122,7 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
     """Every liveness question goes through `Lease.live`, every release through
     `services.leases`: a second copy of either is how three answers came to exist."""
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    home = root / "core" / "records.py"
+    home = root / "core" / "records" / "items.py"
     # The home defines `expired` and asks it exactly once, inside `live`.
     assert home.read_text().count(".expired(") == 1
     bad = []
@@ -133,10 +133,11 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
         for n, line in enumerate(text.splitlines(), 1):
             if re.search(r"\.expired\(", line) and "def expired" not in line:
                 bad.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
-    # A recorded expiry is read as the CAUSE of a refusal in services/leases.py, and folded
-    # in core/; anywhere else it is a liveness test that ignores the clock.
+    # A recorded expiry is read as the CAUSE of a refusal in services/leases/ (folded from
+    # services/leases.py), and folded in core/; anywhere else it is a liveness test.
     for path in root.rglob("*.py"):
-        if "core" in path.relative_to(root).parts or path == root / "services" / "leases.py":
+        parts = path.relative_to(root).parts
+        if "core" in parts or parts[:2] == ("services", "leases"):
             continue
         for n, line in enumerate(path.read_text().splitlines(), 1):
             if ".expired_at" in line:
@@ -144,7 +145,7 @@ def test_no_caller_outside_the_lease_modules_reads_the_clock_or_writes_a_release
     assert not bad, "use Lease.live(now, grace):\n" + "\n".join(bad)
     raw = []
     for path in root.rglob("*.py"):
-        if path.name == "leases.py" and path.parent.name == "services":
+        if path.relative_to(root).parts[:2] == ("services", "leases"):
             continue
         for node in ast.walk(ast.parse(path.read_text())):
             if (

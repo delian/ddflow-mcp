@@ -51,6 +51,13 @@ dir = ".claude/agents"
 [worktrees]
 dir = ".claude/worktrees"
 
+[orchestration]
+loop = "self-paced-command"
+dispatch = "Agent (worktree isolation, model explicit)"
+wait = "Bash run_in_background + ScheduleWakeup"
+persist = "ddflow event log + leases"
+stop = "AskUserQuestion / operator approval"
+
 [commands.files]
 ".claude/commands/implement.md" = "commands/claude/implement.md"
 

@@ -37,6 +37,8 @@ def status_text(d: dict) -> str:
         if who
         else "integrator: idle -- `ddflow queue run` lands the line"
     )
+    warn = d.get("warning") or ""
+    head = f"{head}\nWARNING: {warn}" if warn else head
     if not rows:
         return f"{head}\nthe merge queue is empty"
     lines = [head, f"{d['waiting']} waiting, {d['parked']} parked"]

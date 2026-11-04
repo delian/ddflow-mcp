@@ -28,6 +28,7 @@ from .findings import (
     _track_rerun_raised,
 )
 from .records import _prior_evidence, _reason_of, _record, _reviewed_findings, _round_evidence
+from .reviewers import _begin_run, active_files
 
 
 def _order_refusal(
@@ -61,6 +62,42 @@ def _log_started(log, it, item: str, gate: str) -> None:
     Only for a real item: a diff reviewed with no item has no gate to start."""
     if it is not None:
         log.append("gate.started", item, {"gate": gate})
+
+
+#: The synthetic key of the per-item review lock: it names no gate, so it never collides
+#: with a command gate's started-marker, and a dead one is skipped by the dead-run sweep.
+_REVIEW_LOCK_GATE = "review"
+
+
+def _claim_or_refuse_twin(repo: Path, item: str, sha: str) -> tuple[Any, O.Outcome | None]:
+    """(marker, refusal): claim the per-ITEM review lock, or refuse a second review of the
+    same item while one is live (B8664a1e0c6). Its record is per item, not per gate or per
+    commit, so a second `ddflow review` of the item -- any gate, any commit -- races the
+    first for the same gate records, and the first to take the lock reviews while the second
+    sees its marker and refuses. Held across the WHOLE call (all of the item's gates), not
+    per gate. The lock uses a synthetic key that is no gate, so it never collides with a
+    command gate's marker and a dead one is skipped by the sweep. (None, None) when there is
+    no item (nothing is recorded, nothing to race); a marker the filesystem could not write
+    is refused too, because without it a concurrent review could not be refused."""
+    if not item:
+        return None, None
+    marker, twin = RUN.claim_started(repo, item, _REVIEW_LOCK_GATE, sha, same_commit=False)
+    if twin is not None:
+        return None, O.nothing(
+            "review",
+            f"this item's gates are already being reviewed (pid {twin.pid}, since "
+            f"{twin.at}); wait for it -- a second review would only race it for the one "
+            f"outcome and pay the reviewer twice. A review can start once the first ends.",
+            id=item,
+        )
+    if marker is None:
+        return None, O.nothing(
+            "review",
+            f"the review could not write its started-marker for {item}; refusing rather "
+            f"than run without the concurrent-review lock",
+            id=item,
+        )
+    return marker, None
 
 
 def _unknown_item(repo: Path, item: str, agent: str, gate: str) -> O.Outcome | None:
@@ -104,6 +141,7 @@ def _ends_on_signal(fn):
         bound = sig.bind(*a, **kw)
         bound.apply_defaults()
         started_at = clock.now_iso()
+        _begin_run()  # forget prior runs BEFORE the guard can checkpoint their files (B982d306cc8)
         try:
             with RUN.terminating():
                 return fn(*a, **kw)
@@ -113,32 +151,74 @@ def _ends_on_signal(fn):
     return wrapper
 
 
+_NOTHING_REVIEWED = "nothing was reviewed, which is not a pass"
+
+
+def _terminated_gate(
+    repo, log, cfg, st, item: str, gate: str, signame: str, called_from, gates
+) -> str:
+    """One gate's record for a review cut short by ``signame``; returns the reason recorded.
+
+    Chunks already checkpointed (bug B982d306cc8) become a `partial` record that keeps their
+    findings -- a killed background shell loses no reviewer work; none become `unavailable`."""
+    files = active_files(item, gate)
+    reviewed = sorted({c for f in files for c, _r in f.chunks()})
+    if not reviewed:
+        reason = (
+            f"the review was terminated by {signame} before a reviewer finished: "
+            f"{_NOTHING_REVIEWED}"
+        )
+        _record(
+            repo, log, cfg, st, item, gate, "unavailable", called_from, gates,
+            reason=reason, evidence={"review_kind": "delta"},
+        )  # fmt: skip
+        return reason
+    evidence: dict[str, Any] = {
+        "review_kind": "delta",
+        "terminated_by": signame,
+        "status": "PARTIAL",
+        "reviewed": reviewed,
+        "chunk_findings": [fd for f in files for fd in f.findings()],
+    }
+    for f in files:
+        evidence.update(f.evidence())
+    reason = (
+        f"the review was terminated by {signame} mid-round after {len(reviewed)} chunk(s) "
+        f"were reviewed ({', '.join(str(c) for c in reviewed)}); those findings are "
+        f"checkpointed, the remaining chunks were not reviewed, which is not a pass"
+    )
+    _record(
+        repo, log, cfg, st, item, gate, "partial", called_from, gates,
+        reason=reason, evidence=evidence,
+    )  # fmt: skip
+    return reason
+
+
 def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcome:
-    """A review ended by SIGTERM/SIGHUP (the usual `timeout`) before its reviewers answered:
-    said, and recorded `unavailable` for each gate asked that gained no outcome in this run
-    -- never a pass, never silence, never over a round this run already recorded. Marked a
-    delta so an earlier finished round stays the gate's record (`_keep_reviewed_round`)
+    """A review ended by SIGTERM/SIGHUP (the usual `timeout`) before its reviewers finished:
+    said, and recorded per gate asked. See `_terminated_gate` for what is recorded, and
+    `_keep_reviewed_round` for why a delta never over a round this run already recorded
     (Bed9d75dd1c)."""
     repo, item = args["repo"], args["item"]
     gate_names = [g.strip() for g in args["gate"].split(",") if g.strip()]
-    reason = (
-        f"the review was terminated by {signame} before a reviewer finished: "
-        "nothing was reviewed, which is not a pass"
+    fallback = (
+        f"the review was terminated by {signame} before a reviewer finished: {_NOTHING_REVIEWED}"
     )
+    reasons: list[str] = []
     kept: list[str] = []
     log, cfg, st = _load(repo, args["agent"])
     it = st.items.get(item) if item else None
+    gates = GD.load_gates(repo, cfg)
     if it is not None and gate_names:  # an id no item has is never recorded (B8d9e8108f8)
-        gates = GD.load_gates(repo, cfg)
         for g in gate_names:
             rec = it.gates.get(g) if it else None
             if rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at):
                 kept.append(f"{g} = {rec.outcome}")  # this run already recorded it
                 continue
-            _record(
-                repo, log, cfg, st, item, g, "unavailable", args["called_from"], gates,
-                reason=reason, evidence={"review_kind": "delta"},
-            )  # fmt: skip
+            reasons.append(
+                _terminated_gate(repo, log, cfg, st, item, g, signame, args["called_from"], gates)
+            )
+    reason = "; ".join(reasons) if reasons else fallback
     if kept:
         reason += f" (already recorded by this run: {', '.join(kept)})"
     return O.nothing(

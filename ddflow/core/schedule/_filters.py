@@ -71,6 +71,11 @@ def order_key(ctx: PlanCtx) -> Callable[[Item], tuple]:
     return lambda it: tuple(KEYS[n](ctx, it) for n in ORDER)
 
 
+def order_terms(ctx: PlanCtx) -> Callable[[Item], tuple[tuple[str, object], ...]]:
+    """The same keys as `order_key`, itemised as ``(name, value)`` for the optimizer port."""
+    return lambda it: tuple((n, KEYS[n](ctx, it)) for n in ORDER)
+
+
 def _f_deps(ctx: PlanCtx, it: Item) -> Blocked | None:
     return plan_blocker(ctx.state, ctx.cfg, it, in_cycle=ctx.in_cycle, cycles=ctx.cycles)
 

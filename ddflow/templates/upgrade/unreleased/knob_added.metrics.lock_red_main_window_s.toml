@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "metrics.lock_red_main_window_s"
+new = "86400"
+why = "The lock metrics report (ddflow metrics locks) reads this knob instead of a built-in number."
+impact = "additive"

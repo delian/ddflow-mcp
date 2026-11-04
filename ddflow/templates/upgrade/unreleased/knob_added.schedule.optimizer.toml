@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "schedule.optimizer"
+new = '"greedy-v1"'
+why = "Which optimizer orders the ready set and cuts it to the free slots (default greedy-v1)."
+impact = "additive"
