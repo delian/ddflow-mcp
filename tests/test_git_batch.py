@@ -126,3 +126,19 @@ def test_an_unknown_commit_is_not_reported_as_off_the_base(repo):
     f = RepoFacts(repo)
     assert f.on_base("0" * 40, "main") is False
     assert ("0" * 40, "main") not in f._on_base
+
+
+def test_one_query_tells_merged_commits_from_unmerged_ones(repo):
+    """`rev-list --no-walk S... ^base` prints only the listed commits the base lacks, so a
+    commit that IS an ancestor of the base is remembered as on it (and is one process)."""
+    from ddflow.infra.gitbatch import RepoFacts
+
+    on = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "side")
+    off = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "main moves on")
+    f = RepoFacts(repo)
+    f.prefetch_on_base([on, off], "main")
+    assert f._on_base == {(on, "main"): True, (off, "main"): False}

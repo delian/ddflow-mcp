@@ -237,31 +237,38 @@ def _sweep_finished(
     try:
         if not dry_run and _sweep_due(repo, cfg):
             CL.sweep_finished(repo, cfg, log, st, callers=callers)
+            _sweep_stamp(repo)  # only a sweep that ran to its end counts
     except Exception:
         pass
 
 
+def _sweep_stamp_path(repo: Path) -> Path:
+    return Path(repo) / ".ddflow" / "local" / "sweep-finished.last"
+
+
 def _sweep_due(repo: Path, cfg, *, now: float | None = None) -> bool:
     """Is it time for the brief to sweep? At most once per ``worktree.sweep_interval_s``
-    (PS-git-batch: the sweep dropped 96 branches in 17 s on every brief). The last sweep's time
-    is a derived, local stamp (``.ddflow/local/sweep-finished.last``): losing it costs one early
-    sweep. It is written BEFORE the sweep, so one that dies is not retried on every call.
-    Interval 0 sweeps on every brief, as before."""
+    (PS-git-batch: the sweep dropped 96 branches in 17 s on every brief). The time of the last
+    COMPLETED sweep is a derived, local stamp (``.ddflow/local/sweep-finished.last``): losing it
+    costs one early sweep, and a sweep that raised leaves it unchanged so the next brief
+    retries. Interval 0 sweeps on every brief, as before."""
     every = cfg.worktree.sweep_interval_s
     now = time.time() if now is None else now
-    stamp = Path(repo) / ".ddflow" / "local" / "sweep-finished.last"
-    if every > 0:
-        try:
-            if now - float(stamp.read_text().strip()) < every:
-                return False
-        except (OSError, ValueError):
-            pass  # no stamp, or a torn one: sweep now
+    if every <= 0:
+        return True
+    try:
+        return now - float(_sweep_stamp_path(repo).read_text().strip()) >= every
+    except (OSError, ValueError):
+        return True  # no stamp, or a torn one: sweep now
+
+
+def _sweep_stamp(repo: Path) -> None:
+    stamp = _sweep_stamp_path(repo)
     try:
         stamp.parent.mkdir(parents=True, exist_ok=True)
-        fsio.replace_text(stamp, f"{now}\n", fsync=False)
+        fsio.replace_text(stamp, f"{time.time()}\n", fsync=False)
     except OSError:
         pass  # a stamp that cannot be written only means the next brief sweeps too
-    return True
 
 
 def brief(
