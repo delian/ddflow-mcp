@@ -218,18 +218,18 @@ def test_is_tree_reads_both_spellings_and_nothing(adopted):
     assert G.is_tree(legacy_clean, adopted), "the pre-fix spelling of a clean tree"
 
 
-@pytest.mark.parametrize("identity", [G.tree_fingerprint, G.tree_identity])
-def test_a_re_edit_of_an_already_dirty_BINARY_moves_the_identity(repo, identity):
+def test_a_re_edit_of_an_already_dirty_BINARY_moves_the_fingerprint(repo):
     """R-B95-binary-reedit: `git diff` shows a binary as "Binary files ... differ", yet its
     `index <old>..<new>` header carries the working copy's blob id, so the digest sees it.
 
     Same size on purpose: only the bytes differ. The filed claim said this was invisible.
+    `tree_identity` has its own test above; this is the fingerprint, which reads the diff.
     """
     asset = repo / "asset.bin"
     asset.write_bytes(b"\0\1\2base----" * 100)
     _git(repo, "add", "asset.bin")
     _git(repo, "commit", "-qm", "binary")
     asset.write_bytes(b"\0\1\2edit-one" * 100)
-    first = identity(repo)
+    first = G.tree_fingerprint(repo)
     asset.write_bytes(b"\0\1\2edit-TWO" * 100)
-    assert identity(repo) != first, "a binary was re-edited and the identity did not move"
+    assert G.tree_fingerprint(repo) != first, "a re-edited binary did not move the fingerprint"
