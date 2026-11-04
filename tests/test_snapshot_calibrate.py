@@ -82,3 +82,19 @@ def test_total_size_cap_collects_other_fingerprints_oldest_first(repo):
     os.utime(other, (old, old))
     log._collect_stale_snapshots(mine, max_bytes=1_000_000)
     assert mine.exists() and not other.exists()
+
+
+def test_a_current_snapshot_over_a_lowered_cap_is_removed(repo):
+    log = _read(repo, LogConfig(snapshot=True, snapshot_min_events=10))
+    mine = log._snapshot_path()
+    assert mine.exists()
+    log._collect_stale_snapshots(mine, max_bytes=1)
+    assert not mine.exists()
+
+
+def test_the_swept_set_is_bounded(repo):
+    from ddflow.infra.log import _parse
+
+    _parse._SNAP_SWEPT.update(repo / f"d{i}" for i in range(300))
+    EventLog(repo, "x", log_cfg=LogConfig(snapshot=False)).read_all()
+    assert len(_parse._SNAP_SWEPT) <= _parse._SNAP_SWEPT_MAX

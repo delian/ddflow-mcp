@@ -26,6 +26,7 @@ from ._parse import (
     _SNAP_COVERED,
     _SNAP_ORDER,
     _SNAP_SWEPT,
+    _SNAP_SWEPT_MAX,
     _SNAPSHOT_SLOT,
     _SNAPSHOTS,
     SNAPSHOT_ENV,
@@ -196,6 +197,12 @@ class _ReadMixin:
                 else:
                     others.append((st.st_mtime, st.st_size, f))
                     total += st.st_size
+        mine_size = total - sum(o[1] for o in others)
+        if mine_size > max_bytes:  # the current file alone is over the cap
+            with contextlib.suppress(OSError):
+                mine.unlink()
+                _SNAP_COVERED.pop(self.dir, None)
+                total -= mine_size
         for _, size, f in sorted(others):
             if total <= max_bytes:
                 break
@@ -211,6 +218,10 @@ class _ReadMixin:
         them, once per process per log. The per-process environment switch never does."""
         if self.log_cfg.snapshot or not self.cache_writes or self.dir in _SNAP_SWEPT:
             return
+        if (
+            len(_SNAP_SWEPT) >= _SNAP_SWEPT_MAX
+        ):  # bounded: a sweep repeated for a forgotten dir is harmless
+            _SNAP_SWEPT.clear()
         _SNAP_SWEPT.add(self.dir)
         stem = SNAPSHOT_FILE.removesuffix(".bin")
         for f in (self.dir.parent / "local").glob(f"{stem}*.bin"):
