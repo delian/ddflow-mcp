@@ -8,8 +8,16 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ddflow.infra import store as S
+
+
+@pytest.fixture(autouse=True)
+def _clean_knobs(monkeypatch):
+    for k in ("GC", "MAX_FILES", "MAX_MB", "KEY"):
+        monkeypatch.delenv(f"DDFLOW_INDEX_{k}", raising=False)
 
 
 def _store(repo, cfg, fp: str) -> S.Store:
