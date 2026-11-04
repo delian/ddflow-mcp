@@ -1,0 +1,2 @@
+{"agent":"close-3","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e82e003b55cbd55b51d053cde","kind":"ddflow.seen","lamport":134216,"schema":1,"subject":"ddflow","ts":"2026-11-04T08:29:27.225615Z"}
+{"agent":"close-3","data":{"by":"close-3","event":"e068afd7c2299b92e8bb4afb4","holder":"recover-a","note":"expired lease from recover-a; resuming as close-3"},"id":"e30a8fcdc5fd49b7a21693da5","kind":"lease.released","lamport":134217,"schema":1,"subject":"fix-B6b7e47955e","ts":"2026-11-04T08:29:27.266931Z"}
