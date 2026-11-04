@@ -206,18 +206,19 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
     detached review runs -- and therefore heartbeats -- as the lease's HOLDER, not as a
     freshly derived id that holds no lease to renew (bug B-lease-ttl-expires-during-review:
     a 90-minute TTL lapsed during four long rounds, and the agent lost its claim because the
-    detached round never renewed it). A `raw` that names nothing to relaunch (no argument
-    before a `--`) is `[]` still, so `_detach`'s "needs its own arguments" refusal fires
-    before the agent is added. An already-typed `--agent` (either the `--agent <v>` pair or
-    the `--agent=<v>` form) is replaced by the resolved id; a positional `--detach` or
-    `--agent` past `--` is an item name, not a flag, and stays."""
-    cut = raw.index("--") if "--" in raw else len(raw)
-    before = [t for t in raw[:cut] if t != "--detach"]
-    if not before:  # nothing to relaunch: `raw` carried no review arguments before `--`
+    detached round never renewed it). A `raw` that names nothing to relaunch is `[]` still,
+    so `_detach`'s "needs its own arguments" refusal fires before the agent is added: the
+    guard reads `_relaunch_argv`'s answer, exactly the pre-fix empty test. An already-typed
+    `--agent` (either the `--agent <v>` pair or the `--agent=<v>` form) is replaced by the
+    resolved id; a positional `--detach` or `--agent` past `--` is an item name, not a flag,
+    and stays."""
+    stripped = _relaunch_argv(raw)
+    if not stripped:  # nothing to relaunch: only the `--detach` flag was typed
         return []
+    cut = raw.index("--") if "--" in raw else len(raw)
     kept: list[str] = []
     skip = False
-    for t in before:
+    for t in raw[:cut]:
         if skip:
             skip = False
             continue
@@ -226,7 +227,8 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
             continue
         if t.startswith("--agent="):
             continue
-        kept.append(t)
+        if t != "--detach":
+            kept.append(t)
     return ["--agent", agent, *kept] + raw[cut:]
 
 

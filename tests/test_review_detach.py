@@ -193,6 +193,10 @@ def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_le
     # naming nothing to relaunch is [] still, so `--detach` keeps its own-arguments refusal
     assert CR._detach_argv(["--detach"], "role") == []
     assert CR._detach_argv([], "role") == []
+    # a positional arg past `--` is not a flag: it stays, and the resolved id leads
+    assert CR._detach_argv(["--detach", "--", "--detach"], "role") == [
+        "--agent", "role", "--", "--detach",
+    ]  # fmt: skip
 
 
 def test_detach_relaunches_the_review_as_the_resolved_holder(monkeypatch):
