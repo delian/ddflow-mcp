@@ -179,6 +179,15 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
+    # The primary keeps its event shards uncommitted between doors; a branch that also
+    # changes a shard (an older/newer copy of an agent's log) then makes git refuse the
+    # merge with 'local changes would be overwritten', leaving the operator to hand-commit
+    # a shard first (B6b7e47955e). Commit the shards HERE, before git merges, so they are
+    # not the uncommitted work git refuses to overwrite.
+    EC.commit_at(log, cfg, "merge", f"merge {item}")
+    # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
+    # (it lands the event shards on the primary), so a landing check against a rev read
+    # before it would misread a refused git merge the shard commit caused as "landed anyway".
     landed_before = W.rev(repo, wt.base)
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
