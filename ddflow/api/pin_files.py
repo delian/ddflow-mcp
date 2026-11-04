@@ -160,7 +160,7 @@ def _after_merge_note(primary: Path, repo: Path, cfg, before, watched, *, check:
 def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approval: str):
     """The pins-are-stale class route (verb pins.regenerate): consume an operator approval of
     re-recording ``before`` with ``only`` (``approval`` = request or id), else a person."""
-    log, cfg = _load(primary, agent)
+    log, cfg, _st = _load(primary, agent)
     if not AP.agent_marker(agent):
         return O.refused("pins", "--approval is an agent's route; a person re-records directly")
     canon = Canon(
@@ -172,7 +172,7 @@ def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approv
     )
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
     if not decision.ok:
-        return O.refused("pins", "refusing: " + decision.message)
+        return O.refused("pins", decision.message)
     return decision.stamp
 
 

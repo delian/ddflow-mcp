@@ -106,6 +106,17 @@ def test_only_names_one_pin_and_refuses_an_unknown_one(repo: Path):
     assert (repo / "pin.txt").read_text() == "1 knobs\n- a\n"
 
 
+def test_approval_request_files_a_request_instead_of_crashing(repo: Path):
+    # `_regenerate_approval` unpacks `_load` (a 3-tuple: log, config, state) into two names,
+    # so the agent route raised `ValueError: too many values to unpack` before a request could
+    # ever be filed. As an agent, `--approval request` must file the operator approval and
+    # say its id, never crash.
+    done = ddflow_cli(repo, "pins", "regenerate", "--approval", "request")
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "pins.regenerate" in done.stdout + done.stderr
+    assert "requested" in done.stdout + done.stderr
+
+
 def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
     inst = ddflow_cli(repo, "pins", "regenerate", "--install")
     assert inst.returncode == 0, inst.stderr
