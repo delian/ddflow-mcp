@@ -25,19 +25,19 @@ def _branch(st, cfg, item_id: str) -> str:
     return it.lease.branch if it.lease and it.lease.branch else F.branch_name(it, cfg)
 
 
-def _text(p: PR.Probe, item: str, against: str, ref: str) -> str:
+def _text(p: PR.Probe, item: str, against: str, ref: str, asked: str) -> str:
     if p.result == PR.UNAVAILABLE:
         return (
             f"probe {item} against {against}: unavailable ({p.reason}); the commit-time check "
-            f"decides. Retry: `ddflow probe {item} --against {against}` "
-            f"(MCP: ddflow_probe id={item} against={against})"
+            f"decides. Retry: `ddflow probe {item} --against {asked}` "
+            f"(MCP: ddflow_probe id={item} against={asked})"
         )
     if p.result == PR.CONFLICT:
         shown = ", ".join(p.paths) or "(git named no path)"
         return (
             f"probe {item} against {against}: CONFLICT in {shown}. Merge {ref} into the "
-            f"branch and resolve, or `ddflow wait` for the holder; re-probe with `ddflow probe {item} --against {against}` "
-            f"(MCP: ddflow_probe id={item} against={against}). {PR.LIMIT}."
+            f"branch and resolve, or `ddflow wait` for the holder; re-probe with `ddflow probe {item} --against {asked}` "
+            f"(MCP: ddflow_probe id={item} against={asked}). {PR.LIMIT}."
         )
     return f"probe {item} against {against}: clean ({p.method}). {PR.LIMIT}."
 
@@ -72,7 +72,7 @@ def probe(repo: Path, item: str, *, against: str = "", agent: str = "") -> O.Out
         "head": res.item_sha,
         "base": res.against_sha,
         "why": res.reason,
-        "text": _text(res, item, shown, peer),
+        "text": _text(res, item, shown, peer, target),
     }
     log.append("probe.recorded", item, {k: v for k, v in data.items() if k not in ("id", "text")})
     if res.result == PR.CONFLICT:

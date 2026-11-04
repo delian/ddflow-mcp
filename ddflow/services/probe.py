@@ -98,6 +98,30 @@ def _both_changed(repo: Path, item: str, against: str) -> tuple[str, ...]:
     return tuple(sorted(one & two))
 
 
+_LISTED = re.compile(r"conflicting files: ([^;]*)")
+
+
+def _split_names(said: str, known: tuple[str, ...]) -> tuple[str, ...]:
+    """The names in ``conflicting files: a, b;`` read as a sequence of ``known`` paths joined by
+    ", " (backtracking, so ``a`` and ``a,b`` are told apart); () when no reading fits."""
+    found = _LISTED.search(said)
+    if not found:
+        return ()
+    text = found.group(1).strip()
+
+    def parse(rest: str) -> tuple[str, ...] | None:
+        if not rest:
+            return ()
+        for n in known:
+            if rest == n:
+                return (n,)
+            if rest.startswith(n + ", ") and (tail := parse(rest[len(n) + 2 :])) is not None:
+                return (n, *tail)
+        return None
+
+    return parse(text) or ()
+
+
 def _scratch(repo: Path, item: str, against: str) -> Probe:
     with CI.merge_tree(repo, item, against) as (_tree, why):
         if _tree is not None:
@@ -106,8 +130,7 @@ def _scratch(repo: Path, item: str, against: str) -> Probe:
         if kind == CI.CONFLICT:
             # The scratch merge says which files in prose; a name is taken from it only when
             # it is one both sides changed, so a comma or semicolon in a path cannot split it.
-            said = str(why)
-            names = tuple(n for n in _both_changed(repo, item, against) if n in said)
+            names = _split_names(str(why), _both_changed(repo, item, against))
             return Probe(CONFLICT, SCRATCH, names, item, against)
         return Probe(UNAVAILABLE, SCRATCH, (), item, against, str(why)[-300:])
 

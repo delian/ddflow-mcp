@@ -208,3 +208,11 @@ def test_peer_advice_names_the_peer_branch_not_its_item_id(pair: Path) -> None:
     _, out, _ = run_cli(pair, "--json", "probe", "clash", "--against", "clean")
     body = json.loads(out)
     assert body["result"] == "conflict" and "Merge ddflow/clean into" in body["text"]
+
+
+def test_scratch_paths_tell_a_from_a_comma_b() -> None:
+    said = "x does not merge with y: conflicting files: a,b; resolve a,b by merging"
+    assert PR._split_names(said, ("a", "a,b")) == ("a,b",)
+    said = "conflicting files: a, a,b; resolve"
+    assert PR._split_names(said, ("a", "a,b")) == ("a", "a,b")
+    assert PR._split_names("no list here", ("a",)) == ()
