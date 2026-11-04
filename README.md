@@ -3412,9 +3412,9 @@ How many items may be in flight adapts by default (decision D-adaptive-flow-acce
 
 | Knob | Default | Meaning |
 |---|---|---|
-| `parallel` | `auto` | `auto`: the limit adapts inside `[max_parallel_min, max_parallel_max]`; `fixed`: `max_parallel_tasks` is the number, exactly as before |
-| `max_parallel_tasks` | `4` | the start value in auto (the limit begins and resets here), the number in fixed |
-| `max_parallel_min` | `2` | the floor: auto never goes below it (at least 1) |
+| `parallel` | `auto` | `auto`: the limit adapts inside `[max_parallel_min, max_parallel_max]`; `fixed`: `max_parallel_tasks` is the ceiling the signals may lower (to `max_parallel_min`) under load, memory, disk, reviewer-latency or gate-failure pressure, and restore when calm -- never exceeding the number |
+| `max_parallel_tasks` | `4` | the start value in auto (the limit begins and resets here), the ceiling in fixed |
+| `max_parallel_min` | `2` | the floor: auto and fixed never go below it (at least 1) |
 | `max_parallel_max` | `8` | the ceiling: auto never exceeds it; machine sizing, so set it with `--local` |
 | `adapt_up_after_s` | `600` | healthy seconds, with the limit binding, before +1; no increase for twice this after a decrease |
 | `adapt_cooldown_s` | `300` | minimum seconds between two decreases |
@@ -3474,8 +3474,9 @@ truncated line is skipped (and the file rewritten on the next sample), a clock t
 backwards drops the sample, a short `O_EXCL` lock file keeps concurrent samplers to one
 sample per interval (the file's integrity does not depend on it: whole lines are appended
 and rewrites are atomic renames), and a directory that cannot be written leaves the limit at
-its start value with the reason. In `fixed` mode nothing is
-sampled. `ddflow doctor` notes a ring that cannot be read or written and a `.ddflow/local/`
+its start value with the reason. `fixed` mode is sampled the same way: the fixed
+`max_parallel_tasks` is the ceiling the signals may lower, never raise. `ddflow doctor` notes a
+ring that cannot be read or written and a `.ddflow/local/`
 that git does not ignore.
 
 ### Adaptive parallelism: host signals
