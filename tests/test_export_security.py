@@ -276,6 +276,13 @@ def test_a_fix_on_a_maintenance_line_clears_that_line_by_ancestry(repo):
     assert (rows["2.0"]["status"], rows["1.1"]["status"]) == ("supported", "unsupported")
 
 
+def test_a_date_placed_fix_after_every_tag_is_for_the_next_release(repo):
+    events = [bug("B1", "2026-09-15T00:00:00Z"), fix("B1", "2026-10-20T00:00:00Z")]
+    data = collect(repo, events)
+    assert (data["fixed"][0]["fixed_in"], data["fixed"][0]["by_date"]) == (ks.UNRELEASED, True)
+    assert lines_of(data)["2.0"]["vulnerable"] == [f"vulnerable: B1, fixed in {ks.UNRELEASED}"]
+
+
 def test_a_date_placed_fix_never_clears_a_release_tagged_before_it(repo):
     # 1.1.1 sorts below 2.0.0 and was tagged after it: version order is not date order
     git(repo, "checkout", "-q", "-b", "maint", "v1.1.0")
