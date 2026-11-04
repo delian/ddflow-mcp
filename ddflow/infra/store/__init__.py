@@ -49,6 +49,7 @@ from ._fingerprint import _environmental as _environmental
 from ._fingerprint import _has_fts5 as _has_fts5
 from ._fingerprint import _has_trigram as _has_trigram
 from ._fingerprint import code_fingerprint as code_fingerprint
+from ._fingerprint import collect_over_cap as collect_over_cap
 from ._projection import _ProjectionMixin as _ProjectionMixin
 from ._schema import _SchemaMixin as _SchemaMixin
 from ._search import _FTS_TERMS as _FTS_TERMS

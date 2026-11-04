@@ -249,11 +249,13 @@ def collect_over_cap(directory: Path, keep: str) -> list[Path]:
     total = sized(directory / keep)
     kept = 1
     gone: list[Path] = []
+    full = False  # once one file is over a cap, every older one goes too (oldest first)
     for _, size, f in mains:
-        if kept < max_files and (max_bytes <= 0 or total + size <= max_bytes):
+        if not full and kept < max_files and (max_bytes <= 0 or total + size <= max_bytes):
             kept += 1
             total += size
         else:
+            full = True
             remove(f)
             gone.append(f)
     return gone

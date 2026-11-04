@@ -75,7 +75,7 @@ def test_a_total_size_cap_removes_oldest_first(log, repo, cfg, monkeypatch):
     size = _mains(repo)[0].stat().st_size
     monkeypatch.setenv("DDFLOW_INDEX_MAX_MB", str(max(size * 1.5 / 1048576, 1e-6)))
     _store(repo, cfg, f"{3:016x}").rebuild(log)
-    assert len(_mains(repo)) <= 2
+    assert [p.name[9:] for p in _mains(repo)] == [f"{3:016x}"]
 
 
 def test_the_key_ignores_source_edits_but_follows_fold_rev(monkeypatch):
@@ -111,3 +111,18 @@ def test_source_key_mode_restores_the_source_hash(monkeypatch):
     monkeypatch.undo()
     S.code_fingerprint.cache_clear()
     assert seen[0] != seen[1] and seen[0] == seen[2]
+
+
+def test_a_newer_file_over_the_size_cap_does_not_outlive_an_older_one(log, repo, cfg, monkeypatch):
+    d = repo / ".ddflow"
+    d.mkdir(exist_ok=True)
+    keep = d / ("index.db-" + "a" * 16)
+    new = d / ("index.db-" + "b" * 16)
+    old = d / ("index.db-" + "c" * 16)
+    for f, size, age in ((keep, 900_000, 0), (new, 200_000, 10), (old, 100_000, 20)):
+        f.write_bytes(b"x" * size)
+        t = time.time() - age
+        os.utime(f, (t, t))
+    monkeypatch.setenv("DDFLOW_INDEX_MAX_MB", "1")
+    S.collect_over_cap(d, keep.name)
+    assert keep.exists() and not new.exists() and not old.exists()
