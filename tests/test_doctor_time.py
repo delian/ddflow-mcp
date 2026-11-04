@@ -34,10 +34,14 @@ def test_a_check_over_its_budget_is_reported(repo, monkeypatch):
     assert "embed" in out.data["check_timings"], out.data["check_timings"]
     over = [n for n in out.data["over_budget"] if "embed" in n]
     assert over, out.data["over_budget"]
+    # The over-budget finding is a user-facing note, not just a machine field.
+    assert any("over the 1s per-check budget" in n for n in out.data["notes"]), out.data["notes"]
 
 
 def test_a_check_under_budget_is_not_reported(repo):
     assert run_cli(repo, "init")[0] == 0
+    with (repo / ".ddflow" / "config.toml").open("a", encoding="utf-8") as f:
+        f.write("\n[health]\ncheck_budget_s = 1\n")
     out = reporting.doctor(repo, agent="a1")
     assert "embed" in out.data["check_timings"], out.data["check_timings"]
     over = [n for n in out.data["over_budget"] if "embed" in n]

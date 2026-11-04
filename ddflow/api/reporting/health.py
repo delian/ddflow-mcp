@@ -442,8 +442,10 @@ def doctor(
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
     notes += AD.adopt_notes(repo, cfg)
-    notes += _unknown_author_notes(repo, log, repair_ctx)
-    notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
+    with _check(timings, "unknown-author"):
+        notes += _unknown_author_notes(repo, log, repair_ctx)
+    with _check(timings, "repairs.notes"):
+        notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
     with _check(timings, "progress"):
         for f in PR.detect(log.read_all(), st, cfg):
