@@ -197,3 +197,14 @@ def test_conflict_text_names_the_mcp_call(pair: Path) -> None:
     _items(pair, "clash")
     _, out, _ = run_cli(pair, "--json", "probe", "clash")
     assert "ddflow_probe id=clash" in json.loads(out)["text"]
+
+
+def test_peer_advice_names_the_peer_branch_not_its_item_id(pair: Path) -> None:
+    _items(pair, "clash", "clean")
+    _git(pair, "checkout", "-q", "ddflow/clean")
+    (pair / "shared.txt").write_text("peer rewrites\n")
+    _git(pair, "commit", "-qam", "peer")
+    _git(pair, "checkout", "-q", "main")
+    _, out, _ = run_cli(pair, "--json", "probe", "clash", "--against", "clean")
+    body = json.loads(out)
+    assert body["result"] == "conflict" and "Merge ddflow/clean into" in body["text"]
