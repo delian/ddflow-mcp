@@ -57,6 +57,14 @@ def test_allow_unknown_needs_overrides_the_refusal(repo):
     assert _items(repo)["T"].needs == ["NO-SUCH-ID"]
 
 
+def test_update_allow_unknown_needs_overrides_the_refusal(repo):
+    _two(repo)
+    assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
+    code, out, err = run_cli(repo, "update", "T", "--needs", "A,NOPE", "--allow-unknown-needs")
+    assert code == 0, out + err
+    assert _items(repo)["T"].needs == ["A", "NOPE"]
+
+
 def test_valid_need_is_still_accepted(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A,B")[0] == 0
