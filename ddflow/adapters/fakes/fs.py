@@ -89,8 +89,6 @@ class FakeFs:
         _no_root(s, d)
         if self.is_dir(d):  # like shutil.move: into an existing directory
             d = self._prefix(d) + s.rsplit("/", 1)[-1]
-            if d == s:
-                return  # already there: a no-op, as with the real move
             if _exists(self, d):
                 raise FileExistsError(d)
         elif d in self.files and s not in self.files:

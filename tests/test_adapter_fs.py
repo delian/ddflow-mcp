@@ -155,8 +155,8 @@ def test_fake_mirrors_shutil_on_directories():
     f.files["/c/g"] = b"g"
     f.mkdir("/dd")
     f.files["/dd/g"] = b"old"
-    f.move("/dd/g", "/dd")  # already inside: a no-op
-    assert f.files["/dd/g"] == b"old"
+    with pytest.raises(FileExistsError):
+        f.move("/dd/g", "/dd")  # shutil.move refuses: the target name exists
     with pytest.raises(FileExistsError):
         f.move("/c/g", "/dd")  # the name is taken inside the directory
     with pytest.raises(FileExistsError):
