@@ -1,0 +1,2 @@
+{"agent":"fix-bp","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e0d15e6e48a4a0e76cf2ce748","kind":"ddflow.seen","lamport":136163,"schema":1,"subject":"ddflow","ts":"2026-11-04T18:51:30.696647Z"}
+{"agent":"fix-bp","data":{"tags":["bugfix","wave:0"]},"id":"e8ecb6599eb0cd52dd833af13","kind":"task.updated","lamport":136164,"schema":1,"subject":"fix-B87982586a0","ts":"2026-11-04T18:51:30.727612Z"}
