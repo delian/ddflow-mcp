@@ -231,8 +231,8 @@ def _race(
     left = dict.fromkeys(range(n), hedge)
 
     def attempt(i: int, c: int) -> tuple[str, str] | None:
-        if i in settled:
-            return None  # another copy already won; never start this one
+        if i in settled or tokens[(i, c)].cancelled:
+            return None  # another copy won, or a queued twin was cancelled before it started
         remaining = rev.total_budget_s - (time.time() - started)
         if remaining <= 0:
             return "", f"total budget {rev.total_budget_s}s exhausted before it started"
@@ -260,7 +260,7 @@ def _race(
                     # A chunk lost to its OWN size -- out of tokens, or no answer within the
                     # bound -- is deterministic: a hedge copy is the SAME chunk with the SAME
                     # budget and timeout, so it must fail identically. Cancel its twins instead
-                    # of running them: the queued one would otherwise start only after this one
+                    # of running them: a queued one would otherwise start only after this one
                     # timed out and spend the SAME timeout_s again, so a lost chunk would wait
                     # hedge x timeout_s while the tick claimed "cut at timeout_s"
                     # (B-review-chunk-timeout-not-enforced: chunks were still waiting at 3600s
