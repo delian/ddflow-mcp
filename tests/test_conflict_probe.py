@@ -208,23 +208,3 @@ def test_peer_advice_names_the_peer_branch_not_its_item_id(pair: Path) -> None:
     _, out, _ = run_cli(pair, "--json", "probe", "clash", "--against", "clean")
     body = json.loads(out)
     assert body["result"] == "conflict" and "Merge ddflow/clean into" in body["text"]
-
-
-def test_scratch_paths_tell_a_from_a_comma_b() -> None:
-    said = "x does not merge with y: conflicting files: a,b; resolve a,b by merging"
-    assert PR._split_names(said, ("a", "a,b")) == ("a,b",)
-    said = "conflicting files: a, a,b; resolve"
-    assert PR._split_names(said, ("a", "a,b")) == ("a", "a,b")
-    assert PR._split_names("no list here", ("a",)) == ()
-
-
-def test_scratch_paths_with_separators_in_a_name_give_the_superset() -> None:
-    known = ("a", "a, b", "b")
-    assert PR._split_names("conflicting files: a, b;", known) == known
-    assert PR._split_names("conflicting files: a;b;", ("a;b",)) == ("a;b",)
-
-
-def test_scratch_paths_superset_only_when_the_prose_mentions_the_odd_name() -> None:
-    known = ("src/a;b.txt", "src/c.txt")
-    assert PR._split_names("conflicting files: src/c.txt;", known) == ("src/c.txt",)
-    assert PR._split_names("no list here", ("a;b",)) == ()

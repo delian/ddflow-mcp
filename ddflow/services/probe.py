@@ -98,47 +98,16 @@ def _both_changed(repo: Path, item: str, against: str) -> tuple[str, ...]:
     return tuple(sorted(one & two))
 
 
-_LISTED = re.compile(r"conflicting files: ([^;]*)")
-
-
-def _split_names(said: str, known: tuple[str, ...]) -> tuple[str, ...]:
-    """The names in ``conflicting files: a, b;`` read as a sequence of ``known`` paths joined by
-    ", " (backtracking, so ``a`` and ``a,b`` are told apart); () when no reading fits. A path
-    with ``;`` or ``, `` in it makes the prose ambiguous: the answer is then every path both
-    sides changed, a superset."""
-    found = _LISTED.search(said)
-    if not found:
-        return ()
-    odd = [n for n in known if (";" in n or ", " in n) and n in said]
-    if odd:
-        # The prose cannot tell such a name from its separators: every path both sides
-        # changed that the prose mentions (a superset) beats a wrong, shorter list.
-        return tuple(n for n in known if n in said)
-    known = tuple(n for n in known if ";" not in n and ", " not in n)
-    text = found.group(1).strip()
-
-    def parse(rest: str) -> tuple[str, ...] | None:
-        if not rest:
-            return ()
-        for n in known:
-            if rest == n:
-                return (n,)
-            if rest.startswith(n + ", ") and (tail := parse(rest[len(n) + 2 :])) is not None:
-                return (n, *tail)
-        return None
-
-    return parse(text) or ()
-
-
 def _scratch(repo: Path, item: str, against: str) -> Probe:
     with CI.merge_tree(repo, item, against) as (_tree, why):
         if _tree is not None:
             return Probe(CLEAN, SCRATCH, (), item, against)
         kind = getattr(why, "kind", "")
         if kind == CI.CONFLICT:
-            # The scratch merge says which files in prose; a name is taken from it only when
-            # it is one both sides changed, so a comma or semicolon in a path cannot split it.
-            names = _split_names(str(why), _both_changed(repo, item, against))
+            # The scratch merge names its files only in prose, which a path with a comma or a
+            # semicolon makes ambiguous: so the paths are every one both sides changed (exact
+            # names, a superset of the conflicted ones), never a parse of the prose.
+            names = _both_changed(repo, item, against)
             return Probe(CONFLICT, SCRATCH, names, item, against)
         return Probe(UNAVAILABLE, SCRATCH, (), item, against, str(why)[-300:])
 

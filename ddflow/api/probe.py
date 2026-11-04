@@ -34,6 +34,8 @@ def _text(p: PR.Probe, item: str, against: str, ref: str, asked: str) -> str:
         )
     if p.result == PR.CONFLICT:
         shown = ", ".join(p.paths) or "(git named no path)"
+        if p.method == PR.SCRATCH:
+            shown += " (every file both sides changed; some may merge cleanly)"
         return (
             f"probe {item} against {against}: CONFLICT in {shown}. Merge {ref} into the "
             f"branch and resolve, or `ddflow wait` for the holder; re-probe with `ddflow probe {item} --against {asked}` "
