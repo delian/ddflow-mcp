@@ -1,0 +1,134 @@
+"""The `Fs` port: the default adapter's behaviour and the fake's (CONFORMANCE)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from ddflow.adapters import fs as F
+from ddflow.adapters.fakes import FAKES
+from ddflow.adapters.fakes.fs import FakeFs
+from ddflow.adapters.fs import Fs
+from ddflow.infra import fsio
+
+
+class _Disk:
+    """The real adapter over a tmp dir, with the same read helpers the fake has."""
+
+    def __init__(self, root: Path) -> None:
+        self.root, self.fs = root, F.LocalFs()
+
+    def __getattr__(self, name: str):
+        return getattr(self.fs, name)
+
+    def put(self, rel: str, data: bytes) -> str:
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+        return str(p)
+
+    def path(self, rel: str) -> str:
+        return str(self.root / rel)
+
+    def read(self, rel: str) -> bytes | None:
+        p = self.root / rel
+        return p.read_bytes() if p.is_file() else None
+
+    def exists_dir(self, rel: str) -> bool:
+        return (self.root / rel).is_dir()
+
+
+class _Mem:
+    def __init__(self, fs: FakeFs | None = None) -> None:
+        self.fs = fs or FakeFs()
+
+    def __getattr__(self, name: str):
+        return getattr(self.fs, name)
+
+    def put(self, rel: str, data: bytes) -> str:
+        self.fs.files[f"/m/{rel}"] = data
+        return f"/m/{rel}"
+
+    def path(self, rel: str) -> str:
+        return f"/m/{rel}"
+
+    def read(self, rel: str) -> bytes | None:
+        return self.fs.files.get(f"/m/{rel}")
+
+    def exists_dir(self, rel: str) -> bool:
+        return self.fs.is_dir(f"/m/{rel}")
+
+
+def fs_conformance(adapter) -> None:
+    """What every Fs does, real or fake (the harness adds put/read over the adapter)."""
+    h = _Mem(adapter) if isinstance(adapter, FakeFs) else adapter
+    a = h.put("a/one.txt", b"1")
+    h.put("a/sub/two.txt", b"2")
+    h.copy_file(a, h.path("copy.txt"))
+    assert h.read("copy.txt") == b"1" and h.read("a/one.txt") == b"1"
+    h.copy_tree(h.path("a"), h.path("b"))
+    assert h.read("b/sub/two.txt") == b"2"
+    with pytest.raises(FileExistsError):
+        h.copy_tree(h.path("a"), h.path("b"))
+    h.copy_tree(h.path("a"), h.path("b"), dirs_exist_ok=True)
+    h.move(h.path("copy.txt"), h.path("moved.txt"))
+    assert h.read("moved.txt") == b"1" and h.read("copy.txt") is None
+    h.replace_path(h.path("moved.txt"), h.path("a/one.txt"))
+    assert h.read("a/one.txt") == b"1" and h.read("moved.txt") is None
+    h.rmtree(h.path("b"))
+    assert not h.exists_dir("b")
+    h.rmtree(h.path("b"))  # missing: ignored by default
+    with pytest.raises(FileNotFoundError):
+        h.rmtree(h.path("b"), ignore_errors=False)
+    with pytest.raises(FileNotFoundError):
+        h.copy_file(h.path("nope"), h.path("x"))
+
+
+def _real(monkeypatch) -> _Disk:
+    root = fsio.unused_dir("fs-conf-")
+    root.mkdir()
+    return _Disk(root)
+
+
+CONFORMANCE = {"Fs": {"real": _real, "cases": fs_conformance}}
+
+
+def test_the_adapter_and_the_fake_satisfy_the_port():
+    assert isinstance(F.LocalFs(), Fs) and isinstance(FakeFs(), Fs)
+    assert FAKES["Fs"] is FakeFs and isinstance(F.DEFAULT, F.LocalFs)
+
+
+def test_real_adapter_conforms(tmp_path):
+    fs_conformance(_Disk(tmp_path))
+
+
+def test_fake_conforms():
+    fs_conformance(_Mem())
+
+
+def test_fake_records_calls_and_moves_directories():
+    f = FakeFs({"/r/x/a": b"A", "/r/x/b/c": b"C"})
+    f.move("/r/x", "/r/y")
+    assert f.files == {"/r/y/a": b"A", "/r/y/b/c": b"C"}
+    assert f.calls == [("move", "/r/x", "/r/y")]
+
+
+def test_fsio_path_operations_go_through_the_one_adapter(monkeypatch, tmp_path):
+    fake = FakeFs({"/s/f": b"1", "/s/d/g": b"2"})
+    monkeypatch.setattr(F, "DEFAULT", fake)
+    fsio.copy_file("/s/f", "/t/f")
+    fsio.copy_tree("/s/d", "/t/d")
+    fsio.move("/s/f", "/t/m")
+    fsio.rmtree("/s/d")
+    assert [c[0] for c in fake.calls] == ["copy_file", "copy_tree", "move", "rmtree"]
+
+
+def test_fsio_real_roundtrip(tmp_path):
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "f").write_text("x")
+    fsio.copy_tree(tmp_path / "d", tmp_path / "e")
+    fsio.move(tmp_path / "e", tmp_path / "g")
+    assert (tmp_path / "g" / "f").read_text() == "x"
+    fsio.rmtree(tmp_path / "g")
+    assert not (tmp_path / "g").exists()

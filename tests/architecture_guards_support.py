@@ -41,7 +41,7 @@ HOMES: dict[str, frozenset[str]] = {
     "git_argv": frozenset({"ddflow.infra.git"}),
     "write_text": frozenset({"ddflow.infra.fsio"}),
     "tempfile": frozenset({"ddflow.infra.fsio"}),
-    "os_replace": frozenset({"ddflow.infra.fsio"}),
+    "os_replace": frozenset({"ddflow.infra.fsio", "ddflow.adapters.fs"}),
     "fcntl": frozenset({"ddflow.infra.fsio"}),
     "hashlib": frozenset({"ddflow.core.digest"}),
     "tomlkit": frozenset({"ddflow.infra.tomlcfg"}),
