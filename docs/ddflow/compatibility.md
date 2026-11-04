@@ -157,3 +157,7 @@ when the process has not set them (numpy's thread pool cost seconds of CPU per c
 many-core host), and `model2vec` is imported only when an embedding is requested. Nothing on
 disk changes and old logs replay identically. To keep the old behaviour, export the variable
 yourself before running ddflow; a value you set is never overridden.
+
+`embed.extra_installed()` (used by `ddflow doctor`) no longer imports the `[rag]` extra: before the
+first embedding it answers "the package is findable"; a findable but broken install is reported as
+unavailable, with the reason, by the first embedding request.
