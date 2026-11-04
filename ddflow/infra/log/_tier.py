@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,10 @@ class Ref:
         return Ref(d["shard"], int(d["start"]), int(d["end"]), d["sha256"], int(d["count"]))
 
 
+#: A shard name ends in the writing clone's id (as `_agent.py` makes agent ids): one writer per file.
+_CLONE_SUFFIX = re.compile(r"-[0-9a-f]{6}$")
+
+
 class Unavailable(Exception):
     """The cold range is not in this clone (not pulled yet). Reported, never a silent miss."""
 
@@ -98,6 +103,10 @@ class TierWriter:
     """One agent's writer. Cold line first (fsync), summary second: a ref never dangles."""
 
     def __init__(self, root: Path, agent: str, policy: TierPolicy) -> None:
+        if not _CLONE_SUFFIX.search(agent):
+            raise ValueError(
+                f"shard owner {agent!r} must end in -<6 hex clone id> (one writer per shard)"
+            )
         self.root, self.agent, self.policy = Path(root), agent, policy
         (self.root / "hot").mkdir(parents=True, exist_ok=True)
         (self.root / "cold").mkdir(parents=True, exist_ok=True)
@@ -124,7 +133,7 @@ class TierWriter:
         p = self._pending.get(ev["subject"])
         if p is None:
             p = self._pending[ev["subject"]] = _Pending(
-                start, end, 0, at, ev["data"].get("holder", self.agent)
+                start, end, 0, at, ev.get("data", {}).get("holder", self.agent)
             )
         p.end, p.count, p.last_at = end, p.count + 1, max(p.last_at, at)
         p.h.update(raw)
@@ -192,13 +201,19 @@ def renewed_at(events: list[dict[str, Any]]) -> dict[str, float]:
     return out
 
 
-def search(root: Path, needle: str, *, max_cold_bytes: int | None = None) -> dict[str, Any]:
+def search(
+    root: Path, needle: str, *, max_cold_bytes: int | None = None, policy: TierPolicy | None = None
+) -> dict[str, Any]:
     """Hot first; a summary whose text matches falls through to its cold range, bounded.
 
     Returns hits plus `unavailable` (refs not in this clone) and `truncated` (budget hit):
     a miss is never reported as "no results".
     """
-    budget = TierPolicy().fall_through_max_bytes if max_cold_bytes is None else max_cold_bytes
+    budget = (
+        (policy or TierPolicy()).fall_through_max_bytes
+        if max_cold_bytes is None
+        else max_cold_bytes
+    )
     hits: list[dict[str, Any]] = []
     unavailable: list[str] = []
     truncated = False

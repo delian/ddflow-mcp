@@ -47,19 +47,19 @@ def session(
 
 
 def test_disabled_policy_is_todays_behaviour(tmp_path: Path) -> None:
-    w = T.TierWriter(tmp_path, "a", T.TierPolicy())
+    w = T.TierWriter(tmp_path, "a-aaaaaa", T.TierPolicy())
     for i in range(5):
-        w.append(ev("a", i, "lease.renewed", "X", 1000.0 + i))
+        w.append(ev("a-aaaaaa", i, "lease.renewed", "X", 1000.0 + i))
     assert (
-        not (tmp_path / "cold" / "a.jsonl").read_bytes()
-        if (tmp_path / "cold" / "a.jsonl").exists()
+        not (tmp_path / "cold" / "a-aaaaaa.jsonl").read_bytes()
+        if (tmp_path / "cold" / "a-aaaaaa.jsonl").exists()
         else True
     )
     assert len(T.read_union(tmp_path, tiers=(T.HOT,))) == 5
 
 
 def test_union_is_the_full_log_and_hot_is_smaller(tmp_path: Path) -> None:
-    written = session(tmp_path, "a", 1)
+    written = session(tmp_path, "a-aaaaaa", 1)
     union = T.read_union(tmp_path)
     assert {e["id"] for e in written} <= {e["id"] for e in union}  # every event, none lost
     hot = T.read_union(tmp_path, tiers=(T.HOT,))
@@ -68,15 +68,15 @@ def test_union_is_the_full_log_and_hot_is_smaller(tmp_path: Path) -> None:
 
 
 def test_summary_is_a_lease_renewed_so_an_old_fold_stays_live(tmp_path: Path) -> None:
-    written = session(tmp_path, "a", 1)
+    written = session(tmp_path, "a-aaaaaa", 1)
     hot = T.read_union(tmp_path, tiers=(T.HOT,))
     assert T.renewed_at(hot) == T.renewed_at(written)  # flush at release: exact
     assert all(e["kind"] in {"lease.acquired", "lease.renewed", "gate.passed"} for e in hot)
 
 
 def test_liveness_lag_is_bounded_by_the_summary_cadence(tmp_path: Path) -> None:
-    w = T.TierWriter(tmp_path, "a", POLICY)
-    evs = [ev("a", i, "lease.renewed", "X", 1000.0 + 120.0 * i) for i in range(1, 30)]
+    w = T.TierWriter(tmp_path, "a-aaaaaa", POLICY)
+    evs = [ev("a-aaaaaa", i, "lease.renewed", "X", 1000.0 + 120.0 * i) for i in range(1, 30)]
     for e in evs:
         w.append(e)  # no flush: a holder that is still working
     lag = T.renewed_at(evs)["X"] - T.renewed_at(T.read_union(tmp_path, tiers=(T.HOT,)))["X"]
@@ -86,7 +86,7 @@ def test_liveness_lag_is_bounded_by_the_summary_cadence(tmp_path: Path) -> None:
 
 
 def test_every_summary_reexpands_with_a_proving_digest(tmp_path: Path) -> None:
-    session(tmp_path, "a", 1)
+    session(tmp_path, "a-aaaaaa", 1)
     refs = [
         T.Ref.of(e["data"]["summary"])
         for e in T.read_union(tmp_path, tiers=(T.HOT,))
@@ -114,8 +114,8 @@ def test_two_clones_merge_without_conflict_and_nothing_is_lost(tmp_path: Path) -
 
 
 def test_crash_between_cold_and_summary_loses_nothing(tmp_path: Path) -> None:
-    w = T.TierWriter(tmp_path, "a", POLICY)
-    evs = [ev("a", i, "lease.renewed", "X", 1000.0 + 120.0 * i) for i in range(1, 4)]
+    w = T.TierWriter(tmp_path, "a-aaaaaa", POLICY)
+    evs = [ev("a-aaaaaa", i, "lease.renewed", "X", 1000.0 + 120.0 * i) for i in range(1, 4)]
     for e in evs:
         w.append(e)  # crash here: cold has them, no summary was written
     del w
@@ -123,14 +123,16 @@ def test_crash_between_cold_and_summary_loses_nothing(tmp_path: Path) -> None:
     assert {
         e["id"] for e in evs
     } <= ids  # the first renewal was summarised at once; all are in the union
-    w2 = T.TierWriter(tmp_path, "a", POLICY)  # restart; the next summary covers only what it wrote
-    w2.append(ev("a", 9, "lease.renewed", "X", 5000.0))
-    assert {"a-00009"} <= {e["id"] for e in T.read_union(tmp_path)}
+    w2 = T.TierWriter(
+        tmp_path, "a-aaaaaa", POLICY
+    )  # restart; the next summary covers only what it wrote
+    w2.append(ev("a-aaaaaa", 9, "lease.renewed", "X", 5000.0))
+    assert {"a-aaaaaa-00009"} <= {e["id"] for e in T.read_union(tmp_path)}
 
 
 def test_torn_cold_tail_is_skipped_and_counted_not_fatal(tmp_path: Path) -> None:
-    session(tmp_path, "a", 1)
-    p = tmp_path / "cold" / "a.jsonl"
+    session(tmp_path, "a-aaaaaa", 1)
+    p = tmp_path / "cold" / "a-aaaaaa.jsonl"
     p.write_bytes(p.read_bytes() + b'{"agent":"a","id":"half')  # power cut mid-write
     events, torn = T._read_lines(p)
     assert torn == 1 and len(events) == 20
@@ -143,8 +145,8 @@ def test_torn_cold_tail_is_skipped_and_counted_not_fatal(tmp_path: Path) -> None
 
 
 def test_altered_cold_range_is_detected_not_trusted(tmp_path: Path) -> None:
-    session(tmp_path, "a", 1)
-    p = tmp_path / "cold" / "a.jsonl"
+    session(tmp_path, "a-aaaaaa", 1)
+    p = tmp_path / "cold" / "a-aaaaaa.jsonl"
     p.write_bytes(p.read_bytes().replace(b'"at":1120.0', b'"at":9999.0', 1))
     ref = next(
         T.Ref.of(e["data"]["summary"])
@@ -156,29 +158,31 @@ def test_altered_cold_range_is_detected_not_trusted(tmp_path: Path) -> None:
 
 
 def test_clone_that_never_pushed_is_unavailable_never_a_silent_miss(tmp_path: Path) -> None:
-    session(tmp_path, "a", 1)
-    (tmp_path / "cold" / "a.jsonl").unlink()  # the hot summary was pushed, the cold shard was not
-    out = T.search(tmp_path, "X-a")
+    session(tmp_path, "a-aaaaaa", 1)
+    (
+        tmp_path / "cold" / "a-aaaaaa.jsonl"
+    ).unlink()  # the hot summary was pushed, the cold shard was not
+    out = T.search(tmp_path, "X-a-aaaaaa")
     assert out["unavailable"], "a missing cold shard must be reported"
     assert any(e["kind"] == "lease.renewed" for e in out["hits"])  # the summary still answers
 
 
 def test_search_falls_through_to_cold_and_is_bounded(tmp_path: Path) -> None:
-    session(tmp_path, "a", 1)
-    full = T.search(tmp_path, "X-a")
+    session(tmp_path, "a-aaaaaa", 1)
+    full = T.search(tmp_path, "X-a-aaaaaa")
     assert not full["unavailable"] and not full["truncated"]
     assert sum(e["kind"] == "lease.renewed" for e in full["hits"]) >= 20  # cold events are found
-    capped = T.search(tmp_path, "X-a", max_cold_bytes=10)
+    capped = T.search(tmp_path, "X-a-aaaaaa", max_cold_bytes=10)
     assert capped["truncated"] is True  # over budget: said so, not silently dropped
 
 
 def test_replay_export_of_union_equals_the_untiered_log(tmp_path: Path) -> None:
     """The same events written with tiering off and on: the union is identical, event for event."""
     off, on = tmp_path / "off", tmp_path / "on"
-    w_off = T.TierWriter(off, "a", T.TierPolicy())
-    w_on = T.TierWriter(on, "a", POLICY)
+    w_off = T.TierWriter(off, "a-aaaaaa", T.TierPolicy())
+    w_on = T.TierWriter(on, "a-aaaaaa", POLICY)
     evs = [
-        ev("a", i, "lease.renewed" if i % 3 else "gate.passed", "X", 1000.0 + 120.0 * i)
+        ev("a-aaaaaa", i, "lease.renewed" if i % 3 else "gate.passed", "X", 1000.0 + 120.0 * i)
         for i in range(1, 40)
     ]
     for e in evs:
@@ -195,3 +199,14 @@ def test_ddflow_seen_and_unlisted_kinds_stay_hot() -> None:
         T.TierPolicy(enabled=True, cold_kinds=T.PHASE2_COLD_KINDS).classify("gate.started")
         == T.COLD
     )
+
+
+def test_shard_owner_without_clone_id_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        T.TierWriter(tmp_path, "alice", POLICY)
+
+
+def test_search_honours_the_configured_budget(tmp_path: Path) -> None:
+    session(tmp_path, "a-aaaaaa", 1)
+    tiny = T.TierPolicy(enabled=True, fall_through_max_bytes=10)
+    assert T.search(tmp_path, "X-a-aaaaaa", policy=tiny)["truncated"] is True
