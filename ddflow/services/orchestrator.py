@@ -44,8 +44,10 @@ def _ctx(
 ):
     """A schedule ``PlanCtx`` for ``fill_order``, derived only when the caller held none.
 
-    Defaults mirror `core.schedule.plan`'s own preamble so a caller without a folded plan
-    still gets the same order; a caller that has one passes the pieces it already read."""
+    The ORDER it ranks by is `core.schedule.plan`'s own keys, so this module agrees with
+    `ddflow next`; ``now`` reads the clock port (`ddflow.adapters.clock`), the schedule
+    layer's own source of "now". A caller that already folded a plan passes the pieces it
+    read rather than deriving them a second time."""
     now = _CLOCK.wall() if now is None else now
     live = state.active_leases(now, cfg.lease.grace_s) if live is None else live
     cycles = list(find_cycles(state.live_by_id())) if cycles is None else cycles
