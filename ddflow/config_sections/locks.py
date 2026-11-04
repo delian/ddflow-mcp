@@ -14,7 +14,15 @@ PROBE_AT = ("claim", "gate", "merge")
 
 def _probe_at(value):
     """Keep the known places, report the rest (a newer release's place is ignored)."""
-    items = list(value) if isinstance(value, (list, tuple)) else []
+    items = (
+        [value]
+        if isinstance(value, str)
+        else list(value)
+        if isinstance(value, (list, tuple))
+        else []
+    )
+    if not isinstance(value, (str, list, tuple)):
+        return [], [f"probe_at must be a list of places, not {type(value).__name__}"]
     kept = [x for x in items if x in PROBE_AT]
     return kept, [f"unknown probe_at place {x!r}" for x in items if x not in PROBE_AT]
 

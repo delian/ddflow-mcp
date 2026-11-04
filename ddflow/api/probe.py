@@ -36,7 +36,8 @@ def _text(p: PR.Probe, item: str, against: str) -> str:
         shown = ", ".join(p.paths) or "(git named no path)"
         return (
             f"probe {item} against {against}: CONFLICT in {shown}. Merge {against} into the "
-            f"branch and resolve, or `ddflow wait` for the holder. {PR.LIMIT}."
+            f"branch and resolve, or `ddflow wait` for the holder; re-probe with `ddflow probe {item} --against {against}` "
+            f"(MCP: ddflow_probe id={item} against={against}). {PR.LIMIT}."
         )
     return f"probe {item} against {against}: clean ({p.method}). {PR.LIMIT}."
 
@@ -48,10 +49,12 @@ def probe(repo: Path, item: str, *, against: str = "", agent: str = "") -> O.Out
     if not branch:
         return O.failed(KIND, f"no such item {item!r}: `ddflow list` names the items", id=item)
     target = against or MAIN
-    if target in st.items:
+    if target == MAIN:  # always the repository's default branch, even beside an item id "main"
+        peer = W.default_branch(repo)
+    elif target in st.items:
         peer = _branch(st, cfg, target)
-    else:  # a branch name; "main" means the repository's default branch
-        peer = W.default_branch(repo) if target == MAIN else target
+    else:  # a branch name
+        peer = target
     if not cfg.locks.probe:
         res = PR.Probe(PR.UNAVAILABLE, PR.NONE, reason="[locks].probe is off")
     else:

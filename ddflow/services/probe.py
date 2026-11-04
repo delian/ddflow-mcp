@@ -30,7 +30,7 @@ LIMIT = (
     "Note: clean means textually clean only; a semantic break (a function renamed on one side and "
     "used on the other) still needs the gates and ci on the merge result"
 )
-_VERSION = re.compile(r"(\d+)\.(\d+)")
+_VERSION = re.compile(r"(\d+(?:\.\d+)+)")
 _FILES = re.compile(r"conflicting files: ([^;]*)")
 
 
@@ -48,13 +48,13 @@ class Probe:
         return self.result == CLEAN
 
 
-def _tuple(text: str) -> tuple[int, int]:
+def _tuple(text: str) -> tuple[int, ...]:
     m = _VERSION.search(text)
-    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+    return tuple(int(x) for x in m.group(1).split(".")) if m else (0,)
 
 
-def git_version(repo: Path | str, timeout_s: float) -> tuple[int, int] | None:
-    """``(major, minor)`` of the git on PATH; None when it cannot be asked."""
+def git_version(repo: Path | str, timeout_s: float) -> tuple[int, ...] | None:
+    """The version numbers of the git on PATH; None when it cannot be asked."""
     r = G.run(repo, "--version", timeout=timeout_s)
     return _tuple(r.out) if r.ok and _VERSION.search(r.out) else None
 

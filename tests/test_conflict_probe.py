@@ -74,6 +74,7 @@ def test_old_git_falls_back_to_a_scratch_merge(pair: Path, monkeypatch) -> None:
 
 
 def test_git_129_falls_back_to_a_scratch_merge(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 43, 0))
     real = PR.G.run
 
     def run(repo, *args, **kw):
@@ -93,6 +94,7 @@ def test_unknown_ref_is_unavailable_never_clean(pair: Path) -> None:
 
 
 def test_a_timeout_is_unavailable(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 43, 0))
     real = PR.G.run
 
     def run(repo, *args, **kw):
@@ -159,3 +161,16 @@ def test_cli_names_the_default_branch_actually_probed(pair: Path) -> None:
     _git(pair, "branch", "-m", "trunk", "master")
     code, out, err = run_cli(pair, "probe", "clash")
     assert code == 1 and "master" in out + err and "main into" not in out + err
+
+
+def test_patch_level_minimum_is_honoured(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 38, 0))
+    p = PR.run(pair, "ddflow/clean", "main", timeout_s=TIMEOUT, min_git="2.38.1")
+    assert p.method == PR.SCRATCH
+
+
+def test_probe_at_accepts_a_single_place_and_reports_a_bad_type() -> None:
+    from ddflow.config_sections.locks import _probe_at
+
+    assert _probe_at("claim") == (["claim"], [])
+    assert _probe_at(3)[1]
