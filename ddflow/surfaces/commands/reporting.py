@@ -415,7 +415,10 @@ def render_recover(out, a) -> str:
     found, salvageable = out.data["_render"]["found"], out.data["_render"]["salvageable"]
     if not found:
         return ""
-    lines = [f"{len(found)} recoverable situation(s); {len(salvageable)} may contain work:\n"]
+    # The counts are the whole sweep's: `found` may be one page of it (`output_caps`).
+    total = out.data.get("count", len(found))
+    may = out.data.get("salvageable", len(salvageable))
+    lines = [f"{total} recoverable situation(s); {may} may contain work:\n"]
     for r in found:
         flag = "!! " if may_hold_work(r) else "   "
         lines.append(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")

@@ -39,6 +39,8 @@ COMMANDS: dict[str, tuple[str, str, tuple[str, str] | None, str]] = {
 #: The shortest a long string is clipped to when one row alone passes the cap.
 MIN_CLIP = 80
 _BOARD_KEYS = ("phases", "unphased", "critical_path")
+#: The prose list that is the same rows as a paged list, under another name (`recover --plan`).
+RENDERED_PAGE = {"found": "actions"}
 #: Lists whose NEWEST rows are the ones a reader wants (kept from the end).
 TAIL_KEYS = frozenset({"completed_tasks"})
 
@@ -124,8 +126,8 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
     render = data.get("_render")
     if isinstance(render, dict):
         for key, value in list(render.items()):
-            if isinstance(value, list) and len(value) > limit:
-                off = start if key == paged else 0
+            off = start if key in (paged, RENDERED_PAGE.get(paged)) else 0
+            if isinstance(value, list) and (len(value) > limit or off):
                 render[key] = _slice(key, value, limit, off)
                 info.setdefault(f"_render.{key}", len(value))
     return info
@@ -146,6 +148,7 @@ def footer(
         k: v
         for k, v in info.items()
         if k not in ("next_cursor", "task_rows_shown", "clipped_strings")
+        and not k.startswith("_render.")
     }
     if lists:
         parts.append("lists cut: " + ", ".join(f"{k} {v} total" for k, v in sorted(lists.items())))

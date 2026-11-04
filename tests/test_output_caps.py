@@ -8,6 +8,7 @@ the `[output]` knobs, settable in the environment as well as the config files.""
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from conftest import run_cli
@@ -15,6 +16,7 @@ from conftest import run_cli
 from ddflow.config import Config
 from ddflow.core import outcome as O
 from ddflow.infra.log import EventLog
+from ddflow.surfaces.parsers.reporting import render_recover
 from ddflow.views import output_caps as OC
 
 PHASES = 30
@@ -165,6 +167,43 @@ def test_the_config_command_writes_the_knob_and_the_answer_follows_it(repo):
     code, _out, err = run_cli(repo, "config", "output.max_rows", "40")
     assert code == 0, err
     assert Config.load(repo).output.max_rows == 40
+
+
+def _plan(n: int) -> O.Outcome:
+    acts = [
+        SimpleNamespace(cls="propose", item=f"I{i}", attempts=0, reason="r", command="c")
+        for i in range(n)
+    ]
+    rows = [{"item": a.item} for a in acts]
+    render = {"plan": True, "actions": acts, "recoveries": []}
+    return O.ok("recover", found=rows, count=n, salvageable=0, paused=False, _render=render)
+
+
+def test_the_recovery_plan_prose_keeps_its_real_count_says_it_was_cut_and_pages():
+    out = OC.apply(None, _plan(120), "recover", cfg=_cfg(max_rows=50))
+    text = render_recover(out, None)
+    assert "recovery plan: 120 action(s)" in text, "the count is the plan's, not the page's"
+    assert "ddflow recover --cursor 50" in text and "I49 " in text and "I50 " not in text
+    page = render_recover(OC.apply(None, _plan(120), "recover", cursor=50, cfg=_cfg()), None)
+    assert "I50 " in page and "I49 " not in page
+
+
+def test_the_plain_recover_prose_keeps_its_real_count():
+    rows = [
+        SimpleNamespace(
+            item=f"I{i}", kind="k", holder="h", worktree="", advice="a", salvageable=False
+        )
+        for i in range(120)
+    ]
+    out = O.ok(
+        "recover",
+        found=[{"item": r.item} for r in rows],
+        count=120,
+        salvageable=0,
+        _render={"found": rows, "salvageable": []},
+    )
+    text = render_recover(OC.apply(None, out, "recover", cfg=_cfg(max_rows=50)), None)
+    assert text.startswith("120 recoverable situation(s)") and "ddflow recover --full" in text
 
 
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
