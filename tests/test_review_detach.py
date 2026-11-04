@@ -218,7 +218,10 @@ def test_detach_relaunches_the_review_as_the_resolved_holder(monkeypatch):
     monkeypatch.setattr(CR.AJ, "job_detach", fake_detach)
     a = SimpleNamespace(_argv=["--detach", "T1", "--gate", "critic"], id=["T1"])
     c = SimpleNamespace(
-        called_from=Path("."), log=SimpleNamespace(agent_id="role"), out=lambda *a, **k: None
+        repo=Path("."),
+        called_from=Path("."),
+        log=SimpleNamespace(agent_id="role"),
+        out=lambda *a, **k: None,
     )
     assert CR._detach(a, c) == CR.OK
     assert "--agent" in called["command"] and "role" in called["command"], called
