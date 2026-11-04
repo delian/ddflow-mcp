@@ -57,18 +57,18 @@ def test_update_needs_refuses_an_unknown_need(repo):
 def test_update_add_needs_names_the_nearest_real_id(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
-    code, out, err = run_cli(repo, "update", "T", "--add-needs", "Aa")
+    code, out, err = run_cli(repo, "update", "T", "--add-needs", "Ba")
     assert code != 0
-    assert "Did you mean 'A'" in out + err
-    assert _items(repo)["T"].needs == ["A"]
+    assert "Did you mean 'B'" in out + err
+    assert _items(repo)["T"].needs == ["A"]  # refused, not auto-corrected to ["A", "B"]
 
 
 def test_update_needs_names_the_nearest_real_id(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
-    code, out, err = run_cli(repo, "update", "T", "--needs", "A,Aa")
+    code, out, err = run_cli(repo, "update", "T", "--needs", "A,Ba")
     assert code != 0
-    assert "Did you mean 'A'" in out + err
+    assert "Did you mean 'B'" in out + err
     assert _items(repo)["T"].needs == ["A"]
 
 
@@ -111,6 +111,7 @@ def test_add_needs_valid_id_is_not_refused_on_a_pre_existing_unknown_need(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "OLD-GHOST",
                    "--allow-unknown-needs")[0] == 0
+    assert _items(repo)["T"].needs == ["OLD-GHOST"]  # the unknown need WAS persisted
     code, out, err = run_cli(repo, "update", "T", "--add-needs", "A")
     assert code == 0, out + err
     assert _items(repo)["T"].needs == ["OLD-GHOST", "A"]
@@ -120,6 +121,7 @@ def test_update_needs_is_not_refused_on_a_pre_existing_unknown_need(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "OLD-GHOST",
                    "--allow-unknown-needs")[0] == 0
+    assert _items(repo)["T"].needs == ["OLD-GHOST"]  # the unknown need WAS persisted
     code, out, err = run_cli(repo, "update", "T", "--needs", "A")
     assert code == 0, out + err
     assert _items(repo)["T"].needs == ["A"]
