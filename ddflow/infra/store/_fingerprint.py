@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import functools
+import math
 import os
 import re
 import sqlite3
@@ -193,42 +194,66 @@ def _capability_tables(con, fts: bool, trig: bool) -> bool:
     return True
 
 
+_COMPANIONS = ("-wal", "-shm", "-lock")
+
+
 def _env_num(name: str, default: float) -> float:
+    """A positive finite number from the environment, else `default` (nan, inf and
+    garbage never reach the caps)."""
     try:
-        return float(os.environ.get(name, "").strip() or default)
+        v = float(os.environ.get(name, "").strip() or default)
     except ValueError:
         return default
+    return v if math.isfinite(v) and v >= 0 else default
 
 
 def collect_over_cap(directory: Path, keep: str) -> list[Path]:
     """Delete the oldest index files (with their -wal/-shm/-lock companions) beyond the
     count and size caps, never `keep` (the index in use). Best effort; an index is derived,
     so a mistaken removal costs one rebuild. `DDFLOW_INDEX_GC=0` turns it off, and
-    `DDFLOW_INDEX_MAX_FILES` / `DDFLOW_INDEX_MAX_MB` set the caps."""
+    `DDFLOW_INDEX_MAX_FILES` / `DDFLOW_INDEX_MAX_MB` set the caps (the size of a file
+    counts its companions; companions whose main file is gone are removed)."""
     if os.environ.get("DDFLOW_INDEX_GC", "").strip().lower() in ("0", "false", "off", "no"):
         return []
     max_files = max(1, int(_env_num("DDFLOW_INDEX_MAX_FILES", INDEX_MAX_FILES)))
     max_bytes = _env_num("DDFLOW_INDEX_MAX_MB", INDEX_MAX_MB) * 1048576
-    mains: list[tuple[float, int, Path]] = []
-    for f in directory.glob("index.db*"):
-        m = _INDEX_FILE.match(f.name)
-        if not m or m.group(2) or f.name == keep:
-            continue
-        with contextlib.suppress(OSError):
-            st = f.stat()
-            mains.append((st.st_mtime, st.st_size, f))
-    mains.sort(key=lambda t: t[0], reverse=True)  # newest first
-    total = 0
-    with contextlib.suppress(OSError):
-        total = (directory / keep).stat().st_size
-    gone: list[Path] = []
-    for i, (_, size, f) in enumerate(mains):
-        total += size
-        if i + 1 < max_files and (max_bytes <= 0 or total <= max_bytes):
-            continue
-        total -= size
-        for suf in ("", "-wal", "-shm", "-lock"):
+
+    def sized(f: Path) -> int:
+        n = 0
+        for suf in ("", *_COMPANIONS):
+            with contextlib.suppress(OSError):
+                n += f.with_name(f.name + suf).stat().st_size
+        return n
+
+    def remove(f: Path) -> None:
+        for suf in ("", *_COMPANIONS):
             with contextlib.suppress(OSError):
                 f.with_name(f.name + suf).unlink(missing_ok=True)
-        gone.append(f)
+
+    names = {p.name for p in directory.glob("index.db*")}
+    mains: list[tuple[float, int, Path]] = []
+    for f in map(directory.joinpath, sorted(names)):
+        m = _INDEX_FILE.match(f.name)
+        if not m or f.name == keep:
+            continue
+        if m.group(2) in _COMPANIONS:  # an orphan companion: its main file is gone
+            if f.name[: -len(m.group(2))] not in names:
+                with contextlib.suppress(OSError):
+                    f.unlink()
+            continue
+        if m.group(2):
+            continue  # a rebuild's temp file: aged out by the rebuild itself
+        with contextlib.suppress(OSError):
+            mains.append((f.stat().st_mtime, sized(f), f))
+    mains.sort(key=lambda t: t[0], reverse=True)  # newest first
+    total = sized(directory / keep)
+    kept = 1
+    gone: list[Path] = []
+    for _, size, f in mains:
+        if kept < max_files and (max_bytes <= 0 or total + size <= max_bytes):
+            kept += 1
+            total += size
+        else:
+            remove(f)
+            gone.append(f)
     return gone
