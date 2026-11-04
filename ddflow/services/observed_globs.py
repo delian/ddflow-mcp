@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..core import globs
 from ..core.records.state import State
+from .completion._changed import changed_paths
 
 #: Returned by `undeclared_report` when git cannot say what changed: the check could not
 #: run, which is neither a pass nor a block.
@@ -35,13 +36,8 @@ _OWN = (".ddflow/**",)
 
 
 def _read(read: Callable | None) -> Callable:
-    """The one changed-files reader (`services.completion.changed_paths`), imported late:
-    the completion rule-set imports this module."""
-    if read is not None:
-        return read
-    from .completion.rules import changed_paths
-
-    return changed_paths
+    """The one changed-files reader (`services.completion.changed_paths`)."""
+    return read if read is not None else changed_paths
 
 
 def verdict_notice(state: State, cfg, item_id: str, repo: Path) -> tuple[str, bool]:

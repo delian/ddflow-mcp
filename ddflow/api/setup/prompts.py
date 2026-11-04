@@ -109,7 +109,14 @@ def prompts(
         # With no name, everything -- BOTH registries, plus any `[[macro]]`. Writing only
         # the templates would mean the documented way to edit a workflow command does not
         # exist.
-        names = [name] if name else [*P.TEMPLATE_NAMES, *P.all_commands(repo)]
+        names = (
+            [name]
+            if name
+            # A `[[macro]]` named like a template (macros.py refuses only COMMANDS names)
+            # is in BOTH `TEMPLATE_NAMES` and `all_commands`; dedupe so its one path lands
+            # once -- in `written` OR `skipped`, never both (force would write it twice).
+            else list(dict.fromkeys([*P.TEMPLATE_NAMES, *P.all_commands(repo)]))
+        )
         out = repo / ".ddflow" / "prompts"
         (out / "commands").mkdir(parents=True, exist_ok=True)
         written, skipped = [], []

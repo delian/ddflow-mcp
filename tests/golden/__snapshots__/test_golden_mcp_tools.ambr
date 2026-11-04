@@ -36,7 +36,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks.",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -167,13 +167,22 @@
           "type": "boolean",
           "description": "List what would be filed; write nothing."
          },
+         "apply": {
+          "type": "boolean",
+          "description": "Link each younger duplicate onto its cluster's canonical member (a `duplicate_of` link; nothing is closed)."
+         },
+         "floor": {
+          "type": "number",
+          "description": "Minimum score at which two bugs cluster (default: [dedupe].show_floor)."
+         },
          "action": {
           "type": "string",
           "enum": [
            "fixed",
            "invalid",
            "found",
-           "file_tasks"
+           "file_tasks",
+           "dedupe"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -820,6 +829,10 @@
          "summary": {
           "type": "string",
           "description": "What this session achieved."
+         },
+         "relayed_by": {
+          "type": "string",
+          "description": "The coordinator (agent) that relayed the words, when the operator's answer reached this agent through a coordinator rather than directly."
          },
          "model": {
           "type": "string",

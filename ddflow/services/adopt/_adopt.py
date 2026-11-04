@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...infra import paths
-from ._commands import AGENT_COMMANDS, _install_prompt_hooks, _write_command
+from ._commands import _install_prompt_hooks, _write_harness_files
 from ._docs import _backup_docs, _write_driver
 from ._launch import _launch_entry, _register_mcp
 from ._native import _claude_extras, _write_native_rule
@@ -87,10 +87,8 @@ def adopt(
         actions.append(_register_mcp(repo, key, launch=launch, image=image))
         if key in NATIVE_RULES:
             actions.append(_write_native_rule(repo, key, docs_dir))
-        for dst, src in AGENT_COMMANDS.get(key, {}).items():
-            actions.append(_write_command(repo, dst, templates / src))
+        actions.extend(_write_harness_files(repo, key, templates))
         actions.extend(_claude_extras(repo, key, templates, launch, image))
-
     # Only when a line written here carries a path: a uvx or docker entry has none, and
     # the hooks' own install message already says it for the hooks.
     entry = _launch_entry(launch, image)

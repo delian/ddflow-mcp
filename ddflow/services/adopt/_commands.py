@@ -48,6 +48,31 @@ AGENT_COMMANDS: dict[str, dict[str, str]] = {
     h.id: dict(h.commands.files) for h in HR.load() if h.commands is not None and h.commands.files
 }
 
+#: Subagent definition files to emit for a harness, keyed and shaped like `AGENT_COMMANDS`
+#: (`{repo-relative destination: source under templates/}`). The generic mirror of the
+#: Claude-specific lean role definitions in `services.leanagents`: a harness whose
+#: `[subagents].files` names its own subagent surfaces (Kilo's `.kilo/agent/`).
+AGENT_SUBAGENTS: dict[str, dict[str, str]] = {
+    h.id: dict(h.subagents.files)
+    for h in HR.load()
+    if h.subagents is not None and not h.subagents.none and h.subagents.files
+}
+
+
+def _write_harness_files(repo: Path, key: str, templates: Path) -> list[str]:
+    """The slash-command and subagent files a harness reads, written from its descriptor's
+    `[commands].files` and `[subagents].files` (one action line each)."""
+    out = [
+        _write_command(repo, dst, templates / src)
+        for dst, src in AGENT_COMMANDS.get(key, {}).items()
+    ]
+    out += [
+        _write_command(repo, dst, templates / src, "agents")
+        for dst, src in AGENT_SUBAGENTS.get(key, {}).items()
+    ]
+    return out
+
+
 #: The line that marked a command file as ddflow's own before the stamped grammar. A file
 #: carrying it is still ours (adopt migrates it to the region below); a file without it, or
 #: with a region someone broke, is the operator's -- a project adopting mid-stream often has

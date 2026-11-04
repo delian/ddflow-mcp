@@ -1105,7 +1105,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 530 knobs.
+cadences, and the rest of the 533 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5308,7 +5308,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 530): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 533): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5590,7 +5590,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=c234e29384ef -->
+<!-- ddflow:begin README/tools sha=3f82a6420a6d -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5607,7 +5607,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
 - `ddflow_task` (12 actions): `phase_add` (was `ddflow_phase_add`), `split` (was `ddflow_split`), `add` (was `ddflow_task_add`), `research_add` (was `ddflow_research_add`), `update` (was `ddflow_update`), `remove` (was `ddflow_remove`), `resolve` (was `ddflow_resolve`), `phase_close` (was `ddflow_phase_close`), `batch` (was `ddflow_batch`), `fold` (was `ddflow_task_fold`), `rename` (was `ddflow_rename`), `phase_complete` (was `ddflow_phase_complete`)
 - `ddflow_memory` (10 actions): `lesson_verify` (was `ddflow_lesson_verify`), `lesson_add` (was `ddflow_lesson_add`), `lesson_search` (was `ddflow_lesson_search`), `recall` (was `ddflow_recall`), `similar` (was `ddflow_similar`), `dupes` (was `ddflow_dupes`), `link` (was `ddflow_link`), `add` (was `ddflow_memory_add`), `list` (was `ddflow_memory_list`), `forget` (was `ddflow_memory_forget`)
-- `ddflow_bug` (4 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`)
+- `ddflow_bug` (5 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`), `dedupe` (was `ddflow_bug_dedupe`)
 - `ddflow_doctor` (10 actions): `recover` (was `ddflow_recover`), `cleanup` (was `ddflow_cleanup`), `replay` (was `ddflow_replay`), `rebuild` (was `ddflow_rebuild`), `verify` (was `ddflow_verify`), `bisect` (was `ddflow_bisect`), `hooks` (was `ddflow_hooks`), `check`, `precommit` (was `ddflow_precommit`), `record` (was `ddflow_record`)
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
@@ -5616,7 +5616,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 131 MCP tools by their own name (the flat list): 34 in the `core` tier, 48 more in `standard`, 49 more in `all`</summary>
+<details><summary>All 132 MCP tools by their own name (the flat list): 34 in the `core` tier, 49 more in `standard`, 49 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5697,6 +5697,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Landing it | `ddflow_queue` | standard | Merge queue. |
 | Landing it | `ddflow_version_cut` | all | Tag the next version. |
 | Landing it | `ddflow_version_show` | standard | The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the release branch), the next one, the… |
+| What the project remembers | `ddflow_bug_dedupe` | standard | Cluster the OPEN bugs that describe one root cause under different wordings (symptom + root-cause matching… |
 | What the project remembers | `ddflow_bug_file_tasks` | all | File the fix task of ONE open bug that has none (`id`), or of every such bug (`all`: one-shot after an… |
 | What the project remembers | `ddflow_bug_fixed` | core | Close a bug. |
 | What the project remembers | `ddflow_bug_found` | core | Report a bug the moment you find it, BEFORE fixing it. |
@@ -5749,7 +5750,7 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
 | When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
-| view | `ddflow_archdeps` | standard |  |
+| view | `ddflow_archdeps` | standard | The external-dependency census as a read-only report: every dependency family (third-party packages and the… |
 | Reading the queue | `ddflow_waves` | all | Dependency waves of the open queue: wave 0 = no open prerequisite (task-level or inherited from a phase)… |
 
 </details>
@@ -5886,7 +5887,7 @@ declared once and persists — see
 
 ## Configuration
 
-530 knobs across 50 sections, every one documented in place and listed, with its default
+533 knobs across 50 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5953,8 +5954,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=c031d5ec9499 -->
-<details><summary>All 530 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=c9e2857ffee1 -->
+<details><summary>All 533 knobs across 50 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6207,6 +6208,8 @@ long default is left to `ddflow config --explain`.
 | `locks.suggest_history` | `30` |  |
 | `locks.suggest_min_items` | `2` |  |
 | `locks.suggest_shown` | `5` |  |
+| `locks.snapshot` | `true` |  |
+| `locks.snapshot_max_age_s` | `1800` |  |
 | `lanes.window_s` | `86400` |  |
 | `lanes.stale_after_s` | `0` |  |
 | `lanes.watch_interval_s` | `5` |  |
@@ -6448,6 +6451,7 @@ long default is left to `ddflow config --explain`.
 | `rules.scopes_allowed` | `["project", "phase", "task"]` |  |
 | `agent.id` | `""` |  |
 | `agent.reviewer_family_must_differ` | `true` |  |
+| `agent.reviewer_independence` | `"model"` | `family` \| `model` \| `off` |
 | `agent.families` | (long: see `ddflow config --explain`) |  |
 | `agent.family` | `""` |  |
 | `agent.routers` | `{hydrafusion = []}` |  |

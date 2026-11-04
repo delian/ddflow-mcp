@@ -79,6 +79,7 @@
    "waiters",
    "globs_withheld",
    "yield_requested",
+   "recall",
    "wake"
   ],
   "output_schema": {
@@ -91,6 +92,7 @@
     "waiters": {},
     "globs_withheld": {},
     "yield_requested": {},
+    "recall": {},
     "wake": {},
     "export_refresh": {},
     "ci": {},
@@ -2894,6 +2896,41 @@
     "tasks": {},
     "done": {},
     "abandoned": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_bug_dedupe": {
+  "command": "bug_dedupe",
+  "schema": "bug_dedupe@1",
+  "shape": "object",
+  "payload": [
+   "clusters",
+   "count",
+   "applied",
+   "floor",
+   "semantic",
+   "scanned"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "bug_dedupe@1"
+    },
+    "clusters": {},
+    "count": {},
+    "applied": {},
+    "floor": {},
+    "semantic": {},
+    "scanned": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

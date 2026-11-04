@@ -13,7 +13,8 @@ from ...core import outcome as O
 from ...core import participation as PA
 from ...core import provenance as PV
 from ...core.budget import RECALL_MAX_CHARS, Budget
-from ...infra.store import recall_sources
+from ...infra.store import recall_sources, similar_records
+from ...services import bugsim
 from ...services import contextpack as CP
 from ...services import searchcore as SC
 from ...services import similar as sim
@@ -125,6 +126,40 @@ def recall(
     return O.Outcome(kind="recall", data=data, reason=cut.note())
 
 
+def _semantic_bug_rows(repo: Path, cfg, st, text: str, rows: list[dict]) -> str:
+    """Fold the semantic matcher's bug candidates into ``rows`` (in place), and Return the
+    note ("" when the embedder ran). Strengthened for bugs (DX-bug-dedupe-sweep): a
+    differently-worded report of one defect the token engine missed is surfaced; its score
+    is folded into the candidate, and a bug only the embedder sees is added."""
+    bugs = [r for r in similar_records(st) if r["kind"] == "bug"]
+    hits, note = bugsim.semantic_hits(repo, cfg, text, bugs, floor=cfg.dedupe.show_floor)
+    sem = dict(hits)
+    have = {r["id"] for r in rows if r["kind"] == "bug"}
+    for r in rows:
+        if r["kind"] == "bug" and r["id"] in sem:
+            r["semantic"] = sem[r["id"]]
+            r["score"] = max(r["score"], r["semantic"])
+    for bid, s in hits:
+        if bid in have:
+            continue
+        src = next((x for x in bugs if x["id"] == bid), None)
+        headline, state = DD.record_state(st, bid, "bug", grace_s=cfg.lease.grace_s)
+        rows.append(
+            {
+                "id": bid,
+                "kind": "bug",
+                "title": " ".join((headline or (src["body"] if src else "")).split())[:200],
+                "state": state,
+                "score": s,
+                "semantic": s,
+                "shared": [],
+                "flags": ["semantic"],
+            }
+        )
+    rows.sort(key=lambda r: (-r["score"], r["id"]))
+    return note
+
+
 def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Outcome:
     """ "Is this already filed?" -- the records most like ``text``, before it is added.
 
@@ -165,6 +200,7 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
         # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
         cands = [c for c in found.candidates if c.kind in scope]
         rows = DD.rows(st, matcher, cands, text, grace_s=cfg.lease.grace_s)
+        note = _semantic_bug_rows(repo, cfg, st, text, rows) if "bug" in scope else ""
     data = {
         "text": text,
         "kinds": scope,
@@ -172,6 +208,8 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
         "candidates": rows,
         "count": len(rows),
     }
+    if "bug" in scope:
+        data["semantic"] = note or "semantic + overlap"
     if not rows:
         return O.nothing(
             "similar",

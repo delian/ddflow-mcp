@@ -43,6 +43,9 @@ class Outcome:
     #: Lines the tree differed from HEAD by when the verdict was recorded (insertions plus
     #: deletions of the evidence's ``diff_stat``); None when the evidence carried none.
     changed_lines: int | None = None
+    #: A review's independence tier (family | model | none), "" for an older log or a
+    #: gate no reviewer judged (D-reviewer-independence-soft).
+    tier: str = ""
 
 
 @dataclass(frozen=True)
@@ -152,6 +155,7 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         elapsed_s=_float(evidence.get("elapsed_s")),
         waited_s=_float(evidence.get("waited_s")),
         changed_lines=_changed_lines(evidence),
+        tier=str(evidence.get("independence_tier") or ""),
     )
 
 

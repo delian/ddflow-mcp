@@ -10,7 +10,7 @@ def reason(rows_: list[dict[str, Any]], floor: float = 0.0) -> str:
     under ``floor``) is shown apart, as information: it is not what makes the add refuse."""
     asking = [r for r in rows_ if not _only_named(r, floor)] or rows_
     named = [r for r in rows_ if r not in asking]
-    lines = ["refused: possible duplicate. It reads like:"]
+    lines = ["refused: possible duplicate (not added). It reads like:"]
     lines += [_line(r) for r in asking]
     if named:
         lines.append("Also named by the text (information only, not why this was refused):")

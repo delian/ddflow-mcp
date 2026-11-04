@@ -1665,6 +1665,17 @@
           that many days -- or ever, so a weekly pass that has never run is due now
           rather than silently never. For a rule like 'a bug hunt every week' that
           otherwise lives only in prose, which is where it stops happening.
+      cadence.recall_recheck_s = 1800   [default]
+          Seconds between periodic re-scorings of the pre-recorded lessons against an
+          item a worker still holds, re-surfacing any it re-violates mid-work
+          (`services/recall`, Bcd5871e71b). 0 turns the mid-work recheck off. The run
+          is recorded as `cadence.ran recall_recheck:<item>`, so the next scoring
+          waits this long after the last and a heartbeat storm never busy-loops the
+          recall engine.
+      cadence.recall_recheck_max = 3   [default]
+          How many mid-work lesson re-scorings one item may cause before it goes
+          quiet. 0 is no cap. A small number keeps the reminder occasional rather than
+          a nag; the interval `recall_recheck_s` still bounds how fast it can run.
       reinstruct.enabled = True   [default]
           Whether tool results may carry a short footer naming what this project has
           left undone. The instruction block is delivered once at connect; after a
@@ -1943,6 +1954,60 @@
           looping); `config --set`, `ddflow_configure` and the environment refuse it,
           and so does loading ddflow's own source tree, where the file and the code
           are one commit.
+      locks.undeclared_write = 'warn'   [default]
+          What `gate status`, `brief` and `complete` do about a task whose diff has
+          files in none of its lease globs (measured: 45% of the files tasks touch are
+          undeclared, so parallel agents cannot see the overlap). 'warn' names them
+          and the exact call that declares them (`ddflow update <id> --globs ...`, MCP
+          `ddflow_task action=update`), 'block' makes `complete` refuse until they are
+          declared, 'off' disables. When git cannot say what the task changed the
+          check could not run: a warning, never a block and never a pass. Change it
+          for the project (`ddflow config locks.undeclared_write ...`), for this
+          machine (add --local), per run (DDFLOW_LOCKS_UNDECLARED_WRITE), or over MCP
+          with `ddflow_configure`. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'block', the strictest
+          (complete refuses); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
+      locks.suggest_globs = True   [default]
+          Offer glob suggestions: declared globs the task's diff never touched are
+          named for narrowing when it is ready to merge (measured: 50% of declared
+          files are never touched), and directories that finished tasks of the same
+          tags keep writing outside their declaration are named at `claim` and `gate
+          status`. Advice only; nothing is changed. Off: neither is offered.
+      locks.suggest_history = 30   [default]
+          How many of the most recent finished tasks sharing a tag with this one are
+          read to learn which undeclared directories to suggest (each read is one git
+          diff of its landed range). 0 reads none.
+      locks.suggest_min_items = 2   [default]
+          A directory is suggested only when at least this many finished tasks of the
+          same tags wrote into it outside their declared globs: one task's miss is an
+          accident, a repeated one is a habit.
+      locks.suggest_shown = 5   [default]
+          At most this many suggested or undeclared paths are listed in one notice;
+          the rest are counted.
+      locks.snapshot = True   [default]
+          Keep `.ddflow/local/lease-snapshot.json`, a small machine-local file
+          rewritten on every lease acquire, renewal, release and expiry, which the
+          per-edit write hook reads instead of folding the whole event log (that fold
+          cost 3.7 s per edit on a 108 MB log). Off: nothing is written and the hook
+          cannot check a lease, so it allows the call and says the commit-time check
+          is the only one. Change it for the project (`ddflow config locks.snapshot
+          ...`), for this machine (add --local), per run (DDFLOW_LOCKS_SNAPSHOT), or
+          over MCP with `ddflow_configure`; an organisation locks it in its shared
+          config.
+      locks.snapshot_max_age_s = 1800   [default]
+          A lease snapshot written longer ago than this many seconds is STALE: the
+          write hook does not trust it, ALLOWS the call and says so on stderr (the
+          commit-time lease check is then the only check), never a silent pass. A live
+          agent's heartbeat rewrites the snapshot at least every
+          `[lease].renew_log_min_s` plus its heartbeat, so the default (the lease TTL)
+          lapses only when nothing has touched the leases for that long. Lower = the
+          hook falls back to the commit-time check sooner; higher = it trusts an older
+          picture of who holds what. 0 = never stale. Change it for the project
+          (`ddflow config locks.snapshot_max_age_s ...`), for this machine (add
+          --local), per run (DDFLOW_LOCKS_SNAPSHOT_MAX_AGE_S), or over MCP with
+          `ddflow_configure`.
       lanes.window_s = 86400   [default]
           How far back a lane's last event may be for `ddflow lanes` to list it (a
           lane holding a live lease is always listed). Older agents are history, not
@@ -3556,9 +3621,23 @@
           Stable identity for this agent process, used to shard the event log so
           concurrent agents never write the same file. Empty auto-derives host-pid.
       agent.reviewer_family_must_differ = True   [default]
-          Require at least one reviewer from a different pretraining family than the
-          author. A same-family reviewer shares the author's blind spots, so its
-          agreement is not independent evidence.
+          Legacy switch for `reviewer_independence`: false means `off`; true (the
+          default) defers to `reviewer_independence`. Same-family agreement shares the
+          author's blind spots, which is why a different family is preferred.
+      agent.reviewer_independence = 'model'   [default]
+          How independent a reviewer must be of the author (D-reviewer-independence-
+          soft). `family`: at least one reviewer from a different pretraining family
+          (the strictest; pin it for the whole organisation with a lock). `model`: a
+          different family is preferred, and a DIFFERENT MODEL of the author's family
+          also satisfies the gate, recorded as tier `model` -- the normal state for a
+          single-subscription account. `off`: no independence is demanded. The
+          author's own model never counts, and a model no map recognises establishes
+          nothing, at any level. The legacy boolean `reviewer_family_must_differ =
+          false` still means `off`. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'family', the strictest (an
+          unknown level asks for a reviewer of another family); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       agent.families = {'qwen': 'alibaba', 'claude': 'anthropic', 'gpt': 'openai', 'o1': 'openai', 'o3': 'openai', 'codex': 'openai', 'gemini': 'google', 'gemma': 'google', 'llama': 'meta', 'mistral': 'mistral', 'mixtral': 'mistral', 'deepseek': 'deepseek', 'grok': 'xai', 'phi': 'microsoft', 'command': 'cohere', 'yi-': '01ai', 'glm': 'zhipu', 'nemotron': 'nvidia', 'granite': 'ibm', 'kimi': 'moonshot', 'minimax': 'minimax', 'ernie': 'baidu'}   [default]
           Model-name substring (matched case-blind; an empty key matches nothing) to
           pretraining-family map, used to enforce the rule above. Extend it as new

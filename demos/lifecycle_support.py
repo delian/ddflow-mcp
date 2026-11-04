@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 #: The second agent, so act 1 can complete its handshake before act 2 uses it.
 BETA: list = [None]
 
+#: A governing decision D1 surfaces as the fenced attribute `id="D1"`. Match the
+#: attribute itself (a standalone `id` key whose value is exactly `D1`), never the
+#: bare substring: `related_id="D1"`, `data-id="D1"` or `id="D10"` must not count.
+_D1_RECORD = re.compile(r'(?<![\S=])id="D1"')
+
 
 def work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
     """Claim, write, test, pass the pipeline, complete, merge. The per-task order."""
@@ -19,7 +25,17 @@ def work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
     sc.check(f"{item} got its own worktree", wt.is_dir() and wt.parent == wt_root, str(wt))
 
     brief = client.tool("ddflow_brief", item=item)[0]
-    sc.check(f"{item}'s brief carries the rules and decisions in force", "D1" in brief or True, "")
+    # The assertion is both directions on purpose: the scenario is load-bearing on
+    # "scoping by globs, not by broadcast", so D1 must appear exactly for the files
+    # it governs (ledger/core/money.py, ledger/report/**) and not otherwise.
+    governs_d1 = any(
+        rel == "ledger/core/money.py" or rel.startswith("ledger/report/") for rel in files
+    )
+    sc.check(
+        f"{item}'s brief surfaces decision D1 exactly where it governs {item}'s files",
+        bool(_D1_RECORD.search(brief)) == governs_d1,
+        brief[:400],
+    )
 
     for rel, body in files.items():
         p = wt / rel
