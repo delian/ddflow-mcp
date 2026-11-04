@@ -633,7 +633,7 @@
   ],
   2,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
+  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
  ],
  [
   [
@@ -1288,7 +1288,7 @@
    "show"
   ],
   0,
-  "on main: current (none) (no tag)\nnext: 0.1.0  (patch, 7 commit(s), 0 item(s))\n\n## v0.1.0\n\n",
+  "on main: current (none) (no tag)\nnext: 0.1.0  (patch, 10 commit(s), 0 item(s))\n\n## v0.1.0\n\n",
   ""
  ],
  [
@@ -1298,7 +1298,7 @@
    "show"
   ],
   0,
-  "{\n  \"schema\": \"version_show@1\",\n  \"ref\": \"main\",\n  \"current\": \"\",\n  \"current_tag\": \"\",\n  \"next\": \"0.1.0\",\n  \"bump\": \"patch\",\n  \"reasons\": [],\n  \"commits\": 7,\n  \"items\": [],\n  \"notes\": \"## v0.1.0\\n\",\n  \"problems\": [],\n  \"line\": \"current\"\n}\n",
+  "{\n  \"schema\": \"version_show@1\",\n  \"ref\": \"main\",\n  \"current\": \"\",\n  \"current_tag\": \"\",\n  \"next\": \"0.1.0\",\n  \"bump\": \"patch\",\n  \"reasons\": [],\n  \"commits\": 10,\n  \"items\": [],\n  \"notes\": \"## v0.1.0\\n\",\n  \"problems\": [],\n  \"line\": \"current\"\n}\n",
   ""
  ],
  [
