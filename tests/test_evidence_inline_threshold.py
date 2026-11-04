@@ -81,3 +81,20 @@ def test_an_old_log_replays_identically_and_is_not_rewritten(tmp_path):
         k: v.gates for k, v in again.items.items()
     }
     assert {p.name: p.read_bytes() for p in events.glob("*.jsonl")} == before
+
+
+def test_appending_to_an_old_log_leaves_its_events_byte_identical(tmp_path):
+    """The upgrade path: an old inline log, opened with the switch on, gains a small-stub
+    event at the tail; every old line stays as written and replays the same."""
+    events = tmp_path / ".ddflow" / "events"
+    logfixture.generate(events, 800, seed=3)
+    shard = next(events.glob("*.jsonl"))
+    old_lines = shard.read_bytes().splitlines(keepends=True)
+    cfg = LogConfig(evidence_blobs=True)
+    log = EventLog(tmp_path, shard.stem, log_cfg=cfg)
+    log.append("task.added", "TNEW", {"title": "t", "globs": ["a.py"]})
+    ev = log.append("gate.passed", "TNEW", {"gate": "g", "evidence": {"tail": "t" * 400}})
+    assert B.is_stub(ev.data["evidence"]["tail"])
+    assert shard.read_bytes().splitlines(keepends=True)[: len(old_lines)] == old_lines
+    st = fold(EventLog(tmp_path, log_cfg=cfg).read_all(), strict=False)
+    assert LB.full(st.items["TNEW"].gates["g"].evidence, root=tmp_path)["tail"] == "t" * 400
