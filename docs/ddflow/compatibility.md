@@ -149,3 +149,15 @@ What checks this contract, and which tasks complete it:
 | every `--json` and MCP result names its schema version | B-uni-compat-json |
 | surface snapshots (help tree, `tools/list`, JSON schemas, `config --explain`, event kinds) compared with the previous release | B-uni-compat-tests |
 | the release's bump level comes from the declared impact in the upgrade manifest (`scripts/release_impact.py`, read by `publish.yml`), and an undeclared surface change or a too-small version step refuses the release (`scripts/release.sh`) | B-uni-compat-release-gate: `tests/test_release_gate.py` |
+
+## Upgrade note: BLAS thread cap (B4c7b7e8d5b)
+
+The `ddflow` and `ddflow-mcp` commands (not a library `import ddflow`) now set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` to `1`
+when the process has not set them (numpy's thread pool cost seconds of CPU per command on a
+many-core host), and `model2vec` is imported only when an embedding is requested. Nothing on
+disk changes and old logs replay identically. To keep the old behaviour, export the variable
+yourself before running ddflow; a value you set is never overridden.
+
+`embed.extra_installed()` (used by `ddflow doctor`) no longer imports the `[rag]` extra: before the
+first embedding it answers "the package is findable", so `ddflow doctor` may say installed for a
+findable but broken install; the first embedding request reports that as unavailable, with the reason.
