@@ -122,5 +122,9 @@ _SUBMODULE_OF = {
     "renew_window": "lifecycle",
 }
 
+# Importing it registers the log's append hook that keeps `.ddflow/local/lease-snapshot.json`
+# current (LK-hook-snapshot); it imports nothing from this package, so it is no cycle.
+from . import snapshot as snapshot  # noqa: E402
+
 _reexport.reexport(globals(), _SUBMODULE_OF, __name__)
 del _reexport

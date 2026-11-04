@@ -40,3 +40,13 @@ class LocksConfig:
         doc="At most this many suggested or undeclared paths are listed in one notice; the rest are counted.",
         check=int_at_least(1),
     )
+
+    snapshot: bool = knob(
+        True,
+        doc="Keep `.ddflow/local/lease-snapshot.json`, a small machine-local file rewritten on every lease acquire, renewal, release and expiry, which the per-edit write hook reads instead of folding the whole event log (that fold cost 3.7 s per edit on a 108 MB log). Off: nothing is written and the hook cannot check a lease, so it allows the call and says the commit-time check is the only one. Change it for the project (`ddflow config locks.snapshot ...`), for this machine (add --local), per run (DDFLOW_LOCKS_SNAPSHOT), or over MCP with `ddflow_configure`; an organisation locks it in its shared config.",
+    )
+    snapshot_max_age_s: int = knob(
+        1800,
+        doc="A lease snapshot written longer ago than this many seconds is STALE: the write hook does not trust it, ALLOWS the call and says so on stderr (the commit-time lease check is then the only check), never a silent pass. A live agent's heartbeat rewrites the snapshot at least every `[lease].renew_log_min_s` plus its heartbeat, so the default (the lease TTL) lapses only when nothing has touched the leases for that long. Lower = the hook falls back to the commit-time check sooner; higher = it trusts an older picture of who holds what. 0 = never stale. Change it for the project (`ddflow config locks.snapshot_max_age_s ...`), for this machine (add --local), per run (DDFLOW_LOCKS_SNAPSHOT_MAX_AGE_S), or over MCP with `ddflow_configure`.",
+        check=int_at_least(0),
+    )
