@@ -252,7 +252,9 @@ def test_completion_judges_independence_by_the_agent_that_ran(
     code, out, err = _record(repo, head)
     assert code == 0, out + err
     st = fold(EventLog(repo).read_all(), strict=False)
-    ok, why = G.reviewer_independence(st, Config(), "T1", "claude-opus-5-5")
+    cfg = Config()
+    cfg.agent.reviewer_independence = "family"
+    ok, why = G.reviewer_independence(st, cfg, "T1", "claude-opus-5-5")
     assert ok is independent, why
 
 

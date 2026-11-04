@@ -140,7 +140,13 @@ class AgentConfig:
     )
     reviewer_family_must_differ: bool = knob(
         True,
-        doc="Require at least one reviewer from a different pretraining family than the author. A same-family reviewer shares the author's blind spots, so its agreement is not independent evidence.",
+        doc="Legacy switch for `reviewer_independence`: false means `off`; true (the default) defers to `reviewer_independence`. Same-family agreement shares the author's blind spots, which is why a different family is preferred.",
+    )
+    reviewer_independence: str = knob(
+        "model",
+        doc="How independent a reviewer must be of the author (D-reviewer-independence-soft). `family`: at least one reviewer from a different pretraining family (the strictest; pin it for the whole organisation with a lock). `model`: a different family is preferred, and a DIFFERENT MODEL of the author's family also satisfies the gate, recorded as tier `model` -- the normal state for a single-subscription account. `off`: no independence is demanded. The author's own model never counts, and a model no map recognises establishes nothing, at any level. The legacy boolean `reviewer_family_must_differ = false` still means `off`.",
+        choices=("family", "model", "off"),
+        strictest=("family", "an unknown level asks for a reviewer of another family"),
     )
     families: dict[str, str] = knob(
         factory=lambda: dict(FAMILY_HINTS),

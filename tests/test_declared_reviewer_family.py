@@ -49,6 +49,7 @@ def test_a_review_recorded_family_wins_over_the_served_name(log, cfg, gd):
 def test_a_declared_family_equal_to_the_authors_is_not_independent(log, cfg, gd):
     """The dangerous direction: a served name from another family must not rescue a
     reviewer the operator declared to be the author's own family."""
+    cfg.agent.reviewer_independence = "family"
     _item(log)
     G.record(log, cfg, "T1", "critic", "passed", evidence=_review("anthropic"), gates=gd)
     ok, why = G.reviewer_independence(fold(log.read_all()), cfg, "T1", "claude-opus-5")
@@ -82,6 +83,7 @@ def test_an_undeclared_family_falls_back_to_the_name(log, cfg, gd, family):
 def test_family_names_are_compared_case_blind(log, cfg, gd):
     """A declared 'ALIBABA' against an author the map calls 'Alibaba' is the SAME family:
     lowercasing only one side made them look independent (rubber duck, B-fam-case)."""
+    cfg.agent.reviewer_independence = "family"
     cfg.agent.families = {**cfg.agent.families, "inhouse-coder": "Alibaba"}
     _item(log)
     G.record(log, cfg, "T1", "critic", "passed", evidence=_review("ALIBABA"), gates=gd)
@@ -91,6 +93,7 @@ def test_family_names_are_compared_case_blind(log, cfg, gd):
 
 def test_map_values_differing_only_in_case_are_one_family(log, cfg, gd):
     """The name-inferred side too: two map entries spelling one family differently."""
+    cfg.agent.reviewer_independence = "family"
     cfg.agent.families = {
         **cfg.agent.families,
         "inhouse-coder": "alibaba",

@@ -90,23 +90,6 @@ def test_unavailable_is_not_a_pass_in_status(log, cfg, gd):
     assert not s.complete
 
 
-def test_same_family_panel_is_not_independent(log, cfg, gd):
-    item(log)
-    G.record(
-        log, cfg, "T1", "rubber_duck", "passed", evidence={"model": "claude-sonnet-5"}, gates=gd
-    )
-    G.record(
-        log, cfg, "T1", "standards", "passed", evidence={"model": "claude-haiku-4-5"}, gates=gd
-    )
-    st = fold(log.read_all())
-    ok, why = G.reviewer_independence(st, cfg, "T1", "claude-opus-5")
-    assert not ok and "same as the author" in why
-    G.record(log, cfg, "T1", "critic", "passed", evidence={"model": "gemini-2.5-pro"}, gates=gd)
-    st = fold(log.read_all())
-    ok, why = G.reviewer_independence(st, cfg, "T1", "claude-opus-5")
-    assert ok and "google" in why
-
-
 def test_no_reviewer_at_all_is_not_independence(log, cfg):
     item(log)
     st = fold(log.read_all())

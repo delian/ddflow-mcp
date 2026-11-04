@@ -3621,9 +3621,23 @@
           Stable identity for this agent process, used to shard the event log so
           concurrent agents never write the same file. Empty auto-derives host-pid.
       agent.reviewer_family_must_differ = True   [default]
-          Require at least one reviewer from a different pretraining family than the
-          author. A same-family reviewer shares the author's blind spots, so its
-          agreement is not independent evidence.
+          Legacy switch for `reviewer_independence`: false means `off`; true (the
+          default) defers to `reviewer_independence`. Same-family agreement shares the
+          author's blind spots, which is why a different family is preferred.
+      agent.reviewer_independence = 'model'   [default]
+          How independent a reviewer must be of the author (D-reviewer-independence-
+          soft). `family`: at least one reviewer from a different pretraining family
+          (the strictest; pin it for the whole organisation with a lock). `model`: a
+          different family is preferred, and a DIFFERENT MODEL of the author's family
+          also satisfies the gate, recorded as tier `model` -- the normal state for a
+          single-subscription account. `off`: no independence is demanded. The
+          author's own model never counts, and a model no map recognises establishes
+          nothing, at any level. The legacy boolean `reviewer_family_must_differ =
+          false` still means `off`. An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'family', the strictest (an
+          unknown level asks for a reviewer of another family); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       agent.families = {'qwen': 'alibaba', 'claude': 'anthropic', 'gpt': 'openai', 'o1': 'openai', 'o3': 'openai', 'codex': 'openai', 'gemini': 'google', 'gemma': 'google', 'llama': 'meta', 'mistral': 'mistral', 'mixtral': 'mistral', 'deepseek': 'deepseek', 'grok': 'xai', 'phi': 'microsoft', 'command': 'cohere', 'yi-': '01ai', 'glm': 'zhipu', 'nemotron': 'nvidia', 'granite': 'ibm', 'kimi': 'moonshot', 'minimax': 'minimax', 'ernie': 'baidu'}   [default]
           Model-name substring (matched case-blind; an empty key matches nothing) to
           pretraining-family map, used to enforce the rule above. Extend it as new

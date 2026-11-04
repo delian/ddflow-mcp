@@ -128,6 +128,7 @@ def test_complete_refuses_a_same_family_review_panel(proj):
     agreement amplifies shared error rather than testing it. A panel may KILL a
     finding; it may never promote one, and it may never stand in for independence.
     """
+    run_cli(proj, "config", "--set", "agent.reviewer_independence", "family")
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
     pass_pipeline(proj, "P1.T1", reviewer="claude-sonnet-5")
     code, _, err = run_cli(proj, "complete", "P1.T1", "--model", "claude-opus-5")
