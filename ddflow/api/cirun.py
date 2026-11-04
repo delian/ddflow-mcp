@@ -13,6 +13,7 @@ from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
 from ..services import ci_marker as CM
+from ..services.ci import admission as AD
 from ..services.flakes import failed_tests
 from ..services.gates import baseline as BL
 from ..services.gates.handrecord import CI_RUN
@@ -171,6 +172,7 @@ def run(
     res = CI.run(
         repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s or 0,
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
+        rates=[] if full or command else AD.measured_rates(log.read_all(), cfg),
     )  # fmt: skip
     data = res.as_data()
     data.update(_keep_failing_ids(repo, res))

@@ -962,6 +962,10 @@
           "type": "boolean",
           "description": "File a REMOVED item's id again with this definition. An id still in the queue is always refused -- change that item with ddflow_update."
          },
+         "allow_unknown_needs": {
+          "type": "boolean",
+          "description": "Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id."
+         },
          "relation": {
           "type": "string",
           "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
