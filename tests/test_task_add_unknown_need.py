@@ -60,3 +60,14 @@ def test_allow_unknown_needs_overrides_the_refusal(repo):
 def test_valid_need_is_still_accepted(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A,B")[0] == 0
+
+
+def test_add_needs_valid_id_is_not_refused_on_a_pre_existing_unknown_need(repo):
+    _two(repo)
+    # An item keeps an unknown need it was filed with under the override flag (or pre-fix):
+    # adding a VALID need later must not be refused on the stale one it already holds.
+    assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "OLD-GHOST",
+                   "--allow-unknown-needs")[0] == 0
+    code, out, err = run_cli(repo, "update", "T", "--add-needs", "A")
+    assert code == 0, out + err
+    assert _items(repo)["T"].needs == ["OLD-GHOST", "A"]

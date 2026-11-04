@@ -195,7 +195,11 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
     _adjust_list(it, edit, fields, "needs")
     _adjust_list(it, edit, fields, "tags")
     _adjust_globs(it, edit, fields)
-    if not edit.allow_unknown_needs and (bad := IT.unknown_needs(st, fields.get("needs"))):
+    # Validate only the ids THIS edit introduces -- a replacement (`--needs`) or added ones
+    # (`--add-needs`) -- not the merged result: an item filed before the fix may already
+    # hold an unknown need, and a valid `--add-needs REAL` must not be refused on it.
+    introduced = (edit.needs or []) + (edit.add_needs or [])
+    if not edit.allow_unknown_needs and (bad := IT.unknown_needs(st, introduced)):
         return O.failed("item.updated", f"{it.id}: {bad}", id=it.id)
     moved = IM.plan(cfg, st, it, edit.parent, edit.kind, _line_frozen, fields.get("needs"))
     if isinstance(moved, str):
