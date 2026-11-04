@@ -13,6 +13,7 @@ pass). Pure of the log: `api/probe.py` records the event.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +32,6 @@ LIMIT = (
     "used on the other) still needs the gates and ci on the merge result"
 )
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
-_FILES = re.compile(r"conflicting files: ([^;]*)")
 
 
 @dataclass(frozen=True)
@@ -82,14 +82,32 @@ def _parse(out: bytes) -> tuple[str, ...]:
     return tuple(sorted(set(names)))
 
 
+def _both_changed(repo: Path, item: str, against: str) -> tuple[str, ...]:
+    """Paths changed on both sides since their merge base, as git spells them (NUL separated):
+    a superset of the conflicted paths, with names exact whatever characters they carry."""
+    base = G.run(repo, "merge-base", item, against)
+    if not base.ok:
+        return ()
+    sides = [
+        G.run(repo, "diff", "--name-only", "-z", base.out, x, z=False, binary=True)
+        for x in (item, against)
+    ]
+    if not all(r.ok for r in sides):
+        return ()
+    one, two = ({os.fsdecode(n) for n in (r.out_bytes or b"").split(b"\0") if n} for r in sides)
+    return tuple(sorted(one & two))
+
+
 def _scratch(repo: Path, item: str, against: str) -> Probe:
     with CI.merge_tree(repo, item, against) as (_tree, why):
         if _tree is not None:
             return Probe(CLEAN, SCRATCH, (), item, against)
         kind = getattr(why, "kind", "")
         if kind == CI.CONFLICT:
-            found = _FILES.search(str(why))
-            names = tuple(n.strip() for n in found.group(1).split(",")) if found else ()
+            # The scratch merge says which files in prose; a name is taken from it only when
+            # it is one both sides changed, so a comma or semicolon in a path cannot split it.
+            said = str(why)
+            names = tuple(n for n in _both_changed(repo, item, against) if n in said)
             return Probe(CONFLICT, SCRATCH, names, item, against)
         return Probe(UNAVAILABLE, SCRATCH, (), item, against, str(why)[-300:])
 

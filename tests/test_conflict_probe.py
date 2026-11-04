@@ -174,3 +174,26 @@ def test_probe_at_accepts_a_single_place_and_reports_a_bad_type() -> None:
 
     assert _probe_at("claim") == (["claim"], [])
     assert _probe_at(3)[1]
+
+
+def test_scratch_conflict_names_a_path_with_a_comma_whole(repo: Path, monkeypatch) -> None:
+    (repo / "a,b.txt").write_text("one\n")
+    _git(repo, "add", "a,b.txt")
+    _git(repo, "commit", "-qm", "comma")
+    _branch(repo, "ddflow/c", "a,b.txt", "branch\n")
+    _main_edit(repo, "a,b.txt", "main\n")
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
+    assert PR.run(repo, "ddflow/c", "main", timeout_s=TIMEOUT).paths == ("a,b.txt",)
+
+
+def test_an_item_named_main_does_not_hijack_the_default_branch(pair: Path) -> None:
+    _items(pair, "clash", "main")
+    _git(pair, "branch", "ddflow/main", "ddflow/clean")
+    code, out, err = run_cli(pair, "--json", "probe", "clash")
+    assert json.loads(out)["against"] == "main" and code == 1
+
+
+def test_conflict_text_names_the_mcp_call(pair: Path) -> None:
+    _items(pair, "clash")
+    _, out, _ = run_cli(pair, "--json", "probe", "clash")
+    assert "ddflow_probe id=clash" in json.loads(out)["text"]
