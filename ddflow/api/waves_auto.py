@@ -29,14 +29,14 @@ _SCOPE = contextvars.ContextVar("ddflow_waves_auto_scope", default=None)
 
 
 @contextlib.contextmanager
-def _own_appends(log):
+def _own_appends(root, who):
     """Counts the events THIS process appends for the caller while the block runs.
 
     Counted by the append hook, not by shard size: a shard is keyed by agent name, so a
     second PROCESS using the same name grows it too, and that is not this command's write
     (Bc5d4aafb98, rule r-read-verbs-read-only)."""
     seen = [0]
-    root, who, token = log.root, log.agent_id, object()
+    token = object()
 
     def hook(wlog, ev, _start, _end):
         if _SCOPE.get() is token and wlog.root == root and ev.agent == who:
@@ -66,7 +66,8 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
             # would write the feature's own events into the live shared log (Bf4eaec64a6).
             and not PATHS.running_from_linked_worktree_against(repo)
         )
-        counter = _own_appends(log) if on else None
+        # the identity derives lazily and may fail: resolved HERE, inside the guard
+        counter = _own_appends(log.root, log.agent_id) if on else None
     except Exception:  # stamping must never break the command it follows
         on, counter = False, None
     if not on:
