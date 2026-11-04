@@ -123,11 +123,12 @@ def test_cli_clean_conflict_peer_and_event(pair: Path) -> None:
     assert code == 1 and "shared.txt" in out + err and "ddflow wait" in out + err
     code, _, _ = run_cli(pair, "probe", "clean", "--against", "clash")
     assert code == 0
-    code, out, _ = run_cli(pair, "--json", "probe", "clash")
+    code, out, _ = run_cli(pair, "--json", "probe", "clean")
     body = json.loads(out)
-    assert body["result"] == "conflict" and body["paths"] == ["shared.txt"]
+    assert body["result"] == "clean" and body["paths"] == []
     assert len(body["head"]) == 40 and len(body["base"]) == 40
     events = [e for e in EventLog(pair, "x").read_all() if e.kind == "probe.recorded"]
+    assert events[1].data["paths"] == ["shared.txt"]
     assert [e.data["result"] for e in events][:2] == ["clean", "conflict"]
     assert all("text" not in e.data for e in events)
 
@@ -193,13 +194,13 @@ def test_an_item_named_main_does_not_hijack_the_default_branch(pair: Path) -> No
     _items(pair, "clash", "main")
     _git(pair, "branch", "ddflow/main", "ddflow/clean")
     code, out, _err = run_cli(pair, "--json", "probe", "clash")
-    assert json.loads(out)["against"] == "main" and code == 1
+    assert code == 1 and "against main" in json.loads(out)["refusal"]["reason"]
 
 
 def test_conflict_text_names_the_mcp_call(pair: Path) -> None:
     _items(pair, "clash")
     _, out, _ = run_cli(pair, "--json", "probe", "clash")
-    assert "ddflow_probe id=clash" in json.loads(out)["text"]
+    assert "ddflow_probe id=clash" in json.loads(out)["refusal"]["reason"]
 
 
 def test_peer_advice_names_the_peer_branch_not_its_item_id(pair: Path) -> None:
@@ -209,8 +210,7 @@ def test_peer_advice_names_the_peer_branch_not_its_item_id(pair: Path) -> None:
     _git(pair, "commit", "-qam", "peer")
     _git(pair, "checkout", "-q", "main")
     _, out, _ = run_cli(pair, "--json", "probe", "clash", "--against", "clean")
-    body = json.loads(out)
-    assert body["result"] == "conflict" and "Merge ddflow/clean into" in body["text"]
+    assert "Merge ddflow/clean into" in json.loads(out)["refusal"]["reason"]
 
 
 def test_a_ref_that_looks_like_an_option_is_refused(pair: Path) -> None:

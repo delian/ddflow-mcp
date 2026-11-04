@@ -59,7 +59,7 @@ def probe(repo: Path, item: str, *, against: str = "", at: str = "", agent: str 
         return O.nothing(KIND, why, id=item, result=PR.UNAVAILABLE, at=at, text=why)
     branch = _branch(st, cfg, item)
     if not branch:
-        return O.failed(KIND, f"no such item {item!r}: `ddflow list` names the items", id=item)
+        return O.failed(KIND, f"no such item {item!r}: `ddflow list` names the items")
     target = against or MAIN
     if target == MAIN:  # always the repository's default branch, even beside an item id "main"
         peer = W.default_branch(repo)

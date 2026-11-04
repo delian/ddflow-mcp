@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from ..registry import CliPolicy, Command, Param, by_tool
+from ..registry import Command, Param, by_tool
 from ..tools._common import _api
 
 COMMANDS: tuple[Command, ...] = (
@@ -41,7 +41,6 @@ COMMANDS: tuple[Command, ...] = (
             "text",
         ),
         render=lambda out, a: out.data["text"],
-        cli=CliPolicy(body_always=True),
         params=(
             Param("id", help="The item whose branch is probed.", cli_help="", positional=True),
             Param(
