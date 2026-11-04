@@ -99,8 +99,8 @@ def test_sweep_interval_zero_sweeps_on_every_brief(repo, monkeypatch):
     from ddflow.services import cleanup as CL
 
     monkeypatch.setattr(CL, "sweep_finished", lambda *a, **k: calls.append(1) or [])
-    LC.brief(repo, agent="reader")
-    LC.brief(repo, agent="reader")
+    assert LC.brief(repo, agent="reader").exit == 0
+    assert LC.brief(repo, agent="reader").exit == 0
     assert len(calls) == 2
 
 
@@ -116,3 +116,13 @@ def test_recover_still_measures_every_tree(repo):
     capped = L.scan(EventLog(repo, "r"), Config.load(repo), repo, view=True)
     assert sum(1 for r in capped if r.salvageable is None) == 20 - 16
     assert all("complete" in r.advice or "NOT MEASURED" in r.advice for r in capped)
+
+
+def test_an_unknown_commit_is_not_reported_as_off_the_base(repo):
+    """`merge-base --is-ancestor` exits 128 for a commit git does not know: that is
+    "could not tell", not "not an ancestor", and it is not remembered."""
+    from ddflow.infra.gitbatch import RepoFacts
+
+    f = RepoFacts(repo)
+    assert f.on_base("0" * 40, "main") is False
+    assert ("0" * 40, "main") not in f._on_base

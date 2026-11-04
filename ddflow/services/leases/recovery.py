@@ -156,11 +156,17 @@ class _Budget:
 
 
 def _prefetch_landed(state: State, cfg: Config, facts: RepoFacts) -> None:
-    """One query for which merged commits the base holds, before the per-item checks."""
+    """One query for which merged commits the base holds, before the per-item checks: asked
+    only about the items a recovery can be reported for (an unfinished item with a lapsed
+    lease or a leftover tree), so a state with none needs no git answer at all."""
     shas = [
         it.merged_sha
         for it in state.items.values()
-        if not it.removed and it.merged_sha and it.gate_outcome("merge") == "passed"
+        if not it.removed
+        and not it.terminal
+        and it.merged_sha
+        and (it.lease is not None or it.worktree)
+        and it.gate_outcome("merge") == "passed"
     ]
     if shas:
         facts.prefetch_on_base(shas, facts.base(cfg.worktree.base_ref))

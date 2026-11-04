@@ -132,7 +132,8 @@ class RepoFacts:
         """Is ``sha`` reachable from ``base``?"""
         key = (sha, base)
         if key not in self._on_base:
-            self._on_base[key] = G.run(
-                self.repo, "merge-base", "--is-ancestor", sha, base
-            ).ok
+            r = G.run(self.repo, "merge-base", "--is-ancestor", sha, base)
+            if r.code not in (0, 1):  # 128 is an unknown commit, not "not an ancestor"
+                return False  # unknown: not remembered, and never "on the base"
+            self._on_base[key] = r.ok
         return self._on_base[key]
