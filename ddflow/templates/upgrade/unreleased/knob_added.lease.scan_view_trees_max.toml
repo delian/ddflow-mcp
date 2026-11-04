@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.scan_view_trees_max"
+new = "16"
+why = "status and brief measure at most this many stale worktrees (one git process each); the rest are reported NOT MEASURED, treated as holding work. `ddflow recover` measures all. (PS-git-batch)"
+impact = "additive"

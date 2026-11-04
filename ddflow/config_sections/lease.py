@@ -114,3 +114,13 @@ class LeaseConfig:
         factory=list,
         doc='Files every item APPENDS to -- a changelog, a research log: ["docs/CHANGELOG.md"]. Shared like shared_globs (no lease-overlap check; covered for any live lease holder), and ddflow WRITES "<glob> merge=union" to .gitattributes for each one, so two items\' added lines both survive the merge. Written when this is set through `ddflow config --set/--append-toml` (or ddflow_configure), and re-synced by `ddflow init`/`adopt` after a hand edit; .gitattributes is tracked, so commit it with the config. Only globs in the COMMITTED config get a line: one set with --local is this machine\'s and writes no rule for every clone. doctor reports a missing line.',
     )
+    scan_view_trees_max: int = knob(
+        16,
+        doc="The most worktrees a read-only view (`status`, `brief`) measures for the recovery report. Each measured tree is a `git status` process, so a log with 126 stale leases made `status` spawn hundreds; a tree beyond the cap is reported as NOT MEASURED -- treated as holding work, never as clean -- and `ddflow recover` always measures every one. 0 measures none in a view.",
+        check=int_at_least(0),
+    )
+    scan_view_verdicts_max: int = knob(
+        0,
+        doc="The most merged-but-unfinished items for which a read-only view (`status`, `brief`) weighs the full completion (what `complete` would still want), which costs dozens of git calls each. Past the cap the advice says the item is merged and to run `ddflow complete` or `ddflow recover` for the rest. `ddflow recover` always weighs every one.",
+        check=int_at_least(0),
+    )

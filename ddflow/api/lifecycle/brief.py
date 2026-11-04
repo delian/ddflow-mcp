@@ -14,6 +14,7 @@ from ...core import progress as PR
 from ...core import provenance as PV
 from ...core.budget import Budget, approx_tokens
 from ...core.measuring import is_measuring
+from ...infra import fsio
 from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import choices as CHO
@@ -234,10 +235,33 @@ def _sweep_finished(
     if is_measuring():
         return
     try:
-        if not dry_run:
+        if not dry_run and _sweep_due(repo, cfg):
             CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
         pass
+
+
+def _sweep_due(repo: Path, cfg, *, now: float | None = None) -> bool:
+    """Is it time for the brief to sweep? At most once per ``worktree.sweep_interval_s``
+    (PS-git-batch: the sweep dropped 96 branches in 17 s on every brief). The last sweep's time
+    is a derived, local stamp (``.ddflow/local/sweep-finished.last``): losing it costs one early
+    sweep. It is written BEFORE the sweep, so one that dies is not retried on every call.
+    Interval 0 sweeps on every brief, as before."""
+    every = cfg.worktree.sweep_interval_s
+    now = time.time() if now is None else now
+    stamp = Path(repo) / ".ddflow" / "local" / "sweep-finished.last"
+    if every > 0:
+        try:
+            if now - float(stamp.read_text().strip()) < every:
+                return False
+        except (OSError, ValueError):
+            pass  # no stamp, or a torn one: sweep now
+    try:
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        fsio.replace_text(stamp, f"{now}\n", fsync=False)
+    except OSError:
+        pass  # a stamp that cannot be written only means the next brief sweeps too
+    return True
 
 
 def brief(
@@ -303,7 +327,7 @@ def brief(
             rules = f"See `{candidate}` (loaded separately by your agent)."
             break
 
-    recovery = L.scan(log, cfg, repo, state=loaded) if check_recovery else []
+    recovery = L.scan(log, cfg, repo, state=loaded, view=True) if check_recovery else []
     live = sorted(
         (m for m in st.memories.values() if m.live),
         key=lambda m: (m.origin_at or m.at, m.at),

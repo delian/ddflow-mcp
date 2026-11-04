@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.scan_view_verdicts_max"
+new = "0"
+why = "status and brief no longer weigh the full completion of every merged-but-unfinished item (dozens of git calls each); set above 0 to restore it for that many. `ddflow recover` still weighs all. (PS-git-batch)"
+impact = "additive"

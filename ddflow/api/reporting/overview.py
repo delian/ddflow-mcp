@@ -134,7 +134,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
     # never an item `next` withholds for a waiter in line.
     p = plan_for(repo, log, cfg, st, purpose="view", agent=log.agent_id, events=events)
     L.surface_contests(p, st, cfg)  # B2809f4213b: contested is not 'in flight'
-    rec = L.scan(log, cfg, repo, state=st)
+    rec = L.scan(log, cfg, repo, state=st, view=True)
 
     phases, tasks = st.phases(), st.tasks()
     # Every bucket is read off the ONE plan `next` and `brief` use, so each task is in
@@ -230,7 +230,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
             }
             for v in yield_vs
         ]
-    health = health_lines(log, st, cfg, repo, wait_cycles(st, cfg))
+    health = health_lines(log, st, cfg, repo, wait_cycles(st, cfg), recoveries=rec)
     if health:
         data["health"] = health  # stalled / locked / runaway lanes (`ddflow health`)
     if taken:

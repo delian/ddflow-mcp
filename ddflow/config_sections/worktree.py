@@ -53,6 +53,15 @@ class WorktreeConfig:
             else "must be an integer >= 0"
         ),
     )
+    sweep_interval_s: int = knob(
+        900,
+        doc="The most often the `brief` sweeps finished items' leftover worktrees (`dispose_finished`): the sweep drops a git branch per tree and took 17 s on a project with 96 of them, which no session start should pay on every call. The time of the last sweep is a local stamp (`.ddflow/local/sweep-finished.last`); losing it only brings the next sweep forward. 0 sweeps on every brief, as before.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "must be an integer >= 0 (0 = sweep on every brief)"
+        ),
+    )
     max_parallel: int = knob(
         0,
         doc="Ceiling on simultaneously active task worktrees. Guards disk and CPU; the scheduler queues beyond it rather than refusing. 0 (the default) means FOLLOW the schedule limit -- the adaptive or fixed number of items in flight (`schedule.parallel`) -- and is not unlimited: there is no unlimited setting, the schedule ceiling always bounds it. A nonzero value stays an independent hard cap on worktrees alone. Projects adopted before adaptive parallelism carry an explicit `max_parallel = 4`, which caps auto at 4 worktrees; `ddflow doctor` names it and the remedy `ddflow config --set worktree.max_parallel 0`.",

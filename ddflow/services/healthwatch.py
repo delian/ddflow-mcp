@@ -157,6 +157,8 @@ def gather(
     events=None,
     activity: LB.Activity | None = None,
     alive: Alive | None = None,
+    view: bool = False,
+    recoveries=None,
 ) -> tuple[list[H.Lane], list[H.Proc], list[H.Wait]]:
     """The lanes (one per lease of an unfinished item), unended jobs and standing waits."""
     events = log.read_all() if events is None else events
@@ -168,9 +170,13 @@ def gather(
         if it.lease is not None and not it.removed and not it.terminal
     }
     newest = _newest_events(events, set(held))
-    recs = {
-        r.item: r for r in L.scan(log, cfg, repo, now=now, state=st) if r.kind == "expired_lease"
-    }
+    # A caller that already scanned passes its result: one scan (and its git processes) per command.
+    found = (
+        recoveries
+        if recoveries is not None
+        else L.scan(log, cfg, repo, now=now, state=st, view=view)
+    )
+    recs = {r.item: r for r in found if r.kind == "expired_lease"}
     procs = [
         H.Proc(j.id, j.item, clock.epoch(j.started_at), JOBS.status(j).state == "running")
         for j in st.jobs.values()
@@ -202,10 +208,20 @@ def gather(
 
 
 def inspect(
-    log, st, cfg, repo, now, cycles: list[LW.Cycle], events=None, activity=None, alive=None
+    log,
+    st,
+    cfg,
+    repo,
+    now,
+    cycles: list[LW.Cycle],
+    events=None,
+    activity=None,
+    alive=None,
+    view: bool = False,
+    recoveries=None,
 ):
     """The findings now, deduplicated by (kind, item, holder)."""
-    lanes, procs, waits = gather(log, st, cfg, repo, now, events, activity, alive)
+    lanes, procs, waits = gather(log, st, cfg, repo, now, events, activity, alive, view, recoveries)
     found = H.inspect(lanes, procs, waits, [c.as_dict() for c in cycles], now, limits(cfg))
     return list({f.key: f for f in found}.values())
 

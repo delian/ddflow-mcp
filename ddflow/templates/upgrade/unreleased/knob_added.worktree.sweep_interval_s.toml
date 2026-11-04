@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "worktree.sweep_interval_s"
+new = "900"
+why = "The brief sweeps finished worktrees at most this often (default 900 seconds) instead of on every call; 0 restores a sweep on every brief. (PS-git-batch)"
+impact = "additive"
