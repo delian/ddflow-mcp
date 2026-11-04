@@ -59,7 +59,13 @@ class Ref:
     count: int
 
     def to_data(self) -> dict[str, Any]:
-        return {"shard": self.shard, "start": self.start, "end": self.end, "sha256": self.sha256, "count": self.count}
+        return {
+            "shard": self.shard,
+            "start": self.start,
+            "end": self.end,
+            "sha256": self.sha256,
+            "count": self.count,
+        }
 
     @staticmethod
     def of(d: dict[str, Any]) -> Ref:
@@ -117,7 +123,9 @@ class TierWriter:
         at = float(ev.get("data", {}).get("at", 0.0))
         p = self._pending.get(ev["subject"])
         if p is None:
-            p = self._pending[ev["subject"]] = _Pending(start, end, 0, at, ev["data"].get("holder", self.agent))
+            p = self._pending[ev["subject"]] = _Pending(
+                start, end, 0, at, ev["data"].get("holder", self.agent)
+            )
         p.end, p.count, p.last_at = end, p.count + 1, max(p.last_at, at)
         p.h.update(raw)
         if at - self._last_summary.get(ev["subject"], -1e18) >= self.policy.summary_every_s:
@@ -198,7 +206,9 @@ def search(root: Path, needle: str, *, max_cold_bytes: int | None = None) -> dic
         ref = ev.get("data", {}).get("summary")
         if needle in json.dumps(ev):
             hits.append(ev)
-        if ref and needle in json.dumps({"subject": ev["subject"], "agent": ev["agent"], "kind": ev["kind"]}):
+        if ref and needle in json.dumps(
+            {"subject": ev["subject"], "agent": ev["agent"], "kind": ev["kind"]}
+        ):
             r = Ref.of(ref)
             if r.end - r.start > budget:
                 truncated = True
@@ -219,5 +229,7 @@ def git_merge(a: Path, b: Path, into: Path) -> None:
             dst = Path(into) / p.relative_to(src)
             dst.parent.mkdir(parents=True, exist_ok=True)
             if dst.exists() and dst.read_bytes() != p.read_bytes():
-                raise FileExistsError(f"merge conflict on {p.relative_to(src)}: two writers, one file")
+                raise FileExistsError(
+                    f"merge conflict on {p.relative_to(src)}: two writers, one file"
+                )
             dst.write_bytes(p.read_bytes())

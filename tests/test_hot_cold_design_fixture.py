@@ -29,11 +29,16 @@ def ev(agent: str, n: int, kind: str, subject: str, at: float, **data) -> dict:
     }
 
 
-def session(root: Path, agent: str, base: int, n_renewals: int = 20, step: float = 120.0) -> list[dict]:
+def session(
+    root: Path, agent: str, base: int, n_renewals: int = 20, step: float = 120.0
+) -> list[dict]:
     """A claim, a run of heartbeats, a gate record, a release: what one agent really writes."""
     w = T.TierWriter(root, agent, POLICY)
     out = [ev(agent, base, "lease.acquired", "X-" + agent, 1000.0)]
-    out += [ev(agent, base + 1 + i, "lease.renewed", "X-" + agent, 1000.0 + step * (i + 1)) for i in range(n_renewals)]
+    out += [
+        ev(agent, base + 1 + i, "lease.renewed", "X-" + agent, 1000.0 + step * (i + 1))
+        for i in range(n_renewals)
+    ]
     out.append(ev(agent, base + 100, "gate.passed", "X-" + agent, 0.0, gate="ci"))
     for e in out:
         w.append(e)
@@ -45,7 +50,11 @@ def test_disabled_policy_is_todays_behaviour(tmp_path: Path) -> None:
     w = T.TierWriter(tmp_path, "a", T.TierPolicy())
     for i in range(5):
         w.append(ev("a", i, "lease.renewed", "X", 1000.0 + i))
-    assert not (tmp_path / "cold" / "a.jsonl").read_bytes() if (tmp_path / "cold" / "a.jsonl").exists() else True
+    assert (
+        not (tmp_path / "cold" / "a.jsonl").read_bytes()
+        if (tmp_path / "cold" / "a.jsonl").exists()
+        else True
+    )
     assert len(T.read_union(tmp_path, tiers=(T.HOT,))) == 5
 
 
@@ -78,7 +87,11 @@ def test_liveness_lag_is_bounded_by_the_summary_cadence(tmp_path: Path) -> None:
 
 def test_every_summary_reexpands_with_a_proving_digest(tmp_path: Path) -> None:
     session(tmp_path, "a", 1)
-    refs = [T.Ref.of(e["data"]["summary"]) for e in T.read_union(tmp_path, tiers=(T.HOT,)) if "summary" in e["data"]]
+    refs = [
+        T.Ref.of(e["data"]["summary"])
+        for e in T.read_union(tmp_path, tiers=(T.HOT,))
+        if "summary" in e["data"]
+    ]
     assert refs
     assert sum(r.count for r in refs) == 20
     assert sum(len(T.reexpand(tmp_path, r)) for r in refs) == 20
@@ -94,7 +107,9 @@ def test_two_clones_merge_without_conflict_and_nothing_is_lost(tmp_path: Path) -
     assert T.renewed_at(T.read_union(merged, tiers=(T.HOT,))) == T.renewed_at(a + b)
     (c2 / "hot").mkdir(exist_ok=True)
     (c2 / "hot" / "alice-111111.jsonl").write_bytes(b"x\n")  # two writers on one file
-    with pytest.raises(FileExistsError):  # the conflict that per-agent shard naming makes impossible
+    with pytest.raises(
+        FileExistsError
+    ):  # the conflict that per-agent shard naming makes impossible
         T.git_merge(c1, c2, tmp_path / "m2")
 
 
@@ -105,7 +120,9 @@ def test_crash_between_cold_and_summary_loses_nothing(tmp_path: Path) -> None:
         w.append(e)  # crash here: cold has them, no summary was written
     del w
     ids = {e["id"] for e in T.read_union(tmp_path)}
-    assert {e["id"] for e in evs} <= ids  # the first renewal was summarised at once; all are in the union
+    assert {
+        e["id"] for e in evs
+    } <= ids  # the first renewal was summarised at once; all are in the union
     w2 = T.TierWriter(tmp_path, "a", POLICY)  # restart; the next summary covers only what it wrote
     w2.append(ev("a", 9, "lease.renewed", "X", 5000.0))
     assert {"a-00009"} <= {e["id"] for e in T.read_union(tmp_path)}
@@ -117,7 +134,11 @@ def test_torn_cold_tail_is_skipped_and_counted_not_fatal(tmp_path: Path) -> None
     p.write_bytes(p.read_bytes() + b'{"agent":"a","id":"half')  # power cut mid-write
     events, torn = T._read_lines(p)
     assert torn == 1 and len(events) == 20
-    refs = [T.Ref.of(e["data"]["summary"]) for e in T.read_union(tmp_path, tiers=(T.HOT,)) if "summary" in e["data"]]
+    refs = [
+        T.Ref.of(e["data"]["summary"])
+        for e in T.read_union(tmp_path, tiers=(T.HOT,))
+        if "summary" in e["data"]
+    ]
     assert sum(len(T.reexpand(tmp_path, r)) for r in refs) == 20  # refs cover whole lines only
 
 
@@ -125,7 +146,11 @@ def test_altered_cold_range_is_detected_not_trusted(tmp_path: Path) -> None:
     session(tmp_path, "a", 1)
     p = tmp_path / "cold" / "a.jsonl"
     p.write_bytes(p.read_bytes().replace(b'"at":1120.0', b'"at":9999.0', 1))
-    ref = next(T.Ref.of(e["data"]["summary"]) for e in T.read_union(tmp_path, tiers=(T.HOT,)) if "summary" in e["data"])
+    ref = next(
+        T.Ref.of(e["data"]["summary"])
+        for e in T.read_union(tmp_path, tiers=(T.HOT,))
+        if "summary" in e["data"]
+    )
     with pytest.raises(T.DigestMismatch):
         T.reexpand(tmp_path, ref)
 
@@ -152,7 +177,10 @@ def test_replay_export_of_union_equals_the_untiered_log(tmp_path: Path) -> None:
     off, on = tmp_path / "off", tmp_path / "on"
     w_off = T.TierWriter(off, "a", T.TierPolicy())
     w_on = T.TierWriter(on, "a", POLICY)
-    evs = [ev("a", i, "lease.renewed" if i % 3 else "gate.passed", "X", 1000.0 + 120.0 * i) for i in range(1, 40)]
+    evs = [
+        ev("a", i, "lease.renewed" if i % 3 else "gate.passed", "X", 1000.0 + 120.0 * i)
+        for i in range(1, 40)
+    ]
     for e in evs:
         w_off.append(e)
         w_on.append(e)
@@ -163,4 +191,7 @@ def test_replay_export_of_union_equals_the_untiered_log(tmp_path: Path) -> None:
 def test_ddflow_seen_and_unlisted_kinds_stay_hot() -> None:
     assert POLICY.classify("ddflow.seen") == T.HOT  # the skew guard reads the highest stamp
     assert POLICY.classify("gate.passed") == T.HOT
-    assert T.TierPolicy(enabled=True, cold_kinds=T.PHASE2_COLD_KINDS).classify("gate.started") == T.COLD
+    assert (
+        T.TierPolicy(enabled=True, cold_kinds=T.PHASE2_COLD_KINDS).classify("gate.started")
+        == T.COLD
+    )
