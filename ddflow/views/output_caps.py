@@ -219,6 +219,17 @@ def _clip_strings(value: Any, n: int) -> Any:
     return value
 
 
+def _mark_oversized(clipped: dict[str, Any], info: dict[str, int], budget: int) -> None:
+    """Last resort, still over ``budget`` (a row of hundreds of fields): the largest lists
+    are replaced by one marker row each, until it fits; a list that fits keeps its rows."""
+    lists = [k for k, v in clipped.items() if isinstance(v, list) and v and k[0] != "_"]
+    for k in sorted(lists, key=lambda k: -len(json.dumps(clipped[k], default=str))):
+        if _size({x: y for x, y in clipped.items() if x != "text"}) <= budget:
+            break
+        info[k] = len(clipped[k])
+        clipped[k] = [{"cut": f"{len(clipped[k])} row(s) too large for [output].max_chars"}]
+
+
 def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[str, Any]:
     """One row (or scalar) that alone passes ``budget``: long strings in the lists are cut,
     halving, down to 80 characters. Bounded: at most seven halvings."""
@@ -233,15 +244,7 @@ def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[
             break
     if clipped != work:
         info["clipped_strings"] = n
-    if _size({k: v for k, v in clipped.items() if k != "text"}) > budget:
-        # Last resort: still over (a row of hundreds of fields). Each list keeps one marker
-        # row, so the cap holds; the footer names the call that shows the rows.
-        lists = [k for k, v in clipped.items() if isinstance(v, list) and v and k[0] != "_"]
-        for k in sorted(lists, key=lambda k: -len(json.dumps(clipped[k], default=str))):
-            if _size({x: y for x, y in clipped.items() if x != "text"}) <= budget:
-                break  # the largest are marked first; a list that fits keeps its rows
-            info[k] = len(clipped[k])
-            clipped[k] = [{"cut": f"{len(clipped[k])} row(s) too large for [output].max_chars"}]
+    _mark_oversized(clipped, info, budget)
     return clipped
 
 
