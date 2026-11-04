@@ -199,6 +199,11 @@ def test_the_tags_that_mean_security_are_configurable(repo):
     assert [r["id"] for r in collect(repo, events)["open"]] == ["B2"]
 
 
+def test_an_empty_tag_list_counts_nothing(repo):
+    config(repo, "[export.security]\ntags = []\n")
+    assert collect(repo, [bug("B1", "2026-09-02T00:00:00Z")])["open"] == []
+
+
 def test_a_fixed_bug_names_the_oldest_version_holding_its_landing(repo):
     events = [
         *task("fix-B1", "2026-09-16T00:00:00Z", sha=sha(repo, "b")),
@@ -406,6 +411,21 @@ def test_a_created_file_with_redacted_text_is_not_read_back_as_hand_edited(repo)
     text = (repo / "SECURITY.md").read_text()
     assert "10.1.2.3" not in text
     assert not any(r.edited for r in RG.parse(text))
+
+
+def test_a_check_of_an_unmarked_file_never_says_it_appended(repo):
+    (repo / "SECURITY.md").write_text("# Ours\n")
+    notes = _write(repo, [], check=True).notes
+    assert notes and all("not inserted" in n for n in notes)
+
+
+def test_force_with_nothing_missing_adds_nothing_after_the_file(repo):
+    _write(repo, [])
+    p = repo / "SECURITY.md"
+    p.write_text(p.read_text().replace("None recorded.", "Edited by hand."))
+    _write(repo, [], force=True)
+    text = p.read_text()
+    assert "None recorded." in text and not text.endswith("\n\n")
 
 
 def test_a_region_the_file_lacks_reaches_the_person_who_ran_the_update(repo):

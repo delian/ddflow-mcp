@@ -171,7 +171,7 @@ def collect(q: Query) -> dict[str, Any]:
     cfg = KC.repo_config(q, "the security document")
     assert q.repo is not None
     table = cfg.export.table("security")
-    wanted = set(table.get("tags") or DEFAULT_TAGS)
+    wanted = set(table.get("tags", DEFAULT_TAGS))
     disclose = str(table.get("disclose") or "ids")
     bugs = [b for b in q.bugs() if _is_security(q, b, wanted)]
     tags = KC._tags(q.repo, cfg.flow.tag_prefix)

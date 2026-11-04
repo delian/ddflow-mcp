@@ -244,13 +244,16 @@ def write_named(
                 f"region(s) {', '.join(sp.edited)} of {rel} were edited by hand since ddflow "
                 "wrote them; refusing to overwrite (--force to replace)"
             )
-        added: tuple[str, ...] = ()
         none_here = len(sp.missing) == len(bodies)  # nothing of the document is in the file
         if none_here and not force:
             refuse = f"{rel} has no ddflow region for {doc!r}: add the markers, or --force to append them"
-        if force or none_here:
-            added = sp.missing
-            sp = replace(sp, text=_appended(sp.text, doc, bodies, added), missing=())
+        added = sp.missing if force else ()
+        if sp.missing and (force or none_here):
+            sp = replace(
+                sp,
+                text=_appended(sp.text, doc, bodies, sp.missing),
+                missing=() if force else sp.missing,
+            )
         res = W._finish(path, rel, old, sp.text, check=check, diff=diff, refuse=refuse)
         return replace(res, notes=_notes(doc, sp, added))
 
