@@ -172,7 +172,7 @@ def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approv
     )
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
     if not decision.ok:
-        return O.refused("pins", "refusing: " + decision.message)
+        return O.refused("pins", decision.message)
     return decision.stamp
 
 
