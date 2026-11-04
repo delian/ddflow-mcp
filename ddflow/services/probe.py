@@ -62,6 +62,8 @@ def git_version(repo: Path | str, timeout_s: float) -> tuple[int, ...] | None:
 def tip(repo: Path | str, ref: str, timeout_s: float) -> tuple[str, str]:
     """``(sha, "")`` for the commit ``ref`` names; ``("", why)`` when it names none, or git
     could not be asked (git missing, a timeout): "could not tell" is not "no such ref"."""
+    if ref.startswith("-"):  # never let a ref be read as an option
+        return "", f"{ref!r} is not a branch name or sha"
     r = G.run(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", timeout=timeout_s)
     if r.ok:
         return r.out, ""
@@ -78,18 +80,20 @@ def _parse(out: bytes) -> tuple[str, ...]:
     for f in fields:
         if not f:
             break
-        names.append(f.decode("utf-8", "replace"))
+        names.append(os.fsdecode(f))
     return tuple(sorted(set(names)))
 
 
-def _both_changed(repo: Path, item: str, against: str) -> tuple[str, ...]:
+def _both_changed(repo: Path, item: str, against: str, timeout_s: float) -> tuple[str, ...]:
     """Paths changed on both sides since their merge base, as git spells them (NUL separated):
     a superset of the conflicted paths, with names exact whatever characters they carry."""
-    base = G.run(repo, "merge-base", item, against)
+    base = G.run(repo, "merge-base", item, against, timeout=timeout_s)
     if not base.ok:
         return ()
     sides = [
-        G.run(repo, "diff", "--name-only", "-z", base.out, x, z=False, binary=True)
+        G.run(
+            repo, "diff", "--name-only", "-z", base.out, x, z=False, binary=True, timeout=timeout_s
+        )
         for x in (item, against)
     ]
     if not all(r.ok for r in sides):
@@ -98,7 +102,7 @@ def _both_changed(repo: Path, item: str, against: str) -> tuple[str, ...]:
     return tuple(sorted(one & two))
 
 
-def _scratch(repo: Path, item: str, against: str) -> Probe:
+def _scratch(repo: Path, item: str, against: str, timeout_s: float) -> Probe:
     with CI.merge_tree(repo, item, against) as (_tree, why):
         if _tree is not None:
             return Probe(CLEAN, SCRATCH, (), item, against)
@@ -107,7 +111,7 @@ def _scratch(repo: Path, item: str, against: str) -> Probe:
             # The scratch merge names its files only in prose, which a path with a comma or a
             # semicolon makes ambiguous: so the paths are every one both sides changed (exact
             # names, a superset of the conflicted ones), never a parse of the prose.
-            names = _both_changed(repo, item, against)
+            names = _both_changed(repo, item, against, timeout_s)
             return Probe(CONFLICT, SCRATCH, names, item, against)
         return Probe(UNAVAILABLE, SCRATCH, (), item, against, str(why)[-300:])
 
@@ -129,7 +133,7 @@ def run(
     if have is None:
         return Probe(UNAVAILABLE, NONE, (), a, b, "git could not be run")
     if have < _tuple(min_git):
-        return _scratch(repo, a, b)
+        return _scratch(repo, a, b, timeout_s)
     r = G.run(
         repo, "merge-tree", "--write-tree", "--name-only", "-z", a, b, binary=True,
         timeout=timeout_s,
@@ -141,5 +145,5 @@ def run(
     if r.code == 1:
         return Probe(CONFLICT, MERGE_TREE, _parse(r.out_bytes or b""), a, b)
     if r.code == USAGE:  # an option this git does not know: the scratch merge answers instead
-        return _scratch(repo, a, b)
+        return _scratch(repo, a, b, timeout_s)
     return Probe(UNAVAILABLE, MERGE_TREE, (), a, b, (r.err or r.out)[-300:])

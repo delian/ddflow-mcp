@@ -52,7 +52,8 @@ def pair(repo: Path) -> Path:
     return repo
 
 
-def test_clean_pair(pair: Path) -> None:
+def test_clean_pair(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 43, 0))
     p = PR.run(pair, "ddflow/clean", "main", timeout_s=TIMEOUT)
     assert (p.result, p.method, p.paths) == (PR.CLEAN, PR.MERGE_TREE, ())
     assert len(p.item_sha) == 40 and len(p.against_sha) == 40
@@ -208,3 +209,28 @@ def test_peer_advice_names_the_peer_branch_not_its_item_id(pair: Path) -> None:
     _, out, _ = run_cli(pair, "--json", "probe", "clash", "--against", "clean")
     body = json.loads(out)
     assert body["result"] == "conflict" and "Merge ddflow/clean into" in body["text"]
+
+
+def test_a_ref_that_looks_like_an_option_is_refused(pair: Path) -> None:
+    p = PR.run(pair, "--exec=boom", "main", timeout_s=TIMEOUT)
+    assert p.result == PR.UNAVAILABLE and "not a branch name" in p.reason
+
+
+def test_scratch_fallback_git_calls_carry_the_timeout(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
+    seen = []
+    real = PR.G.run
+
+    def run(repo, *args, **kw):
+        if args[:1] in (("merge-base",), ("diff",)):
+            seen.append(kw.get("timeout"))
+        return real(repo, *args, **kw)
+
+    monkeypatch.setattr(PR.G, "run", run)
+    PR.run(pair, "ddflow/clash", "main", timeout_s=7)
+    assert seen and set(seen) == {7}
+
+
+def test_non_utf8_conflict_paths_are_kept_exact() -> None:
+    out = b"tree\0a\xff\0a\xfe\0\0msg"
+    assert len(PR._parse(out)) == 2
