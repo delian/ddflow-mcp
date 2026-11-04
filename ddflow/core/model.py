@@ -116,7 +116,6 @@ from .handlers.knowledge import (
     _h_research,
 )
 from .handlers.lanerelease import LANERELEASE_HANDLERS
-from .handlers.probe import PROBE_HANDLERS
 from .handlers.leases import (  # noqa: F401
     _displace,
     _h_lease_acquired,
@@ -141,6 +140,7 @@ from .handlers.links import (  # noqa: F401
     _links,
     link_targets,
 )
+from .handlers.probe import PROBE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,

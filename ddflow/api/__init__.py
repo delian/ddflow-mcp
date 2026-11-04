@@ -127,7 +127,6 @@ from .knowledge import (
     similar,
 )
 from .lane_views import lanes, lanes_watch
-from .probe import probe as conflict_probe
 from .lifecycle import (
     DEFAULT_CHECK_RECOVERY,
     DEFAULT_NEXT_KIND,
@@ -160,6 +159,7 @@ from .operations import (
     relevant_tests,
 )
 from .plan import plan_apply, plan_check, plan_confirm, plan_lint
+from .probe import probe as conflict_probe
 from .records import record_resource_listing, record_resource_read
 from .report import item_report, show_report
 from .reporting import (
@@ -267,6 +267,7 @@ __all__ = [
     "complete",
     "completion_verdict",
     "configure",
+    "conflict_probe",
     "decision_add",
     "decision_applicable",
     "decision_list",
@@ -327,7 +328,6 @@ __all__ = [
     "phase_complete",
     "phase_progress",
     "pins",
-    "conflict_probe",
     "plan_apply",
     "plan_check",
     "plan_confirm",
