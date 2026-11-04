@@ -59,6 +59,7 @@ def test_the_error_is_a_decode_error_that_prints_and_carries_its_attributes():
     assert "TOMLDecodeError" in [c.__name__ for c in type(err).__mro__]  # callers' except still works
     assert isinstance(err, ValueError) and str(err) == "bad"
     assert (err.msg, err.lineno, err.colno) == ("bad", 1, 1)
+    assert err.args == ("bad", "", 0)
     with pytest.raises(TomlError, match="bad"):
         raise err
     with pytest.raises(TomlError) as caught:
@@ -68,19 +69,21 @@ def test_the_error_is_a_decode_error_that_prints_and_carries_its_attributes():
 
 def test_the_real_error_keeps_the_position_tomllib_found():
     with pytest.raises(TomlError) as caught:
-        TomlLibIo().loads("a = 1\nb = [")
+        TomlLibIo().loads("a = 1\nb = ]\n")
     assert caught.value.lineno == 2 and caught.value.colno > 1
 
 
 def test_the_fake_rejects_what_tomllib_rejects_in_its_subset():
     both = ("[a]\n[a]\n", "[a..b]\n", "[.a]\n")  # the real adapter rejects these too
-    for bad in (*both, "x = null\n", "x = {}\n", "x = [null]\n"):  # TOML has no null
+    for bad in (*both, "x = null\n", "x = [null]\n", 'x = "\\/"\n'):  # not TOML
         with pytest.raises(TomlError):
             FakeTomlIo().loads(bad)
     with pytest.raises(TomlError):
         FakeTomlIo().loads("x = NaN\n")
     assert FakeTomlIo().loads("[a.b]\n[a]\n") == TomlLibIo().loads("[a.b]\n[a]\n")  # valid TOML
-    for bad in (*both, "x = null\n"):
+    with pytest.raises(TomlError):  # valid TOML, but outside the fake's subset: it says so
+        FakeTomlIo().loads("x = {}\n")
+    for bad in (*both, "x = null\n", 'x = "\\/"\n'):
         with pytest.raises(TomlError):
             TomlLibIo().loads(bad)
 

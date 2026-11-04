@@ -74,6 +74,8 @@ class FakeTomlIo:
             elif m := _PAIR.fullmatch(line):
                 if m.group(1) in table:
                     raise TomlError(f"line {number}: duplicate key {m.group(1)!r}")
+                if "\\/" in m.group(2):  # JSON has this escape, TOML does not
+                    raise TomlError(f"line {number}: invalid escape in {m.group(2)!r}")
                 try:
                     value = json.loads(m.group(2), parse_constant=_refuse)
                 except ValueError as exc:

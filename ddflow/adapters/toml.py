@@ -18,6 +18,7 @@ Small on purpose: callers of ADP-managed-files and ADP-config-store depend on th
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -34,10 +35,13 @@ class TomlError(tomllib.TOMLDecodeError):
         ValueError.__init__(self, msg)  # tomllib's own signature wants doc and pos
         # the position of the error `source` (a tomllib one) reported, or the start of the text
         self.msg = msg
+        self.args = (msg, getattr(source, "doc", ""), getattr(source, "pos", 0))  # as tomllib's
         self.doc = getattr(source, "doc", "")
         self.pos = getattr(source, "pos", 0)
-        self.lineno = getattr(source, "lineno", 1)
-        self.colno = getattr(source, "colno", 1)
+        # Python 3.14 gives the line and column; earlier ones only say "(at line 2, column 5)"
+        at = re.search(r"at line (\d+), column (\d+)", str(source or ""))
+        self.lineno = getattr(source, "lineno", int(at[1]) if at else 1)
+        self.colno = getattr(source, "colno", int(at[2]) if at else 1)
 
     def __str__(self) -> str:
         return self.msg
