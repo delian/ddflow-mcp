@@ -46,6 +46,9 @@ class ItemEdit:
     #: Ids added to / taken from the item's current needs (or from ``needs`` when given too).
     add_needs: list[str] | None = None
     remove_needs: list[str] | None = None
+    #: Accept needs that name no id in the queue (an id that will exist later, or a
+    #: `repo:ID` dependency): --allow-unknown-needs. Off, the edit refuses an unknown id.
+    allow_unknown_needs: bool = False
     add_tags: list[str] | None = None
     remove_tags: list[str] | None = None
     globs: list[str] | None = None
@@ -192,7 +195,7 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
     _adjust_list(it, edit, fields, "needs")
     _adjust_list(it, edit, fields, "tags")
     _adjust_globs(it, edit, fields)
-    if bad := IT.unknown_needs(st, fields.get("needs")):
+    if not edit.allow_unknown_needs and (bad := IT.unknown_needs(st, fields.get("needs"))):
         return O.failed("item.updated", f"{it.id}: {bad}", id=it.id)
     moved = IM.plan(cfg, st, it, edit.parent, edit.kind, _line_frozen, fields.get("needs"))
     if isinstance(moved, str):
