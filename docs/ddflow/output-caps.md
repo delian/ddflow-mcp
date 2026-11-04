@@ -7,7 +7,7 @@ line and over MCP alike. A cut answer ends in a footer that names the exact next
      (MCP: `ddflow_next cursor=50`); narrow with `ddflow next --phase ID` (MCP: `ddflow_next phase=ID`);
      everything: `ddflow next --full` (MCP: `ddflow_next full=true`)]
 
-- `--full` (MCP `full=true`) lifts every cap for that call.
+- `--full` (MCP `full=true`) lifts every cap for that call, unless an org set `[output].allow_full = false`: then the capped answer comes back and the footer says the lift is off.
 - `--cursor N` (MCP `cursor=N`) resumes a cut list on `next` and `recover`.
 - `--json` keeps its schema. Lists are shorter and the body gains `truncated`
   (`lists`: each cut list's real length, `shown`, `chars_cut`) and `next` (the calls as
