@@ -1,7 +1,7 @@
 """Stamping `wave:N` by default (`[waves].auto_stamp`): the guard around ONE command.
 
 It wraps EVERY command, reads included, so the work it adds to a read is a stat of the
-shards (`EventLog.mark`); the queue is folded only when the command appended events.
+caller's own shard; the queue is folded only when the command appended events.
 """
 
 from __future__ import annotations
@@ -21,10 +21,22 @@ from . import waves
 _STAMPING = contextvars.ContextVar("ddflow_waves_auto_stamping", default=False)
 
 
+def _own_size(log) -> int:
+    """Bytes in the CALLER's own shard. Shards are append-only, so growth means this
+    command (or this agent) appended; another agent's writes land in its own shard and
+    never move this number (Bc5d4aafb98, rule r-read-verbs-read-only)."""
+    try:
+        return log.shard.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
 @contextlib.contextmanager
 def keep_stamped(repo: Path, cfg, log, agent: str = ""):
     """Around a command: when it appended events and the knob is on, restamp the items
-    whose wave changed (only those: an unchanged graph writes no event). Never raises."""
+    whose wave changed (only those: an unchanged graph writes no event). "Appended" means
+    to the caller's OWN shard, so a read verb never restamps because someone else wrote.
+    Never raises."""
     try:
         on = (
             not _STAMPING.get()
@@ -33,14 +45,14 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
             # would write the feature's own events into the live shared log (Bf4eaec64a6).
             and not PATHS.running_from_linked_worktree_against(repo)
         )
-        before = log.mark() if on else None
+        before = _own_size(log) if on else None
     except Exception:  # stamping must never break the command it follows
         on, before = False, None
     yield
     if not on:
         return
     try:
-        if log.mark() != before:
+        if _own_size(log) != before:
             _token = _STAMPING.set(True)
             try:
                 waves.restamp(repo, agent)
