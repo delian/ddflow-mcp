@@ -125,6 +125,7 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
             if isinstance(value, list) and len(value) > limit:
                 off = start if key == paged else 0
                 render[key] = _slice(key, value, limit, off)
+                info.setdefault(f"_render.{key}", len(value))
     return info
 
 
@@ -231,8 +232,9 @@ def apply(
     full_refused = bool(full) and not conf.allow_full
     if (full and conf.allow_full) or not isinstance(out.data, dict) or not out.data:
         return out
-    rows = conf.max_rows or 10**9
-    chars = conf.max_chars
+    # A locked organisation (`allow_full = false`) is not undone by a 0 in the environment.
+    rows = conf.max_rows or (50 if not conf.allow_full else 10**9)
+    chars = conf.max_chars or (30000 if not conf.allow_full else 0)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
     budget = chars // 2 if wire and chars else chars
@@ -259,11 +261,17 @@ def _annotate(
     old = work.get("truncated") if isinstance(work.get("truncated"), dict) else {}
     work["truncated"] = {
         **old,
-        "lists": {k: v for k, v in info.items() if k != "next_cursor"},
+        "lists": {
+            k: v for k, v in info.items() if k != "next_cursor" and not k.startswith("_render.")
+        },
         "shown": limit,
         "chars_cut": cut_chars,
-        "all": f"`{COMMANDS[command][0]} --full` (MCP: `{COMMANDS[command][1]} full=true`) lists every entry",
     }
+    if not full_refused:
+        work["truncated"]["all"] = (
+            f"`{COMMANDS[command][0]} --full` (MCP: `{COMMANDS[command][1]} full=true`) "
+            "lists every entry"
+        )
     work["next"] = _next_field(command, info, full_refused)
     work["_footer"] = note
     if isinstance(text, str):

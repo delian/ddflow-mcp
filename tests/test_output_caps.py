@@ -94,6 +94,27 @@ def test_an_org_lock_keeps_the_cap_and_says_the_lift_is_off():
     assert "allow_full" in out.data["_footer"] and "full_cli" not in out.data["next"]
 
 
+def test_a_refused_lift_does_not_advertise_the_lift_and_zero_knobs_do_not_undo_the_lock():
+    out = OC.apply(None, _out(120), "next", full=True, cfg=_cfg(allow_full=False, max_rows=0))
+    assert len(out.data["blocked"]) == 50, "max_rows = 0 does not lift a locked cap"
+    assert "all" not in out.data["truncated"]
+
+
+def test_a_cut_that_only_hit_the_render_lists_is_still_reported():
+    out = O.ok("recover", found=[], _render={"found": list(range(100))})
+    out = OC.apply(None, out, "recover", cfg=_cfg(max_rows=15))
+    assert len(out.data["_render"]["found"]) == 15
+    assert "truncated" in out.data and out.data["_footer"]
+
+
+def test_recover_is_capped_by_default_and_full_is_off_by_default(repo):
+    _code, out, _err = run_cli(repo, "recover", "--help")
+    assert "--full" in out and "--cursor" in out
+    from ddflow.surfaces.declared.capflags import FULL
+
+    assert FULL.default is False
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))
