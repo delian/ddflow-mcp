@@ -15,6 +15,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell)",
         tool="ddflow_probe",
         tier="standard",
+        help_group="Doing the work",
         family="ddflow_lease",
         action="probe",
         description=(
@@ -26,7 +27,7 @@ COMMANDS: tuple[Command, ...] = (
             "uses still needs the gates and ci on the merge result."
         ),
         call=lambda repo, a, agent: _api().conflict_probe(
-            repo, a["id"], against=a.get("against") or "", agent=agent
+            repo, a["id"], against=a.get("against") or "", at=a.get("at") or "", agent=agent
         ),
         payload=(
             "id",
@@ -47,6 +48,13 @@ COMMANDS: tuple[Command, ...] = (
                 "against",
                 help="main (default) or another item id (or a branch name).",
                 cli_help="main (default), another item id or a branch",
+                default="",
+            ),
+            Param(
+                "at",
+                help="Where this probe is made: claim, gate or merge; skipped when [locks].probe_at does not list it.",
+                cli_help="claim, gate or merge: skipped when [locks].probe_at does not list it",
+                choices=("claim", "gate", "merge"),
                 default="",
             ),
         ),

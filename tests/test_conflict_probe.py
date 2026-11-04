@@ -7,6 +7,7 @@ merge answers), git's 129, an unknown ref, the knob off, and the event the comma
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +53,7 @@ def pair(repo: Path) -> Path:
     return repo
 
 
+@pytest.mark.skipif(PR.git_version(".", 10) < (2, 38), reason="needs merge-tree --write-tree")
 def test_clean_pair(pair: Path, monkeypatch) -> None:
     monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 43, 0))
     p = PR.run(pair, "ddflow/clean", "main", timeout_s=TIMEOUT)
@@ -190,7 +192,7 @@ def test_scratch_conflict_names_a_path_with_a_comma_whole(repo: Path, monkeypatc
 def test_an_item_named_main_does_not_hijack_the_default_branch(pair: Path) -> None:
     _items(pair, "clash", "main")
     _git(pair, "branch", "ddflow/main", "ddflow/clean")
-    code, out, err = run_cli(pair, "--json", "probe", "clash")
+    code, out, _err = run_cli(pair, "--json", "probe", "clash")
     assert json.loads(out)["against"] == "main" and code == 1
 
 
@@ -233,4 +235,20 @@ def test_scratch_fallback_git_calls_carry_the_timeout(pair: Path, monkeypatch) -
 
 def test_non_utf8_conflict_paths_are_kept_exact() -> None:
     out = b"tree\0a\xff\0a\xfe\0\0msg"
-    assert len(PR._parse(out)) == 2
+    assert PR._parse(out) == (os.fsdecode(b"a\xfe"), os.fsdecode(b"a\xff"))
+
+
+def test_probe_at_skips_a_place_the_knob_does_not_list(pair: Path) -> None:
+    _items(pair, "clean")
+    with (pair / ".ddflow" / "config.toml").open("a") as f:
+        f.write('\n[locks]\nprobe_at = ["merge"]\n')
+    code, out, err = run_cli(pair, "probe", "clean", "--at", "claim")
+    assert code == 2 and "probe_at lists merge" in out + err
+    assert run_cli(pair, "probe", "clean", "--at", "merge")[0] == 0
+
+
+def test_conflict_without_a_path_list_says_so(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
+    monkeypatch.setattr(PR, "_both_changed", lambda *a: None)
+    p = PR.run(pair, "ddflow/clash", "main", timeout_s=TIMEOUT)
+    assert p.result == PR.CONFLICT and p.paths == () and "could not be listed" in p.reason

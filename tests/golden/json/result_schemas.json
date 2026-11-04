@@ -2907,6 +2907,47 @@
   },
   "array_schema": null
  },
+ "ddflow_probe": {
+  "command": "probe",
+  "schema": "probe@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "against",
+   "result",
+   "method",
+   "paths",
+   "head",
+   "base",
+   "why",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "probe@1"
+    },
+    "id": {},
+    "against": {},
+    "result": {},
+    "method": {},
+    "paths": {},
+    "head": {},
+    "base": {},
+    "why": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_bug_dedupe": {
   "command": "bug_dedupe",
   "schema": "bug_dedupe@1",

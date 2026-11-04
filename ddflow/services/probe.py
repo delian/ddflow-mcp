@@ -84,12 +84,12 @@ def _parse(out: bytes) -> tuple[str, ...]:
     return tuple(sorted(set(names)))
 
 
-def _both_changed(repo: Path, item: str, against: str, timeout_s: float) -> tuple[str, ...]:
+def _both_changed(repo: Path, item: str, against: str, timeout_s: float) -> tuple[str, ...] | None:
     """Paths changed on both sides since their merge base, as git spells them (NUL separated):
     a superset of the conflicted paths, with names exact whatever characters they carry."""
     base = G.run(repo, "merge-base", item, against, timeout=timeout_s)
     if not base.ok:
-        return ()
+        return None
     sides = [
         G.run(
             repo, "diff", "--name-only", "-z", base.out, x, z=False, binary=True, timeout=timeout_s
@@ -97,11 +97,14 @@ def _both_changed(repo: Path, item: str, against: str, timeout_s: float) -> tupl
         for x in (item, against)
     ]
     if not all(r.ok for r in sides):
-        return ()
+        return None
     one, two = ({os.fsdecode(n) for n in (r.out_bytes or b"").split(b"\0") if n} for r in sides)
     return tuple(sorted(one & two))
 
 
+# The scratch merge itself (`ci.merge_tree`) is bounded by git's own timeout (`infra.git`
+# GIT_TIMEOUT), not by [locks].probe_timeout_s, which has no way into it; the calls made
+# here carry the knob.
 def _scratch(repo: Path, item: str, against: str, timeout_s: float) -> Probe:
     with CI.merge_tree(repo, item, against) as (_tree, why):
         if _tree is not None:
@@ -112,7 +115,8 @@ def _scratch(repo: Path, item: str, against: str, timeout_s: float) -> Probe:
             # semicolon makes ambiguous: so the paths are every one both sides changed (exact
             # names, a superset of the conflicted ones), never a parse of the prose.
             names = _both_changed(repo, item, against, timeout_s)
-            return Probe(CONFLICT, SCRATCH, names, item, against)
+            note = "" if names is not None else "the conflicting paths could not be listed"
+            return Probe(CONFLICT, SCRATCH, names or (), item, against, note)
         return Probe(UNAVAILABLE, SCRATCH, (), item, against, str(why)[-300:])
 
 

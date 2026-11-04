@@ -2176,6 +2176,21 @@
   
   '''
 # ---
+# name: test_help[ddflow probe]
+  '''
+  usage: ddflow probe [-h] [--against AGAINST] [--at {claim,gate,merge}] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --against AGAINST     main (default), another item id or a branch
+    --at {claim,gate,merge}
+                          claim, gate or merge: skipped when [locks].probe_at does not list it
+  
+  '''
+# ---
 # name: test_help[ddflow progress]
   '''
   usage: ddflow progress [-h] [id]
@@ -3443,13 +3458,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3563,6 +3578,8 @@
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
       archdeps            the external-dependency census: families, importing modules, home,
                           violations
+      probe               would an item's branch merge clean with main or a peer? (exit 1 =
+                          conflict, 2 = could not tell)
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -3725,6 +3742,7 @@
     'ddflow pr sync',
     'ddflow pr threads',
     'ddflow precommit',
+    'ddflow probe',
     'ddflow progress',
     'ddflow promote',
     'ddflow promote add',

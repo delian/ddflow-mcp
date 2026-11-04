@@ -34,6 +34,8 @@ def _text(p: PR.Probe, item: str, against: str, ref: str, asked: str) -> str:
         )
     if p.result == PR.CONFLICT:
         shown = ", ".join(p.paths) or "(git named no path)"
+        if p.reason:
+            shown += f" ({p.reason})"
         if p.method == PR.SCRATCH:
             shown += " (every file both sides changed; some may merge cleanly)"
         return (
@@ -44,9 +46,15 @@ def _text(p: PR.Probe, item: str, against: str, ref: str, asked: str) -> str:
     return f"probe {item} against {against}: clean ({p.method}). {PR.LIMIT}."
 
 
-def probe(repo: Path, item: str, *, against: str = "", agent: str = "") -> O.Outcome:
+def probe(repo: Path, item: str, *, against: str = "", at: str = "", agent: str = "") -> O.Outcome:
     """Probe ``item``'s branch against ``against`` (default: the default branch, or an item id)."""
     log, cfg, st = _load(repo, agent)
+    if at and at not in cfg.locks.probe_at:
+        why = (
+            f"no probe at {at}: [locks].probe_at lists {', '.join(cfg.locks.probe_at) or 'nothing'}. "
+            f"Probe anyway: `ddflow probe {item}` (MCP: ddflow_probe id={item})"
+        )
+        return O.nothing(KIND, why, id=item, result=PR.UNAVAILABLE, at=at, text=why)
     branch = _branch(st, cfg, item)
     if not branch:
         return O.failed(KIND, f"no such item {item!r}: `ddflow list` names the items", id=item)
