@@ -27,6 +27,7 @@ def test_task_add_names_the_nearest_real_id(repo):
     code, out, err = run_cli(repo, "task", "add", "T2", "--title", "t2", "--needs", "Aa")
     assert code != 0
     assert "Did you mean 'A'" in out + err  # the nearest real id, not just any hint
+    assert "T2" not in _items(repo)  # the near-match path also files nothing
 
 
 def test_update_add_needs_refuses_an_unknown_need(repo):
