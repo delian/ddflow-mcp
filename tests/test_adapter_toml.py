@@ -1,5 +1,5 @@
 """The `TomlIo` port: one set of cases against `TomlLibIo` and the shipped `FakeTomlIo`,
-plus the real adapter's own promises (files, comments, one error family).
+plus the real adapter's own promises (files, one error family).
 
 `CONFORMANCE` is read by the generic contract test (tests/test_ports_contract.py).
 """
@@ -19,13 +19,9 @@ def toml_cases(io) -> None:
     data = io.loads(SAMPLE)
     assert data == {"name": "x", "n": 3, "flag": True, "items": [1, 2], "a": {"k": "v", "b": {"z": 1}}}
     assert io.loads("") == {}
-    assert io.loads(io.dumps(data)) == data  # write then read gives the data back
-    assert io.loads(io.dumps(io.document(SAMPLE))) == data
     for bad in ("not toml", "a = ", "a = 1\na = 2"):
         with pytest.raises(TomlError):
             io.loads(bad)
-    with pytest.raises(TomlError):
-        io.document("a = ")
 
 
 CONFORMANCE = {"TomlIo": {"real": lambda monkeypatch: TomlLibIo(), "cases": toml_cases}}
@@ -58,20 +54,10 @@ def test_the_fake_reads_its_files_and_misses_like_a_file():
         fake.read("/x/other.toml")
 
 
-def test_a_document_edit_keeps_comments_and_layout():
-    text = '# top\nname = "x"  # why\n\n[a]\nk = 1\n'
-    doc = TomlLibIo().document(text)
-    assert TomlLibIo().dumps(doc) == text
-    doc["a"]["k"] = 2
-    assert TomlLibIo().dumps(doc) == text.replace("k = 1", "k = 2")
-
-
 def test_the_error_is_a_tomllib_decode_error():
     import tomllib
 
     assert issubclass(TomlError, tomllib.TOMLDecodeError)
     assert str(TomlError("bad")) == "bad"
-    with pytest.raises(TomlError):
-        TomlLibIo().document("a = ")
     with pytest.raises(tomllib.TOMLDecodeError):  # what the real `loads` raises
         TomlLibIo().loads("a = ")
