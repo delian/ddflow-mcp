@@ -23,7 +23,7 @@ and satisfy each gate → `ddflow_merge` → `ddflow_complete`.
 - A tool or reviewer that could not run is recorded `unavailable`, never `passed`.
 - Every gate in the pipeline must carry SOME outcome before an item completes. Silence
   is not a pass; `ddflow gate skip <id> <gate> --reason "..."` is the way past one.
-- At least one reviewer must come from a different model family than the author.
+- Prefer a reviewer from another model family; a different model of the same family is accepted (unless pinned to `family`), recorded as tier `model`. The author's own model never counts.
 - A bug is not closed without a regression test that fails against the unfixed code.
 
 **Record as you go:** the operator's words verbatim (`ddflow session prompt`), a

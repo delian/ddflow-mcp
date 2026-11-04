@@ -116,6 +116,7 @@ def test_a_plain_single_family_author_is_unchanged(log, cfg, gd):
 
 
 def test_a_single_family_author_with_a_same_family_reviewer_is_still_refused(log, cfg, gd):
+    cfg.agent.reviewer_independence = "family"
     ok, why = _check(log, cfg, gd, "claude-opus-5", {"model": "claude-sonnet-5"})
     assert not ok and "same as the author" in why, why
 
