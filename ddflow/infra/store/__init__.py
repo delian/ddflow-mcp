@@ -32,6 +32,9 @@ from ._fingerprint import _ENV_ERRNOS as _ENV_ERRNOS
 from ._fingerprint import _ENV_SQLITE as _ENV_SQLITE
 from ._fingerprint import _INDEX_FILE as _INDEX_FILE
 from ._fingerprint import _SEARCH_COLS as _SEARCH_COLS
+from ._fingerprint import FOLD_REV as FOLD_REV
+from ._fingerprint import INDEX_MAX_FILES as INDEX_MAX_FILES
+from ._fingerprint import INDEX_MAX_MB as INDEX_MAX_MB
 from ._fingerprint import INDEX_TOUCH_S as INDEX_TOUCH_S
 from ._fingerprint import META_MARK as META_MARK
 from ._fingerprint import META_SHARD_DIGESTS as META_SHARD_DIGESTS
@@ -88,6 +91,9 @@ from ._tables import _write_rows as _write_rows
 from ._tables import similar_records as similar_records
 
 __all__ = [
+    "FOLD_REV",
+    "INDEX_MAX_FILES",
+    "INDEX_MAX_MB",
     "INDEX_TOUCH_S",
     "META_MARK",
     "META_SHARD_DIGESTS",

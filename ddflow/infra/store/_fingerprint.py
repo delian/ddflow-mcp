@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import functools
+import os
 import re
 import sqlite3
 import sys
@@ -24,6 +25,16 @@ from ...core import digest as D
 from ...core import textsim
 
 SCHEMA = 11
+#: Bump when the FOLD (how events become state) or the projection changes what an index
+#: holds without a SCHEMA change. The index is keyed on this, not on a hash of the source,
+#: so a developer edit or a patch upgrade does not cold-rebuild (bug Bece55b8a77).
+#: `DDFLOW_INDEX_KEY=source` keys on the source hash again (the pre-0.2.11 behaviour).
+FOLD_REV = 1
+
+#: At most this many index files are kept (this one included); `DDFLOW_INDEX_MAX_FILES`.
+INDEX_MAX_FILES = 3
+#: And at most this many MB of index files in total; `DDFLOW_INDEX_MAX_MB`. 0 = no size cap.
+INDEX_MAX_MB = 1024.0
 
 #: How long an index built by OTHER code (a different fingerprint, or the pre-fingerprint
 #: `index.db`) is kept after its last write before a rebuild garbage-collects it. Worktrees
@@ -46,7 +57,13 @@ def code_fingerprint() -> str:
     the on-disk FORMAT_LEVEL. A change to any of them is a different index, so nobody has
     to remember to bump a constant, and two checkouts running different code each keep their
     own index instead of rebuilding each other's (D-compat)."""
-    h = D.hasher(f"{sys.modules[__package__].SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
+    pkg = sys.modules[__package__]
+    if os.environ.get("DDFLOW_INDEX_KEY", "").strip().lower() != "source":
+        # Explicit key (r-derived-cache-bounded): what the index holds, not what built it.
+        return D.hasher(
+            f"{pkg.SCHEMA}/{pkg.FOLD_REV}/{textsim.VERSION}/{FORMAT_LEVEL}".encode()
+        ).hexdigest()[:16]
+    h = D.hasher(f"{pkg.SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
     here = Path(__file__).resolve()
     # This module is one level deeper than the pre-package `store.py` was, so the package
     # root (`ddflow/`) is `here`'s great-grandparent; "this module" is now the whole
@@ -174,3 +191,44 @@ def _capability_tables(con, fts: bool, trig: bool) -> bool:
     except sqlite3.DatabaseError:
         return False
     return True
+
+
+def _env_num(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+def collect_over_cap(directory: Path, keep: str) -> list[Path]:
+    """Delete the oldest index files (with their -wal/-shm/-lock companions) beyond the
+    count and size caps, never `keep` (the index in use). Best effort; an index is derived,
+    so a mistaken removal costs one rebuild. `DDFLOW_INDEX_GC=0` turns it off, and
+    `DDFLOW_INDEX_MAX_FILES` / `DDFLOW_INDEX_MAX_MB` set the caps."""
+    if os.environ.get("DDFLOW_INDEX_GC", "").strip().lower() in ("0", "false", "off", "no"):
+        return []
+    max_files = max(1, int(_env_num("DDFLOW_INDEX_MAX_FILES", INDEX_MAX_FILES)))
+    max_bytes = _env_num("DDFLOW_INDEX_MAX_MB", INDEX_MAX_MB) * 1048576
+    mains: list[tuple[float, int, Path]] = []
+    for f in directory.glob("index.db*"):
+        m = _INDEX_FILE.match(f.name)
+        if not m or m.group(2) or f.name == keep:
+            continue
+        with contextlib.suppress(OSError):
+            st = f.stat()
+            mains.append((st.st_mtime, st.st_size, f))
+    mains.sort(key=lambda t: t[0], reverse=True)  # newest first
+    total = 0
+    with contextlib.suppress(OSError):
+        total = (directory / keep).stat().st_size
+    gone: list[Path] = []
+    for i, (_, size, f) in enumerate(mains):
+        total += size
+        if i + 1 < max_files and (max_bytes <= 0 or total <= max_bytes):
+            continue
+        total -= size
+        for suf in ("", "-wal", "-shm", "-lock"):
+            with contextlib.suppress(OSError):
+                f.with_name(f.name + suf).unlink(missing_ok=True)
+        gone.append(f)
+    return gone
