@@ -74,9 +74,20 @@ def merge_log(root: Path) -> list[str]:
     (B2822f97531). Fall back to HEAD only when no ``main`` ref resolves (a checkout with a
     renamed default branch, never a ddflow worktree). Only ``merge <id>:`` subjects: a
     hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
-    anchor = "main" if git_proc(root, "rev-parse", "--verify", "--quiet", "main").returncode == 0 else "HEAD"
+    anchor = (
+        "main"
+        if git_proc(root, "rev-parse", "--verify", "--quiet", "main").returncode == 0
+        else "HEAD"
+    )
     log = git_proc(
-        root, "log", anchor, "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
+        root,
+        "log",
+        anchor,
+        "--merges",
+        "--grep=^merge [^ :]*:",
+        "-n",
+        str(SCAN),
+        "--format=%H %s",
     )
     if log.returncode != 0:
         return []
