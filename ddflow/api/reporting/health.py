@@ -327,9 +327,7 @@ def doctor(
         st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)
-    cost = SC.report(
-        repo, cfg, agent, start_texts
-    )  # first: it refreshes the index (stale check)
+    cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
     problems, notes = RP.integrity(repair_ctx)
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
