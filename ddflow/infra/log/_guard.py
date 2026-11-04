@@ -44,8 +44,10 @@ class _GuardMixin:
     # -- the version stamp and the skew guard -----------------------------------------
     def _shard_meta(self) -> SMT.ShardMeta | None:
         """The per-clone shard facts (`infra.shardmeta`), or None where no cache is kept
-        (`[log].snapshot` off, a log built only to read another repository)."""
-        if not self._snapshot_enabled():
+        (`[log].reuse_parsed` off, a log built only to read another repository). Not tied to
+        the read snapshot (B9d5e21a5e9): these facts are what keeps a fresh process's append
+        from parsing every shard, and a snapshot that is off does not change that."""
+        if not (self.log_cfg.reuse_parsed and self.cache_writes):
             return None
         if self._meta is None:
             self._meta = SMT.ShardMeta(self.root)

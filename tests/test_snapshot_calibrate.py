@@ -98,3 +98,21 @@ def test_the_swept_set_is_bounded(repo):
     _parse._SNAP_SWEPT.update(repo / f"d{i}" for i in range(300))
     EventLog(repo, "x", log_cfg=LogConfig(snapshot=False)).read_all()
     assert len(_parse._SNAP_SWEPT) <= _parse._SNAP_SWEPT_MAX
+
+
+@pytest.mark.parametrize("env", [None, "0"])
+def test_the_shard_facts_do_not_follow_the_snapshot(repo, monkeypatch, env):
+    """B9d5e21a5e9: `.ddflow/local/shardmeta/` is what keeps a fresh process's append from
+    parsing every shard, and it has nothing to do with the read snapshot."""
+    if env is not None:
+        monkeypatch.setenv(L.SNAPSHOT_ENV, env)
+    assert EventLog(repo, "x", log_cfg=LogConfig(snapshot=False))._shard_meta() is not None
+
+
+@pytest.mark.parametrize(
+    "off", [{"log_cfg": LogConfig(reuse_parsed=False)}, {"cache_writes": False}]
+)
+def test_the_shard_facts_stay_off_where_no_cache_may_be_kept(repo, off):
+    """`reuse_parsed = false` re-reads everything, and a log built to read another repository
+    writes nothing there: neither may gain a cache by the separation above."""
+    assert EventLog(repo, "x", **off)._shard_meta() is None

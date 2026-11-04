@@ -21,7 +21,7 @@ from ddflow.infra import log as L
 from ddflow.infra.log import EventLog, clear_parse_cache
 from tests.test_log_merged_order import _ev, _put
 
-_SNAP = LogConfig(snapshot_min_events=10)  # snapshot even a small test log
+_SNAP = LogConfig(snapshot=True, snapshot_min_events=10)  # snapshot even a small test log
 
 
 @pytest.fixture(autouse=True)
