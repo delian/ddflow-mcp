@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 #: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "probe.recorded": ("why",),
     "suggestion.expired": ("reason",),
     "suggestion.superseded": ("reason",),
     "suggestion.withdrawn": ("reason",),
@@ -129,6 +130,9 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("probe.recorded", "against"): "the ref the item was probed against",
+    ("probe.recorded", "result"): "clean, conflict or unavailable",
+    ("probe.recorded", "method"): "merge-tree, scratch-merge or none",
     ("suggestion.expired", "role"): "a role word: ddflow or operator",
     ("suggestion.superseded", "role"): "a role word: ddflow or operator",
     ("suggestion.superseded", "by_id"): "the id of the replacing suggestion",

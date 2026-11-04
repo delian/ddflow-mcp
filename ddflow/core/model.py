@@ -116,6 +116,7 @@ from .handlers.knowledge import (
     _h_research,
 )
 from .handlers.lanerelease import LANERELEASE_HANDLERS
+from .handlers.probe import PROBE_HANDLERS
 from .handlers.leases import (  # noqa: F401
     _displace,
     _h_lease_acquired,
@@ -295,6 +296,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: api/probe.py (`ddflow probe`)
+    **PROBE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

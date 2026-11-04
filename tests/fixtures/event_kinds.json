@@ -676,6 +676,18 @@
    },
    "v": 1
   },
+  "probe.recorded": {
+   "fields": {
+    "against": ["str"],
+    "base": ["str"],
+    "head": ["str"],
+    "method": ["str"],
+    "paths": ["list"],
+    "result": ["str"],
+    "why": ["str"]
+   },
+   "v": 1
+  },
   "record.extended": {
    "fields": {
     "auto": ["bool"],
