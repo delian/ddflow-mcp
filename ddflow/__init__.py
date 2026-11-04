@@ -20,3 +20,10 @@ __version__ = "0.2.10"
 #: ddflow cannot read or write safely, never by an additive one. Separate from `__version__`,
 #: which changes with every release whether or not anything on disk did.
 FORMAT_LEVEL = 1
+
+import os as _os
+
+# Cap BLAS/OpenMP threads before any heavy import: on a many-core host numpy's pool otherwise
+# burns seconds of CPU per process (8 s user for `--version`). A value the user set wins.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    _os.environ.setdefault(_var, "1")
