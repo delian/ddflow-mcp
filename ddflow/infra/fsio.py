@@ -419,6 +419,11 @@ def move(src: Path | str, dst: Path | str) -> None:
     _fs.DEFAULT.move(src, dst)
 
 
+def replace_path(src: Path | str, dst: Path | str) -> None:
+    """Rename ``src`` over ``dst`` atomically (same filesystem), like ``os.replace``."""
+    _fs.DEFAULT.replace_path(src, dst)
+
+
 def rmtree(path: Path | str, *, ignore_errors: bool = True) -> None:
     """Remove the directory tree at ``path``, ignoring errors by default."""
     _fs.DEFAULT.rmtree(path, ignore_errors=ignore_errors)

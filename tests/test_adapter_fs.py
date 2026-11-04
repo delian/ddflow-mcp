@@ -121,7 +121,14 @@ def test_fsio_path_operations_go_through_the_one_adapter(monkeypatch, tmp_path):
     fsio.copy_tree("/s/d", "/t/d")
     fsio.move("/s/f", "/t/m")
     fsio.rmtree("/s/d")
-    assert [c[0] for c in fake.calls] == ["copy_file", "copy_tree", "move", "rmtree"]
+    fsio.replace_path("/t/m", "/t/n")
+    assert [c[0] for c in fake.calls] == [
+        "copy_file",
+        "copy_tree",
+        "move",
+        "rmtree",
+        "replace_path",
+    ]
 
 
 def test_fsio_real_roundtrip(tmp_path):
@@ -132,3 +139,20 @@ def test_fsio_real_roundtrip(tmp_path):
     assert (tmp_path / "g" / "f").read_text() == "x"
     fsio.rmtree(tmp_path / "g")
     assert not (tmp_path / "g").exists()
+
+
+def test_fake_mirrors_shutil_on_directories():
+    f = FakeFs({"/a/f": b"1", "/file": b"x", "/dst": b"old"})
+    f.mkdir("/a/empty")
+    with pytest.raises(FileExistsError):
+        f.copy_tree("/a", "/dst")  # destination is a file
+    f.copy_tree("/a", "/c")
+    assert f.is_dir("/c/empty") and f.files["/c/f"] == b"1"
+    f.move("/file", "/c")  # into an existing directory
+    assert f.files["/c/file"] == b"x"
+    f.move("/a", "/z")
+    assert not f.is_dir("/a/empty") and f.is_dir("/z/empty")
+    root = FakeFs({"/q": b"1"})
+    assert root.is_dir("/")
+    root.rmtree("/", ignore_errors=False)
+    assert root.files == {}

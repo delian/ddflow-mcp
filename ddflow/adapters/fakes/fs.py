@@ -27,14 +27,26 @@ class FakeFs:
         self.calls: list[tuple[str, ...]] = []
 
     def mkdir(self, path: Path | str) -> None:
-        self.dirs.add(_p(path))
+        d = _p(path)
+        self.calls.append(("mkdir", d))
+        self.dirs.add(d)
+
+    @staticmethod
+    def _prefix(d: str) -> str:
+        return d if d.endswith("/") else d + "/"
 
     def is_dir(self, path: Path | str) -> bool:
         d = _p(path)
-        return d in self.dirs or any(f.startswith(d + "/") for f in self.files)
+        pre = self._prefix(d)
+        return d in self.dirs or any(f.startswith(pre) for f in self.files)
 
     def _under(self, root: str) -> list[str]:
-        return sorted(f for f in self.files if f.startswith(root + "/"))
+        pre = self._prefix(root)
+        return sorted(f for f in self.files if f.startswith(pre))
+
+    def _dirs_under(self, root: str) -> list[str]:
+        pre = self._prefix(root)
+        return sorted(x for x in self.dirs if x.startswith(pre))
 
     def copy_file(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
@@ -48,24 +60,31 @@ class FakeFs:
         self.calls.append(("copy_tree", s, d))
         if not self.is_dir(s):
             raise FileNotFoundError(s)
-        if self.is_dir(d) and not dirs_exist_ok:
+        if d in self.files or (self.is_dir(d) and not dirs_exist_ok):
             raise FileExistsError(d)
         for f in self._under(s):
             self.files[d + f[len(s) :]] = self.files[f]
+        for x in self._dirs_under(s):
+            self.dirs.add(d + x[len(s) :])
         self.dirs.add(d)
 
     def move(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
         self.calls.append(("move", s, d))
+        if not (s in self.files or self.is_dir(s)):
+            raise FileNotFoundError(s)
+        if self.is_dir(d):  # like shutil.move: into an existing directory
+            d = self._prefix(d) + s.rsplit("/", 1)[-1]
         if s in self.files:
             self.files[d] = self.files.pop(s)
-        elif self.is_dir(s):
-            for f in self._under(s):
-                self.files[d + f[len(s) :]] = self.files.pop(f)
-            self.dirs.discard(s)
-            self.dirs.add(d)
-        else:
-            raise FileNotFoundError(s)
+            return
+        for f in self._under(s):
+            self.files[d + f[len(s) :]] = self.files.pop(f)
+        for x in self._dirs_under(s):
+            self.dirs.discard(x)
+            self.dirs.add(d + x[len(s) :])
+        self.dirs.discard(s)
+        self.dirs.add(d)
 
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
         d = _p(path)
@@ -76,7 +95,7 @@ class FakeFs:
             raise FileNotFoundError(d)
         for f in self._under(d):
             del self.files[f]
-        self.dirs = {x for x in self.dirs if x != d and not x.startswith(d + "/")}
+        self.dirs = {x for x in self.dirs if x != d and not x.startswith(self._prefix(d))}
 
     def replace_path(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
