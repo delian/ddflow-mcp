@@ -24,6 +24,7 @@ from ._fingerprint import (
     STALE_INDEX_DAYS,
     _capability_tables,
     _environmental,
+    collect_over_cap,
 )
 from ._tables import (
     _fill_trigram,
@@ -418,6 +419,7 @@ class _ProjectionMixin:
                 if f.stat().st_mtime < cutoff:
                     f.unlink()
                     gone.append(f)
+        gone += collect_over_cap(self.path.parent, mine)
         return gone
 
     def ensure(self, log: EventLog) -> State:

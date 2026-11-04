@@ -126,6 +126,14 @@ ddflow's own files) does have an upgrade path: `ddflow upgrade --plan` shows wha
 would change and `ddflow upgrade --apply` does it after a backup (undo: `ddflow upgrade
 --restore`).
 
+**Upgrade note (index files).** The index file name (`index.db-<key>`) is keyed on
+`SCHEMA`/`FOLD_REV`, not on a hash of the ddflow source, so an edit or a patch upgrade does not
+rebuild it. At most `DDFLOW_INDEX_MAX_FILES` (3) files and `DDFLOW_INDEX_MAX_MB` (1024) MB are
+kept, oldest first; older ones from earlier releases are deleted on the next rebuild, never
+trusted. `DDFLOW_INDEX_GC=0` turns the cap off; `DDFLOW_INDEX_KEY=source` restores the
+source-hash key (use it while editing `ddflow/core/` fold code without bumping `FOLD_REV`).
+Rollback: delete `.ddflow/index.db*`.
+
 ---
 
 ## 5. Two branches diverged, or a merge brought duplicate events
