@@ -1,0 +1,2 @@
+{"agent":"Monster3-fix-B2efda94671-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e620784a24cada3f768eec5a9","kind":"ddflow.seen","lamport":135745,"schema":1,"subject":"ddflow","ts":"2026-11-04T17:53:23.977815Z"}
+{"agent":"Monster3-fix-B2efda94671-7267fe","data":{"gate":"rubber_duck"},"id":"eb58c41c45298892d013d995f","kind":"gate.started","lamport":135746,"schema":1,"subject":"fix-B2efda94671","ts":"2026-11-04T17:53:24.028032Z"}
