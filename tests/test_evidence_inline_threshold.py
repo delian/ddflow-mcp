@@ -76,7 +76,11 @@ def test_an_old_log_replays_identically_and_is_not_rewritten(tmp_path):
     first = fold(EventLog(tmp_path).read_all(), strict=False)
     cfg = LogConfig(evidence_blobs=True)  # the new default threshold, switch on
     again = fold(EventLog(tmp_path, log_cfg=cfg).read_all(), strict=False)
+    assert len(first.items) > 20  # a real replay, not two empty models
     assert first.items.keys() == again.items.keys()
+    assert {k: (v.title, v.state) for k, v in first.items.items()} == {
+        k: (v.title, v.state) for k, v in again.items.items()
+    }
     assert {k: v.gates for k, v in first.items.items()} == {
         k: v.gates for k, v in again.items.items()
     }
@@ -95,6 +99,8 @@ def test_appending_to_an_old_log_leaves_its_events_byte_identical(tmp_path):
     log.append("task.added", "TNEW", {"title": "t", "globs": ["a.py"]})
     ev = log.append("gate.passed", "TNEW", {"gate": "g", "evidence": {"tail": "t" * 400}})
     assert B.is_stub(ev.data["evidence"]["tail"])
-    assert shard.read_bytes().splitlines(keepends=True)[: len(old_lines)] == old_lines
+    now = shard.read_bytes().splitlines(keepends=True)
+    assert now[: len(old_lines)] == old_lines
+    assert b'"TNEW"' in now[-1] and b"gate.passed" in now[-1]  # landed at this shard's tail
     st = fold(EventLog(tmp_path, log_cfg=cfg).read_all(), strict=False)
     assert LB.full(st.items["TNEW"].gates["g"].evidence, root=tmp_path)["tail"] == "t" * 400
