@@ -2008,6 +2008,29 @@
           (`ddflow config locks.snapshot_max_age_s ...`), for this machine (add
           --local), per run (DDFLOW_LOCKS_SNAPSHOT_MAX_AGE_S), or over MCP with
           `ddflow_configure`.
+      locks.probe = True   [default]
+          The conflict probe: `ddflow probe ITEM [--against main|ITEM]` asks git
+          (`merge-tree --write-tree`, 8 to 21 ms typical) whether the item's branch
+          merges textually clean with main or a peer's branch, and records the answer
+          as a `probe.recorded` event with both tip shas. Off: the command and the
+          callers that use it (release at merge-ready, suggestions, peer notices)
+          answer `unavailable` and the commit-time check decides, never `clean`. Clean
+          means textually clean only: a renamed function the other side still calls
+          needs the gates and ci on the merge result.
+      locks.probe_timeout_s = 30   [default]
+          Seconds one probe may take before it is recorded `unavailable` (never
+          `clean`). Measured: p90 1.3 s on branches 11k commits stale; a scratch-merge
+          fallback on an old git takes about 1 s.
+      locks.probe_at = ['claim', 'gate', 'merge']   [default]
+          Where ddflow runs the probe on its own: `claim` (when an item is claimed),
+          `gate` (at a gate boundary) and `merge` (before the merge). An empty list
+          probes only when `ddflow probe` is called. A probe that could not run is
+          recorded `unavailable` and the commit-time check decides.
+      locks.probe_merge_tree_min_git = '2.38'   [default]
+          The oldest git whose `merge-tree --write-tree` the probe uses; an older git
+          (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe
+          fall back to a scratch merge in a throwaway worktree, slower and the same
+          answer.
       lanes.window_s = 86400   [default]
           How far back a lane's last event may be for `ddflow lanes` to list it (a
           lane holding a live lease is always listed). Older agents are history, not

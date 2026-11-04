@@ -140,6 +140,7 @@ from .handlers.links import (  # noqa: F401
     _links,
     link_targets,
 )
+from .handlers.probe import PROBE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,
@@ -295,6 +296,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: api/probe.py (`ddflow probe`)
+    **PROBE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

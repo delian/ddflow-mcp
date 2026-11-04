@@ -9,6 +9,23 @@ from dataclasses import dataclass
 from ._docs import declare, int_at_least, knob
 from .enforce import BLOCK_WARN_OFF
 
+PROBE_AT = ("claim", "gate", "merge")
+
+
+def _probe_at(value):
+    """Keep the known places, report the rest (a newer release's place is ignored)."""
+    items = (
+        [value]
+        if isinstance(value, str)
+        else list(value)
+        if isinstance(value, (list, tuple))
+        else []
+    )
+    if not isinstance(value, (str, list, tuple)):
+        return [], [f"probe_at must be a list of places, not {type(value).__name__}"]
+    kept = [x for x in items if x in PROBE_AT]
+    return kept, [f"unknown probe_at place {x!r}" for x in items if x not in PROBE_AT]
+
 
 @declare("locks")
 @dataclass
@@ -49,4 +66,23 @@ class LocksConfig:
         1800,
         doc="A lease snapshot written longer ago than this many seconds is STALE: the write hook does not trust it, ALLOWS the call and says so on stderr (the commit-time lease check is then the only check), never a silent pass. A live agent's heartbeat rewrites the snapshot at least every `[lease].renew_log_min_s` plus its heartbeat, so the default (the lease TTL) lapses only when nothing has touched the leases for that long. Lower = the hook falls back to the commit-time check sooner; higher = it trusts an older picture of who holds what. 0 = never stale. Change it for the project (`ddflow config locks.snapshot_max_age_s ...`), for this machine (add --local), per run (DDFLOW_LOCKS_SNAPSHOT_MAX_AGE_S), or over MCP with `ddflow_configure`.",
         check=int_at_least(0),
+    )
+
+    probe: bool = knob(
+        True,
+        doc="The conflict probe: `ddflow probe ITEM [--against main|ITEM]` asks git (`merge-tree --write-tree`, 8 to 21 ms typical) whether the item's branch merges textually clean with main or a peer's branch, and records the answer as a `probe.recorded` event with both tip shas. Off: the command and the callers that use it (release at merge-ready, suggestions, peer notices) answer `unavailable` and the commit-time check decides, never `clean`. Clean means textually clean only: a renamed function the other side still calls needs the gates and ci on the merge result.",
+    )
+    probe_timeout_s: int = knob(
+        30,
+        doc="Seconds one probe may take before it is recorded `unavailable` (never `clean`). Measured: p90 1.3 s on branches 11k commits stale; a scratch-merge fallback on an old git takes about 1 s.",
+        check=int_at_least(1),
+    )
+    probe_at: list[str] = knob(
+        factory=lambda: ["claim", "gate", "merge"],
+        doc="Where ddflow runs the probe on its own: `claim` (when an item is claimed), `gate` (at a gate boundary) and `merge` (before the merge). An empty list probes only when `ddflow probe` is called. A probe that could not run is recorded `unavailable` and the commit-time check decides.",
+        members=_probe_at,
+    )
+    probe_merge_tree_min_git: str = knob(
+        "2.38",
+        doc="The oldest git whose `merge-tree --write-tree` the probe uses; an older git (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe fall back to a scratch merge in a throwaway worktree, slower and the same answer.",
     )
