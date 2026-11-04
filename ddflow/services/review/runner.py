@@ -255,9 +255,7 @@ def _race(
                 content, err = got
                 if not err and content and parse(content)[1]:
                     settled[i] = got
-                    for other in range(hedge):
-                        if other != c:
-                            tokens[(i, other)].cancel()
+                    _cancel_twins(tokens, i, c, hedge)
                 elif _retryable(err):
                     # A chunk lost to its OWN size -- out of tokens, or no answer within the
                     # bound -- is deterministic: a hedge copy is the SAME chunk with the SAME
@@ -269,9 +267,7 @@ def _race(
                     # on a 1800s timeout). `_retry_truncated` then halves it, which is the
                     # sanctioned recovery, not an identical re-request.
                     settled[i] = first_failure.get(i, got)
-                    for other in range(hedge):
-                        if other != c:
-                            tokens[(i, other)].cancel()
+                    _cancel_twins(tokens, i, c, hedge)
                 elif left[i] == 0:
                     settled[i] = first_failure.get(i, got)
                 else:
@@ -285,6 +281,14 @@ def _race(
                 if waiting:
                     on_tick(waiting)
     return [settled[i] for i in range(n)]
+
+
+def _cancel_twins(tokens: dict, i: int, c: int, hedge: int) -> None:
+    """Cancel every copy of chunk ``i`` but the settled one ``c``; a queued twin then sees
+    ``i in settled`` in `attempt` and never starts."""
+    for other in range(hedge):
+        if other != c:
+            tokens[(i, other)].cancel()
 
 
 def _retryable(err: str) -> bool:
