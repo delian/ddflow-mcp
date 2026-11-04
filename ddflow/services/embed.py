@@ -45,7 +45,7 @@ def _static_model() -> Any:
     if _StaticModel is _UNSET:
         try:  # the [rag] extra; every caller works without it
             from model2vec import StaticModel
-        except ImportError:  # pragma: no cover - depends on the environment
+        except Exception:  # absent or broken install (ImportError or not): no embedder
             StaticModel = None
         _StaticModel = StaticModel
     return _StaticModel
