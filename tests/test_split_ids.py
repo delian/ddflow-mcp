@@ -54,6 +54,9 @@ def test_split_never_mints_an_empty_prefix_child_id(repo):
 
     out = api.split(repo, parent, into=["=first thing", "=second thing"])
     assert out.exit == 0, out
-    for created in out.data["created"]:
-        assert created.startswith(f"{parent}."), created
-        assert not created.startswith(".") and not created.startswith("-"), created
+    created = out.data["created"]
+    assert created, "an auto-minted split minted no children at all"
+    assert len(created) == 2, created
+    for child in created:
+        assert child.startswith(f"{parent}."), child
+        assert not child.startswith(".") and not child.startswith("-"), child
