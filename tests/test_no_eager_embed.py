@@ -12,16 +12,21 @@ _PROBE = (
 )
 
 
-def _run(**env):
+def _run(fake_dir=None, **env):
     e = {k: v for k, v in os.environ.items() if not k.endswith("_NUM_THREADS")}
     e.update(env)
+    if fake_dir:
+        e["PYTHONPATH"] = str(fake_dir)
     out = subprocess.run([sys.executable, "-c", _PROBE], env=e, capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     return out.stdout.split("\n")
 
 
-def test_cli_import_does_not_load_numpy_or_model2vec():
-    assert _run()[0] == "[]"
+def test_cli_import_does_not_load_numpy_or_model2vec(tmp_path):
+    # A stand-in model2vec that imports numpy, so the test bites whether or not the real
+    # [rag] extra is installed (an eager import of it would pull numpy in).
+    (tmp_path / "model2vec.py").write_text("import numpy\nclass StaticModel: ...\n")
+    assert _run(tmp_path)[0] == "[]"
 
 
 def test_blas_threads_capped_unless_the_user_set_them():
