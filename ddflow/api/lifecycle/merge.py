@@ -184,6 +184,13 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     # merge with 'local changes would be overwritten', leaving the operator to hand-commit
     # a shard first (B6b7e47955e). Commit the shards HERE, before git merges, so they are
     # not the uncommitted work git refuses to overwrite.
+    #
+    # The range a merge adds, for the post-merge tripwire check, is from the target's HEAD
+    # as the caller last saw it -- NOT from after the shard commit above (that commit is the
+    # landing's own bookkeeping, not user work). Read it before the shard commit so the
+    # after-merge CI checks user changes rather than re-checking a shard commit it did not
+    # make (Be40e9c84d5).
+    merge_since = W.rev(repo, wt.base)
     EC.commit_at(log, cfg, "merge", f"merge {item}")
     # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
     # (it lands the event shards on the primary), so a landing check against a rev read
@@ -270,7 +277,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     say = on_progress or (lambda _line: None)
     say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
     say(_ci_notice(repo, cfg))
-    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=landed_before)
+    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=merge_since)
     say(
         f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
     )
