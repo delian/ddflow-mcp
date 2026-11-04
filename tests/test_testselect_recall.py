@@ -65,13 +65,16 @@ ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over al
 
 
 def merge_log(root: Path) -> list[str]:
-    """The ``merge <item>: ...`` commits ddflow wrote, newest first, reachable by ANY path.
-    Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
-    parent, so a first-parent walk saw an older window than main does and the replay failed
-    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161). Only ``merge <id>:``
-    subjects: a hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
+    """The ``merge <item>: ...`` commits ddflow wrote, newest first, taken from ``main``.
+    Anchored to ``main``, not HEAD: the window must be the merges main actually shipped,
+    the ones CI's recall guards. Not ``--first-parent``: on a branch that merged main in,
+    main's merges sit on the second parent, so a first-parent walk saw an older window than
+    main does (Bfaef48ced6, Bb5b8b17161); and a walk from HEAD still drifts, because the
+    branch's own tip carries merge commits near the window top and pushes main's off it
+    (B2822f97531). Only ``merge <id>:`` subjects: a hand-made ``merge main`` sync commit is
+    not a ddflow merge (B2d1ecadd87)."""
     log = git_proc(
-        root, "log", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
+        root, "log", "main", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
     )
     if log.returncode != 0:
         return []
@@ -299,3 +302,32 @@ def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
         for sha in merge_log(tmp_path)
     ]
     assert subjects == ["merge T1: real"]
+
+
+def test_merge_log_anchors_to_main_not_the_branch_tip(tmp_path):
+    """B2822f97531: a worktree branched from an older main sees a different (older, or
+    shorter) window of recent merges than main does, so the recall test fails on a merge
+    main has long left behind. The window must be main's recent merges, the same from any
+    checkout: ci guards main, not the branch."""
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    g("commit", "-q", "--allow-empty", "-m", "base")
+    base = git_proc(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    g("checkout", "-q", "-b", "side")
+    g("commit", "-q", "--allow-empty", "-m", "work")
+    g("checkout", "-q", "main")
+    g("commit", "-q", "--allow-empty", "-m", "main")
+    g("merge", "-q", "--no-ff", "-m", "merge T1: real", "side")
+    main_sha = git_proc(tmp_path, "rev-parse", "main").stdout.strip()
+
+    # a worktree branched from base, before main's merge: from its HEAD no ddflow merge is
+    # reachable, but the window is still main's newest merge
+    g("checkout", "-q", "-b", "topic", base)
+    assert merge_log(tmp_path) == [main_sha], merge_log(tmp_path)
+    g("checkout", "-q", "main")
+    assert merge_log(tmp_path) == [main_sha]
