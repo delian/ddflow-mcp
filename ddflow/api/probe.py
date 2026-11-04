@@ -50,9 +50,11 @@ def probe(repo: Path, item: str, *, against: str = "", at: str = "", agent: str 
     """Probe ``item``'s branch against ``against`` (default: the default branch, or an item id)."""
     log, cfg, st = _load(repo, agent)
     if at and at not in cfg.locks.probe_at:
+        vs = f" --against {against}" if against else ""
+        vs_mcp = f" against={against}" if against else ""
         why = (
             f"no probe at {at}: [locks].probe_at lists {', '.join(cfg.locks.probe_at) or 'nothing'}. "
-            f"Probe anyway: `ddflow probe {item}` (MCP: ddflow_probe id={item})"
+            f"Probe anyway: `ddflow probe {item}{vs}` (MCP: ddflow_probe id={item}{vs_mcp})"
         )
         return O.nothing(KIND, why, id=item, result=PR.UNAVAILABLE, at=at, text=why)
     branch = _branch(st, cfg, item)

@@ -252,3 +252,19 @@ def test_conflict_without_a_path_list_says_so(pair: Path, monkeypatch) -> None:
     monkeypatch.setattr(PR, "_both_changed", lambda *a: None)
     p = PR.run(pair, "ddflow/clash", "main", timeout_s=TIMEOUT)
     assert p.result == PR.CONFLICT and p.paths == () and "could not be listed" in p.reason
+
+
+def test_at_skip_names_the_same_peer_in_its_next_call(pair: Path) -> None:
+    _items(pair, "clean")
+    with (pair / ".ddflow" / "config.toml").open("a") as f:
+        f.write('\n[locks]\nprobe_at = ["merge"]\n')
+    _, out, err = run_cli(pair, "probe", "clean", "--against", "ddflow/clash", "--at", "claim")
+    assert "ddflow probe clean --against ddflow/clash" in out + err
+    assert "against=ddflow/clash" in out + err
+
+
+def test_the_timeout_knob_documents_the_scratch_merge_limit() -> None:
+    from ddflow.config import Config  # noqa: F401
+    from ddflow.config_sections._docs import KNOB_DOCS
+
+    assert "scratch merge itself" in KNOB_DOCS["locks.probe_timeout_s"]

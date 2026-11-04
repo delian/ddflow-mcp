@@ -74,7 +74,7 @@ class LocksConfig:
     )
     probe_timeout_s: int = knob(
         30,
-        doc="Seconds one probe may take before it is recorded `unavailable` (never `clean`). Measured: p90 1.3 s on branches 11k commits stale; a scratch-merge fallback on an old git takes about 1 s.",
+        doc="Seconds one probe may take before it is recorded `unavailable` (never `clean`). Measured: p90 1.3 s on branches 11k commits stale; a scratch-merge fallback on an old git takes about 1 s. The limit covers every git call the probe makes except the scratch merge itself (old git only), which git's own timeout in `infra.git` bounds.",
         check=int_at_least(1),
     )
     probe_at: list[str] = knob(
