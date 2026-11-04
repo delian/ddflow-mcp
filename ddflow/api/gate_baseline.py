@@ -42,12 +42,7 @@ def apply(  # noqa: PLR0913, PLR0917
         else ev
     )
     ids = BR.candidate_ids(gate, gdef.command, seen, fail_fast) if result == "failed" else []
-    probe = gdef
-    if gate == "ci":  # `ddflow ci run` is no pytest: the whole failing list is kept aside, and
-        probe = _unit_tests_def(repo, cfg) or gdef
-        ids = _ci_ids(repo, cfg, ev, ids)
-        if TS.fail_fast(probe.command):
-            ids = []  # a run stopped at its first failure lists one of possibly many
+    probe, ids = _probe_and_ids(gate, gdef, repo, cfg, ev, ids)
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
@@ -107,10 +102,34 @@ def _names(text: str, test_id: str) -> bool:
     return re.search(left + re.escape(test_id) + right, text) is not None
 
 
+def _probe_and_ids(gate, gdef, repo, cfg, ev: dict[str, Any], ids: list[str]) -> tuple[Any, list[str]]:
+    """``(probe, ids)``: the gate whose command runs the failing ids on the base, and the whole
+    failing list to try there. `ddflow ci run` is no pytest (its whole list is kept aside, run
+    with the unit_tests command); a full-suite unit_tests failure caps its list the same way and
+    keeps the whole one aside too (B69d1c0ff00)."""
+    probe = gdef
+    if gate == "ci":
+        probe = _unit_tests_def(repo, cfg) or gdef
+        ids = _ci_ids(repo, cfg, ev, ids)
+        if TS.fail_fast(probe.command):
+            ids = []  # a run stopped at its first failure lists one of possibly many
+    elif gate == "unit_tests":
+        ids = _unit_ids(repo, ev, ids)
+    return probe, ids
+
+
 def _ci_ids(repo, cfg, ev: dict[str, Any], capped: list[str]) -> list[str]:
     """Every failing id of the ci run: the whole list `ci run` kept aside for this commit, else
     the evidence's own when it was not cut ([] when the list is cut and no file holds it)."""
     sha = str((ev.get("ci_scope") or {}).get("sha") or "")
+    return BL.read_full(repo, sha) or (capped if not ev.get("failed_tests_more") else [])
+
+
+def _unit_ids(repo, ev: dict[str, Any], capped: list[str]) -> list[str]:
+    """Every failing id of a unit_tests run whose list was cut: the whole list the run kept
+    aside for its own tree (``runner.run_command_gate``), else the evidence's own when it was
+    not cut ([] when the list is cut and no file holds it)."""
+    sha = str(ev.get("tree_sha") or "")
     return BL.read_full(repo, sha) or (capped if not ev.get("failed_tests_more") else [])
 
 

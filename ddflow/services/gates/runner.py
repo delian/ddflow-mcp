@@ -20,7 +20,7 @@ from .. import cmdrunner
 from .. import suitelock as SL
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
-from ..flakes import failure_evidence
+from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .drift import _account_for_drift
@@ -343,7 +343,23 @@ def run_command_gate(
         # Only a FAILURE is worth the git calls: a pass under drift is main's command
         # passing here, which is what the gate asks, and an unavailable already says so.
         outcome = _account_for_drift(gdef, cwd, p.code, out, ev)
+    _keep_cut_failing_ids(gdef, cwd, out, ev)
     return outcome, ev
+
+
+def _keep_cut_failing_ids(gdef: GateDef, cwd: Path, out: str, ev: dict[str, Any]) -> None:
+    """Keep a unit_tests full-suite failure's WHOLE failing list aside for the run's own tree
+    (the evidence caps it to a sample): ``gate_baseline`` reads it to measure the failure on
+    the base, so ``[gates].baseline_red_auto`` can accept it (B69d1c0ff00). A run that could
+    not be kept is dropped: the outcome it follows is unchanged."""
+    if gdef.id != "unit_tests" or not ev.get("failed_tests_more"):
+        return
+    from .baseline import write_full  # deferred, as run_log_writer does
+
+    try:
+        write_full(W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)])
+    except (OSError, ValueError, KeyError):
+        return
 
 
 class Classified(NamedTuple):
