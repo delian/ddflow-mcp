@@ -109,3 +109,20 @@ def test_second_process_with_the_same_agent_name_does_not_restamp(repo, monkeypa
     with waves_auto.keep_stamped(repo, cfg, mine, "shared"):
         subprocess.run([sys.executable, "-c", code, str(repo)], check=True)
     assert calls == []
+
+
+def test_other_thread_with_the_same_agent_name_does_not_restamp(repo, monkeypatch):
+    _setup(repo)
+    calls = []
+    monkeypatch.setattr(batch, "apply", lambda *a, **k: calls.append(1))
+    cfg = Config.load(repo)
+    mine = EventLog(repo, "shared")
+
+    def other():
+        EventLog(repo, "shared").append("session.note", "n", {"text": "x"})
+
+    with waves_auto.keep_stamped(repo, cfg, mine, "shared"):
+        t = threading.Thread(target=other)  # a fresh thread: a context of its own
+        t.start()
+        t.join()
+    assert calls == []

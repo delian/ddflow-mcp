@@ -22,6 +22,12 @@ from . import waves
 _STAMPING = contextvars.ContextVar("ddflow_waves_auto_stamping", default=False)
 
 
+#: Which command's scope the current context is in: the append hook counts a write only
+#: when it runs in the scope that installed it, so a second command in another thread of
+#: one process (an MCP server) under the same agent name is not counted as this one's.
+_SCOPE = contextvars.ContextVar("ddflow_waves_auto_scope", default=None)
+
+
 @contextlib.contextmanager
 def _own_appends(log):
     """Counts the events THIS process appends for the caller while the block runs.
@@ -30,16 +36,18 @@ def _own_appends(log):
     second PROCESS using the same name grows it too, and that is not this command's write
     (Bc5d4aafb98, rule r-read-verbs-read-only)."""
     seen = [0]
-    root, who = log.root, log.agent_id
+    root, who, token = log.root, log.agent_id, object()
 
     def hook(wlog, ev, _start, _end):
-        if wlog.root == root and ev.agent == who:
+        if _SCOPE.get() is token and wlog.root == root and ev.agent == who:
             seen[0] += 1
 
     APPEND_HOOKS.append(hook)
+    reset = _SCOPE.set(token)
     try:
         yield seen
     finally:
+        _SCOPE.reset(reset)
         with contextlib.suppress(ValueError):
             APPEND_HOOKS.remove(hook)
 
