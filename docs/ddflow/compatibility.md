@@ -159,5 +159,5 @@ disk changes and old logs replay identically. To keep the old behaviour, export 
 yourself before running ddflow; a value you set is never overridden.
 
 `embed.extra_installed()` (used by `ddflow doctor`) no longer imports the `[rag]` extra: before the
-first embedding it answers "the package is findable"; a findable but broken install is reported as
-unavailable, with the reason, by the first embedding request.
+first embedding it answers "the package is findable", so `ddflow doctor` may say installed for a
+findable but broken install; the first embedding request reports that as unavailable, with the reason.
