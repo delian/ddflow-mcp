@@ -198,7 +198,9 @@ class _ReadMixin:
             if total <= max_bytes:
                 break
             with contextlib.suppress(OSError):
-                f.unlink()
+                f.unlink(
+                    missing_ok=True
+                )  # gone already (a sibling collected it): still not counted
                 total -= size
 
     def _discard_disabled_snapshots(self) -> None:
