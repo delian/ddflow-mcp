@@ -1,7 +1,7 @@
 """Stamping `wave:N` by default (`[waves].auto_stamp`): the guard around ONE command.
 
 It wraps EVERY command, reads included, so the work it adds to a read is a stat of the
-caller's own shard; the queue is folded only when the command appended events.
+caller's own appends; the queue is folded only when the command appended events.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..infra import paths as PATHS
+from ..infra.log import APPEND_HOOKS
 from ..services import identity as ID
 from . import waves
 
@@ -21,22 +22,34 @@ from . import waves
 _STAMPING = contextvars.ContextVar("ddflow_waves_auto_stamping", default=False)
 
 
-def _own_size(log) -> int:
-    """Bytes in the CALLER's own shard. Shards are append-only, so growth means this
-    command (or this agent) appended; another agent's writes land in its own shard and
-    never move this number (Bc5d4aafb98, rule r-read-verbs-read-only)."""
+@contextlib.contextmanager
+def _own_appends(log):
+    """Counts the events THIS process appends for the caller while the block runs.
+
+    Counted by the append hook, not by shard size: a shard is keyed by agent name, so a
+    second PROCESS using the same name grows it too, and that is not this command's write
+    (Bc5d4aafb98, rule r-read-verbs-read-only)."""
+    seen = [0]
+    root, who = log.root, log.agent_id
+
+    def hook(wlog, ev, _start, _end):
+        if wlog.root == root and ev.agent == who:
+            seen[0] += 1
+
+    APPEND_HOOKS.append(hook)
     try:
-        return log.shard.stat().st_size
-    except FileNotFoundError:
-        return 0
+        yield seen
+    finally:
+        with contextlib.suppress(ValueError):
+            APPEND_HOOKS.remove(hook)
 
 
 @contextlib.contextmanager
 def keep_stamped(repo: Path, cfg, log, agent: str = ""):
     """Around a command: when it appended events and the knob is on, restamp the items
     whose wave changed (only those: an unchanged graph writes no event). "Appended" means
-    to the caller's OWN shard, so a read verb never restamps because someone else wrote.
-    Never raises."""
+    appended by this process for the caller (the append hook), so a read verb never
+    restamps because someone else wrote. Never raises."""
     try:
         on = (
             not _STAMPING.get()
@@ -45,14 +58,16 @@ def keep_stamped(repo: Path, cfg, log, agent: str = ""):
             # would write the feature's own events into the live shared log (Bf4eaec64a6).
             and not PATHS.running_from_linked_worktree_against(repo)
         )
-        before = _own_size(log) if on else None
+        counter = _own_appends(log) if on else None
     except Exception:  # stamping must never break the command it follows
-        on, before = False, None
-    yield
+        on, counter = False, None
     if not on:
+        yield
         return
+    with counter as appended:
+        yield
     try:
-        if _own_size(log) != before:
+        if appended[0]:
             _token = _STAMPING.set(True)
             try:
                 waves.restamp(repo, agent)

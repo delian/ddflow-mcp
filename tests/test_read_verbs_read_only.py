@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
 import time
 
@@ -64,17 +66,23 @@ def test_read_verbs_append_nothing_while_another_agent_writes(repo):
     every event added meanwhile is the writer's, none is a restamp."""
     _setup(repo)
     before = {e.id for e in EventLog(repo, "probe").read_all()}
-    stop = threading.Event()
+    stop, started, errors = threading.Event(), threading.Event(), []
 
     def writer():
-        other, n = EventLog(repo, "writer"), 0
-        while not stop.is_set():
-            other.append("session.note", f"n{n}", {"text": "x"})
-            n += 1
-            time.sleep(0.05)
+        try:
+            other, n = EventLog(repo, "writer"), 0
+            while not stop.is_set():
+                other.append("session.note", f"n{n}", {"text": "x"})
+                started.set()
+                n += 1
+                time.sleep(0.05)
+        except Exception as exc:  # surfaced below, not swallowed with the thread
+            errors.append(exc)
+            started.set()
 
     t = threading.Thread(target=writer)
     t.start()
+    started.wait(30)
     try:
         for verb in (("show", "A"), ("list",), ("board",), ("next",)):
             run_cli(repo, *verb)
@@ -82,4 +90,22 @@ def test_read_verbs_append_nothing_while_another_agent_writes(repo):
         stop.set()
         t.join()
     added = [e for e in EventLog(repo, "probe").read_all() if e.id not in before]
+    assert not errors
     assert added and {e.agent for e in added} == {"writer"}
+
+
+def test_second_process_with_the_same_agent_name_does_not_restamp(repo, monkeypatch):
+    """A shard is keyed by agent name: another PROCESS appending under the caller's own
+    name grows the caller's shard, and still is not the caller's write."""
+    _setup(repo)
+    calls = []
+    monkeypatch.setattr(batch, "apply", lambda *a, **k: calls.append(1))
+    cfg = Config.load(repo)
+    mine = EventLog(repo, "shared")
+    code = (
+        "import sys; from ddflow.infra.log import EventLog; "
+        "EventLog(sys.argv[1], 'shared').append('session.note', 'n', {'text': 'x'})"
+    )
+    with waves_auto.keep_stamped(repo, cfg, mine, "shared"):
+        subprocess.run([sys.executable, "-c", code, str(repo)], check=True)
+    assert calls == []
