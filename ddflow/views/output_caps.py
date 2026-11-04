@@ -267,7 +267,7 @@ def _reasons(rows: Any) -> dict[str, int]:
 
 
 def _conf(repo: Any, cfg: Any) -> Any:
-    return (cfg if cfg is not None else Config.load(repo)).output
+    return cfg if cfg is not None else Config.load(repo)
 
 
 def apply(
@@ -287,13 +287,14 @@ def apply(
     has ``truncated`` and ``next`` in its data, a footer in ``_footer`` (and at the end of
     ``text`` when it has one), and the footer in `take_note()` for the MCP layer."""
     _NOTE.set("")
-    conf = _conf(repo, cfg)
-    full_refused = not conf.allow_full  # locked: no call can lift the cap, asked for or not
-    if (full and conf.allow_full) or not isinstance(out.data, dict) or not out.data:
+    cfg = _conf(repo, cfg)
+    full_refused = not cfg.output.allow_full  # no call can lift the cap, asked for or not
+    if (full and cfg.output.allow_full) or not isinstance(out.data, dict) or not out.data:
         return out
-    # A locked organisation (`allow_full = false`) is not undone by a 0 in the environment.
-    rows = conf.max_rows or (50 if not conf.allow_full else 10**9)
-    chars = conf.max_chars or (30000 if not conf.allow_full else 0)
+    # With `allow_full = false` a 0 in `max_rows` or `max_chars` does not lift the cap either.
+    shipped = type(cfg.output)()
+    rows = cfg.output.max_rows or (shipped.max_rows if not cfg.output.allow_full else 10**9)
+    chars = cfg.output.max_chars or (shipped.max_chars if not cfg.output.allow_full else 0)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
     budget = chars // 2 if wire and chars else chars

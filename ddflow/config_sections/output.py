@@ -15,8 +15,9 @@ class OutputConfig:
     """Default size caps of `board`, `doctor`, `recover`, `next` and `status` (CLI and MCP).
 
     A capped answer ends in a footer naming the exact next call; `--full` (MCP `full=true`)
-    lifts every cap for that call. Settable in the config files, in the environment
-    (`DDFLOW_OUTPUT_MAX_ROWS`), as `ddflow config set`, and per call with `--full`."""
+    lifts every cap for that call. Settable in the config files, with `ddflow config output.max_rows N`, over MCP with
+    `ddflow_configure`, in the environment (`DDFLOW_OUTPUT_MAX_ROWS`), and per call with
+    `--full`."""
 
     max_rows: int = knob(
         50,
@@ -30,5 +31,5 @@ class OutputConfig:
     )
     allow_full: bool = knob(
         True,
-        doc="Whether `--full` / `full=true` may lift the caps. An organisation that must keep every answer bounded (a shared MCP host, a context-limited fleet) sets it to false in its org config layer: a `full` request then still gets the capped answer and a footer saying the lift is off, so nothing is silently different. Default true: a person at a terminal asking for everything gets everything.",
+        doc="Whether `--full` / `full=true` may lift the caps, and whether 0 in `max_rows` or `max_chars` does. Set it to false in the committed config to keep every answer bounded (a shared MCP host, a context-limited fleet): a `full` request then gets the capped answer, and every cut answer says the lift is off, so nothing is silently different. This is a setting, not an enforced lock: ddflow has no organisation layer yet, so the local layer or `DDFLOW_OUTPUT_ALLOW_FULL` can still override it. Default true: a person at a terminal asking for everything gets everything.",
     )

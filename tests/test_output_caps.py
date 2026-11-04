@@ -160,6 +160,13 @@ def test_next_keeps_the_blocked_by_reason_count_when_the_cap_cuts_and_recover_le
     )
 
 
+def test_the_config_command_writes_the_knob_and_the_answer_follows_it(repo):
+    run_cli(repo, "init")
+    code, _out, err = run_cli(repo, "config", "output.max_rows", "40")
+    assert code == 0, err
+    assert Config.load(repo).output.max_rows == 40
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))
