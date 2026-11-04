@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 from conftest import run_cli, write_config
 
@@ -17,7 +20,7 @@ from ddflow.infra.log import EventLog
 
 @pytest.fixture(autouse=True)
 def _default_stamping(monkeypatch):
-    monkeypatch.delenv("DDFLOW_WAVES_AUTO_STAMP")
+    monkeypatch.delenv("DDFLOW_WAVES_AUTO_STAMP", raising=False)
 
 
 def _setup(repo):
@@ -56,9 +59,27 @@ def test_own_appends_still_restamp(repo, monkeypatch):
     assert calls == [1]
 
 
-def test_read_verb_with_stale_waves_appends_nothing(repo):
+def test_read_verbs_append_nothing_while_another_agent_writes(repo):
+    """The CLI end to end: a second writer appends in a loop while the read verbs run;
+    every event added meanwhile is the writer's, none is a restamp."""
     _setup(repo)
-    before = _count(repo)
-    for verb in (("show", "A"), ("list",), ("board",), ("next",)):
-        run_cli(repo, *verb)
-    assert _count(repo) == before
+    before = {e.id for e in EventLog(repo, "probe").read_all()}
+    stop = threading.Event()
+
+    def writer():
+        other, n = EventLog(repo, "writer"), 0
+        while not stop.is_set():
+            other.append("session.note", f"n{n}", {"text": "x"})
+            n += 1
+            time.sleep(0.05)
+
+    t = threading.Thread(target=writer)
+    t.start()
+    try:
+        for verb in (("show", "A"), ("list",), ("board",), ("next",)):
+            run_cli(repo, *verb)
+    finally:
+        stop.set()
+        t.join()
+    added = [e for e in EventLog(repo, "probe").read_all() if e.id not in before]
+    assert added and {e.agent for e in added} == {"writer"}
