@@ -237,8 +237,8 @@ def _sweep_finished(
         return
     try:
         if not dry_run and _sweep_due(repo, cfg):
+            _sweep_stamp(repo)  # the ATTEMPT is stamped: a sweep that raises is not retried per call
             CL.sweep_finished(repo, cfg, log, st, callers=callers)
-            _sweep_stamp(repo)  # only a sweep that ran to its end counts
     except Exception:
         pass
 
@@ -250,9 +250,9 @@ def _sweep_stamp_path(repo: Path) -> Path:
 def _sweep_due(repo: Path, cfg, *, now: float | None = None) -> bool:
     """Is it time for the brief to sweep? At most once per ``worktree.sweep_interval_s``
     (PS-git-batch: the sweep dropped 96 branches in 17 s on every brief). The time of the last
-    COMPLETED sweep is a derived, local stamp (``.ddflow/local/sweep-finished.last``): losing it
-    costs one early sweep, and a sweep that raised leaves it unchanged so the next brief
-    retries. Interval 0 sweeps on every brief, as before."""
+    ATTEMPTED sweep is a derived, local stamp (``.ddflow/local/sweep-finished.last``), written
+    before the sweep so one that raises (an expensive failing sweep) is retried after the
+    interval, not on every brief; losing the stamp costs one early sweep. Interval 0 sweeps on every brief, as before."""
     every = cfg.worktree.sweep_interval_s
     now = time.time() if now is None else now
     if every <= 0:

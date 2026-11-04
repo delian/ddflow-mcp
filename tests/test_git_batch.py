@@ -142,3 +142,18 @@ def test_one_query_tells_merged_commits_from_unmerged_ones(repo):
     f = RepoFacts(repo)
     f.prefetch_on_base([on, off], "main")
     assert f._on_base == {(on, "main"): True, (off, "main"): False}
+
+
+def test_a_sweep_that_raises_is_not_retried_on_every_brief(repo, monkeypatch):
+    run_cli(repo, "init")
+    calls: list = []
+    from ddflow.services import cleanup as CL
+
+    def boom(*a, **k):
+        calls.append(1)
+        raise RuntimeError("branch cannot be deleted")
+
+    monkeypatch.setattr(CL, "sweep_finished", boom)
+    assert LC.brief(repo, agent="reader").exit == 0
+    assert LC.brief(repo, agent="reader").exit == 0
+    assert len(calls) == 1
