@@ -24,6 +24,7 @@ from ddflow.api import setup as API
 from ddflow.services import adopt as A
 from ddflow.services import claudehooks as CH
 from ddflow.services import enforce as E
+from ddflow.services import harnessreg as HR
 from ddflow.services import launchers as LA
 
 CLAUDE = ".claude/settings.json"
@@ -196,6 +197,20 @@ def test_status_says_unknown_for_a_settings_file_it_cannot_parse(repo: Path) -> 
     assert "Claude Code PreCompact hook: UNKNOWN -- " in msg
     assert "prompt capture hook: Claude Code: UNKNOWN -- " in msg
     assert "Gemini CLI: not installed" in msg
+
+
+def test_status_label_follows_the_default_harness(repo: Path, monkeypatch) -> None:
+    """Bug B-setup-hooks-status-claude-label: the SessionStart/PreCompact/PreToolUse label
+    is derived from the default harness (`HR.title_of(HR.default_id())`), never a
+    hard-coded 'Claude Code' string."""
+    monkeypatch.setattr(HR, "title_of", lambda agent: f"Harness<{agent}>")
+    msg = API.hooks(repo, action="status").data["message"]
+    assert "Harness<claude> SessionStart hook: " in msg
+    assert "Harness<claude> PreCompact hook: " in msg
+    assert "Harness<claude> PreToolUse hook: " in msg
+    assert "Claude Code SessionStart hook" not in msg
+    assert "Claude Code PreCompact hook" not in msg
+    assert "Claude Code PreToolUse hook" not in msg
 
 
 def test_adopt_writes_the_same_prompt_hooks_as_hooks_install(repo: Path) -> None:

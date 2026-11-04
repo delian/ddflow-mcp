@@ -405,13 +405,17 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             " -- but [enforce].require_item_trailer is ON, so NOTHING checks it. "
             f"{_hook_remedy(msg_armed, 'check-msg')}."
         )
+    # The SessionStart/PreCompact/PreToolUse hook specs come from the DEFAULT harness
+    # (`CH.spec(HR.default_id(), ...)`), so their label must follow the same source rather
+    # than hard-coding one harness (bug B-setup-hooks-status-claude-label).
+    hr_title = HR.title_of(HR.default_id())
     message = (
         f"{_hook_line('pre-commit', commit_hook)}\n"
         f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
         f"{trailer_line}\n"
-        f"Claude Code SessionStart hook: {session_line}\n"
-        f"Claude Code PreCompact hook: {_precompact_line(repo)}\n"
-        f"Claude Code PreToolUse hook: {_pretool_line(repo)}\n"
+        f"{hr_title} SessionStart hook: {session_line}\n"
+        f"{hr_title} PreCompact hook: {_precompact_line(repo)}\n"
+        f"{hr_title} PreToolUse hook: {_pretool_line(repo)}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
 
