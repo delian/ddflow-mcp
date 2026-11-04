@@ -24,6 +24,7 @@ from typing import Any
 
 from ..core import limits as L
 from ..core.textcut import clip
+from ..views.output_caps import take_note
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
 NEXT_BLOCKED_SHOWN = 10
@@ -282,8 +283,6 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
 def bound_recover(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_recover`: the body is a bare array, so a cut (`output_caps`) is told in a
     second content block, never by changing the array's shape."""
-    from ..views.output_caps import take_note
-
     return body, take_note() or None
 
 

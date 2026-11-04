@@ -23,6 +23,7 @@ import json
 from contextvars import ContextVar
 from typing import Any
 
+from ..config import Config
 from ..core.outcome import Outcome
 
 #: command -> (CLI form, MCP tool, the narrowing flag/arg pair or None, the list that pages
@@ -34,6 +35,8 @@ COMMANDS: dict[str, tuple[str, str, tuple[str, str] | None, str]] = {
     "next": ("ddflow next", "ddflow_next", ("--phase ID", "phase=ID"), "blocked"),
     "status": ("ddflow status", "ddflow_status", ("--by-tag KEY", "by_tag=KEY"), ""),
 }
+#: The board lists `_cut_board` cuts itself.
+_BOARD_KEYS = ("phases", "unphased", "critical_path")
 #: Lists whose NEWEST rows are the ones a reader wants (kept from the end).
 TAIL_KEYS = frozenset({"completed_tasks"})
 
@@ -102,20 +105,9 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
     paged = COMMANDS[command][3]
     if command == "board":
         _cut_board(data, limit, start, info)
+    skip = _BOARD_KEYS if command == "board" else ()
     for key, value in list(data.items()):
-        if (
-            key.startswith("_")
-            or not isinstance(value, list)
-            or (
-                command == "board"
-                and key
-                in (
-                    "phases",
-                    "unphased",
-                    "critical_path",
-                )
-            )
-        ):
+        if key.startswith("_") or not isinstance(value, list) or key in skip:
             continue
         off = start if key == paged else 0
         if len(value) > limit or off:
@@ -181,6 +173,43 @@ def _next_field(command: str, info: dict[str, Any], full_refused: bool) -> dict[
     return out
 
 
+def _copy_data(original: dict[str, Any]) -> dict[str, Any]:
+    work = copy.deepcopy({k: v for k, v in original.items() if k != "_render"})
+    if "_render" in original:
+        work["_render"] = {
+            k: (list(v) if isinstance(v, list) else v) for k, v in original["_render"].items()
+        }
+    return work
+
+
+def _fit(
+    command: str, original: dict[str, Any], rows: int, start: int, budget: int
+) -> tuple[dict[str, Any], int, dict[str, int]]:
+    """A cut copy of ``original``: rows halve (down to 1) until the body fits ``budget``
+    characters (0: no character cap). Returns (data, rows shown, what was cut)."""
+    limit = rows
+    while True:
+        work = _copy_data(original)
+        info = _cut_lists(command, work, limit, start)
+        size = _size({k: v for k, v in work.items() if k != "text"})
+        if not budget or limit <= 1 or size <= budget:
+            return work, limit, info
+        limit = max(1, limit // 2)
+
+
+def _cut_text(text: Any, budget: int) -> tuple[Any, int]:
+    """``text`` cut on a line boundary to ``budget`` characters; (text, characters cut)."""
+    if not budget or not isinstance(text, str) or len(text) <= budget:
+        return text, 0
+    keep = text.rfind("\n", 0, budget)
+    keep = keep if keep > 0 else budget
+    return text[:keep], len(text) - keep
+
+
+def _conf(repo: Any, cfg: Any) -> Any:
+    return (cfg if cfg is not None else Config.load(repo)).output
+
+
 def apply(
     repo: Any,
     out: Outcome,
@@ -198,11 +227,7 @@ def apply(
     has ``truncated`` and ``next`` in its data, a footer in ``_footer`` (and at the end of
     ``text`` when it has one), and the footer in `take_note()` for the MCP layer."""
     _NOTE.set("")
-    if cfg is None:
-        from ..config import Config
-
-        cfg = Config.load(repo)
-    conf = cfg.output
+    conf = _conf(repo, cfg)
     full_refused = bool(full) and not conf.allow_full
     if (full and conf.allow_full) or not isinstance(out.data, dict) or not out.data:
         return out
@@ -212,31 +237,28 @@ def apply(
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
     budget = chars // 2 if wire and chars else chars
     start = max(0, int(cursor or 0)) if COMMANDS[command][3] else 0
-    original = out.data
-    limit, info = rows, {}
-    while True:
-        work = copy.deepcopy({k: v for k, v in original.items() if k != "_render"})
-        if "_render" in original:
-            work["_render"] = {
-                k: (list(v) if isinstance(v, list) else v) for k, v in original["_render"].items()
-            }
-        info = _cut_lists(command, work, limit, start)
-        text = work.get("text")
-        body_size = _size({k: v for k, v in work.items() if k != "text"})
-        if not chars or limit <= 1 or body_size <= budget:
-            break
-        limit = max(1, limit // 2)
-    cut_chars = 0
-    if chars and isinstance(text, str) and len(text) > budget:
-        keep = text.rfind("\n", 0, budget)
-        keep = keep if keep > 0 else budget
-        cut_chars = len(text) - keep
-        text = text[:keep]
+    work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
+    text, cut_chars = _cut_text(work.get("text"), budget if chars else 0)
     if not info and not cut_chars and not (start and COMMANDS[command][3]):
         return out
+    out.data = _annotate(work, command, info, limit, (text, cut_chars), full_refused)
+    return out
+
+
+def _annotate(
+    work: dict[str, Any],
+    command: str,
+    info: dict[str, int],
+    limit: int,
+    cut: tuple[Any, int],
+    full_refused: bool,
+) -> dict[str, Any]:
+    """``work`` with the cut text, `truncated`, `next` and the footer written into it."""
+    text, cut_chars = cut
     note = footer(command, info, limit, cut_chars, full_refused)
+    old = work.get("truncated") if isinstance(work.get("truncated"), dict) else {}
     work["truncated"] = {
-        **(work.get("truncated") if isinstance(work.get("truncated"), dict) else {}),
+        **old,
         "lists": {k: v for k, v in info.items() if k != "next_cursor"},
         "shown": limit,
         "chars_cut": cut_chars,
@@ -245,10 +267,9 @@ def apply(
     work["next"] = _next_field(command, info, full_refused)
     work["_footer"] = note
     if isinstance(text, str):
-        work["text"] = f"{text}\n\n{note}" if cut_chars or info else text
-    out.data = work
+        work["text"] = f"{text}\n\n{note}"
     _NOTE.set(note)
-    return out
+    return work
 
 
 def from_args(repo: Any, out: Outcome, command: str, a: Any, *, wire: bool = False) -> Outcome:
