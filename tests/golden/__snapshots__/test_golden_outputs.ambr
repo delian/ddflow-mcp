@@ -2755,10 +2755,14 @@
           tests list, which were 60% of gate evidence. A key a reader compares as
           plain text should not be added: a reader that has not been taught to read
           blobs back sees a reference where it expects the value.
-      log.evidence_blob_min_bytes = 1024   [default]
+      log.evidence_blob_min_bytes = 256   [default]
           A value under an evidence key goes out of line only when its JSON is at
           least this many bytes: a small value is cheaper in the shard than as a file.
-          0 turns moving values out off.
+          The default was 1024 before PS-evidence-inline; 256 keeps mid-sized findings
+          and tails out of the shard too (PS-evidence-inline). It applies to NEW gate
+          events only, and only once `evidence_blobs` is on: events already written
+          are never rewritten and keep resolving. Set 1024 to restore the old
+          threshold. 0 turns moving values out off.
       upgrade.skew = 'refuse'   [default]
           What happens when a ddflow OLDER than the one that last worked on this
           project's log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse`

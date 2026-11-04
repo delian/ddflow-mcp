@@ -18,12 +18,13 @@ def test_doctor_notes_the_log_signals_a_fresh_project_cannot_read_yet(repo):
     assert rc == 0, f"too little history is a note, never a failure:\n{out}"
 
 
-def test_fixed_parallelism_reads_no_signals_and_notes_none(repo):
+def test_fixed_parallelism_reads_the_log_signals_it_now_governs_by(repo):
     assert run_cli(repo, "init")[0] == 0
     assert run_cli(repo, "config", "schedule.parallel", "fixed")[0] == 0
     rc, out, _err = run_cli(repo, "doctor")
-    assert rc == 0, out  # doctor ran: "no note" must come from a doctor that looked
-    assert "too little history" not in out, out
+    assert rc == 0, out
+    # fixed mode still lowers under load, so the log-derived signals matter there too
+    assert "too little history" in out, out
 
 
 def test_a_switched_off_signal_is_not_noted(repo):

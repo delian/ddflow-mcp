@@ -22,6 +22,7 @@ import argparse
 import os
 import sys
 
+from .. import _threads
 from ..api import items as A_ITEMS
 from ..api import loops as _loops
 from ..api import progress as _progress
@@ -332,6 +333,7 @@ CONFLICT_SAFE = {("doctor",), ("help",)}
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI. A reader that stops reading (`ddflow list task | head -1`) is normal
     shell use: it ends quietly with `PIPE_CLOSED`, not with a traceback (B9834dabc40)."""
+    _threads.cap_blas_threads()
     return run_quietly(_main, argv)
 
 

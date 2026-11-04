@@ -70,7 +70,7 @@ enabled = true
 
 [schedule]
 # parallel = "auto"     # auto (default): the limit adapts in [max_parallel_min, max_parallel_max]
-# max_parallel_tasks = 4   # the start value in auto, the number in fixed
+# max_parallel_tasks = 4   # the start value in auto, the ceiling in fixed
 
 [enforce]
 # "block" makes the pre-commit hook REFUSE a commit touching paths no lease of yours
