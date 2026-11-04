@@ -165,3 +165,11 @@ def test_an_approval_for_other_gates_does_not_cover_this_merge(repo, refuse):
     out = _merge(repo, force=True, approval=ask)
     assert out.exit == 3
     assert _asks(repo)[ask]["used"] == 0
+
+
+def test_the_knob_is_registered_and_defaults_to_warn(repo):
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config")
+    assert code == 0, err
+    line = next(l for l in out.splitlines() if "merge.require_gates" in l)
+    assert "warn" in line
