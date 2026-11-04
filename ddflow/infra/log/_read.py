@@ -181,7 +181,9 @@ class _ReadMixin:
         if max_bytes is None:
             max_bytes = self.log_cfg.snapshot_max_mb * 1_000_000
         others: list[tuple[float, int, Path]] = []
-        total = mine.stat().st_size if mine.is_file() else 0
+        total = 0
+        with contextlib.suppress(OSError):
+            total = mine.stat().st_size
         for f in mine.parent.glob(f"{stem}*.bin"):
             if f == mine or not re.fullmatch(rf"{re.escape(stem)}(-[0-9a-f]{{16}})?\.bin", f.name):
                 continue
