@@ -3360,8 +3360,9 @@ offer already holds every ready item that can run beside what is in flight. A si
 only while it is over its `low` mark (the one that lowered the limit, only while it still
 reads: a null one holds nothing); with every signal healthy the line says "limited by
 growth step (next in Ns)" while in flight has reached the limit (it rises one step per
-`adapt_up_after_s`), and "limited by demand (N in flight)" while it has not. In fixed mode
-the cap's words are exactly what they always were (`schedule.max_parallel_tasks=N`). A
+`adapt_up_after_s`), and "limited by demand (N in flight)" while it has not. In fixed mode the
+cap's words are `schedule.max_parallel_tasks=N` when the fixed knob holds, and, lowered under
+load, `fixed: limit N, limited by <signal>`. A
 shrink never touches a running lease: in flight above the new limit simply leaves no slot
 until enough finish; the limit is never below 1, and a critical signal pauses new
 admissions for that evaluation only. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
@@ -3412,9 +3413,9 @@ How many items may be in flight adapts by default (decision D-adaptive-flow-acce
 
 | Knob | Default | Meaning |
 |---|---|---|
-| `parallel` | `auto` | `auto`: the limit adapts inside `[max_parallel_min, max_parallel_max]`; `fixed`: `max_parallel_tasks` is the number, exactly as before |
-| `max_parallel_tasks` | `4` | the start value in auto (the limit begins and resets here), the number in fixed |
-| `max_parallel_min` | `2` | the floor: auto never goes below it (at least 1) |
+| `parallel` | `auto` | `auto`: the limit adapts inside `[max_parallel_min, max_parallel_max]`; `fixed`: `max_parallel_tasks` is the ceiling the signals may lower (to `max_parallel_min`) under load, memory, disk, reviewer-latency or gate-failure pressure, and restore when calm -- never exceeding the number |
+| `max_parallel_tasks` | `4` | the start value in auto (the limit begins and resets here), the ceiling in fixed |
+| `max_parallel_min` | `2` | the floor: auto and fixed never go below it (at least 1) |
 | `max_parallel_max` | `8` | the ceiling: auto never exceeds it; machine sizing, so set it with `--local` |
 | `adapt_up_after_s` | `600` | healthy seconds, with the limit binding, before +1; no increase for twice this after a decrease |
 | `adapt_cooldown_s` | `300` | minimum seconds between two decreases |
@@ -3474,8 +3475,9 @@ truncated line is skipped (and the file rewritten on the next sample), a clock t
 backwards drops the sample, a short `O_EXCL` lock file keeps concurrent samplers to one
 sample per interval (the file's integrity does not depend on it: whole lines are appended
 and rewrites are atomic renames), and a directory that cannot be written leaves the limit at
-its start value with the reason. In `fixed` mode nothing is
-sampled. `ddflow doctor` notes a ring that cannot be read or written and a `.ddflow/local/`
+its start value with the reason. `fixed` mode is sampled the same way: the fixed
+`max_parallel_tasks` is the ceiling the signals may lower, never raise. `ddflow doctor` notes a
+ring that cannot be read or written and a `.ddflow/local/`
 that git does not ignore.
 
 ### Adaptive parallelism: host signals

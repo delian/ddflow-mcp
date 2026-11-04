@@ -153,13 +153,13 @@ def test_the_ring_is_trimmed_to_six_hours(repo):
     assert [json.loads(ln)["at"] for ln in _lines(repo)] == [clock.t]
 
 
-def test_fixed_mode_is_the_number(repo):
+def test_fixed_mode_still_samples_and_holds_the_number_when_one_sample_cannot_move_it(repo):
     cfg = Config()
     cfg.schedule.parallel = "fixed"
     cfg.schedule.max_parallel_tasks = 3
     d = F.current_limit(_ctx(repo, cfg), SIG.FakeSource(BAD), Clock())
     assert (d.limit, d.mode) == (3, "fixed")
-    assert not F.ring_path(repo).exists()
+    assert F.ring_path(repo).exists()  # fixed mode samples so the signals can govern it
 
 
 def test_a_disabled_signal_is_not_recorded(repo):
