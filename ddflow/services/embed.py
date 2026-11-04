@@ -41,14 +41,14 @@ _StaticModel: Any = _UNSET
 
 def _static_model() -> Any:
     """The model2vec ``StaticModel`` class, or None without the ``[rag]`` extra."""
-    global _StaticModel
     if _StaticModel is _UNSET:
         try:  # the [rag] extra; every caller works without it
             from model2vec import StaticModel
         except Exception:  # absent or broken install (ImportError or not): no embedder
             StaticModel = None
-        _StaticModel = StaticModel
+        globals()["_StaticModel"] = StaticModel
     return _StaticModel
+
 
 COMPANION = "companion"
 MODEL2VEC = "model2vec"
