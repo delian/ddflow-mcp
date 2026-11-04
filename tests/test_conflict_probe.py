@@ -275,3 +275,23 @@ def test_a_scratch_merge_past_the_deadline_is_unavailable(pair: Path, monkeypatc
     monkeypatch.setattr(PR, "_scratch_merge", slow)
     p = PR.run(pair, "ddflow/clean", "main", timeout_s=0.2)
     assert p.result == PR.UNAVAILABLE and "scratch merge took over" in p.reason
+
+
+def test_known_limit_the_scratch_worker_outlives_the_deadline(pair: Path, monkeypatch) -> None:
+    """Findings 18/19, filed as LK-probe-scratch-deadline: the probe answers unavailable at
+    probe_timeout_s, but the scratch merge (no deadline in ci.merge_tree) runs on to its end."""
+    import threading
+    import time
+
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
+    done = threading.Event()
+
+    def slow(*a, **kw):
+        time.sleep(0.8)
+        done.set()
+        return PR.Probe(PR.CLEAN, PR.SCRATCH)
+
+    monkeypatch.setattr(PR, "_scratch_merge", slow)
+    p = PR.run(pair, "ddflow/clean", "main", timeout_s=0.1)
+    assert p.result == PR.UNAVAILABLE and not done.is_set()  # answered, worker still running
+    assert done.wait(5)  # and it does finish on its own
