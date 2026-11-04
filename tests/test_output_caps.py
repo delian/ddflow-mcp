@@ -132,6 +132,14 @@ def test_a_row_of_many_fields_still_fits_and_a_default_locked_run_hides_the_lift
     assert "all" not in OC.apply(None, stale, "next", cfg=_cfg(allow_full=False)).data["truncated"]
 
 
+def test_the_last_resort_marks_only_the_offending_list():
+    wide = {f"f{i}": "a" * 100 for i in range(200)}
+    out = O.ok("next", ready=[{"id": "step-1"}], blocked=[wide])
+    out = OC.apply(None, out, "next", cfg=_cfg(max_chars=3000), wire=True)
+    assert out.data["ready"] == [{"id": "step-1"}]
+    assert "too large" in out.data["blocked"][0]["cut"]
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))

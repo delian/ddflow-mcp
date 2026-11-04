@@ -236,10 +236,12 @@ def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[
     if _size({k: v for k, v in clipped.items() if k != "text"}) > budget:
         # Last resort: still over (a row of hundreds of fields). Each list keeps one marker
         # row, so the cap holds; the footer names the call that shows the rows.
-        for k, v in clipped.items():
-            if isinstance(v, list) and not k.startswith("_") and v:
-                clipped[k] = [{"cut": f"{len(v)} row(s) too large for [output].max_chars"}]
-                info[k] = len(v)
+        lists = [k for k, v in clipped.items() if isinstance(v, list) and v and k[0] != "_"]
+        for k in sorted(lists, key=lambda k: -len(json.dumps(clipped[k], default=str))):
+            if _size({x: y for x, y in clipped.items() if x != "text"}) <= budget:
+                break  # the largest are marked first; a list that fits keeps its rows
+            info[k] = len(clipped[k])
+            clipped[k] = [{"cut": f"{len(clipped[k])} row(s) too large for [output].max_chars"}]
     return clipped
 
 
