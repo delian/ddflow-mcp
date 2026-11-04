@@ -263,8 +263,15 @@ def test_at_skip_names_the_same_peer_in_its_next_call(pair: Path) -> None:
     assert "against=ddflow/clash" in out + err
 
 
-def test_the_timeout_knob_documents_the_scratch_merge_limit() -> None:
-    from ddflow.config import Config  # noqa: F401
-    from ddflow.config_sections._docs import KNOB_DOCS
+def test_a_scratch_merge_past_the_deadline_is_unavailable(pair: Path, monkeypatch) -> None:
+    import time
 
-    assert "scratch merge itself" in KNOB_DOCS["locks.probe_timeout_s"]
+    monkeypatch.setattr(PR, "git_version", lambda repo, t: (2, 30))
+
+    def slow(*a, **kw):
+        time.sleep(1.5)
+        return PR.Probe(PR.CLEAN, PR.SCRATCH)
+
+    monkeypatch.setattr(PR, "_scratch_merge", slow)
+    p = PR.run(pair, "ddflow/clean", "main", timeout_s=0.2)
+    assert p.result == PR.UNAVAILABLE and "scratch merge took over" in p.reason

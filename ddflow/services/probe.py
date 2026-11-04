@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,10 +104,23 @@ def _both_changed(repo: Path, item: str, against: str, timeout_s: float) -> tupl
     return tuple(sorted(one & two))
 
 
-# The scratch merge itself (`ci.merge_tree`) is bounded by git's own timeout (`infra.git`
-# GIT_TIMEOUT), not by [locks].probe_timeout_s, which has no way into it; the calls made
-# here carry the knob.
 def _scratch(repo: Path, item: str, against: str, timeout_s: float) -> Probe:
+    """The scratch merge under the probe's deadline. `ci.merge_tree` takes no timeout, so it
+    runs on a worker thread that is waited for ``timeout_s``: past it the probe is
+    unavailable (never clean) and the worker finishes and removes its throwaway worktree
+    on its own."""
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ddflow-probe")
+    try:
+        return pool.submit(_scratch_merge, repo, item, against, timeout_s).result(timeout_s)
+    except FutureTimeout:
+        return Probe(
+            UNAVAILABLE, SCRATCH, (), item, against, f"the scratch merge took over {timeout_s}s"
+        )
+    finally:
+        pool.shutdown(wait=False)
+
+
+def _scratch_merge(repo: Path, item: str, against: str, timeout_s: float) -> Probe:
     with CI.merge_tree(repo, item, against) as (_tree, why):
         if _tree is not None:
             return Probe(CLEAN, SCRATCH, (), item, against)
