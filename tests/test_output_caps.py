@@ -145,6 +145,21 @@ def test_an_empty_key_does_not_break_the_last_resort():
     assert OC.apply(None, out, "next", cfg=_cfg(max_chars=100), wire=True).data["truncated"]
 
 
+def test_next_keeps_the_blocked_by_reason_count_when_the_cap_cuts_and_recover_leaves_a_note():
+    out = OC.apply(None, _out(120), "next", cfg=_cfg(max_rows=50))
+    assert out.data["truncated"]["blocked_by_reason"] == {"deps": 120}
+    from ddflow.surfaces.mcp_bound import bound_recover
+
+    big = O.ok("recover", found=[{"item": f"I{i}"} for i in range(120)])
+    big = OC.apply(None, big, "recover", cfg=_cfg(max_rows=50))
+    body, note = bound_recover(big.body("found"), {})
+    assert len(body) == 50 and "ddflow_recover full=true" in note
+    huge = O.ok("next", blob="y" * 50_000)
+    assert (
+        len(OC.apply(None, huge, "next", cfg=_cfg(max_chars=1000), wire=True).data["blob"]) < 1000
+    )
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))

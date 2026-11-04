@@ -237,7 +237,7 @@ def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[
     for _ in range(8):
         n = max(MIN_CLIP, n // 2)
         clipped = {
-            k: (_clip_strings(v, n) if isinstance(v, list) and not k.startswith("_") else v)
+            k: (v if k.startswith("_") or k == "text" else _clip_strings(v, n))
             for k, v in work.items()
         }
         if _size({k: v for k, v in clipped.items() if k != "text"}) <= budget or n == MIN_CLIP:
@@ -255,6 +255,15 @@ def _cut_text(text: Any, budget: int) -> tuple[Any, int]:
     keep = text.rfind("\n", 0, budget)
     keep = keep if keep > 0 else budget
     return text[:keep], len(text) - keep
+
+
+def _reasons(rows: Any) -> dict[str, int]:
+    """How many rows carry each ``reason`` (the whole list, before the cut)."""
+    counts: dict[str, int] = {}
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict):
+            counts[str(row.get("reason", ""))] = counts.get(str(row.get("reason", "")), 0) + 1
+    return counts
 
 
 def _conf(repo: Any, cfg: Any) -> Any:
@@ -291,9 +300,12 @@ def apply(
     start = max(0, int(cursor or 0)) if COMMANDS[command][3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
     text, cut_chars = _cut_text(work.get("text"), budget if chars else 0)
+    reasons = _reasons(out.data.get("blocked")) if "blocked" in info else {}
     if not info and not cut_chars and not (start and COMMANDS[command][3]):
         return out
     out.data = _annotate(work, command, info, limit, (text, cut_chars), full_refused)
+    if reasons:  # `next`: the cut blocked list is still counted by reason, as `bound_next` does
+        out.data["truncated"]["blocked_by_reason"] = reasons
     return out
 
 
