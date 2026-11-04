@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -246,6 +249,33 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
+@contextmanager
+def _check(timings: list[tuple[str, float]], name: str) -> Iterator[None]:
+    """Time one named doctor check, appending ``(name, elapsed_seconds)`` to `timings`.
+
+    FOC-doctor-slow: doctor ran over 14 minutes on a 116 MB log with nothing saying
+    WHERE. Timing every check makes the slow one a named row instead of a silent wait,
+    and an over-budget row is reported as a note below.
+    """
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        timings.append((name, time.monotonic() - started))
+
+
+def _over_budget_notes(timings: list[tuple[str, float]], budget: float) -> tuple[dict[str, float], list[str]]:
+    """A note per check that exceeded its budget (FOC-doctor-slow); the timing table always."""
+    table = {name: round(secs, 2) for name, secs in timings}
+    if budget <= 0:
+        return table, []
+    return table, [
+        f"doctor check {name} took {secs:.1f}s — over the {budget:g}s per-check budget"
+        for name, secs in timings
+        if secs > budget
+    ]
+
+
 def doctor(
     repo: Path,
     *,
@@ -267,14 +297,17 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-    log, cfg, st = _load(repo, agent)
+    timings: list[tuple[str, float]] = []
+    with _check(timings, "load"):
+        log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
     accepted = SM.accept(repo, log) if accept_lost_events else []
     # One read of the whole log serves the data repairs and every pass below (the warm
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
-    repair_ctx = RP.context(repo, log, cfg)
+    with _check(timings, "repairs.context"):
+        repair_ctx = RP.context(repo, log, cfg)
     if accept_history:  # recorded as `repair.applied`; the report below reads it back
         reason, note, only, approval = history  # (reason, note, only ids, approval)
         why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
@@ -292,9 +325,11 @@ def doctor(
         st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)
-    cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
+    with _check(timings, "startcost"):
+        cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
-    problems, notes = RP.integrity(repair_ctx)
+    with _check(timings, "integrity"):
+        problems, notes = RP.integrity(repair_ctx)
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
     # agent id, and a lease claimed under it is "mine" in both clones. Claims record
     # their clone, so a double claim is also a CONTESTED item below.
@@ -312,7 +347,8 @@ def doctor(
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     notes.extend(OVR.notes(events, st, cfg))  # forced completions, skips, typed-chat T3 uses ...
     notes.extend(AUD.findings(st, cfg))  # an approved answer without proof, an expiring approval
-    notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
+    with _check(timings, "embed"):
+        notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
@@ -349,7 +385,8 @@ def doctor(
         notes.append(release)
     notes.extend(fold_problem_notes(st))
 
-    p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
+    with _check(timings, "plan"):
+        p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
     problems += _contest_problems(st)
 
@@ -372,7 +409,8 @@ def doctor(
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
-    shared_problems, shared_notes = SF.findings(repo, cfg, render_views(st, cfg))
+    with _check(timings, "shared-files"):
+        shared_problems, shared_notes = SF.findings(repo, cfg, render_views(st, cfg))
     problems += shared_problems
     notes += shared_notes
     # The workflow's own coherence. A pipeline naming a gate that has no definition is the
@@ -406,28 +444,35 @@ def doctor(
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
-    for f in PR.detect(log.read_all(), st, cfg):
-        (problems if f.severity == "block" else notes).append(f.render())
+    with _check(timings, "progress"):
+        for f in PR.detect(log.read_all(), st, cfg):
+            (problems if f.severity == "block" else notes).append(f.render())
     found, held = _recovery_findings(L.scan(log, cfg, repo))
     problems += found
     notes += held
 
     # B71dedb76d2: a removed item whose holder's branch is here and whose lease is live.
-    problems += [
-        x.render()
-        for x in CL.stranded_leases(W.repo_root(repo), cfg, st, log.clone_id(create=False))
-    ]
+    with _check(timings, "cleanup"):
+        problems += [
+            x.render()
+            for x in CL.stranded_leases(W.repo_root(repo), cfg, st, log.clone_id(create=False))
+        ]
     for path in CL.unclaimed_trees(repo, cfg, st):
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
+    with _check(timings, "wait-cycles"):
+        problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
+    table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
+    notes += over
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
+        "check_timings": table,
+        "over_budget": over,
         "events": st.event_count,
         "items": len(st.items),
         "agent": log.agent_id,
