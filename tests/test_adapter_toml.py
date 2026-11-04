@@ -58,12 +58,28 @@ def test_the_error_is_a_decode_error_that_prints_and_carries_its_attributes():
     err = TomlError("bad")
     assert "TOMLDecodeError" in [c.__name__ for c in type(err).__mro__]  # callers' except still works
     assert isinstance(err, ValueError) and str(err) == "bad"
-    assert (err.msg, err.pos, err.lineno, err.colno) == ("bad", 0, 1, 1)
+    assert (err.msg, err.lineno, err.colno) == ("bad", 1, 1)
     with pytest.raises(TomlError, match="bad"):
         raise err
     with pytest.raises(TomlError) as caught:
         TomlLibIo().loads("a = ]")
     assert str(caught.value)  # printable: no AttributeError from a missing `pos`
+
+
+def test_the_real_error_keeps_the_position_tomllib_found():
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().loads("a = 1\nb = [")
+    assert caught.value.lineno == 2 and caught.value.colno > 1
+
+
+def test_the_fake_rejects_what_tomllib_rejects_in_its_subset():
+    both = ("[a]\n[a]\n", "[a..b]\n", "[.a]\n")  # the real adapter rejects these too
+    for bad in (*both, "x = null\n", "x = {}\n", "x = [null]\n"):  # TOML has no null
+        with pytest.raises(TomlError):
+            FakeTomlIo().loads(bad)
+    for bad in (*both, "x = null\n"):
+        with pytest.raises(TomlError):
+            TomlLibIo().loads(bad)
 
 
 def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):

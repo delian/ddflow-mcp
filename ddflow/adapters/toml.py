@@ -30,9 +30,14 @@ class TomlError(tomllib.TOMLDecodeError):
     `tomllib.TOMLDecodeError` (so a caller that catches that keeps working) built from a
     message alone."""
 
-    def __init__(self, msg: str) -> None:
+    def __init__(self, msg: str, source: BaseException | None = None) -> None:
         ValueError.__init__(self, msg)  # tomllib's own signature wants doc and pos
-        self.msg, self.doc, self.pos, self.lineno, self.colno = msg, "", 0, 1, 1  # same attributes
+        # the position of the error `source` (a tomllib one) reported, or the start of the text
+        self.msg = msg
+        self.doc = getattr(source, "doc", "")
+        self.pos = getattr(source, "pos", 0)
+        self.lineno = getattr(source, "lineno", 1)
+        self.colno = getattr(source, "colno", 1)
 
     def __str__(self) -> str:
         return self.msg
@@ -60,10 +65,8 @@ class TomlLibIo:
     def loads(self, text: str) -> dict[str, Any]:
         try:
             return tomllib.loads(text)
-        except TomlError:
-            raise
         except tomllib.TOMLDecodeError as exc:
-            raise TomlError(str(exc)) from exc
+            raise TomlError(str(exc), exc) from exc  # keeps the position tomllib found
 
     def read(self, path: str | Path) -> dict[str, Any]:
         with open(path, "rb") as handle:

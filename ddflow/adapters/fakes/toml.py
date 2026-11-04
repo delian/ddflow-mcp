@@ -30,6 +30,13 @@ def _strip_comment(raw: str) -> str:
     return raw.strip()
 
 
+def _is_toml_value(value: Any) -> bool:
+    """A scalar or an array of them: JSON's `null` and inline objects are not in this subset."""
+    if isinstance(value, list):
+        return all(_is_toml_value(v) for v in value)
+    return isinstance(value, str | int | float | bool)
+
+
 @fake
 class FakeTomlIo:
     """A `TomlIo` over a small subset: `[a.b]` tables and `key = value` where the value is
@@ -42,14 +49,20 @@ class FakeTomlIo:
 
     def loads(self, text: str) -> dict[str, Any]:
         root: dict[str, Any] = {}
-        table = root
+        table, declared = root, set()
         for number, raw in enumerate(text.splitlines(), 1):
             line = _strip_comment(raw)
             if not line:
                 continue
             if m := _HEADER.fullmatch(line):
+                parts = m.group(1).split(".")
+                if "" in parts:
+                    raise TomlError(f"line {number}: empty key in table name {m.group(1)!r}")
+                if m.group(1) in declared:
+                    raise TomlError(f"line {number}: cannot declare [{m.group(1)}] twice")
+                declared.add(m.group(1))
                 table = root
-                for part in m.group(1).split("."):
+                for part in parts:
                     table = table.setdefault(part, {})
                     if not isinstance(table, dict):
                         raise TomlError(f"line {number}: {part!r} is not a table")
@@ -57,9 +70,12 @@ class FakeTomlIo:
                 if m.group(1) in table:
                     raise TomlError(f"line {number}: duplicate key {m.group(1)!r}")
                 try:
-                    table[m.group(1)] = json.loads(m.group(2))
+                    value = json.loads(m.group(2))
                 except ValueError as exc:
                     raise TomlError(f"line {number}: {exc}") from exc
+                if not _is_toml_value(value):
+                    raise TomlError(f"line {number}: not a TOML value: {m.group(2)!r}")
+                table[m.group(1)] = value
             else:
                 raise TomlError(f"line {number}: not TOML this fake knows: {line!r}")
         return root
