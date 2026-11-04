@@ -66,17 +66,20 @@ ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over al
 
 def merge_log(root: Path) -> list[str]:
     """The ``merge <item>: ...`` commits ddflow wrote, newest first, taken from ``main``.
-    Anchored to ``main``, not HEAD: the window must be the merges main actually shipped,
-    the ones CI's recall guards. Not ``--first-parent``: on a branch that merged main in,
-    main's merges sit on the second parent, so a first-parent walk saw an older window than
+    Anchored to the ``main`` branch, not HEAD: the window must be the merges main actually
+    shipped, the ones CI's recall guards. Not ``--first-parent``: on a branch that merged main
+    in, main's merges sit on the second parent, so a first-parent walk saw an older window than
     main does (Bfaef48ced6, Bb5b8b17161); and a walk from HEAD still drifts, because the
     branch's own tip carries merge commits near the window top and pushes main's off it
-    (B2822f97531). Fall back to HEAD only when no ``main`` ref resolves (a checkout with a
-    renamed default branch, never a ddflow worktree). Only ``merge <id>:`` subjects: a
-    hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
+    (B2822f97531). The branch itself is targeted as ``refs/heads/main``, never the bare ``main``:
+    Git resolves a tag named ``main`` before the branch, so the bare name can anchor the window
+    to a stale tag point and drop main's real merges. Fall back to HEAD only when no ``main``
+    branch resolves (a checkout with a renamed default branch, never a ddflow worktree). Only
+    ``merge <id>:`` subjects: a hand-made ``merge main`` sync commit is not a ddflow merge
+    (B2d1ecadd87)."""
     anchor = (
-        "main"
-        if git_proc(root, "rev-parse", "--verify", "--quiet", "main").returncode == 0
+        "refs/heads/main"
+        if git_proc(root, "rev-parse", "--verify", "--quiet", "refs/heads/main").returncode == 0
         else "HEAD"
     )
     log = git_proc(
@@ -347,3 +350,28 @@ def test_merge_log_anchors_to_main_not_the_branch_tip(tmp_path):
     assert merge_log(tmp_path) == [main_sha], merge_log(tmp_path)
     g("checkout", "-q", "main")
     assert merge_log(tmp_path) == [main_sha]
+
+
+def test_merge_log_uses_the_main_branch_not_a_tag_named_main(tmp_path):
+    """B2822f97531 (critic finding 1): a tag named ``main`` must not shadow the branch. Git
+    resolves ``refs/tags/main`` before ``refs/heads/main`` for the bare name, so ``main`` can
+    point at a stale open commit and skip main's real merges; the window is the branch's."""
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    g("commit", "-q", "--allow-empty", "-m", "base")
+    base = git_proc(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    g("checkout", "-q", "-b", "side")
+    g("commit", "-q", "--allow-empty", "-m", "work")
+    g("checkout", "-q", "main")
+    g("commit", "-q", "--allow-empty", "-m", "main")
+    g("merge", "-q", "--no-ff", "-m", "merge T1: real", "side")
+    main_sha = git_proc(tmp_path, "rev-parse", "main").stdout.strip()
+    # a tag named `main` at the stale base: the bare name resolves the tag, the branch wins
+    g("tag", "main", base)
+    assert git_proc(tmp_path, "rev-parse", "--verify", "--quiet", "main").stdout.strip() == base
+    assert merge_log(tmp_path) == [main_sha], merge_log(tmp_path)
