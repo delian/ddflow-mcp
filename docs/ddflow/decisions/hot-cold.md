@@ -164,6 +164,10 @@ today. A lease also records `lease.released` / `lease.expired` hot, unchanged.
 | two machines, one agent id | the shard name includes the clone id: one writer per file; a same-name file with different bytes is the conflict the design forbids (`git_merge` rejects it in the test) |
 | ref points past EOF (truncated cold) | `DigestMismatch`/`Unavailable`, never a partial answer |
 
+Wiring notes (roborev 3978): tiering requires an adopted clone (a clone id in the shard
+name); an unadopted checkout keeps hot renewals and `ddflow tier plan` says so. The
+production writer imports the clone-suffix shape from `_agent.py` instead of redeclaring it.
+
 ## Alternatives rejected
 
 - Move old renewals out of existing shards: rewrites committed shards (r-replay-compat).
