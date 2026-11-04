@@ -59,6 +59,6 @@ def test_own_appends_still_restamp(repo, monkeypatch):
 def test_read_verb_with_stale_waves_appends_nothing(repo):
     _setup(repo)
     before = _count(repo)
-    for verb in (("show", "A"), ("list"), ("board"), ("next")):
+    for verb in (("show", "A"), ("list",), ("board",), ("next",)):
         run_cli(repo, *verb)
     assert _count(repo) == before
