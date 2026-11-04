@@ -9,11 +9,18 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from conftest import run_cli
 
 from ddflow.infra.log import EventLog
 
 DONE = 300
+
+
+@pytest.fixture(autouse=True)
+def _rows_25(monkeypatch):
+    """The bound these tests pin is the `[output].max_rows` cap (default 50, UX-output-caps)."""
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_ROWS", "25")
 
 
 def _big_queue(repo) -> None:
@@ -50,15 +57,15 @@ def test_mcp_status_cuts_its_lists_and_keeps_the_counts(repo):
     assert len(body["completed_tasks"]) == 25
     assert body["completed_tasks"][-1]["id"] == f"T{DONE - 1:03d}", "the most recent are kept"
     assert body["truncated"]["lists"]["completed_tasks"] == DONE
-    assert "ddflow --json status" in body["truncated"]["all"]
+    assert "ddflow status --full" in body["truncated"]["all"]
     assert len(text) < 20_000, len(text)
 
 
-def test_the_cli_lists_everything_and_differs_from_mcp_only_in_the_cut_lists(repo):
+def test_the_cli_full_lists_everything_and_differs_from_mcp_only_in_the_cut_lists(repo):
     """The deliberate exception to CLI/MCP byte-identity (roborev job 962): pinned on a
     queue big enough to cross the bound, which the parity test's fixture never is."""
     _big_queue(repo)
-    code, out, err = run_cli(repo, "--json", "status")
+    code, out, err = run_cli(repo, "--json", "status", "--full")
     assert code == 0, err
     cli = json.loads(out)
     assert len(cli["completed_tasks"]) == DONE and "truncated" not in cli

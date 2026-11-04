@@ -108,6 +108,7 @@ from ._core import (  # noqa: F401
     MemoryConfig,
     MergeQueueConfig,
     MetricsConfig,
+    OutputConfig,
     PinsConfig,
     PlanConfig,
     PromptsConfig,

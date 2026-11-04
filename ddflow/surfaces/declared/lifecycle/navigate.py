@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ....views.output_caps import from_args as _cap
+from ..capflags import capped
 from ._shared import (
     AB,
     DEFAULT_CHECK_RECOVERY,
@@ -31,11 +33,16 @@ COMMANDS: tuple[Command, ...] = (
         "Independent items in the ready set can be run in parallel worktrees by "
         "separate agents. Returns ready=[] when nothing is actionable — that is a "
         "result, not an error, and it never means 'pick something anyway'.",
-        call=lambda repo, a, agent: _api().next_item(
+        call=lambda repo, a, agent: _cap(
             repo,
-            kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
-            phase=a.get("phase", "") or "",
-            agent=agent,
+            _api().next_item(
+                repo,
+                kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
+                phase=a.get("phase", "") or "",
+                agent=agent,
+            ),
+            "next",
+            a,
         ),
         payload="",
         cli=CliPolicy(notes=L.next_notes, human=L.next_text),
@@ -53,6 +60,7 @@ COMMANDS: tuple[Command, ...] = (
                 default=DEFAULT_NEXT_KIND,
                 choices=("task", "phase"),
             ),
+            *capped(True),
         ),
     ),
     Command(

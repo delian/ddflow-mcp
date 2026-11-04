@@ -270,7 +270,11 @@ def next_text(out, a, ctx) -> str | None:
     p = out.data["_render"]["plan"]
     if not p.ready:
         return "\n".join(
-            [out.reason, *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:10])]
+            [
+                out.reason,
+                *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:10]),
+                *([note] if (note := out.data.get("_footer")) else []),
+            ]
         )
     lines = [f"Ready ({p.summary()}):"]
     for it in p.ready:
@@ -283,6 +287,8 @@ def next_text(out, a, ctx) -> str | None:
     lines += [f"  (blocked) {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:6]]
     if p.finished:
         lines.append(p.close_note())
+    if note := out.data.get("_footer"):
+        lines.append(note)
     return "\n".join(lines)
 
 

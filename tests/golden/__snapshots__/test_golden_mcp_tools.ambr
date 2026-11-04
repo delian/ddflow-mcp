@@ -682,6 +682,14 @@
           "type": "string",
           "description": "'task' (default) or 'phase'."
          },
+         "full": {
+          "type": "boolean",
+          "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. Without it a long answer is cut and ends in a footer naming the exact next call."
+         },
+         "cursor": {
+          "type": "integer",
+          "description": "Where to resume a cut list: the number the previous answer's footer or `next.cursor_*` gave (default 0)."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -1170,6 +1178,10 @@
          "phase": {
           "type": "string",
           "description": "Limit to one phase (and, for forecast, its critical path)."
+         },
+         "full": {
+          "type": "boolean",
+          "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. Without it a long answer is cut and ends in a footer naming the exact next call."
          },
          "limit": {
           "type": "integer",
