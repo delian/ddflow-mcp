@@ -268,13 +268,17 @@ def tier_notes(it, gates: Mapping[str, GateDef] | None = None) -> list[str]:
     """One neutral line when a recorded review reached tier `model` (a different model of
     the author's family): a normal state, stated once, with the way to a cross-family
     review as a hint."""
-    recs = [it.gates.get(g) for g in reviewer_gates(gates)]
-    if any(r and r.evidence.get("independence_tier") == "family" for r in recs):
+    # Only a review that RAN counts: an unavailable gate carrying a tier establishes nothing.
+    recs = {
+        g: r
+        for g in reviewer_gates(gates)
+        if (r := it.gates.get(g)) and r.outcome in ("passed", "failed", "partial")
+    }
+    tier = lambda r: r.evidence.get("independence_tier")  # noqa: E731
+    if any(tier(r) == "family" for r in recs.values()):
         return []  # a cross-family review exists: nothing to hint at
     got = [
-        f"{g} by {rec.evidence.get('model') or rec.by}"
-        for g in reviewer_gates(gates)
-        if (rec := it.gates.get(g)) and rec.evidence.get("independence_tier") == "model"
+        f"{g} by {r.evidence.get('model') or r.by}" for g, r in recs.items() if tier(r) == "model"
     ]
     if not got:
         return []

@@ -168,3 +168,38 @@ def test_same_family_panel_is_not_independent(log, cfg, gd):
     st = fold(log.read_all())
     ok, why = G.reviewer_independence(st, cfg, "T1", "claude-opus-5")
     assert ok and "google" in why
+
+
+def test_a_review_that_did_not_run_neither_silences_nor_makes_the_note(log, cfg, gd):
+    item(log)
+    G.record(
+        log,
+        cfg,
+        "T1",
+        "critic",
+        "passed",
+        evidence={"model": "m", "independence_tier": "model"},
+        gates=gd,
+    )
+    G.record(
+        log,
+        cfg,
+        "T1",
+        "rubber_duck",
+        "unavailable",
+        reason="down",
+        evidence={"independence_tier": "family"},
+        gates=gd,
+    )
+    assert len(GR.tier_notes(fold(log.read_all()).items["T1"], gd)) == 1
+    G.record(
+        log,
+        cfg,
+        "T1",
+        "critic",
+        "unavailable",
+        reason="down",
+        evidence={"independence_tier": "model"},
+        gates=gd,
+    )
+    assert GR.tier_notes(fold(log.read_all()).items["T1"], gd) == []
