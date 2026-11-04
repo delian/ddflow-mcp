@@ -384,6 +384,7 @@ def test_a_file_with_no_markers_is_refused_until_force_appends_the_regions(repo)
     text = p.read_text()
     assert res.action == "updated" and text.startswith("# Ours\n\nMail us.\n\n<!-- ddflow:begin")
     assert [r.name for r in RG.parse(text)] == ["versions", "known-issues"]
+    assert "-->\n\n<!-- ddflow:begin" in text  # the regions keep a blank line between them
     assert not any("not inserted" in n for n in res.notes)
     assert "Reporting" not in text  # the operator's file has its own policy text
     assert ops.state_of(repo, cfg, load(repo, []), _spec(cfg))[0] == "fresh"
