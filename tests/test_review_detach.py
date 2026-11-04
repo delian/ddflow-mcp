@@ -195,6 +195,28 @@ def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_le
     assert CR._detach_argv([], "role") == []
 
 
+def test_detach_relaunches_the_review_as_the_resolved_holder(monkeypatch):
+    """`_detach` wires `_detach_argv` into the launched command, so the detached review runs
+    as the holder and its long rounds renew the holder's lease (the `if not argv` fallback
+    would launch the review under a derived id that holds no lease)."""
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import review as CR
+
+    called: dict = {}
+
+    def fake_detach(repo, item, command, *, cwd="", log_file="", agent=""):
+        called.update(item=item, command=command, agent=agent)
+        return SimpleNamespace(exit=0, data={"id": "j", "pid": 1, "log": "/tmp/l"}, reason="")
+
+    monkeypatch.setattr(CR.AJ, "job_detach", fake_detach)
+    a = SimpleNamespace(_argv=["--detach", "T1", "--gate", "critic"], id=["T1"])
+    c = SimpleNamespace(called_from=Path("."), log=SimpleNamespace(agent_id="role"))
+    assert CR._detach(a, c) == CR.OK
+    assert "--agent" in called["command"] and "role" in called["command"], called
+    assert called["agent"] == "role"
+
+
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
     _setup(repo, tmp_path)
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
