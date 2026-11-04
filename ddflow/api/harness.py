@@ -137,7 +137,7 @@ def _row(h: Harness, adopted: set[str]) -> dict[str, Any]:
 
 def harness_list(repo: Path) -> O.Outcome:
     adopted = set(AD.adopted_agents(repo))
-    rows = [_row(h, adopted) for h in HR.load()]
+    rows = [_row(h, adopted) for h in HR.load_in(repo)]
     lines = [
         f"{r['id']:<12} {'adopted' if r['adopted'] else '-':<8} mcp={r['mcp']:<12} "
         f"hooks={r['hooks']:<11} best={r['best']}"
@@ -164,9 +164,10 @@ def _list_changed_line(harness_id: str) -> str:
 
 
 def harness_show(repo: Path, which: str) -> O.Outcome:
-    h = HR.get(which)
+    found = {h.id: h for h in HR.load_in(repo)}
+    h = found.get(which)
     if h is None:
-        return O.failed("harness_show", f"no harness {which!r}; known: {', '.join(HR.ids())}")
+        return O.failed("harness_show", f"no harness {which!r}; known: {', '.join(found)}")
     lv = levels(h)
     feats = {
         "commands": _feature(h.commands),
@@ -240,14 +241,15 @@ def _findings(repo: Path, h: Harness) -> list[dict[str, str]]:
 
 def harness_doctor(repo: Path, which: str = "") -> O.Outcome:
     """Drift for ``which``, or for every agent this project was adopted for."""
+    merged = {h.id: h for h in HR.load_in(repo)}
     if which:
-        h = HR.get(which)
+        h = merged.get(which)
         if h is None:
-            return O.failed("harness_doctor", f"no harness {which!r}; known: {', '.join(HR.ids())}")
+            return O.failed("harness_doctor", f"no harness {which!r}; known: {', '.join(merged)}")
         targets = [h]
     else:
         adopted = set(AD.adopted_agents(repo))
-        targets = [x for x in HR.load() if x.id in adopted]
+        targets = [x for x in merged.values() if x.id in adopted]
     found = [f for h in targets for f in _findings(repo, h)]
     if not found:
         msg = f"{len(targets)} harness(es) checked: nothing is broken"
