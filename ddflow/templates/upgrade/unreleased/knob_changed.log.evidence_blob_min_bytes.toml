@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_changed"
+key = "log.evidence_blob_min_bytes"
+old = "1024"
+new = "256"
+why = "With log.evidence_blobs on, evidence values of 256 bytes or more (was 1024) go out of line, so new gate events are smaller. Events already written are untouched and still replay; log.evidence_blobs itself stays off by default (PS-evidence-inline)."
+effect = "only with log.evidence_blobs on: new gate events keep evidence of 256 to 1023 bytes in .ddflow/blobs/ instead of the shard; set log.evidence_blob_min_bytes = 1024 to restore the old threshold"

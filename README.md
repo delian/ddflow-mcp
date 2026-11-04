@@ -5956,7 +5956,7 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7b3d38d43da5 -->
+<!-- ddflow:begin README/knobs sha=3d2f6a0b31ab -->
 <details><summary>All 537 knobs across 50 sections</summary>
 
 | Knob | Default | Values |
@@ -6340,7 +6340,7 @@ long default is left to `ddflow config --explain`.
 | `log.snapshot_touch_s` | `86400` |  |
 | `log.evidence_blobs` | `false` |  |
 | `log.evidence_blob_keys` | (long: see `ddflow config --explain`) |  |
-| `log.evidence_blob_min_bytes` | `1024` |  |
+| `log.evidence_blob_min_bytes` | `256` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.skew_notice` | `"once"` | `once` \| `always` \| `off` |
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
