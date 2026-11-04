@@ -17,6 +17,15 @@ def _p(path: Path | str) -> str:
     return Path(path).as_posix().rstrip("/") or "/"
 
 
+def _no_root(*paths: str) -> None:
+    if "/" in paths:
+        raise ValueError("FakeFs does not model operations on the filesystem root")
+
+
+def _exists(fs: FakeFs, p: str) -> bool:
+    return p in fs.files or fs.is_dir(p)
+
+
 @fake
 class FakeFs:
     """An `Fs` holding `files` (path -> bytes) and `dirs` in memory."""
@@ -58,6 +67,9 @@ class FakeFs:
     def copy_tree(self, src: Path | str, dst: Path | str, *, dirs_exist_ok: bool = False) -> None:
         s, d = _p(src), _p(dst)
         self.calls.append(("copy_tree", s, d))
+        _no_root(s, d)
+        if d == s or d.startswith(s + "/"):
+            raise ValueError(f"cannot copy {s} into itself ({d})")
         if not self.is_dir(s):
             raise FileNotFoundError(s)
         if d in self.files or (self.is_dir(d) and not dirs_exist_ok):
@@ -73,8 +85,15 @@ class FakeFs:
         self.calls.append(("move", s, d))
         if not (s in self.files or self.is_dir(s)):
             raise FileNotFoundError(s)
+        _no_root(s, d)
         if self.is_dir(d):  # like shutil.move: into an existing directory
             d = self._prefix(d) + s.rsplit("/", 1)[-1]
+            if _exists(self, d):
+                raise FileExistsError(d)
+        elif d in self.files and s not in self.files:
+            raise FileExistsError(d)  # a directory over a file
+        if d == s or d.startswith(s + "/"):
+            raise ValueError(f"cannot move {s} into itself ({d})")
         if s in self.files:
             self.files[d] = self.files.pop(s)
             return
@@ -89,6 +108,7 @@ class FakeFs:
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
         d = _p(path)
         self.calls.append(("rmtree", d))
+        _no_root(d)
         if not self.is_dir(d):
             if ignore_errors:
                 return

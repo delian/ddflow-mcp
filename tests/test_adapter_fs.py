@@ -152,7 +152,15 @@ def test_fake_mirrors_shutil_on_directories():
     assert f.files["/c/file"] == b"x"
     f.move("/a", "/z")
     assert not f.is_dir("/a/empty") and f.is_dir("/z/empty")
-    root = FakeFs({"/q": b"1"})
-    assert root.is_dir("/")
-    root.rmtree("/", ignore_errors=False)
-    assert root.files == {}
+    f.files["/c/g"] = b"g"
+    f.mkdir("/dd")
+    f.files["/dd/g"] = b"old"
+    with pytest.raises(FileExistsError):
+        f.move("/c/g", "/dd")  # the name is taken inside the directory
+    with pytest.raises(FileExistsError):
+        f.move("/z", "/dst")  # a directory over a file
+    with pytest.raises(ValueError):
+        f.copy_tree("/z", "/z/sub", dirs_exist_ok=True)
+    for call in (lambda: f.rmtree("/"), lambda: f.copy_tree("/", "/x"), lambda: f.move("/", "/x")):
+        with pytest.raises(ValueError):
+            call()
