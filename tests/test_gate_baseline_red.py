@@ -85,3 +85,50 @@ def test_no_ids_is_never_baseline_red(repo) -> None:
     from ddflow.services.gates import baseline_red as BR
 
     assert BR.on_base(repo, "main", None, [], lambda g, c: ("failed", {}))["red"] is False
+
+
+def _capped_project(repo: Path, n: int) -> None:
+    """A fake pytest that fails ``n`` distinct tests (``n > MAX_FAILED_TESTS`` caps the list the
+    gate evidence keeps). The base fails them too: a full-suite failure the base shows is
+    baseline-red (B69d1c0ff00)."""
+    run_cli(repo, "init")
+    (repo / "bin").mkdir()
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_x.py").write_text(
+        "".join(f"def test_a{i}():\n    pass\n" for i in range(n))
+    )
+    lines = ["#!/bin/sh"]
+    for i in range(n):
+        lines.append(f'echo "____ test_a{i} ____"')
+        lines.append('echo "E assert 1 == 2"')
+    lines.append('echo "=== short test summary info ==="')
+    for i in range(n):
+        lines.append(f'echo "FAILED tests/test_x.py::test_a{i} - assert 1 == 2"')
+    lines.append(f'echo "{n} failed in 0.1s"')
+    lines.append("exit 1")
+    script = repo / "bin" / "pytest"
+    script.write_text("\n".join(lines) + "\n")
+    script.chmod(0o755)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "./bin/pytest -q tests/"\ncwd = "repo"\n'
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
+
+
+def test_a_cut_full_suite_failure_is_still_measured_on_the_base(repo) -> None:
+    """B69d1c0ff00: a full-suite unit_tests failure CAPS its failing ids (checked in
+    `test_unattributable_failures_stay_failed`), so the whole list must be kept aside and run on
+    the base -- otherwise the gate stays failed with no baseline and `baseline_red_auto` never
+    fires."""
+    _capped_project(repo, 55)  # 55 > MAX_FAILED_TESTS (50): the evidence list is cut
+    code, out, _e = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests", agent="worker")
+    body = json.loads(out)
+    assert body["outcome"] == "partial", body
+    rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["unit_tests"]
+    assert rec.outcome == "partial"
+    assert rec.evidence["baseline"]["red"] is True
+    assert len(rec.evidence["baseline"]["ids"]) == 55
+
