@@ -44,3 +44,12 @@ def test_cli_main_caps_blas_threads_unless_the_user_set_them():
     )
     assert _run(["-c", main])[1] == "1"
     assert _run(["-c", main], OPENBLAS_NUM_THREADS="4")[1] == "4"
+
+
+def test_extra_installed_does_not_import_the_extra(tmp_path):
+    (tmp_path / "model2vec.py").write_text("class StaticModel: ...\n")
+    probe = (
+        "import sys; from ddflow.services import embed; print(embed.extra_installed()); "
+        "print('model2vec' in sys.modules)"
+    )
+    assert _run(["-c", probe], tmp_path)[:2] == ["True", "False"]

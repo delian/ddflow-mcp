@@ -81,7 +81,16 @@ def _unavailable(reason: str, backend: str = "") -> Embedding:
 
 def extra_installed() -> bool:
     """Is the ``[rag]`` extra's embedding half (model2vec) installed?"""
-    return _static_model() is not None  # a real import: a broken install is not "installed"
+    if _StaticModel is not _UNSET:  # an embedding already tried the import: that answer is exact
+        return _StaticModel is not None
+    # Otherwise stay import-free (r-no-eager-heavy-import): "installed" = the package is findable;
+    # a broken install is reported at the first embedding as unavailable with the reason.
+    from importlib.util import find_spec
+
+    try:
+        return find_spec("model2vec") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def backend(cfg: Config) -> str:
