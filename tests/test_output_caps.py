@@ -140,6 +140,11 @@ def test_the_last_resort_marks_only_the_offending_list():
     assert "too large" in out.data["blocked"][0]["cut"]
 
 
+def test_an_empty_key_does_not_break_the_last_resort():
+    out = O.ok("next", **{"": [{"id": "x" * 500}]})
+    assert OC.apply(None, out, "next", cfg=_cfg(max_chars=100), wire=True).data["truncated"]
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))

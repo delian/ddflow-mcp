@@ -222,7 +222,7 @@ def _clip_strings(value: Any, n: int) -> Any:
 def _mark_oversized(clipped: dict[str, Any], info: dict[str, int], budget: int) -> None:
     """Last resort, still over ``budget`` (a row of hundreds of fields): the largest lists
     are replaced by one marker row each, until it fits; a list that fits keeps its rows."""
-    lists = [k for k, v in clipped.items() if isinstance(v, list) and v and k[0] != "_"]
+    lists = [k for k, v in clipped.items() if isinstance(v, list) and v and not k.startswith("_")]
     for k in sorted(lists, key=lambda k: -len(json.dumps(clipped[k], default=str))):
         if _size({x: y for x, y in clipped.items() if x != "text"}) <= budget:
             break
