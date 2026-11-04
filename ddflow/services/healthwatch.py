@@ -148,6 +148,17 @@ def _lane(it, st, cfg, repo, now, hint, rec, act, alive, clone) -> H.Lane:
     )
 
 
+def _expired(log, st, cfg, repo, now, view, recoveries) -> dict[str, Any]:
+    """The expired-lease recoveries by item. A caller that already scanned passes its result:
+    one scan (and its git processes) per command."""
+    found = (
+        recoveries
+        if recoveries is not None
+        else L.scan(log, cfg, repo, now=now, state=st, view=view)
+    )
+    return {r.item: r for r in found if r.kind == "expired_lease"}
+
+
 def gather(
     log: EventLog,
     st,
@@ -170,13 +181,7 @@ def gather(
         if it.lease is not None and not it.removed and not it.terminal
     }
     newest = _newest_events(events, set(held))
-    # A caller that already scanned passes its result: one scan (and its git processes) per command.
-    found = (
-        recoveries
-        if recoveries is not None
-        else L.scan(log, cfg, repo, now=now, state=st, view=view)
-    )
-    recs = {r.item: r for r in found if r.kind == "expired_lease"}
+    recs = _expired(log, st, cfg, repo, now, view, recoveries)
     procs = [
         H.Proc(j.id, j.item, clock.epoch(j.started_at), JOBS.status(j).state == "running")
         for j in st.jobs.values()
