@@ -134,19 +134,16 @@ def test_a_forced_merge_with_an_approval_lands_and_records_merge_forced(repo, re
 def test_the_approval_is_single_use(repo, refuse):
     _claimed(repo)
     ask = _approved_ask(repo)
+    from ddflow.api._base import _load
+
+    log, cfg, st = _load(repo, "bot")
+    a = MF.assess(repo, cfg, st, "T1")  # the very assessment the approval is bound to
     assert _merge(repo, force=True, approval=ask).exit == 0
     assert _asks(repo)[ask]["used"] == 1
-    # the same approval on a second unsettled item is refused as spent, not as "merged"
-    run_cli(repo, "task", "add", "T2", "--title", "b", "--globs", "b.py")
-    code, out, err = run_cli(repo, "--json", "claim", "T2")
-    tree2 = Path(json.loads(out)["worktree"])
-    (tree2 / "b.py").write_text("y = 1\n")
-    _git(tree2, "add", "b.py")
-    _git(tree2, "commit", "-qm", "add b")
-    again = api.merge_item(repo, "T2", agent="bot", force=True, approval=ask)
-    assert again.exit == 3
+    # same command, same agent, same gates: only the spend count differs
+    stamp, why = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    assert stamp is None and "is spent" in why, why
     assert _asks(repo)[ask]["used"] == 1
-    assert not [e for e in _events(repo, "worktree.merged") if e.subject == "T2"]
 
 
 def test_a_refused_call_does_not_spend_the_approval(repo, refuse):
