@@ -40,6 +40,7 @@ from .model import (
     Finding,
     Reviewer,
     ReviewResult,
+    classify_exhaustion,
     finding_digest,
 )
 from .transport import _Cancel, _cancel_on_error, _running
@@ -608,6 +609,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
 def _settle(res: ReviewResult) -> None:
     """Status and reason from coverage: every chunk, some, or none."""
     _name_unreviewed(res)
+    res.degraded = classify_exhaustion(res.reason) if res.reason else ""
     if res.chunks_reviewed == 0:
         res.status = UNAVAILABLE
         res.reason = res.reason or "no chunk produced a usable review"

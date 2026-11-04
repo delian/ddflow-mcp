@@ -55,7 +55,7 @@ from ...services.export import select as export_select
 from ...services.export.query import ExportError
 from ...services.gates import load_gates
 from ...services.guidance import ruleview as RULEVIEW
-from ...services.review import load_reviewers
+from ...services.review import degraded_notes, load_reviewers
 from ...views import human
 from ...views.markdown import render_views
 from .._base import _load
@@ -428,6 +428,9 @@ def doctor(
     except Exception:
         urls = []
     notes.extend(CT.warnings(repo, cfg, urls))
+    # Reviewers a quota/exhaustion wall marked degraded and shed (B8efd3d1bc4): surfaced
+    # here rather than as a run of silently `unavailable` rubber_duck/critic gates.
+    notes.extend(degraded_notes(st))
 
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
