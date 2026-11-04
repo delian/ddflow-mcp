@@ -1,9 +1,10 @@
 """`FakeFs`: an in-memory `Fs` over a dict of files, for tests that must not touch a disk.
 
 Paths are normalised to POSIX strings; a directory exists when a file lies under it or it
-was made with `mkdir`. `calls` records every operation as `(name, *paths)`. Errors mirror the
-real ones: a missing source raises `FileNotFoundError`; `rmtree` of a missing path raises
-unless `ignore_errors` (the default).
+was made with `mkdir`. `calls` records every operation as `(name, *paths)`. Errors are `OSError` subclasses like
+the real ones (`FileExistsError` where `shutil` raises `shutil.Error`: callers catch
+`OSError`); a missing source raises `FileNotFoundError`; `rmtree` of a missing path raises
+unless `ignore_errors` (the port's default). The filesystem root is refused (`ValueError`).
 """
 
 from __future__ import annotations
@@ -88,6 +89,8 @@ class FakeFs:
         _no_root(s, d)
         if self.is_dir(d):  # like shutil.move: into an existing directory
             d = self._prefix(d) + s.rsplit("/", 1)[-1]
+            if d == s:
+                return  # already there: a no-op, as with the real move
             if _exists(self, d):
                 raise FileExistsError(d)
         elif d in self.files and s not in self.files:
