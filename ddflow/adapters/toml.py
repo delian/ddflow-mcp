@@ -1,10 +1,16 @@
 """The `TomlIo` port and its default adapter: the ONE module that reads and writes TOML.
 
 Home of the `toml` family's raw I/O: `tomllib` (reading) and `tomlkit` (writing, with comments
-and layout kept) are imported here and nowhere else; the `toml-home` import contract lets the
+and layout kept) are imported here and nowhere else; the `toml-home` import contract (task ADP-toml-contract) lets the
 count of other importers only go down (tests/guard_baselines/importlinter-toml-home.toml).
-The layered overlay loader and the comment-preserving key edits stay in the `Toml` port
-(`ddflow.adapters.tomlcfg`, today `ddflow.infra.tomlcfg`), which builds on this one.
+
+Why two ports: `Toml` (`ddflow.adapters.tomlcfg`, implemented today in `ddflow.infra.tomlcfg`)
+is the policy layer -- layered overlay of config paths, unknown-key rules, key upsert/remove
+on text -- and has a loose, overlay-shaped signature. `TomlIo` is the primitive under it: parse
+and render, nothing else. They are one stack, not two paths: `infra.tomlcfg` still imports
+`tomllib` and `tomlkit` itself (it is on the `toml-home` baseline) only until it delegates to
+`TomlIo`; that move is the follow-up task ADP-toml-unify, after which no second reader or
+writer exists.
 
 Small on purpose: callers of ADP-managed-files and ADP-config-store depend on these four calls.
 `tomlkit` is imported on first write (38 ms; most commands never edit a config).
@@ -32,7 +38,7 @@ class TomlIo(Protocol):
     """Read TOML into plain data; write data or an edited document back as text.
 
     Home: `ddflow.adapters.toml`. Single adapter; `tomllib` and `tomlkit` are imported there
-    alone, and the `toml-home` guard only lets the other importers go down in number.
+    alone, and the `toml-home` contract (ADP-toml-contract) lets the other importers only go down in number.
     """
 
     def loads(self, text: str) -> dict[str, Any]:

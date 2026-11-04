@@ -11,7 +11,7 @@ Four calls: `loads(text)`, `read(path)`, `dumps(data_or_document)`, `document(te
 - **Fake:** `FakeTomlIo`, a small TOML subset (tables, JSON-shaped values) over an in-memory
   `files` dict.
 - **Conformance cases:** tests/test_adapter_toml.py.
-- **Contract:** `toml-home` (.importlinter): only `ddflow.adapters.toml` imports `tomllib` and
+- **Contract:** `toml-home` (.importlinter, task ADP-toml-contract): only `ddflow.adapters.toml` imports `tomllib` and
   `tomlkit`; the other importers sit in tests/guard_baselines/importlinter-toml-home.toml,
   which only shrinks. New code calls the port.
 
