@@ -176,6 +176,58 @@ def test_relaunch_argv_strips_only_the_flag_never_a_positional_detach():
     assert CR._relaunch_argv(["--", "--detach"]) == ["--", "--detach"]
 
 
+def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_lease():
+    from ddflow.surfaces.commands import review as CR
+
+    # A detached review relaunched with a DERIVED identity holds no lease to renew: the
+    # holder's lease lapses over a long round (bug B-lease-ttl-expires-during-review). The
+    # relaunch must re-declare the resolved id so the run heartbeats as the holder.
+    assert CR._detach_argv(["--detach", "T1", "--delta"], "role") == [
+        "--agent", "role", "T1", "--delta",
+    ]  # fmt: skip
+    # a typed `--agent` is replaced by the resolved one, not duplicated
+    assert CR._detach_argv(["--agent", "shell-alias", "T1", "--detach"], "role") == [
+        "--agent", "role", "T1",
+    ]  # fmt: skip
+    assert CR._detach_argv(["--agent=shell-alias", "T1", "--detach"], "role") == [
+        "--agent", "role", "T1",
+    ]  # fmt: skip
+    # naming nothing to relaunch is [] still, so `--detach` keeps its own-arguments refusal
+    assert CR._detach_argv(["--detach"], "role") == []
+    assert CR._detach_argv([], "role") == []
+    # a positional arg past `--` is not a flag: it stays, and the resolved id leads
+    assert CR._detach_argv(["--detach", "--", "--detach"], "role") == [
+        "--agent", "role", "--", "--detach",
+    ]  # fmt: skip
+
+
+def test_detach_relaunches_the_review_as_the_resolved_holder(monkeypatch):
+    """`_detach` wires `_detach_argv` into the launched command, so the detached review runs
+    as the holder and its long rounds renew the holder's lease (the `if not argv` fallback
+    would launch the review under a derived id that holds no lease)."""
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import review as CR
+
+    called: dict = {}
+
+    def fake_detach(repo, item, command, *, cwd="", log_file="", agent=""):
+        called.update(item=item, command=command, agent=agent)
+        return SimpleNamespace(exit=0, data={"id": "j", "pid": 1, "log": "/tmp/l"}, reason="")
+
+    monkeypatch.setattr(CR.AJ, "job_detach", fake_detach)
+    a = SimpleNamespace(_argv=["--detach", "T1", "--gate", "critic"], id=["T1"])
+    c = SimpleNamespace(
+        repo=Path("."),
+        called_from=Path("."),
+        log=SimpleNamespace(agent_id="role"),
+        out=lambda *a, **k: None,
+    )
+    assert CR._detach(a, c) == CR.OK
+    assert "--agent" in called["command"] and "role" in called["command"], called
+    assert called["agent"] == "role"
+
+
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
     _setup(repo, tmp_path)
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
