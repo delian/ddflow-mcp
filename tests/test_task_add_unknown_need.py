@@ -32,18 +32,18 @@ def test_task_add_names_the_nearest_real_id(repo):
 def test_update_add_needs_refuses_an_unknown_need(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
-    code, out, err = run_cli(repo, "update", "T", "--add-needs", "GHOST")
+    code, out, err = run_cli(repo, "update", "T", "--add-needs", "Aa")
     assert code != 0
-    assert "GHOST" in out + err
+    assert "Did you mean 'A'" in out + err  # nearest real id, like task add
     assert _items(repo)["T"].needs == ["A"]  # the item's needs were not mutated
 
 
 def test_update_needs_refuses_an_unknown_need(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
-    code, out, err = run_cli(repo, "update", "T", "--needs", "A,GHOST")
+    code, out, err = run_cli(repo, "update", "T", "--needs", "A,Aa")
     assert code != 0
-    assert "GHOST" in out + err
+    assert "Did you mean 'A'" in out + err
     assert _items(repo)["T"].needs == ["A"]
 
 
@@ -61,6 +61,14 @@ def test_update_allow_unknown_needs_overrides_the_refusal(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
     code, out, err = run_cli(repo, "update", "T", "--needs", "A,NOPE", "--allow-unknown-needs")
+    assert code == 0, out + err
+    assert _items(repo)["T"].needs == ["A", "NOPE"]
+
+
+def test_update_add_needs_allow_unknown_needs_overrides(repo):
+    _two(repo)
+    assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
+    code, out, err = run_cli(repo, "update", "T", "--add-needs", "NOPE", "--allow-unknown-needs")
     assert code == 0, out + err
     assert _items(repo)["T"].needs == ["A", "NOPE"]
 
