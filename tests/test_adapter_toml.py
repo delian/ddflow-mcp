@@ -77,6 +77,9 @@ def test_the_fake_rejects_what_tomllib_rejects_in_its_subset():
     for bad in (*both, "x = null\n", "x = {}\n", "x = [null]\n"):  # TOML has no null
         with pytest.raises(TomlError):
             FakeTomlIo().loads(bad)
+    with pytest.raises(TomlError):
+        FakeTomlIo().loads("x = NaN\n")
+    assert FakeTomlIo().loads("[a.b]\n[a]\n") == TomlLibIo().loads("[a.b]\n[a]\n")  # valid TOML
     for bad in (*both, "x = null\n"):
         with pytest.raises(TomlError):
             TomlLibIo().loads(bad)

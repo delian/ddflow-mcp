@@ -30,6 +30,11 @@ def _strip_comment(raw: str) -> str:
     return raw.strip()
 
 
+def _refuse(name: str) -> Any:
+    """JSON's `NaN` and `Infinity` are not TOML (which spells them `nan` and `inf`)."""
+    raise ValueError(f"not a TOML value: {name}")
+
+
 def _is_toml_value(value: Any) -> bool:
     """A scalar or an array of them: JSON's `null` and inline objects are not in this subset."""
     if isinstance(value, list):
@@ -70,7 +75,7 @@ class FakeTomlIo:
                 if m.group(1) in table:
                     raise TomlError(f"line {number}: duplicate key {m.group(1)!r}")
                 try:
-                    value = json.loads(m.group(2))
+                    value = json.loads(m.group(2), parse_constant=_refuse)
                 except ValueError as exc:
                     raise TomlError(f"line {number}: {exc}") from exc
                 if not _is_toml_value(value):
