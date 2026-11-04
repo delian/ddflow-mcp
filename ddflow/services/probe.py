@@ -57,10 +57,15 @@ def git_version(repo: Path | str, timeout_s: float) -> tuple[int, int] | None:
     return _tuple(r.out) if r.ok and _VERSION.search(r.out) else None
 
 
-def tip(repo: Path | str, ref: str, timeout_s: float) -> str:
-    """The commit ``ref`` names, or ""."""
+def tip(repo: Path | str, ref: str, timeout_s: float) -> tuple[str, str]:
+    """``(sha, "")`` for the commit ``ref`` names; ``("", why)`` when it names none, or git
+    could not be asked (git missing, a timeout): "could not tell" is not "no such ref"."""
     r = G.run(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", timeout=timeout_s)
-    return r.out if r.ok else ""
+    if r.ok:
+        return r.out, ""
+    if r.unavailable:
+        return "", r.err[-300:]
+    return "", f"{ref!r} is not a commit of this repository"
 
 
 def _parse(out: bytes) -> tuple[str, ...]:
@@ -97,10 +102,9 @@ def run(
 ) -> Probe:
     """Probe ``item_ref`` against ``against_ref`` (branch names or shas of this repository)."""
     repo = Path(repo)
-    a, b = tip(repo, item_ref, timeout_s), tip(repo, against_ref, timeout_s)
-    for ref, sha in ((item_ref, a), (against_ref, b)):
-        if not sha:
-            return Probe(UNAVAILABLE, NONE, (), a, b, f"{ref!r} is not a commit of this repository")
+    (a, why_a), (b, why_b) = tip(repo, item_ref, timeout_s), tip(repo, against_ref, timeout_s)
+    if not (a and b):
+        return Probe(UNAVAILABLE, NONE, (), a, b, why_a or why_b)
     have = git_version(repo, timeout_s)
     if have is None:
         return Probe(UNAVAILABLE, NONE, (), a, b, "git could not be run")

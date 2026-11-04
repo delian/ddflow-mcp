@@ -141,3 +141,21 @@ def test_cli_knob_off_is_unavailable_and_recorded(pair: Path) -> None:
     assert code == 2 and "unavailable" in out + err and "[locks].probe is off" in out + err
     events = [e for e in EventLog(pair, "x").read_all() if e.kind == "probe.recorded"]
     assert events[-1].data["result"] == "unavailable"
+
+
+def test_git_unavailable_at_rev_parse_is_not_a_missing_ref(pair: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        PR.G,
+        "run",
+        lambda repo, *a, **kw: PR.G.GitResult(PR.G.UNAVAILABLE, "", "timed out", unavailable=True),
+    )
+    p = PR.run(pair, "ddflow/clean", "main", timeout_s=1)
+    assert p.result == PR.UNAVAILABLE and "not a commit" not in p.reason
+
+
+def test_cli_names_the_default_branch_actually_probed(pair: Path) -> None:
+    _git(pair, "branch", "-m", "main", "trunk")
+    _items(pair, "clash")
+    _git(pair, "branch", "-m", "trunk", "master")
+    code, out, err = run_cli(pair, "probe", "clash")
+    assert code == 1 and "master" in out + err and "main into" not in out + err

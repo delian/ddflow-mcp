@@ -59,16 +59,17 @@ def probe(repo: Path, item: str, *, against: str = "", agent: str = "") -> O.Out
             repo, branch, peer, timeout_s=cfg.locks.probe_timeout_s,
             min_git=cfg.locks.probe_merge_tree_min_git,
         )  # fmt: skip
+    shown = peer if target == MAIN else target  # the ref actually probed
     data = {
         "id": item,
-        "against": target,
+        "against": shown,
         "result": res.result,
         "method": res.method,
         "paths": list(res.paths),
         "head": res.item_sha,
         "base": res.against_sha,
         "why": res.reason,
-        "text": _text(res, item, target),
+        "text": _text(res, item, shown),
     }
     log.append("probe.recorded", item, {k: v for k, v in data.items() if k not in ("id", "text")})
     if res.result == PR.CONFLICT:

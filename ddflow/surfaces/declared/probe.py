@@ -29,7 +29,15 @@ COMMANDS: tuple[Command, ...] = (
             repo, a["id"], against=a.get("against") or "", agent=agent
         ),
         payload=(
-            "id", "against", "result", "method", "paths", "head", "base", "why", "text",
+            "id",
+            "against",
+            "result",
+            "method",
+            "paths",
+            "head",
+            "base",
+            "why",
+            "text",
         ),  # fmt: skip
         render=lambda out, a: out.data["text"],
         cli=CliPolicy(body_always=True),
