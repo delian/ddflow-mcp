@@ -88,6 +88,15 @@ def test_the_fake_rejects_what_tomllib_rejects_in_its_subset():
             TomlLibIo().loads(bad)
 
 
+def test_the_error_survives_pickle_with_its_position():
+    import pickle
+
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().loads("a = 1\nb = ]\n")
+    back = pickle.loads(pickle.dumps(caught.value))
+    assert (str(back), back.lineno, back.colno) == (str(caught.value), 2, caught.value.colno)
+
+
 def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):
     path = tmp_path / "bad.toml"
     path.write_bytes(b"\xff\xfe")

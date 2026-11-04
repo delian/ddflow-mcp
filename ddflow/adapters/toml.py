@@ -46,6 +46,9 @@ class TomlError(tomllib.TOMLDecodeError):
     def __str__(self) -> str:
         return self.msg
 
+    def __reduce__(self) -> tuple[Any, ...]:  # `args` is tomllib's (msg, doc, pos): rebuild from msg
+        return (type(self), (self.msg,), self.__dict__)
+
 
 @port
 @runtime_checkable
