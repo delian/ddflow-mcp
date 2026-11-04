@@ -92,7 +92,7 @@ def test_appending_to_an_old_log_leaves_its_events_byte_identical(tmp_path):
     event at the tail; every old line stays as written and replays the same."""
     events = tmp_path / ".ddflow" / "events"
     logfixture.generate(events, 800, seed=3)
-    shard = next(events.glob("*.jsonl"))
+    shard = sorted(events.glob("*.jsonl"))[0]
     old_lines = shard.read_bytes().splitlines(keepends=True)
     cfg = LogConfig(evidence_blobs=True)
     log = EventLog(tmp_path, shard.stem, log_cfg=cfg)
