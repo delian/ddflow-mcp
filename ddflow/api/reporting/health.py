@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import re
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
@@ -257,11 +257,11 @@ def _check(timings: list[tuple[str, float]], name: str) -> Iterator[None]:
     WHERE. Timing every check makes the slow one a named row instead of a silent wait,
     and an over-budget row is reported as a note below.
     """
-    started = time.monotonic()
+    started = CLOCK.monotonic()
     try:
         yield
     finally:
-        timings.append((name, time.monotonic() - started))
+        timings.append((name, CLOCK.monotonic() - started))
 
 
 def _over_budget_notes(timings: list[tuple[str, float]], budget: float) -> tuple[dict[str, float], list[str]]:
@@ -436,7 +436,8 @@ def doctor(
     _rules_findings(repo, st.highest_version, problems, notes)
 
     _launcher_findings(repo, problems, notes, cfg.enforce.commit_without_lease)
-    found, extra = stale_references(repo, parser, tools)
+    with _check(timings, "stale-refs"):
+        found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
@@ -447,7 +448,8 @@ def doctor(
     with _check(timings, "progress"):
         for f in PR.detect(log.read_all(), st, cfg):
             (problems if f.severity == "block" else notes).append(f.render())
-    found, held = _recovery_findings(L.scan(log, cfg, repo))
+    with _check(timings, "leases"):
+        found, held = _recovery_findings(L.scan(log, cfg, repo))
     problems += found
     notes += held
 
@@ -463,8 +465,10 @@ def doctor(
     notes += _dupe_note(st, cfg)
     with _check(timings, "wait-cycles"):
         problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
-    ordered = wait_order(log, st, cfg, cycles, notes, repo)
-    notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
+    with _check(timings, "wait-order"):
+        ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    with _check(timings, "leasebreak"):
+        notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
     notes += over
