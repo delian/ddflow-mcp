@@ -98,12 +98,17 @@ def _capped_project(repo: Path, n: int) -> None:
         "".join(f"def test_a{i}():\n    pass\n" for i in range(n))
     )
     lines = ["#!/bin/sh"]
-    for i in range(n):
-        lines.append(f'echo "____ test_a{i} ____"')
-        lines.append('echo "E assert 1 == 2"')
+    # Fail exactly the tests named on the command line (the base measurement runs a fixed
+    # list); with none named (the item's full run) fail all `n` under tests/test_x.py.
+    lines.append('named=0')
+    lines.append('for a in "$@"; do')
+    lines.append('  case "$a" in tests/test_x.py::*) echo "FAILED $a - assert 1 == 2"; named=1;; esac')
+    lines.append("done")
+    lines.append("if [ $named -eq 0 ]; then")
+    lines.append('  i=0')
+    lines.append(f'  while [ $i -lt {n} ]; do echo "FAILED tests/test_x.py::test_a$i - assert 1 == 2"; i=$((i+1)); done')
+    lines.append("fi")
     lines.append('echo "=== short test summary info ==="')
-    for i in range(n):
-        lines.append(f'echo "FAILED tests/test_x.py::test_a{i} - assert 1 == 2"')
     lines.append(f'echo "{n} failed in 0.1s"')
     lines.append("exit 1")
     script = repo / "bin" / "pytest"
