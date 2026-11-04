@@ -15,6 +15,21 @@ _HEADER = re.compile(r"\[([A-Za-z0-9_.-]+)\]")
 _PAIR = re.compile(r"([A-Za-z0-9_-]+)\s*=\s*(.+)")
 
 
+def _strip_comment(raw: str) -> str:
+    """`raw` without a trailing `# comment` (a `#` inside a double-quoted string stays)."""
+    quoted = escaped = False
+    for i, ch in enumerate(raw):
+        if quoted and ch == "\\" and not escaped:
+            escaped = True
+            continue
+        if ch == '"' and not escaped:
+            quoted = not quoted
+        elif ch == "#" and not quoted:
+            return raw[:i].strip()
+        escaped = False
+    return raw.strip()
+
+
 @fake
 class FakeTomlIo:
     """A `TomlIo` over a small subset: `[a.b]` tables and `key = value` where the value is
@@ -29,7 +44,7 @@ class FakeTomlIo:
         root: dict[str, Any] = {}
         table = root
         for number, raw in enumerate(text.splitlines(), 1):
-            line = raw.split("#", 1)[0].strip() if raw.lstrip()[:1] == "#" else raw.strip()
+            line = _strip_comment(raw)
             if not line:
                 continue
             if m := _HEADER.fullmatch(line):

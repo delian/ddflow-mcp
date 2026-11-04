@@ -31,7 +31,11 @@ class TomlError(tomllib.TOMLDecodeError):
     message alone."""
 
     def __init__(self, msg: str) -> None:
-        ValueError.__init__(self, msg)  # tomllib's own signature wants doc and pos; we have neither
+        ValueError.__init__(self, msg)  # tomllib's own signature wants doc and pos
+        self.msg, self.doc, self.pos, self.lineno, self.colno = msg, "", 0, 1, 1  # same attributes
+
+    def __str__(self) -> str:
+        return self.msg
 
 
 @port
@@ -63,4 +67,9 @@ class TomlLibIo:
 
     def read(self, path: str | Path) -> dict[str, Any]:
         with open(path, "rb") as handle:
-            return self.loads(handle.read().decode("utf-8"))
+            raw = handle.read()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise TomlError(f"{path}: not UTF-8: {exc}") from exc
+        return self.loads(text)

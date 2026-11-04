@@ -54,10 +54,26 @@ def test_the_fake_reads_its_files_and_misses_like_a_file():
         fake.read("/x/other.toml")
 
 
-def test_the_error_is_a_tomllib_decode_error():
-    import tomllib
+def test_the_error_is_a_decode_error_that_prints_and_carries_its_attributes():
+    err = TomlError("bad")
+    assert "TOMLDecodeError" in [c.__name__ for c in type(err).__mro__]  # callers' except still works
+    assert isinstance(err, ValueError) and str(err) == "bad"
+    assert (err.msg, err.pos, err.lineno, err.colno) == ("bad", 0, 1, 1)
+    with pytest.raises(TomlError, match="bad"):
+        raise err
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().loads("a = ]")
+    assert str(caught.value)  # printable: no AttributeError from a missing `pos`
 
-    assert issubclass(TomlError, tomllib.TOMLDecodeError)
-    assert str(TomlError("bad")) == "bad"
-    with pytest.raises(tomllib.TOMLDecodeError):  # what the real `loads` raises
-        TomlLibIo().loads("a = ")
+
+def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):
+    path = tmp_path / "bad.toml"
+    path.write_bytes(b"\xff\xfe")
+    with pytest.raises(TomlError):
+        TomlLibIo().read(path)
+
+
+def test_inline_comments_are_ignored_by_both_but_not_inside_strings():
+    text = 'key = 1 # why\ns = "a # b"  # c\n'
+    for io in (TomlLibIo(), FakeTomlIo()):
+        assert io.loads(text) == {"key": 1, "s": "a # b"}
