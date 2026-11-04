@@ -4,6 +4,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -257,9 +258,10 @@ def _sweep_due(repo: Path, cfg, *, now: float | None = None) -> bool:
     if every <= 0:
         return True
     try:
-        return now - float(_sweep_stamp_path(repo).read_text().strip()) >= every
+        last = float(_sweep_stamp_path(repo).read_text().strip())
     except (OSError, ValueError):
         return True  # no stamp, or a torn one: sweep now
+    return not math.isfinite(last) or now - last >= every  # "nan" is a torn stamp too
 
 
 def _sweep_stamp(repo: Path) -> None:
