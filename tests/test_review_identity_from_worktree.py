@@ -44,8 +44,7 @@ def test_detach_argv_redeclares_an_env_sourced_identity(adopted, monkeypatch):
     c = _ctx(adopted)
     assert c.log.agent_id == "sz-dry-run", "the identity DDFLOW_AGENT resolved"
     assert R._detach_argv(["review", "T1"], c.log.agent_id) == [
-        "--agent",
-        "sz-dry-run",
+        "--agent=sz-dry-run",
         "review",
         "T1",
     ]
@@ -55,14 +54,22 @@ def test_detach_argv_replaces_a_typed_agent(monkeypatch):
     """A `--agent` already typed still relaunches under the RESOLVED holder, not the typed
     token."""
     assert R._detach_argv(["--agent", "flagged", "review", "T1"], "sz-dry-run") == [
-        "--agent",
-        "sz-dry-run",
+        "--agent=sz-dry-run",
         "review",
         "T1",
     ]
     assert R._detach_argv(["--agent=flagged", "review", "T1"], "sz-dry-run") == [
-        "--agent",
-        "sz-dry-run",
+        "--agent=sz-dry-run",
+        "review",
+        "T1",
+    ]
+
+
+def test_detach_argv_attaches_the_value_so_a_dash_id_cannot_misparse(monkeypatch):
+    """`--agent=<id>` attached: separate tokens would read a `-dry-run` value as its own
+    option, so the identity would still be lost in the relaunched parser."""
+    assert R._detach_argv(["review", "T1"], "-dry-run") == [
+        "--agent=-dry-run",
         "review",
         "T1",
     ]
@@ -73,8 +80,7 @@ def test_detach_argv_keeps_a_positional_agent_past_the_separator(monkeypatch):
     global identity flag, so it stays."""
     argv = ["review", "T1", "--", "--agent=notes.md"]
     assert R._detach_argv(argv, "sz-dry-run") == [
-        "--agent",
-        "sz-dry-run",
+        "--agent=sz-dry-run",
         "review",
         "T1",
         "--",
@@ -88,7 +94,7 @@ def test_detach_argv_is_empty_when_there_is_nothing_to_relaunch(monkeypatch):
 
 def test_detach_launches_with_the_resolved_identity(adopted, monkeypatch):
     """A detach with only `DDFLOW_AGENT` set (no `--agent` in argv) relaunches the review
-    carrying `--agent <resolved>` before the `review` subcommand, and attributes the job to
+    carrying `--agent=<resolved>` before the `review` subcommand, and attributes the job to
     the RESOLVED holder -- so the detached process does not derive the worktree id."""
     monkeypatch.chdir(adopted)
     monkeypatch.setenv("DDFLOW_AGENT", "sz-dry-run")
@@ -109,8 +115,7 @@ def test_detach_launches_with_the_resolved_identity(adopted, monkeypatch):
     # The job is attributed to the RESOLVED holder, matching the relaunched process.
     assert captured["agent"] == "sz-dry-run", captured
     tokens = shlex.split(captured["cmd"])
-    # The command is `python -m ddflow <argv>`; `--agent <resolved>` precedes the `review`
+    # The command is `python -m ddflow <argv>`; `--agent=<resolved>` precedes the `review`
     # subcommand so the top-level identity flag applies to the detached child.
-    assert tokens.index("--agent") < tokens.index("review"), tokens
-    assert tokens[tokens.index("--agent") + 1] == "sz-dry-run", tokens
+    assert tokens.index("--agent=sz-dry-run") < tokens.index("review"), tokens
     assert "--detach" not in tokens
