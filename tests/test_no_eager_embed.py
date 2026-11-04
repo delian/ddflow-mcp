@@ -39,7 +39,8 @@ def test_cli_main_caps_blas_threads_unless_the_user_set_them():
     # the real entry point wires the cap (a removed call in cli.main fails here)
     main = (
         "import os, sys; from ddflow.surfaces import cli; "
-        "cli.main(['--version']); print(os.environ.get('OPENBLAS_NUM_THREADS'))"
+        "import atexit; atexit.register(lambda: print(os.environ.get('OPENBLAS_NUM_THREADS'))); "
+        "cli.main(['--version'])"
     )
     assert _run(["-c", main])[1] == "1"
     assert _run(["-c", main], OPENBLAS_NUM_THREADS="4")[1] == "4"
