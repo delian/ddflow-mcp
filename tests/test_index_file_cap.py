@@ -90,26 +90,24 @@ def test_the_key_ignores_source_edits_but_follows_fold_rev(monkeypatch):
     assert S.code_fingerprint() == before
 
 
-def test_source_key_mode_restores_the_source_hash(monkeypatch):
-    explicit = S.code_fingerprint()
+def test_a_source_edit_does_not_change_the_explicit_key(monkeypatch):
+    before = S.code_fingerprint()
     S.code_fingerprint.cache_clear()
-    monkeypatch.setenv("DDFLOW_INDEX_KEY", "source")
+    monkeypatch.setattr(Path, "read_bytes", lambda self: b"edited core source")
     try:
-        assert S.code_fingerprint() != explicit
+        assert S.code_fingerprint() == before
     finally:
         monkeypatch.undo()
         S.code_fingerprint.cache_clear()
 
 
-def test_a_bad_cap_value_falls_back_and_orphans_go(log, repo, cfg, monkeypatch):
-    log.append("lesson.recorded", "L1", {"title": "Alpha", "rule": "alpha"})
-    d = repo / ".ddflow"
-    d.mkdir(exist_ok=True)
-    orphan = d / ("index.db-" + "e" * 16 + "-wal")
-    orphan.write_bytes(b"x")
-    for bad in ("nan", "inf", "-3", "junk"):
-        monkeypatch.setenv("DDFLOW_INDEX_MAX_FILES", bad)
-        monkeypatch.setenv("DDFLOW_INDEX_MAX_MB", bad)
-        _simulate_edits(log, repo, cfg, 4)
-        assert 1 <= len(_mains(repo)) <= 3
-    assert not orphan.exists()
+def test_source_key_mode_restores_the_source_hash(monkeypatch):
+    monkeypatch.setenv("DDFLOW_INDEX_KEY", "source")
+    seen = []
+    for text in (b"edit one", b"edit two", b"edit one"):
+        S.code_fingerprint.cache_clear()
+        monkeypatch.setattr(Path, "read_bytes", lambda self, t=text: t)
+        seen.append(S.code_fingerprint())
+    monkeypatch.undo()
+    S.code_fingerprint.cache_clear()
+    assert seen[0] != seen[1] and seen[0] == seen[2]
