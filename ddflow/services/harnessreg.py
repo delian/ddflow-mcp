@@ -360,9 +360,7 @@ def parse(text: str, name: str) -> Harness:
 
 def _parse_dir(directory: Path) -> tuple[Harness, ...]:
     """Every descriptor under ``directory``, ranked, each file's id checked against its name."""
-    found = [
-        parse(p.read_text(encoding="utf-8"), p.stem) for p in sorted(directory.glob("*.toml"))
-    ]
+    found = [parse(p.read_text(encoding="utf-8"), p.stem) for p in sorted(directory.glob("*.toml"))]
     ranks: dict[int, str] = {}
     for h in found:
         if h.rank in ranks:
