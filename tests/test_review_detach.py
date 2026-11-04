@@ -176,6 +176,21 @@ def test_relaunch_argv_strips_only_the_flag_never_a_positional_detach():
     assert CR._relaunch_argv(["--", "--detach"]) == ["--", "--detach"]
 
 
+def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_lease():
+    from ddflow.surfaces.commands import review as CR
+
+    # A detached review relaunched with a DERIVED identity holds no lease to renew: the
+    # holder's lease lapses over a long round (bug B-lease-ttl-expires-during-review). The
+    # relaunch must re-declare the resolved id so the run heartbeats as the holder.
+    assert CR._detach_argv(["--detach", "T1", "--delta"], "role") == ["--agent", "role", "T1", "--delta"]
+    # a typed `--agent` is replaced by the resolved one, not duplicated
+    assert CR._detach_argv(["--agent", "shell-alias", "T1", "--detach"], "role") == [
+        "--agent", "role", "T1",
+    ]  # fmt: skip
+    # a positional `--detach` past `--` is not the flag, and past-`--` tokens stay
+    assert CR._detach_argv(["--detach", "--", "--detach"], "role") == ["--agent", "role", "--", "--detach"]
+
+
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
     _setup(repo, tmp_path)
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}

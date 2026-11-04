@@ -201,6 +201,29 @@ def _relaunch_argv(raw: list[str]) -> list[str]:
     return [x for x in raw[:cut] if x != "--detach"] + raw[cut:]
 
 
+def _detach_argv(raw: list[str], agent: str) -> list[str]:
+    """`_relaunch_argv`, with the RESOLVED identity re-declared as `--agent <agent>` so the
+    detached review runs -- and therefore heartbeats -- as the lease's HOLDER, not as a
+    freshly derived id that holds no lease to renew (bug B-lease-ttl-expires-during-review:
+    a 90-minute TTL lapsed during four long rounds, and the agent lost its claim because the
+    detached round never renewed it). An explicit `--agent` someone typed before the `--` is
+    replaced by the resolved one; a positional `--detach` past `--` stays untouched."""
+    cut = raw.index("--") if "--" in raw else len(raw)
+    head = [t for t in raw[:cut] if t != "--detach"]
+    # Drop any `--agent <x>` pair already typed, then re-declare the resolved id first.
+    kept: list[str] = []
+    skip = False
+    for t in head:
+        if skip:
+            skip = False
+            continue
+        if t == "--agent":
+            skip = True
+            continue
+        kept.append(t)
+    return ["--agent", agent, *kept] + raw[cut:]
+
+
 def _detach(a, c: Ctx) -> int:
     """`--detach`: this review in its OWN session, streamed to a job log (bug Be927e56fb6).
 
@@ -208,9 +231,10 @@ def _detach(a, c: Ctx) -> int:
     large diff against remote reviewers outlasts the limit, so only "[killed]" ever showed.
     Relaunching through the job launcher (`setsid`) means the cut reaches only this command,
     which has already returned: the review runs on, and every line it says lands in a log a
-    killed process cannot lose.
+    killed process cannot lose. The relaunch re-declares the resolved identity so the long
+    rounds renew the holder's lease (`_detach_argv`).
     """
-    argv = _relaunch_argv(list(getattr(a, "_argv", [])))
+    argv = _detach_argv(list(getattr(a, "_argv", [])), c.log.agent_id)
     if not argv:
         print("--detach needs the review's own arguments to relaunch", file=sys.stderr)
         return FAIL
@@ -219,7 +243,7 @@ def _detach(a, c: Ctx) -> int:
         a.id[0] if a.id else "",
         shlex.join([sys.executable, "-m", "ddflow", *argv]),
         cwd=str(c.called_from),
-        agent=c.requested_agent,
+        agent=c.log.agent_id,
     )
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
