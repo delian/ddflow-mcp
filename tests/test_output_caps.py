@@ -122,6 +122,16 @@ def test_one_oversized_row_is_clipped_so_the_cap_holds():
     assert out.data["truncated"]["clipped_to"] <= 500 and "long values cut" in out.data["_footer"]
 
 
+def test_a_row_of_many_fields_still_fits_and_a_default_locked_run_hides_the_lift():
+    row = {f"f{i}": "a" * 100 for i in range(200)}
+    out = OC.apply(None, O.ok("next", blocked=[row]), "next", cfg=_cfg(max_chars=3000), wire=True)
+    assert len(json.dumps(out.data["blocked"])) < 1500
+    locked = OC.apply(None, _out(120), "next", cfg=_cfg(allow_full=False))
+    assert "all" not in locked.data["truncated"] and "full_cli" not in locked.data["next"]
+    stale = O.ok("next", blocked=_out(120).data["blocked"], truncated={"all": "old"})
+    assert "all" not in OC.apply(None, stale, "next", cfg=_cfg(allow_full=False)).data["truncated"]
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))

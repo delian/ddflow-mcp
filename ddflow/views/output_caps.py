@@ -233,6 +233,13 @@ def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[
             break
     if clipped != work:
         info["clipped_strings"] = n
+    if _size({k: v for k, v in clipped.items() if k != "text"}) > budget:
+        # Last resort: still over (a row of hundreds of fields). Each list keeps one marker
+        # row, so the cap holds; the footer names the call that shows the rows.
+        for k, v in clipped.items():
+            if isinstance(v, list) and not k.startswith("_") and v:
+                clipped[k] = [{"cut": f"{len(v)} row(s) too large for [output].max_chars"}]
+                info[k] = len(v)
     return clipped
 
 
@@ -267,7 +274,7 @@ def apply(
     ``text`` when it has one), and the footer in `take_note()` for the MCP layer."""
     _NOTE.set("")
     conf = _conf(repo, cfg)
-    full_refused = bool(full) and not conf.allow_full
+    full_refused = not conf.allow_full  # locked: no call can lift the cap, asked for or not
     if (full and conf.allow_full) or not isinstance(out.data, dict) or not out.data:
         return out
     # A locked organisation (`allow_full = false`) is not undone by a 0 in the environment.
@@ -308,6 +315,7 @@ def _annotate(
         "chars_cut": cut_chars,
         **({"clipped_to": info["clipped_strings"]} if "clipped_strings" in info else {}),
     }
+    work["truncated"].pop("all", None)
     if not full_refused:
         work["truncated"]["all"] = (
             f"`{COMMANDS[command][0]} --full` (MCP: `{COMMANDS[command][1]} full=true`) "
