@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from ._docs import declare, int_at_least, knob
 from .enforce import BLOCK_WARN_OFF
 
-
 PROBE_AT = ("claim", "gate", "merge")
 
 

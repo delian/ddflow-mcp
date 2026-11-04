@@ -38,7 +38,7 @@ COMMANDS: tuple[Command, ...] = (
             "base",
             "why",
             "text",
-        ),  # fmt: skip
+        ),
         render=lambda out, a: out.data["text"],
         cli=CliPolicy(body_always=True),
         params=(

@@ -22,6 +22,8 @@ from . import ci as CI
 
 CLEAN, CONFLICT, UNAVAILABLE = "clean", "conflict", "unavailable"
 MERGE_TREE, SCRATCH, NONE = "merge-tree", "scratch-merge", "none"
+#: git's answer to an option it does not know (2.43 to `merge-tree --quiet`).
+USAGE = 129
 
 #: Said in every result text: what "clean" does and does not promise.
 LIMIT = (
@@ -120,6 +122,6 @@ def run(
         return Probe(CLEAN, MERGE_TREE, (), a, b)
     if r.code == 1:
         return Probe(CONFLICT, MERGE_TREE, _parse(r.out_bytes or b""), a, b)
-    if r.code == 129:  # an option this git does not know: the scratch merge answers instead
+    if r.code == USAGE:  # an option this git does not know: the scratch merge answers instead
         return _scratch(repo, a, b)
     return Probe(UNAVAILABLE, MERGE_TREE, (), a, b, (r.err or r.out)[-300:])
