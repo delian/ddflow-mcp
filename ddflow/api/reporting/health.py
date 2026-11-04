@@ -326,7 +326,9 @@ def doctor(
     events = repair_ctx.events
     store = Store(repo, cfg)
     with _check(timings, "startcost"):
-        cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
+        cost = SC.report(
+            repo, cfg, agent, start_texts
+        )  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
     with _check(timings, "integrity"):
         problems, notes = RP.integrity(repair_ctx)
