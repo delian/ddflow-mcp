@@ -1,0 +1,2 @@
+{"agent":"Monster3-ddflow-repro-tod45zva-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e45037647e638410f642e32c5","kind":"ddflow.seen","lamport":136970,"schema":1,"subject":"ddflow","ts":"2026-11-04T22:23:24.175976Z"}
+{"agent":"Monster3-ddflow-repro-tod45zva-7267fe","data":{"evidence":{"note":""},"result":"15"},"id":"e8f92549515c11220870a4f4c","kind":"cadence.ran","lamport":136971,"schema":1,"subject":"NOPE","ts":"2026-11-04T22:23:24.221084Z"}
