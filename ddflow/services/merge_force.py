@@ -99,6 +99,8 @@ def authorise(
 ) -> tuple[dict[str, Any] | None, str]:
     """(stamp, refusal): the override's authority. A person's `--force` needs none; an agent
     spends ``approval`` here, so the caller must run this AFTER every other refusal."""
+    if not a.refuses:
+        return None, ""  # nothing is unsettled, or the mode only warns: no override is needed
     by_agent = bool(AP.agent_marker(agent))
     if not force:
         return None, refusal(item, a, by_agent=by_agent)

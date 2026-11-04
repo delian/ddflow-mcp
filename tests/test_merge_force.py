@@ -135,8 +135,18 @@ def test_the_approval_is_single_use(repo, refuse):
     _claimed(repo)
     ask = _approved_ask(repo)
     assert _merge(repo, force=True, approval=ask).exit == 0
-    again = _merge(repo, force=True, approval=ask)
+    assert _asks(repo)[ask]["used"] == 1
+    # the same approval on a second unsettled item is refused as spent, not as "merged"
+    run_cli(repo, "task", "add", "T2", "--title", "b", "--globs", "b.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T2")
+    tree2 = Path(json.loads(out)["worktree"])
+    (tree2 / "b.py").write_text("y = 1\n")
+    _git(tree2, "add", "b.py")
+    _git(tree2, "commit", "-qm", "add b")
+    again = api.merge_item(repo, "T2", agent="bot", force=True, approval=ask)
     assert again.exit == 3
+    assert _asks(repo)[ask]["used"] == 1
+    assert not [e for e in _events(repo, "worktree.merged") if e.subject == "T2"]
 
 
 def test_a_refused_call_does_not_spend_the_approval(repo, refuse):
@@ -173,3 +183,10 @@ def test_the_knob_is_registered_and_defaults_to_warn(repo):
     assert code == 0, err
     line = next(l for l in out.splitlines() if "merge.require_gates" in l)
     assert "warn" in line
+
+
+def test_authorise_needs_nothing_when_nothing_refuses():
+    a = MF.Assessment(mode="refuse", unmet={})
+    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "")
+    warn = MF.Assessment(mode="warn", unmet={"ci": "not run"})
+    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (None, "")
