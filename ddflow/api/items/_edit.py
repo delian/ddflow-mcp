@@ -21,6 +21,7 @@ from ...core import outcome as O
 from ...core import schedule as SCH
 from ...core.flow import line_order
 from ...infra import worktree as W
+from ...services import items as IT
 from ...services import landed as LD
 from ...services import leases as L
 from ...services import waiting as WG
@@ -191,6 +192,8 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
     _adjust_list(it, edit, fields, "needs")
     _adjust_list(it, edit, fields, "tags")
     _adjust_globs(it, edit, fields)
+    if bad := IT.unknown_needs(st, fields.get("needs")):
+        return O.failed("item.updated", f"{it.id}: {bad}", id=it.id)
     moved = IM.plan(cfg, st, it, edit.parent, edit.kind, _line_frozen, fields.get("needs"))
     if isinstance(moved, str):
         make = O.refused if isinstance(moved, IM.Refusal) else O.failed
