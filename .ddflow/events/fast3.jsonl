@@ -5,3 +5,4 @@
 {"agent":"fast3","data":{"at":1793807703.3485212,"branch":"ddflow/fix-B2efda94671","holder":"fast3","worktree":".ddflow/worktrees/fix-B2efda94671"},"id":"ea4d909d6c4c1343ccf27e11b","kind":"lease.renewed","lamport":135131,"schema":1,"subject":"fix-B2efda94671","ts":"2026-11-04T15:55:08.162300Z"}
 {"agent":"fast3","data":{},"id":"e6bc7aea243cdd45414665b8a","kind":"item.started","lamport":135133,"schema":1,"subject":"fix-B2efda94671","ts":"2026-11-04T15:55:10.429132Z"}
 {"agent":"fast3","data":{"sha":"d904702498c464b8db1f59781579fac7c3ea5660"},"id":"ee2a1226408939d69b9c5b78d","kind":"item.reworked","lamport":135135,"schema":1,"subject":"fix-B2efda94671","ts":"2026-11-04T15:55:10.780032Z"}
+{"agent":"fast3","data":{"by":"fast3","event":"e898d406e10500885423ca0d4","holder":"fast3","note":""},"id":"e3756131fa18023ba56fd738e","kind":"lease.released","lamport":135192,"schema":1,"subject":"fix-B2efda94671","ts":"2026-11-04T16:00:27.791288Z"}
