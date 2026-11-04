@@ -371,8 +371,9 @@ def test_a_file_with_no_markers_is_refused_until_force_appends_the_regions(repo)
     p.write_text("# Ours\n\nMail us.")
     cfg = Config.load(repo)
     assert ops.state_of(repo, cfg, load(repo, []), _spec(cfg))[0] == "hand-edited"
-    res = _write(repo, [])
-    assert res.action == "unchanged" and any("not inserted" in n for n in res.notes)
+    with pytest.raises(ExportError, match="--force"):
+        _write(repo, [])
+    assert _write(repo, [], check=True).code == 1  # never "fresh": none of it is in the file
     assert p.read_text() == "# Ours\n\nMail us."
     res = _write(repo, [], force=True)
     text = p.read_text()
@@ -405,6 +406,15 @@ def test_a_created_file_with_redacted_text_is_not_read_back_as_hand_edited(repo)
     text = (repo / "SECURITY.md").read_text()
     assert "10.1.2.3" not in text
     assert not any(r.edited for r in RG.parse(text))
+
+
+def test_a_region_the_file_lacks_reaches_the_person_who_ran_the_update(repo):
+    _write(repo, [])
+    p = repo / "SECURITY.md"
+    gone = next(r for r in RG.parse(p.read_text()) if r.name == "known-issues")
+    p.write_text(p.read_text()[: gone.begin])
+    out = api.export_documents(repo, "security", update=True)
+    assert out.exit == 0 and "known-issues" in out.data["results"][0]["message"]
 
 
 @pytest.mark.parametrize("where", [".github/SECURITY.md", "docs/SECURITY.md"])

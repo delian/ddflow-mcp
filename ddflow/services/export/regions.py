@@ -221,9 +221,10 @@ def write_named(
     """Create ``target`` from ``rendered`` (the whole render), or splice its regions.
 
     The file is written under the export lock in one atomic replace. A region the file has
-    that was edited by hand is refused without ``force``; a region it lacks is only reported
-    without ``force``, which appends it. ``notes`` on the result report missing, appended,
-    migrated and orphaned regions. A new file's markers are rewritten from the bodies, because
+    that was edited by hand is refused without ``force``. A region it lacks is reported, or
+    appended by ``force``; with none of the document's regions the file is refused without
+    ``force``, as ``write.write_region`` does, and is never "fresh". ``notes`` on the result
+    report missing, appended, migrated and orphaned regions. A new file's markers are rewritten from the bodies, because
     ``rendered`` may have been redacted after the template computed their digests.
     """
     bodies = extract(rendered, doc)
@@ -234,7 +235,7 @@ def write_named(
         path, rel = W.safe_target(repo, target)
         old = W._read(path)
         if old is None:
-            created = splice(rendered, doc, bodies).text
+            created = splice(rendered, doc, bodies, bare_doc=bare_doc).text
             return W._finish(path, rel, None, created, check=check, diff=diff, refuse="")
         sp = splice(old, doc, bodies, bare_doc=bare_doc)
         refuse = ""
@@ -244,7 +245,10 @@ def write_named(
                 "wrote them; refusing to overwrite (--force to replace)"
             )
         added: tuple[str, ...] = ()
-        if force and sp.missing:
+        none_here = len(sp.missing) == len(bodies)  # nothing of the document is in the file
+        if none_here and not force:
+            refuse = f"{rel} has no ddflow region for {doc!r}: add the markers, or --force to append them"
+        if force or none_here:
             added = sp.missing
             sp = replace(sp, text=_appended(sp.text, doc, bodies, added), missing=())
         res = W._finish(path, rel, old, sp.text, check=check, diff=diff, refuse=refuse)
