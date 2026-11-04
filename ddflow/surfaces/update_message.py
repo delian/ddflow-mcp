@@ -17,6 +17,12 @@ def update_message(item: str, data: dict) -> str:
                 f"\n  dropped:   {', '.join(data['globs_dropped'])}  (--globs replaces "
                 f"the list; pass every glob, old and new, to keep them)"
             )
+        if data.get("globs_withheld"):
+            msg += (
+                f"\n  withheld:  {', '.join(data['globs_withheld'])}  (overlap another "
+                f"agent's live lease; re-run with them AND the globs above once that "
+                f"holder is done, since --globs replaces the list)"
+            )
     for name in ("needs", "tags"):
         if data.get(f"{name}_dropped"):
             msg += (

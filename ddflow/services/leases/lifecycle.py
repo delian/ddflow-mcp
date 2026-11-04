@@ -104,6 +104,34 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     return ok
 
 
+def _clash_rule(
+    item_id: str,
+    it: Item,
+    other_id: str,
+    text: str,
+    keep: list[str],
+    keep_partial: bool,
+) -> tuple[list[str] | None, str]:
+    """The accepted globs and a refusal ("") for a widening that clashes with a live lease.
+
+    B-ddflow-glob-widen-refused-broad: a widening that only PARTLY overlaps another
+    agent's live lease takes the non-overlapping subset instead of refusing the whole
+    list. Only a WIDENING applies: the accepted subset must retain every glob the item
+    already holds, or the request still refuses (a narrow that drops a held glob, and a
+    repeat ask of the same held globs, are not widenings and stay refusals).
+    """
+    if keep and keep_partial and set(keep) > set(it.globs):
+        return keep, ""
+    return None, (
+        f"{item_id} is claimed, so its globs are its lease: {text}. The globs were not "
+        f"changed; your lease stays as it is and the request is recorded as waiting. "
+        f"Do not poll. Try narrower globs: drop the overlapping ones"
+        f"{' (' + ','.join(keep) + ' would be accepted)' if keep else ''}, "
+        f"name the exact files {other_id}'s holder does not change, or ask again when "
+        f"{other_id} is done."
+    )
+
+
 def plan_retarget(
     log: EventLog,
     cfg: Config,
@@ -112,9 +140,16 @@ def plan_retarget(
     resources: list[str] | None = None,
     *,
     now: float | None = None,
-) -> tuple[Lease | None, str]:
-    """(the LIVE lease to point at ``globs`` / ``resources`` or None, why that is refused
-    or "").
+    keep_partial: bool = False,
+) -> tuple[Lease | None, str, list[str] | None]:
+    """(the LIVE lease to point at ``accepted`` globs / resources or None, why that is refused
+    or "", and the globs actually to write -- the full ``globs`` when all were accepted, their
+    non-overlapping subset when some were withheld, or None when ``globs`` is None).
+
+    ``keep_partial`` (default off) lets a widening that only PARTLY overlaps another agent's
+    live lease take the non-overlapping subset instead of refusing the whole list
+    (B-ddflow-glob-widen-refused-broad). The default stays all-or-nothing for ``batch`` and
+    the heartbeat catch-up, whose contracts promise that a refusal records nothing.
 
     ``now`` (default: the clock) is the instant the lease is judged live at: the heartbeat
     that revived a lapsed lease passes the instant it renewed it, so a slow process cannot
@@ -140,24 +175,24 @@ def plan_retarget(
     it = state.items.get(item_id)
     lz = it.lease if it else None
     if it is None or lz is None or not lz.live(now, cfg.lease.grace_s):
-        return None, ""
+        return None, "", None
+    accepted = globs
     clash = _clash_text(log, cfg, state, it, globs, now) if globs is not None else None
     if clash:
         other_id, text, keep = clash
-        return lz, (
-            f"{item_id} is claimed, so its globs are its lease: {text}. The globs were not "
-            f"changed; your lease stays as it is and the request is recorded as waiting. "
-            f"Do not poll. Try narrower globs: drop the overlapping ones"
-            f"{' (' + ','.join(keep) + ' would be accepted)' if keep else ''}, "
-            f"name the exact files {other_id}'s holder does not change, or ask again when "
-            f"{other_id} is done."
-        )
-    if globs is not None:
-        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, globs, now)
+        accepted, refusal = _clash_rule(item_id, it, other_id, text, keep, keep_partial)
+        if refusal:
+            return lz, refusal, None
+    if globs is not None and accepted:
+        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, accepted, now)
         if ahead is not None:
-            return lz, (
-                f"{item_id}: those globs are queued behind {ahead.holder} ({ahead.item}), who "
-                f"asked for them first. The globs were not changed."
+            return (
+                lz,
+                (
+                    f"{item_id}: those globs are queued behind {ahead.holder} ({ahead.item}), who "
+                    f"asked for them first. The globs were not changed."
+                ),
+                None,
             )
     if resources:
         try:
@@ -168,14 +203,18 @@ def plan_retarget(
                 exclude=item_id,
             )
         except ValueError as exc:
-            return lz, f"{item_id}: {exc}. Nothing was recorded."
+            return lz, f"{item_id}: {exc}. Nothing was recorded.", None
         if short:
-            return lz, (
-                f"{item_id} is claimed, so its resources are its lease's reservation: "
-                f"{item_id} {short}. Nothing was recorded. Wait for one to be released, "
-                f"or ask for less."
+            return (
+                lz,
+                (
+                    f"{item_id} is claimed, so its resources are its lease's reservation: "
+                    f"{item_id} {short}. Nothing was recorded. Wait for one to be released, "
+                    f"or ask for less."
+                ),
+                None,
             )
-    return lz, ""
+    return lz, "", accepted
 
 
 def retarget(

@@ -221,3 +221,34 @@ def test_a_merge_already_in_progress_is_never_aborted(repo, item):
         for e in EventLog(repo).read_all()
         if e.kind.startswith("gate.") and e.data.get("gate") == "merge"
     ]
+
+
+def test_a_stale_merge_head_is_cleared_and_the_merge_proceeds(repo):
+    """B1b8d31b8c6: a concluded merge left MERGE_HEAD pointing at an ancestor of HEAD with
+    nothing staged, so git refuses every later merge ("not concluded your merge"). `merge`
+    detects that stale state, clears it as `git merge --quit` would, and proceeds."""
+    run_cli(repo, "init")
+    (repo / "c.txt").write_text("base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "edit c", "--globs", "c.txt")
+    _, out, _ = run_cli(repo, "--json", "claim", "T1", agent="alpha")
+    one = Path(json.loads(out)["worktree"])
+    (one / "c.txt").write_text("one\n")
+    _git(one, "commit", "-qam", "first")
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == OK, out + err
+
+    head = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    (repo / ".git" / "MERGE_HEAD").write_text(head + "\n")
+    assert _mid_merge(repo)
+
+    run_cli(repo, "task", "add", "T2", "--title", "edit c again", "--globs", "c.txt")
+    _, out, _ = run_cli(repo, "--json", "claim", "T2", agent="beta")
+    two = Path(json.loads(out)["worktree"])
+    (two / "c.txt").write_text("two\n")
+    _git(two, "commit", "-qam", "second")
+    code, out, err = run_cli(repo, "merge", "T2", agent="beta")
+    assert code == OK, out + err
+    assert not _mid_merge(repo), "the stale MERGE_HEAD was not cleared"
+    assert _git(repo, "show", "main:c.txt").stdout == "two\n"

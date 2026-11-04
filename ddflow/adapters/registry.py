@@ -152,8 +152,14 @@ class Registry(Mapping[str, T], Generic[T]):
                 if m.name.startswith(self._prefix):
                     importlib.import_module(f"{self._package}.{m.name}")
         if self._loader is not None:
-            for item in list(self._loader()):  # all of them first: a failure registers none
-                self.register(item)
+            before = dict(self.table)
+            try:
+                for item in list(self._loader()):  # all of them first: a failure registers none
+                    self.register(item)
+            except BaseException:
+                self.table.clear()
+                self.table.update(before)
+                raise
         self._ready = True
 
     def get_or_raise(self, name: str) -> T:

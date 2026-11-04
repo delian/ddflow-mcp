@@ -99,14 +99,24 @@ def test_the_config_knob_is_honoured_by_the_real_entry_points(repo):
         server._last_footer_at = 0.0
         M._obligation_footer(server)
 
-    for label, call in (
+    # Both knobs, and the SAME real entry points for each. The =false direction passes
+    # trivially when a call site hard-codes LogConfig(reuse_parsed=False), and a =true
+    # check that hand-picks `reporting.loops` leaves every other entry point untested — so
+    # only this loop sees a site that drops the =true knob (rubber_duck qwen3.8-flash
+    # #2/#6: the added block sat outside the loop and hard-coded reporting.loops).
+    entry_points = (
         ("api.loops", lambda: reporting.loops(repo)),
         ("api.progress", lambda: reporting.progress(repo)),
         ("mcp obligation footer", _footer),
-    ):
-        clear_parse_cache()
-        call()
-        assert not L._PARSE_CACHE, f"{label} ignored [log] reuse_parsed = false"
+    )
+    for setting, want_cache in (("false", False), ("true", True)):
+        cfgpath.write_text(f"[log]\nreuse_parsed = {setting}\n")
+        for label, call in entry_points:
+            clear_parse_cache()
+            call()
+            assert bool(L._PARSE_CACHE) is want_cache, (
+                f"{label} ignored [log] reuse_parsed = {setting}"
+            )
 
 
 def event_log_calls_without_config(src: str) -> list[int]:

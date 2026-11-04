@@ -149,6 +149,7 @@ class Skills:
 class Subagents:
     none: bool = False
     dir: str = ""
+    files: dict[str, str] = field(default_factory=dict)  #: repo path -> source under templates/
 
 
 @dataclass(frozen=True)
@@ -194,6 +195,7 @@ class Harness:
     detect: harnessv2.Detect | None = None
     headless: harnessv2.Headless | None = None
     continuation: harnessv2.Continuation | None = None
+    orchestration: harnessv2.Orchestration | None = None
     meters: harnessv2.Meters | None = None
     caps: harnessv2.Caps | None = None
     autonomy: harnessv2.Autonomy | None = None

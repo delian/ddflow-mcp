@@ -85,7 +85,7 @@ def cmd_item_update(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     msg = update_message(a.id, out.data)
-    c.out(msg, out.body(("id", "changed", "globs_dropped", "needs_dropped")))
+    c.out(msg, out.body(("id", "changed", "globs_dropped", "globs_withheld", "needs_dropped")))
     return OK
 
 

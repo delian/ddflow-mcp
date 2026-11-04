@@ -149,6 +149,13 @@ def test_a_loader_that_fails_midway_registers_nothing_and_the_error_is_the_real_
     assert r.names() == ["a", "b"]
 
 
+def test_a_loader_that_duplicates_a_key_registers_nothing():
+    r: Registry[int] = Registry("t", key=lambda _: "x", loader=lambda: [1, 2])
+    with pytest.raises(DuplicateName):
+        r.names()
+    assert r.table == {}  # atomic: nothing half-registered on a duplicate mid-fill
+
+
 def test_removing_a_name_from_a_loaded_registry_sticks():
     r = _reg(loader=lambda: ["a:1", "b:1"])
     r.unregister("a")  # before the first read: the registry is filled first

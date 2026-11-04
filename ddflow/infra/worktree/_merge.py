@@ -107,6 +107,54 @@ def merge_into(repo: Path, cfg: Config, target: str, source: str, *, message: st
         return r
 
 
+def _stale_merge_head(tree: Path) -> str:
+    """The MERGE_HEAD sha when it is a stale leftover, else "".
+
+    A concluded merge can leave MERGE_HEAD behind pointing at an ancestor of HEAD; git
+    then refuses every later merge with ``You have not concluded your merge (MERGE_HEAD
+    exists)`` and ``git merge --quit`` clears it (B1b8d31b8c6). Only an ancestor sha is
+    stale: a MERGE_HEAD not yet in HEAD is a merge genuinely in progress, so it stays
+    untouched. Staged files do not matter either way: a MERGE_HEAD already in HEAD means
+    its merge committed, and ``git merge --quit`` removes only MERGE_HEAD, never the index.
+    """
+    head = _W.git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+    if not head.ok or not head.out:
+        return ""
+    if not _W.git(tree, "merge-base", "--is-ancestor", head.out, "HEAD").ok:
+        return ""
+    return head.out
+
+
+def _premerge(tree: Path) -> tuple[G.GitResult | None, bool | None]:
+    """The pre-merge state, with a stale MERGE_HEAD cleared first.
+
+    Returns ``(refusal, was_merging)``. ``refusal`` is set only when a stale MERGE_HEAD
+    blocks the merge and clearing it failed; ``was_merging`` is what `merging` reported
+    AFTER a stale MERGE_HEAD was cleared (a merge genuinely in progress stays True, and is
+    always someone else's, never aborted).
+    """
+    was_merging = merging(tree)
+    if was_merging is not True:
+        return None, was_merging
+    stale = _stale_merge_head(tree)
+    if not stale:
+        return None, True
+    cleared = _W.git(tree, "merge", "--quit")
+    if not cleared.ok:
+        return (
+            G.GitResult(
+                GIT_REFUSED,
+                "",
+                f"a stale MERGE_HEAD ({stale}) already contained in HEAD blocks the merge, "
+                f"and clearing it failed ({cleared.err}): run `git -C {tree} merge --quit` "
+                f"by hand.",
+                attempted=False,
+            ),
+            None,
+        )
+    return None, False
+
+
 def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> G.GitResult:
     # NO blanket dirty check here. An earlier version refused whenever the primary had
     # any modified tracked file, on the stated grounds that "a merge would mix them
@@ -124,7 +172,9 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> G.GitResu
     elif cfg.worktree.merge_strategy == "squash":
         args.append("--squash")
     args += ["-m", message, source]
-    was_merging = merging(tree)
+    refusal, was_merging = _premerge(tree)
+    if refusal is not None:
+        return refusal
     r = _merge_retrying_stash(tree, args)
     if not r.ok and was_merging is True:
         r = G.GitResult(r.code, r.out, r.err, attempted=False)  # someone else's merge is open
