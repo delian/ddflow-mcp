@@ -211,7 +211,8 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
     guard reads `_relaunch_argv`'s answer, exactly the pre-fix empty test. An already-typed
     `--agent` (either the `--agent <v>` pair or the `--agent=<v>` form) is replaced by the
     resolved id; a positional `--detach` or `--agent` past `--` is an item name, not a flag,
-    and stays."""
+    and stays. The value is attached because an identity may start with a dash: as a separate
+    token argparse reads it as an option and the relaunch dies before reviewing anything."""
     stripped = _relaunch_argv(raw)
     if not stripped:  # nothing to relaunch: only the `--detach` flag was typed
         return []

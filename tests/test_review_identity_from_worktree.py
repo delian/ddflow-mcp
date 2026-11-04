@@ -1,13 +1,11 @@
-"""`ddflow review --detach` re-declares the caller's RESOLVED identity (bug
-B-review-identity-from-worktree-ignores-as-agent).
+"""`ddflow review --detach` relaunches under the caller's RESOLVED identity, whatever it is
+(bug B-review-identity-from-worktree-ignores-as-agent).
 
-The detach relaunch rebuilds its argv from the typed `sys.argv` and strips only
-`--detach`. An identity the caller holds over `as_agent`, `DDFLOW_AGENT` or a harness's
-`ddflow_identify` declaration never rides in argv, so the detached process -- now standing
-in a claimed worktree -- fell through `identity.resolve` to `default_agent_id` and recorded
-the review under ``<host>-<item>-<hash>`` instead of the role the agent actually plays.
-`_detach_argv` carries the resolved id through so shell, MCP and hooks attribute to one
-holder.
+An identity held over `as_agent`, `DDFLOW_AGENT` or `ddflow_identify` never rides in the typed
+argv, so `_detach_argv` re-declares it. `AGENT_NAME` and `DDFLOW_AGENT` both allow a leading
+dash, and `--agent -dry-run` as two tokens is an argparse error: the relaunch exits 2 with
+nothing reviewed. These tests read the relaunch through the real parser, so they pin the
+identity the child gets, not how the flag is spelled.
 """
 
 from __future__ import annotations
@@ -19,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from ddflow.core import outcome as O
+from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.commands import review as R
 from ddflow.surfaces.context import Ctx
 
@@ -37,6 +36,11 @@ def adopted(repo: Path) -> Path:
 
 def _ctx(repo: Path, agent: str = "") -> Ctx:
     return Ctx(argparse.Namespace(repo=str(repo), agent=agent, json=False))
+
+
+def _parsed_agent(argv: list[str]) -> str:
+    """The identity the relaunched process would read from `argv`."""
+    return build_parser().parse_args(argv).agent
 
 
 def test_detach_argv_redeclares_an_env_sourced_identity(adopted, monkeypatch):
@@ -65,14 +69,9 @@ def test_detach_argv_replaces_a_typed_agent(monkeypatch):
     ]
 
 
-def test_detach_argv_attaches_the_value_so_a_dash_id_cannot_misparse(monkeypatch):
-    """`--agent=<id>` attached: separate tokens would read a `-dry-run` value as its own
-    option, so the identity would still be lost in the relaunched parser."""
-    assert R._detach_argv(["review", "T1"], "-dry-run") == [
-        "--agent=-dry-run",
-        "review",
-        "T1",
-    ]
+def test_detach_argv_parses_back_to_a_dash_leading_identity():
+    """A `-dry-run` value in its own token is read as an option, and the parser exits."""
+    assert _parsed_agent(R._detach_argv(["review", "T1"], "-dry-run")) == "-dry-run"
 
 
 def test_detach_argv_keeps_a_positional_agent_past_the_separator(monkeypatch):
@@ -92,12 +91,12 @@ def test_detach_argv_is_empty_when_there_is_nothing_to_relaunch(monkeypatch):
     assert R._detach_argv(["--detach"], "sz-dry-run") == []
 
 
-def test_detach_launches_with_the_resolved_identity(adopted, monkeypatch):
-    """A detach with only `DDFLOW_AGENT` set (no `--agent` in argv) relaunches the review
-    carrying `--agent=<resolved>` before the `review` subcommand, and attributes the job to
-    the RESOLVED holder -- so the detached process does not derive the worktree id."""
+@pytest.mark.parametrize("identity", ["sz-dry-run", "-dry-run"])
+def test_detach_launches_with_the_resolved_identity(adopted, monkeypatch, identity):
+    """A detach with only `DDFLOW_AGENT` set (no `--agent` in argv) launches a command whose
+    own parser yields that identity, and attributes the job to the same holder."""
     monkeypatch.chdir(adopted)
-    monkeypatch.setenv("DDFLOW_AGENT", "sz-dry-run")
+    monkeypatch.setenv("DDFLOW_AGENT", identity)
 
     captured = {}
 
@@ -112,10 +111,8 @@ def test_detach_launches_with_the_resolved_identity(adopted, monkeypatch):
     assert R._detach(a, c) == O.OK
 
     assert captured["item"] == "T1"
-    # The job is attributed to the RESOLVED holder, matching the relaunched process.
-    assert captured["agent"] == "sz-dry-run", captured
+    assert captured["agent"] == identity, captured
     tokens = shlex.split(captured["cmd"])
-    # The command is `python -m ddflow <argv>`; `--agent=<resolved>` precedes the `review`
-    # subcommand so the top-level identity flag applies to the detached child.
-    assert tokens.index("--agent=sz-dry-run") < tokens.index("review"), tokens
     assert "--detach" not in tokens
+    # The command is `python -m ddflow <argv>`: everything past the module is the child's argv.
+    assert _parsed_agent(tokens[tokens.index("-m") + 2 :]) == identity, tokens
