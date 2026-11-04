@@ -70,16 +70,13 @@ class RepoFacts:
     def _worktree_heads(self) -> dict[str, str]:
         """HEAD object id by real worktree path, one `worktree list --porcelain`."""
         if self._heads is None:
-            heads: dict[str, str] = {}
-            r = G.run(self.repo, "worktree", "list", "--porcelain")
-            path = ""
-            if r.ok:
-                for line in r.out.splitlines():
-                    if line.startswith("worktree "):
-                        path = _real(line[len("worktree ") :])
-                    elif line.startswith("HEAD ") and path:
-                        heads[path] = line[len("HEAD ") :].strip()
-            self._heads = heads
+            try:
+                listed = W.list_worktrees(self.repo)
+            except G.GitError:  # could not tell: `head` then asks each tree for itself
+                listed = []
+            self._heads = {
+                _real(w["worktree"]): w.get("HEAD", "") for w in listed if "worktree" in w
+            }
         return self._heads
 
     def head(self, path: Path | str) -> str:
