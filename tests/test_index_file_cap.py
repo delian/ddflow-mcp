@@ -126,3 +126,17 @@ def test_a_newer_file_over_the_size_cap_does_not_outlive_an_older_one(log, repo,
     monkeypatch.setenv("DDFLOW_INDEX_MAX_MB", "1")
     S.collect_over_cap(d, keep.name)
     assert keep.exists() and not new.exists() and not old.exists()
+
+
+def test_a_bad_cap_value_falls_back_and_orphans_go(log, repo, cfg, monkeypatch):
+    log.append("lesson.recorded", "L1", {"title": "Alpha", "rule": "alpha"})
+    d = repo / ".ddflow"
+    d.mkdir(exist_ok=True)
+    orphan = d / ("index.db-" + "e" * 16 + "-wal")
+    orphan.write_bytes(b"x")
+    for bad in ("nan", "inf", "-3", "junk"):
+        monkeypatch.setenv("DDFLOW_INDEX_MAX_FILES", bad)
+        monkeypatch.setenv("DDFLOW_INDEX_MAX_MB", bad)
+        _simulate_edits(log, repo, cfg, 4)
+        assert 1 <= len(_mains(repo)) <= 3
+    assert not orphan.exists()
