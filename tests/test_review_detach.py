@@ -182,7 +182,9 @@ def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_le
     # A detached review relaunched with a DERIVED identity holds no lease to renew: the
     # holder's lease lapses over a long round (bug B-lease-ttl-expires-during-review). The
     # relaunch must re-declare the resolved id so the run heartbeats as the holder.
-    assert CR._detach_argv(["--detach", "T1", "--delta"], "role") == ["--agent", "role", "T1", "--delta"]
+    assert CR._detach_argv(["--detach", "T1", "--delta"], "role") == [
+        "--agent", "role", "T1", "--delta",
+    ]  # fmt: skip
     # a typed `--agent` is replaced by the resolved one, not duplicated
     assert CR._detach_argv(["--agent", "shell-alias", "T1", "--detach"], "role") == [
         "--agent", "role", "T1",
