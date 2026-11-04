@@ -20,7 +20,7 @@ from ddflow.infra.log import EventLog, clear_parse_cache
 from tests.test_log_merged_order import _ev, _put
 from tests.test_log_merged_order import _reference as _reference_ids
 
-CFG = LogConfig(snapshot_min_events=10)  # snapshot even a small test log
+CFG = LogConfig(snapshot=True, snapshot_min_events=10)  # snapshot even a small test log
 N = 1600  # events per shard; the rewrite floor is 1000 events
 
 
@@ -102,7 +102,7 @@ def test_a_big_log_writes_a_git_ignored_snapshot(repo):
 
 
 def test_a_small_log_writes_none(repo):
-    log = _log(repo, LogConfig(snapshot_min_events=5000))
+    log = _log(repo, LogConfig(snapshot=True, snapshot_min_events=5000))
     _put(log, "a", [_ev("a", i) for i in range(1, 2000)])
     log.read_all()
     assert not _snap(log).exists()
@@ -229,7 +229,9 @@ def test_off_means_no_snapshot_is_written_or_read(repo, monkeypatch, parses):
     for how in ("reuse_parsed", "env"):
         clear_parse_cache()
         cfg = (
-            LogConfig(snapshot_min_events=10, reuse_parsed=False) if how == "reuse_parsed" else CFG
+            LogConfig(snapshot=True, snapshot_min_events=10, reuse_parsed=False)
+            if how == "reuse_parsed"
+            else CFG
         )
         if how == "env":
             monkeypatch.setenv(L.SNAPSHOT_ENV, "0")
@@ -360,7 +362,7 @@ def test_over_the_memory_ceiling_the_snapshot_is_still_written_and_reaps_next_ti
     The writer must decouple persisting from holding: the read returns the log either way,
     the snapshot is still written (streamed, not held), the cache keeps at most the
     ceiling, and a later cold read is served from that snapshot with zero JSONL parses."""
-    cfg = LogConfig(snapshot_min_events=10, max_cached_events=N + N // 2)
+    cfg = LogConfig(snapshot=True, snapshot_min_events=10, max_cached_events=N + N // 2)
     log = _log(repo, cfg)
     _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
     _put(log, "b", [_ev("b", i) for i in range(1, N + 1)])
@@ -380,7 +382,7 @@ def test_over_the_ceiling_the_seeded_read_equals_the_full_read_and_rejects_a_tor
     folds byte-identically to read_all(snapshot=False), and a shard the gate doubts (the
     snapshot claims MORE bytes than a truncation left) is never served from the snapshot
     -- the fast path may only reject, never accept."""
-    cfg = LogConfig(snapshot_min_events=10, max_cached_events=N + N // 2)
+    cfg = LogConfig(snapshot=True, snapshot_min_events=10, max_cached_events=N + N // 2)
     log = _log(repo, cfg)
     _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
     _put(log, "b", [_ev("b", i) for i in range(1, N + 1)])

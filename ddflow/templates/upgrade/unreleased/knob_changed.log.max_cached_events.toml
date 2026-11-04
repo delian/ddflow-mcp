@@ -1,0 +1,7 @@
+[[change]]
+kind = "knob_changed"
+key = "log.max_cached_events"
+old = "100000"
+new = "200000"
+why = "A 132k-event log was over the in-process parse ceiling; the new default holds about 147 MB."
+effect = "A long-lived process may hold up to about 147 MB of parsed events instead of 74 MB."

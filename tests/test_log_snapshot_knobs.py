@@ -54,10 +54,14 @@ def test_the_environment_switch_still_wins_over_snapshot_true(repo, monkeypatch)
 
 
 def test_snapshot_min_events_is_the_size_threshold(repo):
-    big = _written(repo, LogConfig(snapshot_min_events=N * 10))
+    big = _written(repo, LogConfig(snapshot=True, snapshot_min_events=N * 10))
     assert not big._snapshot_path().exists(), "a log below the threshold got a snapshot"
     clear_parse_cache()
-    assert _written(repo, LogConfig(snapshot_min_events=N // 2))._snapshot_path().exists()
+    assert (
+        _written(repo, LogConfig(snapshot=True, snapshot_min_events=N // 2))
+        ._snapshot_path()
+        .exists()
+    )
 
 
 @pytest.mark.parametrize("days, kept", [(1, False), (30, True)])

@@ -19,8 +19,8 @@ class LogConfig:
         doc="Re-use already-parsed events instead of re-parsing the whole log on every read. Sound because the log is APPEND-ONLY: a line that has been parsed can never change, so only the appended tail is new. Measured at 20k events: JSON parsing is 97ms of a 115ms read (84%), so this is where the time is. Set false to always re-read from scratch — slower, and the only reason to want it is a shard being rewritten in place under a running process, which `ddflow doctor` reports as a content-address mismatch anyway.",
     )
     max_cached_events: int = knob(
-        100_000,
-        doc="Memory ceiling for reuse_parsed, in events. Measured at ~736 bytes per parsed event, so the 100,000 default holds ~74 MB in a long-lived MCP server. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
+        200_000,
+        doc="Memory ceiling for reuse_parsed, in events. Measured at ~736 bytes per parsed event, so the 200,000 default holds ~147 MB (a 132,555-event log fits) in a long-lived MCP server. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
     )
     redact_builtin_shapes: bool = knob(
         True,
@@ -52,12 +52,17 @@ class LogConfig:
     )
     #: The on-disk read snapshot (B166) as knobs (B-log-snapshot-knobs).
     snapshot: bool = knob(
-        True,
-        doc="Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over this setting.",
+        False,
+        doc="Off by default since a measurement (R-scalability): at 132k events a cold load takes 3.6 s with the snapshot and 2.8 s without, 27 s against 15 s at 1M, and each fingerprint costs ~95 MB. Turning it off also deletes snapshot files an earlier setting left. Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over this setting.",
     )
     snapshot_min_events: int = knob(
         5000,
         doc="No snapshot is written below this many events: a cold parse is cheap there and a file is not free. Lower it to snapshot a small log (tests do), raise it to snapshot only a large one. 0 removes this threshold only: a snapshot is still rewritten just when at least 1000 events (or a tenth of what it already covers) have been added.",
+        check=int_at_least(0),
+    )
+    snapshot_max_mb: int = knob(
+        256,
+        doc="Size cap for the read snapshot, in megabytes: a snapshot that would exceed it is not kept, and when the snapshots of all versions together exceed it the oldest of the others are collected. 0 keeps none.",
         check=int_at_least(0),
     )
     snapshot_stale_days: int = knob(
