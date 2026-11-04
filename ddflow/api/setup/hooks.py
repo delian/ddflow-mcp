@@ -57,6 +57,16 @@ def _state_line(known: tuple[bool | None, str], missing: str) -> str:
     return "installed" if on else missing
 
 
+def _hook_spec(agent: str, name: str) -> CH.HookSpec | None:
+    """`CH.spec(agent, name)` without its KeyError: only claude carries the
+    session-start/pre-compact/pre-tool hooks, so a non-claude default harness has none."""
+
+    for h in CH.HOOKS:
+        if h.agent == agent and h.name == name:
+            return h
+    return None
+
+
 def _prompt_hook_line(repo: Path) -> str:
 
     return "; ".join(
@@ -67,13 +77,17 @@ def _prompt_hook_line(repo: Path) -> str:
 
 
 def _precompact_line(repo: Path) -> str:
-    h = CH.spec(HR.default_id(), "pre-compact")
+    h = _hook_spec(HR.default_id(), "pre-compact")
+    if h is None:
+        return "not installed (ddflow has no PreCompact hook for this harness)"
     return _state_line(CH.state_spec(repo, h), f"not installed (`ddflow hooks install {h.flag}`)")
 
 
 def _pretool_line(repo: Path) -> str:
 
-    h = CH.spec(HR.default_id(), "pre-tool")
+    h = _hook_spec(HR.default_id(), "pre-tool")
+    if h is None:
+        return "not installed (ddflow has no PreToolUse hook for this harness)"
     return _state_line(
         CH.state_spec(repo, h),
         f"not installed (`ddflow hooks install {h.flag}` refuses pkill, git stash, git push and "
@@ -388,13 +402,17 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             f"\n\nNOTE: the policy is 'block' but {missing}, so nothing enforces "
             f"it. {_hook_remedy(commit_hook, 'check-commit')}."
         )
-    start = CH.spec(HR.default_id(), "session-start")
-    known = CH.state_spec(repo, start)
+    start = _hook_spec(HR.default_id(), "session-start")
+    if start is None:
+        known = (False, "")
+        session_line = "not installed (ddflow has no SessionStart hook for this harness)"
+    else:
+        known = CH.state_spec(repo, start)
+        session_line = _state_line(
+            known,
+            f"not installed (`ddflow hooks install {start.flag}` puts the brief in every session)",
+        )
     session = known[0]
-    session_line = _state_line(
-        known,
-        f"not installed (`ddflow hooks install {start.flag}` puts the brief in every session)",
-    )
     msg_armed = E.armed(repo, "commit-msg")
     msg_hook = bool(msg_armed.via)
     trailer_line = _hook_line("commit-msg", msg_armed)
@@ -405,13 +423,17 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             " -- but [enforce].require_item_trailer is ON, so NOTHING checks it. "
             f"{_hook_remedy(msg_armed, 'check-msg')}."
         )
+    # The SessionStart/PreCompact/PreToolUse hook specs come from the DEFAULT harness
+    # (`CH.spec(HR.default_id(), ...)`), so their label must follow the same source rather
+    # than hard-coding one harness (bug B-setup-hooks-status-claude-label).
+    hr_title = HR.title_of(HR.default_id())
     message = (
         f"{_hook_line('pre-commit', commit_hook)}\n"
         f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
         f"{trailer_line}\n"
-        f"Claude Code SessionStart hook: {session_line}\n"
-        f"Claude Code PreCompact hook: {_precompact_line(repo)}\n"
-        f"Claude Code PreToolUse hook: {_pretool_line(repo)}\n"
+        f"{hr_title} SessionStart hook: {session_line}\n"
+        f"{hr_title} PreCompact hook: {_precompact_line(repo)}\n"
+        f"{hr_title} PreToolUse hook: {_pretool_line(repo)}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
 
