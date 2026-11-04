@@ -296,6 +296,18 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="land a branch with no commits ahead of its target (refused by default: it would record the item merged with nothing landed)",
             ),
             Param(
+                "force",
+                type="boolean",
+                help="With [merge].require_gates = refuse: land although required gates are unsettled; recorded as a merge.forced event naming them. An agent also needs `approval`.",
+                cli_help="with [merge].require_gates = refuse: land although required gates are unsettled (recorded as merge.forced). An agent also passes --approval",
+            ),
+            Param(
+                "approval",
+                help="An agent's way past [merge].require_gates = refuse with `force`: 'request' asks the operator, then the approval id they answered (bound to this exact merge, single-use, not spent by a refused call).",
+                cli_help="an agent: 'request' files an approval request for forcing this merge (the operator answers in chat), then the approval id",
+                default="",
+            ),
+            Param(
                 "branch",
                 help="no_worktree items: the branch to land (default: the one checked out where this runs). Changes outside the item's globs come back as outside_globs.",
                 cli_help="for an item claimed without a worktree: the branch to land (default: the one checked out in the worktree you are standing in)",
@@ -316,6 +328,8 @@ COMMANDS: tuple[Command, ...] = (
             "model",
             "allow_dirty",
             "allow_empty",
+            "force",
+            "approval",
             "branch",
         ),
     ),

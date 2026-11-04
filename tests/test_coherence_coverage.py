@@ -68,6 +68,7 @@ _CONFIG = "who changed a setting or approved a tool; the setting itself lives in
 #: Every other kind, and why it is not duplicate-checked. The gate records of an item
 #: (`GATE_RECORDS`, state) are exempt by name below.
 EXEMPT: dict[str, str] = {
+    "merge.forced": "gate names and an approval stamp only; no claim about code to check",
     "probe.recorded": "a machine record of a conflict probe: refs, shas and paths, no authored text",
     "suggestion.expired": "a state move carries no text that is compared for duplicates (services.handoff)",
     "suggestion.superseded": "a state move carries no text that is compared for duplicates (services.handoff)",

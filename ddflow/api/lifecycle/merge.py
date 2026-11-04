@@ -18,6 +18,7 @@ from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
+from ...services import merge_force as MF
 from ...services import pins_dirt as PD
 from ...services import pins_merge as PM
 from ...services.cleanup import (  # noqa: F401  (re-exported)
@@ -69,6 +70,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     shell_cwd: Path | None = None,
     agent: str = "",
     allow_empty: bool = False,
+    force: bool = False,
+    approval: str = "",
     on_progress=None,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
@@ -177,6 +180,17 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     bad = F.problems(cfg)
     if bad:
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+    # Last of the refusals: an agent's approval is spent here, so no refusal above is its cost.
+    gates = MF.assess(repo, cfg, st, item)
+    forced_by = None
+    if gates.refuses:
+        forced_by, why = MF.authorise(
+            log, cfg, item, gates, force=force, approval=approval, agent=agent
+        )
+        if why:
+            return O.refused(
+                "worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)
+            )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     # The primary keeps its event shards uncommitted between doors; a branch that also
@@ -235,10 +249,18 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             # The target's range this merge added -- what a cherry-pick port re-applies.
             "landed_before": landed_before,
             "landed_after": landed_after,
+            # Each gate's real state when it landed (Bb55340e14b), not the post-merge check's.
+            "gates": gates.states,
             # Landed from a branch the item does not own (claimed --no-worktree).
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
+    if forced_by is not None:
+        log.append(
+            "merge.forced",
+            item,
+            {"sha": sha, "unmet_gates": gates.awaiting(), "approval": forced_by, "agent": agent},
+        )
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.
     back_merged, back_failed = [], []
@@ -276,6 +298,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
 
     say = on_progress or (lambda _line: None)
     say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    if gates.unmet:
+        say(MF.warning(item, gates))
     say(_ci_notice(repo, cfg))
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=merge_since)
     say(
@@ -287,7 +311,12 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     return O.ok(
         "worktree.merged",
         id=item,
-        **({"ci": ci_after} if ci_after else {}),
+        # `ci` is kept for readers of the old key; it is the BASE's post-merge check, never the
+        # ci gate (Bb55340e14b): `gate_states` has the gate.
+        **({"ci": ci_after, "post_merge_check": ci_after} if ci_after else {}),
+        gate_states=gates.states,
+        awaiting_gates=gates.awaiting(),
+        forced=forced_by is not None,
         sha=sha,
         branch_head=branch_head,
         base=wt.base,
