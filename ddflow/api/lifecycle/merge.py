@@ -185,11 +185,11 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     # a shard first (B6b7e47955e). Commit the shards HERE, before git merges, so they are
     # not the uncommitted work git refuses to overwrite.
     #
-    # The range a merge adds, for the post-merge tripwire check, is from the target's HEAD
-    # as the caller last saw it -- NOT from after the shard commit above (that commit is the
-    # landing's own bookkeeping, not user work). Read it before the shard commit so the
-    # after-merge CI checks user changes rather than re-checking a shard commit it did not
-    # make (Be40e9c84d5).
+    # ``check_after_merge``'s ``since`` is "the base the merge started from" (ddflow/api/ci.py):
+    # the target's HEAD before the landing's own shard commit, so the tripwire range is the
+    # merge the caller asked for and not every file. Read it BEFORE EC.commit_at below, which
+    # also moves the base by landing the event shards (B6b7e47955e); the range a caller saw
+    # must not skip that commit and start from a base the caller never held (Be40e9c84d5).
     merge_since = W.rev(repo, wt.base)
     EC.commit_at(log, cfg, "merge", f"merge {item}")
     # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
