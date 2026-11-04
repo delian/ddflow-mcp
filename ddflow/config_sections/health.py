@@ -47,7 +47,7 @@ class HealthConfig:
     )
     check_budget_s: int = knob(
         60,
-        doc="`ddflow doctor` times each of its potentially-expensive checks (the log read, planning, git scans and the per-ask sweep) and reports any single check that takes longer than this many seconds, so a slow check is visible and diagnosed instead of the whole run silently waiting (FOC-doctor-slow). The per-check timings are recorded on the outcome either way. 0 turns the report off.",
+        doc="`ddflow doctor` times its potentially-expensive checks (the log read, the repairs context, planning and the progress sweep) and reports any single one that takes longer than this many seconds, so a slow check is visible and diagnosed instead of the whole run silently waiting (FOC-doctor-slow). The per-check timings are recorded on the outcome either way. 0 turns the report off.",
         check=int_at_least(0),
     )
     reply_s: int = knob(

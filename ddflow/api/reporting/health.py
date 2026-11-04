@@ -327,13 +327,11 @@ def doctor(
         st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)
-    with _check(timings, "startcost"):
-        cost = SC.report(
-            repo, cfg, agent, start_texts
-        )  # first: it refreshes the index (stale check)
+    cost = SC.report(
+        repo, cfg, agent, start_texts
+    )  # first: it refreshes the index (stale check)
     # The log's integrity, less what a data repair has quarantined (services.repairs).
-    with _check(timings, "integrity"):
-        problems, notes = RP.integrity(repair_ctx)
+    problems, notes = RP.integrity(repair_ctx)
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
     # agent id, and a lease claimed under it is "mine" in both clones. Claims record
     # their clone, so a double claim is also a CONTESTED item below.
@@ -413,8 +411,7 @@ def doctor(
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
-    with _check(timings, "shared-files"):
-        shared_problems, shared_notes = SF.findings(repo, cfg, render_views(st, cfg))
+    shared_problems, shared_notes = SF.findings(repo, cfg, render_views(st, cfg))
     problems += shared_problems
     notes += shared_notes
     # The workflow's own coherence. A pipeline naming a gate that has no definition is the
@@ -440,41 +437,33 @@ def doctor(
     _rules_findings(repo, st.highest_version, problems, notes)
 
     _launcher_findings(repo, problems, notes, cfg.enforce.commit_without_lease)
-    with _check(timings, "stale-refs"):
-        found, extra = stale_references(repo, parser, tools)
+    found, extra = stale_references(repo, parser, tools)
     problems += found
     notes += extra
     notes += _driver_drift_notes(repo) + PM.driver_notes(repo, cfg) + PM.hook_notes(repo, cfg)
     notes += AD.adopt_notes(repo, cfg)
-    with _check(timings, "unknown-author"):
-        notes += _unknown_author_notes(repo, log, repair_ctx)
-    with _check(timings, "repairs.notes"):
-        notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
+    notes += _unknown_author_notes(repo, log, repair_ctx)
+    notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
     with _check(timings, "progress"):
         for f in PR.detect(log.read_all(), st, cfg):
             (problems if f.severity == "block" else notes).append(f.render())
-    with _check(timings, "leases"):
-        found, held = _recovery_findings(L.scan(log, cfg, repo))
+    found, held = _recovery_findings(L.scan(log, cfg, repo))
     problems += found
     notes += held
 
     # B71dedb76d2: a removed item whose holder's branch is here and whose lease is live.
-    with _check(timings, "cleanup"):
-        problems += [
-            x.render()
-            for x in CL.stranded_leases(W.repo_root(repo), cfg, st, log.clone_id(create=False))
-        ]
+    problems += [
+        x.render()
+        for x in CL.stranded_leases(W.repo_root(repo), cfg, st, log.clone_id(create=False))
+    ]
     for path in CL.unclaimed_trees(repo, cfg, st):
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    with _check(timings, "wait-cycles"):
-        problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
-    with _check(timings, "wait-order"):
-        ordered = wait_order(log, st, cfg, cycles, notes, repo)
-    with _check(timings, "leasebreak"):
-        notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
+    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
+    ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
     notes += over
