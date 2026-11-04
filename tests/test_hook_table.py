@@ -201,13 +201,14 @@ def test_status_says_unknown_for_a_settings_file_it_cannot_parse(repo: Path) -> 
 
 def test_status_label_follows_the_default_harness(repo: Path, monkeypatch) -> None:
     """Bug B-setup-hooks-status-claude-label: the SessionStart/PreCompact/PreToolUse label
-    is derived from the default harness (`HR.title_of(HR.default_id())`), never a
-    hard-coded 'Claude Code' string."""
-    monkeypatch.setattr(HR, "title_of", lambda agent: f"Harness<{agent}>")
+    follows `HR.default_id()` rather than hard-coding 'Claude Code', and a non-claude
+    default harness neither crashes (no KeyError for hooks it lacks) nor shows Claude's
+    name."""
+    monkeypatch.setattr(HR, "default_id", lambda: "gemini")
     msg = API.hooks(repo, action="status").data["message"]
-    assert "Harness<claude> SessionStart hook: " in msg
-    assert "Harness<claude> PreCompact hook: " in msg
-    assert "Harness<claude> PreToolUse hook: " in msg
+    assert "Gemini CLI SessionStart hook: " in msg
+    assert "Gemini CLI PreCompact hook: " in msg
+    assert "Gemini CLI PreToolUse hook: " in msg
     assert "Claude Code SessionStart hook" not in msg
     assert "Claude Code PreCompact hook" not in msg
     assert "Claude Code PreToolUse hook" not in msg
