@@ -344,7 +344,9 @@ class _ReadMixin:
                     fh.write(frame)
                     sized.update(frame)
                     bytes_out += len(frame)
-                    if bytes_out > cap:
+                    if (
+                        bytes_out + _SNAPSHOT_SLOT > cap
+                    ):  # the header slot counts toward the file size
                         raise ValueError("the snapshot is over [log].snapshot_max_mb")
                 meta = {
                     "format": SNAPSHOT_FORMAT,
