@@ -83,6 +83,7 @@ def test_status_with_126_stale_leases_spawns_few_processes(repo, monkeypatch):
 
 def test_brief_sweeps_finished_worktrees_at_most_once_per_interval(repo, monkeypatch):
     run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "worktree.sweep_interval_s", "900")
     calls: list = []
     from ddflow.services import cleanup as CL
 
@@ -146,6 +147,7 @@ def test_one_query_tells_merged_commits_from_unmerged_ones(repo):
 
 def test_a_sweep_that_raises_is_not_retried_on_every_brief(repo, monkeypatch):
     run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "worktree.sweep_interval_s", "900")
     calls: list = []
     from ddflow.services import cleanup as CL
 
@@ -157,3 +159,18 @@ def test_a_sweep_that_raises_is_not_retried_on_every_brief(repo, monkeypatch):
     assert LC.brief(repo, agent="reader").exit == 0
     assert LC.brief(repo, agent="reader").exit == 0
     assert len(calls) == 1
+
+
+def test_a_stamp_that_cannot_be_written_does_not_stop_the_sweep(repo, monkeypatch):
+    run_cli(repo, "init")
+    calls: list = []
+    from ddflow.infra import fsio
+    from ddflow.services import cleanup as CL
+
+    def unwritable(*a, **k):
+        raise PermissionError("read-only .ddflow/local")
+
+    monkeypatch.setattr(fsio, "replace_text", unwritable)
+    monkeypatch.setattr(CL, "sweep_finished", lambda *a, **k: calls.append(1) or [])
+    assert LC.brief(repo, agent="reader").exit == 0
+    assert len(calls) == 1, "the sweep still runs; only the stamp is lost"
