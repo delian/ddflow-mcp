@@ -21,8 +21,7 @@ accepts the candidates the caller already has.
 
 from __future__ import annotations
 
-import time
-
+from ..adapters.clock import DEFAULT as _CLOCK
 from ..config import Config
 from ..core.graph import find_cycles
 from ..core.model import Item, State
@@ -47,7 +46,7 @@ def _ctx(
 
     Defaults mirror `core.schedule.plan`'s own preamble so a caller without a folded plan
     still gets the same order; a caller that has one passes the pieces it already read."""
-    now = time.time() if now is None else now
+    now = _CLOCK.wall() if now is None else now
     live = state.active_leases(now, cfg.lease.grace_s) if live is None else live
     cycles = list(find_cycles(state.live_by_id())) if cycles is None else cycles
     in_cycle = {n for c in cycles for n in c} if in_cycle is None else in_cycle
