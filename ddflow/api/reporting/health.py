@@ -264,7 +264,9 @@ def _check(timings: list[tuple[str, float]], name: str) -> Iterator[None]:
         timings.append((name, CLOCK.monotonic() - started))
 
 
-def _over_budget_notes(timings: list[tuple[str, float]], budget: float) -> tuple[dict[str, float], list[str]]:
+def _over_budget_notes(
+    timings: list[tuple[str, float]], budget: float
+) -> tuple[dict[str, float], list[str]]:
     """A note per check that exceeded its budget (FOC-doctor-slow); the timing table always."""
     table = {name: round(secs, 2) for name, secs in timings}
     if budget <= 0:
