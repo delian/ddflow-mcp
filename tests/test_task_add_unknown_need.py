@@ -16,6 +16,7 @@ def _two(repo):
 
 # -- task add ---------------------------------------------------------------
 
+
 def test_task_add_refuses_an_unknown_need_and_writes_nothing(repo):
     _two(repo)
     code, out, err = run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "NO-SUCH-ID")
@@ -33,6 +34,7 @@ def test_task_add_names_the_nearest_real_id(repo):
 
 
 # -- update refusal (no close match) ----------------------------------------
+
 
 def test_update_add_needs_refuses_an_unknown_need(repo):
     _two(repo)
@@ -54,6 +56,7 @@ def test_update_needs_refuses_an_unknown_need(repo):
 
 # -- update refusal (near match) --------------------------------------------
 
+
 def test_update_add_needs_names_the_nearest_real_id(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A")[0] == 0
@@ -74,11 +77,21 @@ def test_update_needs_names_the_nearest_real_id(repo):
 
 # -- the explicit override --------------------------------------------------
 
+
 def test_allow_unknown_needs_overrides_the_refusal(repo):
     _two(repo)
     assert (
-        run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "NO-SUCH-ID",
-                "--allow-unknown-needs")[0]
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "T",
+            "--title",
+            "t",
+            "--needs",
+            "NO-SUCH-ID",
+            "--allow-unknown-needs",
+        )[0]
         == 0
     )
     assert _items(repo)["T"].needs == ["NO-SUCH-ID"]
@@ -102,6 +115,7 @@ def test_update_add_needs_allow_unknown_needs_overrides(repo):
 
 # -- a stale need from before the fix must not block a valid edit -------------
 
+
 def test_valid_need_is_still_accepted(repo):
     _two(repo)
     assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "A,B")[0] == 0
@@ -109,8 +123,20 @@ def test_valid_need_is_still_accepted(repo):
 
 def test_add_needs_valid_id_is_not_refused_on_a_pre_existing_unknown_need(repo):
     _two(repo)
-    assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "OLD-GHOST",
-                   "--allow-unknown-needs")[0] == 0
+    assert (
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "T",
+            "--title",
+            "t",
+            "--needs",
+            "OLD-GHOST",
+            "--allow-unknown-needs",
+        )[0]
+        == 0
+    )
     assert _items(repo)["T"].needs == ["OLD-GHOST"]  # the unknown need WAS persisted
     code, out, err = run_cli(repo, "update", "T", "--add-needs", "A")
     assert code == 0, out + err
@@ -119,8 +145,20 @@ def test_add_needs_valid_id_is_not_refused_on_a_pre_existing_unknown_need(repo):
 
 def test_update_needs_is_not_refused_on_a_pre_existing_unknown_need(repo):
     _two(repo)
-    assert run_cli(repo, "task", "add", "T", "--title", "t", "--needs", "OLD-GHOST",
-                   "--allow-unknown-needs")[0] == 0
+    assert (
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "T",
+            "--title",
+            "t",
+            "--needs",
+            "OLD-GHOST",
+            "--allow-unknown-needs",
+        )[0]
+        == 0
+    )
     assert _items(repo)["T"].needs == ["OLD-GHOST"]  # the unknown need WAS persisted
     code, out, err = run_cli(repo, "update", "T", "--needs", "A")
     assert code == 0, out + err
