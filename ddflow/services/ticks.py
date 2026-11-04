@@ -418,7 +418,9 @@ def _release(path: Path, t: Tick, claimed_at: float) -> None:
 
 
 def _flow_enabled(ctx: TickCtx) -> bool:
-    return getattr(getattr(ctx.cfg, "schedule", None), "parallel", "") == "auto"
+    # Sampled in auto AND fixed: a fixed cap is the ceiling the signals may still lower
+    # under load (Bd07c080a0c), so the ring has to keep up in fixed mode too.
+    return getattr(getattr(ctx.cfg, "schedule", None), "parallel", "") in ("auto", "fixed")
 
 
 def flow_sample(ctx: TickCtx) -> str | None:

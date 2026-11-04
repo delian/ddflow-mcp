@@ -382,13 +382,15 @@ def test_a_local_cap_is_given_a_local_remedy(repo: Path) -> None:
     assert "ddflow config --local --set worktree.max_parallel 0" in f.detail
 
 
-def test_fixed_params_cannot_move() -> None:
+def test_fixed_params_lower_to_the_min_but_never_above_tasks() -> None:
     from ddflow.core import flowparams as FP
 
     cfg = Config()
     cfg.schedule.parallel = "fixed"
     cfg.schedule.max_parallel_tasks = 5
-    assert FP.params(cfg).bounds() == (5, 5, 5)
+    # the fixed knob is the CEILING, and the floor stays max_parallel_min (2 by default):
+    # a loaded host lowers the limit, a calm one restores it, neither exceeds the number
+    assert FP.params(cfg).bounds() == (2, 5, 5)
 
 
 def test_an_edit_over_an_unloadable_file_owns_the_result_s_problems(repo: Path) -> None:
