@@ -88,13 +88,19 @@ def _fixes(q: Query, cfg: Config, bugs: list[Bug], tags: list[KC._Tag]) -> dict[
         if item is not None and item.merged_sha in info:
             out[b.id] = _Fix(frozenset(KC.tags_holding(repo, cfg, item, tags, info)))
             continue
-        first = KC._by_date(tags, b.fixed_at)
-        out[b.id] = (
-            _Fix(placed=False)
-            if first is None
-            else _Fix(frozenset(range(first, len(tags))), by_date=True)
-        )
+        out[b.id] = _by_date(b, tags)
     return out
+
+
+def _by_date(b: Bug, tags: list[KC._Tag]) -> _Fix:
+    """A fix with no landing: held by every tag made at or after it. Each tag is asked,
+    because ``tags`` is in version order and a maintenance tag can be newer than a higher
+    version, which must not be called fixed for it."""
+    when = KC._stamp(b.fixed_at)
+    if when is None or any(t.instant is None for t in tags):
+        return _Fix(placed=False)
+    held = (n for n, t in enumerate(tags) if t.instant is not None and when <= t.instant)
+    return _Fix(frozenset(held), by_date=True)
 
 
 def _covers(line: str, names: list[str]) -> bool:
