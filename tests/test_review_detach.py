@@ -187,8 +187,12 @@ def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_le
     assert CR._detach_argv(["--agent", "shell-alias", "T1", "--detach"], "role") == [
         "--agent", "role", "T1",
     ]  # fmt: skip
-    # a positional `--detach` past `--` is not the flag, and past-`--` tokens stay
-    assert CR._detach_argv(["--detach", "--", "--detach"], "role") == ["--agent", "role", "--", "--detach"]
+    assert CR._detach_argv(["--agent=shell-alias", "T1", "--detach"], "role") == [
+        "--agent", "role", "T1",
+    ]  # fmt: skip
+    # naming nothing to relaunch is [] still, so `--detach` keeps its own-arguments refusal
+    assert CR._detach_argv(["--detach"], "role") == []
+    assert CR._detach_argv([], "role") == []
 
 
 def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):

@@ -206,19 +206,25 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
     detached review runs -- and therefore heartbeats -- as the lease's HOLDER, not as a
     freshly derived id that holds no lease to renew (bug B-lease-ttl-expires-during-review:
     a 90-minute TTL lapsed during four long rounds, and the agent lost its claim because the
-    detached round never renewed it). An explicit `--agent` someone typed before the `--` is
-    replaced by the resolved one; a positional `--detach` past `--` stays untouched."""
+    detached round never renewed it). A `raw` that names nothing to relaunch (no argument
+    before a `--`) is `[]` still, so `_detach`'s "needs its own arguments" refusal fires
+    before the agent is added. An already-typed `--agent` (either the `--agent <v>` pair or
+    the `--agent=<v>` form) is replaced by the resolved id; a positional `--detach` or
+    `--agent` past `--` is an item name, not a flag, and stays."""
     cut = raw.index("--") if "--" in raw else len(raw)
-    head = [t for t in raw[:cut] if t != "--detach"]
-    # Drop any `--agent <x>` pair already typed, then re-declare the resolved id first.
+    before = [t for t in raw[:cut] if t != "--detach"]
+    if not before:  # nothing to relaunch: `raw` carried no review arguments before `--`
+        return []
     kept: list[str] = []
     skip = False
-    for t in head:
+    for t in before:
         if skip:
             skip = False
             continue
         if t == "--agent":
             skip = True
+            continue
+        if t.startswith("--agent="):
             continue
         kept.append(t)
     return ["--agent", agent, *kept] + raw[cut:]
