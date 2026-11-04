@@ -8,6 +8,7 @@ from ...core import health as H
 from ...core import leasewait as LW
 from ...services import autoorder as AOS
 from ...services import healthwatch as HW
+from ...services import leases as L
 from ...services import waiting as WT
 
 
@@ -56,9 +57,13 @@ def health_lines(
         return []
     at = time.time() if now is None else now
     by_kind = HW.modes(cfg)
+    if recoveries is None:  # a report, not a recovery: bounded like `status`
+        recoveries = L.scan(log, cfg, repo, now=at, state=st, view=True)
     found = [
         f
-        for f in HW.inspect(log, st, cfg, repo, at, cycles, activity=activity, view=True, recoveries=recoveries)
+        for f in HW.inspect(
+            log, st, cfg, repo, at, cycles, activity=activity, recoveries=recoveries
+        )
         # a lapsed lease is shown by `recover`'s notes; a live lease whose process is gone is not
         if by_kind[f.kind] != "off"
         and (f.kind != H.CRASHED or f.evidence.get("pids"))

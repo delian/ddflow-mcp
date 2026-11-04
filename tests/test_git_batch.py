@@ -76,8 +76,8 @@ def test_status_with_126_stale_leases_spawns_few_processes(repo, monkeypatch):
     out = RP.status(repo, agent="reader")
     assert out.exit == 0, out.reason
     assert len(spawns.argv) <= MAX_SPAWNS, (
-        f"{len(spawns.argv)} subprocesses for {STALE} stale leases: {sorted({' '.join(a[3:5]) if a[0]=='git' else a[0] for a in spawns.argv})} "
-        + str([' '.join(a[3:] if a[1]=='-C' else a) for a in spawns.argv])
+        f"{len(spawns.argv)} subprocesses for {STALE} stale leases: {sorted({' '.join(a[3:5]) if a[0] == 'git' else a[0] for a in spawns.argv})} "
+        + str([" ".join(a[3:] if a[1] == "-C" else a) for a in spawns.argv])
     )
 
 

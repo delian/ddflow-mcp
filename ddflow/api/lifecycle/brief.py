@@ -237,7 +237,9 @@ def _sweep_finished(
         return
     try:
         if not dry_run and _sweep_due(repo, cfg):
-            _sweep_stamp(repo)  # the ATTEMPT is stamped: a sweep that raises is not retried per call
+            _sweep_stamp(
+                repo
+            )  # the ATTEMPT is stamped: a sweep that raises is not retried per call
             CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
         pass
