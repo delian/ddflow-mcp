@@ -229,7 +229,7 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
             continue
         if t != "--detach":
             kept.append(t)
-    return ["--agent", agent, *kept] + raw[cut:]
+    return ["--agent", agent, *kept, *raw[cut:]]
 
 
 def _detach(a, c: Ctx) -> int:
