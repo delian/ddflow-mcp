@@ -95,6 +95,7 @@ def test_the_error_survives_pickle_with_its_position():
         TomlLibIo().loads("a = 1\nb = ]\n")
     back = pickle.loads(pickle.dumps(caught.value))
     assert (str(back), back.lineno, back.colno) == (str(caught.value), 2, caught.value.colno)
+    assert (back.args, back.doc, back.pos) == (caught.value.args, caught.value.doc, caught.value.pos)
 
 
 def test_read_of_a_non_utf8_file_is_a_toml_error(tmp_path):
