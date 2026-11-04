@@ -239,12 +239,15 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     held = sum(r[1] for r in results)
     lost = [x for r in results for x in r[2]]
     residual = [x for r in results for x in r[3]]
+    # A blind (subprocess-driving) loss is not scored, so it never counts as a fresh route
+    # miss: it is listed in `residual` with a `(blind: ...)` cause, not hidden (B2822f97531).
+    blind = {x[: x.index(" (blind:")] for x in residual if "(blind:" in x}
     if len(results) < 2 or total == 0:
         pytest.skip("too few replayable merges in this history")
     report = f"recall {held}/{total} over {len(results)} merges; misses: {residual}"
     # Exactly the pinned losses: a new one fails, and so does a pinned one the selector now
     # routes (drop its entry then), so the pin cannot go stale or hide a fresh miss.
-    unexpected = [x for x in lost if x not in UNROUTABLE]
+    unexpected = [x for x in lost if x not in UNROUTABLE and x not in blind]
     assert not unexpected, (
         f"the precise selection lost tests the earlier selector held: {unexpected}; {report}"
     )
