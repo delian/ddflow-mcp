@@ -46,6 +46,7 @@ log records, never the clock.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -239,11 +240,7 @@ def _entries(q: Query, cfg: Any, tags: list[_Tag]) -> tuple[list[dict[str, Any]]
 
     def place(item: Item | None, at: str) -> tuple[int | None, bool]:
         if item is not None and item.merged_sha in info:
-            for n, t in enumerate(tags):
-                if item.merged_sha in t.commits or _second(item, info) in t.commits:
-                    if reached(repo, cfg, item, t.name):
-                        return n, False
-            return len(tags), False
+            return next(tags_holding(repo, cfg, item, tags, info), len(tags)), False
         return _by_date(tags, at), True
 
     for it in tasks:
@@ -271,6 +268,17 @@ def _entries(q: Query, cfg: Any, tags: list[_Tag]) -> tuple[list[dict[str, Any]]
             _row(bug.id, field.get("category", ""), field["line"], bug.fixed_at, idx, fallback)
         )
     return rows, unplaced
+
+
+def tags_holding(
+    repo: Path, cfg: Any, item: Item, tags: list[_Tag], info: dict[str, tuple[str, list[str]]]
+) -> Iterator[int]:
+    """The index of every tag holding ``item``'s landing, oldest first (``tags`` after
+    ``_load_commits`` with this item's commits)."""
+    for n, t in enumerate(tags):
+        if item.merged_sha in t.commits or _second(item, info) in t.commits:
+            if reached(repo, cfg, item, t.name):
+                yield n
 
 
 def _second(it: Item, info: dict[str, tuple[str, list[str]]]) -> str:
@@ -328,15 +336,21 @@ def _section(title: str, version: str, date: str, rows: list[dict[str, Any]]) ->
     }
 
 
-def build_sections(q: Query) -> dict[str, Any]:
-    """Every section (newest first), the baseline tag and the compare links."""
+def repo_config(q: Query, who: str) -> Config:
+    """The project config of a kind that reads git tags; no repository or an unreadable
+    config is ``ExportError`` (could not run), never an empty document."""
     if q.repo is None:
-        raise ExportError("the changelog needs a repository: it reads git tags", EXIT_UNAVAILABLE)
-
+        raise ExportError(f"{who} needs a repository: it reads git tags", EXIT_UNAVAILABLE)
     try:
-        cfg = Config.load(q.repo)
+        return Config.load(q.repo)
     except Exception as exc:
         raise ExportError(f"could not read the configuration: {type(exc).__name__}: {exc}") from exc
+
+
+def build_sections(q: Query) -> dict[str, Any]:
+    """Every section (newest first), the baseline tag and the compare links."""
+    cfg = repo_config(q, "the changelog")
+    assert q.repo is not None
     prefix = cfg.flow.tag_prefix
     tags = _tags(q.repo, prefix)
     rows, unplaced = _entries(q, cfg, tags)
