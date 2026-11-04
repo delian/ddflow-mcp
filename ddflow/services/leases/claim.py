@@ -413,7 +413,7 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
     try:
         while clash:  # decide ALL of it before any write: a half-broken claim helps no one
             other_id, lease, pair = clash
-            v = LB.judge(cfg, events, other_id, lease, [it.id], now, act)
+            v = LB.judge(cfg, events, other_id, lease, [it.id], now, act, log.root)
             if v is None or not v.breakable:
                 if asked:
                     raise LeaseError(
