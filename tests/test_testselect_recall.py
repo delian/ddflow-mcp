@@ -71,10 +71,12 @@ def merge_log(root: Path) -> list[str]:
     main's merges sit on the second parent, so a first-parent walk saw an older window than
     main does (Bfaef48ced6, Bb5b8b17161); and a walk from HEAD still drifts, because the
     branch's own tip carries merge commits near the window top and pushes main's off it
-    (B2822f97531). Only ``merge <id>:`` subjects: a hand-made ``merge main`` sync commit is
-    not a ddflow merge (B2d1ecadd87)."""
+    (B2822f97531). Fall back to HEAD only when no ``main`` ref resolves (a checkout with a
+    renamed default branch, never a ddflow worktree). Only ``merge <id>:`` subjects: a
+    hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
+    anchor = "main" if git_proc(root, "rev-parse", "--verify", "--quiet", "main").returncode == 0 else "HEAD"
     log = git_proc(
-        root, "log", "main", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
+        root, "log", anchor, "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
     )
     if log.returncode != 0:
         return []
