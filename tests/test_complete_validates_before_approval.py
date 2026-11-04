@@ -13,7 +13,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.api.knowledge.bug_close import bug_fixed, regression_arg_refusal
+from ddflow.api.knowledge.bug_close import bug_fixed
+from ddflow.api.knowledge.regression import regression_arg_refusal
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
