@@ -174,3 +174,24 @@ def test_a_stamp_that_cannot_be_written_does_not_stop_the_sweep(repo, monkeypatc
     monkeypatch.setattr(CL, "sweep_finished", lambda *a, **k: calls.append(1) or [])
     assert LC.brief(repo, agent="reader").exit == 0
     assert len(calls) == 1, "the sweep still runs; only the stamp is lost"
+
+
+def test_the_cap_stays_out_of_doctor(repo, monkeypatch):
+    """D-git-batch-defaults accepts the cap because only `status` and `brief` change: `doctor`
+    reaches `health_lines` with no scan of its own and must get the uncapped one."""
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.services import leases as L
+
+    run_cli(repo, "init")
+    views: list = []
+    real = L.scan
+
+    def spy(*a, **k):
+        views.append(k.get("view", False))
+        return real(*a, **k)
+
+    monkeypatch.setattr(L, "scan", spy)
+    log = EventLog(repo, "r")
+    RP.health_lines(log, fold(log.read_all(), strict=False), Config.load(repo), repo, [])
+    assert views and not any(views), views

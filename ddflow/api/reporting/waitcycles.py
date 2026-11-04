@@ -8,7 +8,6 @@ from ...core import health as H
 from ...core import leasewait as LW
 from ...services import autoorder as AOS
 from ...services import healthwatch as HW
-from ...services import leases as L
 from ...services import waiting as WT
 
 
@@ -57,8 +56,6 @@ def health_lines(
         return []
     at = time.time() if now is None else now
     by_kind = HW.modes(cfg)
-    if recoveries is None:  # a report, not a recovery: bounded like `status`
-        recoveries = L.scan(log, cfg, repo, now=at, state=st, view=True)
     found = [
         f
         for f in HW.inspect(
