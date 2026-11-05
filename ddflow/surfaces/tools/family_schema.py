@@ -97,7 +97,8 @@ def _listed(text: str) -> str:
     if len(text) <= LISTED_TEXT_MAX:
         return text
     room = LISTED_TEXT_MAX - len(CUT_MARK)
-    ends = [m.end() for m in _SENTENCE_END.finditer(text, 0, room)]
+    # one past ``room``: the whitespace after a sentence that ends exactly at the limit
+    ends = [m.end() for m in _SENTENCE_END.finditer(text, 0, room + 1)]
     head = text[: ends[-1]] if ends else text[:room].rsplit(" ", 1)[0]
     return head + CUT_MARK
 

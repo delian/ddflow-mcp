@@ -126,13 +126,17 @@ def test_a_listed_argument_text_stays_short_and_says_when_it_was_cut():
                 assert len(prop.get("description", "")) <= FS.LISTED_TEXT_MAX, (family, name)
     full = FS.member_props("ddflow_lesson_add")["pattern"][1]
     listed = FS.family_entry("ddflow_memory")["inputSchema"]["properties"]["pattern"]["description"]
-    assert len(full) > FS.LISTED_TEXT_MAX and full.startswith(listed.removesuffix(FS.CUT_MARK))
+    assert len(full) > FS.LISTED_TEXT_MAX and listed.endswith(FS.CUT_MARK)
+    assert full.startswith(listed.removesuffix(FS.CUT_MARK))
 
 
 def test_a_short_text_is_listed_whole_and_a_sentence_end_is_where_a_long_one_stops():
     assert FS._listed("Short enough.") == "Short enough."
     long_tail = "x " * FS.LISTED_TEXT_MAX
     assert FS._listed(f"First sentence. {long_tail}") == f"First sentence.{FS.CUT_MARK}"
+    room = FS.LISTED_TEXT_MAX - len(FS.CUT_MARK)
+    exact = "A " + "B" * (room - 3) + "."  # a sentence ending on the last character that fits
+    assert FS._listed(f"{exact} {long_tail}") == exact + FS.CUT_MARK
     cut = FS._listed(long_tail)
     assert cut.endswith(FS.CUT_MARK) and len(cut) <= FS.LISTED_TEXT_MAX
 
