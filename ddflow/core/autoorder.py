@@ -90,13 +90,25 @@ def _blockers(k: Mapping[str, Any]) -> list[str]:
     )
 
 
+def _victim_items(cycle: Mapping[str, Any]) -> list[str]:
+    """Every lease the victim must drop to end this cycle, in deterministic order.
+
+    ``cycle['victim_item']`` is only the first drop; the link whose blockers name it is the
+    waiter the victim yields to, and that link's blockers are all of the victim's items in
+    the way. Each must be ordered to yield, or the rest can take the files straight back."""
+    victim_item = cycle.get("victim_item", "")
+    for k in cycle.get("links", []):
+        if victim_item and victim_item in _blockers(k):
+            return _blockers(k)
+    return [victim_item] if victim_item else []
+
+
 def _candidates(cycle: Mapping[str, Any]) -> list[tuple[str, str]]:
-    """(later, earlier) pairs in the order to try them: the victim's item waits for the
-    waiter it blocks; then each waiter for the items it waits behind."""
+    """(later, earlier) pairs in the order to try them: each item the victim drops waits for
+    the waiter it blocks; then each waiter for the items it waits behind."""
     links = cycle.get("links", [])
     out: list[tuple[str, str]] = []
-    victim_item = cycle.get("victim_item", "")
-    out += [(victim_item, k["item"]) for k in links if victim_item in _blockers(k)]
+    out += [(v, k["item"]) for v in _victim_items(cycle) for k in links if v in _blockers(k)]
     out += [(k["item"], b) for k in links for b in _blockers(k)]
     return list(dict.fromkeys(p for p in out if p[0] != p[1]))
 
@@ -114,11 +126,12 @@ def propose(
 
     for cyc in cycles:
         agents = tuple(cyc.get("agents", []))
+        victims = set(_victim_items(cyc))
         why: list[str] = []
-        done = False
+        resolved = False
         for later, earlier in _candidates(cyc):
             if earlier in reach(later):
-                done = True  # already ordered: nothing to add
+                resolved = True  # already ordered: nothing to add
                 break
             if later in reach(earlier):
                 why.append(f"{later}/{earlier}: would close a needs cycle")
@@ -129,8 +142,10 @@ def propose(
                 continue
             edges.append(Edge(later, earlier, agents, tuple(cyc.get("files", []))))
             needs.setdefault(later, []).append(earlier)
-            done = True
-            break
-        if not done:
+            resolved = True
+            if later not in victims:
+                break  # one fallback edge is enough
+            # a dropped lease still needs an edge of its own: order the next drop too
+        if not resolved:
             notes.append(f"no edge for {' -> '.join(agents)}: {'; '.join(why) or 'no candidate'}")
     return edges, notes
