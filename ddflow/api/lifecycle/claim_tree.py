@@ -78,7 +78,7 @@ def _tree_let_go(repo: Path, cfg, st, item) -> bool:
         return False
     tree = W.load_path(repo, item.worktree)
     if not tree.is_dir():
-        return False
+        return True  # no tree, so nothing in it to protect
     if W.dirty(W.Worktree(item=item.id, path=tree, branch=item.branch, base="")):
         return False
     target = FS.target(repo, cfg, item, st)
@@ -121,8 +121,9 @@ def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
     tree and the one `W.create` finds at the default path. A directory there is not
     proof: it can have been removed and re-added on something unrelated. Git must list
     it as a worktree of this repository, with `branch` checked out -- or detached (a
-    rebase in progress, a checkout at a commit) with `branch` an ancestor of HEAD. Any
-    other branch, or a detached HEAD holding unrelated work, is someone else's tree.
+    checkout at a commit) with `branch` an ancestor of HEAD, or (a rebase in progress: HEAD
+    is on the new base, so the tip is no ancestor) with git recording that it is rebasing
+    `branch`. Any other branch, or a detached HEAD holding unrelated work, is someone else's.
     """
     path = Path(path).resolve()
     if not branch or not (path.is_dir() and (path / ".git").exists()):
@@ -135,7 +136,18 @@ def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
         return False
     if entry.get("branch") == f"refs/heads/{branch}":
         return True
-    return bool(
-        entry.get("detached")
-        and W.git(path, "merge-base", "--is-ancestor", f"refs/heads/{branch}", "HEAD").ok
-    )
+    if not entry.get("detached"):
+        return False
+    ref = f"refs/heads/{branch}"
+    return W.git(path, "merge-base", "--is-ancestor", ref, "HEAD").ok or _rebasing(path) == ref
+
+
+def _rebasing(tree: Path) -> str:
+    """The ref git is rebasing in ``tree``, or "": git keeps it in the tree's own git dir."""
+    for state in ("rebase-merge", "rebase-apply"):
+        at = W.git(tree, "rev-parse", "--path-format=absolute", "--git-path", f"{state}/head-name")
+        try:
+            return Path(at.out).read_text("utf-8").strip() if at.ok else ""
+        except OSError:
+            continue  # this kind of rebase is not the one running
+    return ""

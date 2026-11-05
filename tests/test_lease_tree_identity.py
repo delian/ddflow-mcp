@@ -14,13 +14,16 @@ tree is orphaned.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 from helpers import git_raw as _git
 
+from ddflow.api.lifecycle import claim_tree as CT
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
@@ -324,6 +327,43 @@ def test_a_detached_recorded_tree_carrying_the_items_branch_is_still_its_tree(re
     code, out, err = run_cli(other, "claim", "T1")
     assert code == OK, out + err
     assert _resolved(repo, _item(repo).lease.worktree) == tree.resolve(), out
+
+
+def test_a_tree_stopped_in_a_rebase_is_still_the_items_tree(repo):
+    """A real rebase: HEAD is on the new base, so the branch tip is NOT an ancestor of it, and
+    only git's record of the rebase says whose work the tree holds."""
+    tree = _claimed_with_its_own_tree(repo)
+    (tree / "a.py").write_text("ours\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "ours")
+    (repo / "a.py").write_text("theirs\n")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-qm", "theirs")
+    assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
+    stopped = subprocess.run(
+        ["git", "rebase", "main"], cwd=tree, capture_output=True, text=True, check=False
+    )
+    assert stopped.returncode != 0, "fixture: the rebase did not stop on its conflict"
+    other = repo.parent / "other-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
+    code, out, err = run_cli(other, "claim", "T1")
+    assert code == OK, out + err
+    assert _resolved(repo, _item(repo).lease.worktree) == tree.resolve(), out
+
+
+def test_a_tree_rebasing_another_branch_is_not_the_items_tree(repo):
+    tree = _claimed_with_its_own_tree(repo)
+    _git(tree, "commit", "-q", "--allow-empty", "-m", "ahead")
+    _git(tree, "checkout", "-q", "--detach", "HEAD~1")  # the item's tip is no ancestor of HEAD
+    gitdir = Path(_git(tree, "rev-parse", "--absolute-git-dir").strip())
+    (gitdir / "rebase-merge").mkdir()
+    (gitdir / "rebase-merge" / "head-name").write_text("refs/heads/someone-else\n")
+    assert not CT._is_items_tree(repo, tree, _item(repo).branch)
+
+
+def test_a_merged_released_item_whose_tree_is_gone_holds_nothing(repo):
+    item = SimpleNamespace(lease=None, merged_sha="abc", worktree="no/such/tree")
+    assert CT._tree_let_go(repo, None, None, item)
 
 
 def _resolved(repo: Path, stored: str) -> Path:
