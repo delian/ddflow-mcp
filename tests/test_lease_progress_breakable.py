@@ -131,11 +131,18 @@ def _state(repo):
     return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
-def test_a_gate_queued_on_the_suite_lock_is_not_yield_requested(repo):
-    """The heartbeat is one place a contended-but-not-idle lease is told to yield; it used
+def test_an_inflight_gate_run_is_not_yield_requested_by_the_heartbeat(repo):
+    """The heartbeat is the place a contended-but-not-idle lease is told to yield. It used
     to judge WITHOUT the repo, so `_live_gate` could not see a still-alive gate run and a
     lane whose unit_tests run sat #k in the full-suite queue was told to yield / it could
-    be broken (bug B42016bbc0e)."""
+    be broken (bug B42016bbc0e).
+
+    ``RUN.mark_started`` is the faithful model of BOTH an in-flight state `_live_gate`
+    reads: a started run AND one still queued on the suite lock carry the SAME
+    `.running.<pid>.json` marker -- `gate run` writes it (`_mark_or_refuse_twin`) before
+    `run_command_gate` reaches `suitelock.SL.hold`, and the process stays alive while it
+    waits -- so the queued state is this marker with a live pid, exactly what is set here.
+    """
     from ddflow.services.gates import running as RUN
 
     _setup(repo, hold=10 * AGO)
