@@ -8,7 +8,9 @@ and the session names another, so the log tells them apart. HOME and XDG_* point
 the operator's own config and sessions are neither read nor written, and an agent that needs
 a login there says so in its session/new error. The marker is new each run and absent from the
 agent's own environment, so only the injected `env` can deliver it. Exit 0 only when the server
-started in the session directory with that marker and the agent completed the MCP handshake.
+started in the session directory with that marker, the agent answered the initialize result
+(an agent sends `notifications/initialized` only after reading it) and it listed the tools. It
+tests a real agent's behaviour, not one built to fool it. MCP stdio is newline-delimited JSON.
 """
 
 import json
@@ -84,7 +86,7 @@ def judge(entries: list[dict], session: str, spawn: str, marker: str) -> dict:
     return {
         "started": bool(started),
         "env_passed": bool(started) and started[0].get("marker") == marker,
-        "initialized": "initialize" in methods,
+        "initialized": {"initialize", "notifications/initialized"} <= methods,
         "tools_listed": "tools/list" in methods,
         "cwd_is_session": cwd == session,
         "cwd_is_spawn": cwd == spawn,

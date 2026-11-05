@@ -62,7 +62,9 @@ def test_problems_name_each_defect(body, word):
     assert word in " ".join(planefacts.problems(doc(body)))
 
 
-@pytest.mark.parametrize("data", [{"plane": "x"}, {"plane": {"p": "x"}}, {"plane": {"p": []}}])
+@pytest.mark.parametrize(
+    "data", [{"plane": "x"}, {"sources": "x"}, {"plane": {"p": "x"}}, {"plane": {"p": []}}]
+)
 def test_a_wrong_shape_is_a_defect_not_a_crash(data):
     assert "is not a table" in " ".join(planefacts.problems(data))
 

@@ -78,8 +78,9 @@ def problems(data: dict[str, Any]) -> list[str]:
     """Every defect of a parsed facts file, one string each."""
     sources = data.get("sources", {})
     planes = data.get("plane", {})
-    if not isinstance(planes, dict):
-        return ["[plane] is not a table"]
+    for key, table in (("sources", sources), ("plane", planes)):
+        if not isinstance(table, dict):
+            return [f"[{key}] is not a table"]
     harnesses = set(harnessreg.ids())
     out = []
     for name, row in sorted(planes.items()):
