@@ -278,6 +278,7 @@ def test_the_mcp_server_does_not_take_a_token_from_its_environment(proj, monkeyp
     monkeypatch.setenv(AU.TOKEN_ENV, token)
     assert AU.bind_env(proj, Config(), ("mcp",)) is None
     assert ID.credential() is None
+    assert AU.TOKEN_ENV not in os.environ  # nor does what the server starts inherit it
 
 
 def test_a_blank_token_is_a_bad_token_not_no_token(proj, monkeypatch):
@@ -407,6 +408,13 @@ def test_required_mode_a_marker_free_shell_is_not_a_person(proj):
     assert AC.resolve_actor(Config(), "me").source == "default"
 
 
+def test_required_mode_bootstrap_never_opens_for_the_mcp_surface():
+    ID.require_proof()
+    assert ID.lacks_only_proof()
+    with ID.via_mcp():
+        assert not ID.lacks_only_proof()
+
+
 def test_required_mode_is_off_by_default_and_changes_nothing(proj):
     assert Config().agent.require_operator_token is False
     assert ID.agent_marker() == ""
@@ -429,6 +437,27 @@ def test_required_mode_bootstraps_the_first_operator_token_then_needs_it(proj, m
     token = _token(proj, monkeypatch, "me", "operator")
     assert run_cli(proj, "pair", "x", "--role", "bot")[0] == 3
     assert _as(proj, monkeypatch, token, "pair", "x", "--role", "bot")[0] == 0
+
+
+def test_required_mode_bootstrap_is_for_the_operator_role_alone(proj):
+    _require(proj)
+    assert run_cli(proj, "pair", "x", "--role", "bot")[0] == 3
+    assert not AU.store_path(proj).exists()
+
+
+def test_a_rotation_that_cannot_be_recorded_still_ends_the_old_token(proj, monkeypatch):
+    old = _token(proj, monkeypatch, "gw", "bot")
+    _code, out, _err = run_cli(proj, "--json", "tokens", "rotate", "gw")
+    log = _log(proj)
+
+    def down(*_a, **_k):
+        raise OSError("log unavailable")
+
+    monkeypatch.setattr(log, "append", down)
+    with pytest.raises(OSError):
+        AU.redeem(log, Config(), json.loads(out)["code"])
+    with pytest.raises(AU.AuthRefused):
+        AU.verify(proj, Config(), old)
 
 
 def test_required_mode_bootstrap_still_refuses_an_agent(proj, monkeypatch):
@@ -488,6 +517,25 @@ def test_rotation_keeps_the_old_token_until_the_new_one_is_redeemed(proj, monkey
     rows = tokens_of(_state(proj))
     assert sorted(r["reason"] for r in rows.values()) == ["", "rotated"]
     assert [r["rotated_from"] for r in rows.values() if r["rotated_from"]] == [old.split("_")[1]]
+
+
+def test_a_name_that_reads_like_a_token_id_reaches_its_own_token(proj, monkeypatch):
+    first = _token(proj, monkeypatch, "alice", "bot")
+    alias = first.split("_")[1]
+    second = _token(proj, monkeypatch, alias, "bot")
+    assert run_cli(proj, "tokens", "revoke", alias, "--reason", "r")[0] == 0
+    assert AU.verify(proj, Config(), first).name == "alice"
+    with pytest.raises(AU.AuthRefused):
+        AU.verify(proj, Config(), second)
+
+
+def test_a_transport_hands_the_code_in_its_arguments(proj):
+    """A server's stdin is not its client's: the declared call takes the code from `args`."""
+    from ddflow.surfaces.declared import serve as declared
+
+    code = AU.start_pairing(_log(proj), Config(), name="n", role="bot").code
+    redeem = next(c for c in declared.COMMANDS if c.path == ("tokens", "redeem"))
+    assert redeem.call(proj, {"code": code}, "").data["name"] == "n"
 
 
 def test_rotating_an_unknown_name_is_refused(proj):

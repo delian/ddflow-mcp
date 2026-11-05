@@ -34,11 +34,16 @@ def _read_code() -> str:
     return sys.stdin.readline().strip() if sys.stdin is not None else ""
 
 
-def _redeem(repo, _args, agent) -> O.Outcome:
-    return _api().redeem(repo, _read_code(), agent)
+def _redeem(repo, args, agent, code=None) -> O.Outcome:
+    """``code``: what the CLI read from stdin. A transport hands it in ``args`` instead, since
+    a server's own stdin is not its client's."""
+    return _api().redeem(repo, args.get("code", "") if code is None else code, agent)
 
 
 _CLI = CliPolicy(typed_agent=True, shown=(O.OK,))
+_CLI_REDEEM = CliPolicy(
+    typed_agent=True, shown=(O.OK,), call_kwargs=lambda _ctx: {"code": _read_code()}
+)
 
 COMMANDS: tuple[Command, ...] = (
     Command(
@@ -69,7 +74,7 @@ COMMANDS: tuple[Command, ...] = (
         call=_redeem,
         payload=("token", "id", "name", "role", "expires_at"),
         render=_text,
-        cli=_CLI,
+        cli=_CLI_REDEEM,
     ),
     Command(
         path=("tokens", "list"),

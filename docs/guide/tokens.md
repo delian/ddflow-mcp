@@ -20,8 +20,8 @@ export DDFLOW_TOKEN=...                  # how a client presents it
 ```
 
 ddflow keeps only hashes, in `~/.config/ddflow/auth/` (`$XDG_CONFIG_HOME` if set), one private
-file per project and never in the project. The log records `token.issued` and `token.revoked`
-with who, when, the role and the expiry, and no secret. A pasted token is masked by
+file per project and never in the project. The log records `token.issued` (who, when, the role
+and the expiry) and `token.revoked` (who, when and why), and no secret. A pasted token is masked by
 `[session].redact_patterns`.
 
 ## What a token changes
@@ -54,7 +54,7 @@ tool result would sit in an agent's context and transcript.
 Without a token, the operator-only verbs ask only whether the caller carries an agent marker
 (`--agent`, `DDFLOW_AGENT`, a harness variable), and a shell that unsets them passes. With
 `[agent].require_operator_token = true` they need an operator token. `ddflow pair` still works
-from a marker-free terminal until the first operator token exists.
+from a marker-free terminal for the first operator token, until one exists.
 
 This is off by default. Locally it stops accidents and prompt injection, not a hostile process of
 your own user, which can write the store and the config. A role is a hard boundary when the client

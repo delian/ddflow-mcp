@@ -185,7 +185,7 @@ def _changing(repo: Path | str, cfg: Config, now: float) -> Iterator[dict[str, A
     """The store for one read-modify-write, under its own lock (two worktrees of a project have
     two logs and one store) and with what has lapsed dropped. Written back when it changed: on a
     clean exit and on `AuthRefused`, because a burnt guess must stay burnt though the call is
-    refused. Any other exception writes nothing: a failed log write must not spend the code."""
+    refused. Any other exception writes nothing."""
     path = _store(repo)
     path.parent.mkdir(parents=True, exist_ok=True, mode=_PRIVATE_DIR)
     with fsio.file_lock(fsio.lock_path_for(path), cfg.lease.acquire_timeout_s):
@@ -211,8 +211,9 @@ def _live_operator(cfg: Config, data: dict[str, Any]) -> bool:
 
 
 def _person(cfg: Config, data: dict[str, Any], requested_agent: str, *, first: bool) -> None:
-    """Refuse anything but the operator. ``first``: a marker-free terminal may mint the first
-    operator token under `[agent].require_operator_token`, or nobody ever could."""
+    """Refuse anything but the operator. ``first``: this mints an operator token, and a
+    marker-free terminal may mint the first one under `[agent].require_operator_token`, or
+    nobody ever could. Any other role waits for it, so the exception closes with its one use."""
     why = ID.agent_marker(requested_agent)
     if not why:
         return
@@ -266,7 +267,7 @@ def start_pairing(
     """A PERSON opens a pairing for client ``name`` with ``role``; the code is shown once."""
     moment = time.time() if now is None else now
     with _changing(log.root, cfg, moment) as data:
-        _person(cfg, data, requested_agent, first=True)
+        _person(cfg, data, requested_agent, first=_operator(cfg, role))
         if not _NAME.fullmatch(name):
             raise AuthInvalid(f"bad client name {name!r}: letters, digits, . _ - and at most 64")
         if role not in cfg.agent.roles:
@@ -299,9 +300,13 @@ def rotate(
 
 
 def _find(data: dict[str, Any], who: str) -> tuple[str, dict[str, Any]]:
+    """The live token named ``who``, else the one with that id. Names first: a client may be
+    called something that reads like another token's id, and its own name must reach it."""
     for token_id, row in data["tokens"].items():
-        if who in (token_id, row["name"]):
+        if row["name"] == who:
             return token_id, row
+    if who in data["tokens"]:
+        return who, data["tokens"][who]
     raise AuthRefused(f"no live token named {who!r} on this host (`ddflow tokens list`).")
 
 
@@ -321,28 +326,29 @@ def _spend(cfg: Config, data: dict[str, Any], code: str) -> dict[str, Any]:
 
 def redeem(log, cfg: Config, code: str, *, now: float | None = None) -> Minted:
     """Exchange a one-time code for a token: the only moment the token exists in clear. The
-    code is the proof, so this needs no identity. The events go first: an issue with no row is a
-    token nobody got, a row with no issue would be a token nobody can account for."""
+    code is the proof, so this needs no identity. The store is written first, as in `revoke`:
+    a crash after it leaves a token nobody was shown, or an unrecorded rotation; the other order
+    could leave an old token that still verifies though the log says it was replaced."""
     moment = time.time() if now is None else now
     with _changing(log.root, cfg, moment) as data:
         row = _spend(cfg, data, code)
         token_id, secret = secrets.token_hex(6), secrets.token_hex(32)
         token = f"ddft_{token_id}_{secret}"
         expires = moment + row["ttl_h"] * 3600
-        expires_at = clock.iso_at(expires, timespec="seconds")
         old = data["tokens"].pop(row["rotates"], None) if row["rotates"] else None
-        with log.transaction():
-            if old is not None:
-                log.append(REVOKED_KIND, row["rotates"], {
-                    "id": row["rotates"], "name": old["name"], "by": row["by"], "reason": "rotated",
-                })  # fmt: skip
-            log.append(ISSUED_KIND, token_id, {
-                "id": token_id, "name": row["name"], "role": row["role"], "expires_at": expires_at,
-                "by": row["by"], "rotated_from": row["rotates"] if old is not None else "",
-            })  # fmt: skip
         data["tokens"][token_id] = {
             "name": row["name"], "role": row["role"], "hash": token_hash(token), "expires": expires,
         }  # fmt: skip
+    expires_at = clock.iso_at(expires, timespec="seconds")
+    with log.transaction():
+        if old is not None:
+            log.append(REVOKED_KIND, row["rotates"], {
+                "id": row["rotates"], "name": old["name"], "by": row["by"], "reason": "rotated",
+            })  # fmt: skip
+        log.append(ISSUED_KIND, token_id, {
+            "id": token_id, "name": row["name"], "role": row["role"], "expires_at": expires_at,
+            "by": row["by"], "rotated_from": row["rotates"] if old is not None else "",
+        })  # fmt: skip
     return Minted(token, token_id, row["name"], row["role"], expires_at)
 
 

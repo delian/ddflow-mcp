@@ -105,11 +105,12 @@ def clear_credential() -> None:
 @contextmanager
 def with_credential(proof: Credential) -> Iterator[None]:
     """Hold ``proof`` for the calls made inside: one request of a server."""
-    token = _CREDENTIAL.set(proof)
+    token, demand = _CREDENTIAL.set(proof), _PROOF_REQUIRED.set(False)
     try:
         yield
     finally:
         _CREDENTIAL.reset(token)
+        _PROOF_REQUIRED.reset(demand)
 
 
 def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> AgentId:
