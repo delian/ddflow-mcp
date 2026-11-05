@@ -1210,24 +1210,27 @@
           `max_parallel_tasks` -- raised by one after `adapt_up_after_s` of healthy
           samples while the limit was binding, lowered by a quarter when a signal is
           bad on 3 of the last 4 samples -- and the limit is derived on this machine,
-          never committed. 'fixed': `max_parallel_tasks` is the number, exactly as
-          before adaptive parallelism. A shrink never touches a running lease; it only
-          stops new admissions. An unrecognised value in a config file is warned
-          about, reported by `doctor` and falls back to 'fixed', the strictest (no
-          safety dimension; changes least -- max_parallel_tasks is the number, nothing
-          adapts); `config --set`, `ddflow_configure` and the environment refuse it,
-          and so does loading ddflow's own source tree, where the file and the code
-          are one commit.
+          never committed. 'fixed': `max_parallel_tasks` is the ceiling the signals
+          may LOWER (down to `max_parallel_min`) under load, memory, disk, reviewer-
+          latency or gate-failure pressure, and restore when calm -- never exceeding
+          the fixed number. A shrink never touches a running lease; it only stops new
+          admissions. An unrecognised value in a config file is warned about, reported
+          by `doctor` and falls back to 'fixed', the strictest (changes least --
+          max_parallel_tasks caps, and the signals only lower it under load, never
+          raise it above the number); `config --set`, `ddflow_configure` and the
+          environment refuse it, and so does loading ddflow's own source tree, where
+          the file and the code are one commit.
       schedule.max_parallel_tasks = 4   [file]
           How many items may be in flight at once, counted across the whole queue.
           Every live lease counts, worktree or not -- a review task occupies an agent
           just as a coding task does. In `parallel = 'auto'` (the default) this is the
           START value the adaptive limit begins from and returns to; in 'fixed' it is
-          the limit itself. Distinct from worktree.max_parallel, which caps only the
-          leases that made a tree.
+          the CEILING the signals may lower (to `max_parallel_min`) under load and
+          restore, never exceed. Distinct from worktree.max_parallel, which caps only
+          the leases that made a tree.
       schedule.max_parallel_min = 2   [default]
           The floor of the adaptive limit (default 2, at least 1): however bad the
-          signals, auto never offers fewer slots than this. Must not exceed
+          signals, auto and fixed never offer fewer slots than this. Must not exceed
           `max_parallel_tasks` in auto.
       schedule.max_parallel_max = 8   [default]
           The ceiling of the adaptive limit (default 8, at least 1): auto never
@@ -2153,6 +2156,13 @@
           A lane whose lease keeps being renewed but which has shown no progress for
           this many seconds is IDLE (earlier than STALLED, which is stall_s): the
           correction is a nudge, nothing is taken. 0 turns the check off.
+      health.check_budget_s = 60   [default]
+          `ddflow doctor` times its potentially-expensive checks (the log read, the
+          repairs context, planning and the progress sweep) and reports any single one
+          that takes longer than this many seconds, so a slow check is visible and
+          diagnosed instead of the whole run silently waiting (FOC-doctor-slow). The
+          per-check timings are recorded on the outcome either way. 0 turns the report
+          off.
       health.reply_s = 600   [default]
           How long a nudge or stop request to a lane may go unanswered (no progress,
           no release) before the lane is UNRESPONSIVE, which is what lets the watchdog
