@@ -105,10 +105,16 @@ def _guards_unran(gate: str, ev: dict[str, Any]) -> str:
     verdict = (scope.get("ran") or {}).get("always")
     if verdict is not None and verdict != "unavailable":
         return ""  # they ran to a verdict; a guard failure is among the failing ids
+    guards = scope.get("always_tests") or ()
+    names = ", ".join(str(g) for g in guards[: BR.SHOWN]) + (
+        " ..." if len(guards) > BR.SHOWN else ""
+    )
     return (
         "the selected tests failed only as the base fails them (baseline-red), but the "
-        "always-run guards never ran (they run after the selection), so a regression in them "
-        "cannot be ruled out: the run is not baseline-red"
+        f"always-run guards never ran ({scope.get('always')} guard file(s)"
+        + (f": {names}" if names else "")
+        + " -- they run after the selection), so a regression in them cannot be ruled out: "
+        "the run is not baseline-red"
     )
 
 
