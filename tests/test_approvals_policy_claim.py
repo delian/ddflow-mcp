@@ -75,4 +75,6 @@ def test_claim_force_over_an_item_with_no_holder_is_refused_not_auto_approved(pr
     claim = Canon(verb="claim.force", agent="bot", item="T1", state="s")
     cfg = _cfg(policy=["claim_unavailable"], policy_max_uses=99)
     got = C.operator_gate(log, cfg, claim)
-    assert not got.ok and got.ask_id  # a person is asked, never a standing `policy:claim_unavailable`
+    assert (
+        not got.ok and got.ask_id
+    )  # a person is asked, never a standing `policy:claim_unavailable`
