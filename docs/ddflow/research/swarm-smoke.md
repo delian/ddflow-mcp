@@ -30,7 +30,7 @@ lane can do real work: every run was a toy item in a throwaway repo.
 | 10 | flash | launch | a served model id that does not exist | failed honestly: exit 1, `error` event with the server's message |
 | 11 | flash | conformance | shipped defaults | level 0: see B72bcd17b4e |
 
-Runs 8 and 9 did not ask for a heartbeat, so `smoke.judge` reports that step as failed there. That is the item, not the lane.
+`smoke.judge` checks the six steps of the toy item. Runs 8 and 9 ran a different script with no heartbeat step, so its `failed` for that step there says nothing about the lane, and those two runs are not counted as judged.
 
 ## Each step
 

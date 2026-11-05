@@ -87,6 +87,11 @@ def test_a_ddflow_refusal_inside_a_completed_call_is_a_refusal():
     assert "no commit ahead" in s.calls[0].detail
 
 
+def test_a_refusal_with_no_reason_is_still_a_refusal():
+    s = S.read_stream([tool("ddflow_ddflow_heartbeat", out='{"refusal":{"reason":""}}')])
+    assert s.calls[0].status == S.REFUSED
+
+
 def test_a_lease_hook_error_is_a_guard_refusal_not_a_bad_call():
     no_lease = f"lane {LANE} holds no live lease: stop; do not write any file"
     glob = f"lane {LANE}: other.txt is outside the item's lease globs (hello.txt); do not edit it"
@@ -198,6 +203,19 @@ def test_a_call_sent_with_the_refused_one_was_already_in_flight():
     assert outcomes(judged([*GOOD, turn, gone, sent]))["stop"] == S.PASSED
 
 
+def test_work_after_a_heartbeat_that_renewed_nothing_is_not_stopping():
+    turn = json.dumps({"type": "step_start"})
+    dead = tool("ddflow_ddflow_heartbeat", out='{"renewed":false}', id=ITEM)
+    after = tool("bash", out="", command="ls")
+    assert outcomes(judged([*GOOD, turn, dead]))["stop"] == S.PASSED
+    assert outcomes(judged([*GOOD, turn, dead, turn, after]))["stop"] == S.FAILED
+
+
+def test_going_past_the_brief_fails_even_when_the_exit_was_not_seen():
+    v = judged(events=[*log(), ev("item.completed")], exit_code=None)
+    assert outcomes(v)["stop"] == S.FAILED and v.outcome == S.FAILED
+
+
 def test_a_lane_killed_or_failed_did_not_stop():
     assert outcomes(judged(exit_code=1))["stop"] == S.FAILED
     assert outcomes(judged(exit_code=None))["stop"] == S.UNAVAILABLE
@@ -218,6 +236,17 @@ def test_majority_of_runs():
 def test_unavailable_is_never_a_vote_for_passed():
     assert S.majority([S.PASSED, S.UNAVAILABLE, S.UNAVAILABLE]) == S.UNAVAILABLE
     assert S.majority([]) == S.UNAVAILABLE
+
+
+def test_unavailable_runs_weigh_the_same_on_both_sides():
+    assert S.majority([S.PASSED, S.PASSED, S.UNAVAILABLE, S.UNAVAILABLE]) == S.PASSED
+    assert S.majority([S.FAILED, S.FAILED, S.UNAVAILABLE, S.UNAVAILABLE]) == S.FAILED
+
+
+def test_too_few_judged_runs_decide_nothing():
+    assert S.majority([S.FAILED, S.UNAVAILABLE, S.UNAVAILABLE]) == S.UNAVAILABLE
+    many = [S.PASSED, S.PASSED, S.FAILED, *[S.UNAVAILABLE] * 4]
+    assert S.majority(many) == S.UNAVAILABLE
 
 
 def test_a_tie_is_not_a_pass():

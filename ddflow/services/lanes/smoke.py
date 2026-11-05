@@ -29,6 +29,8 @@ STEPS = ("claim", "edit", "commit", "heartbeat", "gate_record", "stop")
 #: The sentences of `lanehooks_check.verdict`, the first one meaning the lease has ended.
 LEASE_GONE = "holds no live lease"
 GUARD_MARKS = (LEASE_GONE, "outside the item's lease globs", "ddflow lane hook")
+#: What `_refusal` says of a heartbeat answering ``renewed: false``.
+NOT_RENEWED = "the heartbeat renewed nothing"
 #: Harness tools that change a file through a path the lease hook can judge.
 WRITE_TOOLS = frozenset({"write", "edit", "multiedit", "patch"})
 #: Events that mean a lane went past its brief: finishing the item is not a lane's to do here.
@@ -95,9 +97,9 @@ def _refusal(output: Any) -> str:
     if not isinstance(head, dict):
         return ""
     if head.get("renewed") is False:
-        return "the heartbeat renewed nothing"
+        return NOT_RENEWED
     got = head.get("refusal")
-    return str(got.get("reason", "refused")) if isinstance(got, dict) else ""
+    return str(got.get("reason") or "refused") if isinstance(got, dict) else ""
 
 
 def _call(part: dict[str, Any], step: int) -> Call:
@@ -177,16 +179,16 @@ def _commit(commits: int | None) -> Check:
 
 
 def _stop(calls: Sequence[Call], past: list[Any], exit_code: int | None) -> Check:
+    if past:  # proved by the log, whether or not the exit was seen
+        return Check("stop", FAILED, f"the lane went past its brief: {past[0].kind}")
+    gone = next((c.step for c in calls if LEASE_GONE in c.detail or c.detail == NOT_RENEWED), None)
+    after = [c for c in calls if gone is not None and c.step > gone]
+    if after:
+        return Check("stop", FAILED, f"{len(after)} call(s) in later turns, after the lease ended")
     if exit_code is None:
         return Check("stop", UNAVAILABLE, "the lane's exit was not observed")
     if exit_code != 0:
         return Check("stop", FAILED, f"the lane exited {exit_code}")
-    if past:
-        return Check("stop", FAILED, f"the lane went past its brief: {past[0].kind}")
-    gone = next((c.step for c in calls if LEASE_GONE in c.detail), None)
-    after = [c for c in calls if gone is not None and c.step > gone]
-    if after:
-        return Check("stop", FAILED, f"{len(after)} call(s) in later turns, after the lease ended")
     return Check("stop", PASSED, "exited by itself and left the item to the lead")
 
 
@@ -219,12 +221,14 @@ def judge(
 
 
 def majority(outcomes: Sequence[str]) -> str:
-    """The result of several runs: more than half passed, or a failure; an unavailable run is
-    no vote for either, and a tie is not a pass."""
+    """The result of several runs. Unavailable runs are no vote, but at least half of the runs
+    must have been judged, or nothing is decided. Among the judged, more than half passed is a
+    pass and anything else, a tie included, a failure."""
     passed, failed = outcomes.count(PASSED), outcomes.count(FAILED)
-    if passed * 2 > len(outcomes):
-        return PASSED
-    return FAILED if failed and failed >= passed else UNAVAILABLE
+    votes = passed + failed
+    if votes == 0 or votes * 2 < len(outcomes):
+        return UNAVAILABLE
+    return PASSED if passed * 2 > votes else FAILED
 
 
 def tool_call_fact(
