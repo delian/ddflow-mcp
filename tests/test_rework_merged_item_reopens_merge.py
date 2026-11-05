@@ -130,7 +130,7 @@ def test_next_does_not_offer_a_merged_uncompleted_item(repo):
     """A merged item not yet completed is not fresh work: `next` for a second lane must not
     list it as ready."""
     _merged(repo, agent="lane-1")
-    code, out, err = run_cli(repo, "--json", "next", agent="lane-2")
+    _code, out, _ = run_cli(repo, "--json", "next", agent="lane-2")
     plan = json.loads(out)
     ready_ids = [r["id"] for r in plan.get("ready", [])]
     assert "T1" not in ready_ids, plan
