@@ -18,6 +18,7 @@ from ...services.gates.rounds import delta_rounds as _delta_rounds
 from ...services.gates.rounds import full_rounds as _full_rounds
 from ...services.gates.rounds import rounds_used as _rounds_used
 from .._base import _load
+from ..lifecycle.author import _author_model
 from ..review_supersede import round_evidence
 from .context import (
     _BACKGROUND_HINT,
@@ -303,6 +304,25 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
+def _identifying_reviewer(results, author_model: str, cfg) -> Any:
+    """The review recorded as the gate's identifying pass.
+
+    The best review is the one with the fewest outstanding problems (its status is the
+    minimum of the run); when several tie -- every reviewer came back clean, the common
+    case -- a reviewer from a DIFFERENT family than the author is the one named, so a
+    clean cross-family review is not discarded when a same-family reviewer also ran
+    clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
+    `complete` resolves it (`[agent].family`, else the session model); when that is
+    unknown here the first tied reviewer is named, but the panel's other families are
+    carried in `reviewer_families` so a clean cross-family round is still seen (bug
+    B1a30dc3303).
+    """
+    best = min(results, key=lambda r: r.status)
+    tied = [r for r in results if r.status == best.status]
+    cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
+    return cross[0] if cross else best
+
+
 def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -507,7 +527,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         results.append(res)
         _say_result(say, res)
 
-    best = min(results, key=lambda r: r.status)
+    author_model, _ = _author_model(st, agent, "", cfg)
+    best = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
         best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )

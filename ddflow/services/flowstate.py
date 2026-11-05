@@ -38,7 +38,7 @@ from ..core import flowparams as FP
 from ..core import flowsignals as FS
 from ..core.events import Event
 from ..core.model import State
-from ..core.schedule import LIMIT_UNAVAILABLE
+from ..core.schedule import LIMIT_UNAVAILABLE, idle_reserved
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra import signals as SIG
@@ -128,10 +128,14 @@ def read_ring(repo: Path) -> list[dict]:
     return _read(repo)[0]
 
 
+def _flying(state: State, cfg: Config, now: float) -> list[str]:
+    live = state.active_leases(now, cfg.lease.grace_s)
+    return [i for i in live if i in state.items and not state.items[i].removed]
+
+
 def in_flight(state: State, cfg: Config, now: float) -> int:
     """Live leases on items that still exist: what the parallelism limit counts."""
-    live = state.active_leases(now, cfg.lease.grace_s)
-    return sum(1 for i in live if i in state.items and not state.items[i].removed)
+    return len(_flying(state, cfg, now))
 
 
 @contextlib.contextmanager
@@ -220,7 +224,12 @@ def _samples(rows: Sequence[dict]) -> list[FC.Sample]:
 
 
 def _history(rows: Sequence[dict]) -> list[tuple[float, int]]:
-    return [(float(r["at"]), int(r.get("in_flight", 0) or 0)) for r in rows]
+    # What the limit's growth is judged by: a reserved slot idle because the ordinary ones
+    # are full is a slot the limit could not give anyone (`idle_reserved`).
+    return [
+        (float(r["at"]), int(r.get("in_flight", 0) or 0) + int(r.get("reserved_idle", 0) or 0))
+        for r in rows
+    ]
 
 
 def _log_signals(events: Sequence[Event], now: float) -> dict[str, float | None]:
@@ -290,7 +299,9 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
         ctx.cfg, {**SIG.controller_signals(raw), **_log_signals(ctx.log_events(), now)}
     )
     flying = in_flight(ctx.state, ctx.cfg, now)
-    binding = flying >= _fold(ctx, rows, now, fresh=False).limit
+    limit = _fold(ctx, rows, now, fresh=False).limit
+    idle = idle_reserved(ctx.state, ctx.cfg, _flying(ctx.state, ctx.cfg, now), limit)
+    binding = flying + idle >= limit
     reasons = dict(getattr(source, "reasons", {}) or {})
     ensure_local_dir(ctx.repo)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -304,6 +315,7 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
             "at": now,
             "signals": signals,
             "in_flight": flying,
+            "reserved_idle": idle,
             "limit_binding": binding,
             "reasons": reasons,
         }
@@ -320,19 +332,31 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
 def current_limit(
     ctx: FlowCtx, source: SIG.SignalSource | None = None, clock: Clock = time.time
 ) -> FC.Decision:
-    """The parallelism limit in force now. In ``fixed`` mode it is
-    ``max_parallel_tasks``; in ``auto`` the ring folded through the controller, after
-    taking a sample if one is due and a ``source`` was given."""
+    """The parallelism limit in force now: the ring folded through the controller, after
+    taking a sample if one is due and a ``source`` was given. In ``fixed`` mode the fixed
+    knob ``max_parallel_tasks`` is still the ceiling -- the fold may lower it under load
+    (down to ``max_parallel_min``) but never above -- so the label stays ``fixed``."""
     s = ctx.cfg.schedule
-    if s.parallel != "auto":
-        return FC.Decision(s.max_parallel_tasks, "fixed", "fixed", "schedule.parallel = fixed")
     now = clock()
     if source is not None:
         result = sample_if_due(ctx, source, clock)
         if result.unavailable:
             start = FP.params(ctx.cfg).bounds()[1]
-            return FC.Decision(start, "start", FC.NO_SIGNALS, result.reason)
-    return _fold(ctx, read_ring(ctx.repo), now, fresh=True)
+            return FC.Decision(
+                start,
+                "fixed" if s.parallel != "auto" else "start",
+                FC.NO_SIGNALS,
+                result.reason,
+            )
+    decision = _fold(ctx, read_ring(ctx.repo), now, fresh=True)
+    if s.parallel != "auto":
+        # The fold's limit, governed by the signals, but labelled fixed: `_parallel`
+        # reads the mode to phrase the cap, and the limit below the knob says the load
+        # lowered it.
+        return FC.Decision(
+            decision.limit, "fixed", decision.limited_by, decision.reason, decision.admit_paused
+        )
+    return decision
 
 
 def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.Decision:
@@ -355,10 +379,8 @@ def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.
 
 def history_notes(cfg: Config, events: Sequence[Event], now: float | None = None) -> list[str]:
     """doctor's notes for the log-derived signals with too little history to be read
-    (`flowsignals.history_notes`): none in ``fixed`` mode, where nothing is sampled, and
-    none for a signal `[schedule.signals].enabled` switches off."""
-    if cfg.schedule.parallel != "auto":
-        return []
+    (`flowsignals.history_notes`), and none for a signal `[schedule.signals].enabled`
+    switches off."""
     at = time.time() if now is None else now
     return FS.history_notes(FS.Signals(**_log_signals(events, at)), FP.enabled_signals(cfg))
 

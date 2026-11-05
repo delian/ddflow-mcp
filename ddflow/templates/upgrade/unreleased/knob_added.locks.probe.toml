@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.probe"
+new = "true"
+why = "The conflict probe: `ddflow probe ITEM [--against main|ITEM]` asks git (`merge-tree --write-tree`, 8 to 21 ms typical) whether the item's branch merges textually clean with main or a peer's branch, and records the answer as a `probe.reco..."
+impact = "additive"

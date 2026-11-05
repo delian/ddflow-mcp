@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.selected_lock_runs"
+new = "50"
+why = "How many of the newest measured ci runs the suite-slot prediction takes its median from; it bounds the search of the log."
+impact = "additive"

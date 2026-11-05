@@ -471,12 +471,19 @@ def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> li
     return [f"task branch(es) not merged into {base}: {', '.join(left)} (`ddflow merge <id>`)"]
 
 
+#: Sits in the blocker `_own_branch_unmerged` writes: what `flow.pre_merge_blockers` drops.
+UNMERGED_BLOCKER = "has commits not merged into"
+
+
 def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> list[str]:
     """The item's OWN branch still holds commits its base lacks. Completing it in that state
     records the work done while those commits never reached the base — a partial land that
     drops them without notice (Bd59dded6a4). The branchless phase is backstopped by
     `_unmerged_branches`; this is each task's own guard. Git unable to answer is treated as
-    unmerged — a conservative blocker, so an unreadable tree cannot silently drop work."""
+    unmerged — a conservative blocker, so an unreadable tree cannot silently drop work.
+    A branch still at the tip `merge` landed is merged whatever ancestry says, as a squash
+    leaves none, while the base still holds what landed. A commit added since moves the tip,
+    and a base rewound past the landing no longer holds it: the guard speaks again."""
     if it.kind == "phase" or not it.branch or it.promote_to:
         return []
     base = (
@@ -486,8 +493,13 @@ def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> lis
     )
     if not W.branch_exists(repo, it.branch) or W.is_merged(repo, it.branch, base):
         return []
+    tip = W.rev(repo, it.branch)
+    if it.pr and it.pr.state == "merged" and tip == it.pr.head_sha:
+        return []  # the forge's word: its base may be a stack, and not fetched here
+    if it.merged_sha and tip == it.merged_head and W.is_merged(repo, it.merged_sha, base):
+        return []
     return [
-        f"branch {it.branch} has commits not merged into {base}: `ddflow merge {it.id}` "
+        f"branch {it.branch} {UNMERGED_BLOCKER} {base}: `ddflow merge {it.id}` "
         f"first, so completing it does not drop them (or `ddflow abandon {it.id} --force` "
         f"to drop them deliberately)"
     ]

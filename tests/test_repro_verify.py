@@ -266,12 +266,12 @@ def test_the_capture_is_a_scratch_file_not_an_in_process_buffer(proj, monkeypatc
     # tail file never dirties the reproduced tree; a rollback to buffering the whole
     # output then slicing would keep the same tail -- and lose the redirect.
     _config(proj, "[bugs]\nrepro_tail_bytes = 8\n")
-    from ddflow.services import reprocheck as RC
+    from ddflow.infra import proc as P
 
     calls: list[tuple[str, dict]] = []
-    real = RC.P.run_shell
+    real = P.run_shell
     monkeypatch.setattr(
-        RC.P, "run_shell", lambda line, **kw: calls.append((line, kw)) or real(line, **kw)
+        P, "run_shell", lambda line, **kw: calls.append((line, kw)) or real(line, **kw)
     )
     _bid, bug = _file(
         proj, repro_cmd=python("import sys; sys.stdout.write('x' * 100000); sys.exit(0)")

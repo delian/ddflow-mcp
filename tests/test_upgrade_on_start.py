@@ -247,10 +247,11 @@ def test_an_unreadable_project_does_not_fail_the_handshake(
     old: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from ddflow.api import setup as S
+    from ddflow.api.setup import session as SS
     from ddflow.surfaces.mcp import _instructions
 
     S._START_REPORTS.clear()
-    monkeypatch.setattr(S, "_load", lambda *a, **k: (_ for _ in ()).throw(OSError("unreadable")))
+    monkeypatch.setattr(SS, "_load", lambda *a, **k: (_ for _ in ()).throw(OSError("unreadable")))
     assert "serving anyway" in _instructions(old, "starter")
 
 
@@ -282,10 +283,11 @@ def test_a_failing_start_report_does_not_silence_the_one_line_notice(
     old: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from ddflow.api import setup as S
+    from ddflow.api.setup import session as SS
     from ddflow.surfaces.mcp import _instructions
 
     S._START_REPORTS.clear()
-    monkeypatch.setattr(S.US, "start", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(SS.US, "start", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     monkeypatch.setattr(S, "upgrade_start", lambda *a, **k: (_ for _ in ()).throw(OSError("y")))
     from ddflow import api
 
@@ -299,6 +301,7 @@ def test_two_handshakes_at_once_make_one_start_check(
     import threading
 
     from ddflow.api import setup as S
+    from ddflow.api.setup import session as SS
 
     S._START_REPORTS.clear()
     calls: list[int] = []
@@ -308,7 +311,7 @@ def test_two_handshakes_at_once_make_one_start_check(
         time.sleep(0.3)
         return {"text": "once"}
 
-    monkeypatch.setattr(S.US, "start", slow)
+    monkeypatch.setattr(SS.US, "start", slow)
     out: list[str] = []
     threads = [threading.Thread(target=lambda: out.append(S.upgrade_start(old))) for _ in range(4)]
     for t in threads:
@@ -344,12 +347,13 @@ def test_a_failed_start_check_is_retried_not_cached(
 ) -> None:
     """Review finding: one transient failure muted the start check for the whole process."""
     from ddflow.api import setup as S
+    from ddflow.api.setup import session as SS
 
     S._START_REPORTS.clear()
-    real = S._load
-    monkeypatch.setattr(S, "_load", lambda *a, **k: (_ for _ in ()).throw(OSError("locked")))
+    real = SS._load
+    monkeypatch.setattr(SS, "_load", lambda *a, **k: (_ for _ in ()).throw(OSError("locked")))
     assert "failed (locked)" in S.upgrade_start(old, agent="starter")
-    monkeypatch.setattr(S, "_load", real)
+    monkeypatch.setattr(SS, "_load", real)
     assert "newer than this project" in S.upgrade_start(old, agent="starter")
 
 

@@ -153,9 +153,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             forced=False,
             **base,
         )
-    force, stamp = _auto_complete_unavailable(
-        log, cfg, item, v, hard, approval, agent, force, stamp
-    )
+    force, stamp = _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp)
     if not v.may_complete and not force:
         return O.refused(
             "item.completed",

@@ -16,11 +16,11 @@ class LogConfig:
 
     reuse_parsed: bool = knob(
         True,
-        doc="Re-use already-parsed events instead of re-parsing the whole log on every read. Sound because the log is APPEND-ONLY: a line that has been parsed can never change, so only the appended tail is new. Measured at 20k events: JSON parsing is 97ms of a 115ms read (84%), so this is where the time is. Set false to always re-read from scratch — slower, and the only reason to want it is a shard being rewritten in place under a running process, which `ddflow doctor` reports as a content-address mismatch anyway.",
+        doc="Re-use already-parsed events instead of re-parsing the whole log on every read. Sound because the log is APPEND-ONLY: a line that has been parsed can never change, so only the appended tail is new. Measured at 20k events: JSON parsing is 97ms of a 115ms read (84%), so this is where the time is. Set false to always re-read from scratch — slower, and the only reason to want it is a shard being rewritten in place under a running process, which `ddflow doctor` reports as a content-address mismatch anyway. It also turns off the per-shard append facts in `.ddflow/local/shardmeta/`, so a fresh process's append parses every shard.",
     )
     max_cached_events: int = knob(
-        100_000,
-        doc="Memory ceiling for reuse_parsed, in events. Measured at ~736 bytes per parsed event, so the 100,000 default holds ~74 MB in a long-lived MCP server. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
+        200_000,
+        doc="Memory ceiling for reuse_parsed, in events, across every log the process has read. Measured over a full load: ~2.5 KB per parsed event on a real project log (339 MB traced, ~380 MB of RSS for 137,407 events) and ~1.5 KB on a synthetic one, so the 200,000 default holds about 300 to 500 MB in a long-lived MCP server, depending on how much gate evidence the events carry. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
     )
     redact_builtin_shapes: bool = knob(
         True,
@@ -52,12 +52,17 @@ class LogConfig:
     )
     #: The on-disk read snapshot (B166) as knobs (B-log-snapshot-knobs).
     snapshot: bool = knob(
-        True,
-        doc="Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over this setting.",
+        False,
+        doc="Off by default since a measurement: on a real 137,407-event log a cold load takes 3.4 s with the snapshot and 2.6 s without (14.7 s against 12.6 s at 1M synthetic events), the load peaks ~200 MB higher, and each fingerprint costs ~113 MB of disk. Turning it off also deletes snapshot files an earlier setting left. It does not touch the per-shard append facts in `.ddflow/local/shardmeta/`, which follow `reuse_parsed` and the environment switch below. Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it and the shard facts off for one process and wins over this setting.",
     )
     snapshot_min_events: int = knob(
         5000,
         doc="No snapshot is written below this many events: a cold parse is cheap there and a file is not free. Lower it to snapshot a small log (tests do), raise it to snapshot only a large one. 0 removes this threshold only: a snapshot is still rewritten just when at least 1000 events (or a tenth of what it already covers) have been added.",
+        check=int_at_least(0),
+    )
+    snapshot_max_mb: int = knob(
+        256,
+        doc="Size cap for the read snapshot, in megabytes: a snapshot that would exceed it is not kept, and when the snapshots of all versions together exceed it the oldest of the others are collected. 0 keeps none.",
         check=int_at_least(0),
     )
     snapshot_stale_days: int = knob(
@@ -80,7 +85,7 @@ class LogConfig:
         doc="The evidence keys that may move out of line (needs evidence_blobs): by default the reviewer findings, the command output tail and the selected-tests list, which were 60% of gate evidence. A key a reader compares as plain text should not be added: a reader that has not been taught to read blobs back sees a reference where it expects the value.",
     )
     evidence_blob_min_bytes: int = knob(
-        1024,
-        doc="A value under an evidence key goes out of line only when its JSON is at least this many bytes: a small value is cheaper in the shard than as a file. 0 turns moving values out off.",
+        256,
+        doc="A value under an evidence key goes out of line only when its JSON is at least this many bytes: a small value is cheaper in the shard than as a file. The default was 1024 before PS-evidence-inline; 256 keeps mid-sized findings and tails out of the shard too (PS-evidence-inline). It applies to NEW gate events only, and only once `evidence_blobs` is on: events already written are never rewritten and keep resolving. Set 1024 to restore the old threshold. 0 turns moving values out off.",
         check=int_at_least(0),
     )

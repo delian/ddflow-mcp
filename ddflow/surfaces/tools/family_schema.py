@@ -1,7 +1,8 @@
 """Family tool schemas and routing (MTD-family-schema, D-mcp-tool-families).
 
 A family is ONE advertised tool with an ``action`` enum. Its ``inputSchema`` is the union of
-its members' arguments, each name once (the longest description wins), ``as_agent`` once, and
+its members' arguments, each name once (the longest description wins, cut to `LISTED_TEXT_MAX`),
+``as_agent`` once, and
 only ``action`` required: what an action needs is checked per action, by the member's own
 declaration, with errors that name the action (`route`, then the engine's `_check_call`). The
 description lists the actions and the arguments each one requires, so a model reads the
@@ -11,6 +12,7 @@ per-action shape without the union's noise. Everything is derived from `TOOLS` a
 
 from __future__ import annotations
 
+import re
 from typing import Any, NamedTuple
 
 from ..registry import AS_AGENT, AS_AGENT_SPEC, Param, params_schema
@@ -30,6 +32,12 @@ ACTION = "action"
 #: A member that has an argument of its own called ``action`` (queue, ci, prompts, hooks,
 #: export) is given it as ``op`` in its family, where ``action`` picks the member.
 OP = "op"
+#: The longest argument text a family lists. A family's schema is the union of its members'
+#: arguments, paid for by every session that loads it, so the listing keeps the opening of a
+#: long text; the member, its `--help` and the flat profile keep all of it.
+LISTED_TEXT_MAX = 120
+CUT_MARK = " ..."
+_SENTENCE_END = re.compile(r"[.;](?=\s)")
 
 #: One clause per family, after the action list.
 _BLURB = {
@@ -83,6 +91,18 @@ def _union(family: Family) -> dict[str, tuple[set[str], str]]:
     return union
 
 
+def _listed(text: str) -> str:
+    """``text`` as a family lists it: whole when short, else cut at the last sentence end that
+    fits, or at a word, and marked as cut."""
+    if len(text) <= LISTED_TEXT_MAX:
+        return text
+    room = LISTED_TEXT_MAX - len(CUT_MARK)
+    # one past ``room``: the whitespace after a sentence that ends exactly at the limit
+    ends = [m.end() for m in _SENTENCE_END.finditer(text, 0, room + 1)]
+    head = text[: ends[-1]] if ends else text[:room].rsplit(" ", 1)[0]
+    return head + CUT_MARK
+
+
 def _requires(tool: str) -> list[str]:
     """What the member requires, by the name its family gives each argument (``op``)."""
     return [
@@ -120,7 +140,11 @@ def family_entry(name: str) -> dict[str, Any]:
     family = FAMILIES[name]
     union = _union(family)
     params = tuple(
-        Param(n, type="string" if len(types) > 1 else next(iter(types)), help=text)
+        Param(
+            n,
+            type="string" if len(types) > 1 else next(iter(types)),
+            help=text if n == OP else _listed(text),
+        )
         for n, (types, text) in union.items()
     )
     schema = params_schema(params)

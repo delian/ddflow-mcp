@@ -73,7 +73,10 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     `unavailable` nor `partial`, so the outcome check refuses it. An excused required
     gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
     already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
-    the verdict alone knows what `applies_when` excused."""
+    the verdict alone knows what `applies_when` excused. A `partial` that only a person
+    accepts (`GA.person_only`, a measured baseline-red partial `gate run` did not
+    auto-accept) is refused here too, so the rule's own predicate and the completion site
+    read the SAME helper and cannot drift (B-complete-self-approves-over-person-only-partial)."""
     required = set(required_gates(cfg))
     for g in required:
         if it.gate_outcome(g) == GateOutcome.FAILED.value:
@@ -83,6 +86,7 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
         g in required
         and not it.gate_satisfied(g, True)
         and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        and not GA.person_only(it, g)
         for g in names
     )
 
@@ -185,6 +189,14 @@ def refusals(state, canon: Canon) -> int:
     return n
 
 
+def retry_armed(cfg: Config, canon: Canon) -> bool:
+    """Is the retry-threshold rule armed for ``canon``: `[approvals].auto_approve_after_retries`
+    above 0 and ``canon.verb`` a generic T2 retry verb. While armed, the refusal site's re-file of
+    an unresolved retry verb must be a NEW filing, not the deduplicated pending one, so
+    `refusals` accumulates over distinct filings and the threshold becomes reachable."""
+    return cfg.approvals.auto_approve_after_retries > 0 and canon.verb in RETRY_VERBS
+
+
 def _approved(
     log, cfg: Config, canon: Canon, reason: str, rule_id: str, *, notify: int = 0
 ) -> dict[str, Any]:
@@ -237,7 +249,7 @@ def apply(
         return _approved(log, cfg, canon, reason, rule_id)
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
-        if threshold > 0 and canon.verb in RETRY_VERBS:
+        if retry_armed(cfg, canon):
             n = refusals(state, canon)
             if n >= threshold:
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.
