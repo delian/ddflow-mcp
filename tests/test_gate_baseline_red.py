@@ -375,6 +375,26 @@ def test_a_run_cut_short_answers_only_when_it_reached_every_id(repo) -> None:
     assert outcome == "unavailable" and ev["baseline"]["unmeasured"] == [ID]
 
 
+@pytest.mark.parametrize(
+    "result",
+    [
+        ("passed", {"exit": 0, "summary": ["1 passed, 1 deselected in 0.1s"]}),
+        (
+            "failed",
+            {"exit": 1, "failed_tests": [ID], "summary": ["1 failed, 1 deselected in 0.1s"]},
+        ),
+    ],
+    ids=["pass", "fail"],
+)
+def test_a_run_that_reached_fewer_ids_than_asked_says_nothing_of_the_rest(repo, result) -> None:
+    """A kept `-k` deselects: the id it never ran is not one that passes on the base."""
+    _project(repo)
+    two = "tests/test_x.py::test_b"
+    outcome, why, ev = _measure(repo, [ID, two], lambda g, where=None: result)
+    assert outcome == "unavailable" and "new failure" not in why
+    assert ev["baseline"]["unmeasured"] == [ID, two]
+
+
 def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -> None:
     """No probe exists for it, so there is no measurement to lose: the failure stands as it was."""
     from ddflow.api import gate_baseline as GB

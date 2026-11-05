@@ -171,14 +171,17 @@ def _probe(gdef, root: Path, part: list[str], run):
 
 
 def _no_verdict(outcome: str, ev: dict[str, Any], asked: int) -> bool:
-    """Did a run that RAN leave any of the ``asked`` ids unreached? Its exit says so, a run cut
-    short counts fewer, or a pass counts none."""
+    """Did a run that RAN leave any of the ``asked`` ids unreached? Its exit says so, or it counts
+    fewer tests than it was asked for (a kept `-k` deselects some). A failed run with no count
+    at all is left to its listed failures."""
     code = ev.get("exit")
     if code in ABORTED:
         return True
     counts = counts_of(" ".join(ev.get("summary") or ()))
     ran = sum(counts.get(word, 0) for word in EXECUTED)
-    return ran < asked if code in CUT_SHORT else outcome == "passed" and not ran
+    if code in CUT_SHORT or outcome == "passed":
+        return ran < asked
+    return 0 < ran + counts.get("error", 0) < asked
 
 
 def _lacking(probe, root: Path, part: list[str], ev: dict[str, Any], run) -> tuple[list, list]:
