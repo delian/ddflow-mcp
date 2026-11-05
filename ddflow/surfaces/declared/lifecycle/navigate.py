@@ -43,9 +43,7 @@ def _next_text(out, a, ctx):
         return L.next_text(out, a, ctx)
     if out.exit == OK:
         d = out.data
-        return (
-            f"{d['lane']}: take {d['item']}\n  ddflow claim {d['item']} --note {quote(d['note'])}"
-        )
+        return f"{d['lane']}: take {d['item']}\n  ddflow claim {quote(d['item'])} --note {quote(d['note'])}"
     return f"{a['lane']}: {out.reason}"
 
 

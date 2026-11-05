@@ -2306,7 +2306,8 @@ lane records it by claiming with `ddflow claim <item> --note "<note>"`, the comm
 NAME is a `[template.<name>]` in `swarm.launch_templates_file`. Family and trust come from that
 template and the model catalog, and nothing is defaulted: with no template, a template a person
 has not approved at its digest, no declared `trust`, or a family or model the catalog cannot
-vouch for, the answer is `unavailable` and offers nothing. Exit 0 is an offer; exit 2 is
+vouch for, the answer is `unavailable` and offers nothing (a locally named model needs its row
+in `.ddflow/local/models.toml`). Exit 0 is an offer; exit 2 is
 `unavailable`, `hold` (the parallel limit or paused admission) or `none` (nothing eligible, with
 the first `swarm.dispatch_why_items` refusals). It starts nothing: launching is a separate step.
 

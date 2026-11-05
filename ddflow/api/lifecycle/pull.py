@@ -17,7 +17,7 @@ from ...core import outcome as O
 from ...core import progress as PR
 from ...core.admission import shared_globs
 from ...core.defaults import DEFAULT_NEXT_KIND
-from ...core.model import State
+from ...core.model import RUNNING, State
 from ...core.schedule import critical_path
 from ...services import flowstate as FL
 from ...services import modelreg
@@ -94,11 +94,13 @@ def _live_families(events: Any, cfg: Config, live: dict[str, Any], now: float) -
     }
 
 
-def _candidates(p: Any) -> list[str]:
+def _candidates(p: Any, st: State) -> list[str]:
     """Everything ready in every sense but the offer: the cap-held and the items overlapping
     another offer compete too, since one lane takes one item and `Slots` already judged the
-    cap."""
-    return [*(i.id for i in p.ready), *p.capped, *p.overlapped]
+    cap. An interrupted item does not: its worktree may hold work, and someone salvages that
+    before a lane starts over."""
+    ids = [*(i.id for i in p.ready), *p.capped, *p.overlapped]
+    return [i for i in ids if st.items[i].state != RUNNING]
 
 
 def _ask(
@@ -152,7 +154,7 @@ def next_lane(
         st,
         _source(repo, cfg, st, lane, now),
         lane,
-        _candidates(p),
+        _candidates(p, st),
         slots=_slots(repo, cfg, st, log, now),
         phase=phase,
         now=now,

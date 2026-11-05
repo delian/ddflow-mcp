@@ -45,6 +45,7 @@ OFFER = "offer"
 HOLD = "hold"
 NONE = "none"
 UNAVAILABLE = "unavailable"
+CUT = "..."
 
 
 @dataclass(frozen=True)
@@ -112,25 +113,16 @@ class Answer:
     decision: score.Decision | None = None
 
 
-def _vendor_of(cat: modelreg.Catalog, family: str) -> str:
-    """The vendor a template's family names, by family id or as a vendor itself; "" if none."""
-    idents = {fid: modelreg._identity(row) for fid, row in cat.family.items()}
-    if family in idents:
-        return idents[family].get("vendor") or ""
-    return family if family and any(i.get("vendor") == family for i in idents.values()) else ""
-
-
 def catalog_facts(cat: modelreg.Catalog, t: Template) -> LaneFacts:
     """The catalog's facts for ``t``. The one reader here that is not clock-free: a fact past
     its review date stops being believed. The caller reads it, so the answer stays pure."""
     route = modelreg.presets(cat).get(t.route, {})
     model = t.model or route.get("model") or ""
     res = modelreg.resolve(cat, model)
-    known = res.family != modelreg.UNKNOWN
     prices = lane_prices(cat, model, t.route) if model else {}
     return LaneFacts(
         model=model,
-        vendor=res.vendor if known else _vendor_of(cat, t.family),
+        vendor=res.vendor,
         family=res.family,
         price_in=prices.get("price_in"),
         price_out=prices.get("price_out"),
@@ -151,7 +143,7 @@ def gaps(src: LaneSource) -> tuple[str, ...]:
     if not f.model:
         out.append(f"template {t.name}: model unknown, none named and none served by the route")
     if not f.vendor:
-        out.append(f"template {t.name}: family {t.family!r} is not one the catalog knows")
+        out.append(f"template {t.name}: the catalog knows no family for model {f.model!r}")
     elif f.family not in ("", modelreg.UNKNOWN) and t.family not in (f.family, f.vendor):
         out.append(f"template {t.name}: family {t.family!r} contradicts the catalog's {f.family!r}")
     return tuple(out)
@@ -194,7 +186,8 @@ def note(
     text = " ".join(" ".join(head).split())
     if len(text) <= bounds.note_chars:
         return text
-    return text[: max(0, bounds.note_chars - 3)] + "..."
+    cut = bounds.note_chars - len(CUT)
+    return text[:cut] + CUT if cut > 0 else text[: bounds.note_chars]
 
 
 def _bounded(rows: Sequence[str], bounds: Bounds) -> tuple[str, ...]:

@@ -7,13 +7,15 @@ import os
 import subprocess
 import sys
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from conftest import run_cli
 
 from ddflow import api
+from ddflow.api.lifecycle import pull as PL
 from ddflow.config import Config
-from ddflow.core.model import DONE, Lease, State
+from ddflow.core.model import DONE, RUNNING, Lease, State, fold
 from ddflow.core.model import Item as QItem
 from ddflow.infra.log import EventLog
 from ddflow.services import modelreg
@@ -23,6 +25,7 @@ from ddflow.services.swarm import dispatch as D
 from ddflow.services.swarm import ledger as L
 from ddflow.services.swarm.score import Decision, Item, Lane, Live, World
 from ddflow.services.swarm.score_config import Weights
+from ddflow.surfaces.declared.lifecycle import navigate as NAV
 from ddflow.surfaces.mcp import Server
 
 W = Weights()
@@ -207,6 +210,12 @@ def test_the_note_is_one_line_within_its_bound():
     assert text.endswith("...")
 
 
+@pytest.mark.parametrize("chars", [1, 2, 3])
+def test_the_note_bound_holds_below_the_cut_mark(chars):
+    d = _decision(family="f", model="m")
+    assert len(D.note(d, D.Bounds(note_chars=chars, why_items=1))) == chars
+
+
 def test_the_note_keeps_every_figure_when_only_the_why_is_cut():
     d = _decision(reasons=("z" * 900,), family="f", model="m")
     assert "fit=1.000" in D.note(d, D.Bounds(note_chars=120, why_items=3))
@@ -216,7 +225,7 @@ def _catalog():
     return modelreg.load()
 
 
-def test_catalog_facts_read_the_vendor_and_price_gap():
+def test_catalog_facts_read_the_family_and_the_vendor():
     cat = _catalog()
     t = replace(TPL, family="qwen", model="Qwen3-Coder", route="ollama")
     facts = D.catalog_facts(cat, t)
@@ -228,17 +237,13 @@ def test_catalog_facts_take_the_route_model_when_the_template_names_none():
     assert D.catalog_facts(_catalog(), t).model == "deepseek-chat"
 
 
-def test_catalog_facts_use_the_template_family_for_a_model_the_catalog_does_not_know():
+def test_a_model_the_catalog_does_not_know_is_unavailable_whatever_the_template_says():
     t = replace(TPL, family="deepseek", model="house-build-7", route="ollama")
     facts = D.catalog_facts(_catalog(), t)
-    assert (facts.family, facts.vendor) == ("unknown", "deepseek")
-
-
-def test_catalog_facts_never_invent_a_vendor():
-    t = replace(TPL, family="no-such-family", model="house-build-7", route="ollama")
-    assert D.catalog_facts(_catalog(), t).vendor == ""
-    t = replace(TPL, family="local", model="house-build-7", route="ollama")
-    assert D.catalog_facts(_catalog(), t).vendor == ""
+    assert (facts.family, facts.vendor) == ("unknown", "")
+    got = _pull(src=_src(template=t, facts=facts))
+    assert got.status == D.UNAVAILABLE
+    assert any("no family for model 'house-build-7'" in w for w in got.why)
 
 
 def test_lane_of_prefers_template_prices_and_keeps_the_catalog_window():
@@ -413,6 +418,14 @@ def test_next_lane_counts_a_holder_of_its_family_against_the_family_cap(repo):
     assert "family_cap" in out.reason
 
 
+def test_next_lane_leaves_an_interrupted_item_to_be_salvaged(repo):
+    _queue(repo)
+    st = fold(EventLog(repo, "reader").read_all(), strict=False)
+    st.items["a"].state = RUNNING
+    plan = SimpleNamespace(ready=[st.items["a"]], capped=[], overlapped=[])
+    assert PL._candidates(plan, st) == []
+
+
 def test_next_lane_is_the_cli_flag_and_prints_the_claim(repo):
     _queue(repo)
     _approve(repo, "ds")
@@ -425,6 +438,12 @@ def test_next_lane_is_the_cli_flag_and_prints_the_claim(repo):
     assert got.returncode == 0, got.stderr
     assert "ds: take a" in got.stdout
     assert "ddflow claim a --note" in got.stdout
+
+
+def test_the_printed_claim_quotes_the_item():
+    out = SimpleNamespace(exit=0, data={"lane": "l", "item": "a b;x", "note": "n"})
+    text = NAV._next_text(out, {"lane": "l"}, None)
+    assert "ddflow claim 'a b;x' --note n" in text
 
 
 def test_next_lane_over_mcp_is_the_same_answer(repo):
