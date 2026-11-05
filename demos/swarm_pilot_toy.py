@@ -37,6 +37,8 @@ MIN_SAMPLES = 10
 VERBS = frozenset(
     {"init", "phase", "task", "next", "claim", "gate", "merge", "complete", "metrics", "show"}
 )
+#: The git verbs the harness uses; `config` only names the sandbox's committer.
+GIT_VERBS = frozenset({"add", "commit", "config", "remote", "rev-parse"})
 PASSED_ENV = ("LANG", "LC_ALL")
 
 
@@ -182,6 +184,10 @@ class Sandbox:
             raise Refused(f"{self.repo} has a remote: a sandbox has nowhere to push")
 
     def git(self, *argv: str, cwd: Path | None = None) -> str:
+        """Stdout of one git verb in this sandbox; `Refused` off the list, so a `--git-dir` or a
+        `core.worktree` cannot point it at another repository."""
+        if argv[0] not in GIT_VERBS or (argv[0] == "config" and not argv[1].startswith("user.")):
+            raise Refused(f"git {' '.join(argv[:2])}: not a pilot verb")
         p = subprocess.run(
             ["git", "-C", str(cwd or self.repo), *argv],
             capture_output=True,

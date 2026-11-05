@@ -237,6 +237,8 @@ def _why_not(before: dict, after: dict) -> list[str]:
         for k in ("worker", "work_s", "items")
         if before[k] != after[k]
     ]
+    if (before["lanes"] or 0) >= (after["lanes"] or 0):
+        why.append(f"lanes: {before['lanes']} before and {after['lanes']} after, want fewer before")
     for name, s in (("before", before), ("after", after)):
         if s["merged"] != s["items"]:
             why.append(f"{name}: {s['merged']} of {s['items']} items merged")

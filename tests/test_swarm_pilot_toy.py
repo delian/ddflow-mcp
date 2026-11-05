@@ -186,6 +186,15 @@ def test_the_guard_runs_on_every_verb_a_sandbox_is_given(tiny):
         tiny.ddflow("complete", "toy-01", "--force")
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [("--git-dir", "/x/.git", "status"), ("config", "core.worktree", "/x"), ("push", "origin")],
+)
+def test_git_cannot_be_pointed_elsewhere(tiny, argv):
+    with pytest.raises(T.Refused, match="not a pilot verb"):
+        tiny.git(*argv)
+
+
 def test_a_second_run_of_one_sandbox_is_refused(tiny):
     with pytest.raises(T.Refused, match="already ran"):
         R.run(T.Sandbox.open(tiny.repo), 1, R.StubWorker(0.0), max_s=1)
@@ -305,6 +314,12 @@ def test_a_pair_that_cannot_be_compared_is_not_judged(after, word):
     assert set(rep["compare"]["targets"].values()) == {None}  # the JSON judges nothing either
     text = R.render(rep)
     assert "NOT COMPARABLE" in text and "met" not in text.replace("NOT MEASURED", "").lower()
+
+
+@pytest.mark.parametrize(("before", "after"), [(3, 1), (3, 3), (None, None)])
+def test_the_baseline_must_have_the_fewer_lanes(before, after):
+    rep = R.judge(_side(lanes=before), _side(lanes=after, per_hour=9.0))
+    assert not rep["comparable"] and any("lanes" in why for why in rep["why_not"])
 
 
 def test_a_missing_figure_is_na_not_zero():
