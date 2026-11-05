@@ -12,6 +12,7 @@ import os
 import stat
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -114,6 +115,65 @@ def test_a_store_others_can_write_is_refused(proj, monkeypatch):
     os.chmod(AU.store_path(proj), 0o666)
     with pytest.raises(AU.AuthRefused, match="permissions"):
         AU.verify(proj, Config(), token)
+
+
+def test_a_corrupt_store_verifies_nothing(proj, monkeypatch):
+    token = _token(proj, monkeypatch)
+    AU.store_path(proj).write_text("{not json", "utf-8")
+    with pytest.raises(AU.AuthRefused, match="unreadable"):
+        AU.verify(proj, Config(), token)
+
+
+def test_a_symlinked_store_is_refused(proj, monkeypatch, tmp_path):
+    token = _token(proj, monkeypatch)
+    store = AU.store_path(proj)
+    planted = tmp_path / "planted.json"
+    planted.write_text(store.read_text("utf-8"), "utf-8")
+    planted.chmod(0o600)
+    store.unlink()
+    store.symlink_to(planted)
+    with pytest.raises(AU.AuthRefused, match="permissions"):
+        AU.verify(proj, Config(), token)
+
+
+def test_every_worktree_of_a_project_shares_one_store(proj):
+    subprocess.run(["git", "-C", str(proj), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(proj), "-c", "user.name=t", "-c", "user.email=t@example.com",
+         "commit", "-qm", "base", "--allow-empty"], check=True, capture_output=True,
+    )  # fmt: skip
+    tree = proj.parent / "linked"
+    subprocess.run(
+        ["git", "-C", str(proj), "worktree", "add", "-q", str(tree)],
+        check=True, capture_output=True,
+    )  # fmt: skip
+    assert AU.store_path(tree) == AU.store_path(proj)
+
+
+def test_a_token_for_one_project_proves_nothing_in_another(proj, monkeypatch, tmp_path):
+    token = _token(proj, monkeypatch)
+    other = tmp_path / "other"
+    other.mkdir()
+    with pytest.raises(AU.AuthRefused):
+        AU.verify(other, Config(), token)
+
+
+def test_two_clients_racing_for_one_code_get_one_token(proj):
+    code = AU.start_pairing(_log(proj), Config(), name="n", role="bot").code
+    won, lost = [], []
+
+    def spend() -> None:
+        try:
+            won.append(AU.redeem(_log(proj), Config(), code))
+        except AU.AuthRefused as exc:
+            lost.append(exc)
+
+    threads = [threading.Thread(target=spend) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(won) == 1 and len(lost) == 5
 
 
 def test_the_store_path_is_no_knob():
