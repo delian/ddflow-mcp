@@ -78,6 +78,20 @@ class IndexMissing(DocIndexError):
     """There is no index (or it is of another schema): build it first."""
 
 
+def read_only_rows(
+    path: Path, sql: str, params: tuple[Any, ...] = (), timeout_s: float = 2
+) -> list[tuple[Any, ...]]:
+    """The rows of one query on a SQLite file ddflow does not own, opened read-only: the file
+    is never created or changed. A file that cannot be read for any reason (missing, locked,
+    not a database, another schema) is no rows."""
+    try:
+        uri = f"{path.absolute().as_uri()}?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True, timeout=timeout_s)) as con:
+            return con.execute(sql, params).fetchall()
+    except (sqlite3.Error, OSError):
+        return []
+
+
 def capabilities() -> tuple[bool, bool]:
     """(fts5, trigram) of this SQLite build, probed on a throwaway in-memory database."""
     out = []
