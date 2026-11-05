@@ -128,7 +128,10 @@ def recipe(rel: str = REL, tier: str = "core") -> str:
 
 
 def deferral_note(
-    environ: Mapping[str, str], *, tier: str, where: str = f"`[mcp].worker_tools`, {REL}"
+    environ: Mapping[str, str],
+    *,
+    tier: str,
+    remedy: str = f"start workers on the `core` tier (`[mcp].worker_tools`, {REL})",
 ) -> str:
     """The doctor note when the host would send every ddflow schema: tool search switched off
     or set so high that nothing is deferred, while this project advertises the whole tool list.
@@ -145,8 +148,7 @@ def deferral_note(
         return ""
     return (
         f"ENABLE_TOOL_SEARCH={value} makes the host send every ddflow schema "
-        f"(~58K tokens on the `{tier}` tool tier): start workers on the `core` tier "
-        f"({where})"
+        f"(~58K tokens on the `{tier}` tool tier): {remedy}"
     )
 
 
@@ -160,7 +162,8 @@ def doctor_notes(cfg: Any, environ: Mapping[str, str] | None = None) -> list[str
     except ValueError:  # the config check names it; a note here would say it twice
         lanes = {}
     wide = sorted(lane for lane, tier in lanes.items() if deferral_note(env, tier=tier))
-    where = f"`[mcp].lane_tools`, {', '.join(lane_rel(lane) for lane in wide)}"
+    files = ", ".join(lane_rel(lane) for lane in wide)
+    remedy = f"lower these lanes in `[mcp].lane_tools` and run `ddflow adopt` ({files})"
     notes = [deferral_note(env, tier=cfg.mcp.worker_tools)]
-    notes += [deferral_note(env, tier=lanes[wide[0]], where=where)] if wide else []
+    notes += [deferral_note(env, tier=lanes[wide[0]], remedy=remedy)] if wide else []
     return [note for note in notes if note]

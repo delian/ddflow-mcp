@@ -384,16 +384,19 @@ def test_the_doctor_counts_a_lane_on_the_whole_tool_list():
     assert WM.doctor_notes(_cfg(), env) == []
     assert WM.doctor_notes(_cfg(lanes="impl=standard"), env) == []
     (note,) = WM.doctor_notes(_cfg(lanes="impl=standard,rev=all"), env)
-    assert "`all` tool tier" in note and "[mcp].lane_tools" in note and WM.lane_rel("rev") in note
-    assert "worker_tools" not in note and WM.lane_rel("impl") not in note
+    cause = WM.deferral_note(env, tier="all").partition(": ")[0]
+    assert note == (
+        f"{cause}: lower these lanes in `[mcp].lane_tools` and run `ddflow adopt` "
+        f"({WM.lane_rel('rev')})"
+    )
 
 
 def test_the_doctor_says_each_place_that_runs_the_whole_tool_list():
     env = {"ENABLE_TOOL_SEARCH": "false"}
     worker, lane = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
-    assert "[mcp].worker_tools" in worker and REL in worker
-    assert "[mcp].lane_tools" in lane and WM.lane_rel("rev") in lane
-    assert WM.doctor_notes(_cfg(worker="all"), env) == [WM.deferral_note(env, tier="all")]
+    assert worker == WM.deferral_note(env, tier="all")
+    assert lane == WM.doctor_notes(_cfg(lanes="rev=all"), env)[0]
+    assert WM.doctor_notes(_cfg(worker="all"), env) == [worker]
 
 
 def test_the_doctor_survives_a_hand_edited_bad_lane_list():
