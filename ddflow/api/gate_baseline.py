@@ -50,6 +50,9 @@ def apply(  # noqa: PLR0913, PLR0917
     ev["baseline"] = found
     if not found["red"]:
         return _not_red(ev, found, base, ids, result, why)
+    if unran := _guards_unran(gate, ev):
+        ev["reason"] = unran
+        return result, unran
     bug = _linked(repo, agent, ids) or _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
     found["auto"] = BL.auto_decision(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
@@ -86,6 +89,27 @@ def _not_red(
     if why:
         ev["reason"] = reason
     return "unavailable", reason
+
+
+def _guards_unran(gate: str, ev: dict[str, Any]) -> str:
+    """Why a ci run's baseline-red conclusion must not stand ("" when it may): the selected
+    run had always-run guards planned (`[ci].always_tests`, `ALWAYS = True`) that never ran to a
+    verdict -- the selection failed first, so they were skipped. Every selected failure being
+    baseline-red would otherwise read as 'nothing new' while the guards, whose input is the whole
+    code base, never got to catch a regression (B47a1dbeba0)."""
+    if gate != "ci":
+        return ""
+    scope = ev.get("ci_scope") or {}
+    if scope.get("scope") != "selected" or not scope.get("always"):
+        return ""  # full scope ran everything; no guards were planned to run after the selection
+    verdict = (scope.get("ran") or {}).get("always")
+    if verdict is not None and verdict != "unavailable":
+        return ""  # they ran to a verdict; a guard failure is among the failing ids
+    return (
+        "the selected tests failed only as the base fails them (baseline-red), but the "
+        "always-run guards never ran (they run after the selection), so a regression in them "
+        "cannot be ruled out: the run is not baseline-red"
+    )
 
 
 def _file(
