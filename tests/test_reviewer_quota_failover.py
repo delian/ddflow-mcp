@@ -72,7 +72,11 @@ def test_classify_exhaustion_matches_quota_walls_only():
     assert classify_exhaustion("HTTP 403: rate limit exceeded") == "HTTP 403"
     assert classify_exhaustion("HTTP 429: too many requests") == "HTTP 429"
     assert classify_exhaustion("HTTP/1.1 403 Forbidden") == "HTTP/1.1 403"
+    assert classify_exhaustion("Client error '403 Forbidden' for url 'https://api.example'") == "403"
+    assert classify_exhaustion("gemini key 403") == "403"
     assert classify_exhaustion("command exited 1: quota exceeded") == "quota"
+    assert classify_exhaustion("insufficient_quota") == "quota"
+    assert classify_exhaustion("rate_limit_exceeded") == "rate_limit"
     assert classify_exhaustion("command exited 1: your rate limit is reached") == "rate limit"
     assert classify_exhaustion("command exited 1: request limit exceeded") == "request limit"
     # The diff's shape, not the endpoint's account: NEVER shed for these.
