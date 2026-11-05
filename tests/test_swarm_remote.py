@@ -622,6 +622,7 @@ def test_cleanup_removes_only_that_lane_and_stops_it(ssh, tmp_path):
     assert t.observe("l").status == "failed"
     with pytest.raises(R.RemoteError):
         t.cleanup("..")
+    assert (home / k.lanes_root / "keep" / "f").exists()
 
 
 def test_unreachable_host_is_unavailable_never_failed_or_passed(ssh, tmp_path):
