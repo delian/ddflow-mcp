@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from test_upgrade_stamp import stamp_newer
 
+from ddflow.infra import proc as PROC
 from ddflow.services import upgrade_notice as UN
 from ddflow.surfaces import mcp, mcp_upgrade
 from ddflow.surfaces.mcp import Server
@@ -136,7 +137,7 @@ def test_the_connection_survives_the_exec(stale: Path, monkeypatch: pytest.Monke
     monkeypatch.setattr(os, "execve", lambda path, argv, env: seen.update(argv=argv, env=env))
     srv = Server(stale, agent="dev")
     srv.protocol, srv.client_info = "2025-03-26", {"name": "harness"}
-    mcp_upgrade.execute(srv, mcp.PROC.replace_process)
+    mcp_upgrade.execute(srv, PROC.replace_process)
     assert seen["argv"][1:3] == ["-m", "ddflow.surfaces.mcp"]
     monkeypatch.setenv(mcp_upgrade.HANDOFF_ENV, seen["env"][mcp_upgrade.HANDOFF_ENV])
     fresh = Server(stale)

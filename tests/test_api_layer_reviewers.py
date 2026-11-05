@@ -131,20 +131,27 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     breaking the review service from a test, which would pin its internals; asserting the
     MAPPING is the honest alternative, and it is the thing that must not drift.
 
-    Only REVIEWED may produce `passed`, and only when it found nothing.
+    Only REVIEWED may produce `passed`, and on a first review only when it found nothing.
     """
     import inspect
 
     from ddflow.api import review as A
+    from ddflow.config import Config
     from ddflow.services import review as R
 
-    # `review` dispatches one gate or several; the one-gate run holds the table.
+    def outcome(status: int, *findings: R.Finding) -> str:
+        res = R.ReviewResult("r", "m", "f", status=status, findings=list(findings))
+        return A._gate_outcome(res, [res], None, "", "critic", False, Config(), None, print)[0]
+
+    # `review` dispatches one gate or several; the one-gate run takes its outcome from
+    # `_gate_outcome`, which holds the table.
     src = inspect.getsource(A._review_gate)
-    table = src[src.index("outcome = {") : src.index("}[best.status]")]
-    for status in ("PARTIAL", "UNAVAILABLE", "ERROR"):
-        arm = table[table.index(f"RV.{status}:") : table.index("\n", table.index(f"RV.{status}:"))]
-        assert '"passed"' not in arm, f"RV.{status} maps to a pass: {arm.strip()}"
-    assert 'RV.REVIEWED: ("failed" if best.findings else "passed")' in table, table
+    assert "_gate_outcome(" in src
+    assert outcome(R.PARTIAL) == "partial"
+    assert outcome(R.UNAVAILABLE) == "unavailable"
+    assert outcome(R.ERROR) == "unavailable"
+    assert outcome(R.REVIEWED) == "passed"
+    assert outcome(R.REVIEWED, R.Finding("HIGH", "t")) == "failed"
 
     # And the exit codes: only a real review with no findings is success.
     exits = src[src.index("exit_code = {") : src.index("]\n", src.index("exit_code = {"))]

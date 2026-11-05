@@ -205,7 +205,10 @@ def test_the_merge_queue_integrator_asks_for_the_whole_suite(monkeypatch):
     monkeypatch.setattr(MR, "effective_pipeline", lambda repo, cfg, it: ["ci"])
     monkeypatch.setattr(MR.MQ, "log_path", lambda repo, e: Path("log"))
     with pytest.raises(RuntimeError):
-        MR._run_checks(Path("."), _Cfg(), _It(), _E(), {}, unit_tests=False, timeout_s=0, agent="")
+        MR._run_checks(
+            Path("."), _Cfg(), _It(), MR.MQ.Entry(item="T1", seq=1), {},
+            unit_tests=False, timeout_s=0, agent="",
+        )  # fmt: skip
     assert seen["full"] is True
 
 
@@ -215,10 +218,6 @@ class _Cfg:
 
 class _It:
     id = "T1"
-
-
-class _E:
-    pass
 
 
 def test_the_marker_line_carries_the_scope_and_the_gate_reads_it_back():
