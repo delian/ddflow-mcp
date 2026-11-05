@@ -291,6 +291,37 @@ def test_complete_unavailable_never_answers_failing_tests_the_base_could_not_mea
     assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": blind}))
 
 
+def test_complete_unavailable_never_answers_a_person_only_baseline_red_partial():
+    """B-complete-self-approves-over-person-only-partial: a `partial` is a coverage gap the
+    standing `complete_unavailable` rule answers; but a MEASURED baseline-red partial whose
+    `baseline.auto.accepted` is False (its failing tests sit in a file the item changed or
+    reaches) is a person's call -- `gate_accept.next_step` names only `ddflow approve` -- and
+    must not be auto-answered."""
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.complete.approval import _only_unavailable
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    v = SimpleNamespace(unmet_gates=["unit_tests"], blockers=["b"], coverage_gaps=["unit_tests"])
+    coverage = GateRecord(gate="unit_tests", outcome="partial")
+    person_only = GateRecord(
+        gate="unit_tests",
+        outcome="partial",
+        evidence={
+            "baseline": {
+                "red": True,
+                "auto": {
+                    "accepted": False,
+                    "why": "failing test file(s) the item changed or reaches: tests/t.py",
+                },
+            }
+        },
+    )
+    assert _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": coverage}))
+    assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": person_only}))
+
+
 def _only_unavailable_repo(repo, unit):
     """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
     required gate is `unit_tests` = `unit`. reviewer independence is off so the completion
@@ -321,6 +352,45 @@ def test_a_routine_completion_never_auto_answers_a_failed_gate_end_to_end(repo):
     _only_unavailable_repo(repo, "failed")
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
     assert code == 3, (out, err)
+    assert _state(repo).items["T1"].state != "done"
+
+
+def _person_only_baseline_red(repo):
+    """`_only_unavailable_repo` with unit_tests = a MEASURED baseline-red partial whose
+    `baseline.auto.accepted` is False (its failing tests are the item's own): the exact
+    state only a person accepts (`ddflow approve T1 unit_tests`), never the standing rule."""
+    _only_unavailable_repo(repo, "partial")
+    log = EventLog(repo, "ddflow-gate-run")
+    log.append(
+        "gate.partial",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "by": "ddflow",
+            "reason": "baseline-red: tests/t.py::test_x, bug B1",
+            "evidence": {
+                "baseline": {
+                    "red": True,
+                    "base": "main",
+                    "ids": ["tests/t.py::test_x"],
+                    "auto": {
+                        "accepted": False,
+                        "why": "failing test file(s) the item changed or reaches: tests/t.py",
+                    },
+                }
+            },
+        },
+    )
+
+
+def test_a_routine_completion_never_auto_answers_a_person_only_baseline_red_partial(repo):
+    """B-complete-self-approves-over-person-only-partial: a plain `complete` (no --approval)
+    over a baseline-red partial whose failing tests are the item's own must refuse and
+    surface `ddflow approve`, never silently spend the standing `complete_unavailable` rule."""
+    _person_only_baseline_red(repo)
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 3, (out, err)
+    assert "ddflow approve" in out + err
     assert _state(repo).items["T1"].state != "done"
 
 

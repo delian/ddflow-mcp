@@ -20,8 +20,17 @@ def _only_unavailable(v, it) -> bool:
     if not v.unmet_gates or len(v.blockers) != 1:
         return False
     records = [it.gates[g] for g in v.unmet_gates if g in it.gates]
-    if any(((r.evidence or {}).get("baseline") or {}).get("unmeasured") for r in records):
-        return False
+    for r in records:
+        base = (r.evidence or {}).get("baseline") or {}
+        if base.get("unmeasured"):
+            return False
+        # A MEASURED baseline-red partial (`baseline.red` is True) that `gate run` did NOT
+        # accept itself (`baseline.auto.accepted` is not True) is a person's call: its failing
+        # tests sit in a file the item changed or reaches, so `gate_accept.next_step` names only
+        # `ddflow approve`. That is not an unavailable tool or a coverage gap, and the standing
+        # `complete_unavailable` rule must not answer it (B-complete-self-approves-over-person-only-partial).
+        if base.get("red") is True and (base.get("auto") or {}).get("accepted") is not True:
+            return False
     return set(v.unmet_gates) <= set(v.coverage_gaps)
 
 
