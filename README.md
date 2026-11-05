@@ -1106,7 +1106,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 541 knobs.
+cadences, and the rest of the 547 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3411,6 +3411,12 @@ default `lease.ttl_s`); `waiting-on-glob` (names the holder) and `waiting-on-dep
 the log does not say whether the context ran out or the process died, and `lanes` does not
 guess. `--watch` redraws when the log changes or every `lanes.watch_interval_s`.
 
+`ddflow lanes fleet` is the durable registry: every agent the log has seen, past the lane
+window, with role, harness, model, items, lease and last stop reason, classed `failed`,
+`stalled`, `working`, `idle` or `done` in that order. `[lanes] fleet_max_rows` cuts the listing
+and says how many more there are. `ddflow lanes resume <lane>` answers how to resume a stopped
+lane, or who took its item over; it starts nothing.
+
 `ddflow lanes brief <lane>` renders what a coordinator would otherwise write by hand as the
 lane's first prompt: the objective (the item's title and body), its phase, tags, needs and
 globs, the open lease and worktree, and the lane's previous run (its last session summary
@@ -5328,7 +5334,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 541): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 547): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5908,7 +5914,7 @@ declared once and persists — see
 
 ## Configuration
 
-541 knobs across 50 sections, every one documented in place and listed, with its default
+547 knobs across 50 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console

@@ -37,10 +37,10 @@ def _task(log, tid, *, parent, priority, tags=(), globs=None):
 def _state(log):
     """A mix of the four kinds, priorities chosen so only the fill order explains the rank."""
     log.append("phase.added", "P1", {"title": "phase"})
-    _task(log, "FEAT", parent="P1", priority=5)          # generic ready, highest priority
+    _task(log, "FEAT", parent="P1", priority=5)  # generic ready, highest priority
     _task(log, "FIXBUG", parent="P1", priority=60, tags=["bugfix"])
-    _task(log, "LOOSE", parent="", priority=10)           # no phase
-    _task(log, "STALLED", parent="P1", priority=50)       # interrupted: RUNNING, no lease
+    _task(log, "LOOSE", parent="", priority=10)  # no phase
+    _task(log, "STALLED", parent="P1", priority=50)  # interrupted: RUNNING, no lease
     log.append("item.started", "STALLED", {})
     return fold(log.read_all())
 

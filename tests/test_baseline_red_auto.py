@@ -268,3 +268,35 @@ def test_a_fail_fast_ci_probe_never_attributes_its_failures(repo, monkeypatch) -
         False,
     )
     assert got[0] == "failed"
+
+
+def test_a_ci_whose_always_run_guards_never_ran_is_not_baseline_red(repo, monkeypatch) -> None:
+    """B47a1dbeba0: every selected failure is baseline-red, but the always-run guards never ran
+    (the selection failed first, so they were skipped). That is NOT baseline-red: a regression
+    in a guard is exactly what they exist to catch, and they were never checked."""
+    from ddflow.api import gate_baseline as GB
+
+    monkeypatch.setattr(GB, "_ci_ids", lambda *a: [ID])
+    monkeypatch.setattr(GB, "_unit_tests_def", lambda *a: SimpleNamespace(command="pytest"))
+    monkeypatch.setattr(
+        BR,
+        "on_base",
+        lambda *a: {"red": True, "still_failing": [ID], "base": "main", "base_sha": "a" * 40},
+    )
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    ev: dict = {
+        "ci_scope": {
+            "scope": "selected",
+            "always": 22,
+            "always_tests": ["tests/test_guard_a.py", "tests/test_guard_b.py"],
+            "ran": {"hooks": True, "selected": False},
+        }
+    }
+    it = SimpleNamespace(id="T1", base="main")
+    gdef = SimpleNamespace(command="ddflow ci run")
+    outcome, why = GB.apply(repo, cfg, "a", it, "ci", gdef, "failed", ev, None, False)
+    assert outcome == "failed", (outcome, why)
+    assert "always-run guards" in why
+    assert "22 guard file(s)" in why
+    assert "tests/test_guard_a.py" in why
+    assert outcome != "partial"
