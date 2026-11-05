@@ -131,8 +131,10 @@ def propose(
         resolved = False
         for later, earlier in _candidates(cyc):
             if earlier in reach(later):
-                resolved = True  # already ordered: nothing to add
-                break
+                resolved = True  # this pair is already ordered
+                if later in victims:
+                    continue  # a dropped lease already handled: order the next drop too
+                break  # a fallback pair already ordered: nothing to add
             if later in reach(earlier):
                 why.append(f"{later}/{earlier}: would close a needs cycle")
                 continue
