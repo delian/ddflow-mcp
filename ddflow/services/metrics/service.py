@@ -18,7 +18,7 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
-from .providers import Context
+from .providers import Context, register
 from .render import forecast as text_forecast
 from .render import lanes as text_lanes
 from .render import retro as text_retro
@@ -31,7 +31,7 @@ from .stages import has_figures as stages_ok
 from .stages import text as stages_text
 from .summary import build, has_figures
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks")
+VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "swarm")
 
 
 @dataclass
@@ -80,6 +80,27 @@ def _locks(ctx: Context, probes: Probes | None) -> Answer:
     return Answer(ok, "" if ok else why, metrics=data, text=locks_text(data))
 
 
+def _swarm_rows(ctx: Context) -> list[dict]:
+    # swarm_metrics, like everything the swarm ledger reaches, imports this package: at call time.
+    from .. import swarm_metrics
+
+    return swarm_metrics.provider(ctx)
+
+
+register("swarm", _swarm_rows)
+
+
+def _swarm(
+    events: Sequence[Event], state: State, cfg: Config, now: float, phase: str, floor: float | None
+) -> Answer:
+    from .. import swarm_metrics as swarm
+
+    data = swarm.baseline(events, state, cfg, now, phase=phase, since=floor)
+    ok = data["throughput"]["per_hour"] is not None
+    why = f"not enough data: {data['unavailable'].get('throughput', '')}"
+    return Answer(ok, "" if ok else why, metrics=data, text=swarm.text(data))
+
+
 def run(
     events: Sequence[Event],
     state: State,
@@ -102,6 +123,8 @@ def run(
         return Answer(False, str(exc), failed=True)
     if phase and phase not in state.items:
         return Answer(False, f"no phase {phase!r}", failed=True)
+    if view == "swarm":  # the baseline folds the log itself
+        return _swarm(events, state, cfg, now, phase, floor)
     facts = collect(events, state, now, cfg)
     ctx = Context(facts, cfg, now, floor, phase)
     if view == "forecast":

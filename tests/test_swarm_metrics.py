@@ -107,7 +107,7 @@ def test_compare_against_targets():
     c = S.compare(before, after)
     assert c["throughput_x"] == 2.0 and c["cost_basis"] == "agent_hours"
     assert abs(c["cost_x"] - 1.2) < 1e-9 and abs(c["rework_points"] - 4.0) < 1e-9
-    assert c["targets"] == {"throughput": True, "cost": True, "rework": True}
+    assert c["targets"] == {"throughput": True, "cost": None, "rework": True}
     after["rework"]["rate"] = 0.20
     assert S.compare(before, after)["targets"]["rework"] is False
     assert (
@@ -116,16 +116,62 @@ def test_compare_against_targets():
     )
 
 
-def test_provider_registers_with_the_shared_service():
-    M.register("swarm-test", S.provider, replace=True)
-    try:
-        log = twelve()
-        st = fold(list(log.events), strict=False)
-        ans = M.run(log.events, st, Config(), NOW, view="summary")
-        rows = {r["metric"]: r for r in ans.metrics["providers"]}
-        assert rows["swarm.merged_per_hour"]["value"] > 0
-    finally:
-        M.unregister("swarm-test")
+def test_agent_hours_never_judge_the_dollar_target():
+    """D-swarm-pilot-2026-11-05 (3): agent-hours are reported, the 1.3x target is not measured."""
+    before = {
+        "throughput": {"per_hour": 1.0},
+        "cost": {"usd_per_item": None, "agent_hours_per_item": 1.0},
+        "rework": {"rate": 0.0},
+    }
+    after = {**before, "cost": {"usd_per_item": None, "agent_hours_per_item": 9.0}}
+    c = S.compare(before, after)
+    assert c["cost_x"] == 9.0 and c["targets"]["cost"] is None
+    assert "not dollars" in c["not_measured"]["cost"]
+    priced = {**before, "cost": {"usd_per_item": 1.0, "agent_hours_per_item": 1.0}}
+    dear = {**before, "cost": {"usd_per_item": 2.0, "agent_hours_per_item": 1.0}}
+    c = S.compare(priced, dear)
+    assert c["cost_basis"] == "usd" and c["targets"]["cost"] is False and not c["not_measured"]
+
+
+def test_the_provider_is_registered_with_the_shared_service():
+    log = twelve()
+    st = fold(list(log.events), strict=False)
+    ans = M.run(log.events, st, Config(), NOW, view="summary")
+    rows = {r["metric"]: r for r in ans.metrics["providers"]}
+    assert rows["swarm.merged_per_hour"]["value"] > 0
+    assert rows["swarm.agent_hours_per_item"]["value"] > 0
+    assert rows["swarm.rework_rate"]["n"] == 12
+
+
+def test_the_swarm_view_prints_the_baseline():
+    log = twelve()
+    st = fold(list(log.events), strict=False)
+    ans = M.run(log.events, st, Config(), NOW, view="swarm")
+    assert ans.ok and ans.metrics["merged"] == 12
+    assert ans.metrics["throughput"]["per_hour"] > 0
+    assert "merged items per hour" in ans.text and "agent-hours per item" in ans.text
+    assert "cost_usd" in ans.text  # no dollars are recorded, and the view says so
+
+
+def test_the_swarm_view_under_the_sample_floor_is_not_a_zero():
+    log = Log()
+    log.task("A", "a.py")
+    log.claim("a1", "A", T0, "a.py")
+    log.complete("a1", "A", T0 + H)
+    st = fold(list(log.events), strict=False)
+    ans = M.run(log.events, st, Config(), NOW, view="swarm")
+    assert not ans.ok and not ans.failed and "1 merged items, need 10" in ans.reason
+    assert ans.metrics["throughput"]["per_hour"] is None
+    assert "n/a" in ans.text
+
+
+def test_the_swarm_view_honours_phase_and_since():
+    log = twelve()
+    st = fold(list(log.events), strict=False)
+    ans = M.run(log.events, st, Config(), NOW, view="swarm", since="2000-01-01")
+    assert ans.metrics["merged"] == 12
+    far = M.run(log.events, st, Config(), NOW, view="swarm", since="1s")
+    assert far.metrics["merged"] == 0 and not far.ok
 
 
 def test_provider_rows_withheld_under_min_samples():
@@ -133,11 +179,7 @@ def test_provider_rows_withheld_under_min_samples():
     log.task("A", "a.py")
     log.claim("a1", "A", T0, "a.py")
     log.complete("a1", "A", T0 + H)
-    M.register("swarm-thin", S.provider, replace=True)
-    try:
-        st = fold(list(log.events), strict=False)
-        rows = M.run(log.events, st, Config(), NOW, view="summary").metrics["providers"]
-        mine = [r for r in rows if r["metric"].startswith("swarm.")]
-        assert mine and all(r["value"] is None and "samples" in r["unavailable"] for r in mine)
-    finally:
-        M.unregister("swarm-thin")
+    st = fold(list(log.events), strict=False)
+    rows = M.run(log.events, st, Config(), NOW, view="summary").metrics["providers"]
+    mine = [r for r in rows if r["metric"].startswith("swarm.")]
+    assert mine and all(r["value"] is None and "samples" in r["unavailable"] for r in mine)
