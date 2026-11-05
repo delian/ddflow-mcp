@@ -20,6 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import run_cli
 from helpers import git_raw as _git
 
@@ -340,10 +341,9 @@ def test_a_tree_stopped_in_a_rebase_is_still_the_items_tree(repo):
     _git(repo, "add", "a.py")
     _git(repo, "commit", "-qm", "theirs")
     assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
-    stopped = subprocess.run(
-        ["git", "rebase", "main"], cwd=tree, capture_output=True, text=True, check=False
-    )
-    assert stopped.returncode != 0, "fixture: the rebase did not stop on its conflict"
+    with pytest.raises(subprocess.CalledProcessError):  # it stops on the conflict
+        _git(tree, "rebase", "main")
+    assert (_gitdir(tree) / "rebase-merge" / "head-name").is_file()
     other = repo.parent / "other-tree"
     _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
     code, out, err = run_cli(other, "claim", "T1")
@@ -352,18 +352,21 @@ def test_a_tree_stopped_in_a_rebase_is_still_the_items_tree(repo):
 
 
 def test_a_tree_rebasing_another_branch_is_not_the_items_tree(repo):
+    """The item's tip IS an ancestor of HEAD here, so git's record is what says no."""
     tree = _claimed_with_its_own_tree(repo)
-    _git(tree, "commit", "-q", "--allow-empty", "-m", "ahead")
-    _git(tree, "checkout", "-q", "--detach", "HEAD~1")  # the item's tip is no ancestor of HEAD
-    gitdir = Path(_git(tree, "rev-parse", "--absolute-git-dir").strip())
-    (gitdir / "rebase-merge").mkdir()
-    (gitdir / "rebase-merge" / "head-name").write_text("refs/heads/someone-else\n")
+    _git(tree, "checkout", "-q", "--detach")
+    (_gitdir(tree) / "rebase-merge").mkdir()
+    (_gitdir(tree) / "rebase-merge" / "head-name").write_text("refs/heads/someone-else\n")
     assert not CT._is_items_tree(repo, tree, _item(repo).branch)
 
 
 def test_a_merged_released_item_whose_tree_is_gone_holds_nothing(repo):
     item = SimpleNamespace(lease=None, merged_sha="abc", worktree="no/such/tree")
     assert CT._tree_let_go(repo, None, None, item)
+
+
+def _gitdir(tree: Path) -> Path:
+    return Path(_git(tree, "rev-parse", "--absolute-git-dir").strip())
 
 
 def _resolved(repo: Path, stored: str) -> Path:

@@ -139,7 +139,9 @@ def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
     if not entry.get("detached"):
         return False
     ref = f"refs/heads/{branch}"
-    return W.git(path, "merge-base", "--is-ancestor", ref, "HEAD").ok or _rebasing(path) == ref
+    if rebasing := _rebasing(path):  # git's own record outranks where HEAD happens to be
+        return rebasing == ref
+    return W.git(path, "merge-base", "--is-ancestor", ref, "HEAD").ok
 
 
 def _rebasing(tree: Path) -> str:
