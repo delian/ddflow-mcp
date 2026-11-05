@@ -191,17 +191,3 @@ def open_channel(
         token=token or "",
         scrub=_scrub(cfg),
     )
-
-
-def notify_channel(
-    log, cfg: Config, *, settings: Settings | None = None, **kw: Any
-) -> HumanChannel:
-    """The channel notifications go to."""
-    n = settings or Settings()
-    return open_channel(log, cfg, n.channel, settings=n, **kw)
-
-
-def ask_channel(log, cfg: Config, *, settings: Settings | None = None, **kw: Any) -> HumanChannel:
-    """The channel questions and approvals go to: the operator's chat by default."""
-    n = settings or Settings()
-    return open_channel(log, cfg, n.ask_channel, settings=n, **kw)

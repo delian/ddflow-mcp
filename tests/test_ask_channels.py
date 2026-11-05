@@ -279,14 +279,6 @@ def test_the_default_for_approvals_is_the_chat_bridge_not_the_terminal():
     assert (C.Settings().ask_channel, C.Settings().channel) == ("harness", "terminal")
 
 
-def test_default_channel_follows_the_settings(log, repo):
-    assert C.ask_channel(log, Config(), repo=repo).name == "harness"
-    assert C.notify_channel(log, Config(), repo=repo).name == "terminal"
-    chosen = C.Settings(channel="desktop", ask_channel="terminal")
-    assert C.ask_channel(log, Config(), settings=chosen, repo=repo).name == "terminal"
-    assert C.notify_channel(log, Config(), settings=chosen, repo=repo).name == "desktop"
-
-
 def test_the_bridge_couriers_the_exact_approvals_ask_payload(log, repo):
     from ddflow.services.approvals import canon as K
     from ddflow.services.approvals import harness as H
