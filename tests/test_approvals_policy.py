@@ -344,6 +344,19 @@ def test_complete_unavailable_predicate_and_site_share_the_person_only_guard():
         },
     )
     assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False
+    # The complementary case at this same boundary: a plain unavailable coverage gap (not
+    # person-only) IS answered -- the same predicate returns True there, so it distinguishes
+    # the two and cannot be a blanket `lambda *a: False`.
+    gap = Item(
+        id="T2",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(gate="unit_tests", outcome="unavailable"),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+    )
+    assert PO.RULES["complete_unavailable"].when(gap, "unit_tests", cfg) is True
 
 
 def _only_unavailable_repo(repo, unit):
