@@ -15,11 +15,12 @@ import secrets
 import shutil
 import threading
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..infra import fsio, proc
+from ..infra import git as G
 from .engines import limit_detect, render_argv, stream_map
 from .engines.safety import DEFAULT, EngineError
 from .lane_driver import (
@@ -37,6 +38,11 @@ from .lane_driver import (
 TRANSPORT = "process-headless"
 SECRET_MIN = 6  #: values shorter than this are not worth redacting (and would mangle text)
 STDERR_TAIL = 4096
+#: git config key -> the variables that carry it into a lane whose HOME hides the launcher's file
+IDENTITY_ENV = (
+    ("user.name", ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME")),
+    ("user.email", ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL")),
+)
 
 
 @dataclass
@@ -133,6 +139,41 @@ def _caps(base: frozenset[str], spec: LaunchSpec) -> frozenset[str]:
     return frozenset(caps)
 
 
+def _identity(cwd: str | None, env: Mapping[str, str]) -> dict[str, str] | Result:
+    """The git identity a lane in ``cwd`` commits under, as variables, or a failed Result.
+
+    A private HOME hides the launcher's global git config (B6a483bb0f5), so the launcher reads
+    what git resolves for ``cwd`` and hands over those values, never the file. A variable ``env``
+    already sets stays. No placeholder: a repository with no identity refuses the launch. A lane
+    outside any work tree has nothing to commit, so it needs none."""
+    if cwd is None:
+        return {}
+    tree = G.run(cwd, "rev-parse", "--is-inside-work-tree", timeout=G.PROBE_TIMEOUT)
+    if tree.unavailable:
+        return failed(f"cannot read the git identity of {cwd}: {tree.err}")
+    if tree.out != "true":
+        return {}
+    found: dict[str, str] = {}
+    absent: list[str] = []
+    for key, names in IDENTITY_ENV:
+        need = [n for n in names if not env.get(n)]
+        if not need:
+            continue
+        r = G.run(cwd, "config", "--get", key, timeout=G.PROBE_TIMEOUT)
+        if r.unavailable:
+            return failed(f"cannot read the git identity of {cwd}: {r.err}")
+        if r.out:
+            found.update(dict.fromkeys(need, r.out))
+        else:
+            absent.append(key)
+    if absent:
+        return failed(
+            f"{cwd} has no git {' or '.join(absent)}, so a lane could not commit there: "
+            f"set it with `git config`, or give the lane GIT_AUTHOR_* and GIT_COMMITTER_*"
+        )
+    return found
+
+
 def _prepare(spec: LaunchSpec, private: list[Path]):
     """(rendered argv, child env, placeholder values) or a failed Result. Directories made
     here are appended to ``private`` so the caller can remove them on failure."""
@@ -159,6 +200,10 @@ def _prepare(spec: LaunchSpec, private: list[Path]):
     env = {n: os.environ[n] for n in spec.pass_env if n in os.environ}
     env.update(spec.fixed_env)
     env.update(r.env)
+    identity = _identity(spec.cwd, env)
+    if isinstance(identity, Result):
+        return identity
+    env.update(identity)
     env["HOME"] = str(home)  # last: nothing in the spec may point the lane back at the real home
     if spec.home_env:
         env[spec.home_env] = str(home)
