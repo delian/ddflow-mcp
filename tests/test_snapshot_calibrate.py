@@ -100,13 +100,17 @@ def test_the_swept_set_is_bounded(repo):
     assert len(_parse._SNAP_SWEPT) <= _parse._SNAP_SWEPT_MAX
 
 
-@pytest.mark.parametrize("env", [None, "0"])
-def test_the_shard_facts_do_not_follow_the_snapshot(repo, monkeypatch, env):
+def test_the_shard_facts_do_not_follow_the_snapshot_knob(repo):
     """B9d5e21a5e9: `.ddflow/local/shardmeta/` is what keeps a fresh process's append from
     parsing every shard, and it has nothing to do with the read snapshot."""
-    if env is not None:
-        monkeypatch.setenv(L.SNAPSHOT_ENV, env)
     assert EventLog(repo, "x", log_cfg=LogConfig(snapshot=False))._shard_meta() is not None
+
+
+def test_the_environment_kill_switch_still_reaches_the_shard_facts(repo, monkeypatch):
+    """r-derived-cache-bounded: every derived store keeps an environment kill switch, and
+    this one is what they always had."""
+    monkeypatch.setenv(L.SNAPSHOT_ENV, "0")
+    assert EventLog(repo, "x", log_cfg=LogConfig(snapshot=True))._shard_meta() is None
 
 
 @pytest.mark.parametrize(
