@@ -154,6 +154,10 @@ def test_a_token_for_one_project_proves_nothing_in_another(proj, monkeypatch, tm
     token = _token(proj, monkeypatch)
     other = tmp_path / "other"
     other.mkdir()
+    subprocess.run(["git", "init", "-q", str(other)], check=True)
+    run_cli(other, "init")
+    assert _token(other, monkeypatch, "openclaw", "bot")
+    assert AU.store_path(other) != AU.store_path(proj)
     with pytest.raises(AU.AuthRefused):
         AU.verify(other, Config(), token)
 
@@ -309,6 +313,16 @@ def test_the_token_name_is_the_identity_and_agent_cannot_override_it(proj, monke
     assert code == 0, out + err
     notes = [e for e in _events(proj) if e.kind == "session.note"]
     assert notes and notes[-1].agent == "openclaw"
+
+
+def test_a_context_built_inside_a_servers_request_keeps_its_proof(proj):
+    from ddflow.surfaces.cli import build_parser
+    from ddflow.surfaces.context import Ctx
+
+    proof = ID.Credential(name="gw", role="bot", token_id="t")
+    with ID.with_credential(proof):
+        ctx = Ctx(build_parser().parse_args(["--repo", str(proj), "status"]))
+        assert ID.credential() == proof and ctx.log.agent_id == "gw"
 
 
 def test_resolve_prefers_the_proof_over_every_declaration(proj):

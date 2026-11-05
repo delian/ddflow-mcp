@@ -99,8 +99,8 @@ class Ctx:
                 self.repo, scope=HR.session_fingerprint(os.environ)
             )
         # Before the identity: a presented token IS the identity (P-remote.auth). `api.auth`
-        # is imported only when there is a token to read or a proof to demand.
-        ID.clear_credential()
+        # is imported only when there is a token to read or a proof to demand. A proof a server
+        # bound for this request (`identity.with_credential`) stands: nothing here clears it.
         if os.environ.get(ID.TOKEN_ENV) or self.cfg.agent.require_operator_token:
             importlib.import_module("ddflow.api.auth").bind_env(
                 self.repo, self.cfg, parsed_path(args)

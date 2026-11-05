@@ -54,7 +54,8 @@ tool result would sit in an agent's context and transcript.
 Without a token, the operator-only verbs ask only whether the caller carries an agent marker
 (`--agent`, `DDFLOW_AGENT`, a harness variable), and a shell that unsets them passes. With
 `[agent].require_operator_token = true` they need an operator token. `ddflow pair` still works
-from a marker-free terminal for the first operator token, until one exists.
+from a marker-free terminal for an operator token while no live one exists: the first one, or
+after the last has expired.
 
 This is off by default. Locally it stops accidents and prompt injection, not a hostile process of
 your own user, which can write the store and the config. A role is a hard boundary when the client

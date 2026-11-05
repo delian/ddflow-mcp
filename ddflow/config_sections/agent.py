@@ -289,5 +289,5 @@ class AgentConfig:
     )
     require_operator_token: bool = knob(
         False,
-        doc="Off by default. On: the verbs that today only ask whether the caller carries an agent marker also need an operator token (`DDFLOW_TOKEN`), so a shell with its markers unset is no longer a person. Until an operator token exists `ddflow pair` still works from a marker-free terminal, or nobody could mint the first one. A same-user process can still edit config and the store: this stops accidents and prompt injection, not a hostile process of the same user.",
+        doc="Off by default. On: the verbs that today only ask whether the caller carries an agent marker also need an operator token (`DDFLOW_TOKEN`), so a shell with its markers unset is no longer a person. While no live operator token exists, `ddflow pair --role operator` still works from a marker-free terminal, or nobody could mint the first one or recover after the last expired. A same-user process can still edit config and the store: this stops accidents and prompt injection, not a hostile process of the same user.",
     )
