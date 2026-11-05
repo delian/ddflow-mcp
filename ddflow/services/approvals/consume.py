@@ -168,7 +168,16 @@ def operator_gate(
             "answers it in chat.",
         )
 
-    filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=approval_id != REQUEST)
+    filed = R.file(
+        log,
+        cfg,
+        state,
+        canon,
+        reason=reason,
+        now=now,
+        auto=approval_id != REQUEST,
+        dedupe=not PO.retry_armed(cfg, canon),
+    )
     if filed is None:
         return Decision(
             False,

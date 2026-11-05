@@ -185,6 +185,14 @@ def refusals(state, canon: Canon) -> int:
     return n
 
 
+def retry_armed(cfg: Config, canon: Canon) -> bool:
+    """Is the retry-threshold rule armed for ``canon``: `[approvals].auto_approve_after_retries`
+    above 0 and ``canon.verb`` a generic T2 retry verb. While armed, the refusal site's re-file of
+    an unresolved retry verb must be a NEW filing, not the deduplicated pending one, so
+    `refusals` accumulates over distinct filings and the threshold becomes reachable."""
+    return cfg.approvals.auto_approve_after_retries > 0 and canon.verb in RETRY_VERBS
+
+
 def _approved(
     log, cfg: Config, canon: Canon, reason: str, rule_id: str, *, notify: int = 0
 ) -> dict[str, Any]:
@@ -237,7 +245,7 @@ def apply(
         return _approved(log, cfg, canon, reason, rule_id)
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
-        if threshold > 0 and canon.verb in RETRY_VERBS:
+        if retry_armed(cfg, canon):
             n = refusals(state, canon)
             if n >= threshold:
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.

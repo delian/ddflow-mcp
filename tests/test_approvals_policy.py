@@ -414,6 +414,23 @@ def test_zero_retry_threshold_never_auto_approves(proj):
     assert not any(r["policy"] for r in asks_of(_state(proj)).values())
 
 
+def test_an_unchanged_state_refiled_accumulates_so_the_threshold_is_reachable(proj):
+    """Bf7c4b174ae: dedup returned the SAME pending ask for a re-file of an unchanged
+    claim.force/complete.force, so `refusals` stayed at 1 and a live agent stuck on one state
+    never reached `auto_approve_after_retries`. Each re-file of a retry verb while the
+    threshold is armed is a NEW filing, so the count accumulates and the next filing fires."""
+    log = EventLog(proj, "bot")
+    cfg = _cfg(auto_approve_after_retries=2)
+    canon = _complete(proj, log, state="digest-unchanged")  # the SAME digest every filing
+    first = C.operator_gate(log, cfg, canon)
+    second = C.operator_gate(log, cfg, canon)
+    assert not first.ok and not second.ok
+    assert first.ask_id != second.ask_id  # two DISTINCT filings, not one deduplicated ask
+    got = C.operator_gate(log, cfg, canon)
+    assert got.ok and got.stamp["policy"] == "auto-after-retries"
+    assert asks_of(_state(proj))[got.ask_id]["notify"] == 2
+
+
 def test_the_retry_rule_fires_on_count_alone_not_the_window_or_the_policy_list(proj, monkeypatch):
     from datetime import timedelta
 
