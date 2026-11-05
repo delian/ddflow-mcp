@@ -15,6 +15,7 @@ operator on every use (`refusals` -> `_approved` with `notify`)."""
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -45,10 +46,19 @@ class Rule:
     when: Callable[[Any, str, Config], bool]
 
 
-def _true(_it, _target: str, _cfg: Config) -> bool:
-    """A generic-verb rule whose only item-level gate is the site digest: the outstanding-window
-    and `standing_verbs` checks `apply` makes are its whole predicate."""
-    return True
+def _claim_unavailable(it, target: str, cfg: Config) -> bool:
+    """`claim_unavailable`: the item is HELD by a lease that has LAPSED -- its holder gone
+    (vanished/unavailable, a crashed or dead lane) -- which is exactly the takeover a
+    `claim.force` over it performs. The rule is documented for that recovery, never for a
+    plain claim the scheduler just refused for its dependencies: a dep-blocked item with NO
+    holder, and a LIVE holder, are not "a vanished holder", so the rule must not answer them.
+    Its old `_true` predicate answered ANY `claim.force` once the standing window was open, so
+    a plain agent claim of a dep-unmet item (refused by `plan_blocker`, re-run as
+    `claim.force`) was silently force-granted over its unmet dependencies
+    (B-claim-unavailable-fires-past-deps). Requiring a lapsed lease is what stops that: no
+    lease -> no answer, a live holder -> no answer."""
+    lease = it.lease
+    return lease is not None and not lease.live(time.time(), cfg.lease.grace_s)
 
 
 def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
@@ -117,7 +127,7 @@ RULES: dict[str, Rule] = {
             "claim_unavailable",
             "claim.force",
             "claim an item held by a vanished/unavailable holder, inside the standing window",
-            _true,
+            _claim_unavailable,
         ),
     )
 }
