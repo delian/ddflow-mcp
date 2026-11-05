@@ -311,6 +311,7 @@ ENTRIES: tuple[Entry, ...] = (
         "2026-10-21",
         f"{_M}: docs silent; refresh is manual",
         reconnect="manual",
+        harness="grok",
     ),
     _e(
         "windsurf",
