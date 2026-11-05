@@ -408,3 +408,47 @@ def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -
     outcome, why = GB.apply(repo, cfg, "w", it, "unit_tests", gdef, "failed", ev, None, False)
     assert outcome == "failed" and "new failure" not in why
     assert "new_failures" not in ev["baseline"] and not ev["baseline"].get("unmeasured")
+
+
+def _sha(repo: Path, ref: str = "HEAD") -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", ref], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
+    """B48c70b6773: the candidate forks from a red main; main then moves on and fixes the
+    failing test. The baseline is measured on the candidate's own merge-base (still red), not
+    the moved main tip (green) -- otherwise the branch's unchanged failure reads as new."""
+    from ddflow.services.gates import baseline_red as BR
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # main fails test_a (no `healthy` file)
+    red = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-qc", "cand"], check=True)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "main"], check=True)
+    (repo / "healthy").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fix test_a on main"], check=True)
+    green = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "cand"], check=True)
+    assert green != red  # main has moved: the move is the whole point of the test
+
+    gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
+
+    def run(g, where=None):
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
+        failed = got.returncode != 0
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
+
+    found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
+    assert found["red"] is True, found
+    assert found["base_sha"] == red, found
