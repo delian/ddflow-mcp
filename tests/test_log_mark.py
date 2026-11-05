@@ -127,7 +127,7 @@ def test_a_shard_vanishing_during_the_mark_is_dropped_not_raised(repo, monkeypat
     def gone(path):
         raise FileNotFoundError(path)
 
-    monkeypatch.setattr(L, "_last_line", gone)
+    monkeypatch.setattr(L._eventlog, "_last_line", gone)
     after = log.mark()
     assert after != before
     assert after.count == 0
@@ -141,7 +141,7 @@ def test_the_stat_only_mark_reads_no_tail_and_still_sees_growth(repo, monkeypatc
     def boom(path):
         raise AssertionError("a stat-only mark must not read the shard")
 
-    monkeypatch.setattr(L, "_last_line", boom)
+    monkeypatch.setattr(L._eventlog, "_last_line", boom)
     log.append("session.started", "s1", {})
     assert log.mark(clock=False) != before
     assert log.mark(clock=False).lamport == 0
