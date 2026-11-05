@@ -13,6 +13,7 @@ from ...services.gates import measured as GR
 from ..gates import item_tree
 
 PROGRESS_EVERY_S = 60
+_HEARD = (RV.REVIEWED, RV.PARTIAL)  # a reviewer that finished at least part of the diff
 
 
 def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
@@ -74,7 +75,7 @@ def _round_evidence(head, kind, done, status, forced, deltas=0) -> dict[str, Any
     minutes, and the branch's head when it ends may hold commits made meanwhile that no
     reviewer saw -- recording that one let the next delta skip them."""
 
-    reviewed = status in (RV.REVIEWED, RV.PARTIAL)
+    reviewed = status in _HEARD
     counted = kind == "full" and reviewed
     ev: dict[str, Any] = {
         "review_kind": kind if counted or kind != "full" else "full_unavailable",
@@ -98,17 +99,31 @@ def _review_runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
+def _reviewer_families_of(results) -> list[str]:
+    """The distinct families of every reviewer that came back REVIEWED, in a stable
+    order. A gate dispatched to several reviewers records ONE of them (its identifying
+    pass) as ``reviewer``/``family``, so a single record hid a clean cross-family panel —
+    which is why reviewer independence could not see that grok AND gemini reviewed when
+    the author's family is unknown (bug B1a30dc3303)."""
+    return sorted(
+        f
+        for f in {
+            (r.family or "").strip().lower() for r in (results or []) if r.status == RV.REVIEWED
+        }
+        if f
+    )
+
+
 def _reviewed_findings(results) -> list[dict[str, Any]]:
-    """The `chunk_findings` of every reviewed reviewer, in venue order. The gate blocks on
-    a finding from ANY of them (`_gate_outcome`), so the record keeps them all: recording
+    """The `chunk_findings` of every reviewer that was heard, in venue order. The gate blocks
+    on a finding from ANY of them (`_gate_outcome`), so the record keeps them all: recording
     ``best``'s alone left a failed round whose finding count named a finding the record
-    did not show (bug B0419c114ef). Each reviewer's `evidence()` builds the dicts with the
-    detail truncation `_merge_delta` and triage already read."""
+    did not show (bug B0419c114ef). A PARTIAL reviewer was heard too: what its finished
+    chunks raised is real, and leaving it out let the `--chunk` re-run of the lost chunk
+    pass over it (bug B-main-red-review-records). Each reviewer's `evidence()` builds the
+    dicts with the detail truncation `_merge_delta` and triage already read."""
     return [
-        fd
-        for r in (results or [])
-        if r.status == RV.REVIEWED
-        for fd in r.evidence()["chunk_findings"]
+        fd for r in (results or []) if r.status in _HEARD for fd in r.evidence()["chunk_findings"]
     ]
 
 
@@ -201,9 +216,9 @@ def _gate_outcome(
     # earlier round (which still spends a round) is not a previous review.
     prior = _last_review(it, gate) if it is not None and bool(item) else {}
     converged_round = converging and bool(prior.get("chunk_findings"))
-    # Every reviewed reviewer's findings count: a below-floor nit (or no finding) from the
+    # Every heard reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
-    found = [f for r in results if r.status == RV.REVIEWED for f in r.findings]
+    found = [f for r in results if r.status in _HEARD for f in r.findings]
     if not found:
         return "passed", extra_evidence
     blocking = RV.blocking_findings(

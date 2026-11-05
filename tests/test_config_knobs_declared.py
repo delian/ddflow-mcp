@@ -18,7 +18,7 @@ from ddflow.config_sections import _docs as K
 
 ROOT = Path(__file__).resolve().parents[1]
 SECTIONS = ROOT / "ddflow" / "config_sections"
-CONFIG_PY = ROOT / "ddflow" / "config.py"
+CONFIG_PKG = ROOT / "ddflow" / "config"  # `config.py` until it became a package
 
 #: The older declarations still standing. Lower these in the change that moves a section
 #: onto `knob()`; the failure message prints the number to write. Never raise one.
@@ -34,7 +34,7 @@ _TABLES = ("KNOB_CHOICES", "KNOB_STRICTEST", "KNOB_OUTWARD")
 
 def _legacy_counts() -> dict[str, int]:
     calls = 0
-    for path in [*sorted(SECTIONS.glob("*.py")), CONFIG_PY]:
+    for path in [*sorted(SECTIONS.glob("*.py")), *sorted(CONFIG_PKG.glob("*.py"))]:
         for node in ast.walk(ast.parse(path.read_text("utf-8"))):
             if not isinstance(node, ast.Call):
                 continue
@@ -123,7 +123,8 @@ def _table_literals() -> dict[str, list[ast.Dict]]:
     assignment of each (a table rebound later is still read whole). A table that is not a
     dict literal fails: this guard reads literals, and would otherwise go blind."""
     found: dict[str, list[ast.Dict]] = {}
-    for node in ast.parse(CONFIG_PY.read_text("utf-8")).body:
+    bodies = [ast.parse(p.read_text("utf-8")).body for p in sorted(CONFIG_PKG.glob("*.py"))]
+    for node in (n for body in bodies for n in body):
         targets = [node.target] if isinstance(node, ast.AnnAssign) else []
         targets += node.targets if isinstance(node, ast.Assign) else []
         for t in targets:

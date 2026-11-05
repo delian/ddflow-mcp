@@ -306,7 +306,9 @@ def _assess(repo: Path, log, cfg: Config, st, rec: Record) -> tuple[Any, list[di
         return sim.Assessment("off"), [], f"{type(exc).__name__}: {exc}"
 
 
-def _bug_semantic(repo: Path, cfg: Config, st, rec: Record, found: sim.Assessment) -> sim.Assessment:
+def _bug_semantic(
+    repo: Path, cfg: Config, st, rec: Record, found: sim.Assessment
+) -> sim.Assessment:
     """Add the bugs the SEMANTIC matcher matches when the token matcher did not already ask.
 
     Two differently-worded reports of one defect share no content word and escape the

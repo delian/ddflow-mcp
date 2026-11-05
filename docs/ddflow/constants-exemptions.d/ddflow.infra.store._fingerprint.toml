@@ -6,3 +6,5 @@
 "ddflow/infra/store/_fingerprint.py:MIN_FINGERPRINT_SOURCES" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
 "ddflow/infra/store/_fingerprint.py:REBUILD_LOCK_TIMEOUT_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
 "ddflow/infra/store/_fingerprint.py:REBUILD_TEMP_MAX_AGE_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/infra/store/_fingerprint.py:INDEX_MAX_FILES" = 'default of the DDFLOW_INDEX_MAX_FILES environment knob (r-derived-cache-bounded), read at call time'
+"ddflow/infra/store/_fingerprint.py:INDEX_MAX_MB" = 'default of the DDFLOW_INDEX_MAX_MB environment knob (r-derived-cache-bounded), read at call time'

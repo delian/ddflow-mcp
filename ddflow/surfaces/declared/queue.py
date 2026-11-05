@@ -42,6 +42,7 @@ def item_edit(a: dict):
         needs=_list_or_none(a, "needs"),
         add_needs=_list_or_none(a, "add_needs"),
         remove_needs=_list_or_none(a, "remove_needs"),
+        allow_unknown_needs=bool(a.get("allow_unknown_needs")),
         add_tags=_list_or_none(a, "add_tags"),
         remove_tags=_list_or_none(a, "remove_tags"),
         # Raw, for the api's single read: split on commas here first, a JSON
@@ -91,6 +92,7 @@ COMMANDS: tuple[Command, ...] = (
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
+            allow_unknown_needs=bool(a.get("allow_unknown_needs")),
         ),
         payload=("id",),
         params=(
@@ -124,6 +126,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="File a REMOVED item's id again with this definition. An id still in the queue is always refused -- change that item with ddflow_update.",
                 cli_help="file a REMOVED item's id again. An id still in the queue is always refused: change it with `ddflow update`",
             ),
+            Param(
+                "allow_unknown_needs",
+                type="boolean",
+                help="Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id.",
+                cli_help="accept needs that name an id not in the queue (one that will exist later, or `repo:ID`)",
+            ),
             *ANSWER_PARAMS,
         ),
         tool_order=(
@@ -136,6 +144,7 @@ COMMANDS: tuple[Command, ...] = (
             "priority",
             "line",
             "readd",
+            "allow_unknown_needs",
             "relation",
             "check_only",
         ),
@@ -195,6 +204,7 @@ COMMANDS: tuple[Command, ...] = (
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
+            allow_unknown_needs=bool(a.get("allow_unknown_needs")),
         ),
         payload=("id", "line", "ports", "port_strategy", "defaulted"),
         params=(
@@ -240,6 +250,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="File a REMOVED item's id again with this definition. An id still in the queue is always refused -- change that item with ddflow_update.",
                 cli_help="file a REMOVED item's id again. An id still in the queue is always refused: change it with `ddflow update`",
             ),
+            Param(
+                "allow_unknown_needs",
+                type="boolean",
+                help="Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id.",
+                cli_help="accept needs that name an id not in the queue (one that will exist later, or `repo:ID`)",
+            ),
             *ANSWER_PARAMS,
             Param(
                 "phase",
@@ -281,6 +297,7 @@ COMMANDS: tuple[Command, ...] = (
             "lines",
             "port_of",
             "readd",
+            "allow_unknown_needs",
             "relation",
             "check_only",
             "kind",
@@ -410,6 +427,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="REMOVE these comma-separated ids from the item's needs",
                 cli_only=True,
             ),
+            Param(
+                "allow_unknown_needs",
+                type="boolean",
+                help="Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id.",
+                cli_help="accept needs that name an id not in the queue (one that will exist later, or `repo:ID`)",
+            ),
             Param("tags", help="Comma-separated tags.", cli_help=""),
             Param(
                 "add_tags",
@@ -426,7 +449,7 @@ COMMANDS: tuple[Command, ...] = (
             Param("line", help="Move it to another release line.", cli_help=""),
             Param(
                 "resources",
-                help="Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses while live claims use up the capacity ([schedule] resources). Declare for a GPU job, model server or long run. Empty clears.",
+                help="Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses while live claims use up the capacity ([schedule] resources). Empty clears.",
                 cli_help="",
             ),
             Param(
@@ -472,7 +495,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "landed_paths",
-                help="With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone.",
+                help="With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Verified inside its declared globs and the landing's changed files; the pipeline judges those alone.",
                 cli_help="restrict the recorded landing to the item's own paths (comma-separated globs, verified inside the item's declared globs and the landing's changed files), so a commit that also changed code does not force the code pipeline on a docs-only item",
                 action=_Globs,
             ),
@@ -494,7 +517,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "worktree",
-                help="Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch.",
+                help="Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding.",
                 cli_help="rebind the item (and your live lease on it) to this linked worktree and the branch checked out there -- the way out of a binding to the wrong tree",
             ),
         ),
@@ -511,6 +534,7 @@ COMMANDS: tuple[Command, ...] = (
             "id",
             "globs",
             "needs",
+            "allow_unknown_needs",
             "title",
             "body",
             "append_body",

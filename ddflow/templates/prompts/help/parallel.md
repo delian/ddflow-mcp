@@ -53,6 +53,12 @@ limit -- it is not unlimited -- and a number is an independent cap. A claim that
 tree does not count against it. Both are counted across the WHOLE queue, not the slice you
 asked about.
 
+`schedule.reserved_slots` (default 0) keeps that many slots of the limit for bug fixes and
+tasks tagged `schedule.reserved_tags` (default `ddflow-gap`): ordinary work holds at most the
+limit minus it, a reserved slot with no such work stays free, and reserved work may also use
+any ordinary slot. One slot of a cap always stays ordinary. `next`, `status` and `brief` say
+how many are reserved and for what.
+
 `ddflow status` and `ddflow brief` print the limit in force on one line: `parallel: 6
 (auto: ceiling 8; limited by load per core)` or `parallel: 4 (fixed)`. "limited by
 independent work" means every ready item that can run beside what is in flight is already

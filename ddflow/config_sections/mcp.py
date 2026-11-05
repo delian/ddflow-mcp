@@ -4,6 +4,7 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section.""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ._docs import declare, int_at_least, knob
@@ -22,6 +23,39 @@ MCP_NEXT_HINTS = ("off", "on", "1", "2", "3")
 MCP_OUTPUT_SCHEMAS = ("off", "on")
 #: `[mcp].on_upgrade`.
 MCP_ON_UPGRADE = ("notify", "reexec", "off")
+#: A lane name of `[mcp].lane_tools` becomes part of a file name: no separators, and it starts
+#: with a letter or digit, so never a dot or an option-like dash.
+_LANE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def parse_lane_tiers(spec: str) -> dict[str, str]:
+    """`[mcp].lane_tools` (`lane=tier,lane=tier`) as a dict; ValueError names the bad entry."""
+    if not isinstance(spec, str):
+        raise ValueError("must be a string of lane=tier pairs")
+    out: dict[str, str] = {}
+    seen: set[str] = set()
+    for part in (p.strip() for p in spec.split(",")):
+        if not part:
+            continue
+        lane, sep, tier = (x.strip() for x in part.partition("="))
+        if not sep or not _LANE_NAME.fullmatch(lane) or ".." in lane:
+            raise ValueError(f"{part!r}: expected lane=tier with a plain lane name")
+        if tier not in MCP_TOOL_TIERS:
+            raise ValueError(f"{part!r}: tier must be one of {', '.join(MCP_TOOL_TIERS)}")
+        if lane.casefold() in seen:  # two names one file on a case-insensitive filesystem
+            raise ValueError(f"lane {lane!r} is given twice (names compare without case)")
+        seen.add(lane.casefold())
+        out[lane] = tier
+    return out
+
+
+def _lane_tools_problem(v: object) -> str:
+    """The `check` of `[mcp].lane_tools`: empty when it parses."""
+    try:
+        parse_lane_tiers(v)  # type: ignore[arg-type]
+    except ValueError as e:
+        return str(e)
+    return ""
 
 
 @declare("mcp")
@@ -44,6 +78,12 @@ class McpConfig:
             "core",
             "no safety dimension; fewer schemas advertised, every tool still callable",
         ),
+    )
+
+    lane_tools: str = knob(
+        "",
+        doc="Per-lane tool tier for the worker MCP config: comma-separated `lane=tier` pairs (tier `core`, `standard` or `all`), e.g. `impl=standard,review=all`. `ddflow adopt` writes `.ddflow/local/worker-mcp-<lane>.json` for each, the same server as `worker-mcp.json` with `DDFLOW_MCP_TOOLS` set to that lane's tier, so a lane that needs more than `[mcp].worker_tools` starts with `--mcp-config=` on its own file. Empty (default) writes none. A lane name starts with a letter or digit, then letters, digits, `.`, `_` or `-`; names compare without case. A file for a lane dropped from the list is named by adopt, not deleted. `ddflow doctor` counts a lane on `all` as it counts `[mcp].worker_tools`. It hides schemas, never tools.",
+        check=_lane_tools_problem,
     )
 
     profile_lean_budget_tokens: int = knob(

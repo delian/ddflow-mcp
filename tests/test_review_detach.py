@@ -181,23 +181,24 @@ def test_detach_argv_redeclares_the_resolved_identity_so_the_round_renews_the_le
 
     # A detached review relaunched with a DERIVED identity holds no lease to renew: the
     # holder's lease lapses over a long round (bug B-lease-ttl-expires-during-review). The
-    # relaunch must re-declare the resolved id so the run heartbeats as the holder.
+    # relaunch must re-declare the resolved id so the run heartbeats as the holder. It rides as
+    # ONE attached token: `tests/test_review_identity_from_worktree.py` says why.
     assert CR._detach_argv(["--detach", "T1", "--delta"], "role") == [
-        "--agent", "role", "T1", "--delta",
+        "--agent=role", "T1", "--delta",
     ]  # fmt: skip
     # a typed `--agent` is replaced by the resolved one, not duplicated
     assert CR._detach_argv(["--agent", "shell-alias", "T1", "--detach"], "role") == [
-        "--agent", "role", "T1",
+        "--agent=role", "T1",
     ]  # fmt: skip
     assert CR._detach_argv(["--agent=shell-alias", "T1", "--detach"], "role") == [
-        "--agent", "role", "T1",
+        "--agent=role", "T1",
     ]  # fmt: skip
     # naming nothing to relaunch is [] still, so `--detach` keeps its own-arguments refusal
     assert CR._detach_argv(["--detach"], "role") == []
     assert CR._detach_argv([], "role") == []
     # a positional arg past `--` is not a flag: it stays, and the resolved id leads
     assert CR._detach_argv(["--detach", "--", "--detach"], "role") == [
-        "--agent", "role", "--", "--detach",
+        "--agent=role", "--", "--detach",
     ]  # fmt: skip
 
 
@@ -224,7 +225,7 @@ def test_detach_relaunches_the_review_as_the_resolved_holder(monkeypatch):
         out=lambda *a, **k: None,
     )
     assert CR._detach(a, c) == CR.OK
-    assert "--agent" in called["command"] and "role" in called["command"], called
+    assert "--agent=role" in called["command"], called
     assert called["agent"] == "role"
 
 

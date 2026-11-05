@@ -117,12 +117,36 @@ def test_self_named_family_tools_without_an_action_are_the_legacy_tool():
     assert r.tool == "ddflow_doctor"
 
 
+def test_a_listed_argument_text_stays_short_and_says_when_it_was_cut():
+    """A family lists the union of its members' arguments, so a long text costs every session
+    that loads the family. The member keeps it whole; only the listing is cut."""
+    for family in FAMILY_NAMES:
+        for name, prop in FS.family_entry(family)["inputSchema"]["properties"].items():
+            if name != FS.OP:  # `op` joins one clause per member, each one needed
+                assert len(prop.get("description", "")) <= FS.LISTED_TEXT_MAX, (family, name)
+    full = FS.member_props("ddflow_lesson_add")["pattern"][1]
+    listed = FS.family_entry("ddflow_memory")["inputSchema"]["properties"]["pattern"]["description"]
+    assert len(full) > FS.LISTED_TEXT_MAX and listed.endswith(FS.CUT_MARK)
+    assert full.startswith(listed.removesuffix(FS.CUT_MARK))
+
+
+def test_a_short_text_is_listed_whole_and_a_sentence_end_is_where_a_long_one_stops():
+    assert FS._listed("Short enough.") == "Short enough."
+    long_tail = "x " * FS.LISTED_TEXT_MAX
+    assert FS._listed(f"First sentence. {long_tail}") == f"First sentence.{FS.CUT_MARK}"
+    room = FS.LISTED_TEXT_MAX - len(FS.CUT_MARK)
+    exact = "A " + "B" * (room - 3) + "."  # a sentence ending on the last character that fits
+    assert FS._listed(f"{exact} {long_tail}") == exact + FS.CUT_MARK
+    cut = FS._listed(long_tail)
+    assert cut.endswith(FS.CUT_MARK) and len(cut) <= FS.LISTED_TEXT_MAX
+
+
 def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
     flat = sum(len(json.dumps(_flat(t), separators=(",", ":")).encode()) for t in TOOLS)
     fams = sum(len(json.dumps(e, separators=(",", ":")).encode()) for e in FS.family_listing())
     singles = sum(len(json.dumps(_flat(t), separators=(",", ":")).encode()) for t in F.HOT_SINGLES)
     assert fams + singles < 0.6 * flat
-    assert fams + singles < 55_000  # measured 49,629 (the research estimated 53,312)
+    assert fams + singles < 55_000  # measured 54,456 (the research estimated 53,312)
 
 
 def _flat(tool):

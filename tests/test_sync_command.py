@@ -181,6 +181,33 @@ def test_a_gate_that_was_never_green_is_not_reported_as_still_valid(repo):
     assert "research" in out.data["gates_not_passing"]
 
 
+def test_gate_status_marks_a_gate_sync_reported_stale(repo):
+    """B1aec051374: after `sync` reports a recorded review stale (main touched its globs),
+    `gate status` must show a STALE marker, not a bare [x], so a reader can tell which
+    reviews no longer cover the branch."""
+    wt = _claimed(repo)
+    run_cli(
+        wt,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "ran",
+        "--agent",
+        ME,
+    )
+    _land(repo, "src/other.py")
+    out = sync(repo, item="T1", agent=ME)
+    assert out.ok, out.reason
+    assert "standards" in out.data["gates_stale"], out.data
+    code, stdout, stderr = run_cli(repo, "gate", "status", "T1")
+    assert code == 0, stderr
+    assert "STALE" in (stdout + stderr), stdout + stderr
+
+
 def test_a_pin_naming_a_directory_is_touched_by_a_path_under_it():
     from ddflow.services.branchsync import _inside_dir
 

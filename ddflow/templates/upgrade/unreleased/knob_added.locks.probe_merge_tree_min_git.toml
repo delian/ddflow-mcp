@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.probe_merge_tree_min_git"
+new = "\"2.38\""
+why = "The oldest git whose `merge-tree --write-tree` the probe uses; an older git (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe fall back to a scratch merge in a throwaway worktree, slower and the same answer."
+impact = "additive"

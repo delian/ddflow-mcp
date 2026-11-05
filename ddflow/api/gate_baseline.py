@@ -46,18 +46,13 @@ def apply(  # noqa: PLR0913, PLR0917
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
-    found = BR.on_base(repo, base, probe, ids, rerun, cfg.gates.baseline_cache_ttl_s)
+    found = BR.on_base(repo, base, probe, ids, rerun, cfg.gates.baseline_cache_ttl_s, cwd or repo)
     ev["baseline"] = found
     if not found["red"]:
-        fresh = [i for i in ids if i not in set(found.get("still_failing") or ())]
-        if fresh:
-            found["new_failures"] = fresh[: BR.SHOWN * 4]
-            why = (why + "; " if why else "") + (
-                f"new failure(s) not failing on {base}: {', '.join(fresh[: BR.SHOWN])}"
-                f"{' ...' if len(fresh) > BR.SHOWN else ''} (a timing flake counts as new unless "
-                f"it also fails on the base)"
-            )
-        return result, why
+        return _not_red(ev, found, base, ids, result, why)
+    if unran := _guards_unran(gate, ev):
+        ev["reason"] = unran
+        return result, unran
     bug = _linked(repo, agent, ids) or _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
     found["auto"] = BL.auto_decision(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
@@ -65,6 +60,62 @@ def apply(  # noqa: PLR0913, PLR0917
     if why:
         ev["reason"] = reason  # the headline names the base, not the superseded "NOT a pass"
     return "partial", reason
+
+
+def _not_red(
+    ev: dict[str, Any], found: dict[str, Any], base: str, ids: list[str], result: str, why: str
+) -> tuple[str, str]:
+    """The outcome when the base does not show the whole failure. An id it passes or lacks is a
+    new failure and fails the gate. An id it could not measure is neither: with nothing else
+    to go on the gate is `unavailable`, since that run says nothing about this change."""
+    if found.get("compared") is False:
+        return result, why
+    blind = set(found.get("unmeasured") or ())
+    known = blind | set(found.get("still_failing") or ())
+    fresh = [i for i in ids if i not in known]
+    if fresh:
+        found["new_failures"] = fresh[: BR.SHOWN * 4]
+        more = f"; {len(blind)} more could not be measured there" if blind else ""
+        return result, (why + "; " if why else "") + (
+            f"new failure(s) not failing on {base}: {', '.join(fresh[: BR.SHOWN])}"
+            f"{' ...' if len(fresh) > BR.SHOWN else ''} (a timing flake counts as new unless "
+            f"it also fails on the base){more}"
+        )
+    if not blind:
+        return result, why
+    shown = ", ".join(sorted(blind)[: BR.SHOWN]) + (" ..." if len(blind) > BR.SHOWN else "")
+    how = found.get("why") or "the run on it gave no verdict for them"
+    reason = f"baseline not measured on {base} ({how}): failing here, unknown there: {shown}"
+    if why:
+        ev["reason"] = reason
+    return "unavailable", reason
+
+
+def _guards_unran(gate: str, ev: dict[str, Any]) -> str:
+    """Why a ci run's baseline-red conclusion must not stand ("" when it may): the selected
+    run had always-run guards planned (`[ci].always_tests`, `ALWAYS = True`) that never ran to a
+    verdict -- the selection failed first, so they were skipped. Every selected failure being
+    baseline-red would otherwise read as 'nothing new' while the guards, whose input is the whole
+    code base, never got to catch a regression (B47a1dbeba0)."""
+    if gate != "ci":
+        return ""
+    scope = ev.get("ci_scope") or {}
+    if scope.get("scope") != "selected" or not scope.get("always"):
+        return ""  # full scope ran everything; no guards were planned to run after the selection
+    verdict = (scope.get("ran") or {}).get("always")
+    if verdict is not None and verdict != "unavailable":
+        return ""  # they ran to a verdict; a guard failure is among the failing ids
+    guards = scope.get("always_tests") or ()
+    names = ", ".join(str(g) for g in guards[: BR.SHOWN]) + (
+        " ..." if len(guards) > BR.SHOWN else ""
+    )
+    return (
+        "the selected tests failed only as the base fails them (baseline-red), but the "
+        f"always-run guards never ran ({scope.get('always')} guard file(s)"
+        + (f": {names}" if names else "")
+        + " -- they run after the selection), so a regression in them cannot be ruled out: "
+        "the run is not baseline-red"
+    )
 
 
 def _file(
@@ -102,7 +153,9 @@ def _names(text: str, test_id: str) -> bool:
     return re.search(left + re.escape(test_id) + right, text) is not None
 
 
-def _probe_and_ids(gate, gdef, repo, cfg, ev: dict[str, Any], ids: list[str]) -> tuple[Any, list[str]]:
+def _probe_and_ids(
+    gate, gdef, repo, cfg, ev: dict[str, Any], ids: list[str]
+) -> tuple[Any, list[str]]:
     """``(probe, ids)``: the gate whose command runs the failing ids on the base, and the whole
     failing list to try there. `ddflow ci run` is no pytest (its whole list is kept aside, run
     with the unit_tests command); a full-suite unit_tests failure caps its list the same way and

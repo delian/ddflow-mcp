@@ -182,3 +182,32 @@ def test_a_task_that_merged_completes_after_the_guard(repo):
     pass_pipeline(repo, "T1", omit=())
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
     assert code == 0, out + err
+
+
+def test_a_commit_after_a_recorded_landing_is_still_refused(repo):
+    """A branch at the tip `merge` landed is merged, even with no ancestry (a squash); one
+    commit past it is not, so the exemption cannot hide later work."""
+    from ddflow.config import Config
+    from ddflow.core.model import Item, State
+    from ddflow.services.completion.rules import UNMERGED_BLOCKER, _own_branch_unmerged
+
+    _git(repo, "branch", "feature")
+    tip = _git(repo, "rev-parse", "feature").strip()
+    _git(repo, "checkout", "-q", "feature")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "landed by squash")
+    landed = _git(repo, "rev-parse", "HEAD").strip()
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "the squash commit")
+    squash = _git(repo, "rev-parse", "HEAD").strip()
+    it = Item(
+        id="T1", kind="task", branch="feature", base="main", merged_head=landed, merged_sha=squash
+    )
+    assert tip != landed
+    assert _own_branch_unmerged(State(), Config(), it, repo) == []
+    _git(repo, "reset", "-q", "--hard", "HEAD~1")  # the base rewound past the landing
+    assert UNMERGED_BLOCKER in _own_branch_unmerged(State(), Config(), it, repo)[0]
+    _git(repo, "reset", "-q", "--hard", squash)
+    _git(repo, "checkout", "-q", "feature")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "after the landing")
+    _git(repo, "checkout", "-q", "main")
+    assert UNMERGED_BLOCKER in _own_branch_unmerged(State(), Config(), it, repo)[0]

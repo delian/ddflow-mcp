@@ -18,11 +18,15 @@ from ...core.events import Event
 from ...core.records import Item, State
 from ...core.schedule import Plan
 from .. import waiting as WG
+from .safe import safe
 
 #: The event kinds that make an agent a lane.
 _LANE_KINDS = ("session.", "lease.")
 #: Blocked reasons that mean "another lane's lease or globs hold it".
 _CONFLICT = ("conflict", "contested")
+#: The gate. namespace kinds that RECORD an outcome (so a later ``gate.started`` is not
+#: one). ``gate.started`` is deliberately absent: it opens a run, it does not end one.
+_GATE_OUTCOMES = ("gate.passed", "gate.failed", "gate.unavailable", "gate.partial", "gate.skipped")
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,14 @@ class Lane:
     since: float = 0.0  #: epoch seconds the state began
     heartbeat: float = 0.0  #: epoch seconds of the last lease heartbeat (0: none)
     last_event: float = 0.0
+    #: The kind of the lane's most recent event (`lease.renewed`, `gate.started`, ...): the
+    #: anchor that names the step a stopped lane died on, once the stop is explained.
+    last_event_kind: str = ""
+    #: The gate that was mid-run on its item when it stopped (a ``gate.started`` with no
+    #: later outcome), else "" -- the step a corpse names. See ``_mid_gates``.
+    mid_gate: str = ""
+    #: The per-cause remedy for a stopped lane: what to do, and which step killed it.
+    remedy: str = ""
     worktree: str = ""
     session: str = ""
     detail: str = ""
@@ -71,6 +83,7 @@ class _Facts:
     """What the events say about one agent, before it is classified."""
 
     last_ts: str = ""
+    last_kind: str = ""
     lane: bool = False
     session: str = ""
     session_ts: str = ""
@@ -87,7 +100,8 @@ def _scan(events: Iterable[Event]) -> dict[str, _Facts]:
     for e in events:
         who = e.agent
         f = facts.setdefault(who, _Facts())
-        f.last_ts = max(f.last_ts, e.ts)
+        if e.ts >= f.last_ts:  # the newest event by timestamp names the step a stop left off
+            f.last_ts, f.last_kind = e.ts, e.kind
         if not e.kind.startswith(_LANE_KINDS):
             continue
         f.lane = True
@@ -99,20 +113,73 @@ def _scan(events: Iterable[Event]) -> dict[str, _Facts]:
             holder = str(e.data.get("holder") or who)
             h = facts.setdefault(holder, _Facts())
             h.lane = True
-            h.last_ts = max(h.last_ts, e.ts)
+            if e.ts >= h.last_ts:
+                h.last_ts, h.last_kind = e.ts, e.kind
             if e.ts >= h.item_ts:
                 h.item, h.item_ts = e.subject, e.ts
         elif e.kind == "lease.renewed":
             h = facts.setdefault(str(e.data.get("holder") or who), _Facts())
             h.lane, h.beat_ts = True, max(h.beat_ts, e.ts)
-            h.last_ts = max(h.last_ts, e.ts)
+            if e.ts >= h.last_ts:
+                h.last_ts, h.last_kind = e.ts, e.kind
         elif e.kind in ("lease.released", "lease.expired"):
             holder = str(e.data.get("holder") or who)
             h = facts.setdefault(holder, _Facts())
             h.lane = True
             h.released_ts = max(h.released_ts, e.ts)
-            h.last_ts = max(h.last_ts, e.ts)
+            if e.ts >= h.last_ts:
+                h.last_ts, h.last_kind = e.ts, e.kind
     return facts
+
+
+def _mid_gates(events: Iterable[Event]) -> dict[str, str]:
+    """item -> the gate that was mid-run at its last ``gate.started`` (no later outcome for
+    that gate), else "". The one step a stopped lane names as the thing that killed it."""
+    started: dict[str, tuple[str, str]] = {}
+    ended: dict[tuple[str, str], str] = {}
+    for e in events:
+        gate = str(e.data.get("gate") or "")
+        if e.kind == "gate.started":
+            if e.ts >= started.get(e.subject, ("", ""))[0]:
+                started[e.subject] = (e.ts, gate)
+        elif e.kind in _GATE_OUTCOMES:
+            key = (e.subject, gate)
+            ended[key] = max(ended.get(key, ""), e.ts)
+    return {
+        item: gate
+        for item, (ts, gate) in started.items()
+        if gate and ts > ended.get((item, gate), "")
+    }
+
+
+def remedy_for(lane: Lane) -> str:
+    """The per-cause remedy for a stopped lane: which step killed it and what to do.
+
+    A done lane is owed nothing; a live one has no death to explain -- both give "".
+    The remedy names the arrested step (the mid-run gate, the last event kind), so the
+    advice no longer falls back to "reason unknown" when the log recorded a step.
+    """
+    item, name = safe(lane.item), safe(lane.name)
+    if lane.state == S.STOPPED_ENDED:
+        mid = f" (mid-{safe(lane.mid_gate)})" if lane.mid_gate else ""
+        return f"its session ended with {item} unfinished{mid}; resume with: ddflow claim {item}"
+    if lane.state != S.STOPPED_UNKNOWN:
+        return ""
+    if lane.mid_gate:
+        return (
+            f"it died inside the {safe(lane.mid_gate)} gate (last event "
+            f"{safe(lane.last_event_kind)}); resume with: ddflow claim {item}, then re-run "
+            f"{safe(lane.mid_gate)}"
+        )
+    if lane.last_event_kind == "lease.renewed":
+        return (
+            "heartbeats only since its last work (last event lease.renewed); resume from its "
+            f"brief: ddflow lanes brief {name}, then ddflow claim {item}"
+        )
+    return (
+        f"its last recorded step is {safe(lane.last_event_kind) or 'unreadable'}; resume with: "
+        f"ddflow claim {item}, after checking its worktree"
+    )
 
 
 def _held(st: State, name: str) -> Item | None:
@@ -161,7 +228,9 @@ def _free(name: str, f: _Facts, st: State, plan: Plan, ended: bool, last: float)
     return Lane(state=S.IDLE, **base)
 
 
-def _lane(name: str, f: _Facts, st: State, cfg: Config, now: float, plan: Plan) -> Lane:
+def _lane(
+    name: str, f: _Facts, st: State, cfg: Config, now: float, plan: Plan, mid_gates: dict[str, str]
+) -> Lane:
     sess = st.sessions.get(f.session)
     ended = bool(sess and sess.ended_at)
     last = epoch(f.last_ts)
@@ -194,20 +263,23 @@ def _lane(name: str, f: _Facts, st: State, cfg: Config, now: float, plan: Plan) 
             worktree=ls.worktree or held.worktree,
             detail=ls.note if state == S.WORKING else "",
         )
-    return _with_session(lane, f, st)
+    return _with_session(lane, f, st, mid_gates.get(lane.item, ""))
 
 
-def _with_session(lane: Lane, f: _Facts, st: State) -> Lane:
+def _with_session(lane: Lane, f: _Facts, st: State, mid_gate: str) -> Lane:
     worktree = lane.worktree or (st.items[f.item].worktree if f.item in st.items else "")
-    return Lane(
+    lane = Lane(
         **{
             **lane.__dict__,
             "harness": f.harness,
             "model": f.model,
             "session": f.session,
             "worktree": worktree,
+            "last_event_kind": f.last_kind,
+            "mid_gate": mid_gate,
         }
     )
+    return replace(lane, remedy=remedy_for(lane))
 
 
 def _with_waits(lane: Lane, st: State, cfg: Config, now: float) -> Lane:
@@ -224,6 +296,7 @@ def _with_waits(lane: Lane, st: State, cfg: Config, now: float) -> Lane:
 def build(events: Sequence[Event], st: State, cfg: Config, now: float, plan: Plan) -> list[Lane]:
     """Every lane active inside ``cfg.lanes.window_s`` (or holding a live lease), by name."""
     horizon = now - cfg.lanes.window_s
+    mid_gates = _mid_gates(events)
     lanes = []
     for name, f in _scan(events).items():
         if not f.lane:
@@ -231,7 +304,7 @@ def build(events: Sequence[Event], st: State, cfg: Config, now: float, plan: Pla
         held = _held(st, name)
         live = bool(held and held.lease and held.lease.live(now, cfg.lease.grace_s))
         if live or epoch(f.last_ts) >= horizon:
-            lanes.append(_with_waits(_lane(name, f, st, cfg, now, plan), st, cfg, now))
+            lanes.append(_with_waits(_lane(name, f, st, cfg, now, plan, mid_gates), st, cfg, now))
     return sorted(lanes, key=lambda ln: ln.name)
 
 

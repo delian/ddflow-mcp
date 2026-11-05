@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.probe_at"
+new = "[\"claim\", \"gate\", \"merge\"]"
+why = "Where ddflow runs the probe on its own: `claim` (when an item is claimed), `gate` (at a gate boundary) and `merge` (before the merge)."
+impact = "additive"

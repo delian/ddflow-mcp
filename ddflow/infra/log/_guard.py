@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from typing import Any
 
@@ -28,6 +29,7 @@ from ...core.events import (
 )
 from .. import shardmeta as SMT
 from ._agent import CLONE_ID_FILE, _clone_suffix
+from ._parse import SNAPSHOT_ENV
 from ._skew import (
     _warn_patch_skew_once,
     _warn_skew_once,
@@ -44,8 +46,14 @@ class _GuardMixin:
     # -- the version stamp and the skew guard -----------------------------------------
     def _shard_meta(self) -> SMT.ShardMeta | None:
         """The per-clone shard facts (`infra.shardmeta`), or None where no cache is kept
-        (`[log].snapshot` off, a log built only to read another repository)."""
-        if not self._snapshot_enabled():
+        (`[log].reuse_parsed` off, the `DDFLOW_SNAPSHOT=0` kill switch, a log built only to
+        read another repository). Not tied to `[log].snapshot` (B9d5e21a5e9): these facts are
+        what keeps a fresh process's append from parsing every shard, and a snapshot that is
+        off does not change that."""
+        if (
+            not (self.log_cfg.reuse_parsed and self.cache_writes)
+            or os.environ.get(SNAPSHOT_ENV) == "0"
+        ):
             return None
         if self._meta is None:
             self._meta = SMT.ShardMeta(self.root)
