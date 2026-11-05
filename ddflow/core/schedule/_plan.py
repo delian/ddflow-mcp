@@ -183,6 +183,23 @@ def plan(
             # item in two lists, and a caller iterating `ready` would start it twice.
             p.running.append(it)
             continue
+        if it.merged_sha:
+            # B-merged-uncompleted-claimable: a merged item not yet completed is not fresh
+            # work. `merge` released the lease and `complete` needs no lease, so `next` must
+            # not offer it -- a second lane's claim of it would run `item.reworked` and clear
+            # the merging lane's gates before it completes. The claim door refuses that
+            # re-claim itself (`api.lifecycle.claim`), the merger's own re-claim reopens.
+            p.blocked.append(
+                Blocked(
+                    it.id,
+                    "state",
+                    f"merged ({it.merged_sha[:12]}) but not completed; `ddflow complete "
+                    f"{it.id}` records it. Re-claim as the merged lane (or `--force`) to "
+                    f"rework it.",
+                    [],
+                )
+            )
+            continue
         blocker = item_blocker(
             state,
             cfg,
