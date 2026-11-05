@@ -233,6 +233,19 @@ def test_the_worktree_cap_keeps_a_tree_for_the_reserved_slot(log, cfg):
     assert _ready(p) == ["fix-B"] and p.capped == ["F2"]
 
 
+def test_a_worktree_lease_counts_against_the_limit_like_any_other(log, cfg):
+    """Every live lease is in flight, worktree or not (`plan`'s two-caps comment), so an
+    ordinary worktree lease uses the ordinary share: reading it as outside the limit would
+    offer a third item to a cap of two."""
+    _queue(log, "F1", "F2")
+    _hold(log, "F1", worktree="/t/f1")
+    _reserve(cfg, cap=2)
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert _ready(p) == [] and p.capped == ["F2"]
+    cfg.schedule.reserved_slots = 0
+    assert _ready(plan(fold(log.read_all()), cfg, agent="me")) == ["F2"]
+
+
 def test_a_no_worktree_feature_is_not_held_by_the_tree_reservation(log, cfg):
     _queue(log, "F1")
     _task(log, "R", "no-worktree")
@@ -308,6 +321,15 @@ def test_the_summary_says_how_many_are_reserved_and_for_what(log, cfg):
     _reserve(cfg)
     summary = plan(fold(log.read_all()), cfg, agent="me").summary()
     assert "1 of 3 slot(s) reserved for bug fixes and tags ddflow-gap" in summary, summary
+
+
+def test_the_summary_says_it_once_with_the_parallel_line_set(log, cfg):
+    _queue(log, "F1", "F2")
+    _reserve(cfg)
+    decision = FC.Decision(3, "fixed", "", "", False)
+    p = plan(fold(log.read_all()), cfg, agent="me", parallel=decision)
+    assert p.summary().count("reserved for") == 1, p.summary()
+    assert p.parallel_line.count("reserved for") == 1, p.parallel_line
 
 
 def test_the_note_drops_the_tags_when_there_are_none(log, cfg):
