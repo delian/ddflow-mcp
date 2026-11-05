@@ -131,6 +131,23 @@ def _state(repo):
     return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
+def test_a_gate_queued_on_the_suite_lock_is_not_yield_requested(repo):
+    """The heartbeat is one place a contended-but-not-idle lease is told to yield; it used
+    to judge WITHOUT the repo, so `_live_gate` could not see a still-alive gate run and a
+    lane whose unit_tests run sat #k in the full-suite queue was told to yield / it could
+    be broken (bug B42016bbc0e)."""
+    from ddflow.services.gates import running as RUN
+
+    _setup(repo, hold=10 * AGO)
+    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # records the wait
+    _backdate(repo, "T1", AGO)
+    marker = RUN.mark_started(repo, "T1", "unit_tests", sha="abc")  # the gate is in flight
+    assert marker is not None  # this process's own pid: still live while the heartbeat's child runs
+    code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)
+    assert code == 0, err
+    assert "YIELD REQUESTED" not in out + err and "no progress" not in out + err
+
+
 def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
     _setup(repo)
     assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3  # fresh
