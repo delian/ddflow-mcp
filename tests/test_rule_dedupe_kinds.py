@@ -79,16 +79,36 @@ def test_related_files_it_and_names_the_decision(proj):
     assert "r-mig" in _rules(proj) and "related to D-mig" in out
 
 
-def test_extends_puts_the_text_on_the_open_decision_and_files_no_rule(proj):
+def test_extends_files_the_rule_and_leaves_the_decision_unedited(proj):
+    """A decision is never edited in place (D-no-deletion, LINK_ONLY_KINDS): `extends`
+    files the new record and names the decision, as every other add does."""
     code, out, err = run_cli(
         proj, "rule", "add", "--id", "r-mig", "--title", "Migrations", "--content", RESTATED,
         "--extends", "D-mig",
     )  # fmt: skip
     assert code == 0, (code, out, err)
-    assert "r-mig" not in _rules(proj)
+    assert "r-mig" in _rules(proj)
     assert "D-mig" in out
+    events = EventLog(proj, "t").read_all()
+    assert "D-mig" in fold(events, strict=False).decisions
+    assert not [e for e in events if e.kind == "record.extended"]
+
+
+def test_extends_puts_the_text_on_an_open_lesson_and_files_no_rule(proj):
+    code, out, err = run_cli(
+        proj, "lesson", "add", "--id", "L-mig", "--title", "Migrations run in one transaction",
+        "--rule", DECISION, "--new",
+    )  # fmt: skip
+    assert code == 0, (code, out, err)
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-mig", "--title", "Migrations", "--content", RESTATED,
+        "--extends", "L-mig",
+    )  # fmt: skip
+    assert code == 0, (code, out, err)
+    assert "r-mig" not in _rules(proj)
+    assert "L-mig" in out
     st = fold(EventLog(proj, "t").read_all(), strict=False)
-    added = st.links["D-mig"].additions.values()
+    added = st.links["L-mig"].additions.values()
     assert any(RESTATED in (a.get("text") or "") for a in added), list(added)
 
 

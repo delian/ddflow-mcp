@@ -56,4 +56,4 @@ def test_the_brief_itself_puts_recoverable_work_before_new_work(repo):
     # The recoverable ENTRY is inside the RESUME block and precedes the suggested work,
     # not only its heading (duck #6/#7).
     assert text.index(RESUME) < text.index("**T1** (stale_running"), text
-    assert text.index("**T1** (stale_running") < text.index("## Suggested next: T9"), text
+    assert text.index("**T1** (stale_running") < text.index("## Current: T9"), text
