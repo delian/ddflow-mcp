@@ -227,7 +227,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if empty is not None:
         return empty
     remote_base = f"{cfg.flow.remote}/{wt.base}"
-    if wrong := _wrong_base(st, it, wt, remote_base, item):
+    if (wrong := _wrong_base(st, it, wt, remote_base, item)) is not None:
         return wrong
     if cfg.flow.integration == "pr":
         if borrowed:
