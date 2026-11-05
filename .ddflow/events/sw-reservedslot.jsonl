@@ -112,3 +112,4 @@
 {"agent":"sw-reservedslot","data":{"at":1793894464.3168724,"holder":"sw-reservedslot"},"id":"ec90d817065127d0af372d701","kind":"lease.renewed","lamport":140921,"schema":1,"subject":"DX-reserved-slot","ts":"2026-11-05T16:01:04.400535Z"}
 {"agent":"sw-reservedslot","data":{"at":1793894741.1129026,"holder":"sw-reservedslot"},"id":"e965aa9900a3f2ca21d93f628","kind":"lease.renewed","lamport":140975,"schema":1,"subject":"DX-reserved-slot","ts":"2026-11-05T16:05:41.378898Z"}
 {"agent":"sw-reservedslot","data":{"at":1793895051.4361987,"holder":"sw-reservedslot"},"id":"e0f1ebe68bcc32d04ae743752","kind":"lease.renewed","lamport":141001,"schema":1,"subject":"DX-reserved-slot","ts":"2026-11-05T16:10:51.533222Z"}
+{"agent":"sw-reservedslot","data":{"at":1793895621.1594055,"holder":"sw-reservedslot"},"id":"ee1b0b61825ef2db772852923","kind":"lease.renewed","lamport":141048,"schema":1,"subject":"DX-reserved-slot","ts":"2026-11-05T16:20:21.244122Z"}
