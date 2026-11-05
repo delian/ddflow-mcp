@@ -159,6 +159,14 @@ def test_the_hook_tap_drains_a_payload_past_its_cap(tmp_path, monkeypatch):
     assert saved.read_bytes() == b"0123"
 
 
+def test_a_stdin_that_cannot_be_read_is_still_exit_zero(tmp_path):
+    class Broken(io.BytesIO):
+        def read(self, *_a):
+            raise OSError("EIO")
+
+    assert Tap.hook(tmp_path, "stop", Broken()) == 0
+
+
 def test_a_payload_that_cannot_be_stored_is_still_drained(tmp_path, monkeypatch):
     monkeypatch.setattr(Tap, "MAX_PAYLOAD_BYTES", 4)
     blocker = tmp_path / "file"

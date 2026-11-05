@@ -55,14 +55,17 @@ def store_hook(capture: Path, event: str, raw: bytes) -> bool:
 
 def hook(capture: Path, event: str, stdin: BinaryIO) -> int:
     """Always 0, whatever happens: see the module note."""
-    raw = stdin.read(MAX_PAYLOAD_BYTES)
     try:
-        if not store_hook(capture, event, raw):
-            print(f"harness tap: {MAX_EVENTS} payloads kept, {event} dropped", file=sys.stderr)
-    except OSError as exc:
-        print(f"harness tap: {event} not stored: {exc}", file=sys.stderr)
-    while stdin.read(MAX_PAYLOAD_BYTES):  # an agent may fail on a pipe closed under it
-        pass
+        raw = stdin.read(MAX_PAYLOAD_BYTES)
+        try:
+            if not store_hook(capture, event, raw):
+                print(f"harness tap: {MAX_EVENTS} payloads kept, {event} dropped", file=sys.stderr)
+        except OSError as exc:
+            print(f"harness tap: {event} not stored: {exc}", file=sys.stderr)
+        while stdin.read(MAX_PAYLOAD_BYTES):  # an agent may fail on a pipe closed under it
+            pass
+    except (OSError, ValueError) as exc:
+        print(f"harness tap: {event}: stdin: {exc}", file=sys.stderr)
     return 0
 
 
