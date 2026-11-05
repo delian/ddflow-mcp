@@ -367,3 +367,30 @@ def test_an_empty_release_says_nothing_about_a_stop():
     g.add("lease.released", "V", "lane-ended", T0 - 80, holder="lane-ended", note="")
     e = next(x for x in _entries(g)[0] if x.name == "lane-ended")
     assert e.cls == FL.FAILED and "429" in e.stop_reason
+
+
+def _held(by: str, *, lapsed: bool = False, then: str = ""):
+    g = Log()
+    g.task("X`y", "f.py")
+    g.claim(by, "X`y", T0, "f.py")
+    now = T0 + 1
+    if lapsed:
+        now = T0 + 100_000
+    if then:
+        g.claim(then, "X`y", now - 1, "f.py")
+    return g, now
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        {"by": "a`b"},  # still holds it
+        {"by": "a`b", "lapsed": True},  # eligible
+        {"by": "a`b", "lapsed": True, "then": "c`d"},  # taken over
+    ],
+)
+def test_a_resume_answer_never_prints_a_name_raw(shape):
+    g, now = _held(**shape)
+    entries, _l, st, cfg = _entries(g, now)
+    r = FL.resume(entries, "a`b", st, now, cfg.lease.grace_s)
+    assert r["reason"] and "`" not in r["reason"]

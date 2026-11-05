@@ -137,7 +137,7 @@ def _patterns(cfg: Config) -> list[re.Pattern[str]]:
         try:
             out.append(re.compile(p, re.IGNORECASE))
         except re.error:
-            continue  # a bad pattern is skipped here; the knob check names it
+            continue  # as the knob's doc says, a pattern that does not compile is skipped
     return out
 
 
@@ -213,20 +213,21 @@ def resume(
         return {**base, "reason": f"no agent {LN.safe(name)!r} in the registry"}
     e = next(x for x in entries if x.name == found.name)
     base.update(lane=e.name, item=e.item, worktree=e.worktree, stop_reason=e.stop_reason)
+    who, what = LN.safe(e.name), LN.safe(e.item)  # the log's words: never printed raw
     it = st.items.get(e.item)
     ls = it.lease if it and not it.terminal else None
     if ls and ls.holder == e.name and ls.live(now, grace_s):
-        return {**base, "reason": f"{e.name} still holds {e.item} on a live lease"}
+        return {**base, "reason": f"{who} still holds {what} on a live lease"}
     if ls and ls.holder and ls.holder != e.name and ls.live(now, grace_s):
-        return {**base, "reason": f"already taken over: {e.item} is held by {ls.holder}"}
+        return {**base, "reason": f"already taken over: {what} is held by {LN.safe(ls.holder)}"}
     if e.lane_state not in _STOPPED:
-        return {**base, "reason": f"{e.name} is {e.cls} ({e.lane_state}); nothing to resume"}
+        return {**base, "reason": f"{who} is {e.cls} ({e.lane_state}); nothing to resume"}
     if it is None or it.terminal:
-        return {**base, "reason": f"{e.item} is finished; nothing to resume"}
+        return {**base, "reason": f"{what} is finished; nothing to resume"}
     return {
         **base,
         "eligible": True,
-        "reason": f"{e.name} stopped with {e.item} unfinished; start a session with its brief "
+        "reason": f"{who} stopped with {what} unfinished; start a session with its brief "
         "(this view starts nothing: a lane launches only from an approved template)",
         "command": f"ddflow lanes brief {LN.safe(e.name)}",
     }
