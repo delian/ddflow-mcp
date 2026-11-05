@@ -235,6 +235,30 @@ def test_prepare_says_what_a_plugin_style_agent_cannot_have_tapped(repo, tmp_pat
     assert HRec.TAP_MODULE in entry["command"], "opencode's shape holds one command list"
 
 
+def test_prepare_on_a_directory_it_cannot_read_is_refused(repo, tmp_path):
+    shut = tmp_path / "shut"
+    shut.mkdir(mode=0)
+    try:
+        out = harness_record(repo, "claude", prepare=str(shut))
+    finally:
+        shut.chmod(0o700)
+    if os.geteuid() == 0:
+        pytest.skip("root reads every directory")
+    assert out.exit == 3
+    assert "cannot make" in out.reason
+
+
+def test_a_line_is_on_disk_before_it_passes(tmp_path):
+    log = Tap.McpLog(tmp_path)
+
+    class Sink(io.BytesIO):
+        def write(self, data):
+            assert (tmp_path / "mcp.jsonl").read_text(), "logged first"
+            return super().write(data)
+
+    Tap._pump(io.BytesIO(b"ping\n"), Sink(), log, "in")
+
+
 def test_prepare_under_a_file_is_refused(repo, tmp_path):
     (tmp_path / "file").write_text("keep")
     out = harness_record(repo, "claude", prepare=str(tmp_path / "file" / "scratch"))

@@ -95,15 +95,17 @@ class McpLog:
 
 
 def _pump(src: BinaryIO, dst: BinaryIO, log: McpLog, direction: str) -> None:
-    """Line by line until EOF; the bytes pass first, and a logging failure never stops them."""
+    """Line by line until EOF. Logged before it passes: the tap leaves the moment the server
+    exits, so a line must be on disk before anything can answer it. A logging failure never
+    stops the bytes."""
     try:
         for line in iter(src.readline, b""):
-            dst.write(line)
-            dst.flush()
             try:
                 log.note(direction, line)
             except (OSError, ValueError) as exc:
                 print(f"harness tap: mcp log: {exc}", file=sys.stderr)
+            dst.write(line)
+            dst.flush()
     except (BrokenPipeError, ValueError):
         pass  # the other end went away: the session is over
     finally:

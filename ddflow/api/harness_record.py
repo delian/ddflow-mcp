@@ -61,11 +61,11 @@ def _status(repo: Path, tree: Path, h: HR.Harness, dest: Path, installed: str) -
 
 def _prepare(repo: Path, h: HR.Harness, target: str, agent: str) -> O.Outcome:
     root = Path(target).resolve()
-    if root.exists() and (not root.is_dir() or any(root.iterdir())):
-        return O.refused(KIND, f"{root} is not empty: a recording starts from a new directory")
     if root.is_relative_to(Path(repo).resolve()):
         return O.refused(KIND, f"{root} is inside this project: use a directory outside it")
     try:
+        if root.exists() and (not root.is_dir() or any(root.iterdir())):
+            return O.refused(KIND, f"{root} is not empty: a recording starts from a new directory")
         root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return O.refused(KIND, f"cannot make {root}: {exc.strerror or exc}")
