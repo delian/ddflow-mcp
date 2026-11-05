@@ -5,10 +5,11 @@ Takes what a caller already read and returns an ``Answer``: no I/O, no clock, no
 note: ``note`` is its text, the pull returns it, and the claim records it (``claim --note``).
 
 ``pull_for`` wires ``score.pull`` (a lane asks for an item) and ``place`` wires ``score.choose``
-(an item asks for a lane, the call DX-dispatch-plan makes). Both answer in the same order:
+(an item asks for a lane, the call DX-dispatch-plan makes). They answer in this order:
 
 1. ``unavailable``: a lane with no template, or a family, model or trust nobody can vouch for.
-   Nothing is offered and nothing is defaulted (``gaps``).
+   Nothing is offered and nothing is defaulted (``gaps``). ``pull_for`` asks this itself;
+   ``place`` takes lanes already built, so its caller keeps only sources ``gaps`` found complete.
 2. ``hold``: the parallelism limit is reached or admission is paused (``Slots``).
 3. ``none``: nothing is eligible, with the first refusals as the reason.
 4. ``offer``: the choice, with its note.
