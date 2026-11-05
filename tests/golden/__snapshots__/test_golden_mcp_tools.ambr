@@ -1301,7 +1301,7 @@
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief."
+          "description": "Lane name (or a unique part); with view=brief or resume."
          },
          "group_by": {
           "type": "string",
