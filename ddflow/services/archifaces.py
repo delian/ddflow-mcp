@@ -24,12 +24,13 @@ from pathlib import Path
 
 from .archdeps import STDLIB_HOMES, _dotted
 from .archifaces_scan import (  # noqa: F401  (re-exported)
-    AGENT_CLIS,
+    ACP_ONLY_AGENTS,
     ALL_ENV,
     DYNAMIC,
     PLATFORM,
     TOOLS,
     Site,
+    agent_clis,
     sites_in,
 )
 
@@ -48,7 +49,6 @@ PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
     "gh": ("ADP-forge", ("ddflow.infra.forge",)),
     "glab": ("ADP-forge", ("ddflow.infra.forge",)),
     DYNAMIC: ("ADP-tools", _RUNNER),
-    **dict.fromkeys(AGENT_CLIS, ("ADP-agent-lanes", ())),
     **dict.fromkeys(TOOLS, ("ADP-tools", ())),
     **dict.fromkeys(PLATFORM, ("ADP-platform", ())),
     "sh": ("ADP-platform", _RUNNER),  # a shell entry point of the process runner itself
@@ -71,6 +71,8 @@ PROTOCOL_MODULES: dict[str, tuple[str, ...]] = {
 def home_of(kind: str, family: str) -> tuple[str, tuple[str, ...]]:
     """The planned ADP-* task and the modules already allowed for one family."""
     if kind == "program":
+        if family in agent_clis():
+            return ("ADP-agent-lanes", ())
         return PROGRAM_HOMES.get(family, ("ADP-tools", ()))
     if kind == "protocol":
         return PROTOCOL_HOMES.get(family, "ADP-lane-transport"), PROTOCOL_MODULES.get(family, ())

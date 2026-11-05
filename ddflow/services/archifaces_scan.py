@@ -15,6 +15,8 @@ import re
 from dataclasses import dataclass
 from itertools import pairwise
 
+from . import harnessreg as HR
+
 DYNAMIC = "<dynamic>"
 ALL_ENV = "<all>"
 
@@ -66,11 +68,19 @@ MCP_METHODS = frozenset(
         "completion/complete",
     }
 )
-# The programs ddflow knows by name (the program homes in `archifaces`).
-AGENT_CLIS = ("claude", "codex", "kilo", "opencode", "vibe")
+# The programs ddflow knows by name (the program homes in `archifaces`). The agents are not
+# listed here: `agent_clis` reads them from the harness descriptors.
+#: An agent program with no descriptor: it is only ever driven over ACP, as a lane.
+ACP_ONLY_AGENTS = ("vibe",)
 TOOLS = ("roborev", "gitleaks", "pre-commit", "pip-audit", "uv", "uvx", "npm", "npx", "node")
 PLATFORM = ("python", "ddflow", "ddflow-mcp", "docker", "systemd-run", "sh", "bash")
-KNOWN_PROGRAMS = frozenset({"git", "gh", "glab", *AGENT_CLIS, *TOOLS, *PLATFORM})
+
+
+def agent_clis() -> tuple[str, ...]:
+    """The agent programs: every harness descriptor's id. A function, not a table built on
+    import: this module loads at every CLI start and the descriptors parse on first read."""
+    return (*HR.ids(), *ACP_ONLY_AGENTS)
+
 
 ACP_METHODS = frozenset(
     {
