@@ -299,7 +299,6 @@ CLAIM_BODY = (
     "port_advice",
     "globs",
     "tree",
-    "sync_warn",
 )
 
 
