@@ -34,6 +34,7 @@ from ..core.schedule import stale_package_globs
 from ..infra import treeactivity as TA
 from ..infra import worktree as W
 from . import waiting as WG
+from .gates import running as RUN
 
 #: Event kinds that only say a lease exists or is being asked for; none is work.
 BOOKKEEPING = frozenset(
@@ -91,8 +92,6 @@ def progress_at(events: Iterable[Any], item_id: str, lease: Lease, activity: Act
 def _live_gate(repo, item_id: str) -> bool:
     """True when a command gate run on ``item_id`` is still alive on this host: a running
     gate is work in flight, never idleness (B-long-ci-run-holds-globs-while-waiter-asks-yield)."""
-    from .gates import running as RUN
-
     return bool(repo is not None and RUN.live_runs(repo, item_id))
 
 def judge(
