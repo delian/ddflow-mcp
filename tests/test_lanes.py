@@ -265,3 +265,23 @@ def test_build_computes_the_wait_rows_once_not_once_per_lane(monkeypatch):
     monkeypatch.setattr(waiting, "rows", counted)
     LN.build(g.events, st, cfg, NOW, plan)
     assert len(calls) == 1, f"waiting.rows called {len(calls)} times, expected once"
+
+
+def test_build_skips_the_wait_scan_when_no_lane_is_active(monkeypatch):
+    """The scan is only worth paying once there is a lane to attach it to: an empty
+    ledger (every lane past the window, none holding a live lease) scans zero times,
+    not once."""
+    import ddflow.services.waiting as waiting
+
+    g = multi_lane()
+    st, cfg, plan = build_inputs(g.events, T0 + 3 * 86400)
+    calls: list[int] = []
+    real = waiting.rows
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(waiting, "rows", counted)
+    assert LN.build(g.events, st, cfg, T0 + 3 * 86400, plan) == []
+    assert len(calls) == 0, f"waiting.rows called {len(calls)} times, expected none"

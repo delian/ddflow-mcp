@@ -300,14 +300,16 @@ def build(events: Sequence[Event], st: State, cfg: Config, now: float, plan: Pla
     """Every lane active inside ``cfg.lanes.window_s`` (or holding a live lease), by name."""
     horizon = now - cfg.lanes.window_s
     mid_gates = _mid_gates(events)
-    wait_rows = WG.rows(st, cfg, now)
     lanes = []
+    wait_rows: list[dict[str, Any]] | None = None
     for name, f in _scan(events).items():
         if not f.lane:
             continue
         held = _held(st, name)
         live = bool(held and held.lease and held.lease.live(now, cfg.lease.grace_s))
         if live or epoch(f.last_ts) >= horizon:
+            if wait_rows is None:  # one scan for the whole ledger, and none for an empty one
+                wait_rows = WG.rows(st, cfg, now)
             lanes.append(_with_waits(_lane(name, f, st, cfg, now, plan, mid_gates), wait_rows))
     return sorted(lanes, key=lambda ln: ln.name)
 
