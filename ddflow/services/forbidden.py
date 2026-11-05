@@ -169,6 +169,8 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
                 k = k + 1 if k2 < 0 else k2 + 1
             elif c == '"':
                 k = dquote_end(k)
+            elif c == "\\":  # an escaped closer (\) / \`) is not the end of the body
+                k += 2 if k + 1 < n else 1
             elif c == "`":
                 k2 = find_body(k + 1, "`")
                 bodies.append(text[k + 1 : k2])
