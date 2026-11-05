@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -266,7 +267,9 @@ def test_parse_lane_tiers_reads_lane_equals_tier_pairs():
     assert WM.parse_lane_tiers("a=standard, b=all") == {"a": "standard", "b": "all"}
 
 
-@pytest.mark.parametrize("bad", ["a", "a=nope", "=core", "a/b=core", "../x=core", "a=core,a=all", "a=core,A=all"])
+@pytest.mark.parametrize(
+    "bad", ["a", "a=nope", "=core", "a/b=core", "../x=core", "a=core,a=all", "a=core,A=all"]
+)
 def test_parse_lane_tiers_refuses_bad_entries(bad):
     with pytest.raises(ValueError):
         WM.parse_lane_tiers(bad)
@@ -316,12 +319,13 @@ def test_the_knob_has_an_upgrade_fragment():
 
 
 def test_a_lane_file_that_is_another_name_for_a_current_one_is_not_reported_stale(tmp_path):
-    """A case-insensitive filesystem lists `worker-mcp-IMPL.json` for the lane `impl`: same file."""
+    """A case-insensitive filesystem lists `worker-mcp-IMPL.json` for the lane `impl`: one file under
+    a second name. A hard link stands in for it, under a name that differs on every filesystem."""
     import os
 
     entry = {"command": "c"}
     WM.write_lanes(tmp_path, entry, "impl=all")
-    os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("IMPL"))
+    os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("alias"))
     assert [x for x in WM.write_lanes(tmp_path, entry, "impl=all") if "no longer" in x] == []
     (tmp_path / WM.lane_rel("old")).write_text("{}")
     assert any("old" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "impl=all"))
@@ -331,4 +335,46 @@ def test_a_dangling_lane_symlink_is_reported_not_a_crash(tmp_path):
     entry = {"command": "c"}
     WM.write_lanes(tmp_path, entry, "foo=core")
     (tmp_path / WM.lane_rel("legacy")).symlink_to(tmp_path / "missing.json")
-    assert any("legacy" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "foo=core"))
+    assert any(
+        "legacy" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "foo=core")
+    )
+
+
+def test_a_lane_name_may_not_end_in_a_newline():
+    """`$` would match before a final newline; the name goes into a file name."""
+    from ddflow.config_sections.mcp import _LANE_NAME
+
+    assert _LANE_NAME.fullmatch("lane\n") is None and _LANE_NAME.fullmatch("lane")
+
+
+def test_the_lane_parser_lives_in_the_config_layer_not_above_it():
+    """The knob's `check` runs in `config_sections`, which may not import `services`."""
+    from ddflow.config_sections import mcp as section
+
+    assert WM.parse_lane_tiers is section.parse_lane_tiers
+
+
+def _cfg(worker="core", lanes=""):
+    return SimpleNamespace(mcp=SimpleNamespace(worker_tools=worker, lane_tools=lanes))
+
+
+def test_the_doctor_counts_a_lane_on_the_whole_tool_list():
+    env = {"ENABLE_TOOL_SEARCH": "false"}
+    assert WM.doctor_notes(_cfg(), env) == []
+    assert WM.doctor_notes(_cfg(lanes="impl=standard"), env) == []
+    (note,) = WM.doctor_notes(_cfg(lanes="impl=standard,rev=all"), env)
+    assert "`all` tool tier" in note and "rev" in note
+    (note,) = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
+    assert "`all` tool tier" in note
+
+
+def test_the_doctor_survives_a_hand_edited_bad_lane_list():
+    assert WM.doctor_notes(_cfg(lanes="impl=bogus"), {"ENABLE_TOOL_SEARCH": "false"}) == []
+
+
+def test_a_hand_edited_bad_lane_list_stops_adopt_with_the_reason_not_a_traceback(repo):
+    run_cli(repo, "init")
+    with (repo / ".ddflow/config.toml").open("a") as f:
+        f.write('\n[mcp]\nlane_tools = "impl=bogus"\n')
+    _code, out, err = run_cli(repo, "adopt", "--agents", "claude")
+    assert "impl=bogus" in out + err and "Traceback" not in out + err
