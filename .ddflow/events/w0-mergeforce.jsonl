@@ -52,3 +52,4 @@
 {"agent":"w0-mergeforce","data":{"at":1793852401.2794955,"holder":"w0-mergeforce"},"id":"ee3426d2324dd2c1becf54a34","kind":"lease.renewed","lamport":138587,"schema":1,"subject":"DX-merge-force-flag","ts":"2026-11-05T04:20:01.384283Z"}
 {"agent":"w0-mergeforce","data":{"at":1793853308.3483157,"holder":"w0-mergeforce"},"id":"e1dae52027e9d5e6e92c5d23d","kind":"lease.renewed","lamport":138649,"schema":1,"subject":"DX-merge-force-flag","ts":"2026-11-05T04:35:08.448328Z"}
 {"agent":"w0-mergeforce","data":{"at":1793853680.814826,"holder":"w0-mergeforce"},"id":"e17f3888705e64878cbe9f627","kind":"lease.renewed","lamport":138672,"schema":1,"subject":"DX-merge-force-flag","ts":"2026-11-05T04:41:20.901453Z"}
+{"agent":"w0-mergeforce","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e93e4587ed161729c33e7e1d5","kind":"cadence.ran","lamport":138675,"schema":1,"subject":"recall_recheck:DX-merge-force-flag","ts":"2026-11-05T04:41:33.585180Z"}
