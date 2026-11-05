@@ -96,12 +96,6 @@ def require_proof() -> None:
     _PROOF_REQUIRED.set(True)
 
 
-def clear_credential() -> None:
-    """Back to unproven: for a caller that runs several calls in one process, as tests do."""
-    _CREDENTIAL.set(None)
-    _PROOF_REQUIRED.set(False)
-
-
 @contextmanager
 def with_credential(proof: Credential) -> Iterator[None]:
     """Hold ``proof`` for the calls made inside: one request of a server."""

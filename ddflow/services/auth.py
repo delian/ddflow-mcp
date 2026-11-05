@@ -36,13 +36,14 @@ import os
 import re
 import secrets
 import stat
-import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
+from ..adapters.clock import DEFAULT as CLOCK
+from ..adapters.env import DEFAULT as ENV
 from ..config import Config
 from ..core import clock
 from ..core.digest import content_digest
@@ -130,7 +131,7 @@ def project_key(repo: Path | str) -> str:
 def store_path(repo: Path | str) -> Path:
     """`$XDG_CONFIG_HOME/ddflow/auth/<project>.json`, else under `~/.config`. From the user's
     environment only: `[agent]` has no knob for it, so a project cannot name its own hashes."""
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    base = ENV.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "ddflow" / "auth" / f"{project_key(repo)}.json"
 
 
@@ -272,7 +273,7 @@ def start_pairing(
     now: float | None = None,
 ) -> Pairing:  # fmt: skip
     """A PERSON opens a pairing for client ``name`` with ``role``; the code is shown once."""
-    moment = time.time() if now is None else now
+    moment = CLOCK.wall() if now is None else now
     with _changing(log.root, cfg, moment) as data:
         _person(cfg, data, requested_agent, first=_operator(cfg, role))
         if not _NAME.fullmatch(name) or _TOKEN_ID.fullmatch(name):
@@ -299,7 +300,7 @@ def rotate(
 ) -> Pairing:  # fmt: skip
     """A PERSON opens a pairing that replaces ``name``'s token: the old one works until the new
     one is redeemed, so a client is never left without a credential by a code it never got."""
-    moment = time.time() if now is None else now
+    moment = CLOCK.wall() if now is None else now
     with _changing(log.root, cfg, moment) as data:
         _person(cfg, data, requested_agent, first=False)
         ttl = _ttl_h(cfg, ttl_h)
@@ -336,7 +337,7 @@ def redeem(log, cfg: Config, code: str, *, now: float | None = None) -> Minted:
     code is the proof, so this needs no identity. The store is written first, as in `revoke`:
     a crash after it leaves a token nobody was shown, or an unrecorded rotation; the other order
     could leave an old token that still verifies though the log says it was replaced."""
-    moment = time.time() if now is None else now
+    moment = CLOCK.wall() if now is None else now
     with _changing(log.root, cfg, moment) as data:
         row = _spend(cfg, data, code)
         token_id, secret = secrets.token_hex(6), secrets.token_hex(32)
@@ -365,7 +366,7 @@ def revoke(
 ) -> str:  # fmt: skip
     """A PERSON ends ``who``'s token (name or id) and any pairing waiting for that name. The row
     goes first: the effect must not wait on the record. Returns what ended."""
-    moment = time.time() if now is None else now
+    moment = CLOCK.wall() if now is None else now
     with _changing(log.root, cfg, moment) as data:
         _person(cfg, data, requested_agent, first=False)
         if not reason.strip():
@@ -398,7 +399,7 @@ def verify(repo: Path | str, cfg: Config, token: str, *, now: float | None = Non
     if m is None:
         raise AuthRefused(_BAD_TOKEN)
     row = _read(_store(repo))["tokens"].get(m.group(1))
-    moment = time.time() if now is None else now
+    moment = CLOCK.wall() if now is None else now
     if row is None or not hmac.compare_digest(token_hash(token), row["hash"]):
         raise AuthRefused(_BAD_TOKEN)
     if row["expires"] <= moment:
@@ -433,7 +434,7 @@ def bind_env(repo: Path | str, cfg: Config, path: tuple[str, ...]) -> ID.Credent
     Two commands take no token. The MCP server: a stdio server speaks for whichever agent
     connected, and the operator's token in its environment would make every agent the operator.
     `tokens redeem`: the code is the proof, and a client rotating still has the old token set."""
-    raw = os.environ.pop(TOKEN_ENV, "")
+    raw = ENV.take(TOKEN_ENV)
     if path in _NO_TOKEN:
         return None
     if not raw:
@@ -454,7 +455,7 @@ def state_of(row: dict[str, Any], now: float | None = None) -> str:
     """A folded token's state: the fold reads no clock, so expiry is answered here."""
     if row["revoked_at"]:
         return REVOKED
-    moment = time.time() if now is None else now
+    moment = CLOCK.wall() if now is None else now
     return EXPIRED if clock.parse_ts(row["expires_at"]).timestamp() <= moment else ACTIVE
 
 

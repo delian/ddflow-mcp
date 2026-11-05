@@ -20,6 +20,9 @@ class FakeEnv:
     def snapshot(self) -> dict[str, str]:
         return dict(self.values)
 
+    def take(self, name: str) -> str:
+        return self.values.pop(name, "")
+
     def set(self, name: str, value: str) -> None:
         self.values[name] = value
 

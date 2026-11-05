@@ -31,14 +31,19 @@ from ddflow.services import auth as AU
 from ddflow.services import identity as ID
 
 
+def _unproven() -> None:
+    ID._CREDENTIAL.set(None)
+    ID._PROOF_REQUIRED.set(False)
+
+
 @pytest.fixture(autouse=True)
 def _a_person(monkeypatch, tmp_path):
     for var in ("DDFLOW_AGENT", AU.TOKEN_ENV, *ID.HARNESS_MARKERS):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "user-config"))
-    ID.clear_credential()
+    _unproven()
     yield
-    ID.clear_credential()
+    _unproven()
 
 
 @pytest.fixture

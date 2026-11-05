@@ -56,6 +56,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
+    "ddflow/services/auth.py:_person": 1,
     "ddflow/services/export/select.py:_is_agent": 1,  # the wrapper
     "ddflow/services/export/select.py:enable": 1,
     "ddflow/services/export/select.py:disable": 1,
@@ -143,6 +144,15 @@ SITES: tuple[Site, ...] = (
         "the pending command reviewer entry (the program it runs)",
         ("ddflow/services/reviewer_trust.py:approve",),
         "ddflow reviewers approve <name>",
+    ),
+    Site(
+        "token.manage",
+        "A",
+        T3,
+        L4,
+        "the client name and role of the credential minted, rotated or revoked",
+        ("ddflow/services/auth.py:_person",),
+        "ddflow pair <name> --role <role>",
     ),
     Site(
         "export.ack",
