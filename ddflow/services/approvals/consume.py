@@ -67,8 +67,9 @@ def _problem(
     ask_id = row["id"]
     if row["verb"] != canon.verb:
         return f"{ask_id} is an approval for '{row['verb']}', not '{canon.verb}'"
-    if row["requested_by"] != canon.agent:
-        return f"{ask_id} was requested by {row['requested_by']}; only that agent may spend it"
+    # Not owner-gated: the digest binds the ACTION (verb, item, target, args, state), not the
+    # actor, and `judge` below re-verifies the answer. A successor lane re-running the same act
+    # may spend a predecessor's granted answer, so a dead agent does not orphan it (B86be969daf).
     if row["state"] != ANSWERED:
         state = E.status(row, now)
         return f"{ask_id} is {state}" + (

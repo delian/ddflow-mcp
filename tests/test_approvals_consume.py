@@ -124,17 +124,35 @@ def test_an_approval_cannot_be_widened_to_another_item_gate_agent_or_verb(log):
     assert asks_of(_state(log))[filed.id]["used"] == 0  # none of them spent it
 
 
-def test_another_agent_cannot_spend_my_approval(log, repo):
+def test_an_approval_binds_the_action_not_the_agent(log, repo):
+    """B86be969daf: the digest binds the command (verb, item, target, args, state), never the
+    agent, so a different agent re-running the SAME action still cannot decide for itself --
+    and yet a WIDENED action (a different item/gate/args/verb) is refused even by a same-named
+    process. The spend is recorded under whoever ran it."""
     cfg = Config()
     filed = _approved(log, cfg)
     thief = EventLog(repo, "thief")
-    got = C.operator_gate(thief, cfg, _canon(agent="thief"), approval_id=filed.id, now=T0 + 1)
-    assert not got.ok  # the digest binds the agent, and the request was asker's
-    got = C.spend(thief, _canon(agent="asker"), filed.id, now=T0 + 1)
-    # Agent names are self-declared (`--agent`), so a process that NAMES itself asker is asker:
-    # the binding stops one agent spending another's approval by accident, not impersonation.
-    assert got.ok is True
-    assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "asker"
+    got = C.spend(thief, _canon(agent="thief"), filed.id, now=T0 + 1)
+    assert got.ok is True  # the same action (item+target+state), a different agent: allowed
+    assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "thief"
+
+
+def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
+    """B86be969daf: a lane files, is approved, then dies unnamed; a successor lane re-claiming
+    the SAME item+state may spend the already-granted answer instead of the answer being
+    owner-gated to the dead agent and expiring unused. A widened act is still refused."""
+    cfg = Config()
+    filed = _approved(log, cfg)  # requested by "asker" (the dead lane)
+    successor = EventLog(repo, "successor")
+    # the same verb/item/target/state, filed by a DIFFERENT agent: the digest matches and
+    # the answer is spent, so the successor is not stranded behind a dead agent's answer.
+    got = C.operator_gate(successor, cfg, _canon(agent="successor"), approval_id=filed.id, now=T0 + 1)
+    assert got.ok and asks_of(_state(log))[filed.id]["used"] == 1
+    assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "successor"
+    # a WIDENED act -- a different item -- still needs a new approval, whatever the agent names
+    other = _approved(log, cfg, _canon(item="fix-OTHER"))
+    assert not C.operator_gate(successor, cfg, _canon(agent="successor", item="fix-OTHER"),
+                               approval_id=other.id, now=T0 + 1).ok
 
 
 def test_the_state_changing_since_the_request_needs_a_new_approval(log):
