@@ -20,6 +20,7 @@ line and over MCP alike. A cut answer ends in a footer that names the exact next
 | --- | --- | --- |
 | `max_rows` | 50 | rows a list shows; 0 lifts the row cap |
 | `max_chars` | 30000 | characters of text or serialised body (about 7500 tokens); 0 lifts it |
+| `non_ascii_weight` | 4 | characters of `max_chars` one non-ASCII character of prose costs; 1 counts plain characters |
 | `allow_full` | true | false makes `--full` still return the capped answer, saying so, and stops 0 lifting a cap |
 
 Each is set in `.ddflow/config.toml`, the git-ignored local layer, with

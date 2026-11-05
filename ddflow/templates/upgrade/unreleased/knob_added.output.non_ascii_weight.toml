@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "output.non_ascii_weight"
+new = "4"
+why = "How many characters of output.max_chars one non-ASCII character of prose costs, because a character count underestimates CJK and emoji tokens (UX-output-caps)."
+effect = "a capped prose answer keeps a quarter as many non-ASCII characters; ASCII answers are unchanged"
+impact = "additive"

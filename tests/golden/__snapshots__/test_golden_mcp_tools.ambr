@@ -688,7 +688,7 @@
          },
          "cursor": {
           "type": "integer",
-          "description": "Where to resume a cut list: the number the previous answer's footer or `next.cursor_*` gave (default 0)."
+          "description": "Where to resume a cut list: the number the previous answer's footer gave (default 0)."
          },
          "as_agent": {
           "type": "string",

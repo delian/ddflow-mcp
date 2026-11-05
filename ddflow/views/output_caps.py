@@ -95,7 +95,7 @@ def _cut_board(data: dict[str, Any], limit: int, start: int, info: dict[str, int
         info["phases"] = len(phases)
         info["task_rows"] = total_tasks
         info["task_rows_shown"] = shown
-        info["next_cursor"] = start + len(kept)
+        info["next_row"] = start + len(kept)
     data["phases"] = kept
     for key in ("unphased", "critical_path"):
         if _rows(data.get(key)) > limit:
@@ -118,7 +118,7 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
             info[key] = len(value)
             data[key] = _slice(key, value, limit, off)
             if key == paged and off + limit < len(value):
-                info["next_cursor"] = off + limit
+                info["next_row"] = off + limit
     by_tag = data.get("by_tag")
     if isinstance(by_tag, dict) and _rows(by_tag.get("values")) > limit:
         info["by_tag"] = len(by_tag["values"])
@@ -131,6 +131,11 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
                 render[key] = _slice(key, value, limit, off)
                 info.setdefault(f"_render.{key}", len(value))
     return info
+
+
+def _page_calls(command: str, row: int) -> tuple[str, str]:
+    """The exact CLI and MCP calls that resume a cut list at ``row``."""
+    return f"{COMMANDS[command][0]} --cursor {row}", f"{COMMANDS[command][1]} cursor={row}"
 
 
 def _calls(command: str, flag: str, mcp_arg: str) -> str:
@@ -147,7 +152,7 @@ def footer(
     lists = {
         k: v
         for k, v in info.items()
-        if k not in ("next_cursor", "task_rows_shown", "clipped_strings")
+        if k not in ("next_row", "task_rows_shown", "clipped_strings")
         and not k.startswith("_render.")
     }
     if lists:
@@ -158,10 +163,9 @@ def footer(
         parts.append(f"{cut_chars} more character(s) not shown")
     msg = "; ".join(parts) or "output cut"
     nxt: list[str] = []
-    if info.get("next_cursor") is not None and paged:
+    if info.get("next_row") is not None and paged:
         nxt.append(
-            "next page "
-            + _calls(command, f"--cursor {info['next_cursor']}", f"cursor={info['next_cursor']}")
+            "next page " + "`{}` (MCP: `{}`)".format(*_page_calls(command, info["next_row"]))
         )
     if narrow:
         nxt.append("narrow with " + _calls(command, narrow[0], narrow[1]))
@@ -175,9 +179,8 @@ def footer(
 def _next_field(command: str, info: dict[str, Any], full_refused: bool) -> dict[str, str]:
     cli, tool, narrow, paged = COMMANDS[command]
     out: dict[str, str] = {}
-    if info.get("next_cursor") is not None and paged:
-        n = info["next_cursor"]
-        out["cursor_cli"], out["cursor_mcp"] = f"{cli} --cursor {n}", f"{tool} cursor={n}"
+    if info.get("next_row") is not None and paged:
+        out["cursor_cli"], out["cursor_mcp"] = _page_calls(command, info["next_row"])
     if narrow:
         out["narrow_cli"], out["narrow_mcp"] = f"{cli} {narrow[0]}", f"{tool} {narrow[1]}"
     if not full_refused:
@@ -251,12 +254,28 @@ def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[
     return clipped
 
 
-def _cut_text(text: Any, budget: int) -> tuple[Any, int]:
-    """``text`` cut on a line boundary to ``budget`` characters; (text, characters cut)."""
-    if not budget or not isinstance(text, str) or len(text) <= budget:
+def _affordable(text: str, budget: int, weight: int) -> int:
+    """How many leading characters of ``text`` fit ``budget``, a non-ASCII one costing
+    ``weight``. One pass, stopping at the budget."""
+    if text.isascii() or weight <= 1:
+        return min(len(text), budget)
+    spent = 0
+    for i, char in enumerate(text):
+        spent += 1 if char.isascii() else weight
+        if spent > budget:
+            return i
+    return len(text)
+
+
+def _cut_text(text: Any, budget: int, weight: int = 1) -> tuple[Any, int]:
+    """``text`` cut on a line boundary to ``budget``; (text, characters cut)."""
+    if not budget or not isinstance(text, str):
         return text, 0
-    keep = text.rfind("\n", 0, budget)
-    keep = keep if keep > 0 else budget
+    fits = _affordable(text, budget, weight)
+    if fits >= len(text):
+        return text, 0
+    keep = text.rfind("\n", 0, fits + 1)
+    keep = keep if keep > 0 else fits
     return text[:keep], len(text) - keep
 
 
@@ -267,6 +286,14 @@ def _reasons(rows: Any) -> dict[str, int]:
         if isinstance(row, dict):
             counts[str(row.get("reason", ""))] = counts.get(str(row.get("reason", "")), 0) + 1
     return counts
+
+
+def _limits(cfg: Any) -> tuple[int, int]:
+    """(rows, characters) in force. With `allow_full = false` a 0 lifts neither cap."""
+    shipped = type(cfg.output)()
+    if cfg.output.allow_full:
+        return cfg.output.max_rows or 10**9, cfg.output.max_chars
+    return cfg.output.max_rows or shipped.max_rows, cfg.output.max_chars or shipped.max_chars
 
 
 def _conf(repo: Any, cfg: Any) -> Any:
@@ -294,16 +321,15 @@ def apply(
     full_refused = not cfg.output.allow_full  # no call can lift the cap, asked for or not
     if (full and cfg.output.allow_full) or not isinstance(out.data, dict) or not out.data:
         return out
-    # With `allow_full = false` a 0 in `max_rows` or `max_chars` does not lift the cap either.
-    shipped = type(cfg.output)()
-    rows = cfg.output.max_rows or (shipped.max_rows if not cfg.output.allow_full else 10**9)
-    chars = cfg.output.max_chars or (shipped.max_chars if not cfg.output.allow_full else 0)
+    rows, chars = _limits(cfg)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
     budget = chars // 2 if wire and chars else chars
     start = max(0, int(cursor or 0)) if COMMANDS[command][3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
-    text, cut_chars = _cut_text(work.get("text"), budget if chars else 0)
+    text, cut_chars = _cut_text(
+        work.get("text"), budget if chars else 0, cfg.output.non_ascii_weight
+    )
     reasons = _reasons(out.data.get("blocked")) if "blocked" in info else {}
     if not info and not cut_chars and not (start and COMMANDS[command][3]):
         return out
@@ -330,7 +356,7 @@ def _annotate(
         "lists": {
             k: v
             for k, v in info.items()
-            if k not in ("next_cursor", "clipped_strings") and not k.startswith("_render.")
+            if k not in ("next_row", "clipped_strings") and not k.startswith("_render.")
         },
         "shown": limit,
         "chars_cut": cut_chars,

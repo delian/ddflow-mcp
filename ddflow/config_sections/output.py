@@ -21,13 +21,18 @@ class OutputConfig:
 
     max_rows: int = knob(
         50,
-        doc="Rows a list shows by default in `board`, `doctor`, `recover`, `next` and `status` (CLI and MCP, text and `--json`). The rest is counted: the answer says how many more there are, and the exact call (`--cursor N`, `--phase ID`, `--full`) that shows them. 0 lifts the row cap for every call, as `--full` does for one.",
+        doc="Rows a list shows by default in `board`, `doctor`, `recover`, `next` and `status` (CLI and MCP, text and `--json`). The rest is counted: the answer says how many more there are, and the exact call that shows them. 0 lifts the row cap for every call, as `--full` does for one.",
         check=int_at_least(0),
     )
     max_chars: int = knob(
         30000,
         doc="Characters a default answer of those commands may hold (text and serialised `--json` alike; about 4 characters a token, so 30000 is roughly 7500 tokens, well under the 25000-token cap an MCP client puts on a tool result). A `--json` body that carries both prose and rows (`board`) gives each half. A longer answer is cut on a line boundary and ends in a footer; a `--json` body first loses rows until it fits and keeps its schema, adding `truncated` and `next`. 0 lifts the character cap.",
         check=int_at_least(0),
+    )
+    non_ascii_weight: int = knob(
+        4,
+        doc="How many characters of `max_chars` one non-ASCII character of prose costs. A character count is only a token estimate for ASCII: 30000 characters measured 5737 tokens of English, 52366 of rare CJK and 84470 of emoji with the Qwen tokenizer, so at weight 1 a non-ASCII report can pass the 25000-token cap on a tool result. At 4 the same cap keeps 7500 such characters, about 21000 tokens at the worst measured rate. 1 counts plain characters.",
+        check=int_at_least(1),
     )
     allow_full: bool = knob(
         True,

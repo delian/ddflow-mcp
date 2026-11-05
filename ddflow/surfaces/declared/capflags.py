@@ -16,7 +16,7 @@ FULL = Param(
 CURSOR = Param(
     "cursor",
     type="integer",
-    help="Where to resume a cut list: the number the previous answer's footer or `next.cursor_*` gave (default 0).",
+    help="Where to resume a cut list: the number the previous answer's footer gave (default 0).",
     cli_help="resume a cut list at this row (the number the previous footer gave)",
     default=0,
 )

@@ -239,6 +239,27 @@ def test_every_surface_of_a_command_bites_at_a_tiny_cap(repo, monkeypatch, comma
     assert f"ddflow_{command} full=true" in _mcp(repo, f"ddflow_{command}"), "the MCP answer"
 
 
+def test_non_ascii_text_costs_more_so_the_token_cap_holds():
+    """Measured with the Qwen and DeepSeek tokenizers: 30000 characters are 5737 tokens of
+    English, 52366 of rare CJK and 84470 of emoji, so a plain character count overran the
+    25000-token cap on a non-ASCII report (rubber_duck finding #1)."""
+    for char in ("\u9f98", "\U0001f600"):
+        text = "\n".join(char * 50 for _ in range(1000))
+        out = OC.apply(None, O.ok("doctor", text=text), "doctor", cfg=_cfg(max_chars=30000))
+        kept = out.data["text"].split("\n\n[")[0]
+        assert len(kept) <= 30000 // 4, len(kept)
+    ascii_text = "\n".join("a" * 50 for _ in range(1000))
+    out = OC.apply(None, O.ok("doctor", text=ascii_text), "doctor", cfg=_cfg(max_chars=30000))
+    assert 29000 < len(out.data["text"].split("\n\n[")[0]) <= 30000
+
+
+def test_a_weight_of_one_counts_plain_characters():
+    text = "\n".join("\u9f98" * 50 for _ in range(1000))
+    cfg = _cfg(max_chars=3000, non_ascii_weight=1)
+    kept = OC.apply(None, O.ok("doctor", text=text), "doctor", cfg=cfg).data["text"]
+    assert 2900 < len(kept.split("\n\n[")[0]) <= 3000
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))
@@ -259,6 +280,7 @@ def test_the_knobs_exist_with_docs_and_the_environment_sets_them(monkeypatch):
     assert Config.load(None).output.max_rows == 7
     out = Config().output
     assert (out.max_rows, out.max_chars, out.allow_full) == (50, 30000, True)
+    assert out.non_ascii_weight == 4
 
 
 def test_the_board_stays_under_the_ceiling_on_a_large_log_and_full_prints_all(repo):
