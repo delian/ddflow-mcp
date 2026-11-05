@@ -34,7 +34,7 @@ def _status_handler(a, c):
     if not by:
         return cmd_status(a, c)
     out = _api().status(c.repo, agent=c.requested_agent, by_tag=by, **_status_args(c.repo, a))
-    out = _cap(c.repo, out, "status", a)
+    out = _cap(c.repo, out, "status", a, wire=c.json)
     if c.json:
         emit_json(out.body())
         return out.exit

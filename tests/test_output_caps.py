@@ -333,3 +333,25 @@ def test_next_status_and_doctor_stay_bounded_on_the_large_log(repo):
 def test_every_capped_command_has_a_full_flag(repo, command):
     _code, out, err = run_cli(repo, command, "--help")
     assert "--full" in out + err, command
+
+
+def test_status_by_tag_json_keeps_the_wire_budget_of_plain_status(repo, monkeypatch):
+    """`--by-tag` goes through its own handler: a `--json` body gets the same half of
+    `max_chars` there as in `cmd_status`, or the two modes of one command disagree."""
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    for i in range(40):
+        log.append(
+            "task.added",
+            f"T{i:02d}",
+            {"title": f"task {i} " + "x" * 90, "globs": ["same.py"], "tags": [f"k:v{i}"]},
+        )
+    _code, whole, _err = run_cli(repo, "--json", "status", "--by-tag", "k", "--full")
+    chars = int(len(whole) * 0.75)
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", str(chars))
+    _code, text, _err = run_cli(repo, "--json", "status", "--by-tag", "k")
+    body = json.loads(text)
+    assert "truncated" in body, "three quarters of the body is over the wire half"
+    for extra in ("truncated", "next"):
+        body.pop(extra)
+    assert len(json.dumps(body, indent=2)) <= chars // 2
