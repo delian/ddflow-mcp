@@ -202,7 +202,7 @@ def _relaunch_argv(raw: list[str]) -> list[str]:
 
 
 def _detach_argv(raw: list[str], agent: str) -> list[str]:
-    """`_relaunch_argv`, with the RESOLVED identity re-declared as `--agent <agent>` so the
+    """`_relaunch_argv`, with the RESOLVED identity re-declared as `--agent=<agent>` so the
     detached review runs -- and therefore heartbeats -- as the lease's HOLDER, not as a
     freshly derived id that holds no lease to renew (bug B-lease-ttl-expires-during-review:
     a 90-minute TTL lapsed during four long rounds, and the agent lost its claim because the
@@ -211,7 +211,8 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
     guard reads `_relaunch_argv`'s answer, exactly the pre-fix empty test. An already-typed
     `--agent` (either the `--agent <v>` pair or the `--agent=<v>` form) is replaced by the
     resolved id; a positional `--detach` or `--agent` past `--` is an item name, not a flag,
-    and stays."""
+    and stays. The value is attached because an identity may start with a dash: as a separate
+    token argparse reads it as an option and the relaunch dies before reviewing anything."""
     stripped = _relaunch_argv(raw)
     if not stripped:  # nothing to relaunch: only the `--detach` flag was typed
         return []
@@ -229,7 +230,7 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
             continue
         if t != "--detach":
             kept.append(t)
-    return ["--agent", agent, *kept, *raw[cut:]]
+    return ["--agent=" + agent, *kept, *raw[cut:]]
 
 
 def _detach(a, c: Ctx) -> int:
