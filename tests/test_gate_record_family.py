@@ -49,7 +49,7 @@ def test_no_module_defines_a_family_rule_of_its_own():
     readers = sorted(
         str(p.relative_to(root))
         for p, tree in _modules(root)
-        if p.name not in ("agent.py", "config.py")
+        if p.relative_to(root).as_posix() not in ("config_sections/agent.py", "config/__init__.py")
         and any(
             (isinstance(n, ast.Name) and n.id == "FAMILY_HINTS")
             or (isinstance(n, ast.Attribute) and n.attr == "FAMILY_HINTS")

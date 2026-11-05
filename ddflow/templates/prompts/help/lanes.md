@@ -9,6 +9,9 @@ resumes an agent and runs no daemon. Acting on a lane (starting or resuming it) 
     ddflow lanes brief <lane>    that lane's whole first prompt: objective, assignment, lease and
                                  worktree, previous run (every agent-written text fenced as data)
     ddflow lanes advise          concrete moves, most urgent first, with the line to run
+    ddflow lanes fleet           every agent the log has seen, past the lane window: role, harness,
+                                 model, items, lease, stop reason; lost and live work first
+    ddflow lanes resume <lane>   how to resume a stopped lane, or who took its item over; read-only
 
 States:
 

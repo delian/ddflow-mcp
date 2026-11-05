@@ -10,7 +10,8 @@ A region is::
 visible. A template is both the skeleton of a new file and the source of every region body:
 ``create`` writes the full render; ``update`` renders, extracts each region body and splices
 it into the file by name. Text outside the markers is never touched (byte for byte, CRLF
-included); a template region the file lacks is reported, never inserted.
+included); a template region the file lacks is reported, and inserted only by ``force``, at
+the end of the file (the operator's confirmation, as for ``write.write_region``).
 
 Two legacy dialects are read and rewritten into the new grammar on the first write:
 ``<!-- ddflow:begin doc=X body-sha256=H -->`` (region name ``body``) and the bare
@@ -162,7 +163,7 @@ class Splice:
     text: str
     updated: tuple[str, ...] = ()
     unchanged: tuple[str, ...] = ()
-    missing: tuple[str, ...] = ()  # in the template, not in the file: reported, not inserted
+    missing: tuple[str, ...] = ()  # in the template, not in the file: reported, or forced in
     orphans: tuple[str, ...] = ()  # in the file, not in the template: left as they are
     migrated: tuple[str, ...] = ()  # legacy markers rewritten into the new grammar
     edited: tuple[str, ...] = ()  # hand-edited since written (refused without force)
@@ -220,8 +221,11 @@ def write_named(
     """Create ``target`` from ``rendered`` (the whole render), or splice its regions.
 
     The file is written under the export lock in one atomic replace. A region the file has
-    that was edited by hand is refused without ``force``. ``notes`` on the result report
-    missing, migrated and orphaned regions.
+    that was edited by hand is refused without ``force``. A region it lacks is reported, or
+    appended by ``force``; with none of the document's regions the file is refused without
+    ``force``, as ``write.write_region`` does, and is never "fresh". ``notes`` on the result
+    report missing, appended, migrated and orphaned regions. A new file's markers are rewritten from the bodies, because
+    ``rendered`` may have been redacted after the template computed their digests.
     """
     bodies = extract(rendered, doc)
     if not bodies:
@@ -231,7 +235,8 @@ def write_named(
         path, rel = W.safe_target(repo, target)
         old = W._read(path)
         if old is None:
-            return W._finish(path, rel, None, rendered, check=check, diff=diff, refuse="")
+            created = splice(rendered, doc, bodies, bare_doc=bare_doc).text
+            return W._finish(path, rel, None, created, check=check, diff=diff, refuse="")
         sp = splice(old, doc, bodies, bare_doc=bare_doc)
         refuse = ""
         if sp.edited and not force:
@@ -239,14 +244,33 @@ def write_named(
                 f"region(s) {', '.join(sp.edited)} of {rel} were edited by hand since ddflow "
                 "wrote them; refusing to overwrite (--force to replace)"
             )
+        none_here = len(sp.missing) == len(bodies)  # nothing of the document is in the file
+        if none_here and not force:
+            refuse = f"{rel} has no ddflow region for {doc!r}: add the markers, or --force to append them"
+        added = sp.missing if force else ()
+        if sp.missing and (force or none_here):
+            sp = replace(
+                sp,
+                text=_appended(sp.text, doc, bodies, sp.missing),
+                missing=() if force else sp.missing,
+            )
         res = W._finish(path, rel, old, sp.text, check=check, diff=diff, refuse=refuse)
-        return replace(res, notes=_notes(doc, sp))
+        return replace(res, notes=_notes(doc, sp, added))
 
 
-def _notes(doc: str, sp: Splice) -> tuple[str, ...]:
+def _appended(text: str, doc: str, bodies: Mapping[str, str], names: tuple[str, ...]) -> str:
+    """``text`` with the regions ``names`` after it, a blank line before each."""
+    eol = "\r\n" if "\r\n" in text else "\n"
+    block = "\n".join(render_region(doc, n, bodies[n]) for n in names).replace("\n", eol)
+    head = text if not text or text.endswith("\n") else text + eol
+    return head + (eol if head else "") + block
+
+
+def _notes(doc: str, sp: Splice, added: tuple[str, ...] = ()) -> tuple[str, ...]:
     out = [
         f"region {doc}/{n} is in the template but not in the file; not inserted" for n in sp.missing
     ]
+    out += [f"region {doc}/{n} was not in the file; appended at its end" for n in added]
     out += [f"region {doc}/{n}: legacy marker rewritten to the new grammar" for n in sp.migrated]
     out += [f"region {doc}/{n} is not in the template; left as it is" for n in sp.orphans]
     return tuple(out)

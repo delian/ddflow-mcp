@@ -83,7 +83,10 @@ def _ev(repo: Path) -> dict:
 
 def test_a_later_rounds_new_medium_finding_does_not_block_the_pass(repo, tmp_path):
     """The regression: the HIGH finding is fixed, and the re-review's NEW MEDIUM nit is
-    recorded but does not keep the gate failed -- the round converges."""
+    recorded but does not keep the gate failed -- the round converges. A confirmed finding
+    needs a delta round that did not raise it again before a full round may converge
+    (D-failed-review-gate, bug B-push-failed-review-delta), so the fix gets one first; a
+    delta blocks at any severity, which is why that round's own nit fails it."""
     _setup(repo, tmp_path, first="HIGH", later="MEDIUM")
 
     first = _review(repo)
@@ -91,6 +94,7 @@ def test_a_later_rounds_new_medium_finding_does_not_block_the_pass(repo, tmp_pat
 
     _settle_first_as_fixed(repo)
     _fix(repo)
+    assert _review(repo).data["outcome"] == "failed"
     later = _review(repo, full=True)
 
     assert later.data["outcome"] == "passed", later.data
@@ -160,6 +164,23 @@ def test_a_converged_round_weighs_every_reviewers_findings(monkeypatch):
         low, [low, low], object(), "T1", "critic", True, cfg, None, print
     )
     assert outcome == "passed" and ev["converged"]["findings_below_floor"] == 2
+
+
+def test_a_partial_reviewers_finding_blocks_beside_a_clean_reviewer():
+    """A reviewer that lost a chunk was still heard: its HIGH finding of the chunks it did
+    finish must not vanish because a peer came back clean (bug B-main-red-review-records)."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    clean = NS(status=RV.REVIEWED, findings=[])
+    partial = NS(status=RV.PARTIAL, findings=[RV.Finding(severity="HIGH", title="bad")])
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        clean, [clean, partial], None, "", "critic", False, cfg, None, print
+    )
+    assert outcome == "failed"
 
 
 def test_the_floor_is_named_only_for_a_full_non_fix_round():

@@ -36,7 +36,7 @@ def _umask_default() -> int:
 # -- pins: each former copy still writes what it wrote ---------------------------------
 
 
-_SNAP = LogConfig(snapshot_min_events=10)  # snapshot even a small test log
+_SNAP = LogConfig(snapshot=True, snapshot_min_events=10)  # snapshot even a small test log
 
 
 @pytest.fixture

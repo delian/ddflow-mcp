@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import ddflow.services.lanes.states as S
+
 from ...core.clock import fmt_age
 from .advise import Move
 from .ledger import Lane
@@ -42,7 +44,12 @@ def render_ledger(lanes: Sequence[Lane], now: float) -> str:
     widths = [max(len(r[i]) for r in rows) for i in range(len(head))]
     lines = ["  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)).rstrip() for r in rows]
     for ln in lanes:
-        if ln.detail and ln.state not in ("working",):
+        if ln.state in S.STOPPED:
+            if ln.remedy:
+                lines.append(f"  {safe(ln.name)}: {safe(ln.remedy)}")
+            elif ln.detail:
+                lines.append(f"  {safe(ln.name)}: {safe(ln.detail)}")
+        elif ln.detail and ln.state != "working":
             lines.append(f"  {safe(ln.name)}: {safe(ln.detail)}")
         lines += [f"  {safe(ln.name)}: {safe(w)}" for w in ln.waits]
     return "\n".join(lines) if lanes else "no lanes active in the window"
