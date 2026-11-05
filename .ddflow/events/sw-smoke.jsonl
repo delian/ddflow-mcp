@@ -94,3 +94,4 @@
 {"agent":"sw-smoke","data":{"gate":"unit_tests"},"id":"e3145ed22f62d6101fe6ff06d","kind":"gate.started","lamport":143484,"schema":1,"subject":"SW-live-smoke","ts":"2026-11-05T21:51:44.818052Z"}
 {"agent":"sw-smoke","data":{"at":1793915635.514252,"holder":"sw-smoke"},"id":"ee31cc3ed16e2ee4eab2cf36f","kind":"lease.renewed","lamport":143494,"schema":1,"subject":"SW-live-smoke","ts":"2026-11-05T21:53:55.579790Z"}
 {"agent":"sw-smoke","data":{"at":1793916248.5108159,"holder":"sw-smoke"},"id":"e46add2555b5a7274432f837a","kind":"lease.renewed","lamport":143652,"schema":1,"subject":"SW-live-smoke","ts":"2026-11-05T22:04:08.597526Z"}
+{"agent":"sw-smoke","data":{"at":1793916865.9165905,"holder":"sw-smoke"},"id":"e6b4a2335c2aabf3c3cf36052","kind":"lease.renewed","lamport":143713,"schema":1,"subject":"SW-live-smoke","ts":"2026-11-05T22:14:26.014105Z"}
