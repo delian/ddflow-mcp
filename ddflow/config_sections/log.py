@@ -16,11 +16,11 @@ class LogConfig:
 
     reuse_parsed: bool = knob(
         True,
-        doc="Re-use already-parsed events instead of re-parsing the whole log on every read. Sound because the log is APPEND-ONLY: a line that has been parsed can never change, so only the appended tail is new. Measured at 20k events: JSON parsing is 97ms of a 115ms read (84%), so this is where the time is. Set false to always re-read from scratch — slower, and the only reason to want it is a shard being rewritten in place under a running process, which `ddflow doctor` reports as a content-address mismatch anyway.",
+        doc="Re-use already-parsed events instead of re-parsing the whole log on every read. Sound because the log is APPEND-ONLY: a line that has been parsed can never change, so only the appended tail is new. Measured at 20k events: JSON parsing is 97ms of a 115ms read (84%), so this is where the time is. Set false to always re-read from scratch — slower, and the only reason to want it is a shard being rewritten in place under a running process, which `ddflow doctor` reports as a content-address mismatch anyway. It also turns off the per-shard append facts in `.ddflow/local/shardmeta/`, so a fresh process's append parses every shard.",
     )
     max_cached_events: int = knob(
         200_000,
-        doc="Memory ceiling for reuse_parsed, in events. Measured at ~736 bytes per parsed event, so the 200,000 default holds ~147 MB (a 132,555-event log fits) in a long-lived MCP server. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
+        doc="Memory ceiling for reuse_parsed, in events, across every log the process has read. Measured over a full load: ~2.5 KB per parsed event on a real project log (339 MB traced, ~380 MB of RSS for 137,407 events) and ~1.5 KB on a synthetic one, so the 200,000 default holds about 300 to 500 MB in a long-lived MCP server, depending on how much gate evidence the events carry. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
     )
     redact_builtin_shapes: bool = knob(
         True,
@@ -53,7 +53,7 @@ class LogConfig:
     #: The on-disk read snapshot (B166) as knobs (B-log-snapshot-knobs).
     snapshot: bool = knob(
         False,
-        doc="Off by default since a measurement (R-scalability): at 132k events a cold load takes 3.6 s with the snapshot and 2.8 s without, 27 s against 15 s at 1M, and each fingerprint costs ~95 MB. Turning it off also deletes snapshot files an earlier setting left. Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over this setting.",
+        doc="Off by default since a measurement: on a real 137,407-event log a cold load takes 3.4 s with the snapshot and 2.6 s without (14.7 s against 12.6 s at 1M synthetic events), the load peaks ~200 MB higher, and each fingerprint costs ~113 MB of disk. Turning it off also deletes snapshot files an earlier setting left. It does not touch the per-shard append facts in `.ddflow/local/shardmeta/`, which follow `reuse_parsed`. Keep an on-disk read snapshot of the parsed log in `.ddflow/local/` so a cold one-shot command does not re-parse the whole log. It is a cache: every doubt ends in parsing the log, and the log stays the only source of truth. Needs `reuse_parsed`. `false` neither reads nor writes it; the environment variable `DDFLOW_SNAPSHOT=0` also turns it off for one process and wins over this setting.",
     )
     snapshot_min_events: int = knob(
         5000,

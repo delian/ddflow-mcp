@@ -214,7 +214,7 @@ class _ReadMixin:
 
     def _discard_disabled_snapshots(self) -> None:
         """`[log].snapshot = false` neither reads nor writes a snapshot, so the files an
-        earlier setting left (~95 MB per fingerprint at 132k events) are dead weight: delete
+        earlier setting left (~113 MB per fingerprint at 137k events) are dead weight: delete
         them, once per process per log. The per-process environment switch never does."""
         if self.log_cfg.snapshot or not self.cache_writes or self.dir in _SNAP_SWEPT:
             return
