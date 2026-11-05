@@ -493,9 +493,10 @@ def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> lis
     )
     if not W.branch_exists(repo, it.branch) or W.is_merged(repo, it.branch, base):
         return []
-    landed = [it.merged_head, it.pr.head_sha if it.pr and it.pr.state == "merged" else ""]
-    tip_landed = W.rev(repo, it.branch) in [sha for sha in landed if sha]
-    if tip_landed and it.merged_sha and W.is_merged(repo, it.merged_sha, base):
+    tip = W.rev(repo, it.branch)
+    if it.pr and it.pr.state == "merged" and tip == it.pr.head_sha:
+        return []  # the forge's word: its base may be a stack, and not fetched here
+    if it.merged_sha and tip == it.merged_head and W.is_merged(repo, it.merged_sha, base):
         return []
     return [
         f"branch {it.branch} {UNMERGED_BLOCKER} {base}: `ddflow merge {it.id}` "
