@@ -308,13 +308,6 @@ def test_seed_commit_survives_gc_until_forget(repo, tmp_path):
     assert "refs/ddflow" not in git(repo, "for-each-ref")
 
 
-def test_outbound_record_round_trip(repo, tmp_path):
-    out = _out(repo, tmp_path)
-    back = R.Outbound.from_record(json.loads(json.dumps(out.record())))
-    assert back == out
-    assert out.base not in out.manifest.read_text()  # the lane is not told the host's commit
-
-
 @pytest.mark.parametrize("bad", ["..", "../..", ".", "a/../b", "x.lock", "-rf", "", "a b", "a."])
 def test_unsafe_name_is_refused(bad):
     with pytest.raises(R.RemoteError, match="plain name"):
@@ -660,7 +653,9 @@ def test_hanging_host_is_cut_by_the_timeouts(ssh, tmp_path):
     begun = time.monotonic()
     assert t.observe("l").status == "unavailable"
     assert t.copy_out("l", "f", tmp_path / "g", 10).status == "unavailable"
-    assert time.monotonic() - begun < 15 and not (tmp_path / "g").exists()
+    (tmp_path / "f").write_text("x")
+    assert t.copy_in("l", tmp_path / "f", "f").status == "unavailable"
+    assert time.monotonic() - begun < 20 and not (tmp_path / "g").exists()
 
 
 def test_unreadable_answer_is_failed_and_missing_ssh_unavailable(ssh, tmp_path):
@@ -722,7 +717,7 @@ def test_trip_out_and_back_over_ssh(repo, tmp_path, ssh):
     out = _out(repo, tmp_path, knobs=k)
     t = R.SshTransport("h", k)
     assert R.ship(t, out, _consent(out), now=60.0).ok
-    assert t.start("l", R.lane_argv(out, AGENT)).ok
+    assert R.launch(t, out, AGENT).ok
     st = _until(lambda: _ended(t, "l"))
     assert st.state == "exited", (st, (home / k.lanes_root / "l" / "lane.log").read_text())
     got = R.collect(t, out, tmp_path / "in", knobs=k)
@@ -738,11 +733,11 @@ def test_lane_that_did_no_work_returns_nothing(repo, tmp_path, ssh):
     out = _out(repo, tmp_path, knobs=k)
     t = R.SshTransport("h", k)
     assert R.ship(t, out, _consent(out), now=60.0).ok
-    assert t.start("l", R.lane_argv(out, ("true",))).ok
+    assert R.launch(t, out, ("true",)).ok
     _until(lambda: _ended(t, "l"))
     got = R.collect(t, out, tmp_path / "in", knobs=k)
     assert got.bundle is None and got.result.status == "failed"
-    assert got.asked.status == "failed"
+    assert got.asked.ok and got.proposals.proposals == ()
 
 
 ACP_AGENT = """

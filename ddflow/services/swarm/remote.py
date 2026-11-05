@@ -20,24 +20,25 @@ the token is SW-remote-trust's.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
-import hashlib
 import json
 import os
 import re
 import shlex
-import tempfile
 import threading
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from ...config import Config, SessionConfig
+from ...core.digest import content_digest
 from ...core.globs import inside
 from ...core.outcome import FAIL
 from ...core.redact import mask_secrets
 from ...core.secret_shapes import shape_hit
+from ...infra import fsio
 from ...infra import git as G
 from ...infra import proc as P
 from ..lane_driver import LaneStatus, Result, failed, ok, unavailable
@@ -109,16 +110,6 @@ class Outbound:
     unscanned: tuple[str, ...]
     item: str
     lane: str
-
-    def record(self) -> dict:
-        """What the caller keeps so ``import_return`` survives a restart."""
-        d = asdict(self)
-        return {k: str(v) if isinstance(v, Path) else v for k, v in d.items()}
-
-    @classmethod
-    def from_record(cls, d: dict) -> Outbound:
-        paths = {k: Path(d[k]) for k in ("dir", "bundle", "seed", "manifest")}
-        return cls(**{**d, **paths, "unscanned": tuple(d["unscanned"])})
 
 
 @dataclass(frozen=True)
@@ -193,7 +184,6 @@ def _secret(text: str, cfg: Config | None) -> bool:
 
 
 def _redact(cfg: Config | None) -> Callable[[str], str]:
-    """The seed pack's profile, with the operator's patterns."""
     r = redactor("upstream", cfg)
     return lambda s: r.text(s).text
 
@@ -235,8 +225,8 @@ def _who(name: str) -> dict[str, str]:
 
 
 def _with_index(repo: Path, k: Knobs, fn: Callable[[dict[str, str]], str]) -> str:
-    with tempfile.TemporaryDirectory(prefix="ddflow-idx-") as d:
-        return fn({"GIT_INDEX_FILE": str(Path(d) / "index")})
+    with fsio.scratch_dir("ddflow-idx-") as d:
+        return fn({"GIT_INDEX_FILE": str(d / "index")})
 
 
 def _seed_text(seed: object, redact: Callable[[str], str]) -> str:
@@ -295,11 +285,12 @@ def build_outbound(
     except (RemoteError, OSError):
         G.run(repo, "update-ref", "-d", ref, timeout=k.git_timeout_s)
         raise
-    digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    digest = content_digest(bundle.read_bytes())
     seed_path = dest / k.seed_name
-    seed_path.write_text(_seed_text(seed, _redact(cfg)), encoding="utf-8")
+    fsio.atomic_write(seed_path, _seed_text(seed, _redact(cfg)))
     manifest = dest / MANIFEST
-    manifest.write_text(
+    fsio.atomic_write(
+        manifest,
         json.dumps(
             {
                 "item": item_id,
@@ -316,7 +307,7 @@ def build_outbound(
             indent=2,
             sort_keys=True,
         )
-        + "\n"
+        + "\n",
     )
     return Outbound(
         dest, bundle, seed_path, manifest, base_sha_s, root, ref, digest, size,
@@ -429,7 +420,7 @@ def import_return(
 def _inspect(
     repo: Path, k: Knobs, out: Outbound, tip: str, globs: tuple[str, ...], cfg: Config | None
 ) -> Returned:
-    """What the host checks of a fetched tip; raises on what is not work at all."""
+    """What the host checks of a fetched tip."""
     if not G.run(repo, "merge-base", "--is-ancestor", out.root, tip, timeout=k.git_timeout_s).ok:
         raise RemoteError("the returned branch does not descend from the seed commit")
     span = f"{out.root}..{tip}"
@@ -528,8 +519,8 @@ class LaneTransport(Protocol):
     def cleanup(self, lane: str) -> Result: ...
 
 
-#: The start time `start` wrote proves the pid is still the lane's: a recycled pid never reads
-#: as running and is never signalled. Without ``lstart`` no lane could be stopped: `start` refuses.
+#: The start time `start` wrote proves the pid is the lane's, so a recycled pid is never
+#: signalled. Without ``lstart`` no lane could be stopped: `start` refuses.
 _STAMP = 'ps -o lstart= -p "$(cat lane.pid)"'
 _ALIVE = f'[ ! -s lane.rc ] && [ -s lane.stamp ] && [ "$({_STAMP})" = "$(cat lane.stamp)" ]'
 _OBSERVE = f"""if {_ALIVE}; then echo "running $(cat lane.pid)"
@@ -574,25 +565,14 @@ class SshTransport:
             return ok()
         return (unavailable if code == _SSH_LOST else failed)(clip or f"exit code {code}")
 
-    def _call(
-        self, line: str, *, stdin: object = None, timeout: int | None = None
-    ) -> tuple[Result, str]:
-        t = timeout or self._k.ssh_timeout_s
-        kw = {} if stdin is None else {"stdin": stdin}
-        try:
-            p = P.run(
-                self.command(line),
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=t,
-                **kw,
-            )
-        except P.TimeoutExpired:
+    def _call(self, line: str) -> tuple[Result, str]:
+        t = self._k.ssh_timeout_s
+        c = P.capture(list(self.command(line)), timeout=t, encoding="utf-8", errors="replace")
+        if c.timed_out:
             return unavailable(f"{self.target} did not answer in {t}s"), ""
-        except OSError as exc:
-            return unavailable(f"ssh could not run: {exc}"), ""
-        return self._judge(p.returncode, p.stderr), p.stdout
+        if not c.ran:
+            return unavailable(f"ssh could not run: {c.error}"), ""
+        return self._judge(c.returncode or 0, c.stderr), c.stdout
 
     def start(self, lane: str, argv: Sequence[str]) -> Result:
         d = self._dir(lane)
@@ -632,49 +612,63 @@ class SshTransport:
             return LaneStatus("failed", detail="the process is gone and left no exit code")
         return failed("no such lane" if word == "absent" else "an unreadable answer")
 
-    def copy_in(self, lane: str, local: Path, name: str) -> Result:
-        target = self._file(lane, name)
-        line = f"mkdir -p {self._dir(lane)} && cat > {target}"
-        with open(local, "rb") as fh:
-            return self._call(line, stdin=fh, timeout=self._k.copy_timeout_s)[0]
-
-    def copy_out(self, lane: str, name: str, local: Path, max_bytes: int) -> Result:
-        """Stream a file back, cut at ``max_bytes``: the remote's word on size is not believed.
-        Nothing is left at ``local`` unless the whole file came."""
-        argv = self.command(f"cat {self._file(lane, name)}")
-        local = Path(local)
-        part = local.with_name(f"{local.name}.part")
+    def _piped(self, line: str, work: Callable[[P.Popen], Result | None]) -> Result:
+        """``line`` with its pipes given to ``work``, cut at ``copy_timeout_s``; a ``work``
+        that answers ends it early."""
         try:
-            p = P.popen(argv, stdout=P.PIPE, stderr=P.PIPE, start_new_session=True)
+            p = P.spawn_stdio(list(self.command(line)))
         except OSError as exc:
             return unavailable(f"ssh could not run: {exc}")
         clock = threading.Timer(self._k.copy_timeout_s, P.kill_group, (p,))
         clock.start()
         try:
-            r = self._drain(p, part, max_bytes)
+            early = work(p)
+            if early is not None:
+                return early
+            code = p.wait()
+            if code < 0:
+                return unavailable(f"{self.target} did not finish in {self._k.copy_timeout_s}s")
+            err = p.stderr.read(self._k.detail_chars)  # type: ignore[union-attr]
+            return self._judge(code, err.decode("utf-8", "replace"))
         finally:
             clock.cancel()
-            if p.poll() is None:  # over the cap: never signal a reaped pid
+            if p.poll() is None:  # ended early: never signal a reaped pid
                 P.stop_group(p)
+
+    def copy_in(self, lane: str, local: Path, name: str) -> Result:
+        line = f"mkdir -p {self._dir(lane)} && cat > {self._file(lane, name)}"
+
+        def feed(p: P.Popen) -> None:
+            with contextlib.suppress(BrokenPipeError), open(local, "rb") as fh:
+                while chunk := fh.read(_CHUNK):
+                    p.stdin.write(chunk)  # type: ignore[union-attr]
+                p.stdin.close()  # type: ignore[union-attr]
+
+        return self._piped(line, feed)
+
+    def copy_out(self, lane: str, name: str, local: Path, max_bytes: int) -> Result:
+        """Stream a file back, cut at ``max_bytes``: the remote's word on size is not believed.
+        Nothing is left at ``local`` unless the whole file came."""
+        local = Path(local)
+        part = local.with_name(f"{local.name}.part")
+
+        def drain(p: P.Popen) -> Result | None:
+            p.stdin.close()  # type: ignore[union-attr]
+            total = 0
+            with open(part, "wb") as fh:
+                while chunk := p.stdout.read(_CHUNK):  # type: ignore[union-attr]
+                    total += len(chunk)
+                    if total > max_bytes:
+                        return failed(f"the file is over the {max_bytes} byte cap")
+                    fh.write(chunk)
+            return None
+
+        r = self._piped(f"cat {self._file(lane, name)}", drain)
         if r.ok:
             part.replace(local)
         else:
             part.unlink(missing_ok=True)
         return r
-
-    def _drain(self, p: P.Popen, part: Path, max_bytes: int) -> Result:
-        total = 0
-        with open(part, "wb") as fh:
-            while chunk := p.stdout.read(_CHUNK):  # type: ignore[union-attr]
-                total += len(chunk)
-                if total > max_bytes:
-                    return failed(f"the file is over the {max_bytes} byte cap")
-                fh.write(chunk)
-        code = p.wait()
-        if code < 0:
-            return unavailable(f"{self.target} did not finish in {self._k.copy_timeout_s}s")
-        err = p.stderr.read(self._k.detail_chars).decode("utf-8", "replace")  # type: ignore[union-attr]
-        return self._judge(code, err)
 
     def stdio_argv(self, lane: str, argv: Sequence[str]) -> tuple[str, ...]:
         """The ssh argv whose stdin and stdout ARE the lane's: ACP over SSH stdio (Q8)."""
@@ -713,8 +707,8 @@ def ship(t: LaneTransport, out: Outbound, consent: Consent | None, *, now: float
 
 def lane_argv(out: Outbound, agent: Sequence[str]) -> tuple[str, ...]:
     """What runs in the lane's directory: unpack the bundle once, run ``agent`` in ``work/``,
-    then write the return bundle (none if nothing was committed). Only the agent writes to
-    stdout, which ACP owns."""
+    then write the return bundle (none if nothing was committed) and, when the lane asked
+    nothing, an empty proposals list. Only the agent writes to stdout, which ACP owns."""
     fetch = shlex.quote(f"{out.ref}:refs/heads/lane")
     script = (
         "if [ ! -d work ]; then\n"
@@ -725,9 +719,14 @@ def lane_argv(out: Outbound, agent: Sequence[str]) -> tuple[str, ...]:
         f"cd work || exit 125\nrm -f ../{RETURN}\n"
         f"{shlex.join(agent)}\nrc=$?\n"
         f"git bundle create -q ../{RETURN} {out.root}..lane >&2 || :\n"
+        f"[ -e ../{PROPOSALS} ] || echo '[]' > ../{PROPOSALS}\n"
         'exit "$rc"\n'
     )
     return ("sh", "-c", script)
+
+
+def launch(t: LaneTransport, out: Outbound, agent: Sequence[str]) -> Result:
+    return t.start(out.lane, lane_argv(out, agent))
 
 
 @dataclass(frozen=True)
