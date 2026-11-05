@@ -144,7 +144,7 @@ def _no_tree_reason(repo: Path, it, item: str, gate: str, held: str, force: bool
         kept = _kept_tree(repo, it)
         disposition = (
             f"its worktree was KEPT at {kept}, but that tree does not stand at the merged "
-            f"tree (it was moved or dirtied off the merge)"
+            f"tree"
             if kept is not None
             else "the merge removed its worktree"
         )
