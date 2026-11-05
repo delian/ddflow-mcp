@@ -162,6 +162,8 @@ def test_refused_comment_quote_spans_lines(cmd):
         'echo "$(echo # )\ngit push origin main)"',
         # a case pattern's `)` is a terminator, not the close of the $() body
         "echo $(case x in x) git push origin main;; esac); echo done",
+        # an esac inside a # comment in a case body is text, not the case's end
+        'echo "$(case x in\nx) echo start # esac )\ngit push origin main;;\nesac)"',
     ],
 )
 def test_refused_substitution_body_edge_cases(cmd):

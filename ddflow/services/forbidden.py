@@ -187,7 +187,10 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
             depth = 1
             k += 4
             while k < n and depth:
-                if _bare_word(text, n, k, "case"):
+                if text[k] == "#" and text[k - 1] in " \t\r\n;|&":
+                    k2 = text.find("\n", k)  # a comment: not the esac that closes this case
+                    k = k2 if k2 >= 0 else n
+                elif _bare_word(text, n, k, "case"):
                     depth += 1
                     k += 4
                 elif _bare_word(text, n, k, "esac"):
