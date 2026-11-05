@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ...config import Config
+from ...core.clock import compact_at
 from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
@@ -46,9 +47,6 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
         )
         where = runs / item_id
         where.mkdir(exist_ok=True)
-        # Imported here, not at the top (deferred, as it was before the area split).
-        from ...core.clock import compact_at
-
         stamp = compact_at()
         path = where / f"{gate}-{stamp}-{os.getpid()}.log"
         fsio.replace_text(path, out.encode("utf-8", "replace").decode("utf-8"), fsync=False)

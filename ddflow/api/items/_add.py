@@ -61,6 +61,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
+    allow_unknown_needs: bool = False,
 ) -> O.Outcome:
     """Add a phase — an umbrella that completes when its tasks do.
 
@@ -73,6 +74,9 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
         return O.failed("phase.added", bad, id=item)
     log, cfg, st = _items._load(repo, agent)
     bad = _bad_line(cfg, line) if line else ""
+    if bad:
+        return O.failed("phase.added", bad, id=item)
+    bad = IT.unknown_needs(st, csv_list(needs)) if not allow_unknown_needs else ""
     if bad:
         return O.failed("phase.added", bad, id=item)
     with log.transaction():
@@ -189,6 +193,14 @@ def _csv_none_when_empty(v: str) -> list[str] | None:
     return csv_list(v) or None
 
 
+def _edges_problem(st, parent: str, needs: str, allow_unknown_needs: bool) -> str:
+    """Why the new task's parent or ``needs`` cannot stand, or ""."""
+    bad = IT.missing_parent(st, parent)
+    if bad or allow_unknown_needs:
+        return bad
+    return IT.unknown_needs(st, csv_list(needs))
+
+
 def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
     repo: Path,
     item: str,
@@ -208,6 +220,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
+    allow_unknown_needs: bool = False,
 ) -> O.Outcome:
     """Add a task. Its parent may be a phase OR another task (making it a sub-task).
 
@@ -245,7 +258,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     if bad:
         return O.failed("task.added", bad, id=item)
     log, cfg, st = _items._load(repo, agent)
-    bad = IT.missing_parent(st, parent)
+    bad = _edges_problem(st, parent, needs, allow_unknown_needs)
     if bad:
         return O.failed("task.added", bad, id=item)
     wanted, bad = _wanted_lines(st, cfg, line, lines, port_of)

@@ -146,22 +146,22 @@ class ScheduleConfig:
     #: auto | fixed: whether the number of items in flight adapts (D-adaptive-flow-accepted)
     parallel: str = knob(
         "auto",
-        doc="'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts between `max_parallel_min` and `max_parallel_max`, starting at `max_parallel_tasks` -- raised by one after `adapt_up_after_s` of healthy samples while the limit was binding, lowered by a quarter when a signal is bad on 3 of the last 4 samples -- and the limit is derived on this machine, never committed. 'fixed': `max_parallel_tasks` is the number, exactly as before adaptive parallelism. A shrink never touches a running lease; it only stops new admissions.",
+        doc="'auto' (default) or 'fixed'. 'auto': the number of items in flight adapts between `max_parallel_min` and `max_parallel_max`, starting at `max_parallel_tasks` -- raised by one after `adapt_up_after_s` of healthy samples while the limit was binding, lowered by a quarter when a signal is bad on 3 of the last 4 samples -- and the limit is derived on this machine, never committed. 'fixed': `max_parallel_tasks` is the ceiling the signals may LOWER (down to `max_parallel_min`) under load, memory, disk, reviewer-latency or gate-failure pressure, and restore when calm -- never exceeding the fixed number. A shrink never touches a running lease; it only stops new admissions.",
         choices=("auto", "fixed"),
         strictest=(
             "fixed",
-            "no safety dimension; changes least -- max_parallel_tasks is the number, nothing adapts",
+            "changes least -- max_parallel_tasks caps, and the signals only lower it under load, never raise it above the number",
         ),
     )
-    #: the START value in auto, the number itself in fixed
+    #: the START value in auto, the ceiling in fixed
     max_parallel_tasks: int = knob(
         4,
-        doc="How many items may be in flight at once, counted across the whole queue. Every live lease counts, worktree or not -- a review task occupies an agent just as a coding task does. In `parallel = 'auto'` (the default) this is the START value the adaptive limit begins from and returns to; in 'fixed' it is the limit itself. Distinct from worktree.max_parallel, which caps only the leases that made a tree.",
+        doc="How many items may be in flight at once, counted across the whole queue. Every live lease counts, worktree or not -- a review task occupies an agent just as a coding task does. In `parallel = 'auto'` (the default) this is the START value the adaptive limit begins from and returns to; in 'fixed' it is the CEILING the signals may lower (to `max_parallel_min`) under load and restore, never exceed. Distinct from worktree.max_parallel, which caps only the leases that made a tree.",
         check=int_at_least(1),
     )
     max_parallel_min: int = knob(
         2,
-        doc="The floor of the adaptive limit (default 2, at least 1): however bad the signals, auto never offers fewer slots than this. Must not exceed `max_parallel_tasks` in auto.",
+        doc="The floor of the adaptive limit (default 2, at least 1): however bad the signals, auto and fixed never offer fewer slots than this. Must not exceed `max_parallel_tasks` in auto.",
         check=int_at_least(1),
     )
     max_parallel_max: int = knob(

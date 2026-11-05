@@ -54,6 +54,8 @@ class Plan:
     always_command: str = ""
     always_s: float = 0.0  #: what they cost; set once they ran
     ok: dict[str, bool] = field(default_factory=dict)  #: stage ("selected"|"always") -> passed
+    #: whether it took the suite slot and on what (`ci.admission.decide`)
+    admission: dict = field(default_factory=dict)
 
     def commands(self) -> list[str]:
         """The pytest commands of a selected run, in order (the selection, then the guards)."""

@@ -27,16 +27,29 @@ import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
 from .cmdrunner import CommandRunner, Declared, executable_missing
 
-try:  # the [rag] extra; every caller works without it
-    from model2vec import StaticModel as _StaticModel
-except ImportError:  # pragma: no cover - depends on the environment
-    _StaticModel = None
+#: The model2vec class, imported at first use (it drags in numpy, joblib and tokenizers, seconds
+#: of CPU no other verb needs). `_UNSET` = not tried yet; None = the [rag] extra is absent.
+_UNSET: Any = object()
+_StaticModel: Any = _UNSET
+
+
+def _static_model() -> Any:
+    """The model2vec ``StaticModel`` class, or None without the ``[rag]`` extra."""
+    if _StaticModel is _UNSET:
+        try:  # the [rag] extra; every caller works without it
+            from model2vec import StaticModel
+        except Exception:  # absent or broken install (ImportError or not): no embedder
+            StaticModel = None
+        globals()["_StaticModel"] = StaticModel
+    return _StaticModel
+
 
 COMPANION = "companion"
 MODEL2VEC = "model2vec"
@@ -69,7 +82,14 @@ def _unavailable(reason: str, backend: str = "") -> Embedding:
 
 def extra_installed() -> bool:
     """Is the ``[rag]`` extra's embedding half (model2vec) installed?"""
-    return _StaticModel is not None
+    if _StaticModel is not _UNSET:  # an embedding already tried the import: that answer is exact
+        return _StaticModel is not None
+    # Otherwise stay import-free (r-no-eager-heavy-import): "installed" = the package is findable;
+    # a broken install is reported at the first embedding as unavailable with the reason.
+    try:
+        return find_spec("model2vec") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def backend(cfg: Config) -> str:
@@ -154,7 +174,8 @@ def _vector(raw: Any) -> tuple[float, ...] | None:
 
 
 def _model2vec(cfg: Config, texts: list[str]) -> Embedding:
-    if _StaticModel is None:
+    model_cls = _static_model()
+    if model_cls is None:
         return _unavailable("the ddflow[rag] extra (model2vec) is not installed", MODEL2VEC)
     path = Path(cfg.rag.model_dir).expanduser()
     if not path.is_dir():
@@ -164,7 +185,7 @@ def _model2vec(cfg: Config, texts: list[str]) -> Embedding:
             MODEL2VEC,
         )
     try:
-        encoded = _StaticModel.from_pretrained(str(path)).encode(texts)
+        encoded = model_cls.from_pretrained(str(path)).encode(texts)
         rows = [_vector([float(x) for x in row]) for row in encoded]
     except Exception as exc:  # the model's own trouble: report it, do not crash a recall
         return _unavailable(f"model2vec failed: {exc}", MODEL2VEC)

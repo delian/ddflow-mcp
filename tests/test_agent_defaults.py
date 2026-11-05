@@ -118,7 +118,9 @@ def _ready_to_complete(repo: Path, monkeypatch, agent: str) -> None:
     (tree / "b.py").write_text("b = 1\n")
     for git in (["add", "b.py"], ["commit", "-qm", "T2"]):
         subprocess.run(["git", "-C", str(tree), *git], check=True, capture_output=True)
-    pass_pipeline(repo, "T2")  # cross-family reviewer: gemini-2.5-pro
+    pass_pipeline(repo, "T2", omit=("merge",))  # cross-family reviewer: gemini-2.5-pro
+    code, out, err = run_cli(repo, "merge", "T2")  # `complete` refuses work that never landed
+    assert code == 0, out + err
 
 
 def test_complete_defaults_the_author_model_from_the_agents_open_session(repo, monkeypatch):

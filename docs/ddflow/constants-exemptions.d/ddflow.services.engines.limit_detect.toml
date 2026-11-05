@@ -1,2 +1,0 @@
-[exempt]
-"ddflow/services/engines/limit_detect.py:EXIT_MAX" = 'an exit code bound (exit-code contract): POSIX exit statuses run 0-255, not a user tunable'

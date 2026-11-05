@@ -11,8 +11,9 @@ import re
 import shlex
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 from ...config import Config
@@ -22,10 +23,11 @@ from .. import ci_scope as CS
 from .. import suitelock as SL
 from .. import workers as WK
 from ..cmdrunner import TIMEOUT, CommandRunner, Declared
-from ..flakes import failure_evidence
+from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
 from ..pins import pin_files
 from ..pins import regenerate as regenerate_pins
+from . import admission as AD
 from .precommit import DEFAULT_COMMAND, PRE_COMMIT_CONFIG, PRE_PUSH_RUN, resolve_command
 from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
@@ -33,6 +35,7 @@ from .types import CONFLICT, Check, Result
 
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
+TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
 def parse_checks(output: str) -> list[Check]:
@@ -66,7 +69,7 @@ def _merge_base(
     )
 
 
-def run(
+def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     repo: Path,
     cfg: Config,
     *,
@@ -78,6 +81,7 @@ def run(
     full: bool = False,
     changed_from: str = "",
     tick: tuple[Callable[[], None], float] | None = None,
+    rates: Sequence[float] = (),
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
     ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
@@ -92,7 +96,10 @@ def run(
     the default command (they run on that diff, not over every file): default ``base``.
 
     ``tick`` is (a callback, seconds): called that often while the command runs, on this thread:
-    the caller renews its lease there (DX-long-op-renew)."""
+    the caller renews its lease there (DX-long-op-renew).
+
+    ``rates`` is what past runs measured (`admission.measured_rates`), for the decision whether
+    a selected run takes the suite slot; none: the file count decides."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -123,7 +130,7 @@ def run(
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
             scope = CS.plan(cfg, tree, base, requested=asked)
         used: dict[str, dict] = {}
-        full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope)
+        full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope, rates)
         holder = _holder(repo, ref)
         try:
             p, out_prefix, waited = _run_locked(
@@ -263,16 +270,15 @@ def _with_workers(
     return cmd
 
 
-def _needs_suite_slot(cfg: Config, cmd: str, scope) -> bool:
-    """Does this run queue for the host-wide full-suite slot? The whole suite does; so does a
-    SELECTED run of more test files than `[ci].selected_lock_tests` (0: never): a long
-    selection is a full suite's load, and it ran beside the holder with a worker per core."""
+def _needs_suite_slot(cfg: Config, cmd: str, scope, rates: Sequence[float] = ()) -> bool:
+    """Does this run queue for the host-wide full-suite slot? The whole suite does; a SELECTED
+    run does when `admission.decide` says it is heavy, and the scope keeps why."""
     if _runs_whole_suite(cmd, scope):
         return True
-    limit = int(cfg.ci.selected_lock_tests)
-    if limit <= 0 or scope is None or scope.scope != "selected":
+    if scope is None or scope.scope != "selected":
         return False
-    return len(scope.tests) + len(scope.always) > limit
+    scope.admission = AD.decide(cfg, len(scope.tests), rates)
+    return scope.admission["slot"]
 
 
 def _runs_whole_suite(cmd: str, scope) -> bool:
@@ -360,6 +366,7 @@ def _run_stages(
     before, spent = p.output, p.elapsed_s
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
+    red = None  # the selection, when it ran and failed: the guards still run after it
     for at, (raw, label) in enumerate(todo):
         cmd_ = _with_workers(raw, cfg, used, label, holding_suite=holding_suite)
         before += f"\n$ {cmd_}\n"
@@ -378,11 +385,29 @@ def _run_stages(
             unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
-        if not scope.ok[label] or at == len(todo) - 1:
+        if at == len(todo) - 1 or not p.ran:
             break
+        red = None if scope.ok[label] else p
         before += p.output
+    if red is not None:
+        p = _selection_verdict(red, p, unran)
     _say_what_ran(scope, unran)
     return p, before
+
+
+def _selection_verdict(red, guards, unran: set[str]):
+    """The run that decides a selection which failed before ``guards`` ran: the selection's own
+    exit, whatever the guards did (their pass must not read as the run's), with their output, the
+    part of the log not yet in the prefix.
+
+    `_guards_unran` reads a guard stage that ran red as one whose failures are among the failing
+    ids. That holds only for a run that went to its end and lists them; a timeout, a crash or a
+    collection error that interrupted the run gave no verdict on the guards it never reached.
+    "always" goes to ``unran`` then, so the selection alone cannot make the run baseline-red."""
+    finished = guards.code == 0 or (guards.code == TESTS_FAILED and failed_tests(guards.output))
+    if not guards.ran or not finished:
+        unran.add("always")
+    return replace(red, out=guards.output or guards.reason, err="")
 
 
 _STAGE_NAMES = {
@@ -394,8 +419,9 @@ _STAGE_NAMES = {
 
 def _say_what_ran(scope, unran: set[str] = frozenset()) -> None:
     """Make the scope's ``why`` (the line the gate records) say what ran, not what was planned:
-    a failed hook stage or test stage stops the later ones, and a selected scope that ran no
-    test must not read as 'selected N files'."""
+    a failed hook stage stops the test stages, failed guards end the run, and a selected scope
+    that ran no test must not read as 'selected N files'. The guards run after a selection that
+    failed, so what they said is told beside it."""
     order = ("hooks", "selected", "always")
     asked = [
         "hooks",
@@ -413,6 +439,10 @@ def _say_what_ran(scope, unran: set[str] = frozenset()) -> None:
     scope.why += f"; {_STAGE_NAMES[bad]} {verb}" + (
         f", so {' and '.join(notrun)} did not run" if notrun else ""
     )
+    if bad == "selected" and "always" in scope.ok:
+        said = "passed" if scope.ok["always"] else "failed"
+        said = "gave no verdict" if "always" in unran else said
+        scope.why += f"; {_STAGE_NAMES['always']} {said}"
 
 
 def _scope_evidence(scope, sha: str) -> dict:
@@ -422,6 +452,8 @@ def _scope_evidence(scope, sha: str) -> dict:
     ev = scope.evidence(sha)
     if used := getattr(scope, "workers", None):
         ev["workers"] = used
+    if admission := getattr(scope, "admission", None):
+        ev["admission"] = admission
     if scope.scope == "selected":
         # stage -> True (passed) | False (ran and failed) | "unavailable" (never started)
         unran = getattr(scope, "unran", set())

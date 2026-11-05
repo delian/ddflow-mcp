@@ -372,7 +372,7 @@ def test_load_runs_the_ticks_and_the_flow_sample_is_taken_once_per_interval(proj
     assert second == first, "the second, inside signal_interval_s, did not take another"
 
 
-def test_load_does_not_sample_when_parallel_is_not_auto(proj: Path) -> None:
+def test_load_samples_when_parallel_is_fixed_too(proj: Path) -> None:
     from ddflow.api._base import _load
 
     assert run_cli(proj, "config", "--set", "schedule.parallel", "fixed")[0] == 0
@@ -380,7 +380,7 @@ def test_load_does_not_sample_when_parallel_is_not_auto(proj: Path) -> None:
 
     _load(proj)
 
-    assert not (proj / ".ddflow/local/flow").exists()
+    assert (proj / ".ddflow/local/flow").exists()
 
 
 def test_load_survives_a_registry_that_raises(proj: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -12,6 +12,8 @@ from __future__ import annotations
 import contextlib
 import errno
 import functools
+import math
+import os
 import re
 import sqlite3
 import sys
@@ -24,6 +26,16 @@ from ...core import digest as D
 from ...core import textsim
 
 SCHEMA = 11
+#: Bump when the FOLD (how events become state) or the projection changes what an index
+#: holds without a SCHEMA change. The index is keyed on this, not on a hash of the source,
+#: so a developer edit or a patch upgrade does not cold-rebuild (bug Bece55b8a77).
+#: `DDFLOW_INDEX_KEY=source` keys on the source hash again (the pre-0.2.11 behaviour).
+FOLD_REV = 1
+
+#: At most this many index files are kept (this one included); `DDFLOW_INDEX_MAX_FILES`.
+INDEX_MAX_FILES = 3
+#: And at most this many MB of index files in total; `DDFLOW_INDEX_MAX_MB`. 0 = no size cap.
+INDEX_MAX_MB = 1024.0
 
 #: How long an index built by OTHER code (a different fingerprint, or the pre-fingerprint
 #: `index.db`) is kept after its last write before a rebuild garbage-collects it. Worktrees
@@ -46,7 +58,13 @@ def code_fingerprint() -> str:
     the on-disk FORMAT_LEVEL. A change to any of them is a different index, so nobody has
     to remember to bump a constant, and two checkouts running different code each keep their
     own index instead of rebuilding each other's (D-compat)."""
-    h = D.hasher(f"{sys.modules[__package__].SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
+    pkg = sys.modules[__package__]
+    if os.environ.get("DDFLOW_INDEX_KEY", "").strip().lower() != "source":
+        # Explicit key (r-derived-cache-bounded): what the index holds, not what built it.
+        return D.hasher(
+            f"{pkg.SCHEMA}/{pkg.FOLD_REV}/{textsim.VERSION}/{FORMAT_LEVEL}".encode()
+        ).hexdigest()[:16]
+    h = D.hasher(f"{pkg.SCHEMA}/{textsim.VERSION}/{FORMAT_LEVEL}".encode())
     here = Path(__file__).resolve()
     # This module is one level deeper than the pre-package `store.py` was, so the package
     # root (`ddflow/`) is `here`'s great-grandparent; "this module" is now the whole
@@ -174,3 +192,70 @@ def _capability_tables(con, fts: bool, trig: bool) -> bool:
     except sqlite3.DatabaseError:
         return False
     return True
+
+
+_COMPANIONS = ("-wal", "-shm", "-lock")
+
+
+def _env_num(name: str, default: float) -> float:
+    """A positive finite number from the environment, else `default` (nan, inf and
+    garbage never reach the caps)."""
+    try:
+        v = float(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return v if math.isfinite(v) and v >= 0 else default
+
+
+def collect_over_cap(directory: Path, keep: str) -> list[Path]:
+    """Delete the oldest index files (with their -wal/-shm/-lock companions) beyond the
+    count and size caps, never `keep` (the index in use). Best effort; an index is derived,
+    so a mistaken removal costs one rebuild. `DDFLOW_INDEX_GC=0` turns it off, and
+    `DDFLOW_INDEX_MAX_FILES` / `DDFLOW_INDEX_MAX_MB` set the caps (the size of a file
+    counts its companions; companions whose main file is gone are removed)."""
+    if os.environ.get("DDFLOW_INDEX_GC", "").strip().lower() in ("0", "false", "off", "no"):
+        return []
+    max_files = max(1, int(_env_num("DDFLOW_INDEX_MAX_FILES", INDEX_MAX_FILES)))
+    max_bytes = _env_num("DDFLOW_INDEX_MAX_MB", INDEX_MAX_MB) * 1048576
+
+    def sized(f: Path) -> int:
+        n = 0
+        for suf in ("", *_COMPANIONS):
+            with contextlib.suppress(OSError):
+                n += f.with_name(f.name + suf).stat().st_size
+        return n
+
+    def remove(f: Path) -> None:
+        for suf in ("", *_COMPANIONS):
+            with contextlib.suppress(OSError):
+                f.with_name(f.name + suf).unlink(missing_ok=True)
+
+    names = {p.name for p in directory.glob("index.db*")}
+    mains: list[tuple[float, int, Path]] = []
+    for f in map(directory.joinpath, sorted(names)):
+        m = _INDEX_FILE.match(f.name)
+        if not m or f.name == keep:
+            continue
+        if m.group(2) in _COMPANIONS:  # an orphan companion: its main file is gone
+            if f.name[: -len(m.group(2))] not in names:
+                with contextlib.suppress(OSError):
+                    f.unlink()
+            continue
+        if m.group(2):
+            continue  # a rebuild's temp file: aged out by the rebuild itself
+        with contextlib.suppress(OSError):
+            mains.append((f.stat().st_mtime, sized(f), f))
+    mains.sort(key=lambda t: t[0], reverse=True)  # newest first
+    total = sized(directory / keep)
+    kept = 1
+    gone: list[Path] = []
+    full = False  # once one file is over a cap, every older one goes too (oldest first)
+    for _, size, f in mains:
+        if not full and kept < max_files and (max_bytes <= 0 or total + size <= max_bytes):
+            kept += 1
+            total += size
+        else:
+            full = True
+            remove(f)
+            gone.append(f)
+    return gone

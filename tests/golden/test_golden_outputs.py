@@ -23,7 +23,17 @@ OUTPUTS = {
     "export list": ["export"],
     "config --explain": ["config", "--explain"],
 }
-EXPORTS = ["bugs", "changelog", "decisions", "roadmap", "rules", "sessions", "status", "worklog"]
+EXPORTS = [
+    "bugs",
+    "changelog",
+    "decisions",
+    "roadmap",
+    "rules",
+    "security",
+    "sessions",
+    "status",
+    "worklog",
+]
 
 
 @pytest.mark.parametrize("name", list(OUTPUTS))

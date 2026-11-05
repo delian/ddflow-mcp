@@ -27,7 +27,14 @@ from .findings import (
     _say_triage_scope,
     _track_rerun_raised,
 )
-from .records import _prior_evidence, _reason_of, _record, _reviewed_findings, _round_evidence
+from .records import (
+    _prior_evidence,
+    _reason_of,
+    _record,
+    _reviewed_findings,
+    _reviewer_families_of,
+    _round_evidence,
+)
 from .reviewers import _begin_run, active_files
 
 
@@ -245,6 +252,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         "diff_chars": diff_chars,
         **_round_evidence(taken, kind, done, best.status, forced, _delta_rounds(it, gate)),
         **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
+        "reviewer_families": _reviewer_families_of(results),
         **(extra_evidence or {}),
         **snapshot,
     }

@@ -85,7 +85,7 @@ class LogConfig:
         doc="The evidence keys that may move out of line (needs evidence_blobs): by default the reviewer findings, the command output tail and the selected-tests list, which were 60% of gate evidence. A key a reader compares as plain text should not be added: a reader that has not been taught to read blobs back sees a reference where it expects the value.",
     )
     evidence_blob_min_bytes: int = knob(
-        1024,
-        doc="A value under an evidence key goes out of line only when its JSON is at least this many bytes: a small value is cheaper in the shard than as a file. 0 turns moving values out off.",
+        256,
+        doc="A value under an evidence key goes out of line only when its JSON is at least this many bytes: a small value is cheaper in the shard than as a file. The default was 1024 before PS-evidence-inline; 256 keeps mid-sized findings and tails out of the shard too (PS-evidence-inline). It applies to NEW gate events only, and only once `evidence_blobs` is on: events already written are never rewritten and keep resolving. Set 1024 to restore the old threshold. 0 turns moving values out off.",
         check=int_at_least(0),
     )

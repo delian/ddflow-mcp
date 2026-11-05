@@ -273,6 +273,24 @@ def test_complete_unavailable_blocks_when_a_required_gate_failed(proj):
     assert PO.RULES["complete_unavailable"].when(it, "lint", cfg) is False  # lint not required
 
 
+def test_complete_unavailable_never_answers_failing_tests_the_base_could_not_measure():
+    """An `unavailable` from the baseline probe sits over tests that DID fail on the branch: the
+    tool that could not run is the comparison, not the suite. A person decides that one."""
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.complete.approval import _only_unavailable
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    v = SimpleNamespace(unmet_gates=["unit_tests"], blockers=["b"], coverage_gaps=["unit_tests"])
+    tool = GateRecord(gate="unit_tests", outcome="unavailable")
+    blind = GateRecord(
+        gate="unit_tests", outcome="unavailable", evidence={"baseline": {"unmeasured": ["t::a"]}}
+    )
+    assert _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": tool}))
+    assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": blind}))
+
+
 def _only_unavailable_repo(repo, unit):
     """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
     required gate is `unit_tests` = `unit`. reviewer independence is off so the completion
@@ -412,6 +430,23 @@ def test_zero_retry_threshold_never_auto_approves(proj):
     for s in ("a", "b", "c"):
         assert not C.operator_gate(log, Config(), _complete(proj, log, state=s)).ok
     assert not any(r["policy"] for r in asks_of(_state(proj)).values())
+
+
+def test_an_unchanged_state_refiled_accumulates_so_the_threshold_is_reachable(proj):
+    """Bf7c4b174ae: dedup returned the SAME pending ask for a re-file of an unchanged
+    claim.force/complete.force, so `refusals` stayed at 1 and a live agent stuck on one state
+    never reached `auto_approve_after_retries`. Each re-file of a retry verb while the
+    threshold is armed is a NEW filing, so the count accumulates and the next filing fires."""
+    log = EventLog(proj, "bot")
+    cfg = _cfg(auto_approve_after_retries=2)
+    canon = _complete(proj, log, state="digest-unchanged")  # the SAME digest every filing
+    first = C.operator_gate(log, cfg, canon)
+    second = C.operator_gate(log, cfg, canon)
+    assert not first.ok and not second.ok
+    assert first.ask_id != second.ask_id  # two DISTINCT filings, not one deduplicated ask
+    got = C.operator_gate(log, cfg, canon)
+    assert got.ok and got.stamp["policy"] == "auto-after-retries"
+    assert asks_of(_state(proj))[got.ask_id]["notify"] == 2
 
 
 def test_the_retry_rule_fires_on_count_alone_not_the_window_or_the_policy_list(proj, monkeypatch):

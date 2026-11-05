@@ -66,6 +66,17 @@ def _no_release_check_requests(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_ambient_harness_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A harness's marker in the shell that runs the suite makes every call an agent's, so each
+    person-only path a test takes is refused, there and not on CI. `run_cli` subprocesses
+    inherit this too. A test of the marker sets it itself."""
+    from ddflow.services.identity import HARNESS_MARKERS
+
+    for var in HARNESS_MARKERS:
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_ambient_mcp_tool_tier(monkeypatch: pytest.MonkeyPatch) -> None:
     """``DDFLOW_MCP_TOOLS`` is a documented env knob; one exported in a developer's shell
     must not narrow ``tools/list`` under every test (and `run_cli` subprocesses inherit).

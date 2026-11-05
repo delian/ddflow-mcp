@@ -23,6 +23,7 @@ def act6_the_guardrails(sc, alpha, repo):
             phase="PX",
             title=f"ring member {tid}",
             needs=needs,
+            allow_unknown_needs=True,
             globs=f"x/{tid}.py",
         )
     loops = alpha.jtool("ddflow_loops")

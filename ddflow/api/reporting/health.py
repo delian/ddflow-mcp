@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
@@ -246,6 +249,35 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
+@contextmanager
+def _check(timings: list[tuple[str, float]], name: str) -> Iterator[None]:
+    """Time one named doctor check, appending ``(name, elapsed_seconds)`` to `timings`.
+
+    FOC-doctor-slow: doctor ran over 14 minutes on a 116 MB log with nothing saying
+    WHERE. Timing every check makes the slow one a named row instead of a silent wait,
+    and an over-budget row is reported as a note below.
+    """
+    started = CLOCK.monotonic()
+    try:
+        yield
+    finally:
+        timings.append((name, CLOCK.monotonic() - started))
+
+
+def _over_budget_notes(
+    timings: list[tuple[str, float]], budget: float
+) -> tuple[dict[str, float], list[str]]:
+    """A note per check that exceeded its budget (FOC-doctor-slow); the timing table always."""
+    table = {name: round(secs, 2) for name, secs in timings}
+    if budget <= 0:
+        return table, []
+    return table, [
+        f"doctor check {name} took {secs:.1f}s — over the {budget:g}s per-check budget"
+        for name, secs in timings
+        if secs > budget
+    ]
+
+
 def doctor(
     repo: Path,
     *,
@@ -267,14 +299,17 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-    log, cfg, st = _load(repo, agent)
+    timings: list[tuple[str, float]] = []
+    with _check(timings, "load"):
+        log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
     accepted = SM.accept(repo, log) if accept_lost_events else []
     # One read of the whole log serves the data repairs and every pass below (the warm
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
-    repair_ctx = RP.context(repo, log, cfg)
+    with _check(timings, "repairs.context"):
+        repair_ctx = RP.context(repo, log, cfg)
     if accept_history:  # recorded as `repair.applied`; the report below reads it back
         reason, note, only, approval = history  # (reason, note, only ids, approval)
         why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
@@ -312,7 +347,8 @@ def doctor(
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     notes.extend(OVR.notes(events, st, cfg))  # forced completions, skips, typed-chat T3 uses ...
     notes.extend(AUD.findings(st, cfg))  # an approved answer without proof, an expiring approval
-    notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
+    with _check(timings, "embed"):
+        notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
@@ -349,7 +385,8 @@ def doctor(
         notes.append(release)
     notes.extend(fold_problem_notes(st))
 
-    p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
+    with _check(timings, "plan"):
+        p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
     problems += _contest_problems(st)
 
@@ -406,8 +443,9 @@ def doctor(
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
-    for f in PR.detect(log.read_all(), st, cfg):
-        (problems if f.severity == "block" else notes).append(f.render())
+    with _check(timings, "progress"):
+        for f in PR.detect(log.read_all(), st, cfg):
+            (problems if f.severity == "block" else notes).append(f.render())
     found, held = _recovery_findings(L.scan(log, cfg, repo))
     problems += found
     notes += held
@@ -425,9 +463,13 @@ def doctor(
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
+    table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
+    notes += over
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
+        "check_timings": table,
+        "over_budget": over,
         "events": st.event_count,
         "items": len(st.items),
         "agent": log.agent_id,

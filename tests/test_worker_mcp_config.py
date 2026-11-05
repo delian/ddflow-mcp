@@ -10,8 +10,10 @@ Nothing is removed: every tool stays callable by name on any tier.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -252,3 +254,158 @@ def test_the_recipe_and_the_help_page_agree_on_the_commands_and_the_numbers():
     assert in_recipe and in_recipe == in_page, (in_recipe, in_page)
     for number in ("10.7K", "11.9K", "17.8K", "25.9K"):
         assert number in WM.recipe(REL) and number in page, number
+
+
+# --- LS-worker-lane-override: a lane picks its own tier ---------------------------------------
+
+
+def test_the_lane_knob_defaults_to_no_override(repo):
+    assert Config.load(repo).mcp.lane_tools == ""
+
+
+def test_parse_lane_tiers_reads_lane_equals_tier_pairs():
+    assert WM.parse_lane_tiers("") == {}
+    assert WM.parse_lane_tiers("a=standard, b=all") == {"a": "standard", "b": "all"}
+
+
+@pytest.mark.parametrize(
+    "bad", ["a", "a=nope", "=core", "a/b=core", "../x=core", "a=core,a=all", "a=core,A=all"]
+)
+def test_parse_lane_tiers_refuses_bad_entries(bad):
+    with pytest.raises(ValueError):
+        WM.parse_lane_tiers(bad)
+
+
+def test_the_lane_file_name_is_beside_the_default_one():
+    assert WM.lane_rel("impl") == ".ddflow/local/worker-mcp-impl.json"
+
+
+def test_adopt_writes_one_file_per_lane_with_its_tier(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, "config", "--set", "mcp.lane_tools", "impl=standard,rev=all")[0] == 0
+    code, out, err = run_cli(repo, "adopt", "--agents", "claude")
+    assert code == 0, err
+    for lane, tier in (("impl", "standard"), ("rev", "all")):
+        data = json.loads((repo / WM.lane_rel(lane)).read_text())
+        assert data["mcpServers"]["ddflow"]["env"]["DDFLOW_MCP_TOOLS"] == tier
+        assert WM.lane_rel(lane) in out
+    default = json.loads((repo / REL).read_text())
+    assert default["mcpServers"]["ddflow"]["env"]["DDFLOW_MCP_TOOLS"] == "core"
+
+
+def test_a_lane_file_that_is_current_is_not_rewritten_and_a_dropped_lane_is_reported(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "mcp.lane_tools", "impl=all")
+    run_cli(repo, "adopt", "--agents", "claude")
+    _c, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert f"{WM.lane_rel('impl')} is current" in out
+    run_cli(repo, "config", "--set", "mcp.lane_tools", "")
+    _c, out, _ = run_cli(repo, "adopt", "--agents", "claude")
+    assert WM.lane_rel("impl") in out and "no longer in" in out  # stale file named, not deleted
+    assert (repo / WM.lane_rel("impl")).is_file()
+
+
+def test_the_knob_rejects_a_bad_value(repo):
+    run_cli(repo, "init")
+    code, _o, _e = run_cli(repo, "config", "--set", "mcp.lane_tools", "impl=bogus")
+    assert code != 0
+
+
+def test_the_knob_has_an_upgrade_fragment():
+    from ddflow.services import upgrade_manifest as UM
+
+    manifest = UM.load()
+    got = [c for _v, _d, changes in manifest.releases for c in changes if c.key == "mcp.lane_tools"]
+    assert got and got[0].new == ""  # JSON-encoded in the fragment: '""' is the empty string
+
+
+def _stale(repo, spec):
+    return [x for x in WM.write_lanes(repo, {"command": "c"}, spec) if "no longer" in x]
+
+
+def _ignores_case(repo):
+    return (repo / WM.lane_rel("impl")).exists() and (repo / WM.lane_rel("IMPL")).exists()
+
+
+def test_a_lane_a_filesystem_lists_under_another_spelling_is_not_stale(tmp_path, monkeypatch):
+    """A filesystem that ignores case lists `worker-mcp-IMPL.json` for the lane `impl` and no
+    `worker-mcp-impl.json` beside it: writing nothing gives that same listing on any filesystem."""
+    (tmp_path / WM.lane_rel("IMPL")).parent.mkdir(parents=True)
+    (tmp_path / WM.lane_rel("IMPL")).write_text("{}")
+    monkeypatch.setattr(WM, "_write_file", lambda *_a: "wrote")
+    assert _stale(tmp_path, "impl=all") == []
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda path, _lane: path.write_text("{}"),  # a second file, keeping its old tier
+        lambda path, lane: os.link(lane, path),
+        lambda path, _lane: path.symlink_to(path.parent / "missing.json"),
+    ],
+    ids=["file", "hard-link", "dangling-symlink"],
+)
+def test_a_second_directory_entry_differing_only_in_case_is_reported(tmp_path, make):
+    WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
+    if _ignores_case(tmp_path):
+        pytest.skip("this filesystem ignores case: there is no second entry")
+    make(tmp_path / WM.lane_rel("IMPL"), tmp_path / WM.lane_rel("impl"))
+    assert any(WM.lane_rel("IMPL") in x for x in _stale(tmp_path, "impl=all"))
+
+
+def test_a_lane_file_nobody_names_is_reported_even_as_a_hard_link_to_a_current_one(tmp_path):
+    WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
+    os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("alias"))
+    assert any("alias" in x for x in _stale(tmp_path, "impl=all"))
+
+
+def test_a_dangling_lane_symlink_is_reported_not_a_crash(tmp_path):
+    entry = {"command": "c"}
+    WM.write_lanes(tmp_path, entry, "foo=core")
+    (tmp_path / WM.lane_rel("legacy")).symlink_to(tmp_path / "missing.json")
+    assert any(
+        "legacy" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "foo=core")
+    )
+
+
+def test_the_lane_parser_lives_in_the_config_layer_not_above_it():
+    """The knob's `check` runs in `config_sections`, which may not import `services`."""
+    from ddflow.config_sections import mcp as section
+
+    assert WM.parse_lane_tiers is section.parse_lane_tiers
+
+
+def _cfg(worker="core", lanes=""):
+    return SimpleNamespace(mcp=SimpleNamespace(worker_tools=worker, lane_tools=lanes))
+
+
+def test_the_doctor_counts_a_lane_on_the_whole_tool_list():
+    env = {"ENABLE_TOOL_SEARCH": "false"}
+    assert WM.doctor_notes(_cfg(), env) == []
+    assert WM.doctor_notes(_cfg(lanes="impl=standard"), env) == []
+    (note,) = WM.doctor_notes(_cfg(lanes="impl=standard,rev=all"), env)
+    cause = WM.deferral_note(env, tier="all").partition(": ")[0]
+    assert note == (
+        f"{cause}: lower these lanes in `[mcp].lane_tools` and run `ddflow adopt` "
+        f"({WM.lane_rel('rev')})"
+    )
+
+
+def test_the_doctor_says_each_place_that_runs_the_whole_tool_list():
+    env = {"ENABLE_TOOL_SEARCH": "false"}
+    worker, lane = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
+    assert worker == WM.deferral_note(env, tier="all")
+    assert lane == WM.doctor_notes(_cfg(lanes="rev=all"), env)[0]
+    assert WM.doctor_notes(_cfg(worker="all"), env) == [worker]
+
+
+def test_the_doctor_survives_a_hand_edited_bad_lane_list():
+    assert WM.doctor_notes(_cfg(lanes="impl=bogus"), {"ENABLE_TOOL_SEARCH": "false"}) == []
+
+
+def test_a_hand_edited_bad_lane_list_stops_adopt_with_the_reason_not_a_traceback(repo):
+    run_cli(repo, "init")
+    with (repo / ".ddflow/config.toml").open("a") as f:
+        f.write('\n[mcp]\nlane_tools = "impl=bogus"\n')
+    code, out, err = run_cli(repo, "adopt", "--agents", "claude")
+    assert code != 0 and "impl=bogus" in out + err and "Traceback" not in out + err

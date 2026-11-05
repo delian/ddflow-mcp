@@ -98,6 +98,21 @@ def _review_runs(it, gate: str) -> list:
     return it.runs_of(gate) if it is not None else []
 
 
+def _reviewer_families_of(results) -> list[str]:
+    """The distinct families of every reviewer that came back REVIEWED, in a stable
+    order. A gate dispatched to several reviewers records ONE of them (its identifying
+    pass) as ``reviewer``/``family``, so a single record hid a clean cross-family panel —
+    which is why reviewer independence could not see that grok AND gemini reviewed when
+    the author's family is unknown (bug B1a30dc3303)."""
+    return sorted(
+        f
+        for f in {
+            (r.family or "").strip().lower() for r in (results or []) if r.status == RV.REVIEWED
+        }
+        if f
+    )
+
+
 def _reviewed_findings(results) -> list[dict[str, Any]]:
     """The `chunk_findings` of every reviewed reviewer, in venue order. The gate blocks on
     a finding from ANY of them (`_gate_outcome`), so the record keeps them all: recording

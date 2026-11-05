@@ -730,9 +730,31 @@ def run(sc: Scenario) -> None:
 
         sc.step("A deliberately circular plan is caught before anyone works it")
         alpha.tool("ddflow_phase_add", id="PX", title="circular")
-        alpha.tool("ddflow_task_add", id="X.A", phase="PX", needs="X.C", globs="x/a")
-        alpha.tool("ddflow_task_add", id="X.B", phase="PX", needs="X.A", globs="x/b")
-        alpha.tool("ddflow_task_add", id="X.C", phase="PX", needs="X.B", globs="x/c")
+        alpha.tool(
+            "ddflow_task_add",
+            id="X.A",
+            title="ring member X.A",
+            phase="PX",
+            needs="X.C",
+            allow_unknown_needs=True,
+            globs="x/a",
+        )
+        alpha.tool(
+            "ddflow_task_add",
+            id="X.B",
+            title="ring member X.B",
+            phase="PX",
+            needs="X.A",
+            globs="x/b",
+        )
+        alpha.tool(
+            "ddflow_task_add",
+            id="X.C",
+            title="ring member X.C",
+            phase="PX",
+            needs="X.B",
+            globs="x/c",
+        )
         loops, lcode = alpha.tool("ddflow_loops")
         # `jtool`: `loops` exits 1 when it finds something, so its reason is a second
         # content block and the joined text is not JSON.

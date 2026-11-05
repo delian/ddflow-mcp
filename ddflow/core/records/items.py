@@ -177,6 +177,8 @@ class Item:
     #: safety property the adoption commit claimed was never actually implemented.
     adopted: bool = False
     merged_sha: str = ""
+    #: The branch tip that `merge` landed: what proves a squash, which leaves no ancestry.
+    merged_head: str = ""
     #: Optional `item.completed` `changelog` {category, line, skip}; {} when none was given.
     changelog: dict[str, Any] = field(default_factory=dict)
     #: The branch the worktree forked from. Recorded because under gitflow and stacking it

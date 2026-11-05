@@ -112,7 +112,9 @@ def test_advise_resume_idle_and_over_limit_in_urgency_order():
     )
     assert [m.kind for m in moves] == ["resume", "resume", "idle", "over-limit"]
     assert moves[0].command == "ddflow lanes brief lane-ended"
-    assert "reason unknown" in moves[1].text
+    assert (
+        "heartbeats only" in moves[1].text
+    )  # the stop now names its last step, not "reason unknown"
     assert len(LN.advise(lanes, None, max_moves=1)) == 1
 
 
@@ -225,7 +227,7 @@ def test_a_hostile_name_stays_one_line_in_the_table_and_the_advice():
     lanes, _st, _cfg = _ledger(g, T0 + 5000)
     table = LN.render_ledger(lanes, T0 + 5000)
     advice = LN.render_advice(LN.advise(lanes, None, max_moves=5))
-    assert len(table.splitlines()) == 2 and len(advice.splitlines()) == 2
+    assert len(table.splitlines()) == 3 and len(advice.splitlines()) == 2
     assert "\n99." not in advice
 
 

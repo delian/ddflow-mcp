@@ -44,8 +44,10 @@ tier lists, the family names the `lean` profile lists, which the project's own `
 `[mcp].tools` says otherwise), so they work on either. Give the flag as
 `--mcp-config=FILE`: it is variadic, and a space lets it read the prompt as a config path.
 `--strict-mcp-config` leaves out every other MCP server (the claude.ai connectors cost ~8K deferred, ~150K
-with tool search off). `ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` is `all`, and on `core` the cost stays small.
+with tool search off). `ENABLE_TOOL_SEARCH=false` makes Claude Code send every schema up front; `ddflow doctor` says so when `[mcp].worker_tools` or a lane's tier is `all`, and on `core` the cost stays small.
 A tier hides schemas, never tools: every tool stays callable by name.
+A lane that needs another tier: `ddflow config --set mcp.lane_tools impl=standard,review=all` and `ddflow adopt`
+write `.ddflow/local/worker-mcp-<lane>.json` for each; start that lane with `--mcp-config=` on its file.
 
 ## What to put in AGENTS.md / CLAUDE.md
 

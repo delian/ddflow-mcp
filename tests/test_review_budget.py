@@ -312,8 +312,9 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
         doc = KNOB_DOCS[key]
         for private in ("ddflow-worktrees", "/home/", "rb-rounds", "bridge-cse"):
             assert private not in doc.lower(), (key, private)
-    src = (root / "ddflow" / "api" / "review.py").read_text()
-    assert "/home/delian" not in src
+    sources = sorted((root / "ddflow" / "api" / "review").glob("*.py"))
+    assert sources, "the review area moved: this check went blind"
+    assert not [p.name for p in sources if "/home/delian" in p.read_text()]
 
 
 # -- round 1 findings of the review of this very change ----------------------------------
