@@ -36,31 +36,19 @@ def lane_rel(lane: str) -> str:
 
 def write_lanes(repo: Path, entry: Mapping[str, Any], spec: str) -> list[str]:
     """Write one config per lane of ``spec``; the action lines, plus a note for a lane file the
-    spec no longer names (left in place)."""
+    spec no longer names (left in place). Every lane was just written, so one missing from the
+    listing is there under another spelling: a filesystem that ignores case keeps the first."""
     lanes = parse_lane_tiers(spec)
     out = [_write_file(Path(repo), lane_rel(lane), entry, tier) for lane, tier in lanes.items()]
     local = Path(repo) / Path(REL).parent
     stem = Path(REL).stem + "-"
-    for f in sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []:
-        lane = f.stem[len(stem) :]
-        if not _is_current(Path(repo), lane, lanes):
+    files = sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []
+    listed = [f.stem[len(stem) :] for f in files]
+    respelled = {lane.casefold() for lane in lanes if lane not in listed}
+    for lane in listed:
+        if lane not in lanes and lane.casefold() not in respelled:
             out.append(f"{lane_rel(lane)} is no longer in [mcp].lane_tools (left in place)")
     return out
-
-
-def _is_current(repo: Path, listed: str, lanes: Mapping[str, str]) -> bool:
-    """``listed``, a lane read off a file name, is one of ``lanes``: by name, or under another
-    spelling on a filesystem that ignores case. Where case counts that is a second file, which
-    keeps its old tier and is not current."""
-    if listed in lanes:
-        return True
-    for lane in lanes:
-        if lane.casefold() == listed.casefold():
-            try:
-                return (repo / lane_rel(listed)).samefile(repo / lane_rel(lane))
-            except OSError:  # a dangling symlink is the same file as nothing
-                return False
-    return False
 
 
 def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
@@ -139,7 +127,9 @@ def recipe(rel: str = REL, tier: str = "core") -> str:
     )
 
 
-def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
+def deferral_note(
+    environ: Mapping[str, str], *, tier: str, where: str = f"`[mcp].worker_tools`, {REL}"
+) -> str:
     """The doctor note when the host would send every ddflow schema: tool search switched off
     or set so high that nothing is deferred, while this project advertises the whole tool list.
     Empty on the `core`/`standard` tiers (already smaller) and on a default host."""
@@ -156,23 +146,21 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
     return (
         f"ENABLE_TOOL_SEARCH={value} makes the host send every ddflow schema "
         f"(~58K tokens on the `{tier}` tool tier): start workers on the `core` tier "
-        f"(`[mcp].worker_tools`, {REL})"
+        f"({where})"
     )
 
 
 def doctor_notes(cfg: Any, environ: Mapping[str, str] | None = None) -> list[str]:
     """The doctor's notes for the worker config: ``deferral_note`` for the tier the workers run on
-    (`[mcp].worker_tools`) and each lane's (`[mcp].lane_tools`), judged against the doctor's own
-    environment unless one is given. One note: only the `all` tier gets one, so the text is the
-    same for every tier it applies to, and it names the lanes."""
+    (`[mcp].worker_tools`), and one for the lanes on such a tier (`[mcp].lane_tools`) naming their
+    files, judged against the doctor's own environment unless one is given."""
     env = os.environ if environ is None else environ
     try:
         lanes = parse_lane_tiers(cfg.mcp.lane_tools)
     except ValueError:  # the config check names it; a note here would say it twice
         lanes = {}
     wide = sorted(lane for lane, tier in lanes.items() if deferral_note(env, tier=tier))
-    tier = lanes[wide[0]] if wide else cfg.mcp.worker_tools
-    note = deferral_note(env, tier=cfg.mcp.worker_tools) or deferral_note(env, tier=tier)
-    if not note:
-        return []
-    return [f"{note} (lanes: {', '.join(wide)})" if wide else note]
+    where = f"`[mcp].lane_tools`, {', '.join(lane_rel(lane) for lane in wide)}"
+    notes = [deferral_note(env, tier=cfg.mcp.worker_tools)]
+    notes += [deferral_note(env, tier=lanes[wide[0]], where=where)] if wide else []
+    return [note for note in notes if note]

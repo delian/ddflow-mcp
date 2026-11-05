@@ -323,34 +323,40 @@ def _stale(repo, spec):
     return [x for x in WM.write_lanes(repo, {"command": "c"}, spec) if "no longer" in x]
 
 
-def test_a_case_insensitive_filesystem_listing_a_lane_under_another_spelling_is_not_stale(
-    tmp_path, monkeypatch
-):
-    """Such a filesystem lists `worker-mcp-IMPL.json` for the lane `impl`: one file, two names."""
+def _ignores_case(repo):
+    return (repo / WM.lane_rel("impl")).exists() and (repo / WM.lane_rel("IMPL")).exists()
+
+
+def test_a_lane_a_filesystem_lists_under_another_spelling_is_not_stale(tmp_path, monkeypatch):
+    """A filesystem that ignores case lists `worker-mcp-IMPL.json` for the lane `impl` and no
+    `worker-mcp-impl.json` beside it: writing nothing gives that same listing on any filesystem."""
     (tmp_path / WM.lane_rel("IMPL")).parent.mkdir(parents=True)
     (tmp_path / WM.lane_rel("IMPL")).write_text("{}")
-    monkeypatch.setattr(Path, "samefile", lambda _a, _b: True)
+    monkeypatch.setattr(WM, "_write_file", lambda *_a: "wrote")
     assert _stale(tmp_path, "impl=all") == []
 
 
-def test_a_second_file_that_differs_only_in_case_keeps_its_old_tier_and_is_reported(tmp_path):
-    (tmp_path / WM.lane_rel("Review")).parent.mkdir(parents=True)
-    (tmp_path / WM.lane_rel("Review")).write_text("{}")
-    if (tmp_path / WM.lane_rel("review")).exists():
-        pytest.skip("this filesystem ignores case: there is no second file")
-    assert any(WM.lane_rel("Review") in x for x in _stale(tmp_path, "review=core"))
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda path, _lane: path.write_text("{}"),  # a second file, keeping its old tier
+        lambda path, lane: os.link(lane, path),
+        lambda path, _lane: path.symlink_to(path.parent / "missing.json"),
+    ],
+    ids=["file", "hard-link", "dangling-symlink"],
+)
+def test_a_second_directory_entry_differing_only_in_case_is_reported(tmp_path, make):
+    WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
+    if _ignores_case(tmp_path):
+        pytest.skip("this filesystem ignores case: there is no second entry")
+    make(tmp_path / WM.lane_rel("IMPL"), tmp_path / WM.lane_rel("impl"))
+    assert any(WM.lane_rel("IMPL") in x for x in _stale(tmp_path, "impl=all"))
 
 
 def test_a_lane_file_nobody_names_is_reported_even_as_a_hard_link_to_a_current_one(tmp_path):
     WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
     os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("alias"))
     assert any("alias" in x for x in _stale(tmp_path, "impl=all"))
-
-
-def test_a_dangling_symlink_spelled_like_a_lane_is_reported_not_a_crash(tmp_path):
-    WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
-    (tmp_path / WM.lane_rel("IMPL")).symlink_to(tmp_path / "missing.json")
-    assert any(WM.lane_rel("IMPL") in x for x in _stale(tmp_path, "impl=all"))
 
 
 def test_a_dangling_lane_symlink_is_reported_not_a_crash(tmp_path):
@@ -378,9 +384,15 @@ def test_the_doctor_counts_a_lane_on_the_whole_tool_list():
     assert WM.doctor_notes(_cfg(), env) == []
     assert WM.doctor_notes(_cfg(lanes="impl=standard"), env) == []
     (note,) = WM.doctor_notes(_cfg(lanes="impl=standard,rev=all"), env)
-    assert "`all` tool tier" in note and "rev" in note
-    (note,) = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
-    assert note == WM.deferral_note(env, tier="all") + " (lanes: rev)"
+    assert "`all` tool tier" in note and "[mcp].lane_tools" in note and WM.lane_rel("rev") in note
+    assert "worker_tools" not in note and WM.lane_rel("impl") not in note
+
+
+def test_the_doctor_says_each_place_that_runs_the_whole_tool_list():
+    env = {"ENABLE_TOOL_SEARCH": "false"}
+    worker, lane = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
+    assert "[mcp].worker_tools" in worker and REL in worker
+    assert "[mcp].lane_tools" in lane and WM.lane_rel("rev") in lane
     assert WM.doctor_notes(_cfg(worker="all"), env) == [WM.deferral_note(env, tier="all")]
 
 
