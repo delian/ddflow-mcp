@@ -245,3 +245,23 @@ def test_safe_keeps_a_long_path_whole_and_flattens_structure():
     assert LN.safe(path) == path[:200]
     assert LN.safe("b" * 300) == "b" * 200  # one long branch name is not cut at 80
     assert LN.safe('x\n## y <z> `c` "q"') == "x ## y z c q"
+
+
+def test_build_computes_the_wait_rows_once_not_once_per_lane(monkeypatch):
+    """`waiting.rows` scans every standing wait; `build` called it inside its per-lane
+    loop, so a ledger with N lanes paid the scan N times (lanes x waits). It must run
+    once per build and be shared by every lane."""
+    import ddflow.services.waiting as waiting
+
+    g = multi_lane()
+    st, cfg, plan = build_inputs(g.events, NOW)
+    calls: list[int] = []
+    real = waiting.rows
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(waiting, "rows", counted)
+    LN.build(g.events, st, cfg, NOW, plan)
+    assert len(calls) == 1, f"waiting.rows called {len(calls)} times, expected once"
