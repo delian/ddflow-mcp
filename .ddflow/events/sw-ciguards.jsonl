@@ -64,3 +64,5 @@
 {"agent":"sw-ciguards","data":{"tags":["bugfix","wave:0"]},"id":"ea827649576293719776bac9b","kind":"task.updated","lamport":141977,"schema":1,"subject":"fix-B600455cc2a","ts":"2026-11-05T18:38:35.289637Z"}
 {"agent":"sw-ciguards","data":{"tags":["bugfix","wave:0","no-deps"]},"id":"e29fe340d47c06828a9c24ea3","kind":"task.updated","lamport":141981,"schema":1,"subject":"fix-B83c7a5eb50","ts":"2026-11-05T18:39:01.880351Z"}
 {"agent":"sw-ciguards","data":{"tags":["bugfix","wave:0","no-deps"]},"id":"edf4e98df6c817e2d896be9c5","kind":"task.updated","lamport":141982,"schema":1,"subject":"fix-B600455cc2a","ts":"2026-11-05T18:39:09.836150Z"}
+{"agent":"sw-ciguards","data":{"at":1793904777.1778293,"holder":"sw-ciguards"},"id":"edbf5689962f09c844755f115","kind":"lease.renewed","lamport":142092,"schema":1,"subject":"fix-B-ci-guards-unran-blocks-red-main","ts":"2026-11-05T18:52:57.540088Z"}
+{"agent":"sw-ciguards","data":{"at":1793905685.914629,"holder":"sw-ciguards"},"id":"eca50222087a1df5319cbe3f2","kind":"lease.renewed","lamport":142214,"schema":1,"subject":"fix-B-ci-guards-unran-blocks-red-main","ts":"2026-11-05T19:08:06.264876Z"}
