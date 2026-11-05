@@ -8,10 +8,10 @@ re-probing a plane must not wait for a ddflow release. A plane id may not reuse 
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
 
+from ..adapters.toml import TomlError, TomlIo, TomlLibIo
 from ..infra import paths
 from . import facts, harnessreg
 from .harnessfacts import show
@@ -35,17 +35,17 @@ def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def load(root: Path | None = None) -> dict[str, Any]:
+def load(root: Path | None = None, toml: TomlIo | None = None) -> dict[str, Any]:
     """The shipped facts, with the project's over them when `root` has any. A project file
     that cannot be read, or holds a bad fact, raises FactsError: it is never skipped."""
-    shipped = paths.templates_dir() / FILE
-    data = tomllib.loads(shipped.read_text(encoding="utf-8"))
+    io = toml or TomlLibIo()
+    data = io.read(paths.templates_dir() / FILE)
     local = Path(root) / ".ddflow" / FILE if root else None
     if local is None or not local.is_file():
         return data
     try:
-        merged = _merge(data, tomllib.loads(local.read_text(encoding="utf-8")))
-    except (tomllib.TOMLDecodeError, OSError) as e:
+        merged = _merge(data, io.read(local))
+    except (TomlError, OSError) as e:
         raise FactsError(f"{local}: {e}") from e
     bad = problems(merged)
     if bad:
