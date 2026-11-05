@@ -20,6 +20,7 @@ from quota_meters_support import (
 )
 
 from ddflow.core.events import Event
+from ddflow.infra.store._schema import ReadOnlyError, read_only_rows
 from ddflow.services import meters_base as MB
 from ddflow.services import meters_local as L
 
@@ -259,9 +260,15 @@ class TestKilo:
     def test_the_store_is_opened_read_only(self, tmp_path):
         c = ctx(tmp_path)
         kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": kilo_tokens(1)}])
-        before = c.kilo_db.read_bytes()
-        L.read_kilo(c)
-        assert c.kilo_db.read_bytes() == before
+        with pytest.raises(ReadOnlyError, match="readonly"):
+            read_only_rows(c.kilo_db, "DELETE FROM message", timeout_s=5.0)
+        assert _kilo(c, "tokens").value == 1.0
+
+    def test_reading_never_creates_a_store(self, tmp_path):
+        missing = tmp_path / "none.db"
+        with pytest.raises(ReadOnlyError):
+            read_only_rows(missing, "SELECT 1", timeout_s=5.0)
+        assert not missing.exists()
 
 
 def _started(at, tool="claude-code"):
