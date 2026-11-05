@@ -25,6 +25,9 @@ class FactsError(ValueError):
 
 def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     """`extra` over `base`, one fact at a time, so an override leaves its neighbours."""
+    for key in ("sources", "plane"):
+        if not isinstance(extra.get(key, {}), dict):
+            raise FactsError(f"{FILE}: [{key}] is not a table")
     out = {**base, "sources": {**base.get("sources", {}), **extra.get("sources", {})}}
     planes = {k: dict(v) for k, v in base.get("plane", {}).items()}
     for name, row in extra.get("plane", {}).items():

@@ -126,6 +126,16 @@ def test_bad_project_file_is_a_named_failure_not_a_traceback(tmp_path):
     assert planefacts.FILE in out.reason
 
 
+@pytest.mark.parametrize("text", ['sources = "x"\n', 'plane = "x"\n', 'plane = { paseo = "x" }\n'])
+def test_wrong_shape_in_the_project_file_is_named(tmp_path, text):
+    local = tmp_path / ".ddflow"
+    local.mkdir()
+    (local / planefacts.FILE).write_text(text, encoding="utf-8")
+    out = harness_view(tmp_path, what="facts")
+    assert out.exit != 0
+    assert "is not a table" in out.reason
+
+
 def test_invalid_project_fact_is_refused(tmp_path):
     local = tmp_path / ".ddflow"
     local.mkdir()
