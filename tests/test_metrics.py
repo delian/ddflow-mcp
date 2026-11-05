@@ -356,7 +356,7 @@ def test_a_provider_adds_rows_and_the_minimum_sample_rule_covers_them(clean_regi
             {"metric": "m2", "group": "g", "n": 2, "value": 0.99},
         ],
     )
-    rows = run(twelve()).metrics["providers"]
+    rows = [r for r in run(twelve()).metrics["providers"] if r["provider"] == "x"]
     assert [(r["metric"], r["value"]) for r in rows] == [("m1", 0.25), ("m2", None)]
     assert "need 10" in rows[1]["unavailable"]
     with pytest.raises(ValueError):

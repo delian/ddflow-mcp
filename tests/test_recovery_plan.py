@@ -309,6 +309,11 @@ def test_a_job_whose_log_has_the_exit_is_ended_by_apply(repo):
 
 def test_plain_recover_is_unchanged_on_a_clean_project(repo):
     code, out, _ = run_cli(repo, "recover")
-    assert code == 2
+    assert (code, out) == (2, "Nothing to recover — no expired leases, no orphan worktrees.\n")
     code, out, _ = run_cli(repo, "recover", "--all", "--plan")
-    assert code == 2 and not out
+    assert code == 2
+    # Exit 2 says why on stdout, as plain recover does: an empty plan names what it looked at.
+    assert out == (
+        "Nothing to recover — no expired leases, orphan worktrees, dead gate runs, "
+        "unended jobs, orphaned queue entries.\n"
+    )

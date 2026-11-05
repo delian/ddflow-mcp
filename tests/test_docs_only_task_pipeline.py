@@ -343,7 +343,7 @@ def test_update_landed_accepts_a_root_commit_and_only_a_root_commit(repo):
 
 def test_an_unreadable_claimed_worktree_never_lets_citations_stand_in(repo):
     from ddflow.core.model import Item
-    from ddflow.services.completion import _unlanded_paths
+    from ddflow.services.completion._changed import _unlanded_paths
 
     _unmerged_task(repo, "docs/note.md")
     it = Item(id="T1", kind="task", title="t", globs=["docs/note.md"], worktree="gone")
@@ -363,5 +363,6 @@ def test_the_real_diffless_callers_use_the_diff_pipeline(repo):
     cfg = Config.load(repo)
     it = _state(repo).items["T1"]
     # no ci/unit_tests in a docs-only pipeline: nothing is run (a task pipeline would run ci)
-    assert MR._run_checks(repo, cfg, it, None, {}, unit_tests=True, timeout_s=1, agent="a") == ""
+    entry = MR.MQ.Entry(item="T1", seq=1)
+    assert MR._run_checks(repo, cfg, it, entry, {}, unit_tests=True, timeout_s=1, agent="a") == ""
     assert "ci" not in TSC._pipeline(cfg, it, repo)

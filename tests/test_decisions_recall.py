@@ -280,8 +280,11 @@ def test_status_answers_what_has_been_completed(proj):
 
 
 def test_status_surfaces_loops_and_recoverable_work(proj):
-    run_cli(proj, "task", "add", "A", "--title", "A fixture", "--phase", "P1", "--needs", "B")
-    run_cli(proj, "task", "add", "B", "--title", "B fixture", "--phase", "P1", "--needs", "A")
+    # B does not exist yet, and a dependency on an unknown id is refused without the flag.
+    for task, needs in (("A", ("B", "--allow-unknown-needs")), ("B", ("A",))):
+        add = ("task", "add", task, "--title", f"{task} fixture", "--phase", "P1", "--needs")
+        code, _, err = run_cli(proj, *add, *needs)
+        assert code == OK, err
     data = json.loads(run_cli(proj, "--json", "status")[1])
     assert any(f["kind"] == "dependency_cycle" for f in data["loops"])
     assert "⚠" in run_cli(proj, "status")[1]

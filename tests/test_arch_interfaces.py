@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ddflow.services import archdeps as A
 from ddflow.services import archifaces as I
+from ddflow.services import harnessreg as HR
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "tests" / "arch_baselines" / "arch_interfaces.txt"
@@ -165,6 +166,14 @@ def test_program_homes_name_the_planned_task(tmp_path: Path):
     assert home["gh"] == "ADP-forge"
     assert home["roborev"] == "ADP-tools" and home["gitleaks"] == "ADP-tools"
     assert home["claude"] == "ADP-agent-lanes"
+
+
+def test_every_descriptor_is_an_agent_program():
+    """The agent programs are the descriptors, not a table beside them: one added there is
+    homed with the others without touching the census."""
+    for agent in (*HR.ids(), *I.ACP_ONLY_AGENTS):
+        assert I.home_of("program", agent) == ("ADP-agent-lanes", ())
+    assert I.home_of("program", "not-an-agent")[0] == "ADP-tools"
 
 
 def test_protocols_by_method_and_jsonrpc_literal(tmp_path: Path):
