@@ -273,6 +273,24 @@ def test_complete_unavailable_blocks_when_a_required_gate_failed(proj):
     assert PO.RULES["complete_unavailable"].when(it, "lint", cfg) is False  # lint not required
 
 
+def test_complete_unavailable_never_answers_failing_tests_the_base_could_not_measure():
+    """An `unavailable` from the baseline probe sits over tests that DID fail on the branch: the
+    tool that could not run is the comparison, not the suite. A person decides that one."""
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.complete.approval import _only_unavailable
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    v = SimpleNamespace(unmet_gates=["unit_tests"], blockers=["b"], coverage_gaps=["unit_tests"])
+    tool = GateRecord(gate="unit_tests", outcome="unavailable")
+    blind = GateRecord(
+        gate="unit_tests", outcome="unavailable", evidence={"baseline": {"unmeasured": ["t::a"]}}
+    )
+    assert _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": tool}))
+    assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": blind}))
+
+
 def _only_unavailable_repo(repo, unit):
     """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
     required gate is `unit_tests` = `unit`. reviewer independence is off so the completion
