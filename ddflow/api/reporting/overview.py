@@ -474,6 +474,10 @@ def _bound(data: dict[str, Any]) -> None:
     # The by-tag view is a list too: a namespace with thousands of distinct values (an
     # `assignee:` label space) is exactly the unbounded answer Bd6aa9ffde9 is about, so
     # the bounded MCP path cuts it the same way (the first values, lowest tag first).
+    for key in ("wait_cycles", "wait_alarms"):  # present only when there are any
+        if len(data.get(key, ())) > STATUS_LIST_LIMIT:
+            cut[key] = len(data[key])
+            data[key] = data[key][:STATUS_LIST_LIMIT]
     if "by_tag" in data:
         values = data["by_tag"]["values"]
         if len(values) > STATUS_LIST_LIMIT:

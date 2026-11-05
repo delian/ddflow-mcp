@@ -40,11 +40,14 @@ def progress_of(log, st, cfg, now: float | None = None, events=None, activity=No
         busy = {j.item for j in running if JOBS.status(j).state == "running"}
         return (log.read_all() if events is None else events), busy
 
+    measured: dict[str, float] = {}
+
     def progress(item: str, lease) -> float:
-        seen, busy = facts()
-        if item in busy or RUN.live_runs(log.root, item):
-            return at
-        return LB.progress_at(seen, item, lease, act)
+        if item not in measured:
+            seen, busy = facts()
+            live = item in busy or RUN.live_runs(log.root, item)
+            measured[item] = at if live else LB.progress_at(seen, item, lease, act)
+        return measured[item]
 
     return progress
 

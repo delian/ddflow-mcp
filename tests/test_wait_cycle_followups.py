@@ -320,3 +320,30 @@ def test_a_move_cannot_carry_structure_out_of_a_hostile_name():
     ]
     (m,) = wait_moves([], LW.find(waits, held), [], 9)
     assert "`" not in m.text and all("`" not in n for n in m.lanes)
+
+
+def test_a_lease_in_a_ring_and_an_alarm_is_measured_once(repo):
+    _setup(repo)
+    log, st, cfg = _read(repo)
+    calls: list[str] = []
+
+    def tree(lease) -> float:
+        calls.append(lease.holder)
+        return 0.0
+
+    progress = progress_of(log, st, cfg, activity=tree)
+    lease = st.items["T2"].lease
+    assert progress("T2", lease) == progress("T2", lease)
+    assert calls == [B]
+
+
+def test_the_bounded_status_cuts_the_wait_rows_and_says_so():
+    from ddflow.api.reporting import overview as OV
+
+    many = [{"key": str(i)} for i in range(OV.STATUS_LIST_LIMIT + 3)]
+    lists = ("completed_tasks", "in_flight", "ready_now", "held_by_cap", "interrupted")
+    data = {k: [] for k in (*lists, "loops", "recoverable")}
+    data |= {"wait_cycles": list(many), "wait_alarms": list(many)}
+    OV._bound(data)
+    assert len(data["wait_alarms"]) == len(data["wait_cycles"]) == OV.STATUS_LIST_LIMIT
+    assert data["truncated"]["lists"]["wait_alarms"] == len(many)
