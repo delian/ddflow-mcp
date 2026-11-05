@@ -1106,7 +1106,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 541 knobs.
+cadences, and the rest of the 543 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2295,6 +2295,20 @@ the ready list) show it; an untagged item shows nothing extra. A harness that di
 subagent may map it to its model choice (see the driver, `docs/ddflow/drivers/implement-phase.md`).
 It is advice only: it never affects scheduling, gates or reviewer independence, and an unknown
 value such as `tier:foo` is ignored and reported by `ddflow doctor` as a note, not an error.
+
+### Pull dispatch: `ddflow next --lane NAME`
+
+`ddflow next --lane NAME` answers an idle lane with the best item for it: the scheduler core's
+pick (`[swarm]` weights and hard constraints) among everything ready, within the parallel limit.
+It only reads. The answer carries a one-line dispatch note with the figures and reasons; the
+lane records it by claiming with `ddflow claim <item> --note "<note>"`, the command the text form prints.
+
+NAME is a `[template.<name>]` in `swarm.launch_templates_file`. Family and trust come from that
+template and the model catalog, and nothing is defaulted: with no template, a template a person
+has not approved at its digest, no declared `trust`, or a family or model the catalog cannot
+vouch for, the answer is `unavailable` and offers nothing. Exit 0 is an offer; exit 2 is
+`unavailable`, `hold` (the parallel limit or paused admission) or `none` (nothing eligible, with
+the first `swarm.dispatch_why_items` refusals). It starts nothing: launching is a separate step.
 
 ## Work that changes shape while you do it
 
@@ -5319,7 +5333,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 541): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 543): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5899,7 +5913,7 @@ declared once and persists — see
 
 ## Configuration
 
-541 knobs across 50 sections, every one documented in place and listed, with its default
+543 knobs across 50 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5966,8 +5980,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ca5b730a3d73 -->
-<details><summary>All 541 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=91873068ec4e -->
+<details><summary>All 543 knobs across 50 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6335,6 +6349,8 @@ long default is left to `ddflow config --explain`.
 | `swarm.seed_entry_chars` | `600` |  |
 | `swarm.seed_item_chars` | `1500` |  |
 | `swarm.seed_handoff_chars` | `1200` |  |
+| `swarm.dispatch_note_chars` | `500` |  |
+| `swarm.dispatch_why_items` | `5` |  |
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |

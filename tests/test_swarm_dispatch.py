@@ -399,6 +399,18 @@ def test_next_lane_holds_at_the_parallel_limit(repo):
     assert "parallel limit" in out.reason
 
 
+def test_next_lane_counts_a_holder_of_its_family_against_the_family_cap(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    (repo / ".ddflow/local/config.toml").write_text("[swarm]\nfamily_cap = 1\n", encoding="utf-8")
+    _task(repo, "b")
+    run_cli(repo, "--agent", "other", "session", "start", "--model", "deepseek-chat")
+    assert api.claim(repo, "b", agent="other").exit == 0
+    out = api.next_lane(repo, lane="ds")
+    assert out.data["status"] == D.NONE
+    assert "family_cap" in out.reason
+
+
 def test_next_lane_is_the_cli_flag_and_prints_the_claim(repo):
     _queue(repo)
     _approve(repo, "ds")

@@ -27,6 +27,7 @@ from ...services.swarm import ledger as LG
 from ...services.swarm import score
 from ...services.swarm.score_config import Weights
 from .._base import _load
+from ..model_cmds import LOCAL
 from .planning import plan_for
 from .ready import _unknown_phase
 
@@ -50,7 +51,7 @@ def _source(repo: Path, cfg: Config, st: State, lane: str, now: float) -> D.Lane
         return D.LaneSource(None, D.LaneFacts(), False, False, live=live)
     return D.LaneSource(
         t,
-        D.catalog_facts(modelreg.load(local_dir=Path(repo) / ".ddflow" / "local"), t),
+        D.catalog_facts(modelreg.load(local_dir=Path(repo) / LOCAL), t),
         _declares_trust(path, lane),
         T.approved(st, t).ok,
         live=live,
@@ -82,15 +83,15 @@ def _waited(events: Any, ids: set[str], now: float) -> dict[str, float]:
     return out
 
 
-def _lease_families(events: Any, cfg: Config, live: dict[str, Any]) -> dict[str, str]:
-    """Item -> the family of the model its live lease claimed with, where it named one."""
+def _live_families(events: Any, cfg: Config, live: dict[str, Any], now: float) -> dict[str, str]:
+    """Item -> the family of whoever holds it now, told as the ledger tells an author's: the
+    lease's own model, else the holder's latest session. "" when neither says."""
+    sessions, leases = LG._models(events), LG._lease_models(events)
     fams = dict(getattr(cfg.agent, "families", {}) or {}) or None
-    out: dict[str, str] = {}
-    for ev in events:
-        data = ev.data if isinstance(ev.data, dict) else {}
-        if ev.kind == "lease.acquired" and ev.subject in live and data.get("model"):
-            out[ev.subject] = family_for(str(data["model"]), fams)
-    return out
+    return {
+        i: family_for(LG._author_model(i, lz.holder, now, sessions, leases), fams)
+        for i, lz in live.items()
+    }
 
 
 def _candidates(p: Any) -> list[str]:
@@ -128,7 +129,7 @@ def _ask(
         cfg=cfg,
         now=now,
         ledger=LG.build(events, st, cfg, now, bug_window_s=w.bug_window_s),
-        families=_lease_families(events, cfg, live),
+        families=_live_families(events, cfg, live, now),
         shared=shared,
     )
     return D.pull_for(lane, src, items, world, w, slots, bounds)
