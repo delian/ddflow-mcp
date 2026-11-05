@@ -131,6 +131,22 @@ class TestTranscriptUsage:
         got = _tokens(c)
         assert got.status == MB.UNAVAILABLE and got.value is None and got.unmetered == 1
 
+    @pytest.mark.parametrize("torn", ['{"type":"ass', '{"typ', "{"])
+    def test_a_last_line_torn_before_its_type_is_never_a_zero(self, tmp_path, torn):
+        c = ctx(tmp_path)
+        path = write_transcript(c.claude_projects / "p" / "a.jsonl", [])
+        path.write_text(torn)  # no newline: the writer was stopped mid-line
+        os.utime(path, (NOW, NOW))
+        got = _tokens(c)
+        assert got.status == MB.UNAVAILABLE and got.unmetered == 1
+
+    def test_a_finished_last_line_of_another_kind_is_nothing(self, tmp_path):
+        c = ctx(tmp_path)
+        path = write_transcript(c.claude_projects / "p" / "a.jsonl", [])
+        path.write_text('{"type":"user"}')  # no newline, but whole
+        os.utime(path, (NOW, NOW))
+        assert (_tokens(c).status, _tokens(c).value) == (MB.OK, 0.0)
+
     def test_a_kind_the_turn_does_not_expose_is_never_a_zero(self, tmp_path):
         c = ctx(tmp_path, token_fields=("cache_read",))
         row = turn()

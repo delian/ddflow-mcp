@@ -130,7 +130,8 @@ def _candidates(root: Path, since: float, max_bytes: int) -> list[Path]:
 def _scan(path: Path, since: float, rows: dict, bare: dict) -> None:
     with path.open(encoding="utf-8", errors="replace") as fh:
         for n, line in enumerate(fh):
-            if '"assistant"' not in line:
+            # An unterminated last line may be a turn cut before it said so.
+            if '"assistant"' not in line and line.endswith("\n"):
                 continue
             try:
                 entry = json.loads(line)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import stat
 from typing import ClassVar
@@ -103,7 +104,8 @@ class TestCacheReader:
         assert none_of(got) and all(r.reason for r in got)
 
     def test_missing_file_is_unavailable(self, tmp_path):
-        assert none_of(V.read_claude_cache(ctx(tmp_path)))
+        got = V.read_claude_cache(ctx(tmp_path))
+        assert none_of(got) and {r.window for r in got} == {"5h", "week"}
 
     def test_no_fetch_time_is_unavailable(self, tmp_path):
         c = ctx(tmp_path)
@@ -345,18 +347,33 @@ class TestSamples:
         M.record(c, [_ok("a", 1.0), _ok("b", 2.0)])
         assert [r["value"] for r in _rows(c)] == [2.0]
 
-    def test_a_trim_does_not_lose_a_row_appended_beside_it(self, tmp_path, monkeypatch):
-        c = ctx(tmp_path, samples_max_bytes=2000)
-        held = []
-        real = M.locked
+    def test_the_append_and_the_trim_both_happen_inside_the_lock(self, tmp_path, monkeypatch):
+        c = ctx(tmp_path, samples_max_bytes=300)
+        inside = []
+        seen = []
+        real_lock, real_open, real_trim = M.locked, M.os.fdopen, M._trim
 
+        @contextlib.contextmanager
         def spy(path):
-            held.append(path)
-            return real(path)
+            with real_lock(path):
+                inside.append(path)
+                yield
+                inside.pop()
+
+        def spy_open(*a, **k):
+            seen.append(("append", list(inside)))
+            return real_open(*a, **k)
+
+        def spy_trim(cx):
+            seen.append(("trim", list(inside)))
+            real_trim(cx)
 
         monkeypatch.setattr(M, "locked", spy)
-        M.record(c, [_ok("a", 1.0)])
-        assert held == [c.samples]  # the append is under the lock the trim takes
+        monkeypatch.setattr(M.os, "fdopen", spy_open)
+        monkeypatch.setattr(M, "_trim", spy_trim)
+        M.record(c, [_ok("a", 1.0), _ok("b", 2.0)])
+        assert {kind for kind, _held in seen} == {"append", "trim"}
+        assert all(held == [c.samples] for _kind, held in seen)
 
     def test_sample_if_due_throttles(self, tmp_path):
         c = ctx(tmp_path)
