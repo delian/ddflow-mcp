@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "log.snapshot_max_mb"
+new = "256"
+why = "Size cap for the read snapshot: one past it is not kept, and the oldest snapshots of other versions are collected past it."
+impact = "additive"
