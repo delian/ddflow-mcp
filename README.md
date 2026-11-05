@@ -2727,6 +2727,9 @@ An unreadable transcript, or more bytes than `quota.transcript_max_bytes`, makes
 `unavailable` rather than a partial sum, because a partial sum would understate what was used. Kilo's
 session totals are not used: they hold a session's whole life, not one window.
 
+`claude-snapshot` has nothing to read yet: the command that writes its file, `ddflow quota snapshot`, comes
+with the quota surfaces. Until then that reader reports `unavailable` and `claude-cache` carries the percent.
+
 The snapshot and the sample log are per user (`$XDG_STATE_HOME/ddflow`, or `quota.snapshot_path` and
 `quota.samples_path`), because several projects share one account. They hold figures only, with an
 account as a short digest, never a raw id. The `[quota]` knobs are in the [configuration table](#configuration).

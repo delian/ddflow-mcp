@@ -140,6 +140,17 @@ class TestTranscriptUsage:
         got = _tokens(c)
         assert got.status == MB.UNAVAILABLE and got.unmetered == 1
 
+    def test_a_torn_line_ending_in_a_newline_is_never_a_zero(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", ['{"type":"ass'])
+        got = _tokens(c)
+        assert got.status == MB.UNAVAILABLE and got.unmetered == 1
+
+    def test_a_blank_line_is_nothing(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", ["", turn(), "  "])
+        assert (_tokens(c).value, _tokens(c).unmetered) == (116.0, 0)
+
     def test_a_finished_last_line_of_another_kind_is_nothing(self, tmp_path):
         c = ctx(tmp_path)
         path = write_transcript(c.claude_projects / "p" / "a.jsonl", [])

@@ -63,6 +63,23 @@ class TestCacheReader:
         assert five.resets_at == iso(NOW + HOUR)
         assert week.value == 36.0
 
+    def test_the_real_cache_shape_is_a_percent_not_a_fraction(self, tmp_path):
+        """The shape read from a real ~/.claude.json: `limits` repeats each figure as `percent`,
+        which is what shows `utilization` is 0-100 here, unlike stream-json's 0-1."""
+        c = ctx(tmp_path)
+        resets = iso(NOW + HOUR)
+        write_cache(
+            c.claude_state,
+            five={"utilization": 43, "resets_at": resets, "limit_dollars": None},
+            week={"utilization": 36, "resets_at": resets, "limit_dollars": None},
+        )
+        data = json.loads(c.claude_state.read_text())
+        table = data["cachedUsageUtilization"]["utilization"]
+        table["limits"] = [{"kind": "session", "percent": 43, "resets_at": resets}]
+        c.claude_state.write_text(json.dumps(data))
+        got = of(V.read_claude_cache(c), "5h")
+        assert got.value == table["limits"][0]["percent"]
+
     def test_stale_by_age(self, tmp_path):
         c = ctx(tmp_path)
         write_cache(c.claude_state, age_s=901, five=window(43), week=window(36))
@@ -360,9 +377,28 @@ class TestSamples:
                 yield
                 inside.pop()
 
+        class Spied:
+            """The real file, noting who holds the lock at the moment the bytes go in."""
+
+            def __init__(self, fh):
+                self.fh = fh
+
+            def __enter__(self):
+                self.fh.__enter__()
+                return self
+
+            def __exit__(self, *exc):
+                return self.fh.__exit__(*exc)
+
+            def __getattr__(self, name):
+                return getattr(self.fh, name)
+
+            def write(self, data):
+                seen.append(("append", list(inside)))
+                return self.fh.write(data)
+
         def spy_open(*a, **k):
-            seen.append(("append", list(inside)))
-            return real_open(*a, **k)
+            return Spied(real_open(*a, **k))
 
         def spy_trim(cx):
             seen.append(("trim", list(inside)))
