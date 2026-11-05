@@ -418,6 +418,24 @@ def test_a_routine_completion_never_auto_answers_a_person_only_baseline_red_part
     assert _state(repo).items["T1"].state != "done"
 
 
+def test_a_person_accepted_baseline_red_partial_is_not_refused_for_the_agent_complete(repo):
+    """B-complete-self-approves-over-person-only-partial, round-2: once a PERSON accepts the
+    measured baseline-red partial (`ddflow approve T1 unit_tests`), the verdict settles that
+    gate (`gate_accept.accepted`, completion/rules `_unsettled`), so `gate_accept.person_only`
+    is never consulted for it and a plain agent `complete` completes -- NOT the refusal the
+    UNACCEPTED case gets. The refusal keys on the unsettled state, not on the person's record
+    of it, so an operator's acceptance is honoured."""
+    _person_only_baseline_red(repo)
+    code, out, err = run_cli(repo, "approve", "T1", "unit_tests", "--note", "accepted the base bug")
+    assert code == 0, (out, err)
+    assert _state(repo).items["T1"].gate_outcome("unit_tests") == "partial", (
+        "acceptance keeps the partial outcome; it does not pass it"
+    )
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 0, (out, err)
+    assert _state(repo).items["T1"].state == "done"
+
+
 def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_asked(
     proj,
     monkeypatch,
