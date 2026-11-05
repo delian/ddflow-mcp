@@ -317,7 +317,7 @@ def degraded_marks(state: Any) -> dict[str, dict[str, Any]]:
     marks: dict[str, dict[str, Any]] = {}
     for item in getattr(state, "items", {}).values():
         for run in getattr(item, "gate_history", ()) or ():
-            evidence = (getattr(run, "evidence", None) or {})
+            evidence = getattr(run, "evidence", None) or {}
             for row in evidence.get("review_degraded", ()) or ():
                 if row.get("reviewer"):
                     marks[row["reviewer"]] = row

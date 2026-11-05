@@ -72,7 +72,9 @@ def test_classify_exhaustion_matches_quota_walls_only():
     assert classify_exhaustion("HTTP 403: rate limit exceeded") == "HTTP 403"
     assert classify_exhaustion("HTTP 429: too many requests") == "HTTP 429"
     assert classify_exhaustion("HTTP/1.1 403 Forbidden") == "HTTP/1.1 403"
-    assert classify_exhaustion("Client error '403 Forbidden' for url 'https://api.example'") == "403"
+    assert (
+        classify_exhaustion("Client error '403 Forbidden' for url 'https://api.example'") == "403"
+    )
     assert classify_exhaustion("gemini key 403") == "403"
     assert classify_exhaustion("command exited 1: quota exceeded") == "quota"
     assert classify_exhaustion("insufficient_quota") == "quota"
@@ -100,8 +102,13 @@ def test_an_exhausted_reviewer_is_marked_shed_and_the_healthy_one_serves(repo, t
     st = fold(EventLog(repo).read_all(), strict=False)
     marks = st.items["T1"].gates["rubber_duck"].evidence.get("review_degraded")
     assert marks == [
-        {"reviewer": "exhausted", "reason": "HTTP 403", "gate": "rubber_duck",
-         "model": "kimi-for-coding-highspeed", "family": "moonshot"}
+        {
+            "reviewer": "exhausted",
+            "reason": "HTTP 403",
+            "gate": "rubber_duck",
+            "model": "kimi-for-coding-highspeed",
+            "family": "moonshot",
+        }
     ], marks
 
     # A later gate run sheds the degraded reviewer: the healthy one serves, the exhausted
