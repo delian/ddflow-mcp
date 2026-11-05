@@ -259,11 +259,22 @@ def test_a_cap_of_zero_lists_everyone():
     assert len(out.data["fleet"]) == 12 and "more" not in out.data["text"]
 
 
-def test_the_default_result_stays_under_the_result_ceiling():
+def test_the_default_result_stays_under_the_result_ceiling_at_its_worst():
+    """Every row as big as a real one gets: stopped, a long reason, a full list of long ids."""
     import json
 
-    out = _view(_many(800))
-    assert out.data["fleet_total"] == 800
+    g = Log()
+    for i in range(40):
+        ids = [f"fix-B-a-long-enough-id-{i:03}-{n}" for n in range(6)]
+        for tid in ids:
+            g.task(tid, f"{tid}.py")
+        name = f"Monster3-bridge-cse_01{i:03}-a-long-agent-identity"
+        g.session(name, f"s{i}", T0, tool="claude-code", model="claude-long-model-name-20261105")
+        for n, tid in enumerate(ids):
+            g.claim(name, tid, T0 + n, f"{tid}.py")
+        g.add("lease.expired", ids[-1], name, T0 + 10, holder=name, reason="swept: " + "x" * 400)
+    out = _view(g)
+    assert out.data["fleet_total"] == 40 and out.data["fleet"][0]["stop_reason"]
     assert len(json.dumps(out.data)) < 20_000
 
 

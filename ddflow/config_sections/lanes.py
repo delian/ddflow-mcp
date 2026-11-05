@@ -32,7 +32,7 @@ class LanesConfig:
         ),
     )
     fleet_max_rows: int = knob(
-        30,
+        18,
         doc="Most agents `ddflow lanes fleet` lists: lost work first, then live work, then the most recently heard from. The cut says how many more there are. 0 lists every one.",
         check=lambda v: (
             ""
@@ -41,7 +41,7 @@ class LanesConfig:
         ),
     )
     fleet_items: int = knob(
-        10,
+        5,
         doc="Items each agent's row in `ddflow lanes fleet` names, newest first; `items_total` still counts them all. 0 names none.",
         check=lambda v: (
             ""
@@ -64,7 +64,7 @@ class LanesConfig:
         doc="Case-insensitive regular expressions: an agent that stopped with its item unfinished and whose recorded stop reason (session summary, lease expiry reason or release note) matches one is classed `failed` in `ddflow lanes fleet`; any other stop is `stalled`. A pattern that does not compile is skipped.",
     )
     fleet_reason_chars: int = knob(
-        200,
+        120,
         doc="Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe to print first). 0 prints none. The cut is for display only: failure patterns match the whole recorded reason.",
         check=lambda v: (
             ""

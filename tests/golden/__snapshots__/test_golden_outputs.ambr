@@ -2046,11 +2046,11 @@
           How far back an agent's last event may be for `ddflow lanes fleet` to list
           it. 0 (the default) lists every agent the log has ever seen: the fleet
           registry is durable history, unlike the lane ledger's window_s.
-      lanes.fleet_max_rows = 30   [default]
+      lanes.fleet_max_rows = 18   [default]
           Most agents `ddflow lanes fleet` lists: lost work first, then live work,
           then the most recently heard from. The cut says how many more there are. 0
           lists every one.
-      lanes.fleet_items = 10   [default]
+      lanes.fleet_items = 5   [default]
           Items each agent's row in `ddflow lanes fleet` names, newest first;
           `items_total` still counts them all. 0 names none.
       lanes.fleet_failed_patterns = ['\\b429\\b', 'rate.?limit', 'spend.?limit', 'quota', 'overloaded', 'context (window|length|exhaust)', 'max.?tokens', 'crash', '\\bOOM\\b']   [default]
@@ -2059,7 +2059,7 @@
           reason or release note) matches one is classed `failed` in `ddflow lanes
           fleet`; any other stop is `stalled`. A pattern that does not compile is
           skipped.
-      lanes.fleet_reason_chars = 200   [default]
+      lanes.fleet_reason_chars = 120   [default]
           Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe
           to print first). 0 prints none. The cut is for display only: failure
           patterns match the whole recorded reason.
