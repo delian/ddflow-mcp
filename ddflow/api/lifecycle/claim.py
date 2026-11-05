@@ -228,7 +228,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     no_worktree = no_worktree or (
         claimed is not None and not needs_tree(claimed)
     )  # `no-worktree` tag
-    if refused := _state_refusal(log, claimed, events, item, force):
+    if (refused := _state_refusal(log, claimed, events, item, force)) is not None:
         return refused
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
