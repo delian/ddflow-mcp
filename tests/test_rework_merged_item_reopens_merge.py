@@ -51,8 +51,16 @@ def _merged(repo: Path, *, with_ci: bool = False, agent: str = "") -> str:
     _git(tree, "commit", "-qm", "work")
     if with_ci:
         code, out, err = run_cli(
-            repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "e",
-            agent=agent
+            repo,
+            "gate",
+            "record",
+            "T1",
+            "implement",
+            "--outcome",
+            "passed",
+            "--evidence",
+            "e",
+            agent=agent,
         )
         assert code == 0, out + err
         code, out, err = run_cli(
