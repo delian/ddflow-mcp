@@ -5089,8 +5089,9 @@ rendered in a sandbox); you ask for a document, you do not write it.
 
 **What can be exported:** `roadmap` (Now / Next / Later with progress), `bugs` (open, fixed,
 invalid), `status`, `worklog` (coalesced per item, grouped by day), `sessions`, `decisions`
-(an index), `rules` (decisions in force by governing path, lessons, the enforced workflow) and
-`changelog` (Keep a Changelog form, from finished items, fixed bugs and version tags).
+(an index), `rules` (decisions in force by governing path, lessons, the enforced workflow),
+`changelog` (Keep a Changelog form, from finished items, fixed bugs and version tags) and
+`security` (a GitHub-compatible `SECURITY.md`: supported versions and known issues).
 Replay is not a kind (`ddflow export replay` is refused): it carries paths and addresses.
 Output is deterministic: the same log gives the same bytes, with no clock in the body.
 
@@ -5104,12 +5105,15 @@ Output is deterministic: the same log gives the same bytes, with no clock in the
 | `decisions` | `DECISIONS.md` | `since` `limit` `status` | an index: id, status, date, title, what it governs |
 | `rules` | `RULES.md` | `limit` `tag` | decisions in force by governing path, lessons by tag, the enforced workflow |
 | `changelog` | `CHANGELOG.md` | `tag` (`--version`) | Keep a Changelog 1.1: Unreleased and one section per version tag |
+| `security` | `SECURITY.md` | none | supported, deprecated and unsupported release lines; known issues from bugs tagged security |
 
 The **roadmap** lists phases in dependency order then priority: Now is work in flight, Next
 the top `next` ready phases, Later the rest (task lists capped at `tasks`, Later as counts), each
 with percent, counts by status, what it waits on, its release line and whether it is on the
 critical path. `[export.roadmap]` takes `hide` (id prefixes or tags, default `["BL-"]`), `next`
 (3), `tasks` (8), `graph` (25; the phases the Mermaid dependency graph draws, edges implied by a longer path removed, 0 for none) `eta` (true; the metrics forecast's range per Now / Next phase, labelled an estimate and left out when there is not enough data) and `show_hidden`; `--phase` names a hidden batch to show it. `--since` (default: the latest version tag's date) adds a Changed section (phases and tasks added, completed, blocked, reprioritised since) and writes `since=` into the header; each phase lists the decisions whose globs overlap its own and the research about it.
+
+The **security** document keeps two named regions (mode `region`) of `SECURITY.md`, or of `.github/SECURITY.md` or `docs/SECURITY.md` when the policy already lives there. Supported Versions has one row per `MAJOR.MINOR` line of the version tags: the newest line and the `[flow.lines]` maintenance lines are supported, `[export.security]` `supported_lines` adds lines (`"1.2"`, or `"1"` for a major), `deprecated_lines` marks some deprecated (it wins), and the rest are unsupported. Known Issues lists the non-invalid bugs carrying one of `tags` (default `["security", "secbug"]`), on the bug or its fix task, with the version holding the fix (by ancestry; `by date` when the fix has no landing). A release is marked `vulnerable: <id>, fixed in <version>` when it was tagged at or after the bug was found and lacks the fix; the newest release is also marked for anything no release has fixed. `disclose` decides what a row publishes beside the id and severity: `ids` (default) nothing, `fixed` the title of a fixed issue, `all` the title of an open one too, which is the operator's call. With no such bug the section says "None recorded." Dependency advisories and security-pass findings are not recorded yet, and the document says it does not cover them. The Reporting section lies outside the regions: a new file gets a TODO for the owner (ddflow never invents a contact) and it is never written again. A file with no markers is left alone until `--update --force`, which needs the operator's approval from an agent, appends the regions to its end.
 
 Every default target is at the repo root; `[export.<doc>].path` moves it. `rules` exports
 decisions in force, lessons and workflow settings: imported rulebooks are not exported. The

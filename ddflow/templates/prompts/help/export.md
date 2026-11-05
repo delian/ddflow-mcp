@@ -21,8 +21,15 @@ ddflow will not overwrite it) or `missing`.
     decisions  DECISIONS.md    since limit status         an index of decisions
     rules      RULES.md        limit tag                  decisions in force, lessons, enforced workflow
     changelog  CHANGELOG.md    tag (--version)            Keep a Changelog, from items, bugs and version tags
+    security   SECURITY.md     (none)                     supported versions and known issues, in named regions
 
 Replay is not a kind: it carries paths and addresses. Imported rulebooks are not exported.
+The security document writes two regions of SECURITY.md (or of an existing .github/ or docs/
+copy): the version lines from the tags and `[export.security]` `supported_lines` and
+`deprecated_lines`, and known issues from bugs tagged `security` or `secbug`. A row shows id and
+severity; `disclose` (`ids`, `fixed`, `all`) adds titles. A new file gets a TODO for the reporting
+contact, which ddflow never invents; a file with no markers needs `--update --force`.
+
 The changelog files each finished item by (1) the `--changelog "Added: ..."` line given to
 `ddflow complete` or `ddflow bug fixed` (`skip` leaves it out), (2) the Conventional Commit
 type of its landing commit, (3) its tags (breaking, feature, bug, hotfix), (4) a

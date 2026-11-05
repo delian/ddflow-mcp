@@ -23,10 +23,20 @@ EXPORT_DEFAULT_TARGETS: dict[str, str] = {
     "decisions": "DECISIONS.md",
     "roadmap": "ROADMAP.md",
     "rules": "RULES.md",
+    "security": "SECURITY.md",
     "sessions": "SESSION.md",
     "status": "STATUS.md",
     "worklog": "LOG.md",
 }
+
+#: The kinds whose default mode is not `whole`: a copy of `DocKind.update_mode` for the same
+#: reason as the table above. Readers of `targets()` take `whole` to mean ddflow owns the file.
+EXPORT_DEFAULT_MODES: dict[str, str] = {"security": "region"}
+
+#: What `[export.security].disclose` accepts: how much of a recorded security bug SECURITY.md
+#: publishes beside its id and severity. `ids`: nothing; `fixed`: the title of a fixed one;
+#: `all`: the title of an open one too, which only the operator may decide.
+SECURITY_DISCLOSE = ("ids", "fixed", "all")
 
 
 def _export_tables_problem(v: Any) -> str:
@@ -47,7 +57,7 @@ class ExportConfig:
 
     documents: list[str] = knob(
         factory=list,
-        doc="The documents `ddflow export --all` writes and keeps (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). EMPTY by default: nothing is generated unless selected. `ddflow export` lists every kind with its state; any kind can still be printed or written once on demand whether or not it is listed here. Each selected target is a shared path for leases (no claim is needed to regenerate it).",
+        doc="The documents `ddflow export --all` writes and keeps (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog, security). EMPTY by default: nothing is generated unless selected. `ddflow export` lists every kind with its state; any kind can still be printed or written once on demand whether or not it is listed here. Each selected target is a shared path for leases (no claim is needed to regenerate it).",
         check=lambda v: (
             ""
             if isinstance(v, list) and all(isinstance(x, str) for x in v)
@@ -77,7 +87,7 @@ class ExportConfig:
     #: redact. Filled from those tables by `Config._apply`; this field is only the store.
     tables: dict[str, dict[str, Any]] = knob(
         factory=dict,
-        doc='The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact (the roadmap also takes hide, a list of id prefixes or tags to leave out, default ["BL-"]; next, how many ready phases are listed under Next, default 3; tasks, the open tasks listed per phase, default 8; graph, how many phases the dependency graph draws, default 25, 0 for none; eta, true by default, false leaves out the estimated time to finish; show_hidden). Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release\'s keys do not stop an older checkout.',
+        doc='The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact (the roadmap also takes hide, a list of id prefixes or tags to leave out, default ["BL-"]; next, how many ready phases are listed under Next, default 3; tasks, the open tasks listed per phase, default 8; graph, how many phases the dependency graph draws, default 25, 0 for none; eta, true by default, false leaves out the estimated time to finish; show_hidden; the security document also takes supported_lines and deprecated_lines, lists of release lines such as "1.2" or "1"; disclose, ids, fixed or all, default ids; tags, the bug tags that mean a security issue, default ["security", "secbug"]). Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release\'s keys do not stop an older checkout.',
         check=_export_tables_problem,
     )
 
@@ -92,7 +102,8 @@ class ExportConfig:
             t = self.table(doc)
             path = str(t.get("path") or EXPORT_DEFAULT_TARGETS.get(doc, ""))
             if path:
-                out.append((doc, path, str(t.get("mode") or "whole")))
+                mode = t.get("mode") or EXPORT_DEFAULT_MODES.get(doc, "whole")
+                out.append((doc, path, str(mode)))
         return out
 
 
@@ -109,11 +120,14 @@ EXPORT_TABLE_KEYS = frozenset(
 )
 #: Keys only `[export.roadmap]` adds to those.
 ROADMAP_TABLE_KEYS = frozenset({"hide", "next", "tasks", "show_hidden", "graph", "eta"})
+#: Keys only `[export.security]` adds to those.
+SECURITY_TABLE_KEYS = frozenset({"supported_lines", "deprecated_lines", "disclose", "tags"})
 
 
 def export_table_keys(doc: str) -> frozenset[str]:
     """The keys `[export.<doc>]` understands."""
-    return EXPORT_TABLE_KEYS | ROADMAP_TABLE_KEYS if doc == "roadmap" else EXPORT_TABLE_KEYS
+    own = {"roadmap": ROADMAP_TABLE_KEYS, "security": SECURITY_TABLE_KEYS}
+    return EXPORT_TABLE_KEYS | own.get(doc, frozenset())
 
 
 EXPORT_MODES = ("whole", "region", "append")
@@ -134,6 +148,16 @@ def _roadmap_keys_problem(doc: str, t: dict[str, Any]) -> str:
     return ""
 
 
+def _security_keys_problem(doc: str, t: dict[str, Any]) -> str:
+    """Why the security keys of `[export.<doc>]` are wrong, or ""."""
+    for k in ("supported_lines", "deprecated_lines", "tags"):
+        if k in t and not (isinstance(t[k], list) and all(isinstance(x, str) for x in t[k])):
+            return f"[export.{doc}].{k} must be a list of strings"
+    if "disclose" in t and t["disclose"] not in SECURITY_DISCLOSE:
+        return f"[export.{doc}].disclose must be one of {', '.join(SECURITY_DISCLOSE)}"
+    return ""
+
+
 def _export_table_problem(doc: str, t: Any) -> str:
     """Why `[export.<doc>]` is wrong, or ""."""
     if not isinstance(t, dict):
@@ -145,7 +169,8 @@ def _export_table_problem(doc: str, t: Any) -> str:
         return f"[export.{doc}].mode must be one of {', '.join(EXPORT_MODES)}"
     if "refresh" in t and t["refresh"] not in EXPORT_REFRESH_MODES:
         return f"[export.{doc}].refresh must be one of {', '.join(EXPORT_REFRESH_MODES)}"
-    if doc == "roadmap" and (why := _roadmap_keys_problem(doc, t)):
+    own = {"roadmap": _roadmap_keys_problem, "security": _security_keys_problem}.get(doc)
+    if own and (why := own(doc, t)):
         return why
     if "redact" in t and not isinstance(t["redact"], bool):
         return f"[export.{doc}].redact must be true or false"
