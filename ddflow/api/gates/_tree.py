@@ -134,7 +134,9 @@ def _kept_tree(repo: Path, it) -> Path | None:
     return W.load_path(repo, it.worktree)
 
 
-def _no_tree_reason(repo: Path, it, item: str, gate: str, held: str, force: bool = False) -> tuple[str, str]:
+def _no_tree_reason(
+    repo: Path, it, item: str, gate: str, held: str, force: bool = False
+) -> tuple[str, str]:
     """(why a worktree gate has nowhere to run, the recorded outcome it leaves standing or "").
     A MERGED item's tree is gone (DX-gate-run-after-merge): a pre-merge pass is kept and
     `complete` uses it; without one the reason says to run gates before `ddflow merge`.
@@ -144,8 +146,7 @@ def _no_tree_reason(repo: Path, it, item: str, gate: str, held: str, force: bool
         prior = it.gate_outcome(gate)
         kept = _kept_tree(repo, it)
         disposition = (
-            f"its worktree was KEPT at {kept}, but that tree does not stand at the merged "
-            f"tree"
+            f"its worktree was KEPT at {kept}, but that tree does not stand at the merged tree"
             if kept is not None
             else "the merge removed its worktree"
         )
