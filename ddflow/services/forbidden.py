@@ -138,6 +138,9 @@ def _strip_continuations(text: str) -> str:
             i = j
         elif c == "\\" and i + 1 < n and text[i + 1] == "\n":
             i += 2
+        elif c == "\\" and i + 1 < n:  # an escape: the quoted char is not a quote opener
+            out.append(text[i : i + 2])
+            i += 2
         else:
             out.append(c)
             i += 1
@@ -281,6 +284,7 @@ def _commands(text: str) -> list[list[str]]:
                 i = head.index("-c")
                 if i + 1 < len(head):
                     found.extend(_split(head[i + 1]))
+                    bodies.extend(_substitutions(head[i + 1]))
         for b in bodies:
             found.extend(_split(b))
         cmds.extend(found)
