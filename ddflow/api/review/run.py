@@ -361,7 +361,7 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     return cross[0] if cross else best
 
 
-def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
