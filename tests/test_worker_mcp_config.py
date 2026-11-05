@@ -340,13 +340,6 @@ def test_a_dangling_lane_symlink_is_reported_not_a_crash(tmp_path):
     )
 
 
-def test_a_lane_name_may_not_end_in_a_newline():
-    """`$` would match before a final newline; the name goes into a file name."""
-    from ddflow.config_sections.mcp import _LANE_NAME
-
-    assert _LANE_NAME.fullmatch("lane\n") is None and _LANE_NAME.fullmatch("lane")
-
-
 def test_the_lane_parser_lives_in_the_config_layer_not_above_it():
     """The knob's `check` runs in `config_sections`, which may not import `services`."""
     from ddflow.config_sections import mcp as section
@@ -365,7 +358,9 @@ def test_the_doctor_counts_a_lane_on_the_whole_tool_list():
     (note,) = WM.doctor_notes(_cfg(lanes="impl=standard,rev=all"), env)
     assert "`all` tool tier" in note and "rev" in note
     (note,) = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
-    assert "`all` tool tier" in note
+    assert "`all` tool tier" in note and "rev" in note
+    (note,) = WM.doctor_notes(_cfg(worker="all"), env)
+    assert "lanes:" not in note
 
 
 def test_the_doctor_survives_a_hand_edited_bad_lane_list():

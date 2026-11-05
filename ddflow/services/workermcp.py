@@ -162,14 +162,13 @@ def doctor_notes(cfg: Any, environ: Mapping[str, str] | None = None) -> list[str
     (`[mcp].worker_tools`) and for each lane's (`[mcp].lane_tools`), one note for the widest, judged
     against the doctor's own environment unless one is given."""
     env = os.environ if environ is None else environ
-    note = deferral_note(env, tier=cfg.mcp.worker_tools)
-    if note:
-        return [note]
     try:
         lanes = parse_lane_tiers(cfg.mcp.lane_tools)
     except ValueError:  # the config check names it; a note here would say it twice
-        return []
+        lanes = {}
     wide = sorted(lane for lane, tier in lanes.items() if deferral_note(env, tier=tier))
-    if not wide:
+    tier = lanes[wide[0]] if wide else cfg.mcp.worker_tools
+    note = deferral_note(env, tier=cfg.mcp.worker_tools) or deferral_note(env, tier=tier)
+    if not note:
         return []
-    return [f"{deferral_note(env, tier=lanes[wide[0]])} (lanes: {', '.join(wide)})"]
+    return [f"{note} (lanes: {', '.join(wide)})" if wide else note]
