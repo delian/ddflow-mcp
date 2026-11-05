@@ -15,6 +15,8 @@ baseline = 0
 # The production wiring of the ExternalTool port (ADP-tools): `ddflow.services.toolrun`; SEC-scanners
 # is its first caller.
 "ddflow/services/toolrun.py:external_tool" = "SEC-scanners"
+# Builds a HumanChannel from its settings (ADP-notify-ask); the [notify] knobs and their callers wire it.
+"ddflow/services/ask/channels.py:open_channel" = "ADP-notify-knobs"
 # Per-role schema cost of a lean agent definition (LS-agents); the LS-e2e probe matrix reports it.
 "ddflow/surfaces/startcost_texts.py:role_tokens" = "LS-e2e"
 # Renders a document type from its sources (B-dt-sources); B-dt-ownership's render.py calls it.
