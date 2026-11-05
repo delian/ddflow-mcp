@@ -298,4 +298,5 @@ def test_a_ci_whose_always_run_guards_never_ran_is_not_baseline_red(repo, monkey
     assert outcome == "failed", (outcome, why)
     assert "always-run guards" in why
     assert "22 guard file(s)" in why
+    assert "tests/test_guard_a.py" in why
     assert outcome != "partial"
