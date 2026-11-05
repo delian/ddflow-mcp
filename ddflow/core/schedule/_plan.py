@@ -17,7 +17,6 @@ from ._readiness import Blocked, Plan, unpickable
 from ._reserved import open_slots, reserved_note
 from ._resources import bug_items, interrupted, needs_tree
 
-
 #: What a plan names as holding work back when a slot is free but reserved.
 RESERVED = "schedule.reserved_slots"
 
