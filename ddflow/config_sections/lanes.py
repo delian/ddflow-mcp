@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from ._docs import declare, knob
 
 
+def _whole(v: object) -> str:
+    ok = isinstance(v, int) and not isinstance(v, bool) and v >= 0
+    return "" if ok else "a whole number of zero or more"
+
+
 @declare("lanes")
 @dataclass
 class LanesConfig:
@@ -25,29 +30,17 @@ class LanesConfig:
     fleet_window_s: int = knob(
         0,
         doc="How far back an agent's last event may be for `ddflow lanes fleet` to list it. 0 (the default) lists every agent the log has ever seen: the fleet registry is durable history, unlike the lane ledger's window_s.",
-        check=lambda v: (
-            ""
-            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-            else "a whole number of zero or more"
-        ),
+        check=_whole,
     )
     fleet_max_rows: int = knob(
         18,
         doc="Most agents `ddflow lanes fleet` lists: lost work first, then live work, then the most recently heard from. The cut says how many more there are. 0 lists every one.",
-        check=lambda v: (
-            ""
-            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-            else "a whole number of zero or more"
-        ),
+        check=_whole,
     )
     fleet_items: int = knob(
         5,
         doc="Items each agent's row in `ddflow lanes fleet` names, newest first; `items_total` still counts them all. 0 names none.",
-        check=lambda v: (
-            ""
-            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-            else "a whole number of zero or more"
-        ),
+        check=_whole,
     )
     fleet_failed_patterns: list[str] = knob(
         factory=lambda: [
@@ -66,11 +59,7 @@ class LanesConfig:
     fleet_reason_chars: int = knob(
         120,
         doc="Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe to print first). 0 prints none. The cut is for display only: failure patterns match the whole recorded reason.",
-        check=lambda v: (
-            ""
-            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-            else "a whole number of zero or more"
-        ),
+        check=_whole,
     )
     watch_interval_s: int = knob(
         5,
@@ -121,11 +110,7 @@ class LanesConfig:
     slot_wait_s: int = knob(
         600,
         doc="Seconds a launched lane waits for a free endpoint or GPU slot before giving up with a report (it holds no lease while it waits and starts no daemon). 0 tries each slot once.",
-        check=lambda v: (
-            ""
-            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-            else "a whole number of zero or more"
-        ),
+        check=_whole,
     )
     release_mode: str = knob(
         "flag",
