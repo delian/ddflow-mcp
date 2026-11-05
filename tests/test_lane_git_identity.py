@@ -123,6 +123,17 @@ def test_a_repo_without_an_identity_refuses_the_launch(repo, tmp_path, given, na
     assert not ran.exists()  # nothing started
 
 
+def test_gits_email_fallback_is_not_an_identity(repo, monkeypatch):
+    """git would accept $EMAIL for a missing user.email; the launch still asks for the real one."""
+    identify(repo, email="")
+    monkeypatch.setenv("EMAIL", EMAIL)
+    r = lh.ProcessHeadless().start(
+        ld.LaunchSpec(name="t", argv=("true",), cwd=str(repo), pass_env=("PATH", "EMAIL"))
+    )
+    assert isinstance(r, ld.Result) and r.status == "failed"
+    assert "user.email" in r.detail
+
+
 def test_a_refused_launch_leaves_no_private_home_behind(repo, tmp_path, monkeypatch):
     made = tmp_path / "made"
     monkeypatch.setattr(lh.fsio, "unused_dir", lambda prefix: made)
