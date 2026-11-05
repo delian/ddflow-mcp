@@ -173,7 +173,7 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "id",
-                help="Stable id you choose: `supersedes` and commit messages cite it.",
+                help="Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance.",
                 cli_help="",
                 default="",
             ),
@@ -196,7 +196,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "supersedes",
-                help="Comma-separated lesson ids this replaces; each is retired, not deleted.",
+                help="Comma-separated lesson ids this replaces. The old one is retired, not deleted: the corpus stops growing without losing what was once believed.",
                 cli_help="",
                 default="",
             ),
@@ -255,7 +255,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("recall",),
         summary="'have we been here before?' — search decisions, lessons, research, bugs, tasks and past prompts at once",
         tool="ddflow_recall",
-        description="'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons, research verdicts, operational memories, past bugs, similar tasks and the operator's earlier prompts. CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK, so nothing is said or learned twice. Results are labelled by kind (a binding decision, a transferable lesson and an old prompt change what you do differently); a superseded decision names its replacement -- follow that.",
+        description="'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons, research verdicts, operational memories, past bugs, similar tasks and the operator's earlier prompts. CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK, so nothing is said or learned twice. Results are labelled by kind; a superseded decision names its replacement -- follow that.",
         call=lambda repo, a, agent: _api().recall(
             repo,
             a.get("query", "") or "",
@@ -288,7 +288,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "max_chars",
                 type="integer",
-                help="Total budget for the answer.",
+                help="Total budget for the answer. The point of a budget is that recall is called at the START of work, where a long answer costs the context the work itself needs.",
                 cli_help="",
                 default=RECALL_MAX_CHARS,
             ),
