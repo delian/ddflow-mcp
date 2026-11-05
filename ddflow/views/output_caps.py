@@ -324,7 +324,7 @@ def apply(
     rows, chars = _limits(cfg)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
-    budget = chars // 2 if wire and chars else chars
+    budget = max(1, chars // 2) if wire and chars else chars
     start = max(0, int(cursor or 0)) if COMMANDS[command][3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
     text, cut_chars = _cut_text(
