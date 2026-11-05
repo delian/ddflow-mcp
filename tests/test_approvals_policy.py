@@ -322,6 +322,30 @@ def test_complete_unavailable_never_answers_a_person_only_baseline_red_partial()
     assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": person_only}))
 
 
+def test_complete_unavailable_predicate_and_site_share_the_person_only_guard():
+    """B-complete-self-approves-over-person-only-partial: the rule's OWN predicate
+    (`_unavailable_unmet_only`) refuses a person-only baseline-red partial, through the SAME
+    `gate_accept.person_only` helper the completion site reads, so they cannot drift apart."""
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(
+                gate="unit_tests",
+                outcome="partial",
+                evidence={"baseline": {"red": True, "auto": {"accepted": False}}},
+            ),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+    )
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False
+
+
 def _only_unavailable_repo(repo, unit):
     """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
     required gate is `unit_tests` = `unit`. reviewer independence is off so the completion

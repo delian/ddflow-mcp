@@ -73,7 +73,10 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     `unavailable` nor `partial`, so the outcome check refuses it. An excused required
     gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
     already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
-    the verdict alone knows what `applies_when` excused."""
+    the verdict alone knows what `applies_when` excused. A `partial` that only a person
+    accepts (`GA.person_only`, a measured baseline-red partial `gate run` did not
+    auto-accept) is refused here too, so the rule's own predicate and the completion site
+    read the SAME helper and cannot drift (B-complete-self-approves-over-person-only-partial)."""
     required = set(required_gates(cfg))
     for g in required:
         if it.gate_outcome(g) == GateOutcome.FAILED.value:
@@ -83,6 +86,7 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
         g in required
         and not it.gate_satisfied(g, True)
         and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        and not GA.person_only(it, g)
         for g in names
     )
 
