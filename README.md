@@ -3407,6 +3407,12 @@ default `lease.ttl_s`); `waiting-on-glob` (names the holder) and `waiting-on-dep
 the log does not say whether the context ran out or the process died, and `lanes` does not
 guess. `--watch` redraws when the log changes or every `lanes.watch_interval_s`.
 
+`ddflow lanes fleet` is the durable registry: every agent the log has seen, past the lane
+window, with role, harness, model, items, lease and last stop reason, classed `failed`,
+`stalled`, `working`, `idle` or `done` in that order. `[lanes] fleet_max_rows` cuts the listing
+and says how many more there are. `ddflow lanes resume <lane>` answers how to resume a stopped
+lane, or who took its item over; it starts nothing.
+
 `ddflow lanes brief <lane>` renders what a coordinator would otherwise write by hand as the
 lane's first prompt: the objective (the item's title and body), its phase, tags, needs and
 globs, the open lease and worktree, and the lane's previous run (its last session summary

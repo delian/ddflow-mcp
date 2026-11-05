@@ -77,9 +77,7 @@ def test_brief_mentioning_related_id_d1_does_not_stand_in_for_d1(tmp_path):
     wt.mkdir()
     # `related_id="D1"` mentions D1 in a different attribute but is not the D1
     # record: only the standalone `id="D1"` attribute counts.
-    client = _MoneyBriefClient(
-        '<ddflow-record kind="decision" id="D2" related_id="D1">', wt
-    )
+    client = _MoneyBriefClient('<ddflow-record kind="decision" id="D2" related_id="D1">', wt)
     sc = _Scenario()
     with pytest.raises(_FailingCheck):
         lifecycle_support.work(

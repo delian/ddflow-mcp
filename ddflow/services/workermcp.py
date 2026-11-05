@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..config_sections.mcp import parse_lane_tiers
 from ..infra.fsio import replace_text
 
 #: Where `adopt` writes it: the git-ignored local layer, since the launcher is machine-specific.
@@ -26,6 +27,28 @@ TIER_ENV = "DDFLOW_MCP_TOOLS"
 #: defers MCP schemas. ddflow's schemas take a large share of a small window, so a high N (auto:90 measured:
 #: nothing deferred, 87.3K against 29.3K) sends them all; 50 is the line this note draws, a judgement.
 AUTO_NO_DEFER_PCT = 50
+
+
+def lane_rel(lane: str) -> str:
+    """The per-lane config beside the default one: `.ddflow/local/worker-mcp-<lane>.json`."""
+    return REL.replace(".json", f"-{lane}.json")
+
+
+def write_lanes(repo: Path, entry: Mapping[str, Any], spec: str) -> list[str]:
+    """Write one config per lane of ``spec``; the action lines, plus a note for a lane file the
+    spec no longer names (left in place). Every lane was just written, so one missing from the
+    listing is there under another spelling: a filesystem that ignores case keeps the first."""
+    lanes = parse_lane_tiers(spec)
+    out = [_write_file(Path(repo), lane_rel(lane), entry, tier) for lane, tier in lanes.items()]
+    local = Path(repo) / Path(REL).parent
+    stem = Path(REL).stem + "-"
+    files = sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []
+    listed = [f.stem[len(stem) :] for f in files]
+    respelled = {lane.casefold() for lane in lanes if lane not in listed}
+    for lane in listed:
+        if lane not in lanes and lane.casefold() not in respelled:
+            out.append(f"{lane_rel(lane)} is no longer in [mcp].lane_tools (left in place)")
+    return out
 
 
 def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
@@ -73,13 +96,17 @@ def config_text(entry: Mapping[str, Any], tier: str) -> str:
 
 def write(repo: Path, entry: Mapping[str, Any], tier: str) -> str:
     """Write the worker config; the action line adopt prints."""
-    path = Path(repo) / REL
+    return _write_file(Path(repo), REL, entry, tier)
+
+
+def _write_file(repo: Path, rel: str, entry: Mapping[str, Any], tier: str) -> str:
+    path = repo / rel
     text = config_text(entry, tier)
     if path.is_file() and path.read_text("utf-8") == text:
-        return f"{REL} is current"
+        return f"{rel} is current"
     path.parent.mkdir(parents=True, exist_ok=True)
     replace_text(path, text)
-    return f"wrote {REL}"
+    return f"wrote {rel}"
 
 
 def recipe(rel: str = REL, tier: str = "core") -> str:
@@ -100,7 +127,12 @@ def recipe(rel: str = REL, tier: str = "core") -> str:
     )
 
 
-def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
+def deferral_note(
+    environ: Mapping[str, str],
+    *,
+    tier: str,
+    remedy: str = f"start workers on the `core` tier (`[mcp].worker_tools`, {REL})",
+) -> str:
     """The doctor note when the host would send every ddflow schema: tool search switched off
     or set so high that nothing is deferred, while this project advertises the whole tool list.
     Empty on the `core`/`standard` tiers (already smaller) and on a default host."""
@@ -116,13 +148,22 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
         return ""
     return (
         f"ENABLE_TOOL_SEARCH={value} makes the host send every ddflow schema "
-        f"(~58K tokens on the `{tier}` tool tier): start workers on the `core` tier "
-        f"(`[mcp].worker_tools`, {REL})"
+        f"(~58K tokens on the `{tier}` tool tier): {remedy}"
     )
 
 
 def doctor_notes(cfg: Any, environ: Mapping[str, str] | None = None) -> list[str]:
     """The doctor's notes for the worker config: ``deferral_note`` for the tier the workers run on
-    (`[mcp].worker_tools`), judged against the doctor's own environment unless one is given."""
-    note = deferral_note(os.environ if environ is None else environ, tier=cfg.mcp.worker_tools)
-    return [note] if note else []
+    (`[mcp].worker_tools`), and one for the lanes on such a tier (`[mcp].lane_tools`) naming their
+    files, judged against the doctor's own environment unless one is given."""
+    env = os.environ if environ is None else environ
+    try:
+        lanes = parse_lane_tiers(cfg.mcp.lane_tools)
+    except ValueError:  # the config check names it; a note here would say it twice
+        lanes = {}
+    wide = sorted(lane for lane, tier in lanes.items() if deferral_note(env, tier=tier))
+    files = ", ".join(lane_rel(lane) for lane in wide)
+    remedy = f"lower these lanes in `[mcp].lane_tools` and run `ddflow adopt` ({files})"
+    notes = [deferral_note(env, tier=cfg.mcp.worker_tools)]
+    notes += [deferral_note(env, tier=lanes[wide[0]], remedy=remedy)] if wide else []
+    return [note for note in notes if note]
