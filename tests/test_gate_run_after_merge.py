@@ -8,6 +8,7 @@ primary for a merged item, and gates genuinely re-run and record there."""
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -257,5 +258,35 @@ def test_a_kept_worktree_is_reported_kept_not_removed(repo):
     text = out + err
     assert code != 0, text
     assert _gate(repo, "unit_tests").outcome == "unavailable"
+    assert "removed its worktree" not in text
+    assert "KEPT" in text
+
+
+def test_a_kept_worktree_is_still_kept_when_its_directory_is_gone(repo):
+    """The kept/removed question is read off the request, not the filesystem: `merge --keep`
+    records the tree (a later foreign removal never attributes `worktree.removed` to the
+    item), so a gate run after the kept directory is deleted STILL says "KEPT", never "the
+    merge removed its worktree" (roborev: pin the `_kept_tree` directory-absent branch)."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
+    run_cli(repo, "config", "worktree.remove_on_merge", "false")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "cfg")
+    run_cli(repo, "task", "add", "T1", "--title", "t")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "t.txt").write_text("x\n")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "-qm", "work")
+    assert run_cli(repo, "merge", "T1")[0] == 0
+    (repo / "post.txt").write_text("post\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "moved past the merge")
+    shutil.rmtree(tree)
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
     assert "removed its worktree" not in text
     assert "KEPT" in text

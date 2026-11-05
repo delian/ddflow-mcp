@@ -124,10 +124,11 @@ def _kept_tree(repo: Path, it) -> Path | None:
 
     `it.worktree` is the PERSISTENT record: `merge` clears it on a `worktree.removed` event
     (the fold handler), so a non-empty `it.worktree` means the merge kept the tree and a
-    removed one reads empty. Re-sniffing the filesystem with ``is_dir()`` would confuse a
-    later cleanup's removal for the merge's, and say "the merge removed its worktree" again
-    (B-gate-run-after-keep-merge): the message must not be read off `merged_sha` alone, nor
-    off the transient presence of the directory."""
+    removed one reads empty. The question is read off the record, not re-sniffed from the
+    filesystem: a later foreign removal that never attributes a `worktree.removed` to the
+    item (a manual `rm`, a force-removal with a different subject) leaves `it.worktree`
+    set, and reading the directory's presence would say "the merge removed its worktree"
+    for a tree the merge kept (B-gate-run-after-keep-merge)."""
     if not it.worktree:
         return None
     return W.load_path(repo, it.worktree)
