@@ -59,6 +59,7 @@ ISSUED_KIND, REVOKED_KIND = "token.issued", "token.revoked"
 _TOKEN = re.compile(r"ddft_([0-9a-f]{12})_[0-9a-f]{64}")
 _CODE = re.compile(r"([0-9a-f]{6})-([0-9A-Z]+)")
 _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
+_TOKEN_ID = re.compile(r"[0-9a-f]{12}")
 STORE_VERSION = 1
 _PRIVATE_FILE, _PRIVATE_DIR = 0o600, 0o700
 _OTHERS_WRITE = stat.S_IWGRP | stat.S_IWOTH
@@ -268,8 +269,11 @@ def start_pairing(
     moment = time.time() if now is None else now
     with _changing(log.root, cfg, moment) as data:
         _person(cfg, data, requested_agent, first=_operator(cfg, role))
-        if not _NAME.fullmatch(name):
-            raise AuthInvalid(f"bad client name {name!r}: letters, digits, . _ - and at most 64")
+        if not _NAME.fullmatch(name) or _TOKEN_ID.fullmatch(name):
+            raise AuthInvalid(
+                f"bad client name {name!r}: letters, digits, . _ - and at most 64, "
+                "and not the shape of a token id (`tokens revoke` takes either)"
+            )
         if role not in cfg.agent.roles:
             raise AuthInvalid(
                 f"no role {role!r}; [agent].roles has {', '.join(sorted(cfg.agent.roles))}"
@@ -300,13 +304,10 @@ def rotate(
 
 
 def _find(data: dict[str, Any], who: str) -> tuple[str, dict[str, Any]]:
-    """The live token named ``who``, else the one with that id. Names first: a client may be
-    called something that reads like another token's id, and its own name must reach it."""
+    """The live token named ``who`` or with that id: `start_pairing` keeps the two apart."""
     for token_id, row in data["tokens"].items():
-        if row["name"] == who:
+        if who in (token_id, row["name"]):
             return token_id, row
-    if who in data["tokens"]:
-        return who, data["tokens"][who]
     raise AuthRefused(f"no live token named {who!r} on this host (`ddflow tokens list`).")
 
 

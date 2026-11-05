@@ -533,14 +533,14 @@ def test_rotation_keeps_the_old_token_until_the_new_one_is_redeemed(proj, monkey
     assert [r["rotated_from"] for r in rows.values() if r["rotated_from"]] == [old.split("_")[1]]
 
 
-def test_a_name_that_reads_like_a_token_id_reaches_its_own_token(proj, monkeypatch):
+def test_a_name_cannot_take_the_shape_of_a_token_id(proj, monkeypatch):
+    """`tokens revoke` takes a name or an id, so the two must never collide."""
     first = _token(proj, monkeypatch, "alice", "bot")
-    alias = first.split("_")[1]
-    second = _token(proj, monkeypatch, alias, "bot")
-    assert run_cli(proj, "tokens", "revoke", alias, "--reason", "r")[0] == 0
-    assert AU.verify(proj, Config(), first).name == "alice"
+    token_id = first.split("_")[1]
+    assert run_cli(proj, "pair", token_id, "--role", "bot")[0] == 1
+    assert run_cli(proj, "tokens", "revoke", token_id, "--reason", "r")[0] == 0
     with pytest.raises(AU.AuthRefused):
-        AU.verify(proj, Config(), second)
+        AU.verify(proj, Config(), first)
 
 
 def test_a_transport_hands_the_code_in_its_arguments(proj):
