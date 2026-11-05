@@ -1106,7 +1106,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 547 knobs.
+cadences, and the rest of the 549 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3373,7 +3373,14 @@ cap's words are `schedule.max_parallel_tasks=N` when the fixed knob holds, and, 
 load, `fixed: limit N, limited by <signal>`. A
 shrink never touches a running lease: in flight above the new limit simply leaves no slot
 until enough finish; the limit is never below 1, and a critical signal pauses new
-admissions for that evaluation only. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
+admissions for that evaluation only. `[schedule].reserved_slots` keeps slots of the limit for
+bug fixes and tasks tagged `reserved_tags`: with limit 3 and one reserved, two features run,
+the third is held though a slot is free, and a bug fix still starts. A bug fix in flight fills
+the reserved share first and may overflow into an ordinary slot; an idle reserved slot stays
+free rather than go to a feature. `worktree.max_parallel` keeps the same share of its trees.
+The offer does this, as with the cap: `claim` of a named item applies neither. `next`, `status`
+and `brief` say it (`parallel: 3 (fixed); 1 of 3 slot(s) reserved for bug fixes and tags
+ddflow-gap`). What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
 person — a dependency cycle, an expired lease under `reclaim_policy = "report"` — it
 refuses at once rather than sleeping to its timeout.
 
@@ -3434,6 +3441,8 @@ How many items may be in flight adapts by default (decision D-adaptive-flow-acce
 | `adapt_up_after_s` | `600` | healthy seconds, with the limit binding, before +1; no increase for twice this after a decrease |
 | `adapt_cooldown_s` | `300` | minimum seconds between two decreases |
 | `signal_interval_s` | `60` | seconds between two samples (taken by next, brief, claim and heartbeat; no daemon) |
+| `reserved_slots` | `0` | slots of the limit only bug fixes and `reserved_tags` work may take; ordinary work holds at most limit minus this, an idle reserved slot stays free, and one slot of a cap always stays ordinary |
+| `reserved_tags` | `["ddflow-gap"]` | tags that make a task reserved work, beside bug fixes |
 | `[schedule.signals]` | all enabled; `load_per_core` low 0.15, high 0.75 | `enabled = [...]` switches signals; per signal `low` / `high` / optional `critical` marks, higher worse |
 
 The shipped marks (decisions D-adaptive-flow-accepted and D-unify 8); `high` shrinks the limit,
@@ -5329,7 +5338,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 547): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 549): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5909,7 +5918,7 @@ declared once and persists — see
 
 ## Configuration
 
-547 knobs across 50 sections, every one documented in place and listed, with its default
+549 knobs across 50 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5976,8 +5985,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=3d07b3546289 -->
-<details><summary>All 547 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=b9c253c3072a -->
+<details><summary>All 549 knobs across 50 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6134,6 +6143,8 @@ long default is left to `ddflow config --explain`.
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.optimizer` | `"greedy-v1"` |  |
 | `schedule.bugs_first` | `true` |  |
+| `schedule.reserved_slots` | `0` |  |
+| `schedule.reserved_tags` | `["ddflow-gap"]` |  |
 | `schedule.dx_priority` | `8` |  |
 | `schedule.bug_priority` | `10` |  |
 | `schedule.dx_tags` | `["dx"]` |  |

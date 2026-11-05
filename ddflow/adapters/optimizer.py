@@ -38,13 +38,15 @@ DEFAULT_NAME = "greedy-v1"
 class Candidate:
     """One item as the optimizer sees it. ``terms`` are the caller's ordering keys, left to
     right, as ``(name, value)`` pairs (the registered keys of `core.schedule`); ``tags`` carry
-    preferences such as ``affinity:<key>@50`` for an adapter that reads them."""
+    preferences such as ``affinity:<key>@50`` for an adapter that reads them; ``reserved`` says
+    it may take a slot `Slots` keeps out of the ordinary share."""
 
     id: str
     terms: tuple[tuple[str, Any], ...] = ()
     globs: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     needs_tree: bool = True
+    reserved: bool = False
 
 
 @dataclass(frozen=True)
@@ -58,16 +60,21 @@ class Placement:
 
 @dataclass(frozen=True)
 class Slots:
-    """What is free: ``flight`` items in flight and ``tree`` worktrees (both counts)."""
+    """What is free: ``flight`` items in flight and ``tree`` worktrees (both counts), and of
+    those the ``ordinary_*`` share an item not marked `Candidate.reserved` may take (None: all
+    of it, nothing is reserved). A reserved item may take any free slot."""
 
     flight: int
     tree: int
+    ordinary_flight: int | None = None
+    ordinary_tree: int | None = None
 
 
 @dataclass(frozen=True)
 class Verdict:
     """What `cut` decided for one item, in walk order. ``what`` is ``taken``, ``held``,
-    ``clash`` (``other`` names the taken item it overlaps) or ``cut`` (no slot)."""
+    ``clash`` (``other`` names the taken item it overlaps), ``cut`` (no slot) or ``reserved``
+    (a slot is free, but only for reserved work)."""
 
     id: str
     what: str
@@ -88,6 +95,24 @@ class CutResult:
 Hold = Callable[[Candidate], bool]
 #: The taken item a candidate overlaps, or "" when it overlaps none.
 Clash = Callable[[Candidate, Sequence[Candidate]], str]
+
+
+def fit(c: Candidate, taken: Sequence[Candidate], slots: Slots) -> str:
+    """The `Verdict.what` for ``c`` beside ``taken``: ``taken``, ``cut`` or ``reserved``."""
+    if len(taken) >= slots.flight or (c.needs_tree and _trees(taken) >= slots.tree):
+        return "cut"
+    if c.reserved:
+        return "taken"
+    ordinary = [t for t in taken if not t.reserved]
+    flight = slots.flight if slots.ordinary_flight is None else slots.ordinary_flight
+    tree = slots.tree if slots.ordinary_tree is None else slots.ordinary_tree
+    if len(ordinary) >= flight or (c.needs_tree and _trees(ordinary) >= tree):
+        return "reserved"
+    return "taken"
+
+
+def _trees(items: Sequence[Candidate]) -> int:
+    return sum(c.needs_tree for c in items)
 
 
 def _term_text(value: Any) -> str:
@@ -118,7 +143,8 @@ class Optimizer(Protocol):
         clash: Clash | None = None,
     ) -> CutResult:
         """Walk ``ready`` in the order given; one `Verdict` per item. Never takes more than
-        ``slots.flight`` items nor more tree-needing ones than ``slots.tree``."""
+        ``slots.flight`` items nor more tree-needing ones than ``slots.tree``, nor more
+        ordinary ones than the ordinary share (`fit` decides all three)."""
 
     def explain(self, placement: Placement) -> str:
         """The placement's terms in words."""
@@ -148,7 +174,6 @@ class GreedyV1:
         clash: Clash | None = None,
     ) -> CutResult:
         taken: list[Candidate] = []
-        trees = 0
         out: list[Verdict] = []
         for c in ready:
             if hold is not None and hold(c):
@@ -157,12 +182,11 @@ class GreedyV1:
             other = clash(c, taken) if clash is not None else ""
             if other:
                 out.append(Verdict(c.id, "clash", other))
-            elif len(taken) < slots.flight and (not c.needs_tree or trees < slots.tree):
+                continue
+            what = fit(c, taken, slots)
+            if what == "taken":
                 taken.append(c)
-                trees += c.needs_tree
-                out.append(Verdict(c.id, "taken"))
-            else:
-                out.append(Verdict(c.id, "cut"))
+            out.append(Verdict(c.id, what))
         return CutResult(tuple(out))
 
     def explain(self, placement: Placement) -> str:

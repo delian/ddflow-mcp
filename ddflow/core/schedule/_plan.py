@@ -14,7 +14,11 @@ from ..model import REVIEW, RUNNING, Item, State
 from ._filters import PlanCtx, item_blocker, order_terms
 from ._parallel import _cap_words, parallel_line
 from ._readiness import Blocked, Plan, unpickable
+from ._reserved import open_slots, reserved_note, tree_cap
 from ._resources import bug_items, interrupted, needs_tree
+
+#: What a plan names as holding work back when a slot is free but reserved.
+RESERVED = "schedule.reserved_slots"
 
 
 def _cut_ready(
@@ -22,8 +26,8 @@ def _cut_ready(
     cfg: Config,
     p: Plan,
     slots: int,
-    flight_slots: int,
-    tree_slots: int,
+    free: Slots,
+    reserved: frozenset[str],
     live_items: list[str],
     live_note: str,
     reached: str,
@@ -36,7 +40,8 @@ def _cut_ready(
     # queued, blocked with the offered item it waits behind.
     by_id = {it.id: it for it in p.ready}
     cands = [
-        Candidate(it.id, (), tuple(it.globs), tuple(it.tags), needs_tree(it)) for it in p.ready
+        Candidate(it.id, (), tuple(it.globs), tuple(it.tags), needs_tree(it), it.id in reserved)
+        for it in p.ready
     ]
     holds: dict[str, Blocked] = {}
     clashes: dict[str, object] = {}
@@ -58,10 +63,11 @@ def _cut_ready(
         return clash.item
 
     result = get_optimizer(cfg.schedule.optimizer).cut(
-        {}, cands, Slots(flight_slots, tree_slots), hold=held_fn, clash=clash_fn
+        {}, cands, free, hold=held_fn, clash=clash_fn
     )
     taken: list[Item] = []
     cut: list[Item] = []
+    kept_out: list[Item] = []
     for v in result.verdicts:
         it = by_id[v.id]
         if v.what == "held":
@@ -79,8 +85,15 @@ def _cut_ready(
             p.overlapped.append(it.id)
         elif v.what == "taken":
             taken.append(it)
+        elif v.what == "reserved":
+            kept_out.append(it)
         else:
             cut.append(it)
+    for it in kept_out:
+        # A slot IS free, so never "cap reached" (B40386f7a40): it waits for an ordinary one.
+        why = f"held by {RESERVED}: {p.reserved_note}; {live_note}"
+        p.blocked.append(Blocked(it.id, "state", why, sorted(live_items)))
+        p.capped.append(it.id)
     if cut:
         if slots:
             # NOT "cap reached": a slot is free, and a higher-ranked item is offered it.
@@ -101,6 +114,9 @@ def _cut_ready(
         for it in cut:
             p.blocked.append(Blocked(it.id, "state", why, holders))
             p.capped.append(it.id)
+    if kept_out:
+        # Only the cut items are the cap's: with none, the cap held nothing back.
+        p.cap_note = f"{p.cap_note} and {RESERVED}" if cut else RESERVED
     p.ready = taken
 
 
@@ -215,9 +231,7 @@ def plan(
     paused = parallel is not None and parallel.admit_paused
     flight_slots = 0 if paused else max(0, limit - in_flight)
     if cfg.worktree.enabled:
-        # 0 (the default) FOLLOWS the schedule limit; it is not unlimited (B-af-config)
-        tree_cap = cfg.worktree.max_parallel or limit
-        tree_slots = max(0, tree_cap - with_trees)
+        tree_slots = max(0, tree_cap(cfg, limit) - with_trees)
     else:
         tree_slots = flight_slots  # no trees are made, so no tree cap applies
     slots = min(flight_slots, tree_slots)
@@ -231,9 +245,12 @@ def plan(
         live_note = f"{with_trees} worktrees live across the queue"
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
-    _cut_ready(state, cfg, p, slots, flight_slots, tree_slots, live_items, live_note, reached, hold)
+    p.reserved_note = reserved_note(cfg, limit)
+    free, reserved = open_slots(state, cfg, live, live_items, limit, flight_slots, tree_slots)
+    _cut_ready(state, cfg, p, slots, free, reserved, live_items, live_note, reached, hold)
     if parallel is not None:
-        p.parallel_line = parallel_line(cfg, parallel, limit, in_flight, len(p.ready), p.capped)
+        line = parallel_line(cfg, parallel, limit, in_flight, len(p.ready), p.capped)
+        p.parallel_line = "; ".join(filter(None, [line, p.reserved_note]))
     # Asked of `unpickable`, the one rule `doctor` reports by; offered, never acted on.
     p.finished = [
         u.item
