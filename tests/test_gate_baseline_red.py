@@ -441,12 +441,15 @@ def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
             ["sh", "-c", g.command], cwd=where, capture_output=True, text=True
         )
         failed = got.returncode != 0
-        return ("failed" if failed else "passed", {
-            "exit": got.returncode,
-            "summary": [],
-            "tail": got.stdout,
-            "failed_tests": [ID] if failed else [],
-        })
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
 
     found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
     assert found["red"] is True, found
