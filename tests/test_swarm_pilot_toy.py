@@ -84,6 +84,20 @@ def test_no_constructor_route_reaches_the_host():
         T.Sandbox(ROOT)
 
 
+def test_a_link_in_the_host_keeps_home_and_temp_files_out_of_it(tmp_path):
+    """Through a link the repository resolves away from the host; its home must follow it."""
+    outside = tmp_path / "sb"
+    outside.mkdir()
+    link = ROOT / ".ddflow" / f"pilot-link-{os.getpid()}"
+    link.symlink_to(outside)
+    try:
+        sb = T.Sandbox(link)
+    finally:
+        link.unlink()
+    assert sb.repo == outside.resolve() and sb.home == outside.resolve().parent / "sb.home"
+    assert sb.env["TMPDIR"] == str(sb.home)
+
+
 def test_a_symlink_into_the_host_is_refused(tmp_path):
     link = tmp_path / "link"
     link.symlink_to(ROOT / "docs")

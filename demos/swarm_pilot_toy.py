@@ -165,7 +165,7 @@ class Sandbox:
 
     def __init__(self, repo: Path) -> None:
         self.repo = apart_from_host(repo)
-        self.home = repo.parent / f"{repo.name}.home"
+        self.home = self.repo.parent / f"{self.repo.name}.home"
         self.env = clean_env(self.home)
 
     @classmethod
