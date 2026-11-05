@@ -282,6 +282,13 @@ def local_command_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     return out
 
 
+def _stale_mark(notes: Sequence[StaleNote] | None) -> dict[str, str]:
+    """gate -> why its recorded pass no longer names the current branch. Unverified notes
+    ("could not tell whether it is stale") are NOT marked: rendering them stale would be
+    a false alarm, and rendering them fresh would be a silent pass."""
+    return {n.gate: n.why for n in (notes or []) if not n.unverified}
+
+
 def status(
     state: State,
     cfg: Config,
@@ -336,7 +343,7 @@ def status(
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
-        stale={n.gate: n.why for n in (stale_notes or []) if not n.unverified},
+        stale=_stale_mark(stale_notes),
     )
 
 
