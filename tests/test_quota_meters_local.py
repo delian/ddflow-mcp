@@ -14,6 +14,7 @@ from quota_meters_support import (
     iso,
     kilo_db,
     kilo_tokens,
+    none_of,
     of,
     turn,
     write_transcript,
@@ -60,6 +61,13 @@ class TestTranscriptUsage:
         write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(out=1), turn(out=9)])
         assert _tokens(c).value == 9.0
 
+    def test_a_turn_seen_on_both_sides_of_a_window_start_stays_in_it(self, tmp_path):
+        start = NOW - 5 * HOUR
+        c = ctx(tmp_path, windows={"5h": start, "week": NOW - 168 * HOUR}, token_fields=("input",))
+        rows = [turn(at=start - 10, inp=1), turn(at=start + 5, inp=500)]
+        write_transcript(c.claude_projects / "p" / "a.jsonl", rows)
+        assert _tokens(c).value == 500.0
+
     def test_rows_without_a_key_are_each_counted(self, tmp_path):
         c = ctx(tmp_path, token_fields=("output",))
         row = turn()
@@ -77,7 +85,7 @@ class TestTranscriptUsage:
     def test_a_file_untouched_since_the_window_is_not_opened(self, tmp_path, monkeypatch):
         c = ctx(tmp_path, windows={"5h": NOW - 5 * HOUR})
         old = c.claude_projects / "p" / "old.jsonl"
-        write_transcript(old, [turn()], mtime=NOW - 6 * HOUR)
+        write_transcript(old, [turn(at=NOW - 6 * HOUR)], mtime=NOW - 6 * HOUR)
         os.chmod(old, 0)  # would fail the read if it were opened
         write_transcript(c.claude_projects / "p" / "new.jsonl", [turn(mid="m2")])
         assert _tokens(c).value == 116.0
@@ -110,15 +118,41 @@ class TestTranscriptUsage:
         got = L.read_claude_tokens(c)
         assert of(got, "5h").unmetered == 1 and of(got, "week").unmetered == 1
 
-    def test_a_torn_last_line_is_skipped(self, tmp_path):
+    def test_a_torn_last_line_is_unmetered(self, tmp_path):
         c = ctx(tmp_path)
         write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), '{"type":"assistant","me'])
         got = _tokens(c)
-        assert got.value == 116.0 and got.detail["skipped"] == 1
+        assert (got.value, got.unmetered) == (116.0, 1)
+
+    def test_only_a_torn_line_is_unavailable_never_zero(self, tmp_path):
+        c = ctx(tmp_path)
+        torn = '{"type":"assistant","message":{"usage":{"input_tokens":5'
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [torn])
+        got = _tokens(c)
+        assert got.status == MB.UNAVAILABLE and got.value is None and got.unmetered == 1
+
+    def test_a_kind_the_turn_does_not_expose_is_never_a_zero(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("cache_read",))
+        row = turn()
+        del row["message"]["usage"]["cache_read_input_tokens"]
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [row])
+        assert _tokens(c).status == MB.UNAVAILABLE
+
+    def test_a_kind_missing_from_one_turn_makes_the_total_a_lower_bound(self, tmp_path):
+        c = ctx(tmp_path)
+        row = turn(mid="m2")
+        del row["message"]["usage"]["cache_read_input_tokens"]
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), row])
+        got = _tokens(c)
+        assert (got.status, got.value, got.unmetered) == (MB.OK, 132.0, 1)
+
+    def test_an_absurd_count_is_unmetered_not_a_crash(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), turn(mid="m2", inp=10**400)])
+        assert _tokens(c).unmetered == 1
 
     def test_no_directory_is_unavailable(self, tmp_path):
-        got = L.read_claude_tokens(ctx(tmp_path))
-        assert all(r.status == MB.UNAVAILABLE and r.value is None for r in got)
+        assert none_of(L.read_claude_tokens(ctx(tmp_path)))
 
     def test_a_directory_with_no_transcripts_is_unavailable(self, tmp_path):
         c = ctx(tmp_path)
@@ -127,9 +161,33 @@ class TestTranscriptUsage:
 
     def test_transcripts_with_nothing_in_the_window_measure_zero(self, tmp_path):
         c = ctx(tmp_path)
-        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()], mtime=NOW - 200 * HOUR)
+        old = NOW - 200 * HOUR
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(at=old)], mtime=old)
         got = _tokens(c)
         assert (got.status, got.value) == (MB.OK, 0.0)
+
+    def test_a_transcript_gone_mid_scan_is_unavailable_not_free(self, tmp_path, monkeypatch):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+
+        def gone(*_a):
+            raise FileNotFoundError("deleted")
+
+        monkeypatch.setattr(L, "_scan", gone)
+        assert none_of(L.read_claude_tokens(c))
+
+    def test_the_only_transcript_gone_at_stat_is_unavailable(self, tmp_path, monkeypatch):
+        c = ctx(tmp_path)
+        path = write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+        real = type(path).stat
+
+        def gone(self, **kw):
+            if self.suffix == ".jsonl":
+                raise FileNotFoundError("deleted")
+            return real(self, **kw)
+
+        monkeypatch.setattr(type(path), "stat", gone)
+        assert none_of(L.read_claude_tokens(c))
 
     def test_over_the_byte_cap_is_unavailable_not_a_partial_sum(self, tmp_path):
         c = ctx(tmp_path, transcript_max_bytes=10)
@@ -229,12 +287,12 @@ class TestKilo:
             ("5h", "usd"),
             ("week", "usd"),
         }
-        assert all(r.status == MB.UNAVAILABLE for r in got)
+        assert none_of(got)
 
     def test_not_a_database_is_unavailable(self, tmp_path):
         c = ctx(tmp_path)
         c.kilo_db.write_text("plain text, not sqlite")
-        assert all(r.status == MB.UNAVAILABLE for r in L.read_kilo(c))
+        assert none_of(L.read_kilo(c))
 
     def test_a_changed_schema_is_unavailable(self, tmp_path):
         c = ctx(tmp_path)
@@ -242,7 +300,7 @@ class TestKilo:
         con.execute("CREATE TABLE other (x)")
         con.commit()
         con.close()
-        assert all(r.status == MB.UNAVAILABLE for r in L.read_kilo(c))
+        assert none_of(L.read_kilo(c))
 
     def test_a_query_over_its_time_budget_is_unavailable(self, tmp_path):
         c = ctx(tmp_path, kilo_timeout_s=0.0)
@@ -263,6 +321,14 @@ class TestKilo:
         with pytest.raises(ReadOnlyError, match="readonly"):
             read_only_rows(c.kilo_db, "DELETE FROM message", timeout_s=5.0)
         assert _kilo(c, "tokens").value == 1.0
+
+    def test_a_path_that_cannot_resolve_is_a_read_failure(self, tmp_path, monkeypatch):
+        def loop(*_a, **_k):
+            raise RuntimeError("Symlink loop")
+
+        monkeypatch.setattr(type(tmp_path), "resolve", loop)
+        with pytest.raises(ReadOnlyError, match="loop"):
+            read_only_rows(tmp_path / "x.db", "SELECT 1", timeout_s=5.0)
 
     def test_reading_never_creates_a_store(self, tmp_path):
         missing = tmp_path / "none.db"
@@ -285,8 +351,17 @@ class TestSessions:
         assert week.detail["by_tool"] == {"claude-code": 1, "kilo": 1}
 
     def test_no_log_handed_in_is_unavailable(self, tmp_path):
-        got = L.read_ddflow_sessions(ctx(tmp_path))
-        assert all(r.status == MB.UNAVAILABLE and r.value is None for r in got)
+        assert none_of(L.read_ddflow_sessions(ctx(tmp_path)))
+
+    def test_a_start_with_no_usable_time_is_never_a_zero(self, tmp_path):
+        ev = [Event("session.started", "s", {"tool": "x"}, ts="garbage")]
+        got = of(L.read_ddflow_sessions(ctx(tmp_path, events=ev)), "5h")
+        assert got.status == MB.UNAVAILABLE and got.unmetered == 1
+
+    def test_a_start_with_no_usable_time_makes_the_count_a_lower_bound(self, tmp_path):
+        ev = [_started(NOW - 60), Event("session.started", "s", {}, ts="garbage")]
+        got = of(L.read_ddflow_sessions(ctx(tmp_path, events=ev)), "5h")
+        assert (got.value, got.unmetered) == (1.0, 1)
 
     def test_a_log_with_no_session_measures_zero(self, tmp_path):
         got = L.read_ddflow_sessions(ctx(tmp_path, events=[]))

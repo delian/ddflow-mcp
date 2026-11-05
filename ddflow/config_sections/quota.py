@@ -24,7 +24,8 @@ def _positive(value: object) -> str:
 def _subset(allowed: tuple[str, ...]):
     def check(value: object) -> str:
         ok = isinstance(value, list) and bool(value) and all(v in allowed for v in value)
-        return "" if ok else f"a non-empty list drawn from {', '.join(allowed)}"
+        ok = ok and len(set(value)) == len(value)  # a repeat would count the same tokens twice
+        return "" if ok else f"a non-empty list, no repeats, drawn from {', '.join(allowed)}"
 
     return check
 

@@ -209,13 +209,13 @@ def snapshot_stream_line(ctx: B.MeterContext, line: str) -> int:
         return 0
     info = _table(data.get("rate_limit_info"))
     unified = _table(info.get("unifiedWindows"))
-    rows = {name: _table(unified.get(name)) for name in WINDOW_OF}
     single = info.get("rateLimitType")
-    if single in WINDOW_OF and not rows[single]:
-        rows[single] = info
     figures: dict[str, dict[str, Any]] = {}
-    for vendor, row in rows.items():
-        got = _row(B.percent(row.get("utilization"), STREAM_SCALE), row.get("resetsAt"))
-        if got:
-            figures[WINDOW_OF[vendor]] = got
+    for vendor, window in WINDOW_OF.items():
+        rows = [_table(unified.get(vendor))] + ([info] if single == vendor else [])
+        for row in rows:
+            got = _row(B.percent(row.get("utilization"), STREAM_SCALE), row.get("resetsAt"))
+            if got:
+                figures[window] = got
+                break
     return _write(ctx, figures, "stream-json")

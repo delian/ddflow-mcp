@@ -120,6 +120,11 @@ def kilo_tokens(inp=0, out=0, reasoning=0, read=0, write=0) -> dict:
     }
 
 
+def none_of(readings) -> bool:
+    """Every reading has no figure, and there IS at least one: an empty list is not a pass."""
+    return bool(readings) and all(r.status == MB.UNAVAILABLE and r.value is None for r in readings)
+
+
 def of(readings, window_: str, unit: str = ""):
     """The one reading of ``window_`` (and ``unit``, when given)."""
     got = [r for r in readings if r.window == window_ and (not unit or r.unit == unit)]

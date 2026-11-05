@@ -30,7 +30,13 @@ SAMPLES_NAME = "usage-samples.jsonl"
 
 
 def is_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    """A finite real number. An int too large for a float is not one: nothing here measures it."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 @dataclass(frozen=True)

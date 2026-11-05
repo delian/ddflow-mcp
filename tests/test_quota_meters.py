@@ -7,7 +7,7 @@ import stat
 from typing import ClassVar
 
 import pytest
-from quota_meters_support import HOUR, NOW, ctx, iso, of, window, write_cache
+from quota_meters_support import HOUR, NOW, ctx, iso, none_of, of, window, write_cache
 
 from ddflow.config import Config
 from ddflow.services import meters as M
@@ -41,7 +41,9 @@ class TestPercent:
     def test_normalises(self, raw, scale, want):
         assert MB.percent(raw, scale) == pytest.approx(want)
 
-    @pytest.mark.parametrize("raw", [None, "43", True, float("nan"), float("inf"), -1, 101])
+    @pytest.mark.parametrize(
+        "raw", [None, "43", True, float("nan"), float("inf"), -1, 101, 10**400]
+    )
     def test_refuses(self, raw):
         assert MB.percent(raw, 1) is None
 
@@ -98,10 +100,10 @@ class TestCacheReader:
         c.claude_state.write_text(body)
         got = V.read_claude_cache(c)
         assert {r.window for r in got} == {"5h", "week"}
-        assert all(r.status == MB.UNAVAILABLE and r.value is None and r.reason for r in got)
+        assert none_of(got) and all(r.reason for r in got)
 
     def test_missing_file_is_unavailable(self, tmp_path):
-        assert all(r.status == MB.UNAVAILABLE for r in V.read_claude_cache(ctx(tmp_path)))
+        assert none_of(V.read_claude_cache(ctx(tmp_path)))
 
     def test_no_fetch_time_is_unavailable(self, tmp_path):
         c = ctx(tmp_path)
@@ -149,7 +151,7 @@ class TestSnapshot:
         c = ctx(tmp_path)
         assert V.snapshot_statusline(c, text) == 0
         assert not c.snapshot.exists()
-        assert all(r.status == MB.UNAVAILABLE for r in V.read_claude_snapshot(c))
+        assert none_of(V.read_claude_snapshot(c))
 
     def test_an_absent_window_keeps_the_last_reading(self, tmp_path):
         c = ctx(tmp_path)
@@ -187,6 +189,18 @@ class TestSnapshot:
         assert V.snapshot_stream_line(c, json.dumps(line)) == 2
         assert of(V.read_claude_snapshot(c), "week").value == pytest.approx(20.0)
 
+    def test_a_unified_window_with_no_figure_does_not_hide_the_top_level_one(self, tmp_path):
+        c = ctx(tmp_path)
+        info = {
+            "rateLimitType": "five_hour",
+            "utilization": 0.42,
+            "resetsAt": int(NOW + HOUR),
+            "unifiedWindows": {"five_hour": {"resetsAt": int(NOW + HOUR)}},
+        }
+        line = {"type": "rate_limit_event", "rate_limit_info": info}
+        assert V.snapshot_stream_line(c, json.dumps(line)) == 1
+        assert of(V.read_claude_snapshot(c), "5h").value == pytest.approx(42.0)
+
     @pytest.mark.parametrize(
         "info",
         [
@@ -210,7 +224,7 @@ class TestSnapshot:
         c = ctx(tmp_path)
         c.snapshot.parent.mkdir(parents=True)
         c.snapshot.write_text("{torn")
-        assert all(r.status == MB.UNAVAILABLE for r in V.read_claude_snapshot(c))
+        assert none_of(V.read_claude_snapshot(c))
         assert V.snapshot_statusline(c, json.dumps(self.STATUS)) == 2
         assert of(V.read_claude_snapshot(c), "5h").status == MB.OK
 
@@ -237,7 +251,7 @@ class TestRegistry:
 
     def test_nothing_readable_gives_no_number_at_all(self, tmp_path):
         got = M.read_all(ctx(tmp_path))
-        assert got and all(r.status == MB.UNAVAILABLE and r.value is None for r in got)
+        assert none_of(got)
 
     def test_names_limit_the_readers(self, tmp_path):
         assert {r.source for r in M.read_all(ctx(tmp_path), ["kilo"])} == {"kilo"}
@@ -268,6 +282,22 @@ class TestBest:
 
     def test_no_reader_for_it_is_none(self):
         assert M.best([_ok("a", 1)], "week", "percent") is None
+
+    def test_a_broken_reader_is_never_read_as_no_reader(self, tmp_path, monkeypatch):
+        def boom(_c):
+            raise RuntimeError("no")
+
+        monkeypatch.setitem(M.READERS, "boom", boom)
+        got = M.best(M.read_all(ctx(tmp_path), ["boom"]), "5h", "tokens")
+        assert got is not None and got.status == MB.UNAVAILABLE and "no" in got.reason
+
+    def test_only_a_reader_failure_answers_for_what_it_might_have_covered(self):
+        other = MB.unavailable("cache", "claude-code", "", "percent", "gone", NOW)
+        assert M.best([other], "5h", "tokens") is None
+
+    def test_a_real_figure_beats_a_broken_reader(self, tmp_path):
+        broken = MB.unavailable("boom", "", "", "", "RuntimeError: no", NOW)
+        assert M.best([broken, _ok("a", 1)], "5h", "percent").source == "a"
 
 
 def _rows(c):
@@ -310,6 +340,24 @@ class TestSamples:
         assert c.samples.stat().st_size <= 2000
         assert _rows(c)[-1]["value"] == 59.0
 
+    def test_a_row_over_half_the_bound_still_survives_its_own_trim(self, tmp_path):
+        c = ctx(tmp_path, samples_max_bytes=300)
+        M.record(c, [_ok("a", 1.0), _ok("b", 2.0)])
+        assert [r["value"] for r in _rows(c)] == [2.0]
+
+    def test_a_trim_does_not_lose_a_row_appended_beside_it(self, tmp_path, monkeypatch):
+        c = ctx(tmp_path, samples_max_bytes=2000)
+        held = []
+        real = M.locked
+
+        def spy(path):
+            held.append(path)
+            return real(path)
+
+        monkeypatch.setattr(M, "locked", spy)
+        M.record(c, [_ok("a", 1.0)])
+        assert held == [c.samples]  # the append is under the lock the trim takes
+
     def test_sample_if_due_throttles(self, tmp_path):
         c = ctx(tmp_path)
         assert M.sample_if_due(c, ["claude-cache"]) is True
@@ -319,6 +367,16 @@ class TestSamples:
 
 
 class TestConfig:
+    @pytest.mark.parametrize("key", ["token_fields", "token_windows"])
+    def test_a_repeated_entry_is_refused_it_would_count_twice(self, tmp_path, key):
+        value = "input" if key == "token_fields" else "5h"
+        (tmp_path / ".ddflow").mkdir()
+        (tmp_path / ".ddflow" / "config.toml").write_text(
+            f'[quota]\n{key} = ["{value}", "{value}"]\n'
+        )
+        with pytest.raises(ValueError, match=f"quota.{key}"):
+            Config.load(tmp_path)
+
     def test_defaults_and_context(self):
         cfg = Config()
         c = MB.context(cfg, now=NOW)

@@ -20,7 +20,6 @@ parses a transcript.
 from __future__ import annotations
 
 import json
-import math
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -58,14 +57,13 @@ class TokenRow:
 @dataclass
 class TranscriptUsage:
     rows: list[TokenRow] = field(default_factory=list)
-    #: The time of each turn with no usable usage; None when the turn has no time either.
+    #: The time of each turn with no usable usage; None when the turn has no time either,
+    #: as a torn line has not: it may be a turn, so it counts against every window.
     unmetered: list[float | None] = field(default_factory=list)
-    #: Lines that were not JSON: normally one torn last line of a file being written.
-    skipped: int = 0
 
 
 def _count(value: object) -> int | None:
-    ok = isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    ok = isinstance(value, int) and B.is_number(value) and value >= 0
     return value if ok else None
 
 
@@ -87,13 +85,15 @@ def _row_of(message: dict[str, Any], at: float | None) -> TokenRow | None:
 
 
 def _merged(old: TokenRow, new: TokenRow) -> TokenRow:
-    """One turn seen twice: the largest figure of each kind, as a partial line is the smaller."""
+    """One turn seen twice: the largest figure of each kind, as a partial line is the smaller,
+    at the latest time, which is when the turn finished. A turn that ended inside a window
+    belongs to it whenever it began."""
 
     def most(a: int | None, b: int | None) -> int | None:
         return b if a is None else a if b is None else max(a, b)
 
     return TokenRow(
-        old.at,
+        max(old.at, new.at),
         old.model,
         max(old.input, new.input),
         max(old.output, new.output),
@@ -110,13 +110,13 @@ def _candidates(root: Path, since: float, max_bytes: int) -> list[Path]:
     total = 0
     picked: list[Path] = []
     for path in root.rglob("*.jsonl"):
-        seen += 1
         try:
             st = path.stat()
         except FileNotFoundError:
-            continue  # the harness deleted it just now
+            continue  # the harness deleted it just now: it does not count as seen
         except OSError as exc:
             raise MeterFailure(f"{path}: {exc}") from exc
+        seen += 1
         if st.st_mtime >= since:
             picked.append(path)
             total += st.st_size
@@ -127,7 +127,7 @@ def _candidates(root: Path, since: float, max_bytes: int) -> list[Path]:
     return picked
 
 
-def _scan(path: Path, since: float, rows: dict, bare: dict, usage: TranscriptUsage) -> None:
+def _scan(path: Path, since: float, rows: dict, bare: dict) -> None:
     with path.open(encoding="utf-8", errors="replace") as fh:
         for n, line in enumerate(fh):
             if '"assistant"' not in line:
@@ -135,7 +135,7 @@ def _scan(path: Path, since: float, rows: dict, bare: dict, usage: TranscriptUsa
             try:
                 entry = json.loads(line)
             except ValueError:
-                usage.skipped += 1
+                bare[(str(path), n)] = None
                 continue
             if not isinstance(entry, dict) or entry.get("type") != "assistant":
                 continue
@@ -163,10 +163,8 @@ def transcript_usage(root: Path, since: float, max_bytes: int) -> TranscriptUsag
     bare: dict[Any, float | None] = {}
     for path in _candidates(root, since, max_bytes):
         try:
-            _scan(path, since, rows, bare, usage)
-        except FileNotFoundError:
-            continue
-        except OSError as exc:
+            _scan(path, since, rows, bare)
+        except OSError as exc:  # gone since `_candidates` too: its turns are not free
             raise MeterFailure(f"{path}: {exc}") from exc
     usage.rows = list(rows.values())
     usage.unmetered = [at for key, at in bare.items() if key not in rows]
@@ -184,7 +182,6 @@ def _tokens(
     window: str,
     kinds: dict[str, int],
     unmetered: int,
-    extra: dict[str, Any] | None = None,
 ) -> B.Reading:
     """A token total. Nothing but unmetered turns has no total at all."""
     total = sum(kinds[k] for k in ctx.token_fields)
@@ -201,7 +198,7 @@ def _tokens(
         B.iso_of(ctx.now),
         False,
         unmetered=unmetered,
-        detail={**kinds, **(extra or {})},
+        detail=kinds,
     )
 
 
@@ -219,8 +216,8 @@ def read_claude_tokens(ctx: B.MeterContext) -> list[B.Reading]:
     for window, start in ctx.windows.items():
         rows = [r for r in usage.rows if r.at >= start]
         bare = sum(1 for at in usage.unmetered if at is None or at >= start)
-        extra = {"skipped": usage.skipped}
-        out.append(_tokens(ctx, CLAUDE_SOURCE, CLAUDE, window, _breakdown(rows), bare, extra))
+        gaps = sum(1 for r in rows if any(getattr(r, k) is None for k in ctx.token_fields))
+        out.append(_tokens(ctx, CLAUDE_SOURCE, CLAUDE, window, _breakdown(rows), bare + gaps))
     return out
 
 
@@ -262,8 +259,7 @@ def _kilo_token_row(row: tuple) -> TokenRow | None:
 
 def _kilo_cost(row: tuple) -> float | None:
     cost = row[-1]
-    ok = isinstance(cost, (int, float)) and math.isfinite(cost) and cost > 0
-    return float(cost) if ok else None
+    return float(cost) if B.is_number(cost) and cost > 0 else None
 
 
 def _usd(ctx: B.MeterContext, window: str, costs: list[float | None]) -> B.Reading:
@@ -314,10 +310,19 @@ def read_ddflow_sessions(ctx: B.MeterContext) -> list[B.Reading]:
             B.unavailable(SESSIONS_SOURCE, "ddflow", w, "sessions", reason, ctx.now)
             for w in ctx.windows
         ]
-    started = [e for e in ctx.events if e.kind == "session.started"]
+    started = [
+        (clock.epoch(e.ts, default=-1.0), e) for e in ctx.events if e.kind == "session.started"
+    ]
+    lost = sum(1 for at, _e in started if at < 0)  # no usable time: it fits no window for sure
     out: list[B.Reading] = []
     for window, start in ctx.windows.items():
-        inside = [e for e in started if clock.epoch(e.ts, default=-1.0) >= start]
+        inside = [e for at, e in started if at >= max(start, 0)]
+        if lost and not inside:
+            reason = f"{lost} session start(s) hold no usable time"
+            out.append(
+                B.unavailable(SESSIONS_SOURCE, "ddflow", window, "sessions", reason, ctx.now, lost)
+            )
+            continue
         tools = Counter(str(e.data.get("tool") or "unknown") for e in inside)
         out.append(
             B.Reading(
@@ -329,6 +334,7 @@ def read_ddflow_sessions(ctx: B.MeterContext) -> list[B.Reading]:
                 float(len(inside)),
                 B.iso_of(ctx.now),
                 False,
+                unmetered=lost,
                 detail={"scope": "project", "by_tool": dict(tools)},
             )
         )

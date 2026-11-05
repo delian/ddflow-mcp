@@ -41,7 +41,7 @@ def read_only_rows(path: Path, sql: str, params: tuple = (), *, timeout_s: float
     deadline = time.monotonic() + timeout_s
     try:
         con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=timeout_s)
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, OSError, RuntimeError) as exc:  # RuntimeError: a symlink loop
         raise ReadOnlyError(str(exc)) from exc
     try:
         con.set_progress_handler(lambda: time.monotonic() > deadline, PROGRESS_STEPS)

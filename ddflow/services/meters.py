@@ -58,7 +58,9 @@ def best(
     readings: Sequence[B.Reading], window: str, unit: str, harness: str = ""
 ) -> B.Reading | None:
     """The reading to act on: the newest fresh figure, else the newest stale one (which says
-    so), else an unavailable one with its reason. None when no reader covers it at all."""
+    so), else an unavailable one with its reason. A reader that broke has no window of its
+    own, so its failure answers for every window it might have covered: "it broke" must not
+    read as "nothing measures this". None only when nothing covers it and nothing broke."""
     match = [
         r
         for r in readings
@@ -67,38 +69,41 @@ def best(
     figures = [r for r in match if r.status == B.OK]
     if figures:
         return max(figures, key=lambda r: (not r.stale, clock.epoch(r.observed_at)))
-    return match[0] if match else None
+    broken = [
+        r for r in readings if r.status == B.UNAVAILABLE and not (r.window or r.unit or r.harness)
+    ]
+    return (match or broken or [None])[0]
 
 
 def _trim(ctx: B.MeterContext) -> None:
-    """Keep the newest rows up to half the bound, so a trim is rare."""
-    with locked(ctx.samples):
-        lines = ctx.samples.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
-        kept: list[str] = []
-        size = 0
-        for line in reversed(lines):
-            size += len(line.encode())
-            if size > ctx.samples_max_bytes // 2:
-                break
-            kept.append(line)
-        atomic_write(ctx.samples, "".join(reversed(kept)), mode=0o600)
+    """Keep the newest rows up to half the bound, so a trim is rare, and always the newest row
+    whatever its size. Called under the lock."""
+    lines = ctx.samples.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+    kept: list[str] = []
+    size = 0
+    for line in reversed(lines):
+        size += len(line.encode())
+        if kept and size > ctx.samples_max_bytes // 2:
+            break
+        kept.append(line)
+    atomic_write(ctx.samples, "".join(reversed(kept)), mode=0o600)
 
 
 def record(ctx: B.MeterContext, readings: Iterable[B.Reading]) -> None:
-    """Append ``readings`` to the sample log, whole lines to an `O_APPEND` descriptor."""
+    """Append ``readings`` to the sample log. Under the lock, because a trim replaces the file:
+    an append beside it would land in the file being replaced and be lost."""
     body = "".join(
         json.dumps({"at": ctx.now, **r.to_dict()}, sort_keys=True) + "\n" for r in readings
     )
     if not body:
         return
     ctx.samples.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(ctx.samples, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-    try:
-        os.write(fd, body.encode())
-    finally:
-        os.close(fd)
-    if ctx.samples.stat().st_size > ctx.samples_max_bytes:
-        _trim(ctx)
+    with locked(ctx.samples):
+        fd = os.open(ctx.samples, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
+            fh.write(body)
+        if ctx.samples.stat().st_size > ctx.samples_max_bytes:
+            _trim(ctx)
 
 
 def _last_at(ctx: B.MeterContext) -> float | None:
