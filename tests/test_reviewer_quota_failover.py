@@ -71,9 +71,10 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
 def test_classify_exhaustion_matches_quota_walls_only():
     assert classify_exhaustion("HTTP 403: rate limit exceeded") == "HTTP 403"
     assert classify_exhaustion("HTTP 429: too many requests") == "HTTP 429"
+    assert classify_exhaustion("HTTP/1.1 403 Forbidden") == "HTTP/1.1 403"
     assert classify_exhaustion("command exited 1: quota exceeded") == "quota"
-    assert classify_exhaustion("command exited 1: your rate limit is reached") == "rate limit is reached"
-    assert classify_exhaustion("command exited 1: request limit exceeded") == "request limit exceeded"
+    assert classify_exhaustion("command exited 1: your rate limit is reached") == "rate limit"
+    assert classify_exhaustion("rate limit") == "rate limit"
     # The diff's shape, not the endpoint's account: NEVER shed for these.
     assert classify_exhaustion("TRUNCATED: the model consumed all 16000 tokens") == ""
     assert classify_exhaustion("max_tokens limit exceeded: output truncated") == ""

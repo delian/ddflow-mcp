@@ -274,13 +274,12 @@ class Finding:
 #: the account pays, not the diff's shape. Shedding sends the gate to a DIFFERENT endpoint
 #: (a different account), which fixing the chunk size, the timeout or the key cannot.
 #: Deliberately NOT the token-budget truncation `_truncated` (a chunk lost to its OWN size,
-#: retried in halves): that is the diff's shape, not the endpoint's account. Account limits
-#: are named (`quota`, `rate`/`usage`/`request`/`concurrency` limit): a BARE "limit exceeded"
-#: is NOT (a `max_tokens`/context limit is the chunk's own shape, not the endpoint); `quota`
-#: is word-bounded so it never matches inside "quotation".
+#: retried in halves): that is the diff's shape, not the endpoint's account. Account walls
+#: are named: an HTTP 403/429 status line (any `HTTP/1.1` style version), the word `quota`
+#: (word-bounded, never inside "quotation"), and a `rate limit`. A BARE "limit exceeded" is
+#: NOT a signal: a `max_tokens`/context limit is the chunk's own shape, not the endpoint.
 _EXHAUSTION_RE = re.compile(
-    r"HTTP 4(?:03|29)|\bquota\b|"
-    r"\b(?:rate|usage|request|concurrency)[ \t-]?limit(?:\s+is)?\s+(?:reached|exceeded)",
+    r"HTTP(?:/\d\.\d)?\s*4(?:03|29)\b|\bquota\b|\brate[ \t-]?limit\b",
     re.IGNORECASE,
 )
 
