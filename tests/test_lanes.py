@@ -245,3 +245,43 @@ def test_safe_keeps_a_long_path_whole_and_flattens_structure():
     assert LN.safe(path) == path[:200]
     assert LN.safe("b" * 300) == "b" * 200  # one long branch name is not cut at 80
     assert LN.safe('x\n## y <z> `c` "q"') == "x ## y z c q"
+
+
+def test_build_computes_the_wait_rows_once_not_once_per_lane(monkeypatch):
+    """`waiting.rows` scans every standing wait; `build` called it inside its per-lane
+    loop, so a ledger with N lanes paid the scan N times (lanes x waits). It must run
+    once per build and be shared by every lane."""
+    from ddflow.services import waiting
+
+    g = multi_lane()
+    st, cfg, plan = build_inputs(g.events, NOW)
+    calls: list[int] = []
+    real = waiting.rows
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(waiting, "rows", counted)
+    LN.build(g.events, st, cfg, NOW, plan)
+    assert len(calls) == 1, f"waiting.rows called {len(calls)} times, expected once"
+
+
+def test_build_skips_the_wait_scan_when_no_lane_is_active(monkeypatch):
+    """The scan is only worth paying once there is a lane to attach it to: an empty
+    ledger (every lane past the window, none holding a live lease) scans zero times,
+    not once."""
+    from ddflow.services import waiting
+
+    g = multi_lane()
+    st, cfg, plan = build_inputs(g.events, T0 + 3 * 86400)
+    calls: list[int] = []
+    real = waiting.rows
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(waiting, "rows", counted)
+    assert LN.build(g.events, st, cfg, T0 + 3 * 86400, plan) == []
+    assert len(calls) == 0, f"waiting.rows called {len(calls)} times, expected none"

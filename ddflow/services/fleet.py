@@ -30,8 +30,6 @@ WORKING, STALLED, FAILED, IDLE, DONE = "working", "stalled", "failed", "idle", "
 ORDER = (FAILED, STALLED, WORKING, IDLE, DONE)
 #: Lane-ledger states that mean "stopped with its item unfinished".
 _STOPPED = S.UNFINISHED
-#: Characters of a reason that failure patterns are matched against (display is cut separately).
-RAW_CAP = 2000
 #: Release notes that say the work ended normally. No note says nothing either way.
 _RELEASE_OK = ("completed", "done", "merged")
 
@@ -84,41 +82,46 @@ def _word(e: Event, sessions: dict[str, str]) -> tuple[str, str, bool]:
     return "", "", False
 
 
-def _signals(events: Iterable[Event]) -> dict[str, tuple[str, str]]:
-    """Agent -> (ts, reason): why it stopped, as far as the log says.
+def _fold(
+    events: Iterable[Event],
+) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, list[str]]]]:
+    """One pass over the log -> (stop signals, history).
 
-    The newest word wins, and a sign the agent carried on after a stop (a normal release, a
+    ``signals`` is agent -> (ts, reason): why it stopped, as far as the log says. The
+    newest word wins, and a sign the agent carried on after a stop (a normal release, a
     new lease, a new session) is a word too: it clears the older reason, which no longer
     explains anything.
+
+    ``history`` is agent -> (role, items it leased, newest first): the roles the sessions
+    recorded and the leases each agent acquired, from the same fold (not a second pass).
+
+    The reason is kept whole here: failure patterns match the whole recorded reason, and
+    the display cut (``lanes.fleet_reason_chars``) is applied only in ``registry``.
     """
-    out: dict[str, tuple[str, str]] = {}
+    sig: dict[str, tuple[str, str]] = {}
     sessions: dict[str, str] = {}  # session id -> agent
-    for e in events:
-        if e.kind == "session.started":
-            sessions[e.subject] = e.agent
-        who, text, clears = _word(e, sessions)
-        if who and (clears or text.strip()) and e.ts >= out.get(who, ("", ""))[0]:
-            out[who] = (e.ts, text[:RAW_CAP])
-    return {who: sig for who, sig in out.items() if sig[1]}
-
-
-def _history(events: Iterable[Event]) -> dict[str, tuple[str, list[str]]]:
-    """Agent -> (role, items it leased, newest first). The roles the sessions recorded."""
     roles: dict[str, str] = {}
     items: dict[str, dict[str, str]] = {}  # agent -> item -> newest lease ts
     for e in events:
-        if e.kind == "session.started" and e.data.get("role"):
-            roles[e.agent] = str(e.data["role"])
+        if e.kind == "session.started":
+            sessions[e.subject] = e.agent
+            role = e.data.get("role")
+            if role:
+                roles[e.agent] = str(role)
         elif e.kind == "lease.acquired":
             held = items.setdefault(_holder(e), {})
             held[e.subject] = max(held.get(e.subject, ""), e.ts)
-    return {
+        who, text, clears = _word(e, sessions)
+        if who and (clears or text.strip()) and e.ts >= sig.get(who, ("", ""))[0]:
+            sig[who] = (e.ts, text)
+    history = {
         who: (
             roles.get(who, ""),
             sorted(items.get(who, {}), key=items.get(who, {}).get, reverse=True),
         )
         for who in roles.keys() | items.keys()
     }
+    return {who: s for who, s in sig.items() if s[1]}, history
 
 
 def _class(lane: LN.Lane, reason: str, patterns: Sequence[re.Pattern[str]]) -> str:
@@ -158,8 +161,7 @@ def registry(
 ) -> list[Entry]:
     """Every lane in ``ledger``, classed, with its newest stop reason: most urgent class first,
     the most recently heard from first inside a class."""
-    sig = _signals(events)
-    history = _history(events)
+    sig, history = _fold(events)
     pats = _patterns(cfg)
     keep = max(0, cfg.lanes.fleet_items)
     rows = []

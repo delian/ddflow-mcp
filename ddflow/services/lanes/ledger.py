@@ -282,12 +282,15 @@ def _with_session(lane: Lane, f: _Facts, st: State, mid_gate: str) -> Lane:
     return replace(lane, remedy=remedy_for(lane))
 
 
-def _with_waits(lane: Lane, st: State, cfg: Config, now: float) -> Lane:
-    """``lane`` with the files it waits for (`services.waiting`), if it does."""
+def _with_waits(lane: Lane, wait_rows: list[dict[str, Any]]) -> Lane:
+    """``lane`` with the files it waits for (`services.waiting`), if it does.
+
+    ``wait_rows`` is the ledger-wide `WG.rows` result, computed once in ``build`` and
+    shared by every lane: the scan is O(waits), not O(lanes x waits)."""
     mine = tuple(
         f"{w['item']} waits for "
         + ", ".join(f"{o['item']} ({o['holder']})" for o in w["waiting_on"])
-        for w in WG.rows(st, cfg, now)
+        for w in wait_rows
         if w["agent"] == lane.name
     )
     return replace(lane, waits=mine) if mine else lane
@@ -298,13 +301,16 @@ def build(events: Sequence[Event], st: State, cfg: Config, now: float, plan: Pla
     horizon = now - cfg.lanes.window_s
     mid_gates = _mid_gates(events)
     lanes = []
+    wait_rows: list[dict[str, Any]] | None = None
     for name, f in _scan(events).items():
         if not f.lane:
             continue
         held = _held(st, name)
         live = bool(held and held.lease and held.lease.live(now, cfg.lease.grace_s))
         if live or epoch(f.last_ts) >= horizon:
-            lanes.append(_with_waits(_lane(name, f, st, cfg, now, plan, mid_gates), st, cfg, now))
+            if wait_rows is None:  # one scan for the whole ledger, and none for an empty one
+                wait_rows = WG.rows(st, cfg, now)
+            lanes.append(_with_waits(_lane(name, f, st, cfg, now, plan, mid_gates), wait_rows))
     return sorted(lanes, key=lambda ln: ln.name)
 
 

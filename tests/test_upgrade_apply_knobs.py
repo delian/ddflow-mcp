@@ -117,12 +117,17 @@ def test_config_changes_operator_with_a_confirm_applies_it(old: Path) -> None:
         "worktree.max_parallel",
         "--confirm",
         "session.redact_patterns",
+        # `operator` refuses every default change of a knob the old project already had:
+        # log.snapshot is not here because the fixture predates it, so it nets to an addition
+        "--confirm",
+        "log.max_cached_events",
         "--reason",
         "the operator accepted the new defaults",
     )
 
     assert "[acknowledged] knob_changed:worktree.root" in out
     assert "[acknowledged] knob_changed:worktree.max_parallel" in out
+    assert "[acknowledged] knob_changed:log.max_cached_events" in out
     assert "[refused] knob_changed:worktree.root" not in out
     assert "[refused] knob_changed:worktree.max_parallel" not in out
     assert code == 0, out
