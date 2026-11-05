@@ -89,9 +89,9 @@ def test_extends_files_the_rule_and_leaves_the_decision_unedited(proj):
     assert code == 0, (code, out, err)
     assert "r-mig" in _rules(proj)
     assert "D-mig" in out
-    st = fold(EventLog(proj, "t").read_all(), strict=False)
-    assert "D-mig" in st.decisions
-    assert "D-mig" not in st.links or not st.links["D-mig"].additions
+    events = EventLog(proj, "t").read_all()
+    assert "D-mig" in fold(events, strict=False).decisions
+    assert not [e for e in events if e.kind == "record.extended"]
 
 
 def test_extends_puts_the_text_on_an_open_lesson_and_files_no_rule(proj):
