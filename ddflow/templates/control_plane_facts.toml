@@ -42,7 +42,7 @@ acp_provider = { v = "custom provider `extends: acp` with `command`, stdio", s =
 sdk = { v = "@getpaseo/client 0.15.2 (npm latest)", s = "documented", src = "paseo-npm", d = "2026-11-05", ver = "0.15.2" }
 
 [plane.harness-remote]
-upstream = { v = "github.com/giuliastro/harness-remote", s = "documented", src = "hr-fork", d = "2026-11-05", ver = "3.8.0", note = "R-control-planes cited monperrus/harness-remote: GitHub API says that is a fork, stale since 2026-09-10; kits should target upstream" }
+upstream = { v = "github.com/giuliastro/harness-remote", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "package.json repository field. R-control-planes cited monperrus/harness-remote (hr-fork): the GitHub API names it a fork of this one, its last commit 2026-09-10; kits should target upstream" }
 api = { v = "bridge: /v1/health, /v1/capabilities, /v1/events, /v1/sessions, /session, /session/:id/{message,prompt_async,abort,todo,diff,action,command,queue}; daemon: /v1/agents/:id/, /v1/tasks/:id/{launch,continue,context,worktree,worktree/cleanup}", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "bridge/src/server.js, task-launch-server.js, REFERENCE.md; the OpenCode path shape, a harness answers a subset named by /v1/capabilities" }
 auth = { v = "HTTP Basic, optional on loopback, required beyond it; bridge default 127.0.0.1:4097", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "bridge/src/config.js, http-policy.js; no per-item or per-lane scope, the credentials are the whole user account" }
 root_limit = { v = "--root (repeatable) limits file browsing and a new session's directory, nothing else", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "REFERENCE.md: not a sandbox; existing sessions and the API a daemon forwards are outside it" }
@@ -80,7 +80,7 @@ cwd = { v = "session/new cwd is the SDK cwd; settingSources user, project, local
 live = { v = "the injected server starts in the session cwd", s = "unverified", src = "claude-acp-src", d = "2026-11-05", note = "not run: adapter not installed; probes/probe_acp_mcp_inject.py answers it once it is" }
 
 [plane.acp-codex]
-adapter = { v = "@agentclientprotocol/codex-acp", s = "documented", src = "codex-acp-old", d = "2026-11-05", ver = "2.5.0", note = "zed-industries/codex-acp is archived and points here; the new one runs on the Codex App Server" }
+adapter = { v = "@agentclientprotocol/codex-acp", s = "documented", src = "codex-acp-src", d = "2026-11-05", ver = "2.5.0", note = "package.json. zed-industries/codex-acp (codex-acp-old) is archived and its README points here; this one runs on the Codex App Server" }
 inject_mcp = { v = "stdio, http; no sse; a server whose name the Codex config already has is skipped", s = "documented", src = "codex-acp-src", d = "2026-11-05", ver = "2.5.0", note = "src/CodexAcpClient.ts, src/McpServerConfig.ts; so a user's own `ddflow` server wins silently, unless DISABLE_MCP_CONFIG_FILTERING=true" }
 cwd = { v = "session/new cwd is the thread cwd, marked trusted for the session", s = "documented", src = "codex-acp-src", d = "2026-11-05", ver = "2.5.0", note = "src/CodexAcpClient.ts createSessionConfig" }
 live = { v = "the injected server starts in the session cwd", s = "unverified", src = "codex-acp-src", d = "2026-11-05", note = "not run: adapter not installed; probes/probe_acp_mcp_inject.py answers it once it is" }

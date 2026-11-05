@@ -23,16 +23,16 @@ class FactsError(ValueError):
     """The project's facts file cannot be used; the message names it."""
 
 
-def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
-    """`extra` over `base`, one fact at a time, so an override leaves its neighbours."""
+def _merge(base: dict[str, Any], extra: dict[str, Any], where: Path) -> dict[str, Any]:
+    """`extra` over `base`, one whole fact at a time, so an override leaves its neighbours."""
     for key in ("sources", "plane"):
         if not isinstance(extra.get(key, {}), dict):
-            raise FactsError(f"{FILE}: [{key}] is not a table")
+            raise FactsError(f"{where}: [{key}] is not a table")
     out = {**base, "sources": {**base.get("sources", {}), **extra.get("sources", {})}}
     planes = {k: dict(v) for k, v in base.get("plane", {}).items()}
     for name, row in extra.get("plane", {}).items():
         if not isinstance(row, dict):
-            raise FactsError(f"{FILE}: [plane.{name}] is not a table")
+            raise FactsError(f"{where}: [plane.{name}] is not a table")
         planes.setdefault(name, {}).update(row)
     out["plane"] = planes
     return out
@@ -40,17 +40,21 @@ def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
 
 def load(root: Path | None = None, toml: TomlIo | None = None) -> dict[str, Any]:
     """The shipped facts, with the project's over them when `root` has any. A project file
-    that cannot be read, or holds a bad fact, raises FactsError: it is never skipped."""
+    that cannot be read, or holds a bad fact, raises FactsError: it is never skipped. Only
+    the project's own facts are judged here, so a shipped defect is not blamed on it."""
     io = toml or TomlLibIo()
     data = io.read(paths.templates_dir() / FILE)
-    local = Path(root) / ".ddflow" / FILE if root else None
-    if local is None or not local.is_file():
+    if root is None:
         return data
+    local = Path(root) / ".ddflow" / FILE
     try:
-        merged = _merge(data, io.read(local))
+        extra = io.read(local)
+    except FileNotFoundError:
+        return data
     except (TomlError, OSError) as e:
         raise FactsError(f"{local}: {e}") from e
-    bad = problems(merged)
+    merged = _merge(data, extra, local)
+    bad = problems({"sources": merged["sources"], "plane": extra.get("plane", {})})
     if bad:
         raise FactsError(f"{local}: " + "; ".join(bad))
     return merged
@@ -73,11 +77,17 @@ def _fact_problems(at: str, node: Any, sources: Any) -> list[str]:
 def problems(data: dict[str, Any]) -> list[str]:
     """Every defect of a parsed facts file, one string each."""
     sources = data.get("sources", {})
+    planes = data.get("plane", {})
+    if not isinstance(planes, dict):
+        return ["[plane] is not a table"]
     harnesses = set(harnessreg.ids())
     out = []
-    for name, row in sorted(data.get("plane", {}).items()):
+    for name, row in sorted(planes.items()):
         if name in harnesses:
             out.append(f"plane {name!r} reuses a harness id")
+        if not isinstance(row, dict):
+            out.append(f"plane.{name} is not a table")
+            continue
         for key, node in sorted(row.items()):
             out += _fact_problems(f"plane.{name}.{key}", node, sources)
     return out
@@ -97,7 +107,7 @@ def rows(data: dict[str, Any], plane: str = "") -> list[dict[str, str]]:
     """Table rows in `harnessfacts` shape, for one plane or all of them."""
     out = []
     for name in [plane] if plane else ids(data):
-        for key, node in sorted(data["plane"][name].items()):
+        for key, node in sorted(data.get("plane", {}).get(name, {}).items()):
             out.append(
                 {
                     "agent": name,

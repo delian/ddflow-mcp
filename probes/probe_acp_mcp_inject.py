@@ -6,11 +6,14 @@ Sends initialize and session/new, never a prompt, so no model is called. The stu
 this file also is logs its cwd and an env marker; the agent starts in one temporary directory
 and the session names another, so the log tells them apart. HOME and XDG_* point at a third:
 the operator's own config and sessions are neither read nor written, and an agent that needs
-a login there says so in its session/new error. Exit 0 only when both facts were seen.
+a login there says so in its session/new error. The marker is new each run and absent from the
+agent's own environment, so only the injected `env` can deliver it. Exit 0 only when the server
+started in the session directory with that marker and the agent completed the MCP handshake.
 """
 
 import json
 import os
+import secrets
 import shlex
 import subprocess
 import sys
@@ -29,7 +32,11 @@ def stub(log: str) -> None:
 
     note(event="started", cwd=os.getcwd(), marker=os.environ.get(MARKER))
     for line in sys.stdin:
-        msg = json.loads(line)
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            note(event="unreadable", line=line[:80])
+            continue
         note(event="request", method=msg.get("method"))
         if "id" not in msg:
             continue
@@ -70,13 +77,13 @@ def ask(proc: subprocess.Popen, lines: list[str], rid: int, method: str, params:
     return None
 
 
-def judge(entries: list[dict], session: str, spawn: str) -> dict:
+def judge(entries: list[dict], session: str, spawn: str, marker: str) -> dict:
     started = [e for e in entries if e.get("event") == "started"]
     methods = {e.get("method") for e in entries}
     cwd = started[0]["cwd"] if started else None
     return {
         "started": bool(started),
-        "env_passed": bool(started) and started[0].get("marker") == "injected",
+        "env_passed": bool(started) and started[0].get("marker") == marker,
         "initialized": "initialize" in methods,
         "tools_listed": "tools/list" in methods,
         "cwd_is_session": cwd == session,
@@ -91,7 +98,9 @@ def probe(agent: str, wait: float) -> int:
         for d in (spawn, session, home):
             d.mkdir()
         log = str(base / "stub.log")
-        env = {**os.environ, "HOME": str(home)}
+        marker = secrets.token_hex(8)
+        env = {k: v for k, v in os.environ.items() if k != MARKER}
+        env["HOME"] = str(home)
         for k, sub in (
             ("CONFIG", ".config"),
             ("DATA", ".data"),
@@ -118,7 +127,7 @@ def probe(agent: str, wait: float) -> int:
             "name": "cpprobe",
             "command": sys.executable,
             "args": ["-I", str(Path(__file__).resolve()), "--stub", log],
-            "env": [{"name": MARKER, "value": "injected"}],
+            "env": [{"name": MARKER, "value": marker}],
         }
         new = ask(
             proc, lines, 2, "session/new", {"cwd": str(session), "mcpServers": [server]}, wait
@@ -135,12 +144,13 @@ def probe(agent: str, wait: float) -> int:
             proc.kill()
         text = Path(log).read_text(encoding="utf-8") if os.path.exists(log) else ""
         entries = [json.loads(line) for line in text.splitlines()]
-        seen = judge(entries, str(session), str(spawn))
+        seen = judge(entries, str(session), str(spawn), marker)
         capabilities = ((init or {}).get("result") or {}).get("agentCapabilities", {})
         print(json.dumps({"mcpCapabilities": capabilities.get("mcpCapabilities")}))
         print(json.dumps({"session_error": (new or {"error": "no answer"}).get("error")}))
         print(json.dumps(seen))
-        return 0 if seen["started"] and seen["cwd_is_session"] and seen["env_passed"] else 1
+        need = ("started", "env_passed", "initialized", "tools_listed", "cwd_is_session")
+        return 0 if all(seen[k] for k in need) else 1
 
 
 if __name__ == "__main__":

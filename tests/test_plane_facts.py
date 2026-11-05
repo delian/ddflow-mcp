@@ -62,6 +62,15 @@ def test_problems_name_each_defect(body, word):
     assert word in " ".join(planefacts.problems(doc(body)))
 
 
+@pytest.mark.parametrize("data", [{"plane": "x"}, {"plane": {"p": "x"}}, {"plane": {"p": []}}])
+def test_a_wrong_shape_is_a_defect_not_a_crash(data):
+    assert "is not a table" in " ".join(planefacts.problems(data))
+
+
+def test_rows_of_a_plane_it_does_not_have_are_empty():
+    assert planefacts.rows(planefacts.load(), "nosuch") == []
+
+
 def test_plane_id_cannot_shadow_a_harness():
     taken = harnessreg.ids()[0]
     found = planefacts.problems(doc(f'[plane.{taken}]\nx = {{ v = "y", {GOOD} }}'))
@@ -117,6 +126,29 @@ def test_project_file_overrides_one_fact_and_keeps_the_rest(tmp_path):
     assert "hooks" in got
 
 
+def test_project_can_mark_a_shipped_fact_absent(tmp_path):
+    local = tmp_path / ".ddflow"
+    local.mkdir()
+    (local / planefacts.FILE).write_text(
+        '[plane.paseo.hooks]\ns = "none"\nsrc = "paseo-src"\nd = "2026-11-06"\n',
+        encoding="utf-8",
+    )
+    got = {r["fact"]: r for r in harness_view(tmp_path, what="facts", id="paseo").data["facts"]}
+    assert got["hooks"]["status"] == "none"
+    assert got["hooks"]["value"] == ""
+
+
+def test_a_shipped_defect_is_not_blamed_on_the_project(tmp_path):
+    shipped = doc('[plane.p]\nx = "bare"')
+    mine = doc('[plane.mine.x]\ns = "none"\nsrc = "a"\nd = "2026-11-06"\n')
+
+    class Io:
+        def read(self, path):
+            return shipped if "templates" in str(path) else mine
+
+    assert "mine" in planefacts.load(tmp_path, Io())["plane"]
+
+
 def test_bad_project_file_is_a_named_failure_not_a_traceback(tmp_path):
     local = tmp_path / ".ddflow"
     local.mkdir()
@@ -134,6 +166,7 @@ def test_wrong_shape_in_the_project_file_is_named(tmp_path, text):
     out = harness_view(tmp_path, what="facts")
     assert out.exit != 0
     assert "is not a table" in out.reason
+    assert str(local) in out.reason
 
 
 def test_invalid_project_fact_is_refused(tmp_path):
