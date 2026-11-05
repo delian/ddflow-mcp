@@ -288,6 +288,16 @@ def find(waits: list[Wait], leases: list[Held]) -> list[Cycle]:
     )
 
 
+def _alarm(w: Wait, held: dict[str, Held], now: float, limit: float) -> Alarm | None:
+    """``w``'s alarm, or None while a lease in its way shows work or none stands in it."""
+    way = [held[b] for b, h in w.on if b in held and held[b].holder == h]
+    on = tuple((lz.item, lz.holder, now - lz.progress_at) for lz in way)
+    if not on or min(s for _i, _h, s in on) < limit:
+        return None
+    drops = tuple(d for lz in way if (d := _drop(lz, w.globs)))
+    return Alarm(w.item, w.agent, now - w.since, on, drops)
+
+
 def alarms(
     waits: list[Wait], leases: list[Held], cycles: list[Cycle], now: float, limit: float
 ) -> list[Alarm]:
@@ -298,13 +308,6 @@ def alarms(
         return []
     ringed = {(i, k.agent) for c in cycles for k in c.links for i in k.items}
     held = {lz.item: lz for lz in leases}
-    out = []
-    for w in sorted(waits, key=lambda w: (w.since, w.item)):
-        way = [held[b] for b, h in w.on if b in held and held[b].holder == h]
-        idle = [now - lz.progress_at for lz in way]
-        if now - w.since < limit or (w.item, w.agent) in ringed or not way or min(idle) < limit:
-            continue
-        drops = tuple(d for lz in way if (d := _drop(lz, w.globs)))
-        on = tuple((lz.item, lz.holder, s) for lz, s in zip(way, idle, strict=True))
-        out.append(Alarm(w.item, w.agent, now - w.since, on, drops))
-    return out
+    aged = [w for w in waits if now - w.since >= limit and (w.item, w.agent) not in ringed]
+    found = (_alarm(w, held, now, limit) for w in sorted(aged, key=lambda w: (w.since, w.item)))
+    return [a for a in found if a]

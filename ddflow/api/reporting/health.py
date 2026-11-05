@@ -66,7 +66,7 @@ from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
-from .waitcycles import wait_findings, wait_order, wait_report
+from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
@@ -477,8 +477,8 @@ def doctor(
         "repo": str(repo),
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
-        "wait_cycles": [c.as_dict() for c in cycles],
-        "wait_alarms": [a.as_dict() for a in alarms],
+        "wait_cycles": [],
+        **wait_rows(cycles, alarms),
         "auto_order": ordered,
         **cost.data(),
     }
