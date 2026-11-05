@@ -23,9 +23,10 @@ def _answer_other_kind(
     repo: Path, rule: Rule, answer: RuleDedupAnswer, agent: str
 ) -> O.Outcome | None:
     """An answer that points at a decision, lesson, task... rather than a rule. None
-    when the cross-kind check is off. ``extends`` / ``duplicate_of`` an open record put
-    the rule's text on that record (`record.extended`) and file no rule, as every other
-    add does; onto a closed or claimed one, and ``related``, the rule is filed and the
+    when the cross-kind check is off. ``duplicate_of`` an open record, and ``extends`` one
+    outside `_dedupe.LINK_ONLY_KINDS`, put the rule's text on that record
+    (`record.extended`) and file no rule, as every other add does; ``extends`` a decision or
+    task, onto a closed or claimed record, and ``related``, the rule is filed and the
     result names the record (a rule is a file: it carries no link in the log)."""
 
     if not DD.kind_of(_load(repo, agent)[2], answer.target):
