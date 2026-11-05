@@ -238,7 +238,7 @@ def _why_not(before: dict, after: dict) -> list[str]:
         if before[k] != after[k]
     ]
     lanes = before["lanes"], after["lanes"]
-    if not all(isinstance(n, int) and n >= 1 for n in lanes) or lanes[0] >= lanes[1]:
+    if not all(type(n) is int and n >= 1 for n in lanes) or lanes[0] >= lanes[1]:
         why.append(f"lanes: {lanes[0]} before and {lanes[1]} after, want fewer before")
     for name, s in (("before", before), ("after", after)):
         if s["merged"] != s["items"]:

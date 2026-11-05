@@ -255,11 +255,17 @@ def test_a_host_that_cannot_answer_is_not_called_isolated(tiny, monkeypatch):
 
 
 def test_a_tag_named_main_does_not_hide_a_known_commit(tmp_path, monkeypatch):
+    """The host holds the commit but not the tag object: only the peeled name finds it."""
     sb = _sandbox(tmp_path, items=T.ITEMS[:1], min_samples=1)
+    host = tmp_path / "host"
+    subprocess.run(["git", "clone", "-q", "--no-tags", str(sb.repo), str(host)], check=True)
     subprocess.run(
         ["git", "-C", str(sb.repo), "tag", "-a", "main", "-m", "x"], check=True, env=sb.env
     )
-    monkeypatch.setattr(T, "ROOT", sb.repo)  # its own head: as if the host held it
+    tag = _git(sb.repo, "rev-parse", "refs/tags/main")
+    missing = subprocess.run(["git", "-C", str(host), "cat-file", "-e", tag], check=False)
+    assert missing.returncode == 1
+    monkeypatch.setattr(T, "ROOT", host)
     assert not R._isolated(sb)
 
 
@@ -367,7 +373,8 @@ def test_a_pair_that_cannot_be_compared_is_not_judged(after, word):
 
 
 @pytest.mark.parametrize(
-    ("before", "after"), [(3, 1), (3, 3), (None, None), (None, 3), (0, 3), (-1, 3), (1, None)]
+    ("before", "after"),
+    [(3, 1), (3, 3), (None, None), (None, 3), (0, 3), (-1, 3), (1, None), (True, 3)],
 )
 def test_the_baseline_must_have_the_fewer_lanes(before, after):
     rep = R.judge(_side(lanes=before), _side(lanes=after, per_hour=9.0))
