@@ -192,6 +192,7 @@ def _h_item_reworked(st: State, ev: Event) -> None:
     if it is None:
         return
     it.merged_sha = ""
+    it.merged_head = ""
     it.landed_before = ""
     it.landed_after = ""
     it.gates = {}

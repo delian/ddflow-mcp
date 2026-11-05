@@ -26,6 +26,7 @@ def _h_worktree_adopted(st: State, ev: Event) -> None:
 def _h_worktree_merged(st: State, ev: Event) -> None:
     it = _item(st, ev, ev.data.get("kind", "task"))
     it.merged_sha = ev.data.get("sha", "")
+    it.merged_head = ev.data.get("branch_head", "")
     it.landed_before = ev.data.get("landed_before", it.landed_before)
     it.landed_after = ev.data.get("landed_after", it.landed_after)
 
