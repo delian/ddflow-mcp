@@ -12,12 +12,13 @@ from typing import Any
 from ...core import clock
 from ...core import outcome as O
 from ...core.plain import plain
+from ...infra import worktree as W
 from ...services import gates as G
 from ...services import grants as GNT
 from ...services import observed_globs as OG
 from ...services import prompts as P
 from ...services.approvals import overrides as OVR
-from ...services.completion import changed_paths, readme_report
+from ...services.completion import changed_paths, readme_report, refine_stale_notes
 from ...services.gates import measured as R
 from ...services.gates import running as RUN
 from ...services.guidance import inject as GI
@@ -113,7 +114,25 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     _log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
     try:
-        s = G.status(st, cfg, item, gates, diff=lambda: changed_paths(repo, st.items[item]))
+        it = st.items[item]
+    except KeyError:
+        return O.failed("gate.status", f"no such item {item!r}", id=item, text="")
+    stale_notes: list = []
+    if it.worktree:
+        cwd = W.load_path(repo, it.worktree)
+        stale_notes = refine_stale_notes(
+            G.stale_evidence_detail(st, cfg, item, cwd, landed="HEAD"),
+            it,
+            cwd,
+            "HEAD",
+            changed_paths(repo, it),
+            cfg.review.triage_ignore_globs,
+            cfg.review.doc_globs,
+        )
+    try:
+        s = G.status(
+            st, cfg, item, gates, diff=lambda: changed_paths(repo, it), stale_notes=stale_notes
+        )
     except KeyError:
         return O.failed("gate.status", f"no such item {item!r}", id=item, text="")
 
