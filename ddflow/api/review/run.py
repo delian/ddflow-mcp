@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -313,12 +314,27 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
     `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, exactly as before.
+    unknown here the reviewer from a minority family is named, so a clean cross-family
+    round is still identified (bug B1a30dc3303).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    return cross[0] if cross else best
+    if cross:
+        return cross[0]
+    # `review_tier` cannot tell a cross-family reviewer from a same-family one when the
+    # author is unknown, so the first tied reviewer used to be named and a clean
+    # cross-family one discarded (bug B1a30dc3303). When the tied reviewers still come
+    # from TWO or more distinct families, name a reviewer whose family is not the single
+    # most common one — the reviewer most likely to be cross-family to the unknown author.
+    fams = [(r.family or "").strip().lower() for r in tied]
+    distinct = {f for f in fams if f}
+    if len(distinct) >= 2:
+        majority = Counter(f for f in fams if f).most_common(1)[0][0]
+        for r in tied:
+            if (r.family or "").strip().lower() and (r.family or "").strip().lower() != majority:
+                return r
+    return best
 
 
 def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands

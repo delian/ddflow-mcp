@@ -130,6 +130,13 @@ def _reviewer_fams(
             anonymous.append(f"{gname}={m or 'no model'}")
             continue
         fams.append((gname, fam))
+        # A gate dispatched to several reviewers records only its identifying pass above;
+        # the panel's other families are carried in `reviewer_families` so a clean
+        # cross-family round is still visible (bug B1a30dc3303).
+        for f in rec.evidence.get("reviewer_families") or []:
+            ff = str(f).strip().lower()
+            if ff and ff != fam:
+                fams.append((gname, ff))
     return fams, anonymous, unapproved
 
 
@@ -339,6 +346,19 @@ def independence_tier(
     routed, author_fam = _author_identity(author_model, cfg)
     fams, anonymous, unapproved = _reviewer_fams(state, it, gates, cfg)
     if why := _author_no_identity_refusal(author_model, routed, author_fam):
+        # An author with no resolvable family -- an empty model, or a name no map
+        # recognises -- still has exactly ONE family. Reviewers from TWO OR MORE distinct
+        # families therefore include one outside the author's family whatever it is, so a
+        # clean cross-family panel satisfies independence even though the author's own
+        # family cannot be named (bug B1a30dc3303). A router author (`routed` is not None)
+        # is a SET of families and is exempt: it may overlap every reviewer's family.
+        families = {f for _g, f in fams}
+        if routed is None and len(families) >= 2:
+            return (
+                "family",
+                f"reviewers from {len(families)} families ({', '.join(sorted(families))}) "
+                f"reviewed, so one is outside the author's single unknown family",
+            )
         return "none", why
     # `router_set` returns its members stripped and lowercased, so the router side is
     # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
