@@ -197,23 +197,24 @@ never added. The counts are exactly the entries of
 so the document and the ratchet name the same list.
 
 ```
-surfaces/   cli.py, mcp.py, registry.py,   argparse and JSON-RPC. No policy. A command is
+surfaces/   cli.py, mcp/, registry/,   argparse and JSON-RPC. No policy. A command is
             declared/, parsers/, tools/,   DATA (registry.Command); both surfaces are
-            records.py, mcp_protocol.py    generated from it.
+            records/, mcp_protocol.py    generated from it.
 api/        lifecycle/, knowledge/,        the application layer: ONE typed entry
-            reporting/, items.py,          point per operation. Both surfaces call it.
-            gates.py, records.py
+            reporting/, items/,          point per operation. Both surfaces call it.
+            gates/, records/
 views/      human.py, markdown/            one renderer per result kind. ABOVE
-                                           services: a renderer reads service results, a
+                                           services: a renderer reads service results; a
                                            service returns an Outcome, not a view.
 services/   gates/, guidance/,             the domain. Every operation returns an
-            searchcore/, leases.py,        Outcome. Nothing here prints.
+            searchcore/, leases/,        Outcome. Nothing here prints.
             cmdrunner.py, ticks.py
 infra/      git.py, proc.py, fsio.py,      disk, git, sqlite, subprocess, containers,
-            log.py, worktree.py,           TOML, machine-local state.
+            log/, worktree/,           TOML, machine-local state.
             tomlcfg.py, localstore.py
 config/     config_sections/               read by every layer; imports none of them.
                                            Above `core`: core is handed its knobs.
+completion_fast.py   the shell-completion entry point (`python -m ddflow.completion_fast`).
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
             handlers/, defs.py, clock.py,
             graph.py, globs.py, redact/
@@ -264,34 +265,34 @@ add-a-port steps and one page per family are in [docs/ddflow/adapters/](ddflow/a
 |---|---|
 | `core/events.py` | the `Event` record, Lamport stamp, content-addressed id |
 | `core/model.py` | domain types and `fold` — pure, no I/O |
-| `core/schedule.py` | readiness, inherited dependencies, glob conflicts, cycles |
-| `core/progress.py` | work aggregation and the six loop detectors |
+| `core/schedule/` | readiness, inherited dependencies, glob conflicts, cycles |
+| `core/progress/` | work aggregation and the six loop detectors |
 | `core/flow.py` | branching model (trunk / gitflow), merge targets, stacking, SemVer and Conventional Commits — pure |
-| `infra/log.py` | the append-only log: `flock`, `fsync`, per-agent shards |
-| `infra/worktree.py` | git worktree lifecycle, safe merge (into a branch nobody has checked out, via a throwaway tree), push, tags |
+| `infra/log/` | the append-only log: `flock`, `fsync`, per-agent shards |
+| `infra/worktree/` | git worktree lifecycle, safe merge (into a branch nobody has checked out, via a throwaway tree), push, tags |
 | `infra/forge.py` | pull/merge requests through `gh` / `glab` — no token, no HTTP; `ForgeUnavailable` kept apart from a refusal |
 | `infra/proc.py` | every subprocess, with stdin detached — see below |
-| `infra/store.py` | SQLite projection + BM25 retrieval (disposable) |
+| `infra/store/` | SQLite projection + BM25 retrieval (disposable) |
 | `infra/container.py` | container detection, loopback rewriting |
 | `infra/tomlcfg.py` | one TOML overlay loader, one unknown-key policy |
 | `api/__init__.py` | the typed operation surface: one entry point per operation, called by both surfaces |
 | `api/lifecycle/claim.py`, `wait.py`, `ready.py`, `heartbeat.py`, `complete.py`, `merge.py`, `brief.py`, `reservations.py` | the work queue, one module per area (`api/lifecycle/` re-exports the public names): claim and worktree adoption, wait, next, heartbeat/release, complete, merge, brief, and the reservation queue they share |
-| `api/knowledge/lessons.py`, `retrieval.py`, `pairs.py`, `research.py`, `bugs.py`, `bug_close.py`, `regression.py`, `sessions.py`, `memory.py` | what the project remembers, one module per area (`api/knowledge/` re-exports the public names) |
-| `api/reporting/overview.py`, `records.py`, `health.py`, `views.py` | read-only questions, one module per area (`api/reporting/` re-exports the public names): status, show, doctor and recover, board and render |
-| `services/leases.py` | acquire/renew/release, crash scanning, salvage advice |
+| `api/knowledge/lessons.py`, `retrieval.py`, `pairs.py`, `research.py`, `bugs.py`, `bug_close.py`, `regression.py`, `sessions/`, `memory.py` | what the project remembers, one module per area (`api/knowledge/` re-exports the public names) |
+| `api/reporting/overview.py`, `records/`, `health.py`, `views.py` | read-only questions, one module per area (`api/reporting/` re-exports the public names): status, show, doctor and recover, board and render |
+| `services/leases/` | acquire/renew/release, crash scanning, salvage advice |
 | `services/gates/defs.py`, `runner.py`, `testcmd.py`, `evidence.py`, `mutation.py`, `outcomes.py`, `reviewers.py` | gates, one module per area (`services/gates/` re-exports the public names): definitions, execution, the test-command advice, evidence fingerprints, mutation and regression-test verification, recorded outcomes, reviewer independence |
-| `services/flow.py` | open a request, `pr sync` (merged / changes requested / closed / approved), version plans and cuts ([R16](RESEARCH.md)) |
-| `services/review.py` | reviewer backends — any LLM, four wire formats |
-| `services/sessions.py` | prompt provenance, redaction, replay, bundles |
-| `services/companions.py` | detect and register the MCP servers that serve the gates |
+| `services/flow/` | open a request, `pr sync` (merged / changes requested / closed / approved), version plans and cuts ([R16](RESEARCH.md)) |
+| `services/review/` | reviewer backends — any LLM, four wire formats |
+| `services/sessions/` | prompt provenance, redaction, replay, bundles |
+| `services/companions/` | detect and register the MCP servers that serve the gates |
 | `services/importer/` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue; `verify_import` answers whether it is still true and whether anyone finished it |
 | `services/help.py` | `ddflow help`: narrative from templates, capability inventory generated from the live tool table |
-| `services/adopt.py`, `cleanup.py`, `prompts.py` | install, worktree classification, templates |
+| `services/adopt/`, `cleanup/`, `prompts.py` | install, worktree classification, templates |
 | `services/enforce/hooks.py`, `precommit.py`, `staged.py`, `leasecheck.py`, `views.py`, `driftchecks.py`, `trailers.py` | the commit hook and its commit-time gates (the `services/enforce/` package re-exports the public names) |
-| `views/markdown.py` | the generated views and the budgeted brief |
+| `views/markdown/` | the generated views and the budgeted brief |
 | `surfaces/cli.py` | argparse |
-| `surfaces/mcp.py` | MCP stdio server |
-| `config.py` | documented knobs, TOML + env, and the one family map |
+| `surfaces/mcp/` | MCP stdio server |
+| `config/` | documented knobs, TOML + env, and the one family map |
 
 The layer map above and this table are hand-maintained prose and are re-homed by ONE
 consolidation pass after a split wave lands, not by each split lane (a lane re-homes only
@@ -349,18 +350,18 @@ import-linter contract counts the stragglers and can only go down.
 | git | `infra/git.py` | every git call: timeouts, status and path parsing, `GitResult` |
 | processes | `infra/proc.py` | `run`, `popen`, `capture` (timeout, optional input, a `Captured` result), `spawn_stdio` (a child whose pipes are spoken to, as a stdio probe does), `spawn_shell`, `kill_group`: stdin detached, process group killed |
 | files | `infra/fsio.py` | `atomic_write`, `replace_text`, `file_lock`, `ensure_ignored_dir`, `repo_rel`, managed regions; `scratch_dir` and `temp_text` for temporary directories and files |
-| TOML writes | `infra/tomlcfg.py` | `upsert`, `remove`, `move_keys` (tomlkit), the overlay readers; `services/configwrite.py` validates then writes `config.toml` |
+| TOML writes | `infra/tomlcfg.py` | `upsert`, `remove`, `move_keys` (tomlkit), the overlay readers; `services/configwrite/` validates then writes `config.toml` |
 | time | `core/clock.py` | the one timestamp parser and writer, durations, ages |
 | graphs | `core/graph.py` | closure, cycles, topological order, longest chains, transitive reduction |
 | globs | `core/globs.py` | one glob semantics (`match`, `inside`, `overlap`); `core/globspec.py` reads a list |
 | redaction | `core/redact/` | one Redactor with named profiles, used by the log, views, exports and bug reports |
-| definition records | `core/defs.py`, `core/records.py` | the managed-definition record every kind shares; the fold's record dataclasses |
+| definition records | `core/defs.py`, `core/records/` | the managed-definition record every kind shares; the fold's record dataclasses |
 | event evolution | `core/upcasters.py` | per-kind payload versions and the upcasters that read old events |
 | overlay loader | `services/overlay.py` | `OverlayLoader`: config path, then `.ddflow/<dir>/`, then shipped; eject, drift, validate |
 | machine-local state | `infra/localstore.py`, `services/slots.py`, `services/changes.py` | `LocalStore` (read, write, lock, trim `.ddflow/local`; the release check and the self-upgrade state use it, while the ticks, waits, quota, upgrade-notice and flake stores keep their own flat files), counting-semaphore `Slots`, content-based `ChangeDetector` |
-| command registry | `surfaces/registry.py`, `surfaces/declared/` | `Command` and `Param`: one declaration generates the argparse parser, the MCP tool, its schema and the parity exemptions |
+| command registry | `surfaces/registry/`, `surfaces/declared/` | `Command` and `Param`: one declaration generates the argparse parser, the MCP tool, its schema and the parity exemptions |
 | CLI executor | `surfaces/cliexec.py`, `registry.CliPolicy` | a declared command with `call` and `render` runs with no `cmd_*` function: `--json` prints the MCP tool's body, a refusal has the tool's lead, the human reads `render`; a `CliPolicy` states what prints differently (the identity as typed, stderr notes, which exits show a result) |
-| record surface | `api/records.py`, `surfaces/records.py` | `RecordKind`: the seven verbs (list, show, add, edit, remove, search, revise) on the CLI and MCP |
+| record surface | `api/records/`, `surfaces/records.py` | `RecordKind`: the seven verbs (list, show, add, edit, remove, search, revise) on the CLI and MCP |
 | MCP protocol | `surfaces/mcp_protocol.py` | which protocol revisions are served and how a reply is shaped for each |
 | search | `services/searchcore/`, `services/search.py` | `SearchSource` registry, rankers (`core/rank.py`), bounded regex check; `ddflow search --source` |
 | context pack | `services/contextpack.py`, `services/embed.py` | ranked candidates cut to one budget, cited and fenced as data; the one `Embedder` |
@@ -371,16 +372,16 @@ import-linter contract counts the stragglers and can only go down.
 | item creation | `services/items.py` | `add_task`: the one way a task is created |
 | identity | `services/identity.py`, `core/agentname.py` | who is calling, and what an agent name may contain |
 | host | `infra/hostinfo.py`, `infra/signals.py` | this machine's names; load, memory and disk signals |
-| tree lifecycle | `infra/worktree.py`, `services/cleanup.py`, `services/tree_owner.py` | create, merge and remove worktrees; classify them; whose tree a command stands in |
+| tree lifecycle | `infra/worktree/`, `services/cleanup/`, `services/tree_owner.py` | create, merge and remove worktrees; classify them; whose tree a command stands in |
 | cadence and triggers | `services/ticks.py`, `services/cadence.py`, `services/triggers.py`, `services/schedule.py` | opportunistic periodic work, count-based due passes, event triggers, scheduled definitions |
 | digest | `core/digest.py` | the one hashing and content-digest module |
 | text | `core/slug.py`, `core/textcut.py`, `core/budget.py` | slugs and safe names, the one clipper, the token and character budget |
 | config knobs | `config_sections/_docs.py` | `knob()` and `declare()`: a knob is declared once, on its field |
 | compatibility | `services/upgrade_plan.py`, `services/migrations/`, `services/repairs/` | `ddflow upgrade --plan`, versioned migrations and data repairs |
-| upgrade chain | `services/upgrade_manifest.py`, `services/upgrade_apply.py`, `services/backups.py`, `services/upgrade_status.py` | the shipped `templates/upgrade/changes.toml` manifest, `--apply` with a backup first, local backups and snapshots, `--status`/`--history`/`--resume` |
-| upgrade at run time | `services/upgrade_start.py`, `services/upgrade_notice.py`, `services/upgrade_check.py`, `services/selfupgrade.py`, `services/upgrade_dryrun.py`, `infra/release_index.py`, `services/install_info.py` | the proposal at server start, the one-line notice, the cached release check (the one HTTP GET, in `infra/release_index.py`), `--self` by install method, the rehearsal on a throwaway clone |
+| upgrade chain | `services/upgrade_manifest.py`, `services/upgrade_apply/`, `services/backups.py`, `services/upgrade_status.py` | the shipped `templates/upgrade/changes.toml` manifest, `--apply` with a backup first, local backups and snapshots, `--status`/`--history`/`--resume` |
+| upgrade at run time | `services/upgrade_start.py`, `services/upgrade_notice.py`, `services/upgrade_check.py`, `services/selfupgrade.py`, `services/upgrade_dryrun/`, `infra/release_index.py`, `services/install_info.py` | the proposal at server start, the one-line notice, the cached release check (the one HTTP GET, in `infra/release_index.py`), `--self` by install method, the rehearsal on a throwaway clone |
 | harness registry | `services/harnessreg.py`, `ddflow/harnesses/*.toml` | one strict TOML descriptor per coding agent (MCP file shape, rules surface, slash commands, hook style); absent, `none = true` and a value are three different facts |
-| hook core | `services/hookio.py`, `surfaces/declared/hooks.py` | `NORMALIZERS` and `EMITTERS`: the agent's hook payload to one `HookPayload` and the reply back in its dialect; the handler per event is in `api/setup.py` |
+| hook core | `services/hookio.py`, `surfaces/declared/hooks.py` | `NORMALIZERS` and `EMITTERS`: the agent's hook payload to one `HookPayload` and the reply back in its dialect; the handler per event is in `api/setup/` |
 | harness identity | `infra/harness_identity.py` | the identity declared on an MCP connection, recorded against the harness process so its shell commands share it |
 | flake log | `services/flakes.py` | failing test ids and tails from a runner's output, and `.ddflow/local/flakes.jsonl` (a test that failed and then passed on the same tree) |
 | id column | `surfaces/render.id_cell` | an id padded to a column and never cut (a shortened id is one `show` rejects) |
@@ -411,7 +412,7 @@ renderer. The guards fail the suite if a change reintroduces the pattern by hand
   handler in `surfaces/commands/`; what a command deliberately does
   not do on the other surface is a field (`surfaces/exemptions.py`), not a test table.
   `python -m ddflow.surfaces.tool_table` rewrites the README tool table.
-- **A record kind.** Declare a `RecordKind` with `declare(...)` in `api/records.py` (name,
+- **A record kind.** Declare a `RecordKind` with `declare(...)` in `api/records/` (name,
   `def_kind`, fields, columns, filters, verbs). The def kind is registered in
   `core/defs.py` (`DEF_KINDS`), which brings history, provenance, digest, replay and the
   add-time duplicate check. `surfaces/records.py` generates the CLI verbs and MCP tool.
