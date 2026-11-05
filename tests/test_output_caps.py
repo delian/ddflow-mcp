@@ -247,7 +247,8 @@ def test_non_ascii_text_costs_more_so_the_token_cap_holds():
         text = "\n".join(char * 50 for _ in range(1000))
         out = OC.apply(None, O.ok("doctor", text=text), "doctor", cfg=_cfg(max_chars=30000))
         kept = out.data["text"].split("\n\n[")[0]
-        assert len(kept) <= 30000 // 4, len(kept)
+        cost = sum(1 if c.isascii() else 4 for c in kept)
+        assert 29000 < cost <= 30000, cost
     ascii_text = "\n".join("a" * 50 for _ in range(1000))
     out = OC.apply(None, O.ok("doctor", text=ascii_text), "doctor", cfg=_cfg(max_chars=30000))
     assert 29000 < len(out.data["text"].split("\n\n[")[0]) <= 30000
