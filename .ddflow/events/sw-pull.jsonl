@@ -80,3 +80,4 @@
 {"agent":"sw-pull","data":{"globs":["ddflow/services/lanes/launch.py","tests/test_lane_launch.py"],"needs":["SW-pull"],"parent":"P-swarm","tags":["bugfix","swarm","wave:3"]},"id":"e12b5e70bc6e5b1d14bc8a855","kind":"task.updated","lamport":141595,"schema":1,"subject":"fix-B60ff757d13","ts":"2026-11-05T17:58:54.953302Z"}
 {"agent":"sw-pull","data":{"tags":["bugfix","swarm","wave:1"]},"id":"e92692db1a3b8c1d6a74d6e33","kind":"task.updated","lamport":141596,"schema":1,"subject":"fix-B60ff757d13","ts":"2026-11-05T17:59:04.426984Z"}
 {"agent":"sw-pull","data":{"at":1793901745.2245302,"holder":"sw-pull"},"id":"e918065c6c60811348fa946e6","kind":"lease.renewed","lamport":141633,"schema":1,"subject":"SW-pull","ts":"2026-11-05T18:02:26.022604Z"}
+{"agent":"sw-pull","data":{"at":1793902650.5167398,"holder":"sw-pull"},"id":"e8b4ce579392cfe411daf60c4","kind":"lease.renewed","lamport":141812,"schema":1,"subject":"SW-pull","ts":"2026-11-05T18:17:31.257166Z"}
