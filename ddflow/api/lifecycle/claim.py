@@ -60,6 +60,39 @@ def _merged_by(events, item: str) -> str:
     return merger
 
 
+def _state_refusal(log, claimed, events, item: str, force: bool) -> O.Outcome | None:
+    """The early refusal of a claim of ``item`` -- in review, or merged-but-uncompleted and
+    by a different agent -- or None.
+
+    Both are "there is nothing for a claimer to do, however it got here": review has its
+    reviewers, and a merged item not yet completed is the merge -> complete gap, where a
+    second lane's re-claim would run `item.reworked` and clear the merger's gates
+    (B-merged-uncompleted-claimable). ``--force`` (a deliberate rework) and the merger's own
+    re-claim (also a rework, `_reopen_stale_merge` below) are not refused.
+    """
+    if claimed is None or force:
+        return None
+    if claimed.state == REVIEW:
+        return O.refused(
+            "item.claimed",
+            f"{item} is in review ({claimed.pr.url if claimed.pr else 'its request'}); the "
+            f"reviewers have it. `ddflow pr sync` brings it back if they request changes. "
+            f"--force to take it back anyway.",
+            id=item,
+            alternatives=[],
+        )
+    if claimed.merged_sha and not claimed.terminal and log.agent_id != _merged_by(events, item):
+        return O.refused(
+            "item.claimed",
+            f"{item} is merged ({claimed.merged_sha[:12]}) but not completed; it is not "
+            f"fresh work for another agent to claim. `ddflow complete {item}` records it "
+            f"(needs no lease). Re-claim as the merged lane, or `--force`, to rework it.",
+            id=item,
+            alternatives=[],
+        )
+    return None
+
+
 def _reopen_stale_merge(log, claimed, item: str) -> dict[str, str]:
     """A re-claim of an item that had already merged reopens that stale merge, or {}.
 
@@ -195,32 +228,8 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     no_worktree = no_worktree or (
         claimed is not None and not needs_tree(claimed)
     )  # `no-worktree` tag
-    if claimed is not None and claimed.state == REVIEW and not force:
-        # Claiming it would let a push ride into the request its reviewers already
-        # judged -- and while it ran, `pr sync` would stop watching the request at all.
-        return O.refused(
-            "item.claimed",
-            f"{item} is in review ({claimed.pr.url if claimed.pr else 'its request'}); the "
-            f"reviewers have it. `ddflow pr sync` brings it back if they request changes. "
-            f"--force to take it back anyway.",
-            id=item,
-            alternatives=[],
-        )
-    if claimed is not None and claimed.merged_sha and not claimed.terminal and not force:
-        # B-merged-uncompleted-claimable: a merged item that is not yet completed is not
-        # fresh work. In the merge -> complete gap another lane's claim ran item.reworked,
-        # which cleared every gate, and the merging lane's `complete` was then refused.
-        # Refuse the re-claim here: it is not a rework the claimer asked for. The merger's
-        # own re-claim IS (below, `_reopen_stale_merge`), so a deliberate rework keeps working.
-        if log.agent_id != _merged_by(events, item):
-            return O.refused(
-                "item.claimed",
-                f"{item} is merged ({claimed.merged_sha[:12]}) but not completed; it is not "
-                f"fresh work for another agent to claim. `ddflow complete {item}` records it "
-                f"(needs no lease). Re-claim as the merged lane, or `--force`, to rework it.",
-                id=item,
-                alternatives=[],
-            )
+    if refused := _state_refusal(log, claimed, events, item, force):
+        return refused
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
