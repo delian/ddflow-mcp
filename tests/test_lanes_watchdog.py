@@ -15,11 +15,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lanes_fixture import T0, Log, build_inputs  # noqa: E402
+from lanes_fixture import T0, Log, build_inputs
 
-from ddflow.services import lanes as LN  # noqa: E402
-from ddflow.services.lanes import states as S  # noqa: E402
-from ddflow.services.lanes.recover_auto import (  # noqa: E402
+from ddflow.services import lanes as LN
+from ddflow.services.lanes import states as S
+from ddflow.services.lanes.recover_auto import (
     AUTO_RESUME,
     EXPIRE,
     STAY,
