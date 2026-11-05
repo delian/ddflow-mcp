@@ -45,7 +45,6 @@ from ..lane_driver import LaneStatus, Result, failed, ok, unavailable
 from ..redact_report import redact_secrets
 from . import seedpack as S
 
-_ID = re.compile(r"[^A-Za-z0-9._-]+|\.{2,}")
 _DATE = "1970-01-01T00:00:00Z"
 _BLOB = ("100644", "100755", "120000")
 _LINKS = ("120000", "160000")  # a returned symlink or gitlink reaches outside the tree
@@ -143,9 +142,11 @@ def _git(repo: Path, k: Knobs, *args: str, **kw) -> G.GitResult:
 
 
 def _safe(s: str) -> str:
-    """One harmless path and ref component: ``..`` and ``-rf`` never reach a shell or a ref."""
-    out = _ID.sub("-", s).strip("-.") or "x"
-    return f"{out}-" if out.endswith(".lock") else out
+    """``s`` when it is one harmless path and ref component. Refused, never rewritten: a
+    rewrite could give two lanes one ref, and ``..`` or ``-rf`` must reach no shell."""
+    if not _FILE.fullmatch(s) or ".." in s or s.endswith((".lock", ".")):
+        raise RemoteError(f"{s!r} is not one plain name")
+    return s
 
 
 def _excluded(path: str, k: Knobs) -> bool:
@@ -564,9 +565,7 @@ class SshTransport:
         return shlex.quote(f"{self._k.lanes_root}/{_safe(lane)}")
 
     def _file(self, lane: str, name: str) -> str:
-        if not _FILE.fullmatch(name):
-            raise RemoteError(f"file name {name!r} is not one plain name")
-        return f"{self._dir(lane)}/{shlex.quote(name)}"
+        return f"{self._dir(lane)}/{shlex.quote(_safe(name))}"
 
     def _judge(self, code: int, err: str) -> Result:
         clip = err.strip()[: self._k.detail_chars]
@@ -734,6 +733,7 @@ class Collected:
     result: Result
     bundle: Path | None  # for ``import_return``; None when the lane left no return bundle
     proposals: Proposals
+    asked: Result  # the proposals' own copy: not ok is "could not tell", not "asked nothing"
 
 
 def collect(t: LaneTransport, out: Outbound, dest: Path, *, knobs: Knobs = DEFAULT) -> Collected:
@@ -743,6 +743,7 @@ def collect(t: LaneTransport, out: Outbound, dest: Path, *, knobs: Knobs = DEFAU
     bundle, asked = dest / RETURN, dest / PROPOSALS
     r = t.copy_out(out.lane, RETURN, bundle, knobs.return_max_bytes)
     got = Proposals()
-    if t.copy_out(out.lane, PROPOSALS, asked, knobs.proposals_max_bytes).ok:
+    read = t.copy_out(out.lane, PROPOSALS, asked, knobs.proposals_max_bytes)
+    if read.ok:
         got = parse_proposals(asked.read_text(encoding="utf-8", errors="replace"), knobs)
-    return Collected(r, bundle if r.ok else None, got)
+    return Collected(r, bundle if r.ok else None, got, read)

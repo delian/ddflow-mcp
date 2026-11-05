@@ -1,4 +1,4 @@
-"""Remote lane transport: bundle out, branch or bundle back, host as the only writer (SW-remote-bundle).
+"""Remote lane transport: bundle out, branch or bundle back, the host the only writer.
 
 The ssh transport runs against a stub `ssh`: no network, but every shell line is executed.
 """
@@ -317,11 +317,10 @@ def test_two_lanes_never_share_a_branch(repo, tmp_path, item, lane):
     assert got.branch == f"swarm/remote/{item}/{lane}"
 
 
-@pytest.mark.parametrize("bad", ["..", "a/../b", "x.lock", "-rf", ""])
-def test_safe_name_is_one_harmless_component(bad):
-    s = R._safe(bad)
-    assert s and "/" not in s and ".." not in s and not s.startswith((".", "-"))
-    assert not s.endswith(".lock")
+@pytest.mark.parametrize("bad", ["..", "../..", ".", "a/../b", "x.lock", "-rf", "", "a b", "a."])
+def test_name_that_is_not_one_harmless_component_is_refused(bad):
+    with pytest.raises(R.RemoteError, match="plain name"):
+        R._safe(bad)
 
 
 def _link_worker(tmp_path, out, mode: str):
@@ -561,13 +560,13 @@ def test_copy_out_over_the_cap_leaves_nothing(ssh, tmp_path):
     assert t.copy_out("l", "nothing", back, 1000).status == "failed" and not back.exists()
 
 
-@pytest.mark.parametrize("name", ["../x", ".hidden", "-f"])
+@pytest.mark.parametrize("name", ["../x", "a/b", ".hidden", "-f", ""])
 def test_file_names_are_plain(ssh, tmp_path, name):
     k, _ = ssh
     t = R.SshTransport("h", k)
-    with pytest.raises(R.RemoteError, match="file name"):
+    with pytest.raises(R.RemoteError, match="plain name"):
         t.copy_out("l", name, tmp_path / "x", 10)
-    with pytest.raises(R.RemoteError, match="file name"):
+    with pytest.raises(R.RemoteError, match="plain name"):
         t.copy_in("l", tmp_path, name)
 
 
@@ -621,7 +620,8 @@ def test_cleanup_removes_only_that_lane_and_stops_it(ssh, tmp_path):
     assert not (home / k.lanes_root / "l").exists()
     assert (home / k.lanes_root / "keep" / "f").exists()
     assert t.observe("l").status == "failed"
-    assert t.cleanup("..").ok and (home / k.lanes_root / "keep" / "f").exists()
+    with pytest.raises(R.RemoteError):
+        t.cleanup("..")
 
 
 def test_unreachable_host_is_unavailable_never_failed_or_passed(ssh, tmp_path):
@@ -674,8 +674,6 @@ def _consent(out, host="h", **kw):
 
 
 class Recording:
-    """A transport with nothing behind it."""
-
     target = "h"
 
     def __init__(self):
@@ -736,7 +734,7 @@ def test_lane_that_did_no_work_returns_nothing(repo, tmp_path, ssh):
     _until(lambda: _ended(t, "l"))
     got = R.collect(t, out, tmp_path / "in", knobs=k)
     assert got.bundle is None and got.result.status == "failed"
-    assert got.proposals.proposals == ()
+    assert got.proposals.proposals == () and got.asked.status == "failed"
 
 
 ACP_AGENT = """
