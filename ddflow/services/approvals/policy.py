@@ -15,7 +15,6 @@ operator on every use (`refusals` -> `_approved` with `notify`)."""
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -58,7 +57,7 @@ def _claim_unavailable(it, target: str, cfg: Config) -> bool:
     (B-claim-unavailable-fires-past-deps). Requiring a lapsed lease is what stops that: no
     lease -> no answer, a live holder -> no answer."""
     lease = it.lease
-    return lease is not None and not lease.live(time.time(), cfg.lease.grace_s)
+    return lease is not None and not lease.live(clock.now_utc().timestamp(), cfg.lease.grace_s)
 
 
 def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
