@@ -21,9 +21,11 @@ Unavailable is never answered: a channel that could not reach anyone says so.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import select
 import sys
+import termios
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, TextIO, runtime_checkable
@@ -132,11 +134,18 @@ class HumanChannel(Protocol):
 Reader = Callable[[float], "str | None"]
 
 
+def _forget_typed(fd: int) -> None:
+    """Drop what was typed and never finished, so it cannot start the next question's answer."""
+    with contextlib.suppress(termios.error, OSError):
+        termios.tcflush(fd, termios.TCIFLUSH)
+
+
 def stdin_reader(timeout_s: float) -> str | None:
     """A line from a real terminal, or None. Refuses a stdin that is no terminal without touching
     it: over MCP stdin IS the JSON-RPC session, and one read would eat the protocol's bytes.
-    Reads the descriptor itself, so ``timeout_s`` bounds the whole line: a half-typed one is cut
-    at the deadline, and a buffered reader cannot wait past it."""
+    Reads the descriptor itself, so no buffer hides a line from the deadline. A terminal in its
+    normal mode hands over one finished line per read and is not ready before the newline; a line
+    never finished is cut at ``timeout_s`` and forgotten."""
     stream = sys.stdin
     if stream is None or stream.closed or not stream.isatty():
         return None
@@ -146,6 +155,7 @@ def stdin_reader(timeout_s: float) -> str | None:
     while b"\n" not in data:
         left = deadline - clock.DEFAULT.monotonic()
         if not select.select([fd], [], [], max(0.0, left))[0]:
+            _forget_typed(fd)
             return None
         chunk = os.read(fd, READ_BYTES)
         if not chunk:

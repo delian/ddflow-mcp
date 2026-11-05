@@ -148,7 +148,7 @@ def test_what_a_self_recording_channel_reports_is_read_back_from_the_log(log):
     cfg = Config()
     ask_id = _approval(log, cfg)
     got = R.relay(log, cfg, _Writes(log, cfg, N.DENIED), ask_id, actor=_agent(cfg))
-    assert (got.text, got.who, got.digest) == (N.DENIED, "me", DIGEST)
+    assert (got.text, got.who, got.digest, got.code) == (N.DENIED, "me", DIGEST, "")
 
 
 def test_a_row_another_channel_wrote_does_not_vouch_for_this_one(log):

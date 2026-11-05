@@ -241,6 +241,34 @@ def test_nothing_typed_is_cut_at_the_timeout(tty):
     assert N.stdin_reader(0.01) is None
 
 
+@pytest.fixture
+def pty_stdin(monkeypatch):
+    """A real terminal in canonical mode: the master end is what the person types on."""
+    master, slave = os.openpty()
+    monkeypatch.setattr("sys.stdin", _Tty(slave))
+    yield master
+    os.close(master)
+    os.close(slave)
+
+
+def test_on_a_real_terminal_a_half_typed_line_is_cut_at_the_timeout(pty_stdin):
+    os.write(pty_stdin, b"y")
+    assert N.stdin_reader(0.05) is None
+
+
+def test_a_half_typed_line_does_not_leak_into_the_next_question(pty_stdin):
+    os.write(pty_stdin, b"y")
+    assert N.stdin_reader(0.05) is None
+    os.write(pty_stdin, b"no\n")
+    assert N.stdin_reader(1.0) == "no\n"
+
+
+def test_on_a_real_terminal_two_lines_are_two_answers(pty_stdin):
+    os.write(pty_stdin, b"yes\nno\n")
+    assert N.stdin_reader(1.0) == "yes\n"
+    assert N.stdin_reader(1.0) == "no\n"
+
+
 def test_no_stdin_at_all_is_unavailable(monkeypatch):
     monkeypatch.setattr("sys.stdin", None)
     assert N.stdin_reader(0.01) is None

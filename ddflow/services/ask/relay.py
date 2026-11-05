@@ -63,6 +63,7 @@ def _as_logged(log, ask_id: str, got: Answer, now: float | None) -> Answer:
         text=row["answer"] or row["outcome"],
         who=row["answered_by"],
         digest=row["answered_digest"],
+        code=row["code_presented"],
         proof=row["proof"],
     )
 
