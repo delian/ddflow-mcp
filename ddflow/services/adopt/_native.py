@@ -32,9 +32,12 @@ def _claude_extras(repo: Path, key: str, templates: Path, launch: str, image: st
         for dst, src in LA.agent_files(key).items()
     ]
     if key == LA.HARNESS:
-        tier = Config.load(repo).mcp.worker_tools
-        wrote = WM.write(repo, _launch_entry(launch, image), tier)
+        mcp = Config.load(repo).mcp
+        tier = mcp.worker_tools
+        entry = _launch_entry(launch, image)
+        wrote = WM.write(repo, entry, tier)
         out += [wrote] + ([WM.recipe(tier=tier)] if not wrote.endswith("is current") else [])
+        out += WM.write_lanes(repo, entry, mcp.lane_tools)
     return out
 
 
