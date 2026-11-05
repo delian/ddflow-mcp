@@ -146,7 +146,9 @@ def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
     successor = EventLog(repo, "successor")
     # the same verb/item/target/state, filed by a DIFFERENT agent: the digest matches and
     # the answer is spent, so the successor is not stranded behind a dead agent's answer.
-    got = C.operator_gate(successor, cfg, _canon(agent="successor"), approval_id=filed.id, now=T0 + 1)
+    got = C.operator_gate(
+        successor, cfg, _canon(agent="successor"), approval_id=filed.id, now=T0 + 1
+    )
     assert got.ok and asks_of(_state(log))[filed.id]["used"] == 1
     assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "successor"
 
