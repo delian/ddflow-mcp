@@ -89,12 +89,12 @@ class Message:
 
 
 def _as_pending(name: str, done: Delivery, digest: str = "") -> Answer:
-    """What a post means for a question: the person has it, or nobody does."""
+    """What a post means for a question: the person has it, or the delivery's failure stands."""
     if done.ok:
         return Answer(
             PENDING, how=name, digest=digest, detail="posted: the answer arrives elsewhere"
         )
-    return Answer(UNAVAILABLE, how=name, detail=done.detail)
+    return Answer(done.status, how=name, detail=done.detail)
 
 
 class _Outbound:
@@ -306,10 +306,11 @@ class EmailChannel(_Outbound):
 
 #: `notify-send --urgency` by severity.
 URGENCY = {INFO: "low", WARNING: "normal", CRITICAL: "critical"}
-#: The text goes in as an argument, so a quote in it is never AppleScript.
+#: The text goes in as an argument, so a quote in it is never AppleScript. It follows `--` and the
+#: title, so a leading dash is never `-e`, whichever way osascript's parser stops at options.
 OSA_SCRIPT = (
     "on run argv",
-    "display notification (item 1 of argv) with title (item 2 of argv)",
+    "display notification (item 2 of argv) with title (item 1 of argv)",
     "end run",
 )
 
@@ -321,10 +322,18 @@ class DesktopChannel:
 
     name = "desktop"
 
-    def __init__(self, *, proc: Proc, platform: str, timeout_s: float) -> None:
+    def __init__(
+        self,
+        *,
+        proc: Proc,
+        platform: str,
+        timeout_s: float,
+        scrub: Callable[[str], str] = _same,
+    ) -> None:
         self._proc = proc
         self._platform = platform
         self._timeout_s = timeout_s
+        self._scrub = scrub
 
     def _argv(self, message: str, severity: str) -> list[str]:
         if self._platform.startswith("linux"):
@@ -337,12 +346,13 @@ class DesktopChannel:
                 message,
             ]
         if self._platform == "darwin":
-            return ["osascript", *(a for line in OSA_SCRIPT for a in ("-e", line)), message, APP]
+            script = (a for line in OSA_SCRIPT for a in ("-e", line))
+            return ["osascript", *script, "--", APP, message]
         return []
 
     def notify(self, message: str, severity: str = INFO) -> Delivery:
         check_severity(severity)
-        argv = self._argv(message, severity)
+        argv = self._argv(self._scrub(message), severity)
         if not argv:
             return Delivery(self.name, UNAVAILABLE, f"no desktop notifications on {self._platform}")
         done = self._proc.capture(argv, timeout=self._timeout_s)

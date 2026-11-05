@@ -6,6 +6,8 @@ only through `engine.answer` under the caller's identity, so an agent is refused
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from ddflow.adapters import notify as N
@@ -124,6 +126,36 @@ def test_a_channel_claiming_it_recorded_is_checked_against_the_log(log):
     lie = Answer(N.ANSWERED, N.APPROVED, who="me", how="fake", digest=DIGEST, recorded=True)
     with pytest.raises(E.AskRefused, match="recorded"):
         R.relay(log, cfg, FakeHumanChannel(answers=[lie]), ask_id, actor=_agent(cfg))
+
+
+class _Writes(FakeHumanChannel):
+    """A self-recording channel: the log gets ``outcome`` by ``via``, the caller told otherwise."""
+
+    def __init__(self, log, cfg, outcome, via="fake", digest=DIGEST):
+        super().__init__()
+        self.ctx = (log, cfg, outcome, via, digest)
+
+    def relay(self, approval):
+        log, cfg, outcome, via, digest = self.ctx
+        E.answer(log, cfg, approval.ask_id, outcome, actor=_person(cfg), digest=digest, via=via)
+        return Answer(
+            N.ANSWERED, N.APPROVED, who="liar", how="fake", digest="e" * 64, recorded=True
+        )
+
+
+def test_what_a_self_recording_channel_reports_is_read_back_from_the_log(log):
+    """The channel says approved, the log says denied: the caller gets the log."""
+    cfg = Config()
+    ask_id = _approval(log, cfg)
+    got = R.relay(log, cfg, _Writes(log, cfg, N.DENIED), ask_id, actor=_agent(cfg))
+    assert (got.text, got.who, got.digest) == (N.DENIED, "me", DIGEST)
+
+
+def test_a_row_another_channel_wrote_does_not_vouch_for_this_one(log):
+    cfg = Config()
+    ask_id = _approval(log, cfg)
+    with pytest.raises(E.AskRefused, match="recorded"):
+        R.relay(log, cfg, _Writes(log, cfg, N.APPROVED, via="cli"), ask_id, actor=_agent(cfg))
 
 
 def test_a_pending_or_unavailable_answer_records_nothing(log):
@@ -319,6 +351,19 @@ def test_the_bridge_records_through_attest_and_the_relay_does_not_answer_twice(
     assert got.status == N.ANSWERED and got.recorded and got.how == "harness"
     assert got.who == "harness:t" and got.proof == "toolu_1"
     assert len(_answers(log)) == 1
+
+
+def test_the_desktop_goes_through_the_proc_it_is_given_and_is_scrubbed(log, repo):
+    calls = []
+
+    def capture(argv, *, timeout, **kw):
+        calls.append(argv)
+        return SimpleNamespace(returncode=0, error=None, stdout="", stderr="")
+
+    secret = "ghp_" + "a1B2" * 9
+    c = C.open_channel(log, Config(), "desktop", repo=repo, proc=SimpleNamespace(capture=capture))
+    c.notify(f"key {secret}")
+    assert calls and secret not in " ".join(calls[0])
 
 
 def test_the_terminal_is_built_from_the_settings(log, repo):

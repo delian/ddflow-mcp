@@ -8,11 +8,13 @@ an agent identity stay in the engine for every adapter: a new channel cannot for
 is recorded under. An agent may relay: it puts the ask to the person and reads the outcome. If an
 answer comes back that only `actor` could vouch for, the engine refuses it for an agent. The one
 channel that vouches for itself is the harness bridge: `attest` proves the answer from the
-transcript the harness wrote, and the row it wrote is checked here rather than taken on its word.
+transcript the harness wrote. What it reports is not taken on its word: the row must be answered
+through that channel, and the caller gets the row's outcome, person and digest, not the report.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from ...adapters.notify import ANSWERED, Answer, Approval, HumanChannel
@@ -51,6 +53,20 @@ def _record(log, cfg: Config, row: dict[str, Any], got: Answer, actor: Actor, no
     )
 
 
+def _as_logged(log, ask_id: str, got: Answer, now: float | None) -> Answer:
+    """``got`` of a channel that says it recorded the answer, as the log has it."""
+    row = _row(log, ask_id)
+    if row is None or E.status(row, now) != ANSWERED or row["via"] != got.how:
+        raise E.AskRefused(f"{got.how} says it recorded {ask_id}, and the log has no such answer")
+    return replace(
+        got,
+        text=row["answer"] or row["outcome"],
+        who=row["answered_by"],
+        digest=row["answered_digest"],
+        proof=row["proof"],
+    )
+
+
 def relay(
     log,
     cfg: Config,
@@ -74,9 +90,6 @@ def relay(
     if got.status != ANSWERED:
         return got
     if got.recorded:
-        after = _row(log, ask_id)
-        if after is None or after["state"] != ANSWERED:
-            raise E.AskRefused(f"{got.how} says it recorded {ask_id}, and the log has no answer")
-        return got
+        return _as_logged(log, ask_id, got, now)
     _record(log, cfg, row, got, actor, now)
     return got

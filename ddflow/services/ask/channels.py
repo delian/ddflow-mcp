@@ -22,6 +22,7 @@ from ...adapters import env as ENV
 from ...adapters import http as HTTP
 from ...adapters import notify as N
 from ...adapters.notify import Answer, Approval, HumanChannel
+from ...adapters.proc import Proc
 from ...config import Config
 from ...core.digest import content_digest
 from ...core.model import fold
@@ -161,6 +162,7 @@ def open_channel(
     repo: Path | None = None,
     http: HTTP.HttpClient | None = None,
     env: ENV.Env | None = None,
+    proc: Proc | None = None,
     person: str = "",
 ) -> HumanChannel:
     """The adapter ``name``, built from ``settings``, or an `UnavailableChannel` that says why it
@@ -176,7 +178,12 @@ def open_channel(
     if name == "harness":
         return _harness(log, cfg, repo)
     if name == "desktop":
-        return cls(proc=P, platform=sys.platform, timeout_s=n.send_timeout_s)
+        return cls(
+            proc=proc or P,
+            platform=sys.platform,
+            timeout_s=n.send_timeout_s,
+            scrub=_scrub(cfg),
+        )
     why = _blocked(fold(log.read_all(), strict=False), n, name)
     if why:
         return N.UnavailableChannel(name, why)

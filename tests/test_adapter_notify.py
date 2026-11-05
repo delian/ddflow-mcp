@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import smtplib
+import time
 from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
@@ -172,6 +174,73 @@ def test_a_closed_terminal_is_unavailable_not_an_exception():
     assert c.ask("y").status == N.UNAVAILABLE
 
 
+def test_a_terminal_with_no_stderr_never_falls_back_to_stdout(capsys, monkeypatch):
+    """`print(file=None)` writes to stdout, which over MCP is the protocol."""
+    monkeypatch.setattr("sys.stderr", None)
+    c = N.TerminalChannel(person="me", reader=_lines("yes"), attempts=1, timeout_s=1.0)
+    assert c.notify("x").status == N.UNAVAILABLE
+    assert c.ask("y", ("yes",)).status == N.UNAVAILABLE
+    assert not capsys.readouterr().out
+
+
+def test_a_closed_or_narrow_stream_is_a_status_not_an_exception():
+    closed = io.StringIO()
+    closed.close()
+    ascii_only = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+    for out, text in ((closed, "x"), (ascii_only, "caf\u00e9")):
+        c = N.TerminalChannel(person="me", reader=_lines("yes"), out=out, attempts=1, timeout_s=1.0)
+        assert c.notify(text).status == N.UNAVAILABLE
+        assert c.ask(text).status == N.UNAVAILABLE
+
+
+def test_bidi_overrides_never_reach_the_person():
+    """A right-to-left override could show a digest reversed beside the real one."""
+    out = io.StringIO()
+    c = N.TerminalChannel(person="me", reader=_lines("x"), out=out, attempts=1, timeout_s=1.0)
+    c.ask("pay Alice\u202e tsegid")
+    assert "\u202e" not in out.getvalue()
+
+
+class _Tty:
+    """A stdin that says it is a terminal, over a pipe the test writes to."""
+
+    closed = False
+
+    def __init__(self, fd: int) -> None:
+        self._fd = fd
+
+    def isatty(self) -> bool:
+        return True
+
+    def fileno(self) -> int:
+        return self._fd
+
+
+@pytest.fixture
+def tty(monkeypatch):
+    r, w = os.pipe()
+    monkeypatch.setattr("sys.stdin", _Tty(r))
+    yield w
+    os.close(r)
+    os.close(w)
+
+
+def test_the_reader_returns_a_whole_line(tty):
+    os.write(tty, b"yes\n")
+    assert N.stdin_reader(1.0) == "yes\n"
+
+
+def test_a_line_with_no_newline_is_cut_at_the_timeout_not_waited_on(tty):
+    os.write(tty, b"y")
+    began = time.monotonic()
+    assert N.stdin_reader(0.05) is None
+    assert time.monotonic() - began < 5
+
+
+def test_nothing_typed_is_cut_at_the_timeout(tty):
+    assert N.stdin_reader(0.01) is None
+
+
 def test_no_stdin_at_all_is_unavailable(monkeypatch):
     monkeypatch.setattr("sys.stdin", None)
     assert N.stdin_reader(0.01) is None
@@ -312,6 +381,16 @@ def test_a_refused_post_is_failed_and_keeps_the_url_out_of_the_detail():
     assert "s3cret" not in done.detail and "403" in done.detail
 
 
+def test_a_refused_question_is_failed_like_a_refused_notification():
+    http = FakeHttpClient()
+    http.when("POST", URL, status=500, body=b"no")
+    c = _hook(http=http)
+    assert c.notify("x").status == N.FAILED
+    got = c.ask("y")
+    assert got.status == N.FAILED and "500" in got.detail
+    assert c.relay(APPROVAL).status == N.FAILED
+
+
 def test_a_bad_scheme_is_unavailable_and_keeps_the_url_out():
     c = O.WebhookChannel(url="file:///etc/passwd", http=FakeHttpClient(), timeout_s=1.0)
     done = c.notify("x")
@@ -356,13 +435,20 @@ def test_linux_uses_notify_send_with_the_text_after_a_separator():
     assert argv[argv.index("--") + 1 :] == ["ddflow", "--help"] and timeout == 2.0
 
 
-def test_macos_passes_the_text_as_an_argument_not_as_script():
+@pytest.mark.parametrize("text", ['x" & do shell script "id', '-edo shell script "id"'])
+def test_macos_passes_the_text_as_an_argument_never_as_script_or_option(text):
     p = _proc()
-    text = 'x" & do shell script "id'
     O.DesktopChannel(proc=p, platform="darwin", timeout_s=2.0).notify(text)
     argv = p.calls[0][0]
-    assert argv[0] == "osascript" and argv[-2:] == [text, "ddflow"]
-    assert not any(text in a for a in argv[:-2])
+    assert argv[0] == "osascript" and argv[-3:] == ["--", "ddflow", text]
+    assert not any(text in a for a in argv[:-1])
+
+
+def test_the_desktop_text_is_scrubbed_like_every_other_word_that_leaves():
+    p = _proc()
+    c = O.DesktopChannel(proc=p, platform="linux", timeout_s=2.0, scrub=lambda s: "[X]")
+    c.notify("hunter2")
+    assert p.calls[0][0][-1] == "[X]"
 
 
 def test_windows_is_unavailable_and_runs_nothing():
@@ -391,15 +477,16 @@ def test_a_desktop_notification_cannot_take_an_answer():
 
 
 class _Smtp:
-    """A stand-in `smtplib.SMTP`: records what happened, raises what it was told to."""
+    """A stand-in `smtplib.SMTP`: records what happened, raises what it was told to, where."""
 
-    def __init__(self, fail=None):
-        self.fail, self.calls, self.sent = fail, [], []
+    def __init__(self, connect_error=None, tls_error=None):
+        self.connect_error, self.tls_error = connect_error, tls_error
+        self.calls, self.sent = [], []
 
     def __call__(self, host, port, timeout):
         self.calls.append(("connect", host, port, timeout))
-        if isinstance(self.fail, OSError):
-            raise self.fail
+        if self.connect_error is not None:
+            raise self.connect_error
         return self
 
     def __enter__(self):
@@ -410,8 +497,8 @@ class _Smtp:
 
     def starttls(self):
         self.calls.append(("starttls",))
-        if isinstance(self.fail, smtplib.SMTPNotSupportedError):
-            raise self.fail
+        if self.tls_error is not None:
+            raise self.tls_error
 
     def login(self, user, password):
         self.calls.append(("login", user, password))
@@ -450,13 +537,13 @@ def test_email_with_tls_off_skips_starttls():
 
 
 def test_email_never_falls_back_to_plain_text():
-    s = _Smtp(fail=smtplib.SMTPNotSupportedError("no STARTTLS"))
+    s = _Smtp(tls_error=smtplib.SMTPNotSupportedError("no STARTTLS"))
     assert _mail(s).notify("x").status == N.FAILED
-    assert not s.sent
+    assert ("starttls",) in s.calls and not s.sent
 
 
 def test_email_offline_is_unavailable_and_unconfigured_too():
-    assert _mail(_Smtp(fail=OSError("no route"))).notify("x").status == N.UNAVAILABLE
+    assert _mail(_Smtp(connect_error=OSError("no route"))).notify("x").status == N.UNAVAILABLE
     s = _Smtp()
     assert _mail(s, host="").notify("x").status == N.UNAVAILABLE
     assert _mail(s, to="").ask("y").status == N.UNAVAILABLE

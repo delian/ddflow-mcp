@@ -9,7 +9,7 @@ Three calls, one result shape each:
 
 * ``notify(message, severity)`` -- a `Delivery`: delivered, failed, or unavailable (could not try).
 * ``ask(question, options)`` -- an `Answer`: answered with who and how, pending (put to the person
-  on a channel whose answer arrives elsewhere), or unavailable.
+  on a channel whose answer arrives elsewhere), failed (the other end refused it), or unavailable.
 * ``relay(approval)`` -- the same for an `Approval`, echoing the digest the person was shown.
 
 A channel COLLECTS; it never decides. It reads no configuration, checks no consent and holds no
@@ -21,23 +21,30 @@ Unavailable is never answered: a channel that could not reach anyone says so.
 
 from __future__ import annotations
 
+import os
 import select
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, TextIO, runtime_checkable
 
+from . import clock
 from .ports import port
 from .registry import Registry
 
 INFO, WARNING, CRITICAL = "info", "warning", "critical"
 SEVERITIES = (INFO, WARNING, CRITICAL)
-#: A `Delivery`'s status, and (with the two below) an `Answer`'s.
+#: A `Delivery`'s status; an `Answer` has `FAILED`, `UNAVAILABLE` and the two below.
 DELIVERED, FAILED, UNAVAILABLE = "delivered", "failed", "unavailable"
 ANSWERED, PENDING = "answered", "pending"
 #: What an approval is answered with: the ask engine's words (a test pins that they match).
 APPROVED, DENIED = "approved", "denied"
 APPROVAL_OPTIONS = (APPROVED, DENIED)
+#: One read of the terminal's descriptor: a line a person types is far shorter.
+READ_BYTES = 4096
+#: What a broken output stream raises: an `OSError`, or a `ValueError` for a closed file or a
+#: character its encoding cannot hold.
+STREAM_ERRORS = (OSError, ValueError)
 
 
 @dataclass(frozen=True)
@@ -127,12 +134,24 @@ Reader = Callable[[float], "str | None"]
 
 def stdin_reader(timeout_s: float) -> str | None:
     """A line from a real terminal, or None. Refuses a stdin that is no terminal without touching
-    it: over MCP stdin IS the JSON-RPC session, and one read would eat the protocol's bytes."""
+    it: over MCP stdin IS the JSON-RPC session, and one read would eat the protocol's bytes.
+    Reads the descriptor itself, so ``timeout_s`` bounds the whole line: a half-typed one is cut
+    at the deadline, and a buffered reader cannot wait past it."""
     stream = sys.stdin
     if stream is None or stream.closed or not stream.isatty():
         return None
-    ready, _, _ = select.select([stream], [], [], max(0.0, timeout_s))
-    return (stream.readline() or None) if ready else None
+    fd = stream.fileno()
+    deadline = clock.DEFAULT.monotonic() + max(0.0, timeout_s)
+    data = b""
+    while b"\n" not in data:
+        left = deadline - clock.DEFAULT.monotonic()
+        if not select.select([fd], [], [], max(0.0, left))[0]:
+            return None
+        chunk = os.read(fd, READ_BYTES)
+        if not chunk:
+            break
+        data += chunk
+    return data.decode("utf-8", "replace") or None
 
 
 def _plain(text: str) -> str:
@@ -178,20 +197,23 @@ class TerminalChannel:
         self._out = out
 
     def _say(self, text: str) -> None:
-        print(_plain(text), file=self._out or sys.stderr, flush=True)
+        out = self._out or sys.stderr
+        if out is None:  # `print(file=None)` would write to stdout, which is the protocol's
+            raise OSError("this process has no stderr")
+        print(_plain(text), file=out, flush=True)
 
     def notify(self, message: str, severity: str = INFO) -> Delivery:
         check_severity(severity)
         try:
             self._say(f"[{severity}] {message}")
-        except OSError as exc:  # a closed stderr is the channel's trouble, not the caller's
+        except STREAM_ERRORS as exc:  # the channel's trouble, not the caller's
             return Delivery(self.name, UNAVAILABLE, f"nothing to write to ({type(exc).__name__})")
         return Delivery(self.name, DELIVERED)
 
     def ask(self, question: str, options: Sequence[str] = ()) -> Answer:
         try:
             return self._collect(question, options)
-        except OSError as exc:
+        except STREAM_ERRORS as exc:
             return Answer(
                 UNAVAILABLE, how=self.name, detail=f"terminal gone ({type(exc).__name__})"
             )
