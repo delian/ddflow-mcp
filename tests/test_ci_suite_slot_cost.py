@@ -184,7 +184,9 @@ def test_what_did_not_measure_a_run_gives_no_rate():
     garbled = _run(elapsed="soon")
     no_guard_seconds = _run()
     del no_guard_seconds.data["evidence"]["ci_scope"]["always_s"]
-    collection_error = _run(kind="gate.failed", exit=1)  # red, and no test ever failed
+    collection_error = _run(  # red with a `failed_tests` row, and no test ever ran
+        kind="gate.failed", exit=1, failed_tests=["tests/test_a.py"], summary=["1 error in 3.10s"]
+    )
     collection_error.data["evidence"]["ci_scope"]["ran"]["selected"] = False
     events = [
         _run(kind="gate.unavailable"),  # timed out: its clock stopped at the limit
@@ -200,7 +202,7 @@ def test_what_did_not_measure_a_run_gives_no_rate():
 
 def test_a_failed_test_run_still_measured_the_run():
     """Main is often red: pytest ran the selection to its end, so the seconds are real."""
-    run = _run(kind="gate.partial", exit=1, failed_tests=["tests/test_a.py::test_b"])
+    run = _run(kind="gate.partial", exit=1, summary=["3 failed, 97 passed in 280.00s"])
     run.data["evidence"]["ci_scope"]["ran"]["selected"] = False
     assert _rates([run], Config()) == [300.0]
 

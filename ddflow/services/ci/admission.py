@@ -19,6 +19,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any
 
 from .. import workers as WK
+from ..gates.testcmd import counts_of
 
 #: The verdicts of a run that ended. `gate.unavailable` measured nothing: it timed out, so its
 #: clock stopped at the limit, or it never started.
@@ -31,19 +32,26 @@ def _seconds(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
+def _selection_finished(evidence: dict[str, Any], ran: Any) -> bool:
+    """Did the selected tests run to their end? They passed (``ran`` True), or they ran and
+    pytest's summary counts a failure: its seconds are real. Red without one is a collection
+    error, which stops the run; `failed_tests` cannot tell, it holds ERROR rows too."""
+    if ran is not False:
+        return ran is True
+    return any(counts_of(str(line)).get("failed") for line in evidence.get("summary") or ())
+
+
 def _rate(evidence: dict[str, Any]) -> float | None:
     """The worker-seconds per selected file of one recorded run; None when the record does not
-    measure one. A red selection counts when tests failed in it: pytest ran it to the end, so
-    its seconds are real. Red with no failed test (a collection error) ended early."""
+    measure one."""
     scope = evidence.get("ci_scope") or {}
     used = (scope.get("workers") or {}).get("selected") or {}
     took, files = _seconds(evidence.get("elapsed_s")), _seconds(scope.get("selected"))
     workers = _seconds(used.get("n"))
     waited, guards = _seconds(evidence.get("waited_s")), _seconds(scope.get("always_s"))
-    ran = (scope.get("ran") or {}).get("selected")
     if (
         scope.get("scope") != "selected"
-        or not (ran is True or (ran is False and evidence.get("failed_tests")))
+        or not _selection_finished(evidence, (scope.get("ran") or {}).get("selected"))
         or evidence.get("exit") not in VERDICT_EXITS
         or not (took and files and workers)
         or guards is None  # their seconds are in `took`, and nothing says how many
