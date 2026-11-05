@@ -72,3 +72,9 @@ name = "readme-agents"
 files = ["README.md"]
 check = ["{python}", "-m", "pytest", "tests/test_readme_agents_table.py", "-q", "-p", "no:xdist", "-p", "no:cacheprovider"]
 regen = ["{python}", "-m", "ddflow.surfaces.harness_table", "README.md", "--force"]
+
+[[pin]]
+name = "default-toml"
+files = ["ddflow/templates/default.toml"]
+check = ["{python}", "-m", "ddflow.views.default_toml", "--check"]
+regen = ["{python}", "-m", "ddflow.views.default_toml"]

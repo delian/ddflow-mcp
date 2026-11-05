@@ -32,6 +32,9 @@ class ConfigEdit:
     `local` sends the change to the git-ignored `.ddflow/local/config.toml`: this
     machine's endpoints, hosts, keys' variable names and sizing. Without it the change
     goes to the committed `.ddflow/config.toml`, which every clone receives.
+
+    `defaults` reads the packaged `default.toml` instead of any project file, and `write`
+    with it regenerates that file in ddflow's own source tree.
     """
 
     set: str = ""
@@ -40,6 +43,39 @@ class ConfigEdit:
     filter: str = ""
     explain: bool = False
     local: bool = False
+    defaults: bool = False
+    write: bool = False
+
+
+def _packaged_defaults(repo: Path, write: bool) -> O.Outcome:
+    """`config defaults`: the packaged file, or with ``write`` the file regenerated.
+
+    Only inside ``repo``: a worktree's `ddflow` on PATH is the primary's code, so its
+    templates are another tree's, and an installed ddflow's are not a checkout at all.
+    """
+    from ...views import default_toml as D
+
+    path = D.PACKAGED_DEFAULTS
+    if not write:
+        text = D.current()
+        if not text:
+            return O.failed("config", f"{path} is missing: this ddflow is damaged", text="")
+        return O.ok("config", path=str(path), text=text)
+    if not path.resolve().is_relative_to(Path(repo).resolve()):
+        return O.refused(
+            "config",
+            f"{path} is not in this repository: run `python -m ddflow.views.default_toml` "
+            "from the source tree it belongs to",
+            path=str(path),
+            text="",
+        )
+    changed = D.write()
+    return O.ok(
+        "config",
+        path=str(path),
+        changed=changed,
+        text=f"{path}: {'rewritten' if changed else 'current'}",
+    )
 
 
 def _said(added: list[str]) -> str:
@@ -94,6 +130,8 @@ def configure(
     """
 
     edit = edit or ConfigEdit()
+    if edit.defaults:
+        return _packaged_defaults(repo, edit.write)
     log, cfg, _st = _load(repo, agent)
     layer = _default_layer(cfg, edit)
     # Machine-local keys (parallelism, reviewers, companions) default to the local layer:

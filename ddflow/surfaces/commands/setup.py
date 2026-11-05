@@ -267,7 +267,23 @@ def cmd_upgrade(a, c: Ctx) -> int:
     return out.exit
 
 
+def _config_defaults(a, c: Ctx) -> int:
+    """`ddflow config defaults [--write]`: the packaged file, or the file regenerated."""
+    write = bool(getattr(a, "write", False))
+    out = A.configure(c.repo, A.ConfigEdit(defaults=True, write=write), agent=c.requested_agent)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    c.out(out.data["text"].rstrip("\n"), out.body(("path", "text", "changed")))
+    return OK
+
+
 def cmd_config(a, c: Ctx) -> int:
+    if not a.set and list(getattr(a, "value", None) or []) == ["defaults"]:
+        return _config_defaults(a, c)
+    if getattr(a, "write", False):
+        print("--write goes with `defaults`: ddflow config defaults --write", file=sys.stderr)
+        return FAIL
     key, value = _config_key_value(a)
     if getattr(a, "value", None) and not key:
         print("a value alone sets nothing: ddflow config KEY VALUE [--local]", file=sys.stderr)

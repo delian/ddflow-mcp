@@ -23,6 +23,10 @@ LOCAL_DIR = Path(".ddflow") / "local"
 #: ("file", the name `Config.sources` gives it) and the git-ignored `.ddflow/local/` ones.
 LAYERS = ("file", "local")
 
+#: The packaged defaults, the lowest layer (D-config-layer-order): shipped with the code, so
+#: no writer targets it and it is not in `LAYERS`. `views/default_toml.py` generates it.
+PACKAGED_DEFAULTS = Path(__file__).resolve().parent.parent / "templates" / "default.toml"
+
 
 def layer_path(root: Path, layer: str = "file", own: str = "config.toml") -> Path:
     """The file ``layer`` keeps ``own`` in: `<root>/.ddflow/<own>` for the committed layer,
