@@ -123,10 +123,7 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
     pass over it (bug B-main-red-review-records). Each reviewer's `evidence()` builds the
     dicts with the detail truncation `_merge_delta` and triage already read."""
     return [
-        fd
-        for r in (results or [])
-        if r.status in _HEARD
-        for fd in r.evidence()["chunk_findings"]
+        fd for r in (results or []) if r.status in _HEARD for fd in r.evidence()["chunk_findings"]
     ]
 
 
