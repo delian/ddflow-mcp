@@ -206,6 +206,39 @@ def test_the_plain_recover_prose_keeps_its_real_count():
     assert text.startswith("120 recoverable situation(s)") and "ddflow recover --full" in text
 
 
+def test_the_doctor_cli_is_cut_in_text_and_json_and_full_lifts_it(repo, monkeypatch):
+    """A cap this small must bite whatever the fixture says: a size assertion on a short
+    report passed while `cmd_doctor` never called the cap at all."""
+    run_cli(repo, "init")
+    _code, whole, _err = run_cli(repo, "doctor", "--full")
+    assert len(whole) > 200 and "ddflow doctor --full" not in whole
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", "200")
+    _code, text, _err = run_cli(repo, "doctor")
+    assert "ddflow doctor --full" in text and len(text) < len(whole) + 400
+    assert text.split("\n\n[")[0] != whole.rstrip(), "the report itself was cut"
+    _code, body, _err = run_cli(repo, "--json", "doctor")
+    assert json.loads(body)["next"]["full_cli"] == "ddflow doctor --full"
+    _code, again, _err = run_cli(repo, "doctor", "--full")
+    assert "ddflow doctor --full" not in again
+
+
+@pytest.mark.parametrize("command", ["board", "next", "status"])
+def test_every_surface_of_a_command_bites_at_a_tiny_cap(repo, monkeypatch, command):
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    for i in range(12):
+        title = f"task {i} " + "x" * 90
+        log.append("task.added", f"T{i:02d}", {"title": title, "globs": ["same.py"]})
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_ROWS", "2")
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", "400")
+    call = f"ddflow {command} --full"
+    _code, text, _err = run_cli(repo, command)
+    assert call in text, "the terminal answer"
+    _code, body, _err = run_cli(repo, "--json", command)
+    assert json.loads(body)["next"]["full_cli"] == call, "the --json answer"
+    assert f"ddflow_{command} full=true" in _mcp(repo, f"ddflow_{command}"), "the MCP answer"
+
+
 def test_text_is_cut_on_a_line_boundary_under_the_char_cap():
     text = "\n".join(f"line {i} " + "z" * 80 for i in range(2000))
     out = OC.apply(None, O.ok("board", text=text, phases=[]), "board", cfg=_cfg(max_chars=5000))

@@ -461,8 +461,11 @@ def cmd_doctor(a, c: Ctx) -> int:
         start_texts=start_texts,
         **doctor_history_kwargs(a),
     )
+    out = OC.from_args(c.repo, out, "doctor", a, wire=c.json)
     if c.json:
-        body = out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
+        capped = ("truncated", "next") if "truncated" in out.data else ()
+        keys = ("problems", "notes", "events", "items", "wait_cycles", "auto_order", *capped)
+        body = out.body(keys)
         if out.exit == REFUSED:
             # The agent route needs the refusal (its approval id) from the JSON, not stderr.
             body = {**body, "reason": out.reason}
