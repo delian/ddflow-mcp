@@ -8,12 +8,16 @@ reads it first, and that a damaged copy can not stop a command, the one that rep
 from __future__ import annotations
 
 import dataclasses
+import os
+import subprocess
+import sys
 import time
 import tomllib
 from pathlib import Path
 
 import pytest
 from _cli_helpers import run_cli
+from _wait import slow_factor
 
 from ddflow.api import setup as API
 from ddflow.config import Config, _packaged
@@ -187,13 +191,48 @@ def test_a_missing_file_warns_and_leaves_the_built_in_defaults(packaged, tmp_pat
     assert "absent.toml" in capsys.readouterr().err
 
 
-def test_a_key_the_code_lost_is_skipped_silently(packaged, tmp_path, capsys):
-    """A branch removed a knob and has not regenerated: the pin says so, a command need not."""
+def test_a_key_the_code_lost_is_drift_and_never_an_unknown_knob(packaged, tmp_path, capsys):
+    """A branch removed a knob and has not regenerated: said like any other drift, and not as
+    a project's unknown key, which `doctor` would blame on the project's own config."""
     path = tmp_path / "default.toml"
     path.write_text("[lease]\nno_such_knob = 1\n[no_such_section]\nx = 1\n", "utf-8")
     packaged(path)
     assert not Config.load(None, env={}).unknown_knobs
+    err = capsys.readouterr().err
+    assert "lease.no_such_knob" in err and "[no_such_section]" in err
+    assert "pins regenerate" in err
+
+
+def test_a_known_section_that_is_not_a_table_warns(packaged, tmp_path, capsys):
+    path = tmp_path / "default.toml"
+    path.write_text('review = "not-a-table"\n', "utf-8")
+    packaged(path)
+    assert Config.load(None, env={}).review == Config().review
+    err = capsys.readouterr().err
+    assert "[review]" in err and "pins regenerate" in err
+
+
+def test_the_shipped_file_loads_without_a_word(capsys):
+    """`[gate.*]` is no section of `Config`, and that is not drift."""
+    _packaged.packaged.cache_clear()
+    _packaged._SAID.clear()
+    Config.load(None, env={})
     assert capsys.readouterr().err == ""
+
+
+def test_importing_config_does_not_import_the_generator():
+    """The deterministic half of the budget (r-perf-budget): the hook path pays for the file,
+    never for the renderer or the gate definitions behind it."""
+    code = (
+        "import sys, ddflow.config; ddflow.config.Config.load(None, env={}); "
+        "print([m for m in ('ddflow.views.default_toml', 'ddflow.services.gates.defs') "
+        "if m in sys.modules])"
+    )
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    done = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
+    )
+    assert done.stdout.strip() == "[]"
 
 
 def test_a_dunder_key_is_not_taken_for_a_knob(packaged, tmp_path, capsys):
@@ -202,7 +241,7 @@ def test_a_dunder_key_is_not_taken_for_a_knob(packaged, tmp_path, capsys):
     path.write_text('[lease]\n__class__ = "broken"\n__module__ = "broken"\n', "utf-8")
     packaged(path)
     assert Config.load(None, env={}).lease.ttl_s == Config().lease.ttl_s
-    assert capsys.readouterr().err == ""
+    assert "lease.__class__" in capsys.readouterr().err
 
 
 def test_a_stale_value_applies_but_never_silently(packaged, tmp_path, capsys):
@@ -250,15 +289,16 @@ def test_load_adds_no_work_when_the_file_matches(monkeypatch):
 
 
 def test_the_load_cost_stays_inside_its_budget():
-    """CONFORMANCE: the hook path must not get slower than this. Best of five, so a busy
-    host reads as the cost and not as the load on it."""
+    """CONFORMANCE: the hook path must not get slower than this. Best of five and scaled by
+    `slow_factor`, so a busy host reads as the cost and not as the load on it; the counters
+    above are what gate hard (r-perf-budget)."""
     best = float("inf")
     for _ in range(5):
         _packaged.packaged.cache_clear()
         start = time.perf_counter()
         _packaged.apply_packaged(Config())
         best = min(best, time.perf_counter() - start)
-    assert best * 1000 < LOAD_BUDGET_MS
+    assert best * 1000 < LOAD_BUDGET_MS * slow_factor()
 
 
 # -- the surfaces ---------------------------------------------------------------------

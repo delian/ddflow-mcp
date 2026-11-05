@@ -45,7 +45,7 @@ def _say(problem: str) -> None:
 def _say_drift(keys: list[str]) -> None:
     more = len(keys) - DRIFT_SHOWN
     named = ", ".join(keys[:DRIFT_SHOWN]) + (f" and {more} more" if more > 0 else "")
-    _say(f"the packaged {PACKAGED_DEFAULTS} is stale at {named}: its values apply")
+    _say(f"the packaged {PACKAGED_DEFAULTS} is stale at {named}")
 
 
 @functools.cache
@@ -58,29 +58,40 @@ def packaged() -> dict[str, Any]:
         return {}
 
 
-def apply_packaged(cfg: Any) -> None:
-    """Lay the packaged file under ``cfg``, a `Config` holding only its dataclass defaults.
-
-    A section or knob this code does not have is skipped without a word: the pin reports it,
-    and a branch that removed a knob must not warn on every command until it regenerates.
-    `_FOREIGN_TABLES` such as `[gate.*]` are not sections, so their readers stay in charge.
-    """
-    sections = set(cfg._sections())
-    drift: list[str] = []
-    for sec, table in packaged().items():
-        if sec not in sections or not isinstance(table, dict):
-            continue
-        target = getattr(cfg, sec)
-        known = {f.name for f in fields(target)}
-        for knob, raw in table.items():
-            if knob not in known or getattr(target, knob) == raw:
-                continue
+def _lay_section(cfg: Any, sec: str, table: dict[str, Any], drift: list[str]) -> None:
+    """Lay one `[sec]` table under ``cfg``, adding to ``drift`` each key that is not the
+    declaration's. Only a declared field is a knob: every object has a `__class__`."""
+    target = getattr(cfg, sec)
+    known = {f.name for f in fields(target)}
+    for knob, raw in table.items():
+        if knob not in known:
+            drift.append(f"{sec}.{knob}")
+        elif getattr(target, knob) != raw:
             try:  # a copy: the parse is shared by every load in this process
                 cfg._apply_knob(sec, knob, copy.deepcopy(raw), "default", False)
                 drift.append(f"{sec}.{knob}")
             except (ValueError, TypeError) as exc:
-                _say(
-                    f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: {exc}; {_BUILT_IN}"
-                )
+                bad = f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: {exc}"
+                _say(f"{bad}; {_BUILT_IN}")
+
+
+def apply_packaged(cfg: Any) -> None:
+    """Lay the packaged file under ``cfg``, a `Config` holding only its dataclass defaults.
+
+    A key the declarations lack is drift, said on stderr and never put in `unknown_knobs`:
+    that list blames the project's own config. `_FOREIGN_TABLES` such as `[gate.*]` are not
+    sections, so their readers stay in charge.
+    """
+    sections = set(cfg._sections())
+    drift: list[str] = []
+    for sec, table in packaged().items():
+        if sec in cfg._FOREIGN_TABLES:
+            continue
+        if sec not in sections:
+            drift.append(f"[{sec}]")
+        elif isinstance(table, dict):
+            _lay_section(cfg, sec, table, drift)
+        else:
+            _say(f"the packaged {PACKAGED_DEFAULTS} holds a bad [{sec}]: not a table; {_BUILT_IN}")
     if drift:
         _say_drift(drift)
