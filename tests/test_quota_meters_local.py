@@ -1,0 +1,292 @@
+"""Quota meters, the local counters: transcripts, kilo.db and the ddflow log."""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+
+import pytest
+from quota_meters_support import (
+    HOUR,
+    NOW,
+    ctx,
+    iso,
+    kilo_db,
+    kilo_tokens,
+    of,
+    turn,
+    write_transcript,
+)
+
+from ddflow.core.events import Event
+from ddflow.services import meters_base as MB
+from ddflow.services import meters_local as L
+
+
+def _tokens(c, window="5h"):
+    return of(L.read_claude_tokens(c), window)
+
+
+class TestTranscriptUsage:
+    def test_sums_all_four_fields_with_a_breakdown(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+        got = _tokens(c)
+        assert (got.status, got.value, got.unit, got.unmetered) == (MB.OK, 116.0, "tokens", 0)
+        assert got.detail["input"] == 10 and got.detail["cache_read"] == 100
+
+    def test_token_fields_choose_what_counts(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("input", "output"))
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+        assert _tokens(c).value == 15.0
+
+    def test_dedupes_on_message_and_request_inside_and_across_files(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), turn(), turn(rid="r2")])
+        write_transcript(c.claude_projects / "p" / "s" / "subagents" / "b.jsonl", [turn()])
+        assert _tokens(c).value == 232.0
+
+    def test_subagent_turns_count(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+        sub = c.claude_projects / "p" / "s" / "subagents" / "b.jsonl"
+        write_transcript(sub, [turn(mid="m2")])
+        assert _tokens(c).value == 232.0
+
+    def test_a_repeat_keeps_the_largest_figures(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("output",))
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(out=1), turn(out=9)])
+        assert _tokens(c).value == 9.0
+
+    def test_rows_without_a_key_are_each_counted(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("output",))
+        row = turn()
+        del row["requestId"]
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [row, row])
+        assert _tokens(c).value == 10.0
+
+    def test_each_window_counts_its_own_rows_in_one_pass(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("output",))
+        rows = [turn(mid="old", at=NOW - 6 * HOUR), turn(mid="new", at=NOW - 60)]
+        write_transcript(c.claude_projects / "p" / "a.jsonl", rows)
+        got = L.read_claude_tokens(c)
+        assert of(got, "5h").value == 5.0 and of(got, "week").value == 10.0
+
+    def test_a_file_untouched_since_the_window_is_not_opened(self, tmp_path, monkeypatch):
+        c = ctx(tmp_path, windows={"5h": NOW - 5 * HOUR})
+        old = c.claude_projects / "p" / "old.jsonl"
+        write_transcript(old, [turn()], mtime=NOW - 6 * HOUR)
+        os.chmod(old, 0)  # would fail the read if it were opened
+        write_transcript(c.claude_projects / "p" / "new.jsonl", [turn(mid="m2")])
+        assert _tokens(c).value == 116.0
+
+    def test_turns_without_usage_are_unmetered_not_zero(self, tmp_path):
+        c = ctx(tmp_path)
+        bare = turn(mid="m2")
+        del bare["message"]["usage"]
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), bare])
+        got = _tokens(c)
+        assert (got.status, got.value, got.unmetered) == (MB.OK, 116.0, 1)
+
+    @pytest.mark.parametrize(
+        "bad",
+        [{"input_tokens": "x", "output_tokens": 1}, {"input_tokens": -1, "output_tokens": 1}, {}],
+    )
+    def test_only_unusable_usage_is_unavailable(self, tmp_path, bad):
+        c = ctx(tmp_path)
+        row = turn()
+        row["message"]["usage"] = bad
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [row])
+        got = _tokens(c)
+        assert got.status == MB.UNAVAILABLE and got.value is None and "1" in got.reason
+
+    def test_a_turn_with_no_timestamp_is_unmetered_in_every_window(self, tmp_path):
+        c = ctx(tmp_path)
+        row = turn(mid="m2")
+        row["timestamp"] = "yesterday"
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), row])
+        got = L.read_claude_tokens(c)
+        assert of(got, "5h").unmetered == 1 and of(got, "week").unmetered == 1
+
+    def test_a_torn_last_line_is_skipped(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), '{"type":"assistant","me'])
+        got = _tokens(c)
+        assert got.value == 116.0 and got.detail["skipped"] == 1
+
+    def test_no_directory_is_unavailable(self, tmp_path):
+        got = L.read_claude_tokens(ctx(tmp_path))
+        assert all(r.status == MB.UNAVAILABLE and r.value is None for r in got)
+
+    def test_a_directory_with_no_transcripts_is_unavailable(self, tmp_path):
+        c = ctx(tmp_path)
+        (c.claude_projects / "p").mkdir(parents=True)
+        assert _tokens(c).status == MB.UNAVAILABLE
+
+    def test_transcripts_with_nothing_in_the_window_measure_zero(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()], mtime=NOW - 200 * HOUR)
+        got = _tokens(c)
+        assert (got.status, got.value) == (MB.OK, 0.0)
+
+    def test_over_the_byte_cap_is_unavailable_not_a_partial_sum(self, tmp_path):
+        c = ctx(tmp_path, transcript_max_bytes=10)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+        got = _tokens(c)
+        assert got.status == MB.UNAVAILABLE and "transcript_max_bytes" in got.reason
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root reads everything")
+    def test_an_unreadable_file_is_unavailable_not_an_undercount(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+        bad = write_transcript(c.claude_projects / "p" / "b.jsonl", [turn(mid="m2")])
+        os.chmod(bad, 0)
+        assert _tokens(c).status == MB.UNAVAILABLE
+
+    def test_one_function_is_the_swap_point(self, tmp_path):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(), turn()])
+        got = L.transcript_usage(c.claude_projects, 0.0, 1 << 20)
+        assert len(got.rows) == 1 and got.rows[0].input == 10 and got.rows[0].model == "m"
+
+
+def _kilo(c, unit, window="5h"):
+    return of(L.read_kilo(c), window, unit)
+
+
+class TestKilo:
+    def test_counts_message_rows_not_the_session_lifetime(self, tmp_path):
+        c = ctx(tmp_path)
+        rows = [
+            {"at": NOW - 60, "tokens": kilo_tokens(10, 5, 2, 100, 1)},
+            {"at": NOW - 6 * HOUR, "tokens": kilo_tokens(1000, 0)},
+        ]
+        kilo_db(c.kilo_db, rows)
+        got = _kilo(c, "tokens")
+        assert (got.status, got.value) == (MB.OK, 118.0)
+        assert got.detail["output"] == 7  # reasoning counts as output
+        assert _kilo(c, "tokens", "week").value == 1118.0
+
+    def test_a_user_message_is_not_a_turn(self, tmp_path):
+        c = ctx(tmp_path)
+        rows = [
+            {"at": NOW - 60, "tokens": kilo_tokens(10)},
+            {"at": NOW - 60, "role": "user", "tokens": kilo_tokens(99)},
+        ]
+        kilo_db(c.kilo_db, rows)
+        assert _kilo(c, "tokens").value == 10.0
+
+    def test_a_zero_row_is_unmetered_not_counted(self, tmp_path):
+        c = ctx(tmp_path)
+        rows = [
+            {"at": NOW - 60, "tokens": kilo_tokens(10)},
+            {"at": NOW - 60, "tokens": kilo_tokens()},
+        ]
+        kilo_db(c.kilo_db, rows)
+        got = _kilo(c, "tokens")
+        assert (got.value, got.unmetered) == (10.0, 1)
+
+    @pytest.mark.parametrize("row", [{"tokens": kilo_tokens()}, {}])
+    def test_only_zero_or_missing_tokens_is_unavailable_never_zero(self, tmp_path, row):
+        c = ctx(tmp_path)
+        kilo_db(c.kilo_db, [{"at": NOW - 60, **row}])
+        got = _kilo(c, "tokens")
+        assert got.status == MB.UNAVAILABLE and got.value is None and got.unmetered == 1
+
+    def test_no_turn_in_the_window_measures_zero_tokens(self, tmp_path):
+        c = ctx(tmp_path)
+        kilo_db(c.kilo_db, [])
+        assert _kilo(c, "tokens").value == 0.0
+
+    def test_zero_cost_is_unavailable_never_a_free_session(self, tmp_path):
+        c = ctx(tmp_path)
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": kilo_tokens(10), "cost": 0}])
+        got = _kilo(c, "usd")
+        assert got.status == MB.UNAVAILABLE and got.value is None and "cost" in got.reason
+
+    def test_no_turns_gives_no_cost_either(self, tmp_path):
+        c = ctx(tmp_path)
+        kilo_db(c.kilo_db, [])
+        assert _kilo(c, "usd").status == MB.UNAVAILABLE
+
+    def test_reported_cost_is_summed_and_gaps_are_named(self, tmp_path):
+        c = ctx(tmp_path)
+        rows = [
+            {"at": NOW - 60, "tokens": kilo_tokens(1), "cost": 0.25},
+            {"at": NOW - 60, "tokens": kilo_tokens(1), "cost": 0},
+        ]
+        kilo_db(c.kilo_db, rows)
+        got = _kilo(c, "usd")
+        assert (got.status, got.value, got.unmetered) == (MB.OK, 0.25, 1)
+
+    def test_missing_store_is_unavailable(self, tmp_path):
+        got = L.read_kilo(ctx(tmp_path))
+        assert {(r.window, r.unit) for r in got} == {
+            ("5h", "tokens"),
+            ("week", "tokens"),
+            ("5h", "usd"),
+            ("week", "usd"),
+        }
+        assert all(r.status == MB.UNAVAILABLE for r in got)
+
+    def test_not_a_database_is_unavailable(self, tmp_path):
+        c = ctx(tmp_path)
+        c.kilo_db.write_text("plain text, not sqlite")
+        assert all(r.status == MB.UNAVAILABLE for r in L.read_kilo(c))
+
+    def test_a_changed_schema_is_unavailable(self, tmp_path):
+        c = ctx(tmp_path)
+        con = sqlite3.connect(c.kilo_db)
+        con.execute("CREATE TABLE other (x)")
+        con.commit()
+        con.close()
+        assert all(r.status == MB.UNAVAILABLE for r in L.read_kilo(c))
+
+    def test_a_query_over_its_time_budget_is_unavailable(self, tmp_path):
+        c = ctx(tmp_path, kilo_timeout_s=0.0)
+        kilo_db(c.kilo_db, [{"at": NOW - 60 - n, "tokens": kilo_tokens(1)} for n in range(500)])
+        got = _kilo(c, "tokens")
+        assert got.status == MB.UNAVAILABLE and "kilo_timeout_s" in got.reason
+
+    def test_a_path_with_uri_characters_still_opens(self, tmp_path):
+        odd = tmp_path / "a b?c#d"
+        odd.mkdir()
+        c = ctx(tmp_path, kilo_db=odd / "kilo.db")
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": kilo_tokens(3)}])
+        assert _kilo(c, "tokens").value == 3.0
+
+    def test_the_store_is_opened_read_only(self, tmp_path):
+        c = ctx(tmp_path)
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": kilo_tokens(1)}])
+        before = c.kilo_db.read_bytes()
+        L.read_kilo(c)
+        assert c.kilo_db.read_bytes() == before
+
+
+def _started(at, tool="claude-code"):
+    return Event("session.started", "s", {"tool": tool}, ts=iso(at))
+
+
+class TestSessions:
+    def test_counts_per_window_with_a_project_scope(self, tmp_path):
+        ev = [_started(NOW - 60), _started(NOW - 6 * HOUR, "kilo"), Event("x", "s", ts=iso(NOW))]
+        got = L.read_ddflow_sessions(ctx(tmp_path, events=ev))
+        five, week = of(got, "5h"), of(got, "week")
+        assert (five.status, five.value, five.unit) == (MB.OK, 1.0, "sessions")
+        assert week.value == 2.0 and week.detail["scope"] == "project"
+        assert week.detail["by_tool"] == {"claude-code": 1, "kilo": 1}
+
+    def test_no_log_handed_in_is_unavailable(self, tmp_path):
+        got = L.read_ddflow_sessions(ctx(tmp_path))
+        assert all(r.status == MB.UNAVAILABLE and r.value is None for r in got)
+
+    def test_a_log_with_no_session_measures_zero(self, tmp_path):
+        got = L.read_ddflow_sessions(ctx(tmp_path, events=[]))
+        assert of(got, "5h").value == 0.0
+
+
+def test_readings_serialise(tmp_path):
+    c = ctx(tmp_path)
+    write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
+    assert json.loads(json.dumps(_tokens(c).to_dict()))["value"] == 116.0

@@ -1,0 +1,342 @@
+"""Quota meters, the vendor side and the registry (D-quotas-governor, r-no-silent-cost)."""
+
+from __future__ import annotations
+
+import json
+import stat
+from typing import ClassVar
+
+import pytest
+from quota_meters_support import HOUR, NOW, ctx, iso, of, window, write_cache
+
+from ddflow.config import Config
+from ddflow.services import meters as M
+from ddflow.services import meters_base as MB
+from ddflow.services import meters_vendor as V
+
+
+class TestReadingInvariant:
+    def test_ok_needs_a_number(self):
+        with pytest.raises(ValueError, match="number"):
+            MB.Reading("s", "h", "5h", "percent", MB.OK, None, iso(NOW), False)
+
+    def test_unavailable_cannot_carry_a_value(self):
+        with pytest.raises(ValueError, match="never a value"):
+            MB.Reading("s", "h", "5h", "percent", MB.UNAVAILABLE, 0.0, "", False, reason="x")
+
+    def test_unavailable_needs_a_reason(self):
+        with pytest.raises(ValueError, match="reason"):
+            MB.Reading("s", "h", "5h", "percent", MB.UNAVAILABLE, None, "", False)
+
+    def test_nan_is_not_a_number(self):
+        with pytest.raises(ValueError, match="number"):
+            MB.Reading("s", "h", "5h", "percent", MB.OK, float("nan"), iso(NOW), False)
+
+
+class TestPercent:
+    @pytest.mark.parametrize(
+        ("raw", "scale", "want"),
+        [(43, 1, 43.0), (0.5, 1, 0.5), (0, 1, 0.0), (0.53, 100, 53.0), (1, 100, 100.0)],
+    )
+    def test_normalises(self, raw, scale, want):
+        assert MB.percent(raw, scale) == pytest.approx(want)
+
+    @pytest.mark.parametrize("raw", [None, "43", True, float("nan"), float("inf"), -1, 101])
+    def test_refuses(self, raw):
+        assert MB.percent(raw, 1) is None
+
+    def test_a_wrong_scale_is_refused_not_clamped(self):
+        assert MB.percent(53, 100) is None  # a 0-100 figure on a 0-1 source
+
+
+class TestCacheReader:
+    def test_fresh_reading(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, five=window(43), week=window(36, 48 * HOUR))
+        got = V.read_claude_cache(c)
+        five, week = of(got, "5h"), of(got, "week")
+        assert (five.status, five.value, five.unit, five.stale) == (MB.OK, 43.0, "percent", False)
+        assert five.source == "claude-cache" and five.observed_at == iso(NOW - 10)
+        assert five.resets_at == iso(NOW + HOUR)
+        assert week.value == 36.0
+
+    def test_stale_by_age(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, age_s=901, five=window(43), week=window(36))
+        assert of(V.read_claude_cache(c), "5h").stale is True
+
+    def test_stale_once_the_reset_passed(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, five=window(43, -1), week=window(36))
+        got = V.read_claude_cache(c)
+        assert of(got, "5h").stale is True and of(got, "week").stale is False
+
+    def test_a_fetch_from_the_future_is_stale(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, age_s=-4000, five=window(43), week=window(36))
+        assert of(V.read_claude_cache(c), "5h").stale is True
+
+    def test_a_null_window_is_unavailable(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, five=None, week=window(36))
+        got = V.read_claude_cache(c)
+        assert of(got, "5h").status == MB.UNAVAILABLE and of(got, "5h").value is None
+        assert of(got, "week").status == MB.OK
+
+    def test_a_measured_zero_stays_zero(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, five=window(0), week=window(36))
+        five = of(V.read_claude_cache(c), "5h")
+        assert (five.status, five.value) == (MB.OK, 0.0)
+
+    @pytest.mark.parametrize(
+        "body",
+        ["", "{not json", "[]", '{"cachedUsageUtilization": 3}', '{"other": 1}'],
+    )
+    def test_bad_file_is_unavailable_for_every_window(self, tmp_path, body):
+        c = ctx(tmp_path)
+        c.claude_state.write_text(body)
+        got = V.read_claude_cache(c)
+        assert {r.window for r in got} == {"5h", "week"}
+        assert all(r.status == MB.UNAVAILABLE and r.value is None and r.reason for r in got)
+
+    def test_missing_file_is_unavailable(self, tmp_path):
+        assert all(r.status == MB.UNAVAILABLE for r in V.read_claude_cache(ctx(tmp_path)))
+
+    def test_no_fetch_time_is_unavailable(self, tmp_path):
+        c = ctx(tmp_path)
+        c.claude_state.write_text(
+            json.dumps({"cachedUsageUtilization": {"utilization": {"five_hour": window(4)}}})
+        )
+        assert of(V.read_claude_cache(c), "5h").status == MB.UNAVAILABLE
+
+    def test_raw_account_id_is_never_carried(self, tmp_path):
+        c = ctx(tmp_path)
+        write_cache(c.claude_state, five=window(1), week=window(2))
+        five = of(V.read_claude_cache(c), "5h")
+        assert five.account and "1111" not in five.account
+        assert "11111111" not in json.dumps(five.to_dict())
+
+
+class TestSnapshot:
+    STATUS: ClassVar[dict] = {
+        "rate_limits": {
+            "five_hour": {"used_percentage": 23.5, "resets_at": int(NOW + HOUR)},
+            "seven_day": {"used_percentage": 41.2, "resets_at": int(NOW + 48 * HOUR)},
+        }
+    }
+
+    def test_statusline_round_trip(self, tmp_path):
+        c = ctx(tmp_path)
+        assert V.snapshot_statusline(c, json.dumps(self.STATUS)) == 2
+        got = V.read_claude_snapshot(c)
+        five = of(got, "5h")
+        assert (five.status, five.value, five.stale) == (MB.OK, 23.5, False)
+        assert five.resets_at == iso(NOW + HOUR) and five.observed_at == iso(NOW)
+        assert five.detail["origin"] == "statusline"
+        assert of(got, "week").value == 41.2
+
+    def test_the_snapshot_is_private(self, tmp_path):
+        c = ctx(tmp_path)
+        V.snapshot_statusline(c, json.dumps(self.STATUS))
+        assert stat.S_IMODE(c.snapshot.stat().st_mode) == 0o600
+
+    @pytest.mark.parametrize(
+        "text",
+        ["", "not json", "{}", '{"rate_limits": null}', '{"rate_limits": {"five_hour": {}}}', "[]"],
+    )
+    def test_no_rate_limits_writes_nothing_never_zero(self, tmp_path, text):
+        c = ctx(tmp_path)
+        assert V.snapshot_statusline(c, text) == 0
+        assert not c.snapshot.exists()
+        assert all(r.status == MB.UNAVAILABLE for r in V.read_claude_snapshot(c))
+
+    def test_an_absent_window_keeps_the_last_reading(self, tmp_path):
+        c = ctx(tmp_path)
+        V.snapshot_statusline(c, json.dumps(self.STATUS))
+        later = ctx(tmp_path, now=NOW + 60)
+        only_week = {"rate_limits": {"seven_day": self.STATUS["rate_limits"]["seven_day"]}}
+        assert V.snapshot_statusline(later, json.dumps(only_week)) == 1
+        assert of(V.read_claude_snapshot(later), "5h").observed_at == iso(NOW)
+
+    def test_stream_event_single_window_is_rescaled(self, tmp_path):
+        c = ctx(tmp_path)
+        line = {
+            "type": "rate_limit_event",
+            "rate_limit_info": {
+                "status": "allowed_warning",
+                "rateLimitType": "five_hour",
+                "utilization": 0.81,
+                "resetsAt": int(NOW + HOUR),
+            },
+        }
+        assert V.snapshot_stream_line(c, json.dumps(line)) == 1
+        five = of(V.read_claude_snapshot(c), "5h")
+        assert five.value == pytest.approx(81.0) and five.detail["origin"] == "stream-json"
+
+    def test_stream_event_unified_windows(self, tmp_path):
+        c = ctx(tmp_path)
+        info = {
+            "status": "allowed",
+            "unifiedWindows": {
+                "five_hour": {"utilization": 0.1, "resetsAt": int(NOW + HOUR)},
+                "seven_day": {"utilization": 0.2, "resetsAt": int(NOW + 2 * HOUR)},
+            },
+        }
+        line = {"type": "rate_limit_event", "rate_limit_info": info}
+        assert V.snapshot_stream_line(c, json.dumps(line)) == 2
+        assert of(V.read_claude_snapshot(c), "week").value == pytest.approx(20.0)
+
+    @pytest.mark.parametrize(
+        "info",
+        [
+            {"status": "rejected", "rateLimitType": "five_hour", "resetsAt": 1},  # no figure
+            {"rateLimitType": "five_hour", "utilization": 53, "resetsAt": 1},  # wrong scale
+            {"rateLimitType": "overage", "utilization": 0.5, "resetsAt": 1},  # not our window
+        ],
+    )
+    def test_stream_event_without_a_usable_figure_writes_nothing(self, tmp_path, info):
+        c = ctx(tmp_path)
+        line = {"type": "rate_limit_event", "rate_limit_info": info}
+        assert V.snapshot_stream_line(c, json.dumps(line)) == 0
+        assert not c.snapshot.exists()
+
+    def test_other_stream_lines_are_ignored(self, tmp_path):
+        c = ctx(tmp_path)
+        assert V.snapshot_stream_line(c, '{"type": "assistant"}') == 0
+        assert V.snapshot_stream_line(c, "torn") == 0
+
+    def test_corrupt_snapshot_is_unavailable_and_a_new_write_heals_it(self, tmp_path):
+        c = ctx(tmp_path)
+        c.snapshot.parent.mkdir(parents=True)
+        c.snapshot.write_text("{torn")
+        assert all(r.status == MB.UNAVAILABLE for r in V.read_claude_snapshot(c))
+        assert V.snapshot_statusline(c, json.dumps(self.STATUS)) == 2
+        assert of(V.read_claude_snapshot(c), "5h").status == MB.OK
+
+    def test_a_bad_reset_time_keeps_the_figure_without_a_reset(self, tmp_path):
+        c = ctx(tmp_path)
+        body = {"rate_limits": {"five_hour": {"used_percentage": 5, "resets_at": True}}}
+        assert V.snapshot_statusline(c, json.dumps(body)) == 1
+        five = of(V.read_claude_snapshot(c), "5h")
+        assert (five.value, five.resets_at) == (5.0, "")
+
+
+class TestRegistry:
+    def test_a_raising_reader_is_unavailable_never_a_raise(self, tmp_path, monkeypatch):
+        def boom(_c):
+            raise RuntimeError("no")
+
+        monkeypatch.setitem(M.READERS, "boom", boom)
+        got = [r for r in M.read_all(ctx(tmp_path)) if r.source == "boom"]
+        assert len(got) == 1 and got[0].status == MB.UNAVAILABLE and "no" in got[0].reason
+
+    def test_a_name_cannot_be_registered_twice(self):
+        with pytest.raises(ValueError, match="already"):
+            M.register("claude-cache", V.read_claude_cache)
+
+    def test_nothing_readable_gives_no_number_at_all(self, tmp_path):
+        got = M.read_all(ctx(tmp_path))
+        assert got and all(r.status == MB.UNAVAILABLE and r.value is None for r in got)
+
+    def test_names_limit_the_readers(self, tmp_path):
+        assert {r.source for r in M.read_all(ctx(tmp_path), ["kilo"])} == {"kilo"}
+
+
+def _ok(source, value, *, stale=False, at=NOW, window_="5h"):
+    return MB.Reading(source, "claude-code", window_, "percent", MB.OK, value, iso(at), stale)
+
+
+def _gone(source):
+    return MB.unavailable(source, "claude-code", "5h", "percent", "gone", NOW)
+
+
+class TestBest:
+    def test_fresh_beats_stale_whatever_the_order(self):
+        assert M.best([_ok("a", 1, stale=True), _ok("b", 2)], "5h", "percent").source == "b"
+
+    def test_newest_of_the_fresh(self):
+        got = M.best([_ok("a", 1, at=NOW - 5), _ok("b", 2, at=NOW)], "5h", "percent")
+        assert got.source == "b"
+
+    def test_a_stale_figure_beats_none_and_says_so(self):
+        got = M.best([_gone("a"), _ok("b", 2, stale=True)], "5h", "percent")
+        assert got.source == "b" and got.stale is True
+
+    def test_only_unavailable_stays_unavailable(self):
+        assert M.best([_gone("a")], "5h", "percent").status == MB.UNAVAILABLE
+
+    def test_no_reader_for_it_is_none(self):
+        assert M.best([_ok("a", 1)], "week", "percent") is None
+
+
+def _rows(c):
+    if not c.samples.exists():
+        return []
+    rows = []
+    for line in c.samples.read_text().splitlines():
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
+    return rows
+
+
+class TestSamples:
+    def test_written_private_and_read_back(self, tmp_path):
+        c = ctx(tmp_path)
+        M.record(c, [_ok("a", 7.0), _gone("b")])
+        rows = _rows(c)
+        assert [r["value"] for r in rows] == [7.0, None]
+        assert rows[1]["status"] == MB.UNAVAILABLE
+        assert stat.S_IMODE(c.samples.stat().st_mode) == 0o600
+
+    def test_a_torn_last_line_does_not_defeat_the_throttle(self, tmp_path):
+        c = ctx(tmp_path)
+        M.record(c, [_ok("a", 7.0)])
+        with c.samples.open("a") as fh:
+            fh.write('{"torn"\n')
+        assert M.sample_if_due(c, ["claude-cache"]) is False
+
+    def test_nothing_to_record_writes_nothing(self, tmp_path):
+        c = ctx(tmp_path)
+        M.record(c, [])
+        assert not c.samples.exists()
+
+    def test_the_ring_stays_inside_its_bound_keeping_the_newest(self, tmp_path):
+        c = ctx(tmp_path, samples_max_bytes=2000)
+        for n in range(60):
+            M.record(c, [_ok("a", float(n))])
+        assert c.samples.stat().st_size <= 2000
+        assert _rows(c)[-1]["value"] == 59.0
+
+    def test_sample_if_due_throttles(self, tmp_path):
+        c = ctx(tmp_path)
+        assert M.sample_if_due(c, ["claude-cache"]) is True
+        assert M.sample_if_due(c, ["claude-cache"]) is False
+        later = ctx(tmp_path, now=NOW + 301)
+        assert M.sample_if_due(later, ["claude-cache"]) is True
+
+
+class TestConfig:
+    def test_defaults_and_context(self):
+        cfg = Config()
+        c = MB.context(cfg, now=NOW)
+        assert c.stale_after_s == cfg.quota.stale_after_s > 0
+        assert set(c.windows) == set(cfg.quota.token_windows)
+        assert c.windows["5h"] == NOW - 5 * HOUR
+        assert str(c.claude_projects).endswith(".claude/projects")
+
+    def test_state_files_follow_xdg_and_their_knobs(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+        c = MB.context(Config(), now=NOW)
+        assert c.samples.parent == tmp_path / "ddflow"
+        assert c.snapshot.parent == tmp_path / "ddflow"
+        cfg = Config()
+        cfg.quota.samples_path = str(tmp_path / "x.jsonl")
+        assert MB.context(cfg, now=NOW).samples == tmp_path / "x.jsonl"
+
+    def test_total_has_no_since_it_reads_from_the_start(self):
+        cfg = Config()
+        cfg.quota.token_windows = ["total"]
+        assert MB.context(cfg, now=NOW).windows == {"total": 0.0}
