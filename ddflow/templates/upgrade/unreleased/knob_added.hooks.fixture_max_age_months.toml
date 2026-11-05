@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "hooks.fixture_max_age_months"
+new = "6"
+why = "`ddflow harness record` and the fixture gap report flag a recorded payload fixture or a walked tier-2 checklist older than this many whole months (B-ac-fixtures)."
+impact = "additive"

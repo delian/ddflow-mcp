@@ -5531,6 +5531,8 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
 
+`ddflow harness record <id>` turns one live session into the payload fixtures the conformance suite replays; a tier-2 agent has a checklist a person walks under `docs/ddflow/agents/checklist/`.
+
 CI, Make or a human need no row: the CLI is complete on its own.
 
 ---
