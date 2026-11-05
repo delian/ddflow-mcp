@@ -36,7 +36,6 @@ BASELINE: dict[str, tuple[str, ...]] = {
     "http": (
         "ddflow.infra.hostinfo",
         "ddflow.infra.release_index",
-        "ddflow.services.approvals.harness",
         "ddflow.services.docscheck",
         "ddflow.services.doctypes.rule_content",
         "ddflow.services.install_info",
@@ -174,7 +173,6 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.infra.worktree",
         "ddflow.mcpshim.probe_server",
         "ddflow.services.approvals.audit",
-        "ddflow.services.approvals.harness",
         "ddflow.services.approvals.view",
         "ddflow.services.backups",
         "ddflow.services.bisect",

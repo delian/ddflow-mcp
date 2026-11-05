@@ -20,17 +20,16 @@ from __future__ import annotations
 import json
 import os
 import re
-import sqlite3
 import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from ...config import Config
 from ...config_sections._layers import LAYERS, layer_path, read_toml
 from ...core import clock
 from ...core.model import fold
+from ...infra.docindex import read_only_rows
 from .. import configwrite as CW
 from ..actors import resolve_actor
 from ..ask import engine as E
@@ -351,21 +350,13 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
     the agent wrote is not such a part, and a T3 act never counts (its filter wants a typed
     answer, which this is not)."""
     found: list[Attested] = []
-    try:
-        con = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=2)
-    except sqlite3.Error:
-        return found
-    try:
-        rows = con.execute(
-            "SELECT id, time_created, data FROM part "
-            "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
-            "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
-            (KILO_TOOL, since * 1000, marker),
-        ).fetchall()
-    except sqlite3.Error:
-        return found  # not a readable Kilo store (wrong schema, locked, missing): nothing there
-    finally:
-        con.close()
+    rows = read_only_rows(
+        path,
+        "SELECT id, time_created, data FROM part "
+        "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
+        "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
+        (KILO_TOOL, since * 1000, marker),
+    )  # no rows when this is not a readable Kilo store (wrong schema, locked, missing)
     for pid, created, raw in rows:
         try:
             data = json.loads(raw)
