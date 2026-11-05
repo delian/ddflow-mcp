@@ -1,7 +1,6 @@
 """Remote lane transport: bundle out, branch or bundle back, host as the only writer (SW-remote-bundle).
 
-The ssh transport runs against a stub `ssh` that runs the remote command in a local directory:
-no network, but every shell line this module sends is executed.
+The ssh transport runs against a stub `ssh`: no network, but every shell line is executed.
 """
 
 from __future__ import annotations
@@ -453,7 +452,7 @@ def test_forged_ref_name_in_a_bundle_is_refused(repo, tmp_path):
 
 
 def test_module_cannot_write_the_log_or_answer_a_gate():
-    """D-swarm-answers Q9, structurally: nothing here reaches the log, gates or approvals."""
+    """D-swarm-answers Q9: nothing here reaches the log, gates or approvals."""
     tree = ast.parse(Path(R.__file__).read_text())
     mods = [
         f"{getattr(n, 'module', '') or ''}.{a.name}"
@@ -749,7 +748,7 @@ sys.stdin.read()
 
 
 class _Pipe:
-    """A `Channel` over a started process: what a caller wires from `infra.proc`."""
+    """A `Channel` over a started process."""
 
     def __init__(self, argv, env):
         self.p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
