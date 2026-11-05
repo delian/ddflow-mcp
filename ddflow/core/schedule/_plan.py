@@ -14,7 +14,7 @@ from ..model import REVIEW, RUNNING, Item, State
 from ._filters import PlanCtx, item_blocker, order_terms
 from ._parallel import _cap_words, parallel_line
 from ._readiness import Blocked, Plan, unpickable
-from ._reserved import open_slots, reserved_note
+from ._reserved import open_slots, reserved_note, tree_cap
 from ._resources import bug_items, interrupted, needs_tree
 
 #: What a plan names as holding work back when a slot is free but reserved.
@@ -231,9 +231,7 @@ def plan(
     paused = parallel is not None and parallel.admit_paused
     flight_slots = 0 if paused else max(0, limit - in_flight)
     if cfg.worktree.enabled:
-        # 0 (the default) FOLLOWS the schedule limit; it is not unlimited (B-af-config)
-        tree_cap = cfg.worktree.max_parallel or limit
-        tree_slots = max(0, tree_cap - with_trees)
+        tree_slots = max(0, tree_cap(cfg, limit) - with_trees)
     else:
         tree_slots = flight_slots  # no trees are made, so no tree cap applies
     slots = min(flight_slots, tree_slots)

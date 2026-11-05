@@ -20,6 +20,12 @@ from ..model import Lease, State
 from ._resources import bug_items
 
 
+def tree_cap(cfg: Config, limit: int) -> int:
+    """How many worktrees may exist: 0 (the default) FOLLOWS the schedule limit; it is not
+    unlimited (B-af-config)."""
+    return cfg.worktree.max_parallel or limit
+
+
 def reserved_items(state: State, cfg: Config) -> frozenset[str]:
     """Ids of the items that may take a reserved slot: every bug fix, whatever
     `bugs_first` says about the order, and every task tagged `reserved_tags`."""
@@ -57,7 +63,7 @@ def open_slots(
     tree_share = share
     if cfg.worktree.enabled:
         with_trees = len([i for i in ordinary if live[i].worktree])
-        tree_share = ordinary_free(cfg.worktree.max_parallel or limit, wanted, with_trees)
+        tree_share = ordinary_free(tree_cap(cfg, limit), wanted, with_trees)
     return Slots(flight, tree, min(share, flight), min(tree_share, tree)), reserved
 
 
