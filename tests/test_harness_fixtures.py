@@ -234,6 +234,23 @@ def test_prepare_taps_every_mapped_event_and_the_mcp_server(repo, tmp_path):
     assert not (scratch / HRec.CAPTURE_DIR / "hooks").exists(), "no session has run"
 
 
+def test_prepare_keeps_a_config_that_is_not_json_as_text(repo, tmp_path):
+    scratch = tmp_path / "scratch"
+    out = harness_record(repo, "codex", prepare=str(scratch))
+    assert out.exit == 0, out.reason
+    assert out.data["mcp_tapped"] is False
+    adopted = json.loads((scratch / HRec.CAPTURE_DIR / "adopt.json").read_text())
+    assert isinstance(adopted["config"][".codex/config.toml"], str)
+
+
+@pytest.mark.parametrize("hid", ["aider", "cline"])
+def test_an_agent_with_nothing_to_tap_is_unavailable_and_no_scratch_is_made(repo, tmp_path, hid):
+    out = harness_record(repo, hid, prepare=str(tmp_path / "scratch"))
+    assert out.exit == 2
+    assert out.data["status"] == "unavailable"
+    assert not (tmp_path / "scratch").exists()
+
+
 def test_prepare_says_what_a_plugin_style_agent_cannot_have_tapped(repo, tmp_path):
     out = harness_record(repo, "kilo", prepare=str(tmp_path / "scratch"))
     assert out.exit == 0, out.reason

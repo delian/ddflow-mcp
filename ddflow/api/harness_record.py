@@ -60,6 +60,9 @@ def _status(repo: Path, tree: Path, h: HR.Harness, dest: Path, installed: str) -
 
 
 def _prepare(repo: Path, h: HR.Harness, target: str, agent: str) -> O.Outcome:
+    why = HRec.untappable(h)
+    if why:
+        return O.nothing(KIND, why, id=h.id, status="unavailable", message=why)
     root = Path(target).resolve()
     if root.is_relative_to(Path(repo).resolve()):
         return O.refused(KIND, f"{root} is inside this project: use a directory outside it")

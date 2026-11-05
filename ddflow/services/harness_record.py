@@ -145,6 +145,18 @@ def tap_argv(capture: Path, *args: str) -> list[str]:
     return ["env", f"PYTHONPATH={package}", sys.executable, "-m", TAP_MODULE, *args]
 
 
+def untappable(h: HR.Harness) -> str:
+    """Why a capture of ``h`` would hold nothing at all; "" when something can be tapped."""
+    why = HW.unsupported(h)
+    if not why:
+        return ""
+    try:
+        mcp_shape.container_path(h.mcp.shape)
+    except EngineError:
+        return f"{why}, and its MCP config is not a JSON file ddflow can tap"
+    return ""
+
+
 def tap_hooks(root: Path, h: HR.Harness, capture: Path) -> tuple[list[str], str]:
     """One capture hook per mapped event, beside what adopt wrote: (events tapped, why not)."""
     why = HW.unsupported(h)
@@ -209,7 +221,8 @@ def snapshot(root: Path, h: HR.Harness) -> dict[str, Any]:
     for rel in filter(None, (h.mcp.path, h.hooks.file if h.hooks else "")):
         p = root / rel
         if p.is_file():
-            config[rel] = json.loads(p.read_text(encoding="utf-8"))
+            text = p.read_text(encoding="utf-8")
+            config[rel] = json.loads(text) if rel.endswith(".json") else text
     return {"wrote": wrote, "config": config}
 
 
