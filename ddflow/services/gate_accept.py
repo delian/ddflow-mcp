@@ -85,7 +85,10 @@ def person_only(it: Item, gate: str) -> bool:
     The standing `complete_unavailable` rule must not answer a completion whose unmet gate is
     this one; the completion site `_only_unavailable` and the rule's own predicate read THIS
     helper so the two decisions cannot drift apart (B-complete-self-approves-over-person-only-partial)."""
-    base = ((it.gates[gate].evidence or {}).get("baseline") or {})
+    rec = it.gates.get(gate)
+    if rec is None:
+        return False
+    base = (rec.evidence or {}).get("baseline") or {}
     return base.get("red") is True and (base.get("auto") or {}).get("accepted") is not True
 
 
