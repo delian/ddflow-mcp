@@ -62,6 +62,9 @@ class GateStatus:
     #: gate -> its recorded reason when `unavailable` or `partial` (B305db5608b), else how
     #: long its recorded run queued before it ran (`queued Xm of Ym elapsed`).
     why: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
+    #: gate -> why a recorded pass no longer covers the current branch (B1aec051374): the
+    #: evidence names a tree that has since changed (a `sync` merged main into its globs).
+    stale: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -74,6 +77,7 @@ class GateStatus:
             + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             + (f"  -- {self.local_command[g]}" if g in self.local_command else "")
             + (f"  -- {self.after_failure[g]}" if g in self.after_failure else "")
+            + (f"  -- STALE: {self.stale[g]}" if g in self.stale else "")
             + (f"  -- {self.why[g]}" if g in self.why else "")
             for g, o in self.rows
         )
@@ -285,6 +289,7 @@ def status(
     defs: Mapping[str, GateDef] | None = None,
     *,
     diff: DiffPaths | None = None,
+    stale_notes: Sequence[StaleNote] | None = None,
 ) -> GateStatus:
     """Where is this item in its pipeline, and what is the next thing to do?
 
@@ -294,7 +299,10 @@ def status(
 
     ``diff`` reads the ACTUAL changed paths. A `[gates].required` gate is never excused
     by the declared globs alone, only by a readable diff that misses its `applies_when`
-    (B-na-required-gate); without ``diff`` such a gate stays owed."""
+    (B-na-required-gate); without ``diff`` such a gate stays owed.
+
+    ``stale_notes`` are `stale_evidence_detail`'s notes (verified-only): each gate whose
+    recorded pass no longer names the current branch is rendered with a STALE marker."""
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
@@ -328,6 +336,7 @@ def status(
         after_failure={
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
+        stale={n.gate: n.why for n in (stale_notes or []) if not n.unverified},
     )
 
 
