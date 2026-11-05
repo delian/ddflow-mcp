@@ -27,6 +27,7 @@ import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -85,8 +86,6 @@ def extra_installed() -> bool:
         return _StaticModel is not None
     # Otherwise stay import-free (r-no-eager-heavy-import): "installed" = the package is findable;
     # a broken install is reported at the first embedding as unavailable with the reason.
-    from importlib.util import find_spec
-
     try:
         return find_spec("model2vec") is not None
     except (ImportError, ValueError):

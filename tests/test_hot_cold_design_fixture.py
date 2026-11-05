@@ -16,6 +16,20 @@ from ddflow.infra.log import _tier as T
 POLICY = T.TierPolicy(enabled=True, summary_every_s=600.0)
 
 
+def _git_merge(a: Path, b: Path, into: Path) -> None:
+    """What git does with two clones: a union of files. A same-named file on both sides with
+    different bytes is the conflict the per-agent naming rule exists to make impossible."""
+    for src in (a, b):
+        for p in Path(src).rglob("*.jsonl"):
+            dst = Path(into) / p.relative_to(src)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if dst.exists() and dst.read_bytes() != p.read_bytes():
+                raise FileExistsError(
+                    f"merge conflict on {p.relative_to(src)}: two writers, one file"
+                )
+            dst.write_bytes(p.read_bytes())
+
+
 def ev(agent: str, n: int, kind: str, subject: str, at: float, **data) -> dict:
     return {
         "agent": agent,
@@ -101,7 +115,7 @@ def test_two_clones_merge_without_conflict_and_nothing_is_lost(tmp_path: Path) -
     c1, c2, merged = tmp_path / "c1", tmp_path / "c2", tmp_path / "m"
     a = session(c1, "alice-111111", 1)
     b = session(c2, "bob-222222", 2)
-    T.git_merge(c1, c2, merged)
+    _git_merge(c1, c2, merged)
     union = T.read_union(merged)
     assert {e["id"] for e in a + b} <= {e["id"] for e in union}
     assert T.renewed_at(T.read_union(merged, tiers=(T.HOT,))) == T.renewed_at(a + b)
@@ -110,7 +124,7 @@ def test_two_clones_merge_without_conflict_and_nothing_is_lost(tmp_path: Path) -
     with pytest.raises(
         FileExistsError
     ):  # the conflict that per-agent shard naming makes impossible
-        T.git_merge(c1, c2, tmp_path / "m2")
+        _git_merge(c1, c2, tmp_path / "m2")
 
 
 def test_crash_between_cold_and_summary_loses_nothing(tmp_path: Path) -> None:

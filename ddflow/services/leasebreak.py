@@ -34,6 +34,7 @@ from ..core.schedule import stale_package_globs
 from ..infra import treeactivity as TA
 from ..infra import worktree as W
 from . import waiting as WG
+from .gates import running as RUN
 
 #: Event kinds that only say a lease exists or is being asked for; none is work.
 BOOKKEEPING = frozenset(
@@ -91,9 +92,8 @@ def progress_at(events: Iterable[Any], item_id: str, lease: Lease, activity: Act
 def _live_gate(repo, item_id: str) -> bool:
     """True when a command gate run on ``item_id`` is still alive on this host: a running
     gate is work in flight, never idleness (B-long-ci-run-holds-globs-while-waiter-asks-yield)."""
-    from .gates import running as RUN
-
     return bool(repo is not None and RUN.live_runs(repo, item_id))
+
 
 def judge(
     cfg,
@@ -211,7 +211,9 @@ def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
     """The operator's lines for every standing yield-requested or breakable lease, each
     with its idle time (DX-lease-yield-doctor-status): `ddflow doctor` lists what the
     holder's brief and heartbeat only tell the holder."""
-    return [yield_text(v) for v in verdicts(st, cfg, events, time.time(), tree_activity(root), root)]
+    return [
+        yield_text(v) for v in verdicts(st, cfg, events, time.time(), tree_activity(root), root)
+    ]
 
 
 def stale_glob_notes(repo: Path, st: State) -> list[str]:

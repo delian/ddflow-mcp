@@ -38,13 +38,7 @@ def upgrade_remedy(highest: str = "") -> str:
     """`config_sections._compat.upgrade_advice` for how this ddflow is installed, as the
     sentence a refusal opens its remedy with: a source checkout merges main, an installed
     ddflow upgrades its package (``highest`` is the version needed, "" when unknown)."""
-    # Resolve install_kind through the package at call time: the split of log.py into a
-    # package re-exports install_kind from this module, so a caller or test that monkeypatches
-    # `ddflow.infra.log.install_kind` reaches the same name upgrade_remedy and skew_message
-    # call, rather than a copy bound here (the pre-split behaviour, which the split broke).
-    from . import install_kind as _install_kind
-
-    text = CV.upgrade_advice(highest, _install_kind())
+    text = CV.upgrade_advice(highest, install_kind())
     if highest and highest not in text:  # a source checkout's advice names no version
         text += f" (ddflow >= {highest} is needed)"
     return text[:1].upper() + text[1:]
