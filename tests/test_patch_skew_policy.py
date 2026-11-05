@@ -29,7 +29,7 @@ FORMAT = 3
 def running(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ddflow, "__version__", RUNNING)
     monkeypatch.setattr(ddflow, "FORMAT_LEVEL", FORMAT)
-    monkeypatch.setattr(LOG, "_SKEW_WARNED", set())
+    monkeypatch.setattr(LOG._skew, "_SKEW_WARNED", set())
 
 
 def _shard_write(repo: Path, agent: str, kind: str, data: dict, n: int = 1) -> None:
@@ -201,9 +201,9 @@ def test_the_patch_skew_notice_is_said_once_across_processes(repo: Path):
     """B-path-ddflow-version-skew-noise: each CLI call is a new process, so a per-process
     set repeated the warning on every write; a machine-local marker says it once."""
     _stamp(repo, "0.5.7")
-    LOG._SKEW_WARNED.clear()
+    LOG._skew._SKEW_WARNED.clear()
     EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
-    LOG._SKEW_WARNED.clear()  # a new process
+    LOG._skew._SKEW_WARNED.clear()  # a new process
     EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
     assert (repo / ".ddflow" / "local" / "skew-notice.json").exists()
 
@@ -223,7 +223,7 @@ def test_a_second_process_stays_quiet_and_always_repeats(
     _stamp(repo, "0.5.7")
     EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
     capsys.readouterr()
-    LOG._SKEW_WARNED.clear()
+    LOG._skew._SKEW_WARNED.clear()
     EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
     assert capsys.readouterr().err == ""
 
@@ -238,10 +238,10 @@ def test_skew_notice_always_repeats_per_process_and_off_is_silent(
     EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
     assert capsys.readouterr().err == ""
     cfg.write_text('[upgrade]\nskew_notice = "always"\n')
-    LOG._SKEW_WARNED.clear()
+    LOG._skew._SKEW_WARNED.clear()
     EventLog(repo, "me").append("phase.added", "P2", {"title": "p"})
     assert "patch skew" in capsys.readouterr().err
-    LOG._SKEW_WARNED.clear()
+    LOG._skew._SKEW_WARNED.clear()
     EventLog(repo, "me").append("phase.added", "P3", {"title": "p"})
     assert "patch skew" in capsys.readouterr().err
 
@@ -262,7 +262,7 @@ def test_a_malformed_marker_only_repeats_the_notice(repo: Path, capsys: pytest.C
     marker.parent.mkdir(parents=True, exist_ok=True)
     for bad in ('{"seen": null}', '{"seen": 3}', "[1]", "not json"):
         marker.write_text(bad)
-        LOG._SKEW_WARNED.clear()
+        LOG._skew._SKEW_WARNED.clear()
         EventLog(repo, "me").append("phase.added", "P1", {"title": "p"})
         assert "patch skew" in capsys.readouterr().err
 

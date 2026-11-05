@@ -309,7 +309,7 @@ def test_a_holder_that_cannot_be_described_is_still_named_by_pid(tmp_path, monke
     def gone(pid):
         raise FileNotFoundError(pid)
 
-    monkeypatch.setattr(L, "_describe_pid", gone)
+    monkeypatch.setattr(L._lock, "_describe_pid", gone)
     try:
         with pytest.raises(TimeoutError) as e, _flock(lock, 0.3):
             pass
