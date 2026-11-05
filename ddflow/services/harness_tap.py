@@ -135,7 +135,9 @@ def main(argv: list[str]) -> int:
     if verb == "hook" and rest[0] and len(argv) == len(("hook", "dir", "event")):
         return hook(Path(capture), rest[0], sys.stdin.buffer)
     if verb == "mcp" and rest[0] == "--" and argv[3:]:
-        return mcp(Path(capture), argv[3:])
+        # Not a normal exit: the upstream pump is a daemon blocked in a read of stdin, and the
+        # interpreter's shutdown aborts on that lock. Everything is written by now.
+        os._exit(mcp(Path(capture), argv[3:]))
     print("usage: harness_tap hook <capture> <event> | mcp <capture> -- <argv>", file=sys.stderr)
     return 1 if verb == "mcp" else 0  # a hook never fails; a server that did not start does
 

@@ -193,10 +193,9 @@ def test_the_mcp_tap_keeps_passing_bytes_once_the_log_is_full(tmp_path, monkeypa
 
 
 def test_the_tap_stops_a_server_nobody_reads_any_more(tmp_path):
-    chatty = "while True: print('x' * 1000, flush=True)"
+    server = [sys.executable, "-c", "while True: print('x' * 1000, flush=True)"]
     p = subprocess.Popen(
-        [sys.executable, "-m", "ddflow.services.harness_tap", "mcp", str(tmp_path / "cap")]
-        + ["--", sys.executable, "-c", chatty],
+        [sys.executable, "-m", HRec.TAP_MODULE, "mcp", str(tmp_path / "cap"), "--", *server],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         cwd=ROOT,
