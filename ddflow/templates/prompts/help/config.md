@@ -15,7 +15,8 @@ it, and set a project's value in `.ddflow/config.toml` instead. Working on ddflo
 `ddflow config defaults --write` (or `ddflow pins regenerate --only default-toml`) rewrites
 it after a knob or a default gate changed; the `default-toml` pin fails until you do. Over
 MCP, `ddflow_configure` with no arguments lists the same values with their meaning. A
-damaged or missing file warns and leaves the built-in defaults in effect.
+damaged or missing file warns and leaves the built-in defaults in effect; a stale one warns
+and its values apply.
 
 **An unknown section or knob is an ERROR, never a silent drop.** `[leases]` for `[lease]`
 used to leave every knob at its default while the operator believed the file was in

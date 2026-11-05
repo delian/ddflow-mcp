@@ -279,6 +279,15 @@ def _config_defaults(a, c: Ctx) -> int:
     if a.set or list(getattr(a, "value", None) or []) != ["defaults"]:
         print("--write goes with `defaults`: ddflow config defaults --write", file=sys.stderr)
         return FAIL
+    flags = (
+        ("--append-toml", a.append_toml),
+        ("--filter", a.filter),
+        ("--explain", a.explain),
+        ("--local", getattr(a, "local", False)),
+    )
+    if stray := [name for name, given in flags if given]:
+        print(f"`config defaults` takes only --write, not {', '.join(stray)}", file=sys.stderr)
+        return FAIL
     out = A.configure(c.repo, A.ConfigEdit(defaults=True, write=write), agent=c.requested_agent)
     if out.exit != OK:
         print(out.reason, file=sys.stderr)

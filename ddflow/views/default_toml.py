@@ -56,8 +56,12 @@ def render() -> str:
 
 
 def current() -> str:
-    """The file as it is on disk, "" when there is none."""
-    return PACKAGED_DEFAULTS.read_text("utf-8") if PACKAGED_DEFAULTS.is_file() else ""
+    """The file as it is on disk, "" when there is none. Undecodable bytes are replaced, so
+    a damaged file reads as stale and the write that repairs it can still run."""
+    try:
+        return PACKAGED_DEFAULTS.read_bytes().decode("utf-8", "replace")
+    except OSError:
+        return ""
 
 
 def write() -> bool:

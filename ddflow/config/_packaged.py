@@ -8,8 +8,10 @@ because that is what the layer is to everything that asks whether anyone set a k
 
 The file is parsed once per process (`Config.load` runs several times per command). Until
 CE-defaults-source moves the values here the dataclasses are a complete fallback, so a file
-that is damaged, absent or wrong warns and is passed over: refusing would also stop
-`ddflow pins regenerate`, the command that repairs it.
+that can not be read, or a value no knob can take, warns and is passed over: refusing would
+also stop `ddflow pins regenerate`, the command that repairs it. A readable value that merely
+differs is applied, because a layer wins over what is under it, and warned about, because
+until then any difference is drift.
 """
 
 from __future__ import annotations
@@ -18,11 +20,16 @@ import copy
 import functools
 import sys
 import tomllib
+from dataclasses import fields
 from typing import Any
 
 from ..config_sections._layers import PACKAGED_DEFAULTS, ConfigConflict, read_toml
 
-_REPAIR = "the built-in defaults apply; repair it with `ddflow pins regenerate --only default-toml`"
+_REPAIR = "repair it with `ddflow pins regenerate --only default-toml`"
+_BUILT_IN = "the built-in defaults apply"
+
+#: Knobs a drift warning names; the rest it counts.
+DRIFT_SHOWN = 5
 
 #: What this process has already said: `Config.load` runs several times per command.
 _SAID: set[str] = set()
@@ -35,13 +42,19 @@ def _say(problem: str) -> None:
         print(f"ddflow: warning: {problem}; {_REPAIR}", file=sys.stderr)
 
 
+def _say_drift(keys: list[str]) -> None:
+    more = len(keys) - DRIFT_SHOWN
+    named = ", ".join(keys[:DRIFT_SHOWN]) + (f" and {more} more" if more > 0 else "")
+    _say(f"the packaged {PACKAGED_DEFAULTS} is stale at {named}: its values apply")
+
+
 @functools.cache
 def packaged() -> dict[str, Any]:
     """The parsed packaged file, or `{}` (having warned) when it can not be read."""
     try:
         return read_toml(PACKAGED_DEFAULTS)
     except (OSError, UnicodeDecodeError, ConfigConflict, tomllib.TOMLDecodeError) as exc:
-        _say(f"cannot read the packaged {PACKAGED_DEFAULTS}: {exc}")
+        _say(f"cannot read the packaged {PACKAGED_DEFAULTS}: {exc}; {_BUILT_IN}")
         return {}
 
 
@@ -53,14 +66,21 @@ def apply_packaged(cfg: Any) -> None:
     `_FOREIGN_TABLES` such as `[gate.*]` are not sections, so their readers stay in charge.
     """
     sections = set(cfg._sections())
+    drift: list[str] = []
     for sec, table in packaged().items():
         if sec not in sections or not isinstance(table, dict):
             continue
         target = getattr(cfg, sec)
+        known = {f.name for f in fields(target)}
         for knob, raw in table.items():
-            if not hasattr(target, knob) or getattr(target, knob) == raw:
+            if knob not in known or getattr(target, knob) == raw:
                 continue
             try:  # a copy: the parse is shared by every load in this process
                 cfg._apply_knob(sec, knob, copy.deepcopy(raw), "default", False)
+                drift.append(f"{sec}.{knob}")
             except (ValueError, TypeError) as exc:
-                _say(f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: {exc}")
+                _say(
+                    f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: {exc}; {_BUILT_IN}"
+                )
+    if drift:
+        _say_drift(drift)

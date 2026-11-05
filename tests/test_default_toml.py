@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from _cli_helpers import run_cli
 
 from ddflow.api import setup as API
 from ddflow.config import Config, _packaged
@@ -23,6 +24,13 @@ from ddflow.views import default_toml as DT
 #: Best of five, in milliseconds, for one process's read, parse and comparison. Measured at
 #: about 5 ms on the reference host (R555dc3c874); the ceiling leaves room for a shared host.
 LOAD_BUDGET_MS = 25.0
+
+
+def _project(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    (repo / ".ddflow").mkdir(parents=True)
+    (repo / ".ddflow" / "config.toml").write_text("[lease]\nttl_s = 1800\n", "utf-8")
+    return repo
 
 
 def _shipped() -> dict:
@@ -81,6 +89,19 @@ def test_required_gates_stay_stated_once_in_the_gates_section():
 
 def test_the_file_stays_under_the_size_limit():
     assert PACKAGED_DEFAULTS.stat().st_size < Config().quality.max_file_bytes
+
+
+@pytest.mark.parametrize("damage", [b"\xff\xfe not utf-8", b""], ids=["bytes", "empty"])
+def test_a_damaged_file_is_stale_to_the_check_and_repaired_by_the_write(
+    tmp_path, monkeypatch, damage
+):
+    """The repair must survive what it repairs."""
+    path = tmp_path / "default.toml"
+    monkeypatch.setattr(DT, "PACKAGED_DEFAULTS", path)
+    path.write_bytes(damage)
+    assert DT.main(["--check"]) == 1
+    assert DT.main([]) == 0
+    assert path.read_text("utf-8") == DT.render()
 
 
 def test_a_stale_file_is_reported_by_the_check_and_repaired_by_the_write(tmp_path, monkeypatch):
@@ -169,11 +190,45 @@ def test_a_missing_file_warns_and_leaves_the_built_in_defaults(packaged, tmp_pat
 def test_a_key_the_code_lost_is_skipped_silently(packaged, tmp_path, capsys):
     """A branch removed a knob and has not regenerated: the pin says so, a command need not."""
     path = tmp_path / "default.toml"
-    path.write_text("[lease]\nno_such_knob = 1\nttl_s = 4242\n[no_such_section]\nx = 1\n", "utf-8")
+    path.write_text("[lease]\nno_such_knob = 1\n[no_such_section]\nx = 1\n", "utf-8")
     packaged(path)
-    cfg = Config.load(None, env={})
-    assert cfg.lease.ttl_s == 4242 and not cfg.unknown_knobs
+    assert not Config.load(None, env={}).unknown_knobs
     assert capsys.readouterr().err == ""
+
+
+def test_a_dunder_key_is_not_taken_for_a_knob(packaged, tmp_path, capsys):
+    """Every object has `__class__`: only a declared field is a knob."""
+    path = tmp_path / "default.toml"
+    path.write_text('[lease]\n__class__ = "broken"\n__module__ = "broken"\n', "utf-8")
+    packaged(path)
+    assert Config.load(None, env={}).lease.ttl_s == Config().lease.ttl_s
+    assert capsys.readouterr().err == ""
+
+
+def test_a_stale_value_applies_but_never_silently(packaged, tmp_path, capsys):
+    """The layer wins over the dataclass, as it must once CE-defaults-source moves the values;
+    until then any difference is drift, so it is said, once, with the repair."""
+    path = tmp_path / "default.toml"
+    path.write_text("[lease]\nttl_s = 4242\nheartbeat_s = 42\n", "utf-8")
+    packaged(path)
+    assert Config.load(None, env={}).lease.ttl_s == 4242
+    Config.load(None, env={})
+    err = capsys.readouterr().err
+    assert err.count("ddflow: warning") == 1
+    assert "lease.ttl_s" in err and "lease.heartbeat_s" in err and "pins regenerate" in err
+    assert "built-in defaults apply" not in err
+
+
+def test_the_stale_warning_names_a_bounded_number_of_keys(packaged, tmp_path, capsys):
+    knobs = [f.name for f in dataclasses.fields(Config().lease) if f.type == "int"]
+    path = tmp_path / "default.toml"
+    path.write_text("[lease]\n" + "".join(f"{k} = 987654\n" for k in knobs), "utf-8")
+    packaged(path)
+    Config.load(None, env={})
+    err = capsys.readouterr().err
+    assert len(knobs) > _packaged.DRIFT_SHOWN
+    assert err.count("lease.") == _packaged.DRIFT_SHOWN
+    assert f"and {len(knobs) - _packaged.DRIFT_SHOWN} more" in err
 
 
 def test_a_bad_value_warns_and_keeps_the_built_in_default(packaged, tmp_path, capsys):
@@ -189,9 +244,7 @@ def test_load_adds_no_work_when_the_file_matches(monkeypatch):
     """The pinned state: nothing differs, so no knob is coerced or re-sourced."""
     calls = []
     real = Config._apply_knob
-    monkeypatch.setattr(
-        Config, "_apply_knob", lambda self, *a: calls.append(a) or real(self, *a)
-    )
+    monkeypatch.setattr(Config, "_apply_knob", lambda self, *a: calls.append(a) or real(self, *a))
     Config.load(None, env={})
     assert calls == []
 
@@ -223,6 +276,52 @@ def test_write_is_refused_outside_the_tree_the_code_came_from(tmp_path):
     assert out.exit == 3
     assert "ddflow.views.default_toml" in out.reason
     assert PACKAGED_DEFAULTS.read_bytes() == before
+
+
+def test_write_is_refused_for_an_install_inside_the_repository(tmp_path, monkeypatch):
+    """A `.venv` under the repository passes a path test and is still not the source."""
+    target = tmp_path / ".venv/lib/python3/site-packages/ddflow/templates/default.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text("installed\n", "utf-8")
+    monkeypatch.setattr(DT, "PACKAGED_DEFAULTS", target)
+    out = API.configure(tmp_path, API.ConfigEdit(defaults=True, write=True))
+    assert out.exit == 3
+    assert target.read_text("utf-8") == "installed\n"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("config", "defaults", "--append-toml", "[lease]\nttl_s = 9\n"),
+        ("config", "defaults", "--local"),
+        ("config", "defaults", "--filter", "lease"),
+        ("config", "defaults", "--explain"),
+    ],
+    ids=["append", "local", "filter", "explain"],
+)
+def test_a_flag_defaults_can_not_honour_is_refused_not_dropped(tmp_path, argv):
+    code, out, err = run_cli(_project(tmp_path), *argv)
+    assert code == 1 and out == ""
+    assert "--write" in err and argv[2] in err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("config", "--write"), ("config", "--set", "lease.ttl_s", "9", "--write")],
+    ids=["bare", "with-set"],
+)
+def test_write_without_defaults_changes_nothing(tmp_path, argv):
+    repo = _project(tmp_path)
+    before = (repo / ".ddflow" / "config.toml").read_bytes()
+    code, _out, err = run_cli(repo, *argv)
+    assert code == 1 and "ddflow config defaults --write" in err
+    assert (repo / ".ddflow" / "config.toml").read_bytes() == before
+
+
+def test_the_cli_prints_the_file_whole(tmp_path):
+    code, out, _err = run_cli(_project(tmp_path), "config", "defaults")
+    assert code == 0
+    assert out.rstrip("\n") == PACKAGED_DEFAULTS.read_text("utf-8").rstrip("\n")
 
 
 def test_write_regenerates_inside_the_tree(tmp_path, monkeypatch):

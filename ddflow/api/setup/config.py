@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ...config import ReviewConfig
+from ...config import ReviewConfig, is_source_tree
 from ...core import outcome as O
 from ...infra import tomlcfg as TC
 from ...services import approval as AP
@@ -51,8 +51,9 @@ class ConfigEdit:
 def _packaged_defaults(repo: Path, write: bool) -> O.Outcome:
     """`config defaults`: the packaged file, or with ``write`` the file regenerated.
 
-    Only inside ``repo``: a worktree's `ddflow` on PATH is the primary's code, so its
-    templates are another tree's, and an installed ddflow's are not a checkout at all.
+    Only a source tree inside ``repo``: a worktree's `ddflow` on PATH is the primary's code,
+    so its templates are another tree's, and an installed ddflow's are not a checkout at all,
+    even in a `.venv` under the repository.
     """
     path = D.PACKAGED_DEFAULTS
     if not write:
@@ -60,10 +61,10 @@ def _packaged_defaults(repo: Path, write: bool) -> O.Outcome:
         if not text:
             return O.failed("config", f"{path} is missing: this ddflow is damaged", text="")
         return O.ok("config", path=str(path), text=text)
-    if not path.resolve().is_relative_to(Path(repo).resolve()):
+    if not (is_source_tree(path) and path.resolve().is_relative_to(Path(repo).resolve())):
         return O.refused(
             "config",
-            f"{path} is not in this repository: run `python -m ddflow.views.default_toml` "
+            f"{path} is not this repository's source: run `python -m ddflow.views.default_toml` "
             "from the source tree it belongs to",
             path=str(path),
             text="",
