@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from ddflow.services.swarm import dispatch as D
 from ddflow.services.swarm import ledger as L
 from ddflow.services.swarm.score import Decision, Item, Lane, Live, World
 from ddflow.services.swarm.score_config import Weights
+from ddflow.surfaces.mcp import Server
 
 W = Weights()
 B = D.Bounds(note_chars=400, why_items=3)
@@ -423,6 +425,22 @@ def test_next_lane_is_the_cli_flag_and_prints_the_claim(repo):
     assert got.returncode == 0, got.stderr
     assert "ds: take a" in got.stdout
     assert "ddflow claim a --note" in got.stdout
+
+
+def test_next_lane_over_mcp_is_the_same_answer(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    reply = Server(repo, agent="lane").handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_next", "arguments": {"lane": "ds"}},
+        }
+    )
+    body = json.loads(reply["result"]["content"][0]["text"])
+    assert (body["status"], body["item"]) == (D.OFFER, "a")
+    assert body["note"] == api.next_lane(repo, lane="ds").data["note"]
 
 
 def test_next_without_a_lane_is_the_queue_answer(repo):
