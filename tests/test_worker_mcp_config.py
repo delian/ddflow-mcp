@@ -10,6 +10,7 @@ Nothing is removed: every tool stays callable by name on any tier.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -318,15 +319,38 @@ def test_the_knob_has_an_upgrade_fragment():
     assert got and got[0].new == ""  # JSON-encoded in the fragment: '""' is the empty string
 
 
-def test_a_lane_file_spelled_with_other_case_is_not_reported_stale(tmp_path):
-    """Lane names compare without case, as the knob's parser does: a case-insensitive filesystem
-    lists `worker-mcp-IMPL.json` for the lane `impl`, and a case-sensitive one is told the same."""
-    entry = {"command": "c"}
+def _stale(repo, spec):
+    return [x for x in WM.write_lanes(repo, {"command": "c"}, spec) if "no longer" in x]
+
+
+def test_a_case_insensitive_filesystem_listing_a_lane_under_another_spelling_is_not_stale(
+    tmp_path, monkeypatch
+):
+    """Such a filesystem lists `worker-mcp-IMPL.json` for the lane `impl`: one file, two names."""
     (tmp_path / WM.lane_rel("IMPL")).parent.mkdir(parents=True)
     (tmp_path / WM.lane_rel("IMPL")).write_text("{}")
-    assert [x for x in WM.write_lanes(tmp_path, entry, "impl=all") if "no longer" in x] == []
-    (tmp_path / WM.lane_rel("old")).write_text("{}")
-    assert any("old" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "impl=all"))
+    monkeypatch.setattr(Path, "samefile", lambda _a, _b: True)
+    assert _stale(tmp_path, "impl=all") == []
+
+
+def test_a_second_file_that_differs_only_in_case_keeps_its_old_tier_and_is_reported(tmp_path):
+    (tmp_path / WM.lane_rel("Review")).parent.mkdir(parents=True)
+    (tmp_path / WM.lane_rel("Review")).write_text("{}")
+    if (tmp_path / WM.lane_rel("review")).exists():
+        pytest.skip("this filesystem ignores case: there is no second file")
+    assert any(WM.lane_rel("Review") in x for x in _stale(tmp_path, "review=core"))
+
+
+def test_a_lane_file_nobody_names_is_reported_even_as_a_hard_link_to_a_current_one(tmp_path):
+    WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
+    os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("alias"))
+    assert any("alias" in x for x in _stale(tmp_path, "impl=all"))
+
+
+def test_a_dangling_symlink_spelled_like_a_lane_is_reported_not_a_crash(tmp_path):
+    WM.write_lanes(tmp_path, {"command": "c"}, "impl=all")
+    (tmp_path / WM.lane_rel("IMPL")).symlink_to(tmp_path / "missing.json")
+    assert any(WM.lane_rel("IMPL") in x for x in _stale(tmp_path, "impl=all"))
 
 
 def test_a_dangling_lane_symlink_is_reported_not_a_crash(tmp_path):
@@ -356,9 +380,8 @@ def test_the_doctor_counts_a_lane_on_the_whole_tool_list():
     (note,) = WM.doctor_notes(_cfg(lanes="impl=standard,rev=all"), env)
     assert "`all` tool tier" in note and "rev" in note
     (note,) = WM.doctor_notes(_cfg(worker="all", lanes="rev=all"), env)
-    assert "`all` tool tier" in note and "rev" in note
-    (note,) = WM.doctor_notes(_cfg(worker="all"), env)
-    assert "lanes:" not in note
+    assert note == WM.deferral_note(env, tier="all") + " (lanes: rev)"
+    assert WM.doctor_notes(_cfg(worker="all"), env) == [WM.deferral_note(env, tier="all")]
 
 
 def test_the_doctor_survives_a_hand_edited_bad_lane_list():

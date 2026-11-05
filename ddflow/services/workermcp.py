@@ -36,17 +36,31 @@ def lane_rel(lane: str) -> str:
 
 def write_lanes(repo: Path, entry: Mapping[str, Any], spec: str) -> list[str]:
     """Write one config per lane of ``spec``; the action lines, plus a note for a lane file the
-    spec no longer names (left in place). Names compare without case, as `parse_lane_tiers` does."""
+    spec no longer names (left in place)."""
     lanes = parse_lane_tiers(spec)
     out = [_write_file(Path(repo), lane_rel(lane), entry, tier) for lane, tier in lanes.items()]
-    named = {lane.casefold() for lane in lanes}
     local = Path(repo) / Path(REL).parent
     stem = Path(REL).stem + "-"
     for f in sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []:
         lane = f.stem[len(stem) :]
-        if lane.casefold() not in named:
+        if not _is_current(Path(repo), lane, lanes):
             out.append(f"{lane_rel(lane)} is no longer in [mcp].lane_tools (left in place)")
     return out
+
+
+def _is_current(repo: Path, listed: str, lanes: Mapping[str, str]) -> bool:
+    """``listed``, a lane read off a file name, is one of ``lanes``: by name, or under another
+    spelling on a filesystem that ignores case. Where case counts that is a second file, which
+    keeps its old tier and is not current."""
+    if listed in lanes:
+        return True
+    for lane in lanes:
+        if lane.casefold() == listed.casefold():
+            try:
+                return (repo / lane_rel(listed)).samefile(repo / lane_rel(lane))
+            except OSError:  # a dangling symlink is the same file as nothing
+                return False
+    return False
 
 
 def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
