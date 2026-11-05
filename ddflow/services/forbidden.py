@@ -109,35 +109,67 @@ def _strip_heredocs(text: str) -> str:
 
 
 def _logical_lines(text: str) -> list[str]:
-    """`text` split at the newlines that sit OUTSIDE quotes. A quote may span a newline —
-    `python3 -c "<line break>"` is one line to the shell, its newline is data, not a command
-    boundary — so a `;` on the line that opens the quote is still seen for the separator it
-    is. A backslash-newline is a continuation, not a boundary either."""
+    """`text` split at the newlines that ARE command separators. A newline is data, not a
+    boundary, only inside the literal body of a quote — `python3 -c "<line break>"` is one line
+    to the shell — so a `;` on the line that opens the quote is still seen for the separator
+    it is. The shell still runs the `$(` ... `)` / backtick bodies a `"..."` holds, so their
+    newlines stay separators; a backslash-newline is a continuation, not a boundary either."""
+    n = len(text)
+    cut = [False] * n
+
+    def mark_command(i: int, closer: str) -> int:
+        """Classify the `\n` at command position as separators; return the index of `closer`."""
+        j = i
+        while j < n:
+            c = text[j]
+            if c == closer:
+                return j
+            if c == "\n":
+                cut[j] = True
+                j += 1
+            elif c == "\\":  # an escape outside quotes: the next char is data, not a separator
+                j += 2 if j + 1 < n else 1
+            elif c == "'":  # single quote: its body is literal data until the next single quote
+                k = text.find("'", j + 1)
+                j = j + 1 if k < 0 else k + 1
+            elif c == '"':
+                j = mark_dquote(j)
+            elif c == "`":  # a backtick body is command position: its newlines are separators
+                j = mark_command(j + 1, "`") + 1
+            elif c == "$" and j + 1 < n and text[j + 1] == "(":
+                j = mark_command(j + 2, ")") + 1
+            else:
+                j += 1
+        return j
+
+    def mark_dquote(j: int) -> int:
+        """From the `"` at `j`: its literal body is data, but `$(` / backtick bodies inside
+        recurse as command position (their newlines are separators). Returns after the `"`."""
+        k = j + 1
+        while k < n:
+            cc = text[k]
+            if cc == '"':
+                return k + 1
+            if cc == "\\":
+                k += 2 if k + 1 < n else 1
+            elif cc == "`":
+                k = mark_command(k + 1, "`") + 1
+            elif cc == "$" and k + 1 < n and text[k + 1] == "(":
+                k = mark_command(k + 2, ")") + 1
+            else:
+                k += 1
+        return k
+
+    mark_command(0, "")
+
     lines: list[str] = []
     cur: list[str] = []
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch == "\n":
+    for i, ch in enumerate(text):
+        if ch == "\n" and cut[i]:
             lines.append("".join(cur))
             cur = []
-            i += 1
-        elif ch == "'":  # single quote: literal until the next single quote
-            j = text.find("'", i + 1)
-            cur.append(text[i:] if j < 0 else text[i : j + 1])
-            i = n if j < 0 else j + 1
-        elif ch == '"':  # double quote: literal until an unescaped double quote
-            j = i + 1
-            while j < n and text[j] != '"':
-                j += 2 if text[j] == "\\" else 1
-            cur.append(text[i:] if j >= n else text[i : j + 1])
-            i = n if j >= n else j + 1
-        elif ch == "\\" and i + 1 < n:  # an escape: the backslash-newline continues the line
-            cur.append(text[i : i + 2])
-            i += 2
         else:
             cur.append(ch)
-            i += 1
     if cur:
         lines.append("".join(cur))
     return lines

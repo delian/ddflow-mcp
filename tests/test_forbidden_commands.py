@@ -110,6 +110,22 @@ def test_allowed_multiline_quote_data(cmd):
     assert _check(cmd) is None, cmd
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        'echo "$(\ngit push origin main\n)"',
+        'echo "`\ngit push origin main\n`"',
+    ],
+)
+def test_refused_command_substitution_multiline(cmd):
+    # a $() or backtick body a double quote holds still runs as a command, so its newlines
+    # stay separators and the command after them is still refused
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert r.entry == "git push", cmd
+    assert "Instead:" in r.message()
+
+
 def test_reset_hard_only_on_primary(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     assert _check("git reset --hard HEAD", cwd=tmp_path) is not None
