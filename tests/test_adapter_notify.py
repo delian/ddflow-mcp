@@ -110,6 +110,15 @@ def test_importing_the_port_loads_no_network_module():
     assert done.stdout.strip() == "False"
 
 
+def test_a_platform_without_termios_can_still_load_the_port():
+    """Windows has no `termios`; its terminal reports unavailable, it must not fail to import."""
+    import subprocess
+    import sys
+
+    code = "import sys; sys.modules['termios'] = None; import ddflow.adapters.notify as N; N._forget_typed(0)"
+    subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+
+
 def test_an_answer_is_a_value():
     with pytest.raises(FrozenInstanceError):
         Answer(N.ANSWERED).text = "x"  # type: ignore[misc]

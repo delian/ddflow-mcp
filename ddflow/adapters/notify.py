@@ -25,7 +25,6 @@ import contextlib
 import os
 import select
 import sys
-import termios
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol, TextIO, runtime_checkable
@@ -33,6 +32,11 @@ from typing import Any, Protocol, TextIO, runtime_checkable
 from . import clock
 from .ports import port
 from .registry import Registry
+
+try:
+    import termios
+except ImportError:  # Windows: the port still loads, and its terminal reports unavailable
+    termios = None  # type: ignore[assignment]
 
 INFO, WARNING, CRITICAL = "info", "warning", "critical"
 SEVERITIES = (INFO, WARNING, CRITICAL)
@@ -136,8 +140,9 @@ Reader = Callable[[float], "str | None"]
 
 def _forget_typed(fd: int) -> None:
     """Drop what was typed and never finished, so it cannot start the next question's answer."""
-    with contextlib.suppress(termios.error, OSError):
-        termios.tcflush(fd, termios.TCIFLUSH)
+    if termios is not None:
+        with contextlib.suppress(termios.error, OSError):
+            termios.tcflush(fd, termios.TCIFLUSH)
 
 
 def stdin_reader(timeout_s: float) -> str | None:
