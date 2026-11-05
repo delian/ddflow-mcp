@@ -32,8 +32,8 @@ ORDER = (FAILED, STALLED, WORKING, IDLE, DONE)
 _STOPPED = S.UNFINISHED
 #: Characters of a reason that failure patterns are matched against (display is cut separately).
 RAW_CAP = 2000
-#: Release notes that say nothing went wrong: the work ended normally, or no note at all.
-_RELEASE_OK = ("", "completed", "done", "merged")
+#: Release notes that say the work ended normally. No note says nothing either way.
+_RELEASE_OK = ("completed", "done", "merged")
 
 
 @dataclass(frozen=True)
@@ -196,7 +196,7 @@ def _lease_left(ln: LN.Lane, st: State, now: float, grace_s: float) -> int:
     ls = it.lease if it and not it.terminal else None
     if ls is None or ls.holder != ln.name or not ls.live(now, grace_s):
         return 0
-    return max(1, int(ls.renewed_at + ls.ttl_s + grace_s - now))  # live, so never read as none
+    return max(1, int(ls.remaining_s(now)))  # past the ttl but in the grace it is still held
 
 
 def resume(

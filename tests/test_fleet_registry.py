@@ -182,7 +182,7 @@ def test_a_finished_lane_keeps_no_old_failure_reason():
     assert e.cls == FL.DONE and e.stop_reason == ""
 
 
-@pytest.mark.parametrize("note", ["completed", "merged", "done", ""])
+@pytest.mark.parametrize("note", ["completed", "merged", "done"])
 def test_a_normal_release_clears_an_older_stop_reason(note):
     g = multi_lane()
     g.add("lease.expired", "V", "sweeper", T0 - 90, holder="lane-ended", reason="HTTP 429")
@@ -331,7 +331,7 @@ def test_a_release_by_another_agent_keeps_the_stop_reason(note):
 def test_a_cleared_reason_leaves_the_lane_resumable():
     g = multi_lane()
     g.add("lease.expired", "V", "sweeper", T0 - 90, holder="lane-ended", reason="HTTP 429")
-    g.add("lease.released", "V", "lane-ended", T0 - 80, holder="lane-ended", note="")
+    g.add("lease.released", "V", "lane-ended", T0 - 80, holder="lane-ended", note="completed")
     entries, _l, st, cfg = _entries(g)
     assert FL.resume(entries, "lane-ended", st, NOW, cfg.lease.grace_s)["eligible"]
 
@@ -346,4 +346,24 @@ def test_a_lease_inside_its_grace_still_shows_as_held():
         cfg.lease.grace_s = 30
 
     e = next(x for x in _entries(g, now, edit)[0] if x.name == "lane-work")
-    assert e.lease_s == 20
+    assert e.lease_s == 1 and e.lane_state in FL.S.ACTIVE  # held, with the ttl spent
+
+
+def test_lease_seconds_stop_at_the_ttl_not_the_grace():
+    g = multi_lane()
+    st, *_ = build_inputs(g.events, T0)
+    ls = st.items["X"].lease
+    e = next(
+        x
+        for x in _entries(g, ls.renewed_at, lambda c: setattr(c.lease, "grace_s", 30))[0]
+        if x.name == "lane-work"
+    )
+    assert e.lease_s == ls.ttl_s
+
+
+def test_an_empty_release_says_nothing_about_a_stop():
+    g = multi_lane()
+    g.add("lease.expired", "V", "sweeper", T0 - 90, holder="lane-ended", reason="HTTP 429")
+    g.add("lease.released", "V", "lane-ended", T0 - 80, holder="lane-ended", note="")
+    e = next(x for x in _entries(g)[0] if x.name == "lane-ended")
+    assert e.cls == FL.FAILED and "429" in e.stop_reason
