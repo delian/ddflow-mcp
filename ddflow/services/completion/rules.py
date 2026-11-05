@@ -481,12 +481,10 @@ def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> lis
     drops them without notice (Bd59dded6a4). The branchless phase is backstopped by
     `_unmerged_branches`; this is each task's own guard. Git unable to answer is treated as
     unmerged — a conservative blocker, so an unreadable tree cannot silently drop work.
-    A branch still at the tip `merge` landed is merged whatever ancestry says: a squash leaves
-    none. A commit added since moves the tip, and the guard speaks again."""
+    A branch still at the tip `merge` landed is merged whatever ancestry says, as a squash
+    leaves none, while the base still holds what landed. A commit added since moves the tip,
+    and a base rewound past the landing no longer holds it: the guard speaks again."""
     if it.kind == "phase" or not it.branch or it.promote_to:
-        return []
-    landed = [it.merged_head, it.pr.head_sha if it.pr and it.pr.state == "merged" else ""]
-    if W.rev(repo, it.branch) in [sha for sha in landed if sha]:
         return []
     base = (
         it.base
@@ -494,6 +492,10 @@ def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> lis
         else (cfg.worktree.base_ref or W.default_branch(repo))
     )
     if not W.branch_exists(repo, it.branch) or W.is_merged(repo, it.branch, base):
+        return []
+    landed = [it.merged_head, it.pr.head_sha if it.pr and it.pr.state == "merged" else ""]
+    tip_landed = W.rev(repo, it.branch) in [sha for sha in landed if sha]
+    if tip_landed and it.merged_sha and W.is_merged(repo, it.merged_sha, base):
         return []
     return [
         f"branch {it.branch} {UNMERGED_BLOCKER} {base}: `ddflow merge {it.id}` "

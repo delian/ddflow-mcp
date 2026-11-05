@@ -197,9 +197,16 @@ def test_a_commit_after_a_recorded_landing_is_still_refused(repo):
     _git(repo, "commit", "-q", "--allow-empty", "-m", "landed by squash")
     landed = _git(repo, "rev-parse", "HEAD").strip()
     _git(repo, "checkout", "-q", "main")
-    it = Item(id="T1", kind="task", branch="feature", base="main", merged_head=landed)
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "the squash commit")
+    squash = _git(repo, "rev-parse", "HEAD").strip()
+    it = Item(
+        id="T1", kind="task", branch="feature", base="main", merged_head=landed, merged_sha=squash
+    )
     assert tip != landed
     assert _own_branch_unmerged(State(), Config(), it, repo) == []
+    _git(repo, "reset", "-q", "--hard", "HEAD~1")  # the base rewound past the landing
+    assert UNMERGED_BLOCKER in _own_branch_unmerged(State(), Config(), it, repo)[0]
+    _git(repo, "reset", "-q", "--hard", squash)
     _git(repo, "checkout", "-q", "feature")
     _git(repo, "commit", "-q", "--allow-empty", "-m", "after the landing")
     _git(repo, "checkout", "-q", "main")
