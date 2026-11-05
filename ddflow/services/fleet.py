@@ -61,6 +61,27 @@ class Entry:
         return d
 
 
+def _holder(e: Event) -> str:
+    return str(e.data.get("holder") or e.agent)
+
+
+def _word(e: Event, sessions: dict[str, str]) -> tuple[str, str, bool]:
+    """(agent, stop reason, whether it clears an older one) that ``e`` says, if anything."""
+    if e.kind == "session.started":
+        return e.agent, "", True
+    if e.kind == "session.ended":
+        return sessions.get(e.subject, e.agent), str(e.data.get("summary") or ""), False
+    if e.kind == "lease.acquired":
+        return _holder(e), "", True
+    if e.kind == "lease.expired":
+        return _holder(e), str(e.data.get("reason") or ""), False
+    if e.kind == "lease.released":
+        note = str(e.data.get("note") or "")
+        normal = note.strip().lower() in _RELEASE_OK
+        return _holder(e), "" if normal else note, normal
+    return "", "", False
+
+
 def _signals(events: Iterable[Event]) -> dict[str, tuple[str, str]]:
     """Agent -> (ts, reason): why it stopped, as far as the log says.
 
@@ -71,20 +92,9 @@ def _signals(events: Iterable[Event]) -> dict[str, tuple[str, str]]:
     out: dict[str, tuple[str, str]] = {}
     sessions: dict[str, str] = {}  # session id -> agent
     for e in events:
-        who, text, clears = "", "", False
         if e.kind == "session.started":
             sessions[e.subject] = e.agent
-            who, clears = e.agent, True
-        elif e.kind == "session.ended":
-            who, text = sessions.get(e.subject, e.agent), str(e.data.get("summary") or "")
-        elif e.kind == "lease.acquired":
-            who, clears = str(e.data.get("holder") or e.agent), True
-        elif e.kind == "lease.expired":
-            who, text = str(e.data.get("holder") or e.agent), str(e.data.get("reason") or "")
-        elif e.kind == "lease.released":
-            who, text = str(e.data.get("holder") or e.agent), str(e.data.get("note") or "")
-            if text.strip().lower() in _RELEASE_OK:
-                text, clears = "", True
+        who, text, clears = _word(e, sessions)
         if who and (clears or text.strip()) and e.ts >= out.get(who, ("", ""))[0]:
             out[who] = (e.ts, text[:RAW_CAP])
     return {who: sig for who, sig in out.items() if sig[1]}
@@ -98,7 +108,7 @@ def _history(events: Iterable[Event]) -> dict[str, tuple[str, list[str]]]:
         if e.kind == "session.started" and e.data.get("role"):
             roles[e.agent] = str(e.data["role"])
         elif e.kind == "lease.acquired":
-            held = items.setdefault(str(e.data.get("holder") or e.agent), {})
+            held = items.setdefault(_holder(e), {})
             held[e.subject] = max(held.get(e.subject, ""), e.ts)
     return {
         who: (
