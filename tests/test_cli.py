@@ -9,6 +9,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import pass_pipeline, run_cli
 
+from ddflow.infra.log import EventLog
+
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
@@ -213,18 +215,9 @@ def test_brief_respects_its_token_budget(proj):
 
 
 def test_doctor_detects_a_dependency_cycle(proj):
-    run_cli(
-        proj,
-        "task",
-        "add",
-        "P1.TA",
-        "--title",
-        "P1.TA fixture",
-        "--phase",
-        "P1",
-        "--needs",
-        "P1.TB",
-    )
+    # `task add --needs` refuses an id that does not exist yet (B4d23497469), so the ring is
+    # closed by `update`, which is how one can really arise.
+    run_cli(proj, "task", "add", "P1.TA", "--title", "P1.TA fixture", "--phase", "P1")
     run_cli(
         proj,
         "task",
@@ -237,22 +230,17 @@ def test_doctor_detects_a_dependency_cycle(proj):
         "--needs",
         "P1.TA",
     )
+    code, _o, err = run_cli(proj, "update", "P1.TA", "--add-needs", "P1.TB")
+    assert code == OK, err
     code, out, _ = run_cli(proj, "doctor")
     assert code == FAIL and "cycle" in out
 
 
 def test_doctor_detects_an_unknown_dependency(proj):
-    run_cli(
-        proj,
-        "task",
-        "add",
-        "P1.TZ",
-        "--title",
-        "P1.TZ fixture",
-        "--phase",
-        "P1",
-        "--needs",
-        "GHOST",
+    # The CLI refuses an unknown id (B4d23497469), but a log written before that, or a shard
+    # merged from another branch, can still hold one: the event is what doctor must catch.
+    EventLog(proj, "seed").append(
+        "task.added", "P1.TZ", {"parent": "P1", "title": "P1.TZ fixture", "needs": ["GHOST"]}
     )
     code, out, _ = run_cli(proj, "doctor")
     assert code == FAIL and "GHOST" in out
