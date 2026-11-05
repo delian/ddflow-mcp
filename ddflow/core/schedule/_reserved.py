@@ -73,14 +73,16 @@ def idle_reserved(state: State, cfg: Config, in_flight: Iterable[str], limit: in
     The adaptive limit counts them as in use: it grows only while in flight reaches it, and
     an idle reservation would otherwise hold in flight under the limit for good, with the
     features it keeps out exactly what a higher limit would admit. 0 with ordinary slots
-    still open: then the limit is not what holds anything back."""
+    still open, where the limit holds nothing back, and never more than the slots free: a
+    claim by name may take a reserved slot, as `claim` applies neither the cap nor this."""
     wanted = cfg.schedule.reserved_slots
     if not wanted:
         return 0
     flying, reserved = set(in_flight), reserved_items(state, cfg)
     if ordinary_free(limit, wanted, len(flying - reserved)):
         return 0
-    return max(0, reserved_in_force(wanted, limit) - len(flying & reserved))
+    unused = reserved_in_force(wanted, limit) - len(flying & reserved)
+    return max(0, min(unused, limit - len(flying)))
 
 
 def reserved_note(cfg: Config, limit: int) -> str:

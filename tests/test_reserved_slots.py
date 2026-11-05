@@ -1,4 +1,4 @@
-"""`[schedule].reserved_slots`: slots only bug fixes and ddflow-defect tasks may take.
+"""`[schedule].reserved_slots`: slots only bug fixes and `reserved_tags` tasks may take.
 
 Operator 2026-10-15: 'Add one additional slot for the bugs and the new features'. Raising
 `max_parallel_tasks` was the only lever, and any ready item could then take the slot, so a
@@ -19,7 +19,13 @@ from ddflow.adapters.optimizer import Candidate, GreedyV1, Slots
 from ddflow.config import Config
 from ddflow.core import flowcontrol as FC
 from ddflow.core.model import fold
-from ddflow.core.schedule import ordinary_free, plan, reserved_in_force, reserved_items
+from ddflow.core.schedule import (
+    idle_reserved,
+    ordinary_free,
+    plan,
+    reserved_in_force,
+    reserved_items,
+)
 from ddflow.infra import signals as SIG
 from ddflow.services import flowstate as F
 
@@ -492,6 +498,15 @@ def test_the_limit_does_not_grow_on_ordinary_slots_still_open(repo, log, cfg):
 def test_a_reserved_slot_in_use_is_not_idle(repo, log, cfg):
     _limit, row = _grow(repo, log, cfg, ["F1", "F2", "fix-B"], reserved=2)
     assert row["reserved_idle"] == 1 and row["in_flight"] == 3
+
+
+def test_a_slot_a_claim_by_name_took_is_not_idle(log, cfg):
+    """`claim` applies no cap: three features on limit 3 leave no reserved slot to be idle."""
+    _queue(log, "F1", "F2", "F3")
+    cfg.schedule.reserved_slots = 1
+    st = fold(log.read_all())
+    assert idle_reserved(st, cfg, ["F1", "F2", "F3"], 3) == 0
+    assert idle_reserved(st, cfg, ["F1", "F2"], 3) == 1
 
 
 def test_nothing_reserved_counts_nothing_idle(repo, log, cfg):
