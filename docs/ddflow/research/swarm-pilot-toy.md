@@ -61,13 +61,13 @@ own overhead and the harness:
 | 2 s | 387.88 | 973.01 | 2.51x | 8.33% both | 0.0018 to 0.0017 |
 | 0 s | 459.52 | 1248.92 | 2.72x | 8.33% both | 0.0014 to 0.0013 |
 
-Two things follow. ddflow's coordination is not the bottleneck at three lanes: a chain of 4 caps the
-fleet at 2.4x for equal items in unit steps, and the merged ratio sits at or above that because the
-items are not equal (the first-attempt failure and serial setup of a lane's first call). And a lane
-costs about 8 s of ddflow verbs per item on this host, which real work of minutes will dwarf.
+Two things follow. ddflow's coordination is not the bottleneck at three lanes: the ratio sits at 2.51x
+to 2.72x of a ceiling of 3x (three lanes, and a chain of 4 over 12 items is no tighter). And a lane
+costs about 8 s of ddflow verbs per item on this host, which real work of minutes will dwarf. One pair
+each on a loaded host is a sanity check, not a distribution.
 
 Not measured here, and left to SW-pilot-local: the host contention of a real suite (the sandbox gate is
-a four-line unittest), review time (no review gate, independence off), undetected lease violations and
+a one-test unittest), review time (no review gate, independence off), undetected lease violations and
 reviewer independence coverage. Those are the invalidators of research section 7.6, so a stub ratio
 says nothing about them.
 
@@ -78,4 +78,4 @@ says nothing about them.
   `live_model` in the manifest, which `report` reads.
 - **B-merged-uncompleted-claimable must be fixed first.** Between `merge` and `complete` an item is
   still offered, and another lane's claim reworks it and wipes its gates. The first full 3-lane run hit
-  this within 30 seconds. The stub lanes avoid it through a board they share; real lanes share none.
+  this within about 30 seconds. The stub lanes avoid it through a board they share; real lanes share none.
