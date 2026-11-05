@@ -76,14 +76,15 @@ release, is checked by name only).
 |---|---|---|---|---|
 | `ddflow.__version__` | the release | the code a PROCESS imported; stamped into the log by `ddflow.seen`; the skew guard compares it with the log's highest stamp, so a long-lived MCP server that outlives a self-upgrade keeps the old number, refuses writes once newer code has stamped the log and says to restart (`tests/test_upgrade_running_server.py`); `ddflow upgrade --plan` compares the project's stamp with it | every release | `ddflow upgrade --plan` / `--apply` bring the project to it (config, migrations, repairs, instruction files, hooks) |
 | `ddflow.FORMAT_LEVEL` | 1 | the on-disk shape an older ddflow cannot read or write safely | only for a breaking on-disk change | a registered migration (`ddflow upgrade --apply migrations`) rewrites what it must and `verify`s; an older ddflow is refused a conflicting write |
-| `config.CONFIG_FORMAT` | 1 | the optional top-level `format = N` of `.ddflow/config.toml` | only when a section's SHAPE changes in a way an older ddflow could not edit without losing something; an added knob never does | a file with a higher `format` is read (what this version knows applies) and not written (exit 3, upgrade advice); a file with none is format 1; `ddflow upgrade --apply config` rewrites by the manifest |
+| `config._core.CONFIG_FORMAT` | 1 | the optional top-level `format = N` of `.ddflow/config.toml` | only when a section's SHAPE changes in a way an older ddflow could not edit without losing something; an added knob never does | a file with a higher `format` is read (what this version knows applies) and not written (exit 3, upgrade advice); a file with none is format 1; `ddflow upgrade --apply config` rewrites by the manifest |
 | `core.events.SCHEMA_VERSION` | 1 | the envelope of every event (id, kind, subject, agent, lamport, ts, schema) | only with a `FORMAT_LEVEL` bump | none: the log is never rewritten. A reader meeting a higher `schema` counts the event as skipped and says to upgrade; it never guesses |
 | payload versions (`core.upcasters.PAYLOAD_VERSIONS`) | none above 1 yet | one event kind's `data` shape, per kind (`data["v"]`, absent = 1) | a kind at a time, with an upcaster for each step and an entry on this page | the fold upcasts when it reads, so old events keep folding unchanged on disk; an older reader skips a newer payload and counts it |
-| `infra.log.SNAPSHOT_FORMAT` | 1 | the local read snapshot of the parsed log (`read-snapshot.bin`, machine-local, never committed) | any release that changes how events are stored in it | none to run: a snapshot whose format, ddflow version, field layout or parser differs is ignored and the log is parsed again; one snapshot is kept per fingerprint and stale ones are collected |
-| `infra.store.SCHEMA` | 11 | the derived SQLite index (search, recall) | any release that changes its tables | none to run: the index is disposable, and a different SCHEMA, similarity version or code fingerprint rebuilds it from the log on the next read |
+| `infra.log._parse.SNAPSHOT_FORMAT` | 1 | the local read snapshot of the parsed log (`read-snapshot.bin`, machine-local, never committed) | any release that changes how events are stored in it | none to run: a snapshot whose format, ddflow version, field layout or parser differs is ignored and the log is parsed again; one snapshot is kept per fingerprint and stale ones are collected |
+| `infra.store._fingerprint.SCHEMA` | 11 | the derived SQLite index (search, recall) | any release that changes its tables | none to run: the index is disposable, and a different SCHEMA, similarity version or code fingerprint rebuilds it from the log on the next read |
 | `core.textsim.VERSION` | 2 | the similarity tokens, weights and record digest | any release that changes how text is compared | the index stores it and rebuilds when it differs; nothing outside the index keeps it |
 | `services.ticks.FORMAT` | 1 | `.ddflow/local/ticks.json`, machine-local schedule state | rarely | written beside the data but not checked by readers yet: a shape change must stay readable by the old reader or be recomputed (an unreadable file reads as empty) |
 | `services.quota.STORE_VERSION` | 1 | the user-level `quotas.json` (usage quotas) | when the file shape changes | a newer file is read for the fields this version knows and kept whole when this one writes; an older or missing version is refused |
+| `services.swarm.lanehooks_plugin.VERSION` | 1 | the lane-private pre-tool hook plugin template the swarm lanehooks write into a lane's home (`ddflow-lane-hook.js`, SW-lane-hooks) | when the template text changes: its digest is what the operator approves once per template | none to run: the plugin is written per lane from the template and removed with the lane; a lane keeps its own copy until it is next (re)rendered |
 
 The local state files that carry NO version are the markers and caches under `.ddflow/local/`
 (`upgrade-notice.json`, `upgrade-start.json`, `release-check.json`, `companion-probes.json`, the
@@ -148,3 +149,15 @@ What checks this contract, and which tasks complete it:
 | every `--json` and MCP result names its schema version | B-uni-compat-json |
 | surface snapshots (help tree, `tools/list`, JSON schemas, `config --explain`, event kinds) compared with the previous release | B-uni-compat-tests |
 | the release's bump level comes from the declared impact in the upgrade manifest (`scripts/release_impact.py`, read by `publish.yml`), and an undeclared surface change or a too-small version step refuses the release (`scripts/release.sh`) | B-uni-compat-release-gate: `tests/test_release_gate.py` |
+
+## Upgrade note: BLAS thread cap (B4c7b7e8d5b)
+
+The `ddflow` and `ddflow-mcp` commands (not a library `import ddflow`) now set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` to `1`
+when the process has not set them (numpy's thread pool cost seconds of CPU per command on a
+many-core host), and `model2vec` is imported only when an embedding is requested. Nothing on
+disk changes and old logs replay identically. To keep the old behaviour, export the variable
+yourself before running ddflow; a value you set is never overridden.
+
+`embed.extra_installed()` (used by `ddflow doctor`) no longer imports the `[rag]` extra: before the
+first embedding it answers "the package is findable", so `ddflow doctor` may say installed for a
+findable but broken install; the first embedding request reports that as unavailable, with the reason.

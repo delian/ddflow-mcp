@@ -68,13 +68,14 @@ def test_a_conflicting_merge_leaves_the_primary_clean(repo, item):
     _git(item, "commit", "-qam", "branch edit")
     (repo / "c.txt").write_text("main\n")
     _git(repo, "commit", "-qam", "main edit")
-    head = _git(repo, "rev-parse", "HEAD").stdout
 
     code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code == REFUSED, out + err
     assert not _mid_merge(repo), "the primary was left mid-merge"
     assert _dirty(repo) == ""
-    assert _git(repo, "rev-parse", "HEAD").stdout == head
+    # The item's branch was not judged/landed: its `c.txt` edit is not on main. (A refused
+    # conflict may move HEAD by committing the event shard first, B6b7e47955e.)
+    assert _git(repo, "show", "main:c.txt").stdout == "main\n"
     # The remedy is the agent's to apply, in its own tree.
     assert "c.txt" in err and "into your branch" in err
     # And the next merge is not wedged: resolve on the branch, merge again.
@@ -221,3 +222,64 @@ def test_a_merge_already_in_progress_is_never_aborted(repo, item):
         for e in EventLog(repo).read_all()
         if e.kind.startswith("gate.") and e.data.get("gate") == "merge"
     ]
+
+
+def test_a_stale_merge_head_is_cleared_and_the_merge_proceeds(repo):
+    """B1b8d31b8c6: a concluded merge left MERGE_HEAD pointing at an ancestor of HEAD with
+    nothing staged, so git refuses every later merge ("not concluded your merge"). `merge`
+    detects that stale state, clears it as `git merge --quit` would, and proceeds."""
+    run_cli(repo, "init")
+    (repo / "c.txt").write_text("base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "edit c", "--globs", "c.txt")
+    _, out, _ = run_cli(repo, "--json", "claim", "T1", agent="alpha")
+    one = Path(json.loads(out)["worktree"])
+    (one / "c.txt").write_text("one\n")
+    _git(one, "commit", "-qam", "first")
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == OK, out + err
+
+    head = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    (repo / ".git" / "MERGE_HEAD").write_text(head + "\n")
+    assert _mid_merge(repo)
+
+    run_cli(repo, "task", "add", "T2", "--title", "edit c again", "--globs", "c.txt")
+    _, out, _ = run_cli(repo, "--json", "claim", "T2", agent="beta")
+    two = Path(json.loads(out)["worktree"])
+    (two / "c.txt").write_text("two\n")
+    _git(two, "commit", "-qam", "second")
+    code, out, err = run_cli(repo, "merge", "T2", agent="beta")
+    assert code == OK, out + err
+    assert not _mid_merge(repo), "the stale MERGE_HEAD was not cleared"
+    assert _git(repo, "show", "main:c.txt").stdout == "two\n"
+
+
+def test_merge_commits_the_primarys_uncommitted_shard_first(repo):
+    """B6b7e47955e: a branch that brings new shard content the primary holds uncommitted
+    makes git refuse the merge with 'local changes would be overwritten', leaving the
+    operator to hand-commit a shard first. `merge` commits the primary's shard before git
+    merges, so the landing is not that bare git error."""
+    run_cli(repo, "init")
+    (repo / "c.txt").write_text("base\n")
+    shard = repo / ".ddflow" / "events" / "shared.jsonl"
+    shard.parent.mkdir(parents=True, exist_ok=True)
+    shard.write_text('{"e": "base"}\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+
+    run_cli(repo, "task", "add", "T1", "--title", "edit c", "--globs", "c.txt")
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="alpha")
+    assert code == OK, out + err
+    one = Path(json.loads(out)["worktree"])
+    (one / "c.txt").write_text("branch\n")
+    (one / ".ddflow" / "events" / "shared.jsonl").write_text('{"e": "base"}\n{"e": "branch"}\n')
+    _git(one, "commit", "-qam", "branch edit")
+    # The primary now holds that same new shard content, uncommitted — exactly the state
+    # whose bare git refusal B6b7e47955e is about.
+    shard.write_text('{"e": "base"}\n{"e": "branch"}\n')
+
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == OK, out + err
+    assert _git(repo, "show", "main:c.txt").stdout == "branch\n"
+    assert '{"e": "branch"}' in _git(repo, "show", "main:.ddflow/events/shared.jsonl").stdout

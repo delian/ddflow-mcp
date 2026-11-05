@@ -236,7 +236,7 @@ def test_renew_release_and_expire_all_go_through_one_body():
     import ast
     import inspect
 
-    src = inspect.getsource(L)
+    src = inspect.getsource(inspect.getmodule(L.renew))
     tree = ast.parse(src)
     bodies = {
         node.name: node

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge_queue.auto_run_max_parallel"
+new = "1"
+why = "LC-integrator-trigger: how many automatically started integrator jobs may be alive at once."
+impact = "additive"

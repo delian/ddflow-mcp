@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -112,6 +113,9 @@ def _project(repo: Path, tmp_path: Path, fails: int) -> Path:
     (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "./bin/pytest -q tests/"\ncwd = "repo"\n'
     )
+    # Committed: a base with no runner measures nothing, and the gate would be `unavailable`.
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
     run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
     return state
@@ -270,6 +274,8 @@ def _partial_project(repo: Path, tmp_path: Path, options: str = "") -> None:
     (repo / ".ddflow" / "gates.toml").write_text(
         f'[gate.unit_tests]\ncommand = "./bin/pytest -q {options} tests/"\ncwd = "repo"\n'
     )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "project"], check=True)
     run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
     run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
 

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/surfaces/tools/family_schema.py:LISTED_TEXT_MAX" = "the shape of the family listing, held by the byte limit in tests/test_mcp_families.py; a per-project value would make the advertised schema differ between clients of one release"

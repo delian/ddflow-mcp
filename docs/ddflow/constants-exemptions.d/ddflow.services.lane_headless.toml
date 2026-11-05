@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/lane_headless.py:SECRET_MIN" = "redaction heuristic: a value shorter than this is not worth redacting (redacting it would mangle text)"

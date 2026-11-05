@@ -459,10 +459,9 @@ def test_a_reviewer_with_no_model_cannot_satisfy_independence(repo):
     the different-family requirement on its own. The check whose entire purpose is to
     refuse unverified independence was passed by the absence of information.
 
-    Found while writing a different test, which is the usual way: the fixture that was
-    supposed to set up a refusal produced a pass.
     """
     _queue(repo)
+    run_cli(repo, "config", "--set", "agent.reviewer_independence", "family")
     for g in ("research", "rules", "implement", "unit_tests", "bug_hunt", "dedupe", "merge"):
         run_cli(repo, "gate", "record", "P1.T1", g, "--outcome", "passed", "--evidence", "ok")
     # A reviewer that ran, passed, and named no model.
@@ -689,6 +688,7 @@ def test_a_dependency_can_be_CLEARED_over_mcp(repo):
             "PX",
             "--needs",
             needs,
+            "--allow-unknown-needs",
             "--globs",
             f"x/{tid}",
         )

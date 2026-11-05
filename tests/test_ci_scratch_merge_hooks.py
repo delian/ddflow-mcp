@@ -21,6 +21,7 @@ from helpers import git as _git
 from ddflow.config import Config
 from ddflow.infra import git as IG
 from ddflow.services import ci as CI
+from ddflow.services.ci import scratch
 
 
 @pytest.fixture
@@ -120,7 +121,7 @@ def test_a_reworded_conflict_message_is_still_failed(repo, passing_precommit, mo
     _git(repo, "switch", "-q", default)
     _commit(repo, {"b.txt": "other\n"}, "main edits b")
     _git(repo, "switch", "-q", "work")
-    monkeypatch.setattr(CI, "NOT_MERGEABLE", "clashes with")
+    monkeypatch.setattr(scratch, "NOT_MERGEABLE", "clashes with")
     res = CI.run(repo, Config.load(repo), base=default)
     assert res.status == "failed" and "clashes with" in res.reason, res
 

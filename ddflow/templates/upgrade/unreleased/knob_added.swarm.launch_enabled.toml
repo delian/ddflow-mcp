@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.launch_enabled"
+new = 'false'
+why = "Whether the scheduler may start lanes itself from approved templates (SW-launch); off by default."
+impact = "additive"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import signal
 import time
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ...config import Config
+from ...core.clock import compact_at
 from ...core.records import GateOutcome
 from ...infra import fsio
 from ...infra import worktree as W
@@ -19,7 +21,7 @@ from .. import cmdrunner
 from .. import suitelock as SL
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
-from ..flakes import failure_evidence
+from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .drift import _account_for_drift
@@ -45,9 +47,6 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
         )
         where = runs / item_id
         where.mkdir(exist_ok=True)
-        # Imported here, not at the top (deferred, as it was before the area split).
-        from ...core.clock import compact_at
-
         stamp = compact_at()
         path = where / f"{gate}-{stamp}-{os.getpid()}.log"
         fsio.replace_text(path, out.encode("utf-8", "replace").decode("utf-8"), fsync=False)
@@ -81,10 +80,17 @@ def _unavailable_evidence(gdef: GateDef, p: cmdrunner.CommandRun) -> dict[str, A
             "command": gdef.command,
             "timed_out": True,
             "elapsed_s": round(p.elapsed_s, 1),
+            **_cost_evidence(p),
         }
     if p.kind == cmdrunner.NOT_FOUND:
         return {"reason": p.reason, "command": gdef.command, "exit": p.code}
     return {"reason": p.reason, "command": gdef.command}  # COULD_NOT_RUN, BUSY
+
+
+def _cost_evidence(p: Any) -> dict[str, Any]:
+    """cpu_user_s, cpu_sys_s, maxrss_kb, io_*_blocks and resources_source of the run, when measured
+    (PM-resource-capture); a run that carries none adds nothing."""
+    return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
 def _runs_whole_suite(gdef: GateDef) -> bool:
@@ -194,12 +200,13 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
     with SL.hold(cfg, who) if holds else nullcontext():
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
+        timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
         ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
             cwd=cwd,
             env=env,
-            timeout_s=gdef.timeout_s,
+            timeout_s=timeout_s,
             on_tick=on_tick if ticking else None,
             tick_s=tick_s if ticking else 0,
         )
@@ -297,6 +304,7 @@ def run_command_gate(
         **command_layer_evidence(gdef, cwd),
         "exit": p.code,
         "elapsed_s": round(p.elapsed_s, 1),
+        **_cost_evidence(p),
         **output_evidence(out),
         # Which tests a `ddflow ci run` took (its last marker line): D-test-economy-r2.
         **({"ci_scope": sc} if gdef.id == "ci" and (sc := parse_marker(out)) else {}),
@@ -333,7 +341,23 @@ def run_command_gate(
         # Only a FAILURE is worth the git calls: a pass under drift is main's command
         # passing here, which is what the gate asks, and an unavailable already says so.
         outcome = _account_for_drift(gdef, cwd, p.code, out, ev)
+    _keep_cut_failing_ids(gdef, cwd, out, ev)
     return outcome, ev
+
+
+def _keep_cut_failing_ids(gdef: GateDef, cwd: Path, out: str, ev: dict[str, Any]) -> None:
+    """Keep a unit_tests full-suite failure's WHOLE failing list aside for the run's own tree
+    (the evidence caps it to a sample): ``gate_baseline`` reads it to measure the failure on
+    the base, so ``[gates].baseline_red_auto`` can accept it (B69d1c0ff00). A run that could
+    not be kept is dropped: the outcome it follows is unchanged."""
+    if gdef.id != "unit_tests" or not ev.get("failed_tests_more"):
+        return
+    from .baseline import write_full  # deferred, as run_log_writer does
+
+    try:
+        write_full(W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)])
+    except (OSError, ValueError, KeyError):
+        return
 
 
 class Classified(NamedTuple):
@@ -357,10 +381,36 @@ def _blocked_on(output: str) -> str:
     return found[-1].strip() if found else ""
 
 
+#: The signals that mean the run was CUT OFF from outside (a harness timeout, a `kill`, a
+#: terminal hangup/interrupt), not a verdict. A crash (SIGSEGV, SIGABRT, SIGBUS, SIGFPE,
+#: SIGILL) is the command's own failure and stays FAILED -- only these read as unavailable.
+_CUT_OFF_SIGNALS = frozenset({"SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGKILL"})
+
+
+def _signal_death(code: int | None) -> str:
+    """The delivery signal that cut a command's process off from outside, else "".
+
+    Python reports a signalled DIRECT child as a NEGATIVE return code (``-N``): that is the
+    one trustworthy form, because a shell only reports the positive ``128+N`` for a child of
+    a COMPOUND command it survived, and that is indistinguishable from a command that exits
+    that code itself (``exit 137`` would read as "killed by SIGKILL" and downgrade a real
+    failure to UNAVAILABLE). A kill read as ``failed`` was what left a cut-off ``ci`` run
+    stuck as "queued 11m of 15m elapsed" forever (B8664a1e0c6).
+    """
+    if not isinstance(code, int) or isinstance(code, bool) or code >= 0:
+        return ""
+    try:
+        name = signal.Signals(-code).name
+    except ValueError:
+        return ""
+    return name if name in _CUT_OFF_SIGNALS else ""
+
+
 def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     """`(outcome, reason)` for a command that RAN. The reason is "" for a plain pass/fail.
 
     The gate's declared exit codes and output patterns first, then the POSIX default.
+    A command killed by a signal is UNAVAILABLE (its checks were cut off, not failed).
     A pattern that does not compile is UNAVAILABLE naming the knob: a broken verdict
     rule decides nothing, and guessing either way would be a verdict nobody gave.
     """
@@ -384,6 +434,12 @@ def classify_exit(gdef: GateDef, code: int, output: str) -> Classified:
     if code in gdef.partial_exits:
         return Classified(
             GateOutcome.PARTIAL, f"exit {code} is declared PARTIAL for this gate (partial_exits)"
+        )
+    if death := _signal_death(code):
+        return Classified(
+            GateOutcome.UNAVAILABLE,
+            f"the command was killed by {death} (exit {code}): the run was cut off before it "
+            f"finished, so there is no verdict. Not a failing check.",
         )
     if code != 0:
         return Classified(GateOutcome.FAILED, "")

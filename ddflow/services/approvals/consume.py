@@ -155,7 +155,10 @@ def operator_gate(
     if approval_id and approval_id != REQUEST:
         return spend(log, canon, approval_id, now=now, cfg=cfg)
     state = fold(log.read_all(), strict=False)
-    if stamp := PO.apply(log, cfg, state, canon, reason=reason):  # a standing rule (off by default)
+    # `--approval request` is the agent deciding to ask a person: a standing auto-approval
+    # must not answer for it, window or not (Bef8d328af3). Only when the agent has NOT named
+    # "request" may a standing rule supply the person's stand-in stamp.
+    if approval_id != REQUEST and (stamp := PO.apply(log, cfg, state, canon, reason=reason)):
         return Decision(True, stamp=stamp, ask_id=stamp["ask"])
     if not approval_id and not auto:
         return Decision(
@@ -165,7 +168,16 @@ def operator_gate(
             "answers it in chat.",
         )
 
-    filed = R.file(log, cfg, state, canon, reason=reason, now=now, auto=approval_id != REQUEST)
+    filed = R.file(
+        log,
+        cfg,
+        state,
+        canon,
+        reason=reason,
+        now=now,
+        auto=approval_id != REQUEST,
+        dedupe=not PO.retry_armed(cfg, canon),
+    )
     if filed is None:
         return Decision(
             False,

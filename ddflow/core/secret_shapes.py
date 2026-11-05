@@ -25,6 +25,8 @@ _L = r"(?<![0-9A-Za-z])"  # not inside a longer alphanumeric word
 
 #: (name, regex). The name is for tests and `ddflow doctor`; the text never carries it.
 SHAPES: tuple[tuple[str, str], ...] = (
+    # the newer format: `AQ.` then exactly 50 letters/digits (53 total); no guards, listed FIRST so a legacy key glued before it cannot eat its `AQ`, so a key glued to text still goes
+    ("google-api-key", r"AQ\.[0-9A-Za-z]{50}"),
     ("google-api-key", r"AIza[0-9A-Za-z_-]{35,}"),
     ("google-oauth", r"ya29\.[0-9A-Za-z_-]{30,}"),
     ("anthropic", r"sk-ant-[0-9A-Za-z_-]{20,}"),

@@ -42,6 +42,7 @@ def item_edit(a: dict):
         needs=_list_or_none(a, "needs"),
         add_needs=_list_or_none(a, "add_needs"),
         remove_needs=_list_or_none(a, "remove_needs"),
+        allow_unknown_needs=bool(a.get("allow_unknown_needs")),
         add_tags=_list_or_none(a, "add_tags"),
         remove_tags=_list_or_none(a, "remove_tags"),
         # Raw, for the api's single read: split on commas here first, a JSON
@@ -91,6 +92,7 @@ COMMANDS: tuple[Command, ...] = (
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
+            allow_unknown_needs=bool(a.get("allow_unknown_needs")),
         ),
         payload=("id",),
         params=(
@@ -124,6 +126,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="File a REMOVED item's id again with this definition. An id still in the queue is always refused -- change that item with ddflow_update.",
                 cli_help="file a REMOVED item's id again. An id still in the queue is always refused: change it with `ddflow update`",
             ),
+            Param(
+                "allow_unknown_needs",
+                type="boolean",
+                help="Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id.",
+                cli_help="accept needs that name an id not in the queue (one that will exist later, or `repo:ID`)",
+            ),
             *ANSWER_PARAMS,
         ),
         tool_order=(
@@ -136,6 +144,7 @@ COMMANDS: tuple[Command, ...] = (
             "priority",
             "line",
             "readd",
+            "allow_unknown_needs",
             "relation",
             "check_only",
         ),
@@ -195,6 +204,7 @@ COMMANDS: tuple[Command, ...] = (
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
+            allow_unknown_needs=bool(a.get("allow_unknown_needs")),
         ),
         payload=("id", "line", "ports", "port_strategy", "defaulted"),
         params=(
@@ -240,6 +250,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="File a REMOVED item's id again with this definition. An id still in the queue is always refused -- change that item with ddflow_update.",
                 cli_help="file a REMOVED item's id again. An id still in the queue is always refused: change it with `ddflow update`",
             ),
+            Param(
+                "allow_unknown_needs",
+                type="boolean",
+                help="Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id.",
+                cli_help="accept needs that name an id not in the queue (one that will exist later, or `repo:ID`)",
+            ),
             *ANSWER_PARAMS,
             Param(
                 "phase",
@@ -281,6 +297,7 @@ COMMANDS: tuple[Command, ...] = (
             "lines",
             "port_of",
             "readd",
+            "allow_unknown_needs",
             "relation",
             "check_only",
             "kind",
@@ -410,6 +427,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="REMOVE these comma-separated ids from the item's needs",
                 cli_only=True,
             ),
+            Param(
+                "allow_unknown_needs",
+                type="boolean",
+                help="Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id.",
+                cli_help="accept needs that name an id not in the queue (one that will exist later, or `repo:ID`)",
+            ),
             Param("tags", help="Comma-separated tags.", cli_help=""),
             Param(
                 "add_tags",
@@ -511,6 +534,7 @@ COMMANDS: tuple[Command, ...] = (
             "id",
             "globs",
             "needs",
+            "allow_unknown_needs",
             "title",
             "body",
             "append_body",

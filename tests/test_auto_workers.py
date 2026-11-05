@@ -135,3 +135,49 @@ def test_an_explicit_worker_count_is_never_raised_by_the_holder_floor():
     src = FakeSource({"load": 1.5, "memory_free_frac": 0.10})
     c = holder_cfg(8, workers="4")
     assert WK.compute(c, None, source=src, cores=192, holding_suite=True).n == 4
+
+
+def _run_cut(cfg_obj, load=1.5, free=0.9):
+    """A loaded host: the load clamp cuts the count below the ceiling."""
+    return run(cfg_obj, load, free=free)
+
+
+def test_a_run_cut_below_the_ceiling_gets_a_longer_timeout_capped_by_the_knob():
+    """B2efda94671: fewer workers carry the same suite, slowly, so a timeout sized for an
+    idle host dead-ends the gate in `unavailable` before it can record a real outcome."""
+    from ddflow.config import Config
+
+    c = Config()
+    c.gates.max_run_timeout_s = 21600
+    cut = _run_cut(cfg(hi=48))
+    assert cut.n < 48
+    assert WK.timeout_for(3600, cut, c) == 21600
+
+
+def test_a_run_at_the_ceiling_keeps_the_declared_timeout():
+    from ddflow.config import Config
+
+    c = Config()
+    c.gates.max_run_timeout_s = 21600
+    full = run(cfg(hi=48), 0.0)  # a quiet host stays at the ceiling: no cut, no scaling
+    assert full.n == 48
+    assert WK.timeout_for(3600, full, c) == 3600
+
+
+def test_a_nonpositive_or_unknown_timeout_is_kept_as_declared():
+    from ddflow.config import Config
+
+    c = Config()
+    cut = _run_cut(cfg(hi=48))
+    assert cut.n < 48
+    assert WK.timeout_for(0, cut, c) == 0
+    assert WK.timeout_for(3600, None, c) == 3600
+
+
+def test_the_scaling_is_bounded_by_max_run_timeout_s_not_unbounded():
+    from ddflow.config import Config
+
+    c = Config()
+    c.gates.max_run_timeout_s = 10800
+    cut = _run_cut(cfg(hi=48))
+    assert cut.n < 48 and WK.timeout_for(3600, cut, c) == 10800

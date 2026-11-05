@@ -24,7 +24,7 @@ HOMES = frozenset({"infra/proc.py", "services/cmdrunner.py"})
 EXEMPT = {
     ("api/operations.py", "which(<command>[i])"): "pre-commit execs shlex.split(entry), no shell",
     ("infra/forge.py", "which(<command>[i])"): "argv[0] of a gh/glab call ddflow assembled",
-    ("services/companions.py", "which(<command>[i])"): "a companion's own detect argv",
+    ("services/companions/model.py", "which(<command>[i])"): "a companion's own detect argv",
 }
 
 _SHELL_CALLS = frozenset({"run_shell", "spawn_shell"})

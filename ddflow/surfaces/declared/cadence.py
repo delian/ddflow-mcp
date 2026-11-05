@@ -40,7 +40,7 @@ COMMANDS: tuple[Command, ...] = (
         summary="which text of an instruction file a test pins; or `pins regenerate` re-records stale pin files",
         tool="ddflow_pins",
         description=(
-            "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file."
+            "BEFORE rewording an instruction file (rulebook, driver, AGENTS.md, CLAUDE.md, prompt template): which of its text a test pins, which suites to re-run, and the longest stretches no test holds. Exit 2: no Python suite to read pins from -- treat ALL as pinned. `pins regenerate [--check] [--only NAME] [--install]` re-records stale pin files by [pins].recipes_file. `pins drivers [--check] [--install]` shows the git merge-driver lines for baselines, pins and the opt-in Mergiraf; --install writes them, --check verifies the merged baselines."
         ),
         wants_progress=True,
         call=lambda repo, a, agent, on_progress=None: (
@@ -56,7 +56,7 @@ COMMANDS: tuple[Command, ...] = (
                 agent=agent,
                 approval=a.get("approval") or "",
             )
-            if a["document"] in ("regenerate", "merge-driver")
+            if a["document"] in ("regenerate", "merge-driver", "drivers")
             else _api().pins(
                 repo,
                 a["document"],

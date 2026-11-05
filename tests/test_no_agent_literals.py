@@ -42,10 +42,6 @@ BASELINE: dict[str, tuple[int, str]] = {
         "the legacy hook table: the identities of hook entries already written into "
         "operators' settings files, kept byte for byte",
     ),
-    "ddflow/config_sections/agent.py": (
-        6,
-        "model vendors of the agent roster (anthropic, google): a different domain",
-    ),
     "ddflow/services/harnessreg.py": (
         6,
         "the hook-style vocabulary, the legacy session variables and the title doc",
@@ -54,7 +50,8 @@ BASELINE: dict[str, tuple[int, str]] = {
         5,
         "the reference checker's table of known agent paths; read by `doctor`",
     ),
-    "ddflow/services/review.py": (3, "reviewer provider kinds (gemini) are not harnesses"),
+    "ddflow/services/review/model.py": (2, "reviewer provider kinds (gemini) are not harnesses"),
+    "ddflow/services/review/engine.py": (1, "reviewer provider kinds (gemini) are not harnesses"),
     "ddflow/config_sections/approvals.py": (
         2,
         "the default transcript root ~/.claude/projects and its doc: a path the claude "
@@ -64,8 +61,24 @@ BASELINE: dict[str, tuple[int, str]] = {
         1,
         "HARNESS = 'claude': the lean agent definitions are a claude-only template set",
     ),
-    "ddflow/api/setup.py": (2, "the --claude/--gemini flag parameters of `hooks`"),
-    "ddflow/services/adopt.py": (2, "the CLAUDE.md pointer written when claude is adopted"),
+    "ddflow/api/setup/hooks.py": (2, "the --claude/--gemini flag parameters of `hooks`"),
+    "ddflow/services/adopt/_adopt.py": (
+        1,
+        "the CLAUDE.md pointer written when claude is adopted",
+    ),
+    "ddflow/services/adopt/_docs.py": (
+        1,
+        "the CLAUDE.md pointer written when claude is adopted",
+    ),
+    "ddflow/services/lanes/launch_template.py": (
+        2,
+        "the harness process lanes the shipped launch can start (opencode, kilo)",
+    ),
+    "ddflow/services/lanes/opencode.py": (2, "the opencode/kilo binaries in preference order"),
+    "ddflow/services/swarm/lanehooks.py": (
+        3,
+        "the per-harness DOORS storage keys (claude, kilo, opencode)",
+    ),
     "ddflow/services/hookwriters/__init__.py": (2, "the descriptor styles claude and gemini"),
     "ddflow/services/hookwriters/flatlist.py": (2, "the descriptor styles cursor and copilot"),
     "ddflow/services/mcpconfig.py": (2, "the MCP file shapes named after their first user"),
@@ -107,10 +120,42 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return out
 
 
-def sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
-    """Line numbers of the string constants that name an agent or sit under an agent's directory."""
+def _vendor_key_nodes(tree: ast.AST) -> set[int]:
+    """``id()`` of the string constants that are KEYS of the module-level ``FAMILY_HINTS`` dict.
+
+    ``FAMILY_HINTS`` maps model-name substrings to pretraining families -- a domain apart from
+    the harness descriptors. A key that also names a harness ('grok' since
+    DX-grok-hook-descriptor, 'claude', ...) is a model vendor, not a descriptor read, so those
+    key NODES are not sites. Only the keys of that one table are exempt: the same string used
+    anywhere else in the module is still a site (Bd567efa0b3).
+    """
+    nodes: set[int] = set()
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign):
+            targets, value = stmt.targets, stmt.value
+        elif isinstance(stmt, ast.AnnAssign):
+            targets, value = [stmt.target], stmt.value
+        else:
+            continue
+        if isinstance(value, ast.Dict) and any(
+            isinstance(t, ast.Name) and t.id == "FAMILY_HINTS" for t in targets
+        ):
+            for k in value.keys:
+                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                    nodes.add(id(k))
+    return nodes
+
+
+def sites(source: str, ids: set[str], roots: set[str], skip_vendor_keys: bool = False) -> list[int]:
+    """Line numbers of the string constants that name an agent or sit under an agent's directory.
+
+    With ``skip_vendor_keys``, the ``FAMILY_HINTS`` key nodes -- a different domain -- are not
+    sites even when their value equals a descriptor id.
+    """
     tree = ast.parse(source)
     skip = _docstrings(tree)
+    if skip_vendor_keys:
+        skip |= _vendor_key_nodes(tree)
     found = []
     for n in ast.walk(tree):
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:
@@ -120,6 +165,17 @@ def sites(source: str, ids: set[str], roots: set[str]) -> list[int]:
     return found
 
 
+def _module_sites(rel: str, source: str, ids: set[str], roots: set[str]) -> int:
+    """The sites ddflow's detector counts in one module (``rel``, repo-relative).
+
+    ``ddflow/config_sections/agent.py`` is scanned with the ``FAMILY_HINTS`` vendor keys
+    exempted -- a domain apart from the harness descriptors (Bd567efa0b3).
+    """
+    return len(
+        sites(source, ids, roots, skip_vendor_keys=(rel == "ddflow/config_sections/agent.py"))
+    )
+
+
 def _counts() -> dict[str, int]:
     ids = {h.id for h in HR.load()}
     roots = _roots()
@@ -127,9 +183,10 @@ def _counts() -> dict[str, int]:
     for f in sorted(PKG.rglob("*.py")):
         if "harnesses" in f.relative_to(PKG).parts[:1]:
             continue
-        n = len(sites(f.read_text("utf-8"), ids, roots))
+        rel = f.relative_to(PKG.parent).as_posix()
+        n = _module_sites(rel, f.read_text("utf-8"), ids, roots)
         if n:
-            out[f.relative_to(PKG.parent).as_posix()] = n
+            out[rel] = n
     return out
 
 
@@ -163,6 +220,37 @@ def test_the_detector_can_fail():
     assert sites('D = ".claude"\n', ids, roots) == [1]
     assert sites('D = "x/.claude"\n', ids, roots) == []  # a path component, not a root
     assert sites('"""claude"""\ndef f():\n    """.claude/x"""\n', ids, roots) == []
+
+
+def test_family_hints_vendor_keys_are_not_agent_sites():
+    # FAMILY_HINTS maps model-name substrings to pretraining families: a domain apart from the
+    # harness descriptors. A vendor key that also names a harness ('grok' since
+    # DX-grok-hook-descriptor, 'claude', ...) is a model vendor, not a descriptor read, so the
+    # real detector must leave ddflow/config_sections/agent.py out of the counts (Bd567efa0b3,
+    # the grok collision reddened this file 6 -> 7).
+    assert "ddflow/config_sections/agent.py" not in _counts()
+
+
+def test_vendor_key_outside_family_hints_is_still_a_site():
+    # The FAMILY_HINTS exemption is scoped to that table's dict keys, so a bare vendor name
+    # used as a descriptor read in the very module the detector specialises must still be
+    # counted (Bd567efa0b3). Exercise _module_sites -- the function _counts() calls -- on the
+    # real module source, and again with a planted descriptor read.
+    ids = {h.id for h in HR.load()}
+    assert "grok" in ids
+    src = (PKG / "config_sections" / "agent.py").read_text("utf-8")
+    assert _module_sites("ddflow/config_sections/agent.py", src, ids, _roots()) == 0
+    planted = src + '\nCURRENT_AGENT = "grok"\n'
+    assert _module_sites("ddflow/config_sections/agent.py", planted, ids, _roots()) == 1
+
+
+def test_shadowed_family_hints_is_not_exempt():
+    # _vendor_key_nodes is scoped to the MODULE-level FAMILY_HINTS table. A function-local
+    # dict also named FAMILY_HINTS is not that vendor table, so its keys are still sites.
+    ids = {h.id for h in HR.load()}
+    assert "grok" in ids
+    source = 'def f():\n    FAMILY_HINTS = {"grok": "x"}\n    return FAMILY_HINTS\n'
+    assert sites(source, ids, _roots(), skip_vendor_keys=True) == [2]
 
 
 #: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125): it scans the whole

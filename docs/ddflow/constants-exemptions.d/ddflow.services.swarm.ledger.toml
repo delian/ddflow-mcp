@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/swarm/ledger.py:BUG_WINDOW_S" = 'swarm.bug_window_s'
+"ddflow/services/swarm/ledger.py:EXPLORE_MIN_N" = 'swarm.explore_min_n'

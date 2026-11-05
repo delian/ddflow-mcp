@@ -1,0 +1,4 @@
+[knob]
+"ddflow/core/limits.py:LIST_MAX_LIMIT" = 'viewers.max_limit'
+"ddflow/core/limits.py:SEARCH_MAX_LIMIT" = 'search.max_limit'
+"ddflow/core/limits.py:SESSION_MAX_LIMIT" = 'session_view.max_limit'

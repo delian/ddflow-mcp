@@ -1,0 +1,3 @@
+[knob]
+"ddflow/infra/release_index.py:MAX_BYTES" = 'release_index.max_bytes'
+"ddflow/infra/release_index.py:TIMEOUT_S" = 'release_index.timeout_s'

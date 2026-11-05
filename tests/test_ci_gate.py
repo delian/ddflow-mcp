@@ -205,7 +205,7 @@ def test_the_shell_spawn_carries_its_bandit_justification():
     lives in `proc.run_shell` (Bed0f5b6d99), which the CommandRunner calls and ci.py reaches
     through it, without `shell=True`."""
     root = Path(__file__).resolve().parents[1]
-    ci_src = (root / "ddflow/services/ci.py").read_text("utf-8")
+    ci_src = (root / "ddflow/services/ci/runner.py").read_text("utf-8")
     assert "shell=True" not in ci_src and "CommandRunner()" in ci_src
     runner_src = (root / "ddflow/services/cmdrunner.py").read_text("utf-8")
     assert "shell=True" not in runner_src and "P.run_shell(" in runner_src

@@ -32,9 +32,26 @@ def _setup(repo):
     assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
 
 
+def test_partial_widening_accepts_the_non_overlapping_subset(repo):
+    """B-ddflow-glob-widen-refused-broad: a widening that only PARTLY overlaps another
+    lease takes the non-overlapping subset instead of refusing the whole list (and names
+    what was withheld)."""
+    _setup(repo)
+    ok = AI.update(
+        repo, "M1", AI.ItemEdit(globs=["mine.py", "docs/r.md", "pkg/gates/x.py"]), agent=ME
+    )
+    assert ok.ok, ok.reason
+    assert ok.data["globs_withheld"] == ["pkg/gates/x.py"], ok.data
+    item = _items(repo)["M1"]
+    assert item.globs == ["mine.py", "docs/r.md"], item.globs
+    assert item.lease.globs == ["mine.py", "docs/r.md"], item.lease.globs
+
+
 def test_refusal_names_holder_age_pairs_and_a_narrower_glob(repo):
     _setup(repo)
-    code, out, err = run_cli(repo, "update", "M1", "--globs", "mine.py,pkg/gates/x.py", agent=ME)
+    code, out, err = run_cli(
+        repo, "update", "M1", "--globs", "pkg/gates/x.py,pkg/gates/y.py", agent=ME
+    )
     text = out + err
     assert code != 0
     assert HOLDER in text and "H1" in text
@@ -73,6 +90,8 @@ def test_keep_list_counts_every_holder(repo):
     ok = AI.update(
         repo, "M1", AI.ItemEdit(globs=["pkg/gates/a.py", "other/b.py", "fine.py"]), agent=ME
     )
+    # a REPLACEMENT (not a widening) with overlaps is still refused: only a widening that
+    # keeps every held glob is accepted partially (B-ddflow-glob-widen-refused-broad).
     assert not ok.ok
     assert "other/b.py' overlaps" in ok.reason and "pkg/gates/a.py' overlaps" in ok.reason
     assert "(fine.py would be accepted)" in ok.reason

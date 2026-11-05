@@ -1,0 +1,8 @@
+[knob]
+"ddflow/services/upgrade_dryrun/_model.py:START_TIMEOUT_S" = 'upgrade_dryrun.start_timeout_s'
+"ddflow/services/upgrade_dryrun/_model.py:TIMEOUT_S" = 'upgrade_dryrun.timeout_s'
+
+[exempt]
+"ddflow/services/upgrade_dryrun/_model.py:CLONE_RETRY_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/services/upgrade_dryrun/_model.py:FORCED_TIMEOUT_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
+"ddflow/services/upgrade_dryrun/_model.py:MAX_COMMANDS" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'

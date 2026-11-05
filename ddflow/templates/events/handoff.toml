@@ -1,0 +1,37 @@
+# Event kinds owned by handoff (core/handlers/suggestions.py). One [[kind]] per kind.
+
+[[kind]]
+name = "suggestion.proposed"
+doc = "An agent proposed a bounded patch, held as data, to the agent that holds the lease on the file it needs."
+
+[[kind]]
+name = "suggestion.seen"
+doc = "The delivery layer recorded that the owner was shown a suggestion."
+
+[[kind]]
+name = "suggestion.accepted"
+doc = "The owner accepted a suggestion and will apply it."
+
+[[kind]]
+name = "suggestion.applied"
+doc = "A suggestion's change landed on the owner's branch, by the owner or detected by patch id."
+
+[[kind]]
+name = "suggestion.rejected"
+doc = "The owner rejected a suggestion with a reason."
+
+[[kind]]
+name = "suggestion.countered"
+doc = "The owner answered a suggestion with a different proposal."
+
+[[kind]]
+name = "suggestion.withdrawn"
+doc = "The sender took a suggestion back."
+
+[[kind]]
+name = "suggestion.superseded"
+doc = "The sender replaced a suggestion with a newer one."
+
+[[kind]]
+name = "suggestion.expired"
+doc = "A suggestion went unanswered past its time limit or its owner's lease ended."

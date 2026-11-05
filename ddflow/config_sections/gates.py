@@ -81,6 +81,12 @@ class GatesConfig:
         True,
         doc="Permit `ddflow gate skip <id> --reason '...'`. The reason is mandatory and is recorded in the event log, so a skip is auditable rather than invisible.",
     )
+    skip_followup: str = knob(
+        "auto",
+        doc="When a gate is recorded skipped (`ddflow gate skip <id> <gate> --reason ...`, or a hand-recorded `outcome=skipped`), `auto` files ONE future follow-up task whose scope is ONLY to re-run that gate on that item later (run `ddflow gate run <id> <gate>` and record the honest outcome); the follow-up is the log entry, the reminder and the effort to re-run the gate -- not to repair the gate-check code nor to redo the item's payload. It is dropped when the item is abandoned, and settles when the item completes or the gate is re-recorded non-skipped. `warn` reports the follow-up in the skip output and files nothing; `off` does neither. A skip today records nothing extra: only `auto` adds the follow-up.",
+        choices=("auto", "warn", "off"),
+        strictest=("auto", "always files the follow-up, so a skipped gate is never forgotten"),
+    )
     require_outcome: bool = knob(
         True,
         doc="Every gate in the pipeline must carry SOME recorded outcome before an item completes — passed, failed, unavailable, partial, or an explicit `gate skip --reason`. Silence is not a pass, for the same reason UNAVAILABLE is not. With this false, `required` alone blocks and the other gates become documentation. Default true: the fixed order is the point of the pipeline.",
@@ -141,6 +147,24 @@ class GatesConfig:
     unit_tests_name_max_tests: int = knob(
         30,
         doc="A distinctive identifier the change defines, edits or removes selects the tests that spell it, unless more than this many tests do (default 30): then it is a word, not a name.",
+    )
+    baseline_red_auto: str = knob(
+        "on",
+        doc="Whether a ci or unit_tests gate whose every failing test ddflow MEASURED as failing on the base branch too (evidence `baseline.red`), and none of which sits in a file the item changed or reaches by import, is accepted AUTOMATICALLY (decision D-baseline-red-auto-accept): the gate stays `partial` and shows as accepted-baseline-red, never passed; `complete` warns; the coordinator is told through the inbox and the approvals log, naming the test ids; a bug tagged baseline-red is filed or linked by test id. 'on' (default) accepts; 'off' leaves every such partial to a person (`ddflow approve <id> <gate>`). A failed gate, a new failing test, an unavailable probe and a failure in the item's own files are never accepted. Change it for the project (`ddflow config gates.baseline_red_auto off`), for this machine (add --local), per run (DDFLOW_GATES_BASELINE_RED_AUTO), or over MCP with `ddflow_configure`.",
+        choices=("on", "off"),
+        strictest=("off", "every baseline-red partial waits for a person"),
+    )
+    baseline_cache_ttl_s: int = knob(
+        86400,
+        doc="Seconds a measurement of the base branch (which tests fail on one base commit) is reused (default 86400; 0 = never reuse). It is kept per base sha under `.ddflow/local/baseline/`, shared by every item, so a second item costs a comparison, not a run; it expires on its own when the base moves, since a new base has a new sha.",
+    )
+    baseline_red_rate_warn: int = knob(
+        10,
+        doc="Automatic baseline-red acceptances in the last 24 hours from which `ddflow doctor` notes that the base branch is red and what to fix (default 10; 0 = never note).",
+    )
+    baseline_red_notify_to: str = knob(
+        "coordinator",
+        doc="The inbox (agent name) told, once, when a baseline-red partial is accepted automatically (`[gates].baseline_red_auto`): the message names the item, the gate and the failing test ids and the bug. Empty = no inbox message (the approvals log and `ddflow doctor` still show it).",
     )
     scrub_env: list[str] = knob(
         factory=lambda: [

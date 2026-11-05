@@ -68,6 +68,17 @@ _CONFIG = "who changed a setting or approved a tool; the setting itself lives in
 #: Every other kind, and why it is not duplicate-checked. The gate records of an item
 #: (`GATE_RECORDS`, state) are exempt by name below.
 EXEMPT: dict[str, str] = {
+    "probe.recorded": "a machine record of a conflict probe: refs, shas and paths, no authored text",
+    "suggestion.expired": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.superseded": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.withdrawn": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.countered": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.rejected": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.applied": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.accepted": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.seen": "a state move carries no text that is compared for duplicates (services.handoff)",
+    "suggestion.proposed": "a patch and its reason are compared by the handoff service, which owns the duplicate rule (services.handoff)",
+    "phase.completed": "records the deliberate retire of a settled phase: no authored text beyond its evidence",
     "lane.released_for_gate": "a machine record of a release: ids and gate names, no authored text",
     "memory.redacted": "a redaction marker names the superseded event id and why; memory_add writes it, not an authored add to duplicate-check",
     **dict.fromkeys(
@@ -81,6 +92,7 @@ EXEMPT: dict[str, str] = {
             "item.unblocked",
             "item.completed",
             "item.reopened",
+            "item.reworked",
             "item.abandoned",
             "item.resolved",
             "phase.removed",
@@ -179,11 +191,11 @@ EXEMPT: dict[str, str] = {
 WRITERS_EXEMPT: dict[str, str] = {
     "api/plan.py:_file": "plan apply files a plan `plan check` already ran the duplicate hunt "
     "over, as PROPOSED tasks the operator confirms",
-    "api/items.py:split": "the parts of an item being split: their text is the parent's, "
+    "api/items/_split.py:split": "the parts of an item being split: their text is the parent's, "
     "which every part would match",
     "api/rename.py:rename": "re-files an existing item under a new id: its text is the "
     "original's, which the duplicate hunt would match against itself",
-    "api/items.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",
+    "api/items/_add.py:_add_ports": "the ports of a fix just checked by task_add: one per release line",
     "api/knowledge/bugs.py:_bugs_parent": "the standing bugs phase of a fix task: made on first use, a follow-up once it is done",
     "api/knowledge/bugs.py:_file_fix_task": "the fix task of a bug that was itself just checked",
     "api/knowledge/pairs.py:link_record": "merges a lesson INTO the one it duplicates: the answer "
@@ -196,14 +208,16 @@ WRITERS_EXEMPT: dict[str, str] = {
     "environment is enforced instead",
     "services/items.py:add_task": "the one task writer: every caller passes the settled check "
     "or the reason there is none, and this scan follows the calls to it",
-    "services/importer.py:_add_imported_tasks": "tasks carry dependencies, so the plan does "
+    "services/importer/_apply.py:_add_imported_tasks": "tasks carry dependencies, so the plan does "
     "not withhold one (`_dedupe_found` checks the knowledge kinds)",
-    "services/importer.py:apply_import": "the plan was de-duplicated against the queue with "
+    "services/importer/_apply.py:apply_import": "the plan was de-duplicated against the queue with "
     "the same engine and [dedupe] thresholds (`_dedupe_found`) before apply",
     "services/importer_harness.py:apply": "each fact is checked with similar.assess / "
     "screen before it is written",
     "api/defs.py:_write_record": "def_record calls it after check_add; def_record_unchecked is "
     "for a writer that ran its own check first (rule add: rules and every other kind)",
+    "services/gates/skip_followup.py:_file": "a generated gate-skip follow-up; its (item, gate) "
+    "is its own dedupe key",
 }
 
 #: CLI verbs (as argv words) that record text: -> "checked" | "own check: ..." | a reason.
@@ -220,11 +234,13 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     "api._dedupe.check_add, through api.rules._cross_kind (D-rule-dedupe-everywhere)",
     ("rule", "edit"): "own check: a new title or content runs api._dedupe.check_add through "
     "api.rules._cross_kind (D-rule-dedupe-everywhere)",
-    ("split",): WRITERS_EXEMPT["api/items.py:split"],
-    ("import",): WRITERS_EXEMPT["services/importer.py:apply_import"],
+    ("split",): WRITERS_EXEMPT["api/items/_split.py:split"],
+    ("import",): WRITERS_EXEMPT["services/importer/_apply.py:apply_import"],
     ("promote", "add"): WRITERS_EXEMPT["services/promotions.py:add"],
     ("grant", "add"): "a person's recorded permission on one item.gate (refused under an agent "
     "identity), not authored prose that could repeat: the same words are a second grant",
+    ("harness", "add"): "own check: a descriptor file on disk, not a log record; refused when "
+    "the file already exists",
     ("job", "add"): "a long-running process an item waits on, not authored text",
     ("session", "prompt"): EXEMPT["session.prompt"],
     ("session", "note"): EXEMPT["session.note"],

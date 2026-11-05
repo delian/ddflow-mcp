@@ -985,6 +985,7 @@
             "lesson": "",
             "severity": "",
             "fix_task": "",
+            "reproduced": "",
             "needs": []
           }
         ],
@@ -1024,6 +1025,7 @@
             "lesson": "",
             "severity": "",
             "fix_task": "",
+            "reproduced": "",
             "needs": []
           }
         ],
@@ -1066,6 +1068,7 @@
             "lesson": "",
             "severity": "",
             "fix_task": "",
+            "reproduced": "",
             "needs": []
           }
         ],
@@ -1958,6 +1961,10 @@
         "upstream_sent_at": "",
         "upstream_digest": "",
         "repro": {},
+        "reproduced": "",
+        "repro_runs": 0,
+        "repro_failures": null,
+        "sightings": 1,
         "reopened_at": "",
         "reopen_reason": "",
         "kind": "bug",
@@ -2020,8 +2027,10 @@
         "branch": "",
         "adopted": false,
         "merged_sha": "",
+        "merged_head": "",
         "changelog": {},
         "base": "",
+        "base_sha": "",
         "pr": null,
         "line": "",
         "port_of": "",
@@ -2095,8 +2104,10 @@
         "branch": "",
         "adopted": false,
         "merged_sha": "",
+        "merged_head": "",
         "changelog": {},
         "base": "",
+        "base_sha": "",
         "pr": null,
         "line": "",
         "port_of": "",

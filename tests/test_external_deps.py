@@ -45,6 +45,7 @@ def _pair(repo: Path) -> Path:
         "GEN.1 fixture",
         "--needs",
         "trainer:132.D",
+        "--allow-unknown-needs",
         "--globs",
         "g.py",
     )
@@ -107,6 +108,7 @@ def test_an_unconfigured_repository_is_a_doctor_PROBLEM_and_a_failed_sync(repo):
         "GEN.1 fixture",
         "--needs",
         "nowhere:1.A",
+        "--allow-unknown-needs",
         "--globs",
         "g.py",
     )
@@ -147,6 +149,7 @@ def test_a_removed_items_external_dependency_is_not_a_doctor_finding(repo):
         "GONE fixture",
         "--needs",
         "nowhere:1.A",
+        "--allow-unknown-needs",
         "--globs",
         "g.py",
     )

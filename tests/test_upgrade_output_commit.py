@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from test_upgrade_apply import go, old  # noqa: F401 -- the old-version project fixture
+from _upgrade_apply_support import go
 
 from ddflow.config import Config
 from ddflow.core.model import fold
@@ -35,7 +35,7 @@ def _verdict(repo: Path):
     return E.check_commit(repo, cfg, agent="upgrader")
 
 
-def test_the_output_of_an_upgrade_commits_without_a_lease(old: Path) -> None:  # noqa: F811
+def test_the_output_of_an_upgrade_commits_without_a_lease(old: Path) -> None:
     out = go(old, "hooks")
     assert out["exit"] == 0 and (old / SETTINGS).exists(), out["text"]
     _git(old, "add", SETTINGS)
@@ -43,7 +43,7 @@ def test_the_output_of_an_upgrade_commits_without_a_lease(old: Path) -> None:  #
     assert verdict.exit == OK, verdict.message
 
 
-def test_a_whole_apply_commits_as_one_without_a_lease(old: Path) -> None:  # noqa: F811
+def test_a_whole_apply_commits_as_one_without_a_lease(old: Path) -> None:
     out = go(old, None, config_changes="agent")
     assert out["applied"] > 1, out["text"]
     _git(old, "add", "-A")
@@ -58,7 +58,7 @@ def test_a_whole_apply_commits_as_one_without_a_lease(old: Path) -> None:  # noq
     assert verdict.exit == OK, verdict.message
 
 
-def test_the_digests_of_a_run_that_settled_nothing_are_kept_too(old: Path) -> None:  # noqa: F811
+def test_the_digests_of_a_run_that_settled_nothing_are_kept_too(old: Path) -> None:
     """A run that wrote files and then settled no item closes with a failure note: the files are
     on disk all the same, and the note must name them."""
     log = EventLog(old, "upgrader")
@@ -66,7 +66,7 @@ def test_the_digests_of_a_run_that_settled_nothing_are_kept_too(old: Path) -> No
     assert fold(log.read_all(), strict=False).upgrade_runs["r1"]["written"] == {SETTINGS: "abc"}
 
 
-def test_the_output_of_an_interrupted_upgrade_commits_too(old: Path) -> None:  # noqa: F811
+def test_the_output_of_an_interrupted_upgrade_commits_too(old: Path) -> None:
     """A run killed after its first step never reaches the closing event: each step carries the
     digests of what was written so far."""
 
@@ -81,7 +81,7 @@ def test_the_output_of_an_interrupted_upgrade_commits_too(old: Path) -> None:  #
     assert verdict.exit == OK, verdict.message
 
 
-def test_a_later_edit_of_that_output_still_needs_a_lease(old: Path) -> None:  # noqa: F811
+def test_a_later_edit_of_that_output_still_needs_a_lease(old: Path) -> None:
     go(old, "hooks")
     with (old / SETTINGS).open("a") as f:
         f.write("\n")
@@ -90,7 +90,7 @@ def test_a_later_edit_of_that_output_still_needs_a_lease(old: Path) -> None:  # 
     assert verdict.exit == FAIL and SETTINGS in verdict.message
 
 
-def test_a_clean_filter_does_not_make_the_output_look_edited(old: Path) -> None:  # noqa: F811
+def test_a_clean_filter_does_not_make_the_output_look_edited(old: Path) -> None:
     """The record digests what git would store, so a clean filter (or autocrlf) that rewrites
     the bytes on `git add` does not turn the upgrade's own output into an uncovered edit."""
     (old / ".gitattributes").write_text(f"{SETTINGS} filter=shout\n")

@@ -9,7 +9,7 @@ from ...api import operations as A
 from ...api import pin_files as PF
 from ...api import surf_setup as SS
 from ...core import provenance as PV
-from ..context import FAIL, NOTHING, OK, Ctx
+from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 from ..render import emit_json
 
 
@@ -268,6 +268,9 @@ def _pins_regenerate(a, c: Ctx) -> int:
     if out.exit == NOTHING:
         print(out.reason)
         return NOTHING
+    if out.exit == REFUSED:
+        print(out.reason, file=sys.stderr)
+        return REFUSED
     for line in out.data.get("installed", []):
         print(line)
     if out.data.get("note"):
@@ -282,7 +285,7 @@ def _pins_regenerate(a, c: Ctx) -> int:
 
 def cmd_pins(a, c: Ctx) -> int:
     """Which text of an instruction file is pinned by a test, and which is free."""
-    if a.document in ("regenerate", "merge-driver"):
+    if a.document in ("regenerate", "merge-driver", "drivers"):
         return _pins_regenerate(a, c)
     tests = tuple(t.strip() for t in (a.tests or "").split(",") if t.strip())
     out = A.pins(c.repo, a.document, tests=tests, min_chars=a.min_needle, top=a.top)

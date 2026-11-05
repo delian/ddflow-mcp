@@ -260,10 +260,10 @@ def _regression(
     return Claim("regression", OK, f"{len(bugs)} bug(s) closed with a regression test that exists")
 
 
-def _accepted(st: State, item_id: str, pipeline: Sequence[str]) -> list[str]:
+def _accepted(st: State, item_id: str, pipeline: Sequence[str], cfg=None) -> list[str]:
     """The pipeline gates whose recorded partial outcome a person accepted (Bb999d5e20f)."""
     it = st.items.get(item_id)
-    return [g for g in pipeline if it is not None and GA.accepted(st, it, g).ok]
+    return [g for g in pipeline if it is not None and GA.accepted(st, it, g, cfg).ok]
 
 
 def _gates(
@@ -392,7 +392,7 @@ def check(
         _landed(repo, cfg, led),
         _declared(repo, led, tracked),
         _tests(led, tracked),
-        _gates(cfg, led, pipeline, _accepted(st, item_id, pipeline)),
+        _gates(cfg, led, pipeline, _accepted(st, item_id, pipeline, cfg)),
         _survives(led, tracked),
     ]
     if reg := _regression(st, item_id, tracked, cfg):

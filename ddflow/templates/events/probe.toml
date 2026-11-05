@@ -1,0 +1,5 @@
+# Event kinds owned by the conflict probe. One [[kind]] per kind.
+
+[[kind]]
+name = "probe.recorded"
+doc = "A conflict probe ran: an item's branch against main or a peer, clean, conflicting or unavailable, with both tip shas."

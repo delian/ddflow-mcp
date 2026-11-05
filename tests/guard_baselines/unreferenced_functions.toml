@@ -12,13 +12,15 @@ baseline = 0
 # `option_string`, which vulture reports at cli.py and is the protocol's signature,
 # not dead code.)
 [kept]
+# The production wiring of the ExternalTool port (ADP-tools): `ddflow.services.toolrun`; SEC-scanners
+# is its first caller.
+"ddflow/services/toolrun.py:external_tool" = "SEC-scanners"
 # Per-role schema cost of a lean agent definition (LS-agents); the LS-e2e probe matrix reports it.
 "ddflow/surfaces/startcost_texts.py:role_tokens" = "LS-e2e"
 # Renders a document type from its sources (B-dt-sources); B-dt-ownership's render.py calls it.
 "ddflow/services/doctypes/sources.py:render_type" = "B-dt-ownership"
 # The pre-push tripwire hook ids (frozen-workflow-files); the ci run names the hooks that fire
 # over a changed range (api/ci.py check_after_merge). tests/test_ci_tripwire_hooks.py pins it.
-"ddflow/services/ci.py:tripwire_ids" = "B-ci-tripwire"
 # Adaptive flow (D-adaptive-flow): the admission target; the quota signal is the
 # remaining wiring. (The doctor's too-little-history notes are wired: Bc6784dab3c.)
 "ddflow/core/flowcontrol.py:decide_admission" = "B-af-quota-signal"
@@ -50,3 +52,5 @@ baseline = 0
 "ddflow/services/drift.py:set_last_seen" = "DX-drift-notice"
 # The no-key hint for a reviewer listing; DX-reviewers-list-key-hint wires it into api/review.py.
 "ddflow/services/review_keys.py:key_hints" = "DX-reviewers-list-key-hint"
+# The `pins drivers --check` mergiraf keep/drop evaluation (tests/test_merge_drivers.py pins it).
+"ddflow/services/mergedrivers.py:keep_mergiraf" = "B-mergiraf-eval"

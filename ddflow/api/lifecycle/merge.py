@@ -42,6 +42,14 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
         say(line)
 
 
+def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
+    """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
+    are free for a waiter, whose `wait` reads the release as ready, and `complete` needs no
+    lease. Kept when `[lease].release_at_merge` is off or a hotfix back-merge failed (it needs
+    its files to retry). Only reached after a landing, so a failed merge keeps the lease."""
+    return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
+
+
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
     """The first failed-gate blocker that stops ``item`` landing, or ""."""
     found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
@@ -171,6 +179,22 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
+    # The primary keeps its event shards uncommitted between doors; a branch that also
+    # changes a shard (an older/newer copy of an agent's log) then makes git refuse the
+    # merge with 'local changes would be overwritten', leaving the operator to hand-commit
+    # a shard first (B6b7e47955e). Commit the shards HERE, before git merges, so they are
+    # not the uncommitted work git refuses to overwrite.
+    #
+    # ``check_after_merge``'s ``since`` is "the base the merge started from" (ddflow/api/ci.py):
+    # the target's HEAD before the landing's own shard commit, so the tripwire range is the
+    # merge the caller asked for and not every file. Read it BEFORE EC.commit_at below, which
+    # also moves the base by landing the event shards (B6b7e47955e); the range a caller saw
+    # must not skip that commit and start from a base the caller never held (Be40e9c84d5).
+    merge_since = W.rev(repo, wt.base)
+    EC.commit_at(log, cfg, "merge", f"merge {item}")
+    # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
+    # (it lands the event shards on the primary), so a landing check against a rev read
+    # before it would misread a refused git merge the shard commit caused as "landed anyway".
     landed_before = W.rev(repo, wt.base)
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
@@ -223,6 +247,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         (back_merged if br.ok else back_failed).append(
             extra if br.ok else f"{extra}: {br.err or br.out}"
         )
+    # After the back-merges: a hotfix whose back-merge failed still needs its files to retry.
+    freed = _release_at_merge(log, cfg, item, back_failed)
     human_gate = GM.record_merge(
         log,
         cfg,
@@ -251,7 +277,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     say = on_progress or (lambda _line: None)
     say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
     say(_ci_notice(repo, cfg))
-    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=landed_before)
+    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=merge_since)
     say(
         f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
     )
@@ -275,6 +301,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         **_scope_fields(outside, listed=borrowed),
         # The merge gate is a person's to clear here; nothing was recorded for it.
         merge_gate_human=human_gate,
+        lease_released=freed,
         **({"export_refresh": refreshed} if refreshed else {}),
         **committed,
     )

@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/waits.py:POLL_S" = 'waits.poll_s'
+"ddflow/services/waits.py:RECHECK_S" = 'waits.recheck_s'

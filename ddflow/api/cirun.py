@@ -13,6 +13,9 @@ from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
 from ..services import ci_marker as CM
+from ..services.ci import admission as AD
+from ..services.flakes import failed_tests
+from ..services.gates import baseline as BL
 from ..services.gates.handrecord import CI_RUN
 from ._base import _load
 from .ci import lease_tick, status
@@ -97,6 +100,25 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
     return "" if out.ok else out.reason
 
 
+def _keep_failing_ids(repo: Path, res) -> dict:
+    """The evidence caps the list of failing tests; the whole one is kept aside (read by
+    `gate_baseline` to measure a red ci against the base), with a note when it cannot be."""
+    if res.ok or not res.failures:
+        return {}
+    everyone = [f["id"] for f in failed_tests(res.output)]
+    out: dict = {}
+    if len(everyone) > len(res.failures.get("failed_tests") or ()):
+        out["failed_tests_total"] = len(everyone)
+    if not BL.only_tests_failed(res.checks):
+        names = ", ".join(c.id for c in res.checks if not c.ok)
+        out["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
+    elif kept := BL.write_full(repo, res.sha, everyone):
+        out["failing_ids_file"] = kept
+    else:
+        out["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
+    return out
+
+
 def _item_ref(repo: Path, it) -> tuple[str, str]:
     """``(ref, why)``: what ``ddflow ci run <item id>`` checks. The item's branch while it
     exists; once the merge deleted it, the commit the item landed as; else why there is none."""
@@ -108,6 +130,12 @@ def _item_ref(repo: Path, it) -> tuple[str, str]:
         return "", f"{it.id} merged as {it.merged_sha[:12]}, which this clone does not have"
     gone = f"its branch {it.branch!r} is gone" if it.branch else "it has no branch"
     return "", f"{it.id} is not merged and {gone}: name a commit with --ref"
+
+
+def _measured(log, cfg, full: bool, command: str) -> list[float]:
+    """What past runs measured, for a run that may be selected; the whole suite and a command
+    named here take no part in the suite-slot decision (`ci.admission`)."""
+    return [] if full or command else AD.measured_rates(log.read_all(), cfg)
 
 
 def run(
@@ -150,8 +178,10 @@ def run(
     res = CI.run(
         repo, cfg, ref=ref, base=base, command=command, timeout_s=timeout_s or 0,
         for_item=True, full=full, tick=lease_tick(log, cfg, st, item),
+        rates=_measured(log, cfg, full, command),
     )  # fmt: skip
     data = res.as_data()
+    data.update(_keep_failing_ids(repo, res))
     if res.scope:
         data["scope_line"] = CM.marker_line(res.scope)
     if log_to is not None and not res.ok:  # a pass keeps no log

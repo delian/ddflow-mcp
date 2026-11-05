@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/engines/probe.py:TICK_S" = 'internal timing of a poll loop (how often the probe wait wakes in select() to check its deadline), not a workload setting'

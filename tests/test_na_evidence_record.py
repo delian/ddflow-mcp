@@ -33,7 +33,8 @@ def _completed(repo):
 
 def test_a_diff_excused_required_gate_is_recorded_on_the_completion(repo):
     _setup(repo, "lib/x.py")
-    pass_pipeline(repo, "T1", omit=("unit_tests",))
+    pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
+    assert run_cli(repo, "merge", "T1", agent="a1")[0] == 0
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", agent="a1")
     assert code == 0, out + err
     na = _completed(repo).data.get("not_applicable")
@@ -47,7 +48,8 @@ def test_a_diff_excused_required_gate_is_recorded_on_the_completion(repo):
 
 def test_a_completion_with_nothing_excused_has_no_key(repo):
     _setup(repo, "src/a.py")
-    pass_pipeline(repo, "T1")
+    pass_pipeline(repo, "T1", omit=("merge",))
+    assert run_cli(repo, "merge", "T1", agent="a1")[0] == 0
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", agent="a1")
     assert code == 0, out + err
     assert "not_applicable" not in _completed(repo).data

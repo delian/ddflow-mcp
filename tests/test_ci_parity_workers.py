@@ -13,6 +13,7 @@ from ddflow.infra.signals import FakeSource
 from ddflow.services import ci as CI
 from ddflow.services import suitelock as SL
 from ddflow.services import workers as WK
+from ddflow.services.ci import runner
 
 HOOK = """repos:
   - repo: local
@@ -119,8 +120,8 @@ def test_execute_runs_the_localized_config_and_logs_it(tmp_path: Path, monkeypat
             seen.append(Path(conf).read_text())
             return NS(ran=True, code=0, output="", elapsed_s=0, kind="", reason="")
 
-    monkeypatch.setattr(CI, "CommandRunner", Fake)
-    monkeypatch.setattr(CI, "child_env", lambda *a, **k: {})
+    monkeypatch.setattr(runner, "CommandRunner", Fake)
+    monkeypatch.setattr(runner, "child_env", lambda *a, **k: {})
     monkeypatch.setattr(WK, "compute", lambda c, f=None, **k: WK.Workers(7, {"loadavg": 1.0}))
     used: dict = {}
     CI._execute(cfg(), tmp_path, CI.DEFAULT_COMMAND, None, 60, holding_suite=True, used=used)
@@ -152,8 +153,8 @@ def test_execute_gives_only_the_lock_holder_the_worker_floor(tmp_path: Path, mon
         flags.append(k.get("holding_suite", False))
         return WK.Workers(2, {})
 
-    monkeypatch.setattr(CI, "CommandRunner", Fake)
-    monkeypatch.setattr(CI, "child_env", lambda *a, **k: {})
+    monkeypatch.setattr(runner, "CommandRunner", Fake)
+    monkeypatch.setattr(runner, "child_env", lambda *a, **k: {})
     monkeypatch.setattr(WK, "compute", compute)
     for cmd in (CI.DEFAULT_COMMAND, "pytest -n {workers} tests/test_a.py"):
         flags.clear()
@@ -173,7 +174,7 @@ def test_run_locked_passes_the_lock_to_execute_as_holding_suite(tmp_path: Path, 
         seen.append(kw)
         return NS(ran=True), ""
 
-    monkeypatch.setattr(CI, "_execute", execute)
+    monkeypatch.setattr(runner, "_execute", execute)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))  # never the host-wide lock
     for full, cmd in ((False, "cmd"), (True, CI.DEFAULT_COMMAND)):  # its verdict travels intact
         CI._run_locked(cfg(), CI._holder(tmp_path, "ref"), tmp_path, cmd, None, 60, None, {}, full)

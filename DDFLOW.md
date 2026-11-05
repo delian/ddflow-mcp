@@ -4,6 +4,12 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
 
 ## Project Scope
 
+### Architecture
+
+- **r-adapters**: Every external dependency goes through a port in ddflow/adapters: one implementation per function, a new port touches only its own files
+  - Globs: ddflow/**
+  - Priority: 100
+
 ### Config
 
 - **r-company-workflows**: Users and companies can change anything: config, CLI, MCP command or prompt, per company and per project
@@ -24,7 +30,13 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
 - **r-everything-managed**: Every definition is a managed record: edit, delete, review, search, RAG, logged, restorable
   - Globs: ddflow/**, integrations/**
   - Priority: 90
+- **r-no-shell**: No shell needed: every command and acceptance works over MCP and chat; a shell-less server instructs the agent what to run
+  - Globs: ddflow/**, integrations/**
+  - Priority: 90
 - **r-reuse-core**: Reuse the shared core: search before writing, never implement the same behaviour twice
+  - Globs: ddflow/**, integrations/**
+  - Priority: 90
+- **r-tell-dont-discover**: Tell the agent what to run: every result, refusal and error names the exact next call (MCP and CLI form); help is generated, not typed
   - Globs: ddflow/**, integrations/**
   - Priority: 90
 
@@ -36,6 +48,6 @@ This file is auto-generated from `.ddflow/rules/` — do not hand-edit it.
 
 ### Size
 
-- **r-small-files**: Keep every file under 20 KB: split into a package of smaller modules
+- **r-small-files**: Split any Python file over 30 KB into a module or package: small files lock fewer parallel agents and fit small context windows
   - Globs: ddflow/**, tests/**
   - Priority: 90

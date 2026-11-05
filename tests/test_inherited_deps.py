@@ -543,10 +543,14 @@ def test_breaking_the_rule_makes_the_MCP_SURFACE_hand_out_blocked_work(repo, mon
     this file's own docstring warns about.
     """
     _queue_with_an_inherited_dep(repo)
-    from ddflow.core import schedule
+    # `plan_blocker` lives in the `_readiness` submodule now (the `schedule.py` ->
+    # package split), so it reads `inherited_deps` from THAT module's namespace; the
+    # package-level re-export `schedule.inherited_deps` is a different name slot and
+    # patching it would no longer reach the code under test.
+    from ddflow.core.schedule import _readiness
 
     monkeypatch.setattr(
-        schedule, "inherited_deps", lambda _state, it, _cfg=None: [(it.id, d) for d in it.needs]
+        _readiness, "inherited_deps", lambda _state, it, _cfg=None: [(it.id, d) for d in it.needs]
     )
     offered = _ready_over_mcp(repo)
     assert "P2.T1" in offered, (

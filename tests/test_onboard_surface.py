@@ -1,7 +1,7 @@
 """The onboard surfaces: one dispatcher behind CLI and MCP, every stage reachable.
 
 The CLI-verb/MCP-name parity, the tier placement and the wire shape are ratcheted by
-tests/test_mcp_parity.py, test_mcp_tool_tiers.py, test_api_layer.py and test_help.py;
+tests/test_mcp_parity.py, test_mcp_tool_tiers.py, test_api_layer_*.py and test_help.py;
 this module pins the dispatcher's own contract -- one stage list, no guessing, and the
 report (not a write) as the default answer.
 """

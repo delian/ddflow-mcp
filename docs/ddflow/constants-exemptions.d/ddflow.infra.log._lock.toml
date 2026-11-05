@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/infra/log/_lock.py:_HOLDER_SCANS_MAX" = 'a bound on a diagnostic-only rescan of /proc/locks while a lock-timeout message is built; it shapes an error note, never behaviour, so no operator needs the knob'
+"ddflow/infra/log/_lock.py:_HOLDER_SCAN_S" = 'the time cap of the same diagnostic rescan (companion of _HOLDER_SCANS_MAX)'

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/config_sections/bugs.py:_MIN_BUNDLE" = "the floor [bugs] repro_max_bytes accepts: below it not even the bundle's skeleton fits"

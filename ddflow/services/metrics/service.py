@@ -14,6 +14,10 @@ from .facts import collect
 from .forecast import forecast as forecast_view
 from .grid import sample as grid_sample
 from .grid import utilisation
+from .lockgit import Probes
+from .locks import build as locks_build
+from .locks import has_figures as locks_ok
+from .locks import text as locks_text
 from .providers import Context
 from .render import forecast as text_forecast
 from .render import lanes as text_lanes
@@ -22,9 +26,12 @@ from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
 from .skips import audit
+from .stages import build as stages_build
+from .stages import has_figures as stages_ok
+from .stages import text as stages_text
 from .summary import build, has_figures
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes")
+VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks")
 
 
 @dataclass
@@ -54,6 +61,25 @@ def parse_since(text: str, now: float) -> float | None:
     return clock.epoch(f"{day.isoformat()}T00:00:00Z") if isinstance(day, date) else None
 
 
+def _stages(ctx: Context, group_by: str) -> Answer:
+    try:
+        data = stages_build(ctx, group_by)
+    except ValueError as exc:
+        return Answer(False, str(exc), failed=True)
+    ok = stages_ok(data)
+    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any stage"
+    return Answer(ok, "" if ok else why, metrics=data, text=stages_text(data))
+
+
+def _locks(ctx: Context, probes: Probes | None) -> Answer:
+    data = locks_build(ctx, probes)
+    ok = locks_ok(data)
+    why = (
+        f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any lock figure"
+    )
+    return Answer(ok, "" if ok else why, metrics=data, text=locks_text(data))
+
+
 def run(
     events: Sequence[Event],
     state: State,
@@ -65,6 +91,7 @@ def run(
     phase: str = "",
     since: str = "",
     group_by: str = "",
+    probes: Probes | None = None,
 ) -> Answer:
     """``now`` is an argument, not a read of the clock: a test freezes it."""
     if view not in VIEWS:
@@ -88,6 +115,10 @@ def run(
         t = timeline(events, facts, item)
         reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
         return Answer(not reason, reason, metrics=t, text=text_retro(t))
+    if view == "stages":
+        return _stages(ctx, group_by)
+    if view == "locks":
+        return _locks(ctx, probes)
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))

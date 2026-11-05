@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/lanes/capacity.py:_STEM_MAX" = 'longest route-stem a lock-file name keeps before it is cut to a head plus digest: a file-name format fact, not a preference'

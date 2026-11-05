@@ -1,5 +1,5 @@
 # Architecture contracts for import-linter (`lint-imports`), run by
-# tests/test_architecture_guards.py and so by the unit suite, CI and the pre-push hook.
+# tests/test_architecture_import_contracts.py and so by the unit suite, CI and the pre-push hook.
 #
 # These are RATCHETS (D-unify 4, strangler with ratchets). Each contract states the rule
 # the code is moving towards; its `ignore_imports` lists the imports that break the rule
@@ -26,12 +26,14 @@ root_package = ddflow
 include_external_packages = True
 unmatched_ignore_imports_alerting = error
 
-# surfaces > api > views > services > infra > config > core. A layer may import any layer
-# below it. `config` sits above `core` because `core` is pure: it should be handed its
-# knobs, not read them. `views` sits above `services`: a renderer reads service results,
+# surfaces > api > views > services > infra > config > core > adapters. A layer may import
+# any layer below it. `adapters` (ports, default adapters, fakes, the one Registry) is the
+# bottom: every layer may import it, it imports no other (D-adapters-answers).
+# `config` sits above `core` because `core` is pure: it should be handed its knobs, not
+# read them. `views` sits above `services`: a renderer reads service results,
 # a service returns an Outcome and does not render.
 [importlinter:contract:layers]
-name = Layers: surfaces > api > views > services > infra > config > core
+name = Layers: surfaces > api > views > services > infra > config > core > adapters
 type = layers
 layers =
     ddflow.surfaces
@@ -41,6 +43,7 @@ layers =
     ddflow.infra
     ddflow.config : ddflow.config_sections
     ddflow.core
+    ddflow.adapters
 
 # A surface (argparse, JSON-RPC) reaches the domain through ddflow.api only.
 [importlinter:contract:surfaces-through-api]
@@ -82,6 +85,22 @@ source_modules =
     ddflow
 forbidden_modules =
     hashlib
+allow_indirect_imports = True
+
+# HTTP belongs in ddflow.adapters.http (the `HttpClient` port's one default adapter).
+# `forbidden_modules` are import ROOTS (an external package is squashed to its root), so
+# `urllib.parse` and `http.HTTPStatus` users are listed in the baseline too: they are
+# string and constant helpers, not network use, and leave the list when a pure home for
+# them exists.
+[importlinter:contract:http-home]
+name = urllib, http and socket are imported only by ddflow.adapters.http
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    urllib
+    http
+    socket
 allow_indirect_imports = True
 
 # Optional extras (D-unify 2): each is imported by exactly ONE adapter module, which owns

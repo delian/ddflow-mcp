@@ -93,6 +93,8 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
     it.priority = int(d.get("priority", it.priority))
     it.source = d.get("source", it.source)
     it.fixes = list(d.get("fixes", it.fixes))
+    it.followup_of = d.get("followup_of", it.followup_of)
+    it.followup_gate = d.get("followup_gate", it.followup_gate)
     for f in ("line", "port_of", "port_from", "port_strategy", "promote_from", "promote_to"):
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
@@ -179,6 +181,21 @@ def _h_reopened(st: State, ev: Event) -> None:
             "forced": bool(ev.data.get("forced")),
         }
     )
+
+
+def _h_item_reworked(st: State, ev: Event) -> None:
+    """A re-claim of an item that had already merged reopens that stale merge: the landing
+    is no longer `merged_sha`, so it clears, and the item's gates clear with it -- a rework
+    re-gates the new work in the normal order, exactly like `item.reopened`
+    (B-rework-of-merged-item-keeps-stale-merge)."""
+    it = st.items.get(ev.subject)
+    if it is None:
+        return
+    it.merged_sha = ""
+    it.merged_head = ""
+    it.landed_before = ""
+    it.landed_after = ""
+    it.gates = {}
 
 
 def _h_unblocked(st: State, ev: Event) -> None:

@@ -89,7 +89,7 @@ def test_a_round_on_a_clean_commit_is_compared_by_that_commits_tree(repo, tmp_pa
     ).stdout.strip()
     rec = NS(evidence={"tree_sha": f"{head[:12]}+clean"})
     st = NS(items={"T1": NS(gates={"critic": rec})})
-    monkeypatch.setattr(RV, "item_tree", lambda *_a, **_k: (repo, ""))
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (repo, ""))
     assert RV.reviewed_other_tree(repo, None, st, "T1", "critic") == ""
     (repo / "a.py").write_text("x = 2\n")  # the tree moves on from that commit
     assert "holds other content" in RV.reviewed_other_tree(repo, None, st, "T1", "critic")
@@ -106,3 +106,188 @@ def test_a_spent_budget_on_a_stale_round_says_so_once_and_points_at_the_operator
     text = last.data["text"]
     assert _state(repo).gates["critic"].outcome == "failed"
     assert text.count("stays failed") == 1 and "--force --reason" in text, text
+
+
+def _merged_scenario(repo, tmp_path, monkeypatch):
+    """A merged item (worktree gone; `item_tree` answers None) whose `--commit` re-review
+    recorded only the commit it covered (`reviewed_head`) and no `tree_sha`."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "work"], check=True, capture_output=True
+    )
+    rev = ["git", "-C", str(repo), "rev-parse", "HEAD"]
+    first = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+    (repo / "a.py").write_text("x = 2  # one more\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "more"], check=True, capture_output=True
+    )
+    head = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+
+    def make(reviewed_head, merged):
+        rec = NS(evidence={"reviewed_head": reviewed_head, "review_kind": "full"})
+        it = NS(
+            id="T1",
+            kind="task",
+            worktree="",
+            merged_sha=merged,
+            landed_after="",
+            landed_before="",
+            branch="",
+            pr=None,
+            gates={"critic": rec},
+        )
+        return NS(items={"T1": it})
+
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (None, ""))
+    return first, head, make
+
+
+def test_a_commit_review_after_merge_names_the_commit_it_reviewed(repo, tmp_path, monkeypatch):
+    """Bug B-critic-refutation-pass-needs-tree-after-merge: the round has no worktree to
+    name (`tree_sha`), but its `reviewed_head` is the merged commit the reviewer saw."""
+    from ddflow.api import review as RV
+
+    _first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    assert RV.reviewed_other_tree(repo, None, make(head, head), "T1", "critic") == ""
+
+
+def test_a_commit_review_of_an_older_commit_after_merge_is_still_stale(repo, tmp_path, monkeypatch):
+    from ddflow.api import review as RV
+
+    first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    text = RV.reviewed_other_tree(repo, None, make(first, head), "T1", "critic")
+    assert "holds other content" in text, text
+
+
+def test_a_merged_round_that_named_a_dirty_tree_is_not_read_as_the_commits_clean_tree(
+    repo, tmp_path, monkeypatch
+):
+    """`reviewed_head` stand in only when the round named NO tree; a dirty `tree_sha`
+    (opaque fingerprint) whose gone worktree cannot vouch for it stays unresolved."""
+    from ddflow.api import review as RV
+
+    _first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    st = make(head, head)
+    st.items["T1"].gates["critic"].evidence["tree_sha"] = f"{head[:12]}+0123456789abcdef"
+    text = RV.reviewed_other_tree(repo, None, st, "T1", "critic")
+    assert "names no tree" in text, text
+
+
+def test_a_clean_tree_sha_round_after_merge_resolves_against_the_merged_content(
+    repo, tmp_path, monkeypatch
+):
+    """The first fallback (`<head>+clean` read from the repo when no worktree stands) is
+    exercised directly, not only the `reviewed_head` fallback."""
+    from ddflow.api import review as RV
+
+    _first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    st = make(head, head)
+    ev = st.items["T1"].gates["critic"].evidence
+    ev["tree_sha"] = f"{head[:12]}+clean"
+    ev.pop("reviewed_head", None)
+    assert RV.reviewed_other_tree(repo, None, st, "T1", "critic") == ""
+    stale = make(_first, head)
+    stale.items["T1"].gates["critic"].evidence["tree_sha"] = f"{_first[:12]}+clean"
+    stale.items["T1"].gates["critic"].evidence.pop("reviewed_head", None)
+    assert "holds other content" in RV.reviewed_other_tree(repo, None, stale, "T1", "critic")
+
+
+def test_a_merge_commit_after_merge_resolves_to_the_branch_head_content(
+    repo, tmp_path, monkeypatch
+):
+    """The `worktree.merged` event carries `landed_after` (a merge commit), whose `now` is
+    its SECOND parent -- the branch head the round reviewed."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "base"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "checkout", "-q", "-b", "feature"], check=True, capture_output=True
+    )
+    (repo / "a.py").write_text("x = 2\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "work"], check=True, capture_output=True
+    )
+    branch_head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "-C", str(repo), "checkout", "-q", "main"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "merge", "-q", "--no-ff", "-m", "merge work", "feature"],
+        check=True,
+        capture_output=True,
+    )
+    merge_commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    rec = NS(evidence={"reviewed_head": branch_head, "review_kind": "full"})
+    it = NS(
+        id="T1",
+        kind="task",
+        worktree="",
+        merged_sha=merge_commit,
+        landed_after=merge_commit,
+        landed_before=f"{merge_commit}^1",
+        branch="",
+        pr=None,
+        gates={"critic": rec},
+    )
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (None, ""))
+    assert RV.reviewed_other_tree(repo, None, NS(items={"T1": it}), "T1", "critic") == ""
+
+
+def test_different_commits_with_the_same_content_compare_equal(repo, tmp_path, monkeypatch):
+    """Content is compared, not commit ids: two commits that differ only in ddflow's own
+    bookkeeping (`.ddflow/`, excluded from `source_tree`) are one tree to a review."""
+    import subprocess
+    from types import SimpleNamespace as NS
+
+    from ddflow.api import review as RV
+
+    _setup(repo, tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "content"], check=True, capture_output=True
+    )
+    rev = ["git", "-C", str(repo), "rev-parse", "HEAD"]
+    first = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + "\n# bookkeeping-only change\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "bookkeeping"], check=True, capture_output=True
+    )
+    head = subprocess.run(rev, check=True, capture_output=True, text=True).stdout.strip()
+    assert head != first
+
+    rec = NS(evidence={"reviewed_head": first, "review_kind": "full"})
+    it = NS(
+        id="T1",
+        kind="task",
+        worktree="",
+        merged_sha=head,
+        landed_after="",
+        landed_before="",
+        branch="",
+        pr=None,
+        gates={"critic": rec},
+    )
+    monkeypatch.setattr(RV.triaging, "item_tree", lambda *_a, **_k: (None, ""))
+    assert RV.reviewed_other_tree(repo, None, NS(items={"T1": it}), "T1", "critic") == ""
