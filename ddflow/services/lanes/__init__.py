@@ -12,18 +12,26 @@ from __future__ import annotations
 
 from .advise import Move, advise
 from .brief import lane_brief
-from .ledger import Lane, build, find
+from .ledger import Lane, build, find, remedy_for
+from .recover_auto import AUTO_RESUME, EXPIRE, STAY, RecoverAuto
+from .recover_auto import decide as recover_auto_decide
 from .redraw import watch
 from .render import render_advice, render_ledger
 from .safe import safe
 
 __all__ = [
+    "AUTO_RESUME",
+    "EXPIRE",
+    "STAY",
     "Lane",
     "Move",
+    "RecoverAuto",
     "advise",
     "build",
     "find",
     "lane_brief",
+    "recover_auto_decide",
+    "remedy_for",
     "render_advice",
     "render_ledger",
     "safe",

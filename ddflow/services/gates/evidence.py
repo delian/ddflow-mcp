@@ -210,11 +210,10 @@ def tree_fingerprint(cwd: Path) -> str:
     with the fingerprint unmoved. `git hash-object` without `-w` computes the ids and
     writes nothing, so the observer still does not change what it observes.
 
-    **Known limit, stated rather than papered over:** `git diff` renders a TRACKED
-    binary file as "Binary files ... differ" with no content, so a re-edit of an
-    already-modified tracked binary is invisible. Untracked binaries are covered (they
-    are hashed bytewise). The fix for the remaining case -- `--binary`, base85-encoding
-    whole blobs into the digest -- costs far more than it buys here. Filed as B95.
+    A TRACKED binary is covered too, though `git diff` renders it as "Binary files ...
+    differ": the `index <old>..<new>` header above that line names the working copy's
+    blob, abbreviated, so a re-edit moves the digest without `--binary` (B95 said it did
+    not; R-B95-binary-reedit refuted it). Untracked binaries are hashed bytewise.
 
     **This is no longer what a gate records** (B-uni-tree-identity): `tree_identity` is,
     and it names the tree by its content manifest (every path's mode and blob id), not by

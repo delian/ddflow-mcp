@@ -1,4 +1,4 @@
-"""The `metrics` command, declared once: summary, forecast, retro, skips, lanes and stages views.
+"""The `metrics` command, declared once: the summary, forecast, retro, skips, lanes, stages, locks and swarm views.
 
 `surfaces/parsers/metrics.py` registers the command-line half and `surfaces/tools/__init__.py`
 takes the MCP entry (D-unify 4). Read-only: it appends no event and starts no process.
@@ -35,6 +35,8 @@ COMMANDS: tuple[Command, ...] = (
             "review to release, after merge; claim waits and false serialization; declared versus "
             "written files; merge-tree conflict and red-main rates) and whether the recorded "
             "falsifiers tripped, with the call that switches back to strict locking. "
+            "view=swarm: the baseline a lane fleet must beat: merged items per hour, rework rate, "
+            "agent-hours per item, critical-path slack. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(
@@ -51,11 +53,20 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes, stages or locks.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages or locks",
+                help="summary (default), forecast, retro, skips, lanes, stages, locks or swarm.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks or swarm",
                 positional=True,
                 nargs="?",
-                choices=("summary", "forecast", "retro", "skips", "lanes", "stages", "locks"),
+                choices=(
+                    "summary",
+                    "forecast",
+                    "retro",
+                    "skips",
+                    "lanes",
+                    "stages",
+                    "locks",
+                    "swarm",
+                ),
                 default=None,
             ),
             Param(

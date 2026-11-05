@@ -20,9 +20,16 @@ def _words(signal: str) -> str:
 
 def _cap_words(cfg: Config, parallel: FC.Decision | None, limit: int) -> str:
     """What the parallelism cap is, for `cap_note` and "cap reached". Without a Decision,
-    or in fixed mode, exactly the words it always had (`_blocking_leases` keys on "cap
-    reached"); in auto, the adaptive limit and what limits it."""
-    if parallel is None or parallel.mode == "fixed":
+    exactly the words it always had (`_blocking_leases` keys on "cap reached"); in auto,
+    the adaptive limit and what limits it; in fixed, the fixed knob when it holds, or the
+    lowered limit and the signal that lowered it."""
+    if parallel is None:
+        return f"schedule.max_parallel_tasks={cfg.schedule.max_parallel_tasks}"
+    if parallel.mode == "fixed":
+        if parallel.admit_paused:
+            return f"fixed: admission paused -- {parallel.reason}"
+        if limit < cfg.schedule.max_parallel_tasks:
+            return f"fixed: limit {limit}, limited by {_words(parallel.limited_by)}"
         return f"schedule.max_parallel_tasks={cfg.schedule.max_parallel_tasks}"
     if parallel.admit_paused:
         return f"auto: admission paused -- {parallel.reason}"
@@ -37,11 +44,21 @@ def parallel_line(
     offered: int,
     capped: list[str],
 ) -> str:
-    """The one line `status` and `brief` print: "parallel: 4 (fixed)", or "parallel: 6
-    (auto: ceiling 8; limited by <what>)". When nothing is held by the cap -- the offer
-    already holds every ready item that can run beside what is in flight -- what limits
-    the work is the work itself: "limited by independent work"."""
+    """The one line `status` and `brief` print: "parallel: 4 (fixed)", "parallel: 6
+    (auto: ceiling 8; limited by <what>)", or, in fixed mode with the limit lowered
+    under load, "parallel: 3 (fixed: ceiling 4; limited by load per core)". When nothing
+    is held by the cap -- the offer already holds every ready item that can run beside
+    what is in flight -- what limits the work is the work itself: "limited by independent
+    work"."""
     if parallel.mode == "fixed":
+        if parallel.admit_paused:
+            return f"parallel: {limit} (fixed: admission paused -- {parallel.reason})"
+        if limit < cfg.schedule.max_parallel_tasks:
+            by = _words(parallel.limited_by)
+            return (
+                f"parallel: {limit} (fixed: ceiling "
+                f"{cfg.schedule.max_parallel_tasks}; limited by {by})"
+            )
         return f"parallel: {limit} (fixed)"
     if parallel.limited_by == LIMIT_UNAVAILABLE:
         return (

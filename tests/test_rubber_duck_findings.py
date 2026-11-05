@@ -688,6 +688,7 @@ def test_a_dependency_can_be_CLEARED_over_mcp(repo):
             "PX",
             "--needs",
             needs,
+            "--allow-unknown-needs",
             "--globs",
             f"x/{tid}",
         )

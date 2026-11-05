@@ -1,0 +1,7 @@
+[[change]]
+kind = "knob_changed"
+key = "log.snapshot"
+old = "true"
+new = "false"
+why = "A measured cold load is slower with the read snapshot than without (3.4 s against 2.6 s on a real 137,407-event log, with a peak about 200 MB higher). Set log.snapshot = true to keep it; old snapshot files stay readable when it is on and are deleted when it is off."
+effect = "A cold command parses the log instead of reading a snapshot, and snapshot files left in .ddflow/local are deleted. The per-shard append facts in .ddflow/local/shardmeta no longer follow this knob: they stay on unless log.reuse_parsed = false or DDFLOW_SNAPSHOT=0."

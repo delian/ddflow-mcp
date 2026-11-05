@@ -58,6 +58,7 @@ def test_show_says_when_a_row_is_trusted(repo):
 def test_by_harness_returns_the_main_row_of_an_agent():
     assert C.by_harness("claude").key == "claude-code"
     assert C.by_harness("cursor").key == "cursor-ide"  # the descriptor describes the IDE
+    assert C.by_harness("grok").key == "grok-build"  # the descriptor id is not the row's key
     assert C.by_harness("no-such-harness") is None
 
 

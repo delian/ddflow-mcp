@@ -422,7 +422,19 @@ def test_loops_exits_two_when_there_is_nothing_wrong(repo):
 def test_doctor_surfaces_loops(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--phase", "P1", "--needs", "B")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "A",
+        "--title",
+        "A fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "B",
+        "--allow-unknown-needs",
+    )
     run_cli(repo, "task", "add", "B", "--title", "B fixture", "--phase", "P1", "--needs", "A")
     code, out, _ = run_cli(repo, "doctor")
     assert code == FAIL
