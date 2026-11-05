@@ -313,7 +313,9 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
     `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, exactly as before.
+    unknown here the first tied reviewer is named, but the panel's other families are
+    carried in `reviewer_families` so a clean cross-family round is still seen (bug
+    B1a30dc3303).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
