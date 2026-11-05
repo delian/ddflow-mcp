@@ -113,9 +113,9 @@ class Board:
 
     def over(self) -> bool:
         """True when a lane should stop; running out of time is a failure of the run."""
-        if time.monotonic() >= self.deadline and self.left:
-            self.fail(f"deadline: {len(self.left)} item(s) left: {sorted(self.left)}")
         with self.lock:
+            if self.left and not self.failure and time.monotonic() >= self.deadline:
+                self.failure = f"deadline: {len(self.left)} item(s) left: {sorted(self.left)}"
             return bool(self.failure) or not self.left
 
 
@@ -174,6 +174,8 @@ def _lane(sb: T.Sandbox, lane: str, worker: Worker, board: Board) -> None:
 def run(sb: T.Sandbox, lanes: int, worker: Worker, *, max_s: float = MAX_S) -> None:
     """Work the sandbox's toy phase with ``lanes`` lanes. Once per sandbox; `RunFailed` on a stop."""
     sb.check()
+    if lanes < 1:
+        raise T.Refused(f"--lanes {lanes}: a run needs at least one lane")
     manifest = sb.manifest()
     if "lanes" in manifest:
         raise T.Refused(f"{sb.repo} already ran: one run per sandbox, so one log is one figure")
@@ -198,12 +200,15 @@ def _isolated(sb: T.Sandbox) -> bool:
     """The sandbox's head is unknown to the host, and the sandbox still has no remote."""
     head = sb.git("rev-parse", "main").strip()
     known = subprocess.run(
-        ["git", "-C", str(T.ROOT), "cat-file", "-e", f"{head}^{{commit}}"],
+        ["git", "-C", str(T.ROOT), "cat-file", "-e", head],
         capture_output=True,
+        text=True,
         check=False,
         env=sb.env,
     )
-    return known.returncode != 0 and not sb.git("remote").strip()
+    if known.returncode not in (0, 1):  # 1 is "no such object"; anything else answered nothing
+        raise RuntimeError(f"cannot ask the host about {head}: {known.stderr}")
+    return known.returncode == 1 and not sb.git("remote").strip()
 
 
 def side(sb: T.Sandbox) -> dict:
@@ -243,12 +248,16 @@ def _why_not(before: dict, after: dict) -> list[str]:
 
 
 def judge(before: dict, after: dict) -> dict:
-    """The pair against the targets; a pair that differs in more than lanes is not judged."""
+    """The pair against the targets; a pair that differs in more than lanes is not judged, so
+    its ratios stand but every target verdict is None, in the JSON as in the text."""
     why = _why_not(before, after)
+    compared = S.compare(before, after)
+    if why:
+        compared["targets"] = dict.fromkeys(compared["targets"])
     return {
         "before": before,
         "after": after,
-        "compare": S.compare(before, after),
+        "compare": compared,
         "comparable": not why,
         "why_not": why,
     }

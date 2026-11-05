@@ -171,7 +171,7 @@ def _cost(events: Sequence[Event], facts: Facts, items: set[str], now: float, mi
     return {
         "usd_total": usd if usd_events else None,
         "usd_per_item": usd / n if usd_events and n >= minimum else None,
-        "agent_hours_per_item": agent_h / n if n >= minimum else None,
+        "agent_hours_per_item": agent_h / n if agent_h and n >= minimum else None,
         "events_with_cost": usd_events,
     }
 
@@ -318,7 +318,7 @@ def provider(ctx: Context) -> list[dict]:
             "metric": "swarm.agent_hours_per_item",
             "group": "",
             "n": n,
-            "value": agent_s / HOUR / n if n else None,
+            "value": agent_s / HOUR / n if agent_s and n else None,  # no lease: unmeasured, not 0
         },
     ]
 

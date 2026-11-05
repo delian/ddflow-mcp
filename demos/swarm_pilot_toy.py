@@ -37,7 +37,7 @@ MIN_SAMPLES = 10
 VERBS = frozenset(
     {"init", "phase", "task", "next", "claim", "gate", "merge", "complete", "metrics", "show"}
 )
-PASSED_ENV = ("PATH", "LANG", "LC_ALL", "TMPDIR")
+PASSED_ENV = ("LANG", "LC_ALL")
 
 
 class Refused(Exception):
@@ -82,10 +82,15 @@ ITEMS = (
 
 
 def clean_env(home: Path) -> dict[str, str]:
-    """The whole environment of a sandbox process: an allow-list, so a key never leaks in."""
+    """The whole environment of a sandbox process: an allow-list, so a key never leaks in. Temp
+    files stay in ``home``, and no PATH entry resolves into the host."""
+    host = ROOT.resolve()
+    path = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
     env = {k: os.environ[k] for k in PASSED_ENV if k in os.environ}
     return env | {
+        "PATH": os.pathsep.join(p for p in path if not Path(p).resolve().is_relative_to(host)),
         "HOME": str(home),
+        "TMPDIR": str(home),
         "PYTHONPATH": str(ROOT),
         "PYTHONDONTWRITEBYTECODE": "1",
         "GIT_CONFIG_NOSYSTEM": "1",
@@ -110,14 +115,20 @@ def _existing(path: Path) -> Path:
     return path
 
 
-def guard_new(path: Path) -> Path:
-    """The resolved ``path`` if a sandbox may be created there; `Refused` otherwise."""
+def apart_from_host(path: Path) -> Path:
+    """The resolved ``path``, neither inside the host nor holding it; `Refused` otherwise."""
     real, host = path.resolve(), ROOT.resolve()
-    if real == host or real.is_relative_to(host):
+    if real.is_relative_to(host):
         raise Refused(f"{real} is inside the host repository {host}")
     if host.is_relative_to(real):
         raise Refused(f"{real} holds the host repository {host}")
-    if real.exists() and any(real.iterdir()):
+    return real
+
+
+def guard_new(path: Path) -> Path:
+    """The resolved ``path`` if a sandbox may be created there; `Refused` otherwise."""
+    real = apart_from_host(path)
+    if real.exists() and (not real.is_dir() or any(real.iterdir())):
         raise Refused(f"{real} is not empty")
     top = _top_of(_existing(real))
     if top:
@@ -147,21 +158,19 @@ min_samples = {min_samples}
 
 
 class Sandbox:
-    """One pilot repository. Construct through `setup` or `open`, which run the guards."""
+    """One pilot repository, apart from the host however it is built; `setup` and `open` run the
+    rest of the guards."""
 
     def __init__(self, repo: Path) -> None:
-        self.repo = repo
+        self.repo = apart_from_host(repo)
         self.home = repo.parent / f"{repo.name}.home"
         self.env = clean_env(self.home)
 
     @classmethod
     def open(cls, path: Path) -> Sandbox:
-        real, host = path.resolve(), ROOT.resolve()
-        if real == host or real.is_relative_to(host):
-            raise Refused(f"{real} is inside the host repository {host}")
-        if not (real / MANIFEST).is_file():
-            raise Refused(f"{real} is no sandbox: {MANIFEST} is missing")
-        sb = cls(real)
+        sb = cls(path)
+        if not (sb.repo / MANIFEST).is_file():
+            raise Refused(f"{sb.repo} is no sandbox: {MANIFEST} is missing")
         sb.check()
         return sb
 

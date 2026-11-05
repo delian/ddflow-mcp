@@ -30,11 +30,13 @@ A lane pulls the way a real lane does, through the real CLI: `next`, `claim`, wo
 Red main here is why the sandbox exists: an item must complete on its gates, never through the forced
 path. Each of these is checked and tested:
 
-- Created only outside the host and outside any other work tree, in an empty directory.
-- Opened only with its manifest (`.ddflow/local/swarm-pilot.json`), as a repository of its own: not a
+- Created only apart from the host (neither inside it nor holding it) and outside any other work
+  tree, in an empty directory.
+- Opened only apart from the host and with its manifest (`.ddflow/local/swarm-pilot.json`), as a repository of its own: not a
   linked worktree, no remote.
 - Every process gets an allow-listed environment: no `GIT_*` redirect, no `DDFLOW_*` setting, no
-  provider key, and a `HOME` of its own beside the repository.
+  provider key, no `PATH` entry in the host, and a `HOME` and temp directory of its own beside the
+  repository.
 - Only the verbs a pilot needs can be called: `review`, `lanes`, `config` and `reviewers` are refused,
   and so is `--force`.
 - The report checks the head of the sandbox is unknown to the host and counts overrides. A side that
@@ -47,8 +49,9 @@ The 1.3x cost target of D-swarm-answers Q4 is stated in dollars, and the pilot r
 (D-swarm-pilot-2026-11-05, point 3). So `swarm_metrics.compare` still gives the agent-hours ratio as
 `cost_x` with `cost_basis = agent_hours`, but `targets.cost` stays None and `not_measured` says why: only
 dollars judge that target. Before this task the ratio judged it silently. The report prints
-`cost target 1.3x: NOT MEASURED`. Agent-hours are lease-held time plus recorded review time, so the
-window from `merge` to `complete` is not in them.
+`cost target 1.3x: NOT MEASURED`. Agent-hours are lease-held time plus recorded review time: the
+author's lease and the reviewer as a second agent working inside it, so both count. The window from
+`merge` to `complete` is in neither.
 
 ## What the stub runs show
 

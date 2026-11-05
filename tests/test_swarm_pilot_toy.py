@@ -17,6 +17,13 @@ import swarm_pilot_run as R  # noqa: E402
 import swarm_pilot_toy as T  # noqa: E402
 
 from ddflow.services import swarm_metrics as S  # noqa: E402
+from tests.sandbox import scrub_git_env  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_git_redirect(monkeypatch):
+    """A hook's GIT_DIR must not send this file's own git calls to the host."""
+    scrub_git_env(monkeypatch)
 
 
 def _git(repo: Path, *argv: str) -> str:
@@ -65,6 +72,16 @@ def test_the_host_itself_is_refused():
 def test_a_parent_of_the_host_is_refused():
     with pytest.raises(T.Refused, match="holds the host"):
         T.guard_new(ROOT.parent)
+
+
+def test_opening_a_parent_of_the_host_is_refused():
+    with pytest.raises(T.Refused, match="holds the host"):
+        T.Sandbox.open(ROOT.parent)
+
+
+def test_no_constructor_route_reaches_the_host():
+    with pytest.raises(T.Refused, match="inside"):
+        T.Sandbox(ROOT)
 
 
 def test_a_symlink_into_the_host_is_refused(tmp_path):
@@ -135,6 +152,19 @@ def test_the_environment_carries_no_redirect_and_no_key(tmp_path, monkeypatch):
     assert not [k for k in env if k in ("GIT_DIR", "GIT_WORK_TREE")]
 
 
+def test_temp_files_and_path_entries_stay_out_of_the_host(tmp_path, monkeypatch):
+    monkeypatch.setenv("TMPDIR", str(ROOT / "tmp"))
+    monkeypatch.setenv("PATH", f"{ROOT / 'bin'}{os.pathsep}/usr/bin")
+    env = T.clean_env(tmp_path)
+    assert env["TMPDIR"] == str(tmp_path) and env["PATH"] == "/usr/bin"
+
+
+def test_a_file_is_no_place_for_a_sandbox(tmp_path):
+    (tmp_path / "f").write_text("x")
+    with pytest.raises(T.Refused, match="not empty"):
+        T.guard_new(tmp_path / "f")
+
+
 def _sandbox(tmp_path: Path, **kw) -> T.Sandbox:
     return T.setup(tmp_path / "sb", **kw)
 
@@ -159,6 +189,24 @@ def test_the_guard_runs_on_every_verb_a_sandbox_is_given(tiny):
 def test_a_second_run_of_one_sandbox_is_refused(tiny):
     with pytest.raises(T.Refused, match="already ran"):
         R.run(T.Sandbox.open(tiny.repo), 1, R.StubWorker(0.0), max_s=1)
+
+
+def test_a_run_needs_a_lane(tmp_path):
+    sb = _sandbox(tmp_path, items=T.ITEMS[:1], min_samples=1)
+    with pytest.raises(T.Refused, match="at least one lane"):
+        R.run(sb, 0, R.StubWorker(0.0), max_s=1)
+    assert "lanes" not in sb.manifest()
+
+
+def test_a_host_that_cannot_answer_is_not_called_isolated(tiny, monkeypatch):
+    monkeypatch.setattr(T, "ROOT", tiny.repo / "no-such-dir")
+    with pytest.raises(RuntimeError, match="cannot ask the host"):
+        R._isolated(tiny)
+
+
+def test_a_sandbox_whose_head_the_host_knows_is_not_isolated(tiny, monkeypatch):
+    monkeypatch.setattr(T, "ROOT", tiny.repo)  # its own head: as if the host held it
+    assert not R._isolated(tiny)
 
 
 def test_a_real_run_merges_every_item_on_the_sandbox_main_only(tiny):
@@ -254,6 +302,7 @@ def test_rework_outside_five_points_is_said():
 def test_a_pair_that_cannot_be_compared_is_not_judged(after, word):
     rep = R.judge(_side(), _side(lanes=3, **after))
     assert not rep["comparable"] and any(word in why for why in rep["why_not"])
+    assert set(rep["compare"]["targets"].values()) == {None}  # the JSON judges nothing either
     text = R.render(rep)
     assert "NOT COMPARABLE" in text and "met" not in text.replace("NOT MEASURED", "").lower()
 
@@ -278,6 +327,12 @@ def test_a_failing_lane_stops_the_run_and_never_forces(tmp_path):
     assert (
         sb.ddflow("gate", "list", "--overrides")[1].strip() == "no gate was passed by an override"
     )
+
+
+def test_a_finished_board_never_reports_a_deadline():
+    board = R.Board(["toy-01"], 0)
+    board.finish("toy-01")
+    assert board.over() and board.failure == ""
 
 
 def test_a_lane_never_claims_what_another_lane_took():

@@ -153,7 +153,23 @@ def test_the_swarm_view_prints_the_baseline():
     assert ans.ok and ans.metrics["merged"] == 12
     assert ans.metrics["throughput"]["per_hour"] > 0
     assert "merged items per hour" in ans.text and "agent-hours per item" in ans.text
-    assert "cost_usd" in ans.text  # no dollars are recorded, and the view says so
+    assert "dollars per item        n/a" in ans.text  # none are recorded: not a figure
+    assert "no event carries cost_usd" in ans.text
+
+
+def test_items_with_no_lease_have_no_agent_hours_rather_than_zero():
+    log = Log()
+    log.task("A", "a.py")
+    log.claim("a1", "A", T0, "a.py")
+    log.complete("a1", "A", T0 + H)
+    events = [e for e in log.events if not e.kind.startswith("lease.")]
+    st = fold(list(events), strict=False)
+    cfg = Config()
+    cfg.metrics.min_samples = 1
+    assert S.baseline(events, st, cfg, NOW)["cost"]["agent_hours_per_item"] is None
+    rows = M.run(events, st, cfg, NOW, view="summary").metrics["providers"]
+    got = {r["metric"]: r for r in rows}
+    assert got["swarm.agent_hours_per_item"]["value"] is None
 
 
 def test_the_swarm_view_under_the_sample_floor_is_not_a_zero():
