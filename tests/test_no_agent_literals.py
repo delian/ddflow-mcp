@@ -22,10 +22,11 @@ PKG = Path(__file__).resolve().parents[1] / "ddflow"
 #: file (relative to the repo) -> (sites, why they are not descriptor reads)
 BASELINE: dict[str, tuple[int, str]] = {
     "ddflow/mcpshim/clients.py": (
-        30,
+        31,
         "the shim's own stdlib table: the clientInfo.name strings clients send (kilo, opencode, "
-        "cline, goose... coincide with descriptor ids) and the `harness` join column; the shim "
-        "must not import the descriptor loader (follow-up SU-client-table-descriptors)",
+        "cline, goose... coincide with descriptor ids) and the `harness` join column, one site "
+        "for each agent with a row, so grok.toml's row adds one; the shim must not import the "
+        "descriptor loader (follow-up SU-client-table-descriptors)",
     ),
     "ddflow/services/hookio.py": (
         20,
