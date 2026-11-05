@@ -274,9 +274,13 @@ class Finding:
 #: the account pays, not the diff's shape. Shedding sends the gate to a DIFFERENT endpoint
 #: (a different account), which fixing the chunk size, the timeout or the key cannot.
 #: Deliberately NOT the token-budget truncation `_truncated` (a chunk lost to its OWN size,
-#: retried in halves): that is the diff's shape, not the endpoint's account.
+#: retried in halves): that is the diff's shape, not the endpoint's account. Account limits
+#: are named (`quota`, `rate`/`usage`/`request`/`concurrency` limit): a BARE "limit exceeded"
+#: is NOT (a `max_tokens`/context limit is the chunk's own shape, not the endpoint); `quota`
+#: is word-bounded so it never matches inside "quotation".
 _EXHAUSTION_RE = re.compile(
-    r"HTTP 4(?:03|29)|quota|rate[ \t-]?limit|limit(?:\s+is)?\s+(?:reached|exceeded)",
+    r"HTTP 4(?:03|29)|\bquota\b|"
+    r"\b(?:rate|usage|request|concurrency)[ \t-]?limit(?:\s+is)?\s+(?:reached|exceeded)",
     re.IGNORECASE,
 )
 
@@ -284,12 +288,13 @@ _EXHAUSTION_RE = re.compile(
 def classify_exhaustion(text: str) -> str:
     """A non-empty reason when ``text`` says a REVIEWER hit its own quota/exhaustion wall.
 
-    ``"HTTP 403"``, ``"quota"``, ``"rate limit"``, ``"limit exceeded"`` -- the signal that
-    the endpoint's account (a 5-hour limit, an exhausted key) can no longer review, which
-    no chunk tuning fixes and a different reviewer endpoint might. This is the marker the
-    failover shed reads, and `doctor` reports, instead of the gate being silently
+    ``"HTTP 403"``, ``"quota"``, ``"rate limit"``, ``"rate limit exceeded"`` -- the signal
+    that the endpoint's account (a 5-hour limit, an exhausted key) can no longer review,
+    which no chunk tuning fixes and a different reviewer endpoint might. This is the marker
+    the failover shed reads, and `doctor` reports, instead of the gate being silently
     `unavailable`. ``""`` for anything else: a clipped reply, an off-contract answer, a
-    chunk too large for ``max_tokens``.
+    chunk too large for ``max_tokens`` -- a BARE "limit exceeded" counts as nothing, since
+    it cannot be told from the chunk's own ``max_tokens``/context limit.
     """
     m = _EXHAUSTION_RE.search(text or "")
     if not m:

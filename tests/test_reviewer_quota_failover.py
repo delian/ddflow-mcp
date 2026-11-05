@@ -72,9 +72,12 @@ def test_classify_exhaustion_matches_quota_walls_only():
     assert classify_exhaustion("HTTP 403: rate limit exceeded") == "HTTP 403"
     assert classify_exhaustion("HTTP 429: too many requests") == "HTTP 429"
     assert classify_exhaustion("command exited 1: quota exceeded") == "quota"
-    assert classify_exhaustion("command exited 1: your limit is reached") == "limit is reached"
+    assert classify_exhaustion("command exited 1: your rate limit is reached") == "rate limit is reached"
+    assert classify_exhaustion("command exited 1: request limit exceeded") == "request limit exceeded"
     # The diff's shape, not the endpoint's account: NEVER shed for these.
     assert classify_exhaustion("TRUNCATED: the model consumed all 16000 tokens") == ""
+    assert classify_exhaustion("max_tokens limit exceeded: output truncated") == ""
+    assert classify_exhaustion("quotation") == ""
     assert classify_exhaustion("no candidate returned") == ""
     assert classify_exhaustion("") == ""
 
