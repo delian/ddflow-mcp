@@ -24,7 +24,7 @@ run in the throwaway repository. Approve it in Cline. That file is yours: remove
 
 Cline's hooks use the `cline` style (`.cline/hooks/`, `prompt_submit`), which ddflow has no
 writer for, so nothing captures a prompt by hook. Pass only if the first MCP call records it;
-say which in the bug or the date line. `harness record` cannot tap this agent.
+note which at the end of this file. `harness record` cannot tap this agent.
 
 ## Round trip
 

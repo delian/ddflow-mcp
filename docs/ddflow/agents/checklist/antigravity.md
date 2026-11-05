@@ -23,7 +23,7 @@ can list `ddflow_brief`. The descriptor does not state this approval step: note 
 
 Antigravity's hooks use the `antigravity` style (`.agents/hooks.json`, `PreInvocation`), which
 ddflow has no writer for, so nothing captures a prompt by hook. Pass only if the first MCP call
-records it; say which. `harness record` taps its MCP traffic but not its hooks.
+records it; note which at the end of this file. `harness record` taps its MCP traffic but not its hooks.
 
 ## Round trip
 

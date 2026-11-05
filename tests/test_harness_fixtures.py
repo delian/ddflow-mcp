@@ -192,6 +192,21 @@ def test_the_mcp_tap_keeps_passing_bytes_once_the_log_is_full(tmp_path, monkeypa
     assert len((tmp_path / "mcp.jsonl").read_text().splitlines()) == 1, "the cap is on the file"
 
 
+def test_the_tap_stops_a_server_nobody_reads_any_more(tmp_path):
+    chatty = "while True: print('x' * 1000, flush=True)"
+    p = subprocess.Popen(
+        [sys.executable, "-m", "ddflow.services.harness_tap", "mcp", str(tmp_path / "cap")]
+        + ["--", sys.executable, "-c", chatty],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        cwd=ROOT,
+    )
+    p.stdout.readline()
+    p.stdout.close()
+    assert p.wait(timeout=60) == 0
+    p.stdin.close()
+
+
 def test_a_tap_that_cannot_start_a_server_says_so_by_its_exit():
     assert _tap("mcp", "cap", "no-dashes", "x").returncode == 1
     assert _tap("hook").returncode == 0
@@ -219,6 +234,13 @@ def test_prepare_says_what_a_plugin_style_agent_cannot_have_tapped(repo, tmp_pat
     assert out.data["mcp_tapped"] is True
     entry = json.loads((tmp_path / "scratch" / ".kilo" / "kilo.json").read_text())["mcp"]["ddflow"]
     assert HRec.TAP_MODULE in entry["command"], "opencode's shape holds one command list"
+
+
+def test_prepare_under_a_file_is_refused(repo, tmp_path):
+    (tmp_path / "file").write_text("keep")
+    out = harness_record(repo, "claude", prepare=str(tmp_path / "file" / "scratch"))
+    assert out.exit == 3
+    assert "cannot make" in out.reason
 
 
 @pytest.mark.parametrize("where", ["full", "inside", "file"])
@@ -374,7 +396,20 @@ def test_the_scrub_replaces_paths_ids_and_secrets_in_keys_and_values():
 
 
 def test_the_scrub_replaces_a_home_in_a_directory_name():
-    assert _scrubber().value("x/-home-me-.claude/y") == "x/-w-.claude/y"
+    assert _scrubber().value("x/-home-me-.claude/y") == "x/-home-.claude/y"
+
+
+def test_a_session_id_inside_the_project_path_does_not_break_the_path():
+    s = _scrubber(root="/work/a1b2c3d4/proj")
+    s.session("a1b2c3d4")
+    assert s.value("/work/a1b2c3d4/proj/f and a1b2c3d4") == "/w/f and s-1"
+
+
+def test_a_session_id_inside_a_longer_one_leaves_no_tail():
+    s = _scrubber()
+    s.session("abcd1234")
+    s.session("abcd1234XYZ")
+    assert s.value("id=abcd1234XYZ abcd1234") == "id=s-2 s-1"
 
 
 def test_the_scrub_cuts_a_long_string_and_says_so():
@@ -461,8 +496,9 @@ def test_a_synthetic_fixture_is_not_aged():
     assert HRec.fixture_flags(meta, today=TODAY, months=6, installed="2.0") == []
 
 
-def test_an_unreadable_fixture_is_a_row_not_a_crash(tmp_path):
-    (tmp_path / "prompt.json").write_text("{")
+@pytest.mark.parametrize("text", ["{", '{"_meta": null}', '{"_meta": "bogus"}', "[]"])
+def test_an_unreadable_fixture_is_a_row_not_a_crash(tmp_path, text):
+    (tmp_path / "prompt.json").write_text(text)
     [row] = HRec.rows(tmp_path, today=TODAY, months=6)
     assert row["status"] == "unreadable"
 

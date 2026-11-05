@@ -65,7 +65,10 @@ def _prepare(repo: Path, h: HR.Harness, target: str, agent: str) -> O.Outcome:
         return O.refused(KIND, f"{root} is not empty: a recording starts from a new directory")
     if root.is_relative_to(Path(repo).resolve()):
         return O.refused(KIND, f"{root} is inside this project: use a directory outside it")
-    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return O.refused(KIND, f"cannot make {root}: {exc.strerror or exc}")
     if not G.run(root, "init", "-q").ok:
         return O.failed(KIND, f"git init failed in {root}")
     adopted = setup(root, Adoption(agents=h.id), agent=agent)

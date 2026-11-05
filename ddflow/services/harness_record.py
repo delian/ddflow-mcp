@@ -49,6 +49,7 @@ CHECKLIST_ROOT = Path("docs") / "ddflow" / "agents" / "checklist"
 #: What a real project path and home become, the forms the hand-made fixtures use.
 SCRUBBED_ROOT = "/w"
 SCRUBBED_HOME = "~"
+SCRUBBED_ENCODED_HOME = "-home"
 #: Home while the redactor runs: it takes every `~/...` for a path of this machine.
 _HOME_MARK = "ddflowrecordhomemark"
 _ENCODED_HOME_MARK = "ddflowrecordencodedhomemark"
@@ -99,12 +100,13 @@ class Scrubber:
         return f"00000000-0000-0000-0000-{n:012d}"
 
     def text(self, s: str) -> str:
-        for raw, new in self._sessions.items():
-            s = s.replace(raw, new)
+        # Paths first, longest first: an id inside a path must not break the path's match.
         for raw, new in self._literals:
             s = s.replace(raw, new)
+        for raw in sorted(self._sessions, key=len, reverse=True):
+            s = s.replace(raw, self._sessions[raw])
         s = self._redactor.text(_UUID.sub(self._uuid, s)).text
-        s = s.replace(_ENCODED_HOME_MARK, encoded(SCRUBBED_ROOT)).replace(_HOME_MARK, SCRUBBED_HOME)
+        s = s.replace(_ENCODED_HOME_MARK, SCRUBBED_ENCODED_HOME).replace(_HOME_MARK, SCRUBBED_HOME)
         over = len(s) - MAX_STRING
         return f"{s[:MAX_STRING]}[cut {over} chars]" if over > 0 else s
 
@@ -424,6 +426,8 @@ def rows(fixtures: Path, *, today: date, months: int, installed: str = "") -> li
         try:
             meta = json.loads(p.read_text(encoding="utf-8"))["_meta"]
         except (ValueError, KeyError, TypeError):
+            meta = None
+        if not isinstance(meta, dict):
             meta = {"recorded": None}
         out.append(
             {

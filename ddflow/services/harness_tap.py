@@ -32,6 +32,8 @@ MAX_EVENTS = 500
 MAX_PAYLOAD_BYTES = 1 << 20
 #: Bytes of `mcp.jsonl`. Past it the log stops; the bytes keep flowing.
 MAX_MCP_BYTES = 8 << 20
+#: How long a server whose agent has gone gets to exit by itself.
+STOP_GRACE_S = 5
 HOOKS_DIR = "hooks"
 MCP_LOG = "mcp.jsonl"
 PRIVATE_DIR = 0o700
@@ -121,7 +123,11 @@ def mcp(capture: Path, argv: list[str]) -> int:
     )
     up.start()
     _pump(child.stdout, sys.stdout.buffer, log, "out")
-    return child.wait()
+    try:
+        return child.wait(timeout=STOP_GRACE_S)
+    except proc.TimeoutExpired:  # the agent left and nothing reads the server's output now
+        proc.stop_group(child)
+        return 0
 
 
 def main(argv: list[str]) -> int:

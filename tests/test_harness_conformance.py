@@ -56,6 +56,7 @@ def test_a_payload_fixture_normalizes_to_what_it_says(hid, event, fx):
     plan = hookio.plan_for(hid)
     got = hookio.normalize(plan.normalizer, event, hid, json.dumps(fx["stdin"]))
     assert not got.malformed
+    assert "session_id" in fx["expect"], (hid, event)
     assert {k: getattr(got, k) for k in fx["expect"]} == fx["expect"]
 
 
