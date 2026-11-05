@@ -145,7 +145,10 @@ def ledger(events: Sequence[Event], st: State, cfg: Config, now: float, plan: An
     wide.lanes = copy.copy(cfg.lanes)
     win = cfg.lanes.fleet_window_s
     wide.lanes.window_s = win if win > 0 else max(int(now), 1)
-    return LN.build(events, st, wide, now, plan)
+    # The registry shows no waits, and over all history they cost agents x waits x leases.
+    quiet = copy.copy(st)
+    quiet.waiting = {}
+    return LN.build(events, quiet, wide, now, plan)
 
 
 def registry(

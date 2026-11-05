@@ -301,3 +301,17 @@ def test_a_brief_for_nobody_still_names_only_the_active_lanes(repo):
     later = time.time() + 30 * 86400
     out = LV.lanes(repo, view="brief", lane="nobody", now=later)
     assert out.exit != 0 and "none active" in out.reason and "holder" not in out.reason
+
+
+def test_the_all_history_ledger_pays_for_no_standing_waits(monkeypatch):
+    """Waits cost agents x waits x leases, and the registry shows none: 119 of 141 s measured."""
+    from ddflow.services import waiting as WG
+
+    g = multi_lane()
+    st, cfg, plan = build_inputs(g.events, NOW)
+    st.waiting = {"W": {"holder": "lane-idle", "globs": ["f.py"], "since": T0, "queue": True}}
+    st.waiting["W"]["lease_event"] = ""
+    calls = []
+    monkeypatch.setattr(WG, "standing", lambda *a: calls.append(a) or {})
+    lanes = FL.ledger(g.events, st, cfg, NOW, plan)
+    assert len(lanes) == 5 and calls == [] and "W" in st.waiting  # the caller's state is intact
