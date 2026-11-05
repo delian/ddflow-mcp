@@ -368,7 +368,8 @@ class TestSamples:
         c = ctx(tmp_path, samples_max_bytes=300)
         inside = []
         seen = []
-        real_lock, real_open, real_trim = M.locked, M.os.fdopen, M._trim
+        real_lock, real_trim = M.locked, M._trim
+        real_open, real_fdopen = M.os.open, M.os.fdopen
 
         @contextlib.contextmanager
         def spy(path):
@@ -398,16 +399,21 @@ class TestSamples:
                 seen.append(("append", list(inside)))
                 return self.fh.write(data)
 
-        def spy_open(*a, **k):
-            seen.append(("open", list(inside)))
-            return Spied(real_open(*a, **k))
+        def spy_fdopen(*a, **k):
+            return Spied(real_fdopen(*a, **k))
+
+        def spy_open(path, *a, **k):
+            if path == c.samples:  # the call that binds the descriptor to today's inode
+                seen.append(("open", list(inside)))
+            return real_open(path, *a, **k)
 
         def spy_trim(cx):
             seen.append(("trim", list(inside)))
             real_trim(cx)
 
         monkeypatch.setattr(M, "locked", spy)
-        monkeypatch.setattr(M.os, "fdopen", spy_open)
+        monkeypatch.setattr(M.os, "open", spy_open)
+        monkeypatch.setattr(M.os, "fdopen", spy_fdopen)
         monkeypatch.setattr(M, "_trim", spy_trim)
         M.record(c, [_ok("a", 1.0), _ok("b", 2.0)])
         assert {kind for kind, _held in seen} == {"open", "append", "trim"}
