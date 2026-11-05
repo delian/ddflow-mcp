@@ -82,6 +82,7 @@ def test_classify_exhaustion_matches_quota_walls_only():
     # The diff's shape, not the endpoint's account: NEVER shed for these.
     assert classify_exhaustion("TRUNCATED: the model consumed all 16000 tokens") == ""
     assert classify_exhaustion("max_tokens limit exceeded: output truncated") == ""
+    assert classify_exhaustion("usage limited by max_tokens/context") == ""
     assert classify_exhaustion("quotation") == ""
     assert classify_exhaustion("no candidate returned") == ""
     assert classify_exhaustion("") == ""
