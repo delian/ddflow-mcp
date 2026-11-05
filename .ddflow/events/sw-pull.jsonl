@@ -139,3 +139,10 @@
 {"agent":"sw-pull","data":{"at":1793916018.5424664,"holder":"sw-pull"},"id":"ee90c4db1e4e8c5e15ebf2dee","kind":"lease.renewed","lamport":143615,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:00:18.646599Z"}
 {"agent":"sw-pull","data":{"at":1793916390.3268545,"holder":"sw-pull"},"id":"e2543250d4e1ec40c6df42d2b","kind":"lease.renewed","lamport":143663,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:06:30.414652Z"}
 {"agent":"sw-pull","data":{"at":1793916920.7065136,"holder":"sw-pull"},"id":"ef114c86fc8769265e5e2b42b","kind":"lease.renewed","lamport":143715,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:15:20.831211Z"}
+{"agent":"sw-pull","data":{"at":1793917620.6239548,"holder":"sw-pull"},"id":"e9dc7348d063eda18a5e060a0","kind":"lease.renewed","lamport":143774,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:27:00.717968Z"}
+{"agent":"sw-pull","data":{"at":1793917822.68445,"holder":"sw-pull"},"id":"ecae34ea6a8475f96b37b0681","kind":"lease.renewed","lamport":143778,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:30:22.841409Z"}
+{"agent":"sw-pull","data":{"at":1793918237.117819,"holder":"sw-pull"},"id":"eb43942a5256aff2dfc323035","kind":"lease.renewed","lamport":143792,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:37:17.211031Z"}
+{"agent":"sw-pull","data":{"at":1793918730.9704983,"holder":"sw-pull"},"id":"eac0fa919591c0a7343ab373e","kind":"lease.renewed","lamport":143811,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:45:31.079395Z"}
+{"agent":"sw-pull","data":{"at":1793918852.1453726,"holder":"sw-pull"},"id":"ea54d192d8cf5bcbc7033ae6e","kind":"lease.renewed","lamport":143816,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:47:32.232166Z"}
+{"agent":"sw-pull","data":{"at":1793919465.4529545,"holder":"sw-pull"},"id":"ed6b3185f49ee75eb12ec5c4f","kind":"lease.renewed","lamport":143835,"schema":1,"subject":"SW-pull","ts":"2026-11-05T22:57:45.547726Z"}
+{"agent":"sw-pull","data":{"at":1793919632.816009,"holder":"sw-pull"},"id":"e92795e9c273ae65c17da6440","kind":"lease.renewed","lamport":143842,"schema":1,"subject":"SW-pull","ts":"2026-11-05T23:00:32.905256Z"}
