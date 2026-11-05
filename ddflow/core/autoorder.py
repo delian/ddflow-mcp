@@ -156,14 +156,15 @@ def propose(
             added += got == _ADDED
             already = already or got == _ALREADY
         # No drop could be ordered: one fallback edge (the waiter waits for a blocker).
-        if added == 0:
+        if added == 0 and not already:
             for later, earlier in [(k["item"], b) for k in links for b in _blockers(k)]:
                 got = _take(later, earlier, items, needs, edges, why, agents, files)
                 if got == _ALREADY:
                     already = True
                     break
                 if got == _ADDED:
-                    break  # one fallback edge is enough
+                    added = 1  # one fallback edge is enough
+                    break
         if added == 0 and not already:
             notes.append(f"no edge for {' -> '.join(agents)}: {'; '.join(why) or 'no candidate'}")
     return edges, notes
