@@ -13,13 +13,13 @@ nothing below is verified. Write `ddflow/harnesses/continue.toml` first
 
 ## Adopt
 
-Not possible yet: no descriptor. Adopt any other agent into a throwaway git repository to get
-the project files and the MCP launch line.
+Not possible yet: no descriptor. `ddflow init` in a throwaway git repository gives the project
+files.
 
 ## Approve the MCP server
 
-Add the `ddflow` server to Continue by hand, from the launch line in that project's `.mcp.json`,
-and approve it if Continue asks. Note where the setting went: the descriptor needs it.
+Add a server named `ddflow` to Continue by hand: its command is `ddflow mcp`, run in that
+repository. Approve it if Continue asks. Note where the setting went: the descriptor needs it.
 
 ## Prompt capture
 

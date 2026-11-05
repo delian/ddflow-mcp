@@ -7,6 +7,7 @@ talks to the real ddflow MCP server through the tap. No model, no agent binary, 
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -149,6 +150,23 @@ def test_the_hook_tap_stops_storing_at_its_cap(tmp_path, monkeypatch):
     assert len(list((cap / "hooks").iterdir())) == 2
 
 
+def test_the_hook_tap_drains_a_payload_past_its_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(Tap, "MAX_PAYLOAD_BYTES", 4)
+    src = io.BytesIO(b"0123456789")
+    assert Tap.hook(tmp_path, "stop", src) == 0
+    assert src.read() == b"", "the writer's pipe is never closed under it"
+    [saved] = (tmp_path / "hooks").iterdir()
+    assert saved.read_bytes() == b"0123"
+
+
+def test_a_capture_that_cannot_be_written_still_gets_the_agent_its_server(tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    echo = "import sys\nfor l in sys.stdin: print(l.strip(), flush=True)"
+    p = _tap("mcp", str(blocker / "cap"), "--", sys.executable, "-c", echo, stdin=b"ping\n")
+    assert (p.returncode, p.stdout) == (0, b"ping\n")
+
+
 def test_the_mcp_tap_passes_bytes_through_and_logs_both_directions(tmp_path):
     cap = tmp_path / "cap"
     echo = "import sys\nfor l in sys.stdin: print(l.strip().upper(), flush=True)"
@@ -164,11 +182,19 @@ def test_the_mcp_tap_passes_bytes_through_and_logs_both_directions(tmp_path):
 
 
 def test_the_mcp_tap_keeps_passing_bytes_once_the_log_is_full(tmp_path, monkeypatch):
-    monkeypatch.setattr(Tap, "MAX_MCP_BYTES", 1)
+    monkeypatch.setattr(Tap, "MAX_MCP_BYTES", 40)
     log = Tap.McpLog(tmp_path)
     log.note("in", b"first\n")
-    log.note("in", b"second\n")
-    assert len((tmp_path / "mcp.jsonl").read_text().splitlines()) == 1
+    log.note("in", b"x" * 100 + b"\n")
+    assert len((tmp_path / "mcp.jsonl").read_text().splitlines()) == 1, "one huge line is refused"
+    again = Tap.McpLog(tmp_path)
+    again.note("in", b"second, from a restarted agent\n")
+    assert len((tmp_path / "mcp.jsonl").read_text().splitlines()) == 1, "the cap is on the file"
+
+
+def test_a_tap_that_cannot_start_a_server_says_so_by_its_exit():
+    assert _tap("mcp", "cap", "no-dashes", "x").returncode == 1
+    assert _tap("hook").returncode == 0
 
 
 # --- prepare ---------------------------------------------------------------------------
@@ -195,15 +221,18 @@ def test_prepare_says_what_a_plugin_style_agent_cannot_have_tapped(repo, tmp_pat
     assert HRec.TAP_MODULE in entry["command"], "opencode's shape holds one command list"
 
 
-@pytest.mark.parametrize("where", ["full", "inside"])
+@pytest.mark.parametrize("where", ["full", "inside", "file"])
 def test_prepare_refuses_a_directory_that_is_not_a_fresh_scratch(repo, tmp_path, where):
-    target = repo / "scratch" if where == "inside" else tmp_path / "full"
+    target = repo / "scratch" if where == "inside" else tmp_path / where
     if where == "full":
         target.mkdir()
         (target / "mine.txt").write_text("keep")
+    if where == "file":
+        target.write_text("keep")
     out = harness_record(repo, "claude", prepare=str(target))
     assert out.exit == 3, out.reason
     assert not (target / ".ddflow").exists()
+    assert where != "file" or target.read_text() == "keep"
 
 
 # --- record ----------------------------------------------------------------------------
@@ -344,6 +373,10 @@ def test_the_scrub_replaces_paths_ids_and_secrets_in_keys_and_values():
     assert "box9" not in host
 
 
+def test_the_scrub_replaces_a_home_in_a_directory_name():
+    assert _scrubber().value("x/-home-me-.claude/y") == "x/-w-.claude/y"
+
+
 def test_the_scrub_cuts_a_long_string_and_says_so():
     got = _scrubber().value("x" * (HRec.MAX_STRING + 50))
     assert len(got) < HRec.MAX_STRING + 40
@@ -360,6 +393,7 @@ def test_leaks_name_the_kind_and_never_the_value():
     assert s.leaks({"a": "/home/me/x"}) == ["home"]
     assert s.leaks({"/tmp/x.y/z": 1}) == ["project path"]
     assert s.leaks({"a": "abc-session"}) == ["session id"]
+    assert s.leaks({"a": "-home-me-.claude"}) == ["home"]
     assert s.leaks({"a": "~/x"}) == []
 
 
@@ -431,6 +465,15 @@ def test_an_unreadable_fixture_is_a_row_not_a_crash(tmp_path):
     (tmp_path / "prompt.json").write_text("{")
     [row] = HRec.rows(tmp_path, today=TODAY, months=6)
     assert row["status"] == "unreadable"
+
+
+def test_every_committed_fixture_of_an_agent_is_a_row(tmp_path):
+    (tmp_path / "unmapped").mkdir()
+    (tmp_path / "unmapped" / "post_compact.json").write_text(
+        json.dumps({"_meta": _meta(date="2020-01-01")})
+    )
+    [row] = HRec.rows(tmp_path, today=TODAY, months=6)
+    assert row["event"] == "unmapped/post_compact" and row["flags"]
 
 
 def test_the_gap_report_carries_the_flags():

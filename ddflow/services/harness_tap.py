@@ -54,7 +54,10 @@ def store_hook(capture: Path, event: str, raw: bytes) -> bool:
 def hook(capture: Path, event: str, stdin: BinaryIO) -> int:
     """Always 0, whatever happens: see the module note."""
     try:
-        if not store_hook(capture, event, stdin.read(MAX_PAYLOAD_BYTES)):
+        raw = stdin.read(MAX_PAYLOAD_BYTES)
+        while stdin.read(MAX_PAYLOAD_BYTES):  # an agent may fail on a pipe closed under it
+            pass
+        if not store_hook(capture, event, raw):
             print(f"harness tap: {MAX_EVENTS} payloads kept, {event} dropped", file=sys.stderr)
     except OSError as exc:
         print(f"harness tap: {event} not stored: {exc}", file=sys.stderr)
@@ -62,20 +65,28 @@ def hook(capture: Path, event: str, stdin: BinaryIO) -> int:
 
 
 class McpLog:
-    """`mcp.jsonl`, one object per line: direction and text. Two pumps share it."""
+    """`mcp.jsonl`, one object per line: direction and text. Two pumps share it. A log that
+    cannot be opened logs nothing: the agent still gets its server."""
 
     def __init__(self, capture: Path) -> None:
-        capture.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR)
-        fd = os.open(capture / MCP_LOG, os.O_CREAT | os.O_APPEND | os.O_WRONLY, PRIVATE_FILE)
-        self._f = os.fdopen(fd, "ab")
         self._lock = threading.Lock()
         self._written = 0
+        self._f: BinaryIO | None = None
+        try:
+            capture.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR)
+            fd = os.open(capture / MCP_LOG, os.O_CREAT | os.O_APPEND | os.O_WRONLY, PRIVATE_FILE)
+            self._f = os.fdopen(fd, "ab")
+            self._written = os.fstat(fd).st_size  # a restarted agent adds to the same file
+        except OSError as exc:
+            print(f"harness tap: no mcp log: {exc}", file=sys.stderr)
 
     def note(self, direction: str, line: bytes) -> None:
+        if self._f is None:
+            return
         text = line.decode("utf-8", "replace").rstrip("\r\n")
         row = (json.dumps({"d": direction, "line": text}) + "\n").encode()
         with self._lock:
-            if self._written >= MAX_MCP_BYTES:
+            if self._written + len(row) > MAX_MCP_BYTES:
                 return
             self._written += len(row)
             self._f.write(row)
@@ -121,7 +132,7 @@ def main(argv: list[str]) -> int:
     if verb == "mcp" and rest[0] == "--" and argv[3:]:
         return mcp(Path(capture), argv[3:])
     print("usage: harness_tap hook <capture> <event> | mcp <capture> -- <argv>", file=sys.stderr)
-    return 0
+    return 1 if verb == "mcp" else 0  # a hook never fails; a server that did not start does
 
 
 if __name__ == "__main__":

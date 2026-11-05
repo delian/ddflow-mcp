@@ -138,16 +138,16 @@ session is yours, and so is what it costs.
 ```sh
 ddflow harness record acmecli --prepare /tmp/acme-rec    # a new scratch project, adopted, with taps
 cd /tmp/acme-rec && acme                                 # one prompt, one tool call, one ddflow_brief
-ddflow harness record acmecli --from /tmp/acme-rec       # report: what would be written
-ddflow harness record acmecli --from /tmp/acme-rec --write
+V="$(acme --version)"
+ddflow harness record acmecli --from /tmp/acme-rec --agent-version "$V"          # report only
+ddflow harness record acmecli --from /tmp/acme-rec --agent-version "$V" --write
 ```
 
 `--prepare` writes a capture hook for every event the descriptor maps (adopt alone installs only a
 few) and stands a tap in front of the MCP server. `--from` keeps the first payload of each event
 and writes `<event>.json`, plus `session/mcp.json` (request and reply pairs, a `tools/list` reply
-reduced to the names) and `session/adopt.json` (what adopt wrote). Each carries the agent's
-version and the date: the version is asked of the binary `[detect]` names, or given with
-`--agent-version`; with neither the answer is `unavailable` and nothing is written.
+reduced to the names) and `session/adopt.json` (what adopt wrote). Each carries the date and the
+`--agent-version` you give; without one the answer is `unavailable` and nothing is written.
 
 Paths, session ids and UUIDs are replaced and the rest goes through the `log` redaction profile.
 A leak that survives refuses the whole write. Read the result before committing it anyway: a
@@ -156,7 +156,8 @@ holds the older one. An agent whose hook style has no writer gets its MCP traffi
 and `--prepare` says so.
 
 `ddflow harness record <id>` alone lists what is recorded and flags a recording older than
-`[hooks].fixture_max_age_months`, or of another major version with `--agent-version`.
+`[hooks].fixture_max_age_months`, or of another major version with `--agent-version`. A tier-2
+agent's line also gives its checklist's `Date walked`, flagged by the same age.
 
 ## The delta note
 

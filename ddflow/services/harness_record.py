@@ -51,6 +51,7 @@ SCRUBBED_ROOT = "/w"
 SCRUBBED_HOME = "~"
 #: Home while the redactor runs: it takes every `~/...` for a path of this machine.
 _HOME_MARK = "ddflowrecordhomemark"
+_ENCODED_HOME_MARK = "ddflowrecordencodedhomemark"
 #: Characters kept of one string: a tool's output is not what a fixture is for.
 MAX_STRING = 4000
 #: A session id shorter than this identifies nothing, and replacing it would mangle the text.
@@ -80,6 +81,7 @@ class Scrubber:
             root: SCRUBBED_ROOT,
             encoded(root): encoded(SCRUBBED_ROOT),
             home: _HOME_MARK,
+            encoded(home): _ENCODED_HOME_MARK,
             **(extra or {}),
         }
         real = {k: v for k, v in pairs.items() if len(k) > 1}  # a home of "/" names nothing
@@ -101,7 +103,8 @@ class Scrubber:
             s = s.replace(raw, new)
         for raw, new in self._literals:
             s = s.replace(raw, new)
-        s = self._redactor.text(_UUID.sub(self._uuid, s)).text.replace(_HOME_MARK, SCRUBBED_HOME)
+        s = self._redactor.text(_UUID.sub(self._uuid, s)).text
+        s = s.replace(_ENCODED_HOME_MARK, encoded(SCRUBBED_ROOT)).replace(_HOME_MARK, SCRUBBED_HOME)
         over = len(s) - MAX_STRING
         return f"{s[:MAX_STRING]}[cut {over} chars]" if over > 0 else s
 
@@ -121,7 +124,7 @@ class Scrubber:
         found = []
         if self._root in blob or encoded(self._root) in blob:
             found.append("project path")
-        if len(self._home) > 1 and self._home in blob:
+        if len(self._home) > 1 and (self._home in blob or encoded(self._home) in blob):
             found.append("home")
         if any(raw in blob for raw in self._sessions):
             found.append("session id")
@@ -252,7 +255,7 @@ def _rows(path: Path) -> list[dict]:
 
 
 def _pairs(capture: Path) -> list[dict]:
-    """Each request with its reply, one per method and tool, in the order they were asked."""
+    """Each request with its reply, one per method and tool, in the order they were answered."""
     path = capture / Tap.MCP_LOG
     if not path.is_file():
         return []
@@ -338,7 +341,11 @@ def build(
     pairs = [scrubber.value(_reduced(p)) for p in _pairs(capture)]
     if pairs:
         rec.files[f"{SESSION_DIR}/mcp.json"] = {
-            "_meta": _meta(version, today, "live MCP traffic through the tap, scrubbed"),
+            "_meta": _meta(
+                version,
+                today,
+                "live MCP traffic through the tap, scrubbed; a tools/list reply is reduced to its names",
+            ),
             "pairs": pairs,
         }
     adopted = capture / "adopt.json"
@@ -413,7 +420,7 @@ _STATUS = {True: "recorded", None: "unreadable"}
 def rows(fixtures: Path, *, today: date, months: int, installed: str = "") -> list[dict]:
     """Every committed fixture of one agent, for `harness record <id>` and the report."""
     out = []
-    for p in sorted(fixtures.glob("*.json")) + sorted(fixtures.glob(f"{SESSION_DIR}/*.json")):
+    for p in sorted(fixtures.rglob("*.json")):
         try:
             meta = json.loads(p.read_text(encoding="utf-8"))["_meta"]
         except (ValueError, KeyError, TypeError):

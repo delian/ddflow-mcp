@@ -17,8 +17,8 @@ with `ddflow harness doctor cline`.
 
 ## Approve the MCP server
 
-Add the `ddflow` server to Cline's global MCP settings by hand, from the launch line in any
-adopted project's `.mcp.json`, and approve it in Cline. That file is yours: remove the entry after.
+Add a server named `ddflow` to Cline's global MCP settings by hand: its command is `ddflow mcp`,
+run in the throwaway repository. Approve it in Cline. That file is yours: remove the entry after.
 
 ## Prompt capture
 

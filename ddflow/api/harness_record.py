@@ -19,7 +19,6 @@ from ..infra import git as G
 from ..services import harness_record as HRec
 from ..services import harnessreg as HR
 from ..services.redact_report import redactor
-from .harness_drv import harness_probe
 from .setup.adopt import Adoption, files_tree, setup
 
 KIND = "harness_record"
@@ -62,7 +61,7 @@ def _status(repo: Path, tree: Path, h: HR.Harness, dest: Path, installed: str) -
 
 def _prepare(repo: Path, h: HR.Harness, target: str, agent: str) -> O.Outcome:
     root = Path(target).resolve()
-    if root.exists() and any(root.iterdir()):
+    if root.exists() and (not root.is_dir() or any(root.iterdir())):
         return O.refused(KIND, f"{root} is not empty: a recording starts from a new directory")
     if root.is_relative_to(Path(repo).resolve()):
         return O.refused(KIND, f"{root} is inside this project: use a directory outside it")
@@ -100,13 +99,6 @@ def _prepare(repo: Path, h: HR.Harness, target: str, agent: str) -> O.Outcome:
     )
 
 
-def _agent_version(repo: Path, h: HR.Harness, given: str) -> str:
-    if given:
-        return given
-    facts = harness_probe(repo, h.id, run=True).data.get("facts") or []
-    return next((f["tool_version"] for f in facts if f.get("tool_version")), "")
-
-
 def _from(
     repo: Path, h: HR.Harness, source: str, dest: Path, version: str, write: bool
 ) -> O.Outcome:
@@ -116,8 +108,7 @@ def _from(
         return O.failed(KIND, f"{src} holds no capture: run --prepare first")
     if stamp.get("agent") != h.id:
         return O.refused(KIND, f"that capture is of {stamp.get('agent')!r}, not {h.id!r}")
-    have = _agent_version(repo, h, version)
-    if not have:
+    if not version:
         why = f"{h.id}'s version is unknown: pass --agent-version (a fixture always says it)"
         return O.nothing(KIND, why, id=h.id, status="unavailable", fixtures=[], message=why)
     cfg = Config.load(repo)
@@ -127,7 +118,7 @@ def _from(
         redactor=redactor("log", cfg),
         extra={str(Path(HRec.__file__).resolve().parents[2]): "<ddflow>"},
     )
-    rec = HRec.build(h, src, scrub, version=have, today=_today())
+    rec = HRec.build(h, src, scrub, version=version, today=_today())
     if not rec.files:
         why = f"{src} holds no session: nothing was captured"
         return O.nothing(KIND, why, id=h.id, status="empty", fixtures=[], message=why)
@@ -145,7 +136,7 @@ def _from(
     return O.ok(
         KIND,
         id=h.id,
-        version=have,
+        version=version,
         fixtures=fixtures,
         malformed=rec.malformed,
         written=wrote,

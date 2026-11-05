@@ -92,7 +92,7 @@ def _harness_parsers(s: argparse._SubParsersAction) -> None:
     hxr.add_argument(
         "--agent-version",
         default="",
-        help="the agent's version; asked of its binary when [detect] names one",
+        help="what `<agent> --version` says; --from needs it, a fixture always carries it",
     )
     hxr.set_defaults(fn=cmd_harness_record)
 

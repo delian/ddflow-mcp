@@ -2,7 +2,7 @@
   "_meta": {
     "recorded": true,
     "synthetic": false,
-    "source": "live MCP traffic through the tap, scrubbed",
+    "source": "live MCP traffic through the tap, scrubbed; a tools/list reply is reduced to its names",
     "version": "2.1.318 (Claude Code)",
     "date": "2026-11-05"
   },
