@@ -1106,7 +1106,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 541 knobs.
+cadences, and the rest of the 546 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5325,7 +5325,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 541): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 546): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5905,7 +5905,7 @@ declared once and persists — see
 
 ## Configuration
 
-541 knobs across 50 sections, every one documented in place and listed, with its default
+546 knobs across 50 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5972,8 +5972,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ca5b730a3d73 -->
-<details><summary>All 541 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=da7cddb6cbec -->
+<details><summary>All 546 knobs across 50 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6234,6 +6234,11 @@ long default is left to `ddflow config --explain`.
 | `locks.probe_merge_tree_min_git` | `"2.38"` |  |
 | `lanes.window_s` | `86400` |  |
 | `lanes.stale_after_s` | `0` |  |
+| `lanes.fleet_window_s` | `0` |  |
+| `lanes.fleet_max_rows` | `18` |  |
+| `lanes.fleet_items` | `5` |  |
+| `lanes.fleet_failed_patterns` | (long: see `ddflow config --explain`) |  |
+| `lanes.fleet_reason_chars` | `120` |  |
 | `lanes.watch_interval_s` | `5` |  |
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
