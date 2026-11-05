@@ -17,6 +17,7 @@ from ddflow.api.lifecycle import pull as PL
 from ddflow.config import Config
 from ddflow.core.model import DONE, RUNNING, Lease, State, fold
 from ddflow.core.model import Item as QItem
+from ddflow.core.schedule import caps
 from ddflow.infra.log import EventLog
 from ddflow.services import modelreg
 from ddflow.services.lanes import launch_template as T
@@ -406,6 +407,34 @@ def test_next_lane_holds_at_the_parallel_limit(repo):
     assert "parallel limit" in out.reason
 
 
+def test_next_lane_leaves_a_reserved_slot_to_reserved_work(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    (repo / ".ddflow/local/config.toml").write_text(
+        '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 2\nreserved_slots = 1\n',
+        encoding="utf-8",
+    )
+    _task(repo, "b")
+    assert api.claim(repo, "b", agent="other").exit == 0
+    out = api.next_lane(repo, lane="ds")
+    assert out.exit == 2
+    assert (out.data["status"], out.data["item"]) == (D.NONE, "")
+
+
+def test_next_lane_judges_the_cap_plan_counts_with_a_worktree_limit(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    (repo / ".ddflow/local/config.toml").write_text(
+        '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 4\n[worktree]\nmax_parallel = 1\n',
+        encoding="utf-8",
+    )
+    _task(repo, "b")
+    assert api.claim(repo, "b", agent="other").exit == 0
+    out = api.next_lane(repo, lane="ds")
+    assert out.data["status"] == D.HOLD
+    assert "1 in flight of 1" in out.reason
+
+
 def test_next_lane_counts_a_holder_of_its_family_against_the_family_cap(repo):
     _queue(repo)
     _approve(repo, "ds")
@@ -423,7 +452,8 @@ def test_next_lane_leaves_an_interrupted_item_to_be_salvaged(repo):
     st = fold(EventLog(repo, "reader").read_all(), strict=False)
     st.items["a"].state = RUNNING
     plan = SimpleNamespace(ready=[st.items["a"]], capped=[], overlapped=[])
-    assert PL._candidates(plan, st) == []
+    cfg = Config()
+    assert PL._candidates(plan, st, cfg, caps(st, cfg, {}), {}) == []
 
 
 def test_next_lane_is_the_cli_flag_and_prints_the_claim(repo):
