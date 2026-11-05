@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -172,6 +175,17 @@ def test_the_swarm_view_honours_phase_and_since():
     assert ans.metrics["merged"] == 12
     far = M.run(log.events, st, Config(), NOW, view="swarm", since="1s")
     assert far.metrics["merged"] == 0 and not far.ok
+
+
+@pytest.mark.parametrize(
+    "first",
+    ["ddflow.services.swarm_metrics", "ddflow.services.metrics", "ddflow.services.swarm.ledger"],
+)
+def test_any_import_order_works(first):
+    """The ledger and swarm_metrics both reach this package: neither may close a cycle."""
+    code = f"import {first}, ddflow.services.metrics.service as s; print(s.SWARM['view'].__name__)"
+    got = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert got.returncode == 0 and got.stdout.strip() == "view", got.stderr
 
 
 def test_provider_rows_withheld_under_min_samples():

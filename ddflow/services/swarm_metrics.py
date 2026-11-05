@@ -15,8 +15,8 @@ collector ``ddflow metrics`` uses; there is no second one) and answers over a wi
 A figure under ``[metrics] min_samples`` merged items is None, never a zero. The same call
 with ``since``/``until`` gives the "before" and "after" of a lane-consolidation or pilot
 comparison; ``compare`` turns two results into the ratios the swarm targets are stated in.
-``ddflow metrics swarm`` prints the figures (``text``), and ``provider`` is the headline rows
-of ``ddflow metrics``; ``metrics.service`` wires both.
+``view`` is the ``swarm`` view of ``ddflow metrics`` and ``provider`` the headline rows of its
+summary; ``metrics.service`` resolves both when first used.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from ..core.model import State
 from ..core.schedule import critical_path, inherited_deps
 from .metrics.facts import Facts, Span, collect
 from .metrics.providers import Context
+from .metrics.service import Answer
 from .metrics.summary import RAN
 from .swarm.ledger import BUG_WINDOW_S
 
@@ -320,3 +321,13 @@ def provider(ctx: Context) -> list[dict]:
             "value": agent_s / HOUR / n if n else None,
         },
     ]
+
+
+def view(
+    events: Sequence[Event], state: State, cfg: Config, now: float, phase: str, since: float | None
+) -> Answer:
+    """``ddflow metrics swarm``: the baseline, exit 2 while it rests on too few merged items."""
+    data = baseline(events, state, cfg, now, phase=phase, since=since)
+    ok = data["throughput"]["per_hour"] is not None
+    why = f"not enough data: {data['unavailable'].get('throughput', '')}"
+    return Answer(ok, "" if ok else why, metrics=data, text=text(data))
