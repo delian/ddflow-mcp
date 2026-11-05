@@ -29,4 +29,6 @@ Each is set in `.ddflow/config.toml`, the git-ignored local layer, with
 has no organisation layer yet, so the local layer or `DDFLOW_OUTPUT_ALLOW_FULL` overrides it.
 
 A `--json` body that carries both prose and rows (`board`) gives each half of `max_chars`;
-rows only ever halve (down to 1) until the body fits, so the cut is bounded.
+a row's heavy nested fields go first (each becomes a marker of the same type, counted in
+`truncated.fields_cut`), then rows only ever halve (down to 1) until the body fits, so the cut is
+bounded.

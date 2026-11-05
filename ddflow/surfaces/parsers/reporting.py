@@ -36,10 +36,11 @@ def render_recover(out, a) -> str:
 def _render_plan(out) -> str:
     actions = out.data["_render"]["actions"]
     total = out.data.get("count", len(actions))  # the plan's size: `actions` may be one page
-    if not actions and not out.data.get("paused"):
+    note = out.data.get("_footer")  # a page past the end has rows to name, just not here
+    if not actions and not note and not out.data.get("paused"):
         return ""
     lines = []
-    if not actions:
+    if not actions and not note:
         # A paused-but-empty plan must say so: the operator cannot tell the brake is
         # on from silence.
         lines.append(
@@ -64,7 +65,7 @@ def _render_plan(out) -> str:
             "Nothing here runs PROPOSE or OPERATOR: `ddflow recover --all --apply` performs "
             "only SAFE_AUTO."
         )
-    if note := out.data.get("_footer"):
+    if note:
         lines.append(note)
     return "\n".join(lines)
 

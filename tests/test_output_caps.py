@@ -355,3 +355,52 @@ def test_status_by_tag_json_keeps_the_wire_budget_of_plain_status(repo, monkeypa
     for extra in ("truncated", "next"):
         body.pop(extra)
     assert len(json.dumps(body, indent=2)) <= chars // 2
+
+
+def _heavy_row(item: str) -> dict:
+    """A ready item as `next` really sends it: flat fields beside recorded gate evidence."""
+    return {
+        "id": item,
+        "title": "t",
+        "gates": {"ci": {"ids": [f"tests/t{i}" for i in range(4000)]}},
+    }
+
+
+def test_a_heavy_field_of_a_row_goes_before_the_row_itself():
+    """`next` on a live queue answered `ready: [{cut: ...}]`: the one thing it exists to say
+    was replaced because each ready item carries tens of KB of gate evidence."""
+    out = O.ok("next", ready=[_heavy_row("A"), _heavy_row("B")], blocked=[])
+    out = OC.apply(None, out, "next", cfg=_cfg())
+    assert [r["id"] for r in out.data["ready"]] == ["A", "B"]
+    assert isinstance(out.data["ready"][0]["gates"], dict), "the field keeps its type"
+    assert out.data["truncated"]["fields_cut"] == 2
+    assert "2 nested field(s) cut" in out.data["_footer"]
+    assert OC._size(out.data) < 30000
+
+
+def test_a_list_the_last_resort_replaces_keeps_its_real_length():
+    wide = {f"f{i}": "a" * 100 for i in range(200)}
+    out = O.ok("next", ready=[], blocked=[wide] * 120)
+    out = OC.apply(None, out, "next", cfg=_cfg(max_chars=3000), wire=True)
+    assert out.data["truncated"]["lists"]["blocked"] == 120
+
+
+def test_a_page_past_the_end_still_says_so_in_prose():
+    """A cursor past the last row printed nothing at all: no count and no next call."""
+    plan = render_recover(OC.apply(None, _plan(120), "recover", cursor=999, cfg=_cfg()), None)
+    assert "recovery plan: 120 action(s)" in plan and "ddflow recover --full" in plan
+    rows = [
+        SimpleNamespace(
+            item=f"I{i}", kind="k", holder="h", worktree="", advice="a", salvageable=False
+        )
+        for i in range(3)
+    ]
+    out = O.ok(
+        "recover",
+        found=[{"item": r.item} for r in rows],
+        count=3,
+        salvageable=0,
+        _render={"found": rows, "salvageable": []},
+    )
+    text = render_recover(OC.apply(None, out, "recover", cursor=999, cfg=_cfg()), None)
+    assert text.startswith("3 recoverable situation(s)") and "ddflow recover --full" in text

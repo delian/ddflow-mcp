@@ -413,7 +413,7 @@ def render_recover(out, a) -> str:
     """`recover`'s prose: every situation, flagged `!!` when it may hold work, and what to do
     with the flagged ones. Empty when there is nothing (the outcome's reason says so)."""
     found, salvageable = out.data["_render"]["found"], out.data["_render"]["salvageable"]
-    if not found:
+    if not found and not OC.footer_of(out):
         return ""
     # The counts are the whole sweep's: `found` may be one page of it (`output_caps`).
     total = out.data.get("count", len(found))

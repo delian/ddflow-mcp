@@ -11,8 +11,8 @@ One function, `apply`, serves both surfaces (the declared command lambdas and th
 handlers call it), so the two cannot disagree. A `--json` body keeps its schema: lists are
 shorter, and `truncated` and `next` say what was cut and how to get it.
 
-Bounded by construction (r-bounded-everything): the row limit only halves, down to 1, and
-the text cut is one slice. The text and the rows are each held to `max_chars`, so a `--json` body that
+Bounded by construction (r-bounded-everything): a row's heavy nested fields go first, the
+row limit only halves, down to 1, and the text cut is one slice. The text and the rows are each held to `max_chars`, so a `--json` body that
 carries both (board) stays under twice it.
 """
 
@@ -38,6 +38,11 @@ COMMANDS: dict[str, tuple[str, str, tuple[str, str] | None, str]] = {
 #: The board lists `_cut_board` cuts itself.
 #: The shortest a long string is clipped to when one row alone passes the cap.
 MIN_CLIP = 80
+#: A nested field of a row may hold this share of the budget before it goes (1/8: a ready
+#: item's recorded gate evidence is tens of KB, its own fields a few hundred characters).
+FIELD_SHARE = 8
+#: Keys of the cut record that are not a list's real length.
+NOT_A_LIST = ("next_row", "clipped_strings", "fields_cut")
 _BOARD_KEYS = ("phases", "unphased", "critical_path")
 #: The prose list that is the same rows as a paged list, under another name (`recover --plan`).
 RENDERED_PAGE = {"found": "actions"}
@@ -152,11 +157,12 @@ def footer(
     lists = {
         k: v
         for k, v in info.items()
-        if k not in ("next_row", "task_rows_shown", "clipped_strings")
-        and not k.startswith("_render.")
+        if k not in NOT_A_LIST and k != "task_rows_shown" and not k.startswith("_render.")
     }
     if lists:
         parts.append("lists cut: " + ", ".join(f"{k} {v} total" for k, v in sorted(lists.items())))
+    if info.get("fields_cut"):
+        parts.append(f"{info['fields_cut']} nested field(s) cut")
     if info.get("clipped_strings"):
         parts.append(f"long values cut to {info['clipped_strings']} characters")
     if cut_chars:
@@ -197,17 +203,44 @@ def _copy_data(original: dict[str, Any]) -> dict[str, Any]:
     return work
 
 
+def _body_size(work: dict[str, Any]) -> int:
+    return _size({k: v for k, v in work.items() if k != "text"})
+
+
+def _marker(value: Any) -> Any:
+    """What stands for a cut nested field: same type, so a reader's `row[field]` still works."""
+    note = f"{len(value)} entries cut"
+    return {"cut": note} if isinstance(value, dict) else [note]
+
+
+def _cut_fields(work: dict[str, Any], info: dict[str, int], budget: int) -> None:
+    """The nested fields of list rows that alone take over 1/FIELD_SHARE of ``budget`` become
+    a marker: a row's identity is worth more than its recorded evidence."""
+    limit = max(MIN_CLIP, budget // FIELD_SHARE)
+    for key, rows in work.items():
+        if key.startswith("_") or not isinstance(rows, list):
+            continue
+        for row in rows:
+            for field, value in row.items() if isinstance(row, dict) else ():
+                if isinstance(value, (dict, list)) and len(json.dumps(value, default=str)) > limit:
+                    row[field] = _marker(value)
+                    info["fields_cut"] = info.get("fields_cut", 0) + 1
+
+
 def _fit(
     command: str, original: dict[str, Any], rows: int, start: int, budget: int
 ) -> tuple[dict[str, Any], int, dict[str, int]]:
-    """A cut copy of ``original``: rows halve (down to 1) until the body fits ``budget``
-    characters (0: no character cap). Returns (data, rows shown, what was cut)."""
+    """A cut copy of ``original``: a row's heavy nested fields go first, then rows halve
+    (down to 1) until the body fits ``budget`` characters (0: no character cap). Returns
+    (data, rows shown, what was cut). The board's nested tasks are its rows: `_cut_board`
+    cuts those."""
     limit = rows
     while True:
         work = _copy_data(original)
         info = _cut_lists(command, work, limit, start)
-        size = _size({k: v for k, v in work.items() if k != "text"})
-        if not budget or size <= budget:
+        if budget and command != "board" and _body_size(work) > budget:
+            _cut_fields(work, info, budget)
+        if not budget or _body_size(work) <= budget:
             return work, limit, info
         if limit <= 1:
             return _clip_rows(work, info, budget), limit, info
@@ -230,23 +263,23 @@ def _mark_oversized(clipped: dict[str, Any], info: dict[str, int], budget: int) 
     are replaced by one marker row each, until it fits; a list that fits keeps its rows."""
     lists = [k for k, v in clipped.items() if isinstance(v, list) and v and not k.startswith("_")]
     for k in sorted(lists, key=lambda k: -len(json.dumps(clipped[k], default=str))):
-        if _size({x: y for x, y in clipped.items() if x != "text"}) <= budget:
+        if _body_size(clipped) <= budget:
             break
-        info[k] = len(clipped[k])
-        clipped[k] = [{"cut": f"{len(clipped[k])} row(s) too large for [output].max_chars"}]
+        info.setdefault(k, len(clipped[k]))
+        clipped[k] = [{"cut": f"{info[k]} row(s) too large for [output].max_chars"}]
 
 
 def _clip_rows(work: dict[str, Any], info: dict[str, int], budget: int) -> dict[str, Any]:
     """One row (or scalar) that alone passes ``budget``: long strings in the lists are cut,
-    halving, down to 80 characters. Bounded: at most seven halvings."""
+    halving, down to 80 characters. Bounded: one pass per bit of ``budget``."""
     n = max(MIN_CLIP, budget)
-    for _ in range(8):
+    for _ in range(budget.bit_length()):
         n = max(MIN_CLIP, n // 2)
         clipped = {
             k: (v if k.startswith("_") or k == "text" else _clip_strings(v, n))
             for k, v in work.items()
         }
-        if _size({k: v for k, v in clipped.items() if k != "text"}) <= budget or n == MIN_CLIP:
+        if _body_size(clipped) <= budget or n == MIN_CLIP:
             break
     if clipped != work:
         info["clipped_strings"] = n
@@ -354,13 +387,12 @@ def _annotate(
     work["truncated"] = {
         **old,
         "lists": {
-            k: v
-            for k, v in info.items()
-            if k not in ("next_row", "clipped_strings") and not k.startswith("_render.")
+            k: v for k, v in info.items() if k not in NOT_A_LIST and not k.startswith("_render.")
         },
         "shown": limit,
         "chars_cut": cut_chars,
         **({"clipped_to": info["clipped_strings"]} if "clipped_strings" in info else {}),
+        **({"fields_cut": info["fields_cut"]} if "fields_cut" in info else {}),
     }
     work["truncated"].pop("all", None)
     if not full_refused:
