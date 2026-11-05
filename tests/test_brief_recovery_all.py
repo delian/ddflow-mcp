@@ -19,6 +19,8 @@ from conftest import run_cli
 from ddflow.api import lifecycle as LC
 from ddflow.infra.log import EventLog
 
+RESUME = "## ⚠ RESUME: recoverable work found"
+
 
 def _seed(repo: Path, ids: list[str]) -> EventLog:
     run_cli(repo, "init")
@@ -42,8 +44,8 @@ def _recovery_block(repo: Path) -> str:
     out = LC.brief(repo, item="T9", check_recovery=True, agent="next")
     assert out.exit == 0, out.reason
     text = out.data["text"]
-    assert "Recoverable work found" in text, text
-    return text.split("Recoverable work found", 1)[1].split("\n## ", 1)[0]
+    assert RESUME in text, text
+    return text.split(RESUME, 1)[1].split("\n## ", 1)[0]
 
 
 def test_a_running_item_with_no_lease_is_in_the_brief(repo):

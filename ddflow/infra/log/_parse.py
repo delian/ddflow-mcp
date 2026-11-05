@@ -145,6 +145,9 @@ _SNAPSHOTS: dict[Path, dict[str, tuple]] = {}
 #: Events directory -> how many events the on-disk snapshot is known to cover, to decide
 #: when the tail since then is worth a rewrite.
 _SNAP_COVERED: dict[Path, int] = {}
+#: logs whose disabled-snapshot files were already collected in this process
+_SNAP_SWEPT: set[Path] = set()
+_SNAP_SWEPT_MAX = 256
 
 #: Events directory -> the snapshot's saved merged order, for `_merge` to adopt once:
 #: ([(shard name, events snapshotted)], flat indices into the concatenation of those
@@ -181,6 +184,7 @@ def clear_parse_cache() -> None:
     _MERGED.clear()
     _SNAPSHOTS.clear()
     _SNAP_COVERED.clear()
+    _SNAP_SWEPT.clear()
     _SNAP_ORDER.clear()
 
 
