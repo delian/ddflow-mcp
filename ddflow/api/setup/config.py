@@ -20,6 +20,7 @@ from ...services.approvals import class_states as APCS
 from ...services.approvals import consume as CN
 from ...services.approvals.canon import Canon
 from ...services.config_shadow import shadow_report
+from ...views import default_toml as D
 from ...views import human
 from .._base import _load
 from ..knowledge import session_note
@@ -53,8 +54,6 @@ def _packaged_defaults(repo: Path, write: bool) -> O.Outcome:
     Only inside ``repo``: a worktree's `ddflow` on PATH is the primary's code, so its
     templates are another tree's, and an installed ddflow's are not a checkout at all.
     """
-    from ...views import default_toml as D
-
     path = D.PACKAGED_DEFAULTS
     if not write:
         text = D.current()
