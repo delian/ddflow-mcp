@@ -41,6 +41,12 @@ descriptor gap (no template, no flag for a value asked, missing autonomy profile
   directory; only `[lanes].pass_env` names and the spec's own env reach the child. Telemetry-off
   literals (D-dsh-telemetry) go in `fixed_env`. A temporary home and any prompt file are removed by `stop` (call it after the lane ended too); a caller's
   is not.
+- Git identity: the private home hides the launcher's git config, so a lane whose `cwd` is a work
+  tree gets `user.name` and `user.email` as git resolves them there, passed as `GIT_AUTHOR_*` and
+  `GIT_COMMITTER_*` values, never the config file. A variable the spec already sets stays. With no
+  identity the launch refuses, naming what is missing; there is no placeholder, and git's own
+  `EMAIL` fallback does not count even if `pass_env` carries it. A lane with no `cwd`, or outside
+  any work tree, gets none.
 - Cleanup is one process-group kill (`infra.proc.kill_group`), optionally inside a systemd scope
   (`[lanes].scope = systemd`; unavailable, never silently dropped, where systemd-run is missing).
 - Bounded: stream lines over the engine limit are skipped; unread events drop oldest and count
