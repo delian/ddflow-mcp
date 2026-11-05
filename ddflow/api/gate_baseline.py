@@ -80,7 +80,9 @@ def _not_red(
         )
     if not blind:
         return result, why
-    reason = BR.unmeasured_text(base, found)
+    shown = ", ".join(sorted(blind)[: BR.SHOWN]) + (" ..." if len(blind) > BR.SHOWN else "")
+    how = found.get("why") or "the run on it gave no verdict for them"
+    reason = f"baseline not measured on {base} ({how}): failing here, unknown there: {shown}"
     if why:
         ev["reason"] = reason
     return "unavailable", reason

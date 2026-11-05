@@ -334,6 +334,13 @@ def test_params_pytest_cannot_tell_apart_are_asked_about_one_by_one(repo) -> Non
     assert found["new_failures"] == [two] and found["still_failing"] == [one]
 
 
+def test_a_param_is_stripped_from_the_test_name_and_never_from_the_path() -> None:
+    from ddflow.services.gates import baseline_red as BR
+
+    assert BR._PARAM.sub(r"\1", "tests[1]/t.py::C::test_x[a[0]]") == "tests[1]/t.py::C::test_x"
+    assert BR._PARAM.sub(r"\1", "tests[1]/t.py::test_x") == "tests[1]/t.py::test_x"
+
+
 def test_some_measured_new_with_some_unmeasured_stays_failed_and_says_both(repo) -> None:
     from ddflow.services.gates import baseline_red as BR
 

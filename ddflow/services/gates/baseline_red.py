@@ -50,7 +50,7 @@ ROUNDS = 3
 #: There is no probe for such a command, so nothing was lost: the failure stands as it was.
 NOT_PYTEST = "the gate's command does not run pytest"
 _NOT_FOUND = re.compile(r"^ERROR: (?:file or directory )?not found: (.+)$", re.M)
-_PARAM = re.compile(r"\[.*\]$")
+_PARAM = re.compile(r"^(.*?::[^\[]*)\[.*\]$")
 
 
 def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) -> list[str]:
@@ -156,7 +156,7 @@ def _probe(gdef, root: Path, part: list[str], run):
         probe = replace(gdef, command=cmd)
         outcome, ev = run(probe, root)
         if not _no_verdict(outcome, ev, len(part)):
-            return outcome, cmds, {**seen, **_read(probe, part, outcome, ev)}
+            return outcome, cmds, {**seen, **_verdicts(probe, part, outcome, ev)}
         lacking, unsure = _lacking(probe, root, part, ev, run)
         seen.update(dict.fromkeys(lacking, False))
         for test_id in unsure:  # alone, what pytest names can only be this id
@@ -188,7 +188,7 @@ def _lacking(probe, root: Path, part: list[str], ev: dict[str, Any], run) -> tup
     named = _names(ev)
     if not named and ev.get("exit") in ABORTED:
         named = _names(run(replace(probe, command=f"{probe.command} -n 0"), root)[1])
-    stems = [_PARAM.sub("", i) for i in part]
+    stems = [_PARAM.sub(r"\1", i) for i in part]
     lacking: list[str] = []
     unsure: list[str] = []
     for test_id, stem in zip(part, stems, strict=True):
@@ -209,7 +209,7 @@ def _same(printed: str, test_id: str) -> bool:
     return printed == test_id or printed.endswith(f"/{test_id}")
 
 
-def _read(gdef, part: list[str], outcome: str, ev: dict[str, Any]) -> dict[str, bool]:
+def _verdicts(gdef, part: list[str], outcome: str, ev: dict[str, Any]) -> dict[str, bool]:
     """``{id: failed on the base}`` of one run; {} when it cannot say which ids PASS: it could
     not run, listed nothing, listed a cut list, or stopped at the first failure (`-x`)."""
     failing = set(ev.get("failed_tests") or ())
@@ -230,11 +230,3 @@ def bug_id(ids: list[str], sha: str) -> str:
 def reason_text(ids: list[str], bug: str) -> str:
     shown = ", ".join(ids[:SHOWN]) + (f" (+{len(ids) - SHOWN} more)" if len(ids) > SHOWN else "")
     return f"baseline-red: {shown}, bug {bug or 'not filed'}"
-
-
-def unmeasured_text(base: str, found: dict[str, Any]) -> str:
-    """The reason of a failure the base could not be compared with: not new, not baseline-red."""
-    ids = found.get("unmeasured") or []
-    shown = ", ".join(ids[:SHOWN]) + (f" (+{len(ids) - SHOWN} more)" if len(ids) > SHOWN else "")
-    how = found.get("why") or "the run on it gave no verdict for them"
-    return f"baseline not measured on {base} ({how}): failing here, unknown there: {shown}"
