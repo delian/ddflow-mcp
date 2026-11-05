@@ -353,10 +353,8 @@ def test_required_mode_is_off_by_default_and_changes_nothing(proj):
 
 
 def _require(repo):
-    (repo / ".ddflow" / "conf.d").mkdir(exist_ok=True)
-    (repo / ".ddflow" / "conf.d" / "auth.toml").write_text(
-        "[agent]\nrequire_operator_token = true\n", "utf-8"
-    )
+    with (repo / ".ddflow" / "config.toml").open("a", encoding="utf-8") as fh:
+        fh.write("\n[agent]\nrequire_operator_token = true\n")
 
 
 def test_required_mode_refuses_an_operator_verb_without_a_token(proj):
