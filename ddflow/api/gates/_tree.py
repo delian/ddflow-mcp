@@ -119,18 +119,18 @@ def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
 
 
 def _kept_tree(repo: Path, it) -> Path | None:
-    """The item's worktree path when a merge KEPT it on disk (``--keep`` or
-    ``[worktree].remove_on_merge = false``), else None.
+    """The item's worktree when a merge KEPT it (``--keep`` / ``[worktree].remove_on_merge
+    = false``), else None.
 
-    `merge` records `merged_sha` for a removed and a kept tree alike, so a message that
-    says "the merge removed its worktree" off that field alone is false for a kept tree
-    (B-gate-run-after-keep-merge): the tree was never removed, the kept checkout merely
-    does not stand at the merged tree (a merge-commit lands main's other commits beneath
-    the branch tip), so it is not the place a post-merge gate may honestly measure."""
+    `it.worktree` is the PERSISTENT record: `merge` clears it on a `worktree.removed` event
+    (the fold handler), so a non-empty `it.worktree` means the merge kept the tree and a
+    removed one reads empty. Re-sniffing the filesystem with ``is_dir()`` would confuse a
+    later cleanup's removal for the merge's, and say "the merge removed its worktree" again
+    (B-gate-run-after-keep-merge): the message must not be read off `merged_sha` alone, nor
+    off the transient presence of the directory."""
     if not it.worktree:
         return None
-    path = W.load_path(repo, it.worktree)
-    return path if path.is_dir() else None
+    return W.load_path(repo, it.worktree)
 
 
 def _no_tree_reason(repo: Path, it, item: str, gate: str, held: str, force: bool = False) -> tuple[str, str]:
