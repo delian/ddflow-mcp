@@ -55,7 +55,7 @@ class Canon:
 
     def record(self) -> dict[str, Any]:
         return {
-            "v": 1,
+            "v": 2,
             "verb": self.verb,
             "item": self.item,
             "target": self.target,
