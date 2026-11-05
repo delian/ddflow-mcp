@@ -36,28 +36,17 @@ def lane_rel(lane: str) -> str:
 
 def write_lanes(repo: Path, entry: Mapping[str, Any], spec: str) -> list[str]:
     """Write one config per lane of ``spec``; the action lines, plus a note for a lane file the
-    spec no longer names (left in place)."""
+    spec no longer names (left in place). Names compare without case, as `parse_lane_tiers` does."""
     lanes = parse_lane_tiers(spec)
     out = [_write_file(Path(repo), lane_rel(lane), entry, tier) for lane, tier in lanes.items()]
+    named = {lane.casefold() for lane in lanes}
     local = Path(repo) / Path(REL).parent
     stem = Path(REL).stem + "-"
     for f in sorted(local.glob(f"{stem}*.json")) if local.is_dir() else []:
         lane = f.stem[len(stem) :]
-        if lane not in lanes and not _is_a_lane_file(Path(repo), f, lanes):
+        if lane.casefold() not in named:
             out.append(f"{lane_rel(lane)} is no longer in [mcp].lane_tools (left in place)")
     return out
-
-
-def _is_a_lane_file(repo: Path, f: Path, lanes: Mapping[str, str]) -> bool:
-    """``f`` is the same file as one of ``lanes``' (a case-insensitive filesystem lists it under
-    the other spelling)."""
-    try:
-        return any(
-            (repo / lane_rel(lane)).is_file() and f.samefile(repo / lane_rel(lane))
-            for lane in lanes
-        )
-    except OSError:  # a dangling symlink is not the same file as anything
-        return False
 
 
 def worker_entry(entry: Mapping[str, Any], tier: str) -> dict[str, Any]:
@@ -159,8 +148,9 @@ def deferral_note(environ: Mapping[str, str], *, tier: str) -> str:
 
 def doctor_notes(cfg: Any, environ: Mapping[str, str] | None = None) -> list[str]:
     """The doctor's notes for the worker config: ``deferral_note`` for the tier the workers run on
-    (`[mcp].worker_tools`) and for each lane's (`[mcp].lane_tools`), one note for the widest, judged
-    against the doctor's own environment unless one is given."""
+    (`[mcp].worker_tools`) and each lane's (`[mcp].lane_tools`), judged against the doctor's own
+    environment unless one is given. One note: only the `all` tier gets one, so the text is the
+    same for every tier it applies to, and it names the lanes."""
     env = os.environ if environ is None else environ
     try:
         lanes = parse_lane_tiers(cfg.mcp.lane_tools)

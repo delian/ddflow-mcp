@@ -23,7 +23,8 @@ MCP_NEXT_HINTS = ("off", "on", "1", "2", "3")
 MCP_OUTPUT_SCHEMAS = ("off", "on")
 #: `[mcp].on_upgrade`.
 MCP_ON_UPGRADE = ("notify", "reexec", "off")
-#: A lane name of `[mcp].lane_tools` becomes part of a file name: no separators, no leading dot.
+#: A lane name of `[mcp].lane_tools` becomes part of a file name: no separators, and it starts
+#: with a letter or digit, so never a dot or an option-like dash.
 _LANE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
@@ -81,7 +82,7 @@ class McpConfig:
 
     lane_tools: str = knob(
         "",
-        doc="Per-lane tool tier for the worker MCP config: comma-separated `lane=tier` pairs (tier `core`, `standard` or `all`), e.g. `impl=standard,review=all`. `ddflow adopt` writes `.ddflow/local/worker-mcp-<lane>.json` for each, the same server as `worker-mcp.json` with `DDFLOW_MCP_TOOLS` set to that lane's tier, so a lane that needs more than `[mcp].worker_tools` starts with `--mcp-config=` on its own file. Empty (default) writes none. A lane name is letters, digits, `.`, `_` or `-`. A file for a lane dropped from the list is named by adopt, not deleted. `ddflow doctor` counts a lane on `all` as it counts `[mcp].worker_tools`. It hides schemas, never tools.",
+        doc="Per-lane tool tier for the worker MCP config: comma-separated `lane=tier` pairs (tier `core`, `standard` or `all`), e.g. `impl=standard,review=all`. `ddflow adopt` writes `.ddflow/local/worker-mcp-<lane>.json` for each, the same server as `worker-mcp.json` with `DDFLOW_MCP_TOOLS` set to that lane's tier, so a lane that needs more than `[mcp].worker_tools` starts with `--mcp-config=` on its own file. Empty (default) writes none. A lane name starts with a letter or digit, then letters, digits, `.`, `_` or `-`; names compare without case. A file for a lane dropped from the list is named by adopt, not deleted. `ddflow doctor` counts a lane on `all` as it counts `[mcp].worker_tools`. It hides schemas, never tools.",
         check=_lane_tools_problem,
     )
 

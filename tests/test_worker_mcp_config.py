@@ -318,14 +318,12 @@ def test_the_knob_has_an_upgrade_fragment():
     assert got and got[0].new == ""  # JSON-encoded in the fragment: '""' is the empty string
 
 
-def test_a_lane_file_that_is_another_name_for_a_current_one_is_not_reported_stale(tmp_path):
-    """A case-insensitive filesystem lists `worker-mcp-IMPL.json` for the lane `impl`: one file under
-    a second name. A hard link stands in for it, under a name that differs on every filesystem."""
-    import os
-
+def test_a_lane_file_spelled_with_other_case_is_not_reported_stale(tmp_path):
+    """Lane names compare without case, as the knob's parser does: a case-insensitive filesystem
+    lists `worker-mcp-IMPL.json` for the lane `impl`, and a case-sensitive one is told the same."""
     entry = {"command": "c"}
-    WM.write_lanes(tmp_path, entry, "impl=all")
-    os.link(tmp_path / WM.lane_rel("impl"), tmp_path / WM.lane_rel("alias"))
+    (tmp_path / WM.lane_rel("IMPL")).parent.mkdir(parents=True)
+    (tmp_path / WM.lane_rel("IMPL")).write_text("{}")
     assert [x for x in WM.write_lanes(tmp_path, entry, "impl=all") if "no longer" in x] == []
     (tmp_path / WM.lane_rel("old")).write_text("{}")
     assert any("old" in x and "no longer" in x for x in WM.write_lanes(tmp_path, entry, "impl=all"))
@@ -371,5 +369,5 @@ def test_a_hand_edited_bad_lane_list_stops_adopt_with_the_reason_not_a_traceback
     run_cli(repo, "init")
     with (repo / ".ddflow/config.toml").open("a") as f:
         f.write('\n[mcp]\nlane_tools = "impl=bogus"\n')
-    _code, out, err = run_cli(repo, "adopt", "--agents", "claude")
-    assert "impl=bogus" in out + err and "Traceback" not in out + err
+    code, out, err = run_cli(repo, "adopt", "--agents", "claude")
+    assert code != 0 and "impl=bogus" in out + err and "Traceback" not in out + err
