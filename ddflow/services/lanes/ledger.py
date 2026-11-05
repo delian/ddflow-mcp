@@ -146,7 +146,9 @@ def _mid_gates(events: Iterable[Event]) -> dict[str, str]:
             key = (e.subject, gate)
             ended[key] = max(ended.get(key, ""), e.ts)
     return {
-        item: gate for item, (ts, gate) in started.items() if gate and ts > ended.get((item, gate), "")
+        item: gate
+        for item, (ts, gate) in started.items()
+        if gate and ts > ended.get((item, gate), "")
     }
 
 

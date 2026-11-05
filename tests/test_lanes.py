@@ -112,7 +112,9 @@ def test_advise_resume_idle_and_over_limit_in_urgency_order():
     )
     assert [m.kind for m in moves] == ["resume", "resume", "idle", "over-limit"]
     assert moves[0].command == "ddflow lanes brief lane-ended"
-    assert "heartbeats only" in moves[1].text  # the stop now names its last step, not "reason unknown"
+    assert (
+        "heartbeats only" in moves[1].text
+    )  # the stop now names its last step, not "reason unknown"
     assert len(LN.advise(lanes, None, max_moves=1)) == 1
 
 

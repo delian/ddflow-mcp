@@ -32,7 +32,8 @@ class Move:
 def _resume(lane: Lane) -> Move:
     name, item, tree = safe(lane.name), safe(lane.item), safe(lane.worktree)
     why = safe(
-        lane.remedy or ("reason unknown" if lane.state == S.STOPPED_UNKNOWN else "its session ended")
+        lane.remedy
+        or ("reason unknown" if lane.state == S.STOPPED_UNKNOWN else "its session ended")
     )
     return Move(
         "resume",
