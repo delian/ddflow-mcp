@@ -159,6 +159,15 @@ def test_the_hook_tap_drains_a_payload_past_its_cap(tmp_path, monkeypatch):
     assert saved.read_bytes() == b"0123"
 
 
+def test_a_payload_that_cannot_be_stored_is_still_drained(tmp_path, monkeypatch):
+    monkeypatch.setattr(Tap, "MAX_PAYLOAD_BYTES", 4)
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    src = io.BytesIO(b"0123456789")
+    assert Tap.hook(blocker / "cap", "stop", src) == 0
+    assert src.read() == b""
+
+
 def test_a_capture_that_cannot_be_written_still_gets_the_agent_its_server(tmp_path):
     blocker = tmp_path / "file"
     blocker.write_text("x")
