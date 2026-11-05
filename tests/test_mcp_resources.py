@@ -54,8 +54,9 @@ def test_every_listed_resource_reads_and_an_unknown_one_is_an_invalid_param(repo
 
 
 def test_the_table_is_the_only_place_that_names_a_resource():
-    named = sum(
-        len(re.findall(r'"ddflow://', p.read_text("utf-8")))
-        for p in Path(MCP.__file__).parent.glob("*.py")
-    )
-    assert named == len(RESOURCES) == len(RESOURCE_BY_URI)
+    named = [
+        uri
+        for p in Path(MCP.__file__).parent.rglob("*.py")
+        for uri in re.findall(r'"(ddflow://[^"]*)', p.read_text("utf-8"))
+    ]
+    assert sorted(named) == sorted(r.uri for r in RESOURCES) == sorted(RESOURCE_BY_URI)
