@@ -309,9 +309,10 @@ def test_the_all_history_ledger_pays_for_no_standing_waits(monkeypatch):
 
     g = multi_lane()
     st, cfg, plan = build_inputs(g.events, NOW)
-    st.waiting = {"W": {"holder": "lane-idle", "globs": ["f.py"], "since": T0, "queue": True}}
-    st.waiting["W"]["lease_event"] = ""
+    wait = {"holder": "lane-idle", "globs": ["f.py"], "since": T0, "queue": True}
+    st.waiting = {"W": {**wait, "lease_event": ""}}
+    assert WG.standing(st, cfg, NOW)  # a live wait, so an unfixed ledger does the work
     calls = []
-    monkeypatch.setattr(WG, "standing", lambda *a: calls.append(a) or {})
+    monkeypatch.setattr(WG, "edges", lambda *a: calls.append(a) or [])
     lanes = FL.ledger(g.events, st, cfg, NOW, plan)
     assert len(lanes) == 5 and calls == [] and "W" in st.waiting  # the caller's state is intact
