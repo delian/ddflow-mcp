@@ -109,9 +109,9 @@ def _strip_heredocs(text: str) -> str:
 
 
 def _strip_continuations(text: str) -> str:
-    """`text` with a backslash-newline OUTSIDE a single quote removed: a line continuation
-    joins a `$` / backtick across the break, so it is still read as a command substitution.
-    A single-quoted body is literal, so its backslash stays."""
+    """`text` with a backslash-newline removed (a line continuation joins a `$` / backtick over
+    the break, so it is still a command substitution). A single quote keeps its backslash; `'`
+    inside a `"..."` is literal."""
     out: list[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -120,6 +120,22 @@ def _strip_continuations(text: str) -> str:
             j = text.find("'", i + 1)
             out.append(text[i:] if j < 0 else text[i : j + 1])
             i = n if j < 0 else j + 1
+        elif c == '"':
+            out.append('"')
+            j = i + 1
+            while j < n and text[j] != '"':
+                if text[j] == "\\" and j + 1 < n and text[j + 1] == "\n":
+                    j += 2  # a continuation inside the double quote: dropped
+                elif text[j] == "\\":
+                    out.append(text[j : j + 2])
+                    j += 2
+                else:  # includes a `'`, which is literal inside a double quote
+                    out.append(text[j])
+                    j += 1
+            if j < n:
+                out.append('"')
+                j += 1
+            i = j
         elif c == "\\" and i + 1 < n and text[i + 1] == "\n":
             i += 2
         else:
@@ -136,37 +152,33 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
     cut = [False] * n
     bodies: list[str] = []
 
-    def command(i: int, closer: str) -> int:
-        j = i
-        while j < n:
-            c = text[j]
+    def find_body(j: int, closer: str) -> int:
+        """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
+        substitutions inside are navigated but mark no newline (the body's own newlines belong to
+        the body, re-split when it is run through `_split`)."""
+        k = j
+        while k < n:
+            c = text[k]
             if c == closer:
-                return j
-            if c == "\n":
-                cut[j] = True
-                j += 1
-            elif c == "\\":  # an escape: skip it and its character (a continuation is stripped)
-                j += 2 if j + 1 < n else 1
-            elif c == "'":
-                k = text.find("'", j + 1)
-                j = j + 1 if k < 0 else k + 1
+                return k
+            if c == "'":
+                k2 = text.find("'", k + 1)
+                k = k + 1 if k2 < 0 else k2 + 1
             elif c == '"':
-                j = dquote(j)
+                k = dquote_end(k)
             elif c == "`":
-                k = command(j + 1, "`")
-                bodies.append(text[j + 1 : k])
-                j = k + 1
-            elif c == "$" and j + 1 < n and text[j + 1] == "(":
-                k = command(j + 2, ")")
-                bodies.append(text[j + 2 : k])
-                j = k + 1
+                k2 = find_body(k + 1, "`")
+                bodies.append(text[k + 1 : k2])
+                k = k2 + 1
+            elif c == "$" and k + 1 < n and text[k + 1] == "(":
+                k2 = find_body(k + 2, ")")
+                bodies.append(text[k + 2 : k2])
+                k = k2 + 1
             else:
-                j += 1
-        return j
+                k += 1
+        return k
 
-    def dquote(j: int) -> int:
-        """From the `"` at `j`: its literal body is data, but `$(` / backtick bodies inside
-        recurse as command position (their newlines are separators). Returns after the `"`."""
+    def dquote_end(j: int) -> int:
         k = j + 1
         while k < n:
             cc = text[k]
@@ -175,18 +187,40 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
             if cc == "\\":
                 k += 2 if k + 1 < n else 1
             elif cc == "`":
-                kk = command(k + 1, "`")
-                bodies.append(text[k + 1 : kk])
-                k = kk + 1
+                k2 = find_body(k + 1, "`")
+                bodies.append(text[k + 1 : k2])
+                k = k2 + 1
             elif cc == "$" and k + 1 < n and text[k + 1] == "(":
-                kk = command(k + 2, ")")
-                bodies.append(text[k + 2 : kk])
-                k = kk + 1
+                k2 = find_body(k + 2, ")")
+                bodies.append(text[k + 2 : k2])
+                k = k2 + 1
             else:
                 k += 1
         return k
 
-    command(0, "")
+    i = 0
+    while i < n:
+        c = text[i]
+        if c == "\n":
+            cut[i] = True
+            i += 1
+        elif c == "'":
+            k2 = text.find("'", i + 1)
+            i = i + 1 if k2 < 0 else k2 + 1
+        elif c == '"':
+            i = dquote_end(i)
+        elif c == "\\":
+            i += 2 if i + 1 < n else 1
+        elif c == "`":
+            k2 = find_body(i + 1, "`")
+            bodies.append(text[i + 1 : k2])
+            i = k2 + 1
+        elif c == "$" and i + 1 < n and text[i + 1] == "(":
+            k2 = find_body(i + 2, ")")
+            bodies.append(text[i + 2 : k2])
+            i = k2 + 1
+        else:
+            i += 1
 
     lines: list[str] = []
     cur: list[str] = []

@@ -118,6 +118,8 @@ def test_allowed_multiline_quote_data(cmd):
         'echo "$(git push origin main)"',
         'echo "$\\\n(git push origin main)"',
         'echo "`git push origin main`"',
+        "echo \"it's $\\\n(git push origin main)\"",
+        'echo "$(echo x\n)"; git push origin main',
     ],
 )
 def test_refused_command_substitution_multiline(cmd):
