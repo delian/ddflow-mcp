@@ -407,8 +407,7 @@ def claim_text(out, a, ctx) -> str:
             f"\n  a tree of its own, because {d['tree']['why']}."
             f"\n  cd there and work."
         )
-    if d.get("sync_warn"):
-        msg += _sync_warn(d)
+    msg += _sync_warn(d)
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
