@@ -31,8 +31,8 @@ def test_cli_import_does_not_load_numpy_or_model2vec(tmp_path):
 
 def test_cli_main_caps_blas_threads_unless_the_user_set_them():
     probe = (
-        "import os; from ddflow import _threads; print(os.environ.get('OPENBLAS_NUM_THREADS')); "
-        "_threads.cap_blas_threads(); print(os.environ['OPENBLAS_NUM_THREADS'])"
+        "import os; from ddflow.infra import threads; print(os.environ.get('OPENBLAS_NUM_THREADS')); "
+        "threads.cap_blas_threads(); print(os.environ['OPENBLAS_NUM_THREADS'])"
     )
     assert _run(["-c", probe])[:2] == ["None", "1"]  # a bare `import ddflow` changes nothing
     assert _run(["-c", probe], OPENBLAS_NUM_THREADS="4")[1] == "4"
