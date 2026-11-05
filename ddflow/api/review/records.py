@@ -106,7 +106,9 @@ def _reviewer_families_of(results) -> list[str]:
     the author's family is unknown (bug B1a30dc3303)."""
     return sorted(
         f
-        for f in {(r.family or "").strip().lower() for r in (results or []) if r.status == RV.REVIEWED}
+        for f in {
+            (r.family or "").strip().lower() for r in (results or []) if r.status == RV.REVIEWED
+        }
         if f
     )
 

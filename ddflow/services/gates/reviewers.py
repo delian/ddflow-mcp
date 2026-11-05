@@ -57,6 +57,10 @@ def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
 #: `standards` is here without declaring it: roborev records the model that reviewed.
 REVIEWER_GATES = ("rubber_duck", "critic", "standards")
 
+#: An author of a single (unknown) family is guaranteed one reviewer outside it once the
+#: recorded panel comes from this many distinct families (bug B1a30dc3303).
+_CROSS_FAMILY_PANEL = 2
+
 
 def is_reviewer_gate(gate: str, gdef: GateDef | None) -> bool:
     """Is `gate` one a cross-family reviewer records through? Its definition says so
@@ -353,7 +357,7 @@ def independence_tier(
         # family cannot be named (bug B1a30dc3303). A router author (`routed` is not None)
         # is a SET of families and is exempt: it may overlap every reviewer's family.
         families = {f for _g, f in fams}
-        if routed is None and len(families) >= 2:
+        if routed is None and len(families) >= _CROSS_FAMILY_PANEL:
             return (
                 "family",
                 f"reviewers from {len(families)} families ({', '.join(sorted(families))}) "
