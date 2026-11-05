@@ -135,3 +135,4 @@
 {"agent":"sw-remotebundle","data":{"gate":"rubber_duck"},"id":"ea2e32f374ce2e3ffebd297fb","kind":"gate.started","lamport":141228,"schema":1,"subject":"SW-remote-bundle","ts":"2026-11-05T16:48:38.335508Z"}
 {"agent":"sw-remotebundle","data":{"at":1793897981.997562,"holder":"sw-remotebundle"},"id":"ed23b46a1516ea3b4364bec59","kind":"lease.renewed","lamport":141261,"schema":1,"subject":"SW-remote-bundle","ts":"2026-11-05T16:59:42.263206Z"}
 {"agent":"sw-remotebundle","data":{"at":1793898822.6958332,"holder":"sw-remotebundle"},"id":"e5f9403f2ed9b8e3996554611","kind":"lease.renewed","lamport":141327,"schema":1,"subject":"SW-remote-bundle","ts":"2026-11-05T17:13:42.995863Z"}
+{"agent":"sw-remotebundle","data":{"at":1793899686.906482,"holder":"sw-remotebundle"},"id":"e196240384809a97972331cf2","kind":"lease.renewed","lamport":141383,"schema":1,"subject":"SW-remote-bundle","ts":"2026-11-05T17:28:07.190293Z"}
