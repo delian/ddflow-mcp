@@ -20,7 +20,7 @@ def _only_unavailable(v, it) -> bool:
     if not v.unmet_gates or len(v.blockers) != 1:
         return False
     records = [it.gates[g] for g in v.unmet_gates if g in it.gates]
-    if any((r.evidence.get("baseline") or {}).get("unmeasured") for r in records):
+    if any(((r.evidence or {}).get("baseline") or {}).get("unmeasured") for r in records):
         return False
     return set(v.unmet_gates) <= set(v.coverage_gaps)
 

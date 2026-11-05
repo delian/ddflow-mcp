@@ -348,6 +348,24 @@ def test_some_measured_new_with_some_unmeasured_stays_failed_and_says_both(repo)
     outcome, why, ev = _measure(repo, ids, run)
     assert outcome == "failed" and "1 more could not be measured" in why
     assert ev["baseline"]["unmeasured"] == [ids[-1]]
+    assert ev["baseline"]["new_failures"] == ids[: BR.SHOWN * 4] and ids[0] in why
+
+
+def test_a_run_cut_short_answers_only_when_it_reached_every_id(repo) -> None:
+    """Exit 2 is a collection error and an interrupt alike: a pass it counted for the one id asked
+    is a measurement, and one it did not reach (or a file that never collected) is not."""
+    _project(repo)
+    two = "tests/test_x.py::test_b"
+
+    def cut(summary):
+        return lambda g, where=None: ("failed", {"exit": 2, "summary": [summary]})
+
+    outcome, _why, ev = _measure(repo, [ID], cut("1 passed in 0.1s"))
+    assert outcome == "failed" and ev["baseline"]["new_failures"] == [ID]
+    outcome, _why, ev = _measure(repo, [ID, two], cut("1 passed in 0.1s"))
+    assert outcome == "unavailable" and ev["baseline"]["unmeasured"] == [ID, two]
+    outcome, _why, ev = _measure(repo, [ID], cut("1 error in 0.1s"))
+    assert outcome == "unavailable" and ev["baseline"]["unmeasured"] == [ID]
 
 
 def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -> None:

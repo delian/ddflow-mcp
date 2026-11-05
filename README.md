@@ -3141,8 +3141,9 @@ and `verify` notes it. A re-run or re-record needs its own acceptance; `failed`,
 `unavailable` and a hand-recorded or `partial_exits` partial cannot be accepted this way.
 
 **A failure the base could not be compared with is `unavailable`**, not new and not
-baseline-red: the run on the base executed no test (pytest exited 2 to 5, or passed having
-counted none), so `baseline.unmeasured` lists the ids and the reason names the cause. A test
+baseline-red: the run on the base gave no verdict for them (pytest aborted with exit 4 or 5,
+was cut short with 2 or 3 before reaching them all, or passed having counted no test), so
+`baseline.unmeasured` lists the ids and the reason names the cause. A test
 the base lacks needs no run and stays a new failure, and one id measured passing there keeps
 the gate `failed`. The standing `complete_unavailable` rule does not answer such a gate, since
 its tests did fail: re-run it, or have a person decide.

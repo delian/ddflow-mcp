@@ -37,9 +37,14 @@ ISOLATION = (
     "fresh detached worktree of the base; the project's own command ran in it, so an "
     "editable install of the branch or git-ignored fixtures can still mislead it"
 )
-#: pytest's exits that say nothing about any test: interrupted (a collection error), internal
-#: error, usage error (a path or node id it cannot find, a broken conftest), nothing collected.
-NOTHING_RAN = (2, 3, 4, 5)
+#: pytest's exits that ran no test: a usage error (a path or node id it cannot find, a broken
+#: conftest), nothing collected.
+ABORTED = (4, 5)
+#: Its exits that stopped somewhere: interrupted (a collection error too), internal error. Only
+#: the ids it reached have an answer, and `-q` does not say which those are.
+CUT_SHORT = (2, 3)
+#: What a summary counts as a test that ran; an `error` may be a file that never collected.
+EXECUTED = ("passed", "failed", "skipped", "xfailed", "xpassed")
 #: Times one chunk is retried without the ids pytest said the base lacks.
 ROUNDS = 3
 #: There is no probe for such a command, so nothing was lost: the failure stands as it was.
@@ -150,7 +155,7 @@ def _probe(gdef, root: Path, part: list[str], run):
         cmds.append(cmd)
         probe = replace(gdef, command=cmd)
         outcome, ev = run(probe, root)
-        if not _ran_nothing(outcome, ev):
+        if not _no_verdict(outcome, ev, len(part)):
             return outcome, cmds, {**seen, **_read(probe, part, outcome, ev)}
         lacking, unsure = _lacking(probe, root, part, ev, run)
         seen.update(dict.fromkeys(lacking, False))
@@ -165,20 +170,24 @@ def _probe(gdef, root: Path, part: list[str], run):
     return outcome, cmds, seen
 
 
-def _ran_nothing(outcome: str, ev: dict[str, Any]) -> bool:
-    """Did a run that RAN execute no test? Its exit says so, or a pass that counts none."""
-    if ev.get("exit") in NOTHING_RAN:
+def _no_verdict(outcome: str, ev: dict[str, Any], asked: int) -> bool:
+    """Did a run that RAN leave any of the ``asked`` ids unreached? Its exit says so, a run cut
+    short counts fewer, or a pass counts none."""
+    code = ev.get("exit")
+    if code in ABORTED:
         return True
     counts = counts_of(" ".join(ev.get("summary") or ()))
-    counts.pop("deselected", None)
-    return outcome == "passed" and not any(counts.values())
+    ran = sum(counts.get(word, 0) for word in EXECUTED)
+    return ran < asked if code in CUT_SHORT else outcome == "passed" and not ran
 
 
 def _lacking(probe, root: Path, part: list[str], ev: dict[str, Any], run) -> tuple[list, list]:
     """``(ids the base lacks, ids pytest's answer cannot tell apart)``. Only pytest naming an id
     says it is missing: the same exit is a broken conftest. pytest-xdist exits 5 and names none,
     so a serial run asks; an unknown name stops pytest at collection, so that runs no test."""
-    named = _names(ev) or _names(run(replace(probe, command=f"{probe.command} -n 0"), root)[1])
+    named = _names(ev)
+    if not named and ev.get("exit") in ABORTED:
+        named = _names(run(replace(probe, command=f"{probe.command} -n 0"), root)[1])
     stems = [_PARAM.sub("", i) for i in part]
     lacking: list[str] = []
     unsure: list[str] = []
@@ -204,8 +213,10 @@ def _read(gdef, part: list[str], outcome: str, ev: dict[str, Any]) -> dict[str, 
     """``{id: failed on the base}`` of one run; {} when it cannot say which ids PASS: it could
     not run, listed nothing, listed a cut list, or stopped at the first failure (`-x`)."""
     failing = set(ev.get("failed_tests") or ())
-    whole = outcome == "passed" or (
-        outcome == "failed" and failing and (len(part) == 1 or not TS.fail_fast(gdef.command))
+    whole = (
+        outcome == "passed"
+        or ev.get("exit") in CUT_SHORT  # `_no_verdict` found that it reached them all
+        or (outcome == "failed" and failing and (len(part) == 1 or not TS.fail_fast(gdef.command)))
     )
     if not whole or ev.get("failed_tests_more"):
         return {}
@@ -225,5 +236,5 @@ def unmeasured_text(base: str, found: dict[str, Any]) -> str:
     """The reason of a failure the base could not be compared with: not new, not baseline-red."""
     ids = found.get("unmeasured") or []
     shown = ", ".join(ids[:SHOWN]) + (f" (+{len(ids) - SHOWN} more)" if len(ids) > SHOWN else "")
-    how = found.get("why") or "the run on it executed no test"
+    how = found.get("why") or "the run on it gave no verdict for them"
     return f"baseline not measured on {base} ({how}): failing here, unknown there: {shown}"
