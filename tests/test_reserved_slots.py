@@ -270,12 +270,37 @@ def test_a_full_cap_still_says_cap_reached_under_a_reservation(log, cfg):
     assert "cap reached" in p.blocked[-1].detail
 
 
-def test_the_cap_note_names_the_reservation_only_when_it_held_something(log, cfg):
+def test_a_reservation_hold_does_not_blame_a_cap_that_was_not_reached(log, cfg):
+    """Critic round: "held by the worktree cap and schedule.reserved_slots" named a cap with
+    a slot still free. Only the reservation held this item."""
     _queue(log, "F1", "F2", "F3")
+    _hold(log, "F1", worktree="/t/f1")
+    _reserve(cfg, cap=8)
+    cfg.worktree.max_parallel = 2
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert p.capped == ["F2", "F3"]
+    assert p.cap_note == "schedule.reserved_slots"
+    assert "1 held" not in p.summary() and "2 held by schedule.reserved_slots" in p.summary()
+
+
+def test_the_cap_note_names_both_when_both_held_something(log, cfg):
+    """F3 meets a free slot that is reserved; fix-A then takes it, and F4 meets a full cap."""
+    log.append("phase.added", "P", {"title": "phase"})
+    for n, id_ in enumerate(("F1", "F2", "F3")):
+        _task(log, id_, priority=n + 1)
+    _task(log, "fix-A", "bug", priority=4)
+    _task(log, "F4", priority=5)
     _reserve(cfg)
-    assert "schedule.reserved_slots" in plan(fold(log.read_all()), cfg, agent="me").cap_note
-    cfg.schedule.reserved_slots = 0
-    assert "schedule.reserved_slots" not in plan(fold(log.read_all()), cfg, agent="me").cap_note
+    cfg.schedule.bugs_first = False
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert _ready(p) == ["F1", "F2", "fix-A"] and p.capped == ["F3", "F4"]
+    assert "the parallelism cap" in p.cap_note and "schedule.reserved_slots" in p.cap_note
+
+
+def test_no_reservation_leaves_the_cap_note_alone(log, cfg):
+    _queue(log, "F1", "F2")
+    cfg.schedule.max_parallel_tasks = 1
+    assert "reserved" not in plan(fold(log.read_all()), cfg, agent="me").cap_note
 
 
 def test_the_summary_says_how_many_are_reserved_and_for_what(log, cfg):

@@ -18,6 +18,10 @@ from ._reserved import open_slots, reserved_note
 from ._resources import bug_items, interrupted, needs_tree
 
 
+#: What a plan names as holding work back when a slot is free but reserved.
+RESERVED = "schedule.reserved_slots"
+
+
 def _cut_ready(
     state: State,
     cfg: Config,
@@ -88,7 +92,7 @@ def _cut_ready(
             cut.append(it)
     for it in kept_out:
         # A slot IS free, so never "cap reached" (B40386f7a40): it waits for an ordinary one.
-        why = f"held by schedule.reserved_slots: {p.reserved_note}; {live_note}"
+        why = f"held by {RESERVED}: {p.reserved_note}; {live_note}"
         p.blocked.append(Blocked(it.id, "state", why, sorted(live_items)))
         p.capped.append(it.id)
     if cut:
@@ -112,7 +116,8 @@ def _cut_ready(
             p.blocked.append(Blocked(it.id, "state", why, holders))
             p.capped.append(it.id)
     if kept_out:
-        p.cap_note += " and schedule.reserved_slots"
+        # Only the cut items are the cap's: with none, the cap held nothing back.
+        p.cap_note = f"{p.cap_note} and {RESERVED}" if cut else RESERVED
     p.ready = taken
 
 
