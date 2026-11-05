@@ -504,11 +504,11 @@ def test_the_install_kind_is_the_shared_source_tree_test(monkeypatch):
 
 
 def test_the_skew_remedy_fits_how_ddflow_is_installed(monkeypatch):
-    monkeypatch.setattr(LOG, "install_kind", lambda: "installed")
+    monkeypatch.setattr(LOG._skew, "install_kind", lambda: "installed")
     installed = LOG.skew_message("0.1.0", "0.2.0", "bob")
     assert "Upgrade ddflow-mcp to >= 0.2.0 (" in installed and "Merge main" not in installed
     assert "restart the MCP server and retry" in installed
-    monkeypatch.setattr(LOG, "install_kind", lambda: "source-tree")
+    monkeypatch.setattr(LOG._skew, "install_kind", lambda: "source-tree")
     source = LOG.skew_message("0.1.0", "0.2.0", "bob")
     assert "Merge main into this checkout" in source and "(ddflow >= 0.2.0 is needed)" in source
     assert "Upgrade ddflow-mcp" not in source
@@ -520,6 +520,6 @@ def test_the_skew_remedy_fits_how_ddflow_is_installed(monkeypatch):
 
 
 def test_a_capability_refusal_carries_the_same_remedy(monkeypatch):
-    monkeypatch.setattr(LOG, "install_kind", lambda: "installed")
+    monkeypatch.setattr(LOG._skew, "install_kind", lambda: "installed")
     msg = LOG.capability_message("x", "9.9.9", "bug.found", "0.2.0")
     assert "Upgrade ddflow-mcp to >= 9.9.9 (" in msg and "everything else proceeds" in msg
