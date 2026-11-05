@@ -251,7 +251,7 @@ def test_build_computes_the_wait_rows_once_not_once_per_lane(monkeypatch):
     """`waiting.rows` scans every standing wait; `build` called it inside its per-lane
     loop, so a ledger with N lanes paid the scan N times (lanes x waits). It must run
     once per build and be shared by every lane."""
-    import ddflow.services.waiting as waiting
+    from ddflow.services import waiting
 
     g = multi_lane()
     st, cfg, plan = build_inputs(g.events, NOW)
@@ -271,7 +271,7 @@ def test_build_skips_the_wait_scan_when_no_lane_is_active(monkeypatch):
     """The scan is only worth paying once there is a lane to attach it to: an empty
     ledger (every lane past the window, none holding a live lease) scans zero times,
     not once."""
-    import ddflow.services.waiting as waiting
+    from ddflow.services import waiting
 
     g = multi_lane()
     st, cfg, plan = build_inputs(g.events, T0 + 3 * 86400)
