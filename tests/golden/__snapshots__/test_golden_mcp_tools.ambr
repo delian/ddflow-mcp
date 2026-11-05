@@ -1297,7 +1297,7 @@
          },
          "view": {
           "type": "string",
-          "description": "state (default), brief, advise, fleet (every agent ever seen, classed, with its stop reason) or resume (the one idempotent resume for lane)."
+          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
          },
          "lane": {
           "type": "string",

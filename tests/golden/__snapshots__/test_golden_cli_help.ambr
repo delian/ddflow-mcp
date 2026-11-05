@@ -1609,7 +1609,7 @@
   
   positional arguments:
     {state,brief,advise,fleet,resume}
-                          state (default), brief <lane>, advise, fleet or resume <agent>
+                          state (default), brief <lane>, advise, fleet or resume <lane>
     lane                  with brief or resume: the lane name, or a unique part of it
   
   options:

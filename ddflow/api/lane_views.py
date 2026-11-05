@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
+from ..services import fleet as FR
 from ..services import flowstate as FL
 from ..services import lanes as LN
 from ..services.lanes.redraw import watch as _watch
@@ -47,6 +48,7 @@ def lanes(
         "limit": {},
         "text": "",
         "fleet": [],
+        "fleet_total": 0,
         "resume": {},
     }
     if view in ("fleet", "resume"):
@@ -55,6 +57,8 @@ def lanes(
         )
     if view == "brief":
         found = LN.find(ledger, lane) if lane else None
+        if found is None and lane:  # `lanes resume` offers this for an agent past the window
+            found = LN.find(FR.ledger(events, st, cfg, at, offer), lane)
         if found is None:
             names = ", ".join(LN.safe(ln.name) for ln in ledger) or "none active"
             return O.failed(

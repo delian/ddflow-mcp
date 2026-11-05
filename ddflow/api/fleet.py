@@ -25,9 +25,13 @@ def fleet_view(
     """Fill ``data`` with the registry (``fleet``) or one resume (``resume``)."""
     lanes = FL.ledger(events, st, cfg, now, plan)
     entries = FL.registry(events, lanes, st, cfg, now)
-    data["fleet"] = [e.as_dict(now) for e in entries]
+    data["lanes"] = []  # the window's ledger is the state view's: these views answer alone
     if view == "fleet":
-        data["text"] = FL.render(entries, now)
+        cap = cfg.lanes.fleet_max_rows
+        shown = entries[:cap] if cap > 0 else entries
+        data["fleet"] = [e.as_dict(now) for e in shown]
+        data["fleet_total"] = len(entries)
+        data["text"] = FL.render(shown, now, len(entries))
         if not entries:
             return O.nothing("lanes", "no agents seen", **data)
         return O.ok("lanes", **data)

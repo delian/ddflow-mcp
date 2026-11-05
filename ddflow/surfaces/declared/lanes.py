@@ -41,14 +41,15 @@ COMMANDS: tuple[Command, ...] = (
             "limit",
             "text",
             "fleet",
+            "fleet_total",
             "resume",
         ),
         render=_text,
         params=(
             Param(
                 "view",
-                help="state (default), brief, advise, fleet (every agent ever seen, classed, with its stop reason) or resume (the one idempotent resume for lane).",
-                cli_help="state (default), brief <lane>, advise, fleet or resume <agent>",
+                help="state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane).",
+                cli_help="state (default), brief <lane>, advise, fleet or resume <lane>",
                 positional=True,
                 nargs="?",
                 choices=("state", "brief", "advise", "fleet", "resume"),

@@ -5,7 +5,8 @@ lane's state from leases, heartbeats and sessions) plus the stop reasons the log
 carries (`lease.expired` reason, `lease.released` note, `session.ended` summary). The log
 is the durable part; this is a pure function of (events, ledger, state, config, now).
 `resume` is a pure answer too: asking twice gives the same answer, and it names a lane
-another agent has already taken over instead of offering a second restart.
+another agent has already taken over instead of offering a second restart. It starts nothing:
+restarting is `ddflow resume <item>` (DX-resume-command) and a lane launch.
 """
 
 from __future__ import annotations
@@ -24,22 +25,28 @@ from . import lanes as LN
 from .lanes import states as S
 
 WORKING, STALLED, FAILED, IDLE, DONE = "working", "stalled", "failed", "idle", "done"
-#: Urgency order of the classes in a listing: lost work first.
-ORDER = (FAILED, STALLED, IDLE, WORKING, DONE)
+#: Urgency order of the classes in a listing: lost work, then live work, so a capped listing
+#: keeps both ahead of the long tail of agents that went quiet with nothing unfinished.
+ORDER = (FAILED, STALLED, WORKING, IDLE, DONE)
 #: Lane-ledger states that mean "stopped with its item unfinished".
 _STOPPED = S.UNFINISHED
 #: Characters of a reason that failure patterns are matched against (display is cut separately).
 RAW_CAP = 2000
-_RELEASE_OK = ("completed", "done", "merged")
+#: Release notes that say the work ended normally; an empty note says nothing went wrong.
+_RELEASE_OK = ("", "completed", "done", "merged")
 
 
 @dataclass(frozen=True)
 class Entry:
     name: str
     cls: str
+    role: str = ""  #: from `session.started`; empty while a session records none
     harness: str = ""
     model: str = ""
     item: str = ""
+    items: tuple[str, ...] = ()  #: items it leased, newest first, cut to `fleet_items`
+    items_total: int = 0
+    lease_s: int = 0  #: seconds left on its live lease of ``item``; 0 when it holds none
     lane_state: str = ""
     heartbeat: float = 0.0
     last_event: float = 0.0
@@ -55,24 +62,51 @@ class Entry:
 
 
 def _signals(events: Iterable[Event]) -> dict[str, tuple[str, str]]:
-    """Agent -> (ts, reason): the newest reason the log gives for that agent having stopped."""
+    """Agent -> (ts, reason): why it stopped, as far as the log says.
+
+    The newest word wins, and a sign the agent carried on after a stop (a normal release, a
+    new lease, a new session) is a word too: it clears the older reason, which no longer
+    explains anything.
+    """
     out: dict[str, tuple[str, str]] = {}
     sessions: dict[str, str] = {}  # session id -> agent
     for e in events:
-        who, text = "", ""
+        who, text, clears = "", "", False
         if e.kind == "session.started":
             sessions[e.subject] = e.agent
+            who, clears = e.agent, True
         elif e.kind == "session.ended":
             who, text = sessions.get(e.subject, e.agent), str(e.data.get("summary") or "")
+        elif e.kind == "lease.acquired":
+            who, clears = str(e.data.get("holder") or e.agent), True
         elif e.kind == "lease.expired":
             who, text = str(e.data.get("holder") or e.agent), str(e.data.get("reason") or "")
         elif e.kind == "lease.released":
             who, text = str(e.data.get("holder") or e.agent), str(e.data.get("note") or "")
             if text.strip().lower() in _RELEASE_OK:
-                text = ""
-        if who and text.strip() and e.ts >= out.get(who, ("", ""))[0]:
+                text, clears = "", True
+        if who and (clears or text.strip()) and e.ts >= out.get(who, ("", ""))[0]:
             out[who] = (e.ts, text[:RAW_CAP])
-    return out
+    return {who: sig for who, sig in out.items() if sig[1]}
+
+
+def _history(events: Iterable[Event]) -> dict[str, tuple[str, list[str]]]:
+    """Agent -> (role, items it leased, newest first). The roles the sessions recorded."""
+    roles: dict[str, str] = {}
+    items: dict[str, dict[str, str]] = {}  # agent -> item -> newest lease ts
+    for e in events:
+        if e.kind == "session.started" and e.data.get("role"):
+            roles[e.agent] = str(e.data["role"])
+        elif e.kind == "lease.acquired":
+            held = items.setdefault(str(e.data.get("holder") or e.agent), {})
+            held[e.subject] = max(held.get(e.subject, ""), e.ts)
+    return {
+        who: (
+            roles.get(who, ""),
+            sorted(items.get(who, {}), key=items.get(who, {}).get, reverse=True),
+        )
+        for who in roles.keys() | items.keys()
+    }
 
 
 def _class(lane: LN.Lane, reason: str, patterns: Sequence[re.Pattern[str]]) -> str:
@@ -107,21 +141,29 @@ def ledger(events: Sequence[Event], st: State, cfg: Config, now: float, plan: An
 def registry(
     events: Sequence[Event], ledger: Sequence[LN.Lane], st: State, cfg: Config, now: float
 ) -> list[Entry]:
-    """Every lane in ``ledger``, classed, with its newest stop reason, most urgent first."""
+    """Every lane in ``ledger``, classed, with its newest stop reason: most urgent class first,
+    the most recently heard from first inside a class."""
     sig = _signals(events)
+    history = _history(events)
     pats = _patterns(cfg)
+    keep = max(0, cfg.lanes.fleet_items)
     rows = []
     for ln in ledger:
         at, reason = sig.get(ln.name, ("", ""))
         if ln.state not in _STOPPED:
             reason, at = "", ""
+        role, items = history.get(ln.name, ("", []))
         rows.append(
             Entry(
                 name=ln.name,
                 cls=_class(ln, reason, pats),
+                role=role,
                 harness=ln.harness,
                 model=ln.model,
                 item=ln.item,
+                items=tuple(items[:keep]),
+                items_total=len(items),
+                lease_s=_lease_left(ln, st, now, cfg.lease.grace_s),
                 lane_state=ln.state,
                 heartbeat=ln.heartbeat,
                 last_event=ln.last_event,
@@ -131,7 +173,15 @@ def registry(
                 session=ln.session,
             )
         )
-    return sorted(rows, key=lambda e: (ORDER.index(e.cls), e.name))
+    return sorted(rows, key=lambda e: (ORDER.index(e.cls), -e.last_event, e.name))
+
+
+def _lease_left(ln: LN.Lane, st: State, now: float, grace_s: float) -> int:
+    it = st.items.get(ln.item)
+    ls = it.lease if it and not it.terminal else None
+    if ls is None or ls.holder != ln.name or not ls.live(now, grace_s):
+        return 0
+    return max(0, int(ls.renewed_at + ls.ttl_s - now))
 
 
 def resume(
@@ -162,7 +212,7 @@ def resume(
         **base,
         "eligible": True,
         "reason": f"{e.name} stopped with {e.item} unfinished; start a session with its brief "
-        "(no harness spawn line exists yet, so ddflow does not start one)",
+        "(this view starts nothing: a lane launches only from an approved template)",
         "command": f"ddflow lanes brief {LN.safe(e.name)}",
     }
 
@@ -171,8 +221,11 @@ def _as_lane(e: Entry) -> LN.Lane:
     return LN.Lane(name=e.name)
 
 
-def render(entries: Sequence[Entry], now: float) -> str:
-    """One line per agent: name, class, harness, model, item, heartbeat age, stop reason."""
+def render(entries: Sequence[Entry], now: float, total: int = 0) -> str:
+    """One line per agent: name, class, harness, model, item, heartbeat age, stop reason.
+
+    ``total`` is the size of the registry when ``entries`` is a cut of it: the cut says so.
+    """
     if not entries:
         return "no agents seen"
     head = ("AGENT", "CLASS", "HARNESS", "MODEL", "ITEM", "BEAT", "STOP REASON")
@@ -191,6 +244,9 @@ def render(entries: Sequence[Entry], now: float) -> str:
             )
         )
     w = [max(len(r[i]) for r in rows) for i in range(len(head) - 1)]
-    return "\n".join(
+    lines = [
         "  ".join([c.ljust(n) for c, n in zip(r, w, strict=False)] + [r[-1]]).rstrip() for r in rows
-    )
+    ]
+    if total > len(entries):
+        lines.append(f"... and {total - len(entries)} more (lanes.fleet_max_rows; 0 lists all)")
+    return "\n".join(lines)

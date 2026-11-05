@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import pytest
 from lanes_fixture import T0, Log, build_inputs, multi_lane
 
+from ddflow.api import fleet as AF
+from ddflow.api import lane_views as LV
 from ddflow.services import fleet as FL
 from ddflow.services import lanes as LN
 
@@ -102,14 +106,14 @@ def test_resume_already_taken_over_names_the_new_holder():
     assert not r["eligible"] and "lane-new" in r["reason"]
 
 
-def test_registry_is_ordered_by_urgency_then_name():
+def test_registry_puts_lost_and_live_work_before_idle_newest_first():
     entries, *_ = _entries(multi_lane())
     assert [(e.cls, e.name) for e in entries] == [
+        (FL.STALLED, "lane-stale"),
         (FL.STALLED, "lane-ended"),
         (FL.STALLED, "lane-gone"),
-        (FL.STALLED, "lane-stale"),
-        (FL.IDLE, "lane-idle"),
         (FL.WORKING, "lane-work"),
+        (FL.IDLE, "lane-idle"),
     ]
 
 
@@ -147,10 +151,15 @@ def test_fleet_and_resume_over_cli_and_mcp(repo):
     cli = json.loads(out)
     mcp = tool_json(rpc_call(Server(repo), "ddflow_lanes", view="fleet"))
     assert code == 0 and [(e["name"], e["cls"]) for e in cli["fleet"]] == [("holder", "working")]
-    strip = lambda rows: [{k: v for k, v in r.items() if k != "heartbeat_age_s"} for r in rows]  # noqa: E731
+    ticking = ("heartbeat_age_s", "lease_s")  # both count from the moment of the call
+    strip = lambda rows: [{k: v for k, v in r.items() if k not in ticking} for r in rows]  # noqa: E731
     assert strip(cli["fleet"]) == strip(mcp["fleet"])
+    family = tool_json(rpc_call(Server(repo), "ddflow_view", action="lanes", view="fleet"))
+    assert strip(family["fleet"]) == strip(cli["fleet"])
     code, out, _ = run_cli(repo, "lanes", "resume", "holder", "--json")
-    assert code == 2 and json.loads(out)["resume"]["eligible"] is False
+    body = json.loads(out)
+    assert code == 2 and body["resume"]["eligible"] is False
+    assert body["fleet"] == [] and body["lanes"] == []  # one answer, not two listings
     assert run_cli(repo, "lanes", "resume", "--json")[0] == 1
 
 
@@ -171,3 +180,113 @@ def test_a_finished_lane_keeps_no_old_failure_reason():
     g.complete("a", "X", T0 + 3)
     e = _entries(g, T0 + 10)[0][0]
     assert e.cls == FL.DONE and e.stop_reason == ""
+
+
+@pytest.mark.parametrize("note", ["completed", "merged", "done", ""])
+def test_a_normal_release_clears_an_older_stop_reason(note):
+    g = multi_lane()
+    g.add("lease.expired", "V", "sweeper", T0 - 90, holder="lane-ended", reason="HTTP 429")
+    g.add("lease.released", "V", "lane-ended", T0 - 80, holder="lane-ended", note=note)
+    e = next(x for x in _entries(g)[0] if x.name == "lane-ended")
+    assert e.lane_state in FL.S.UNFINISHED  # still stopped: only the reason is stale
+    assert (e.cls, e.stop_reason, e.stop_at) == (FL.STALLED, "", 0.0)
+
+
+def test_coming_back_clears_an_older_stop_reason():
+    g = multi_lane()  # lane-gone claimed at T0 - 300 and then lapsed, saying nothing
+    g.add("session.ended", "s9", "lane-gone", T0 - 350, summary="HTTP 429")
+    e = next(x for x in _entries(g)[0] if x.name == "lane-gone")
+    assert (e.cls, e.stop_reason) == (FL.STALLED, "")
+
+
+def test_a_stop_after_coming_back_is_the_reason():
+    g = multi_lane()
+    g.add("session.ended", "s9", "lane-gone", T0 - 350, summary="weird mood")
+    g.add("lease.expired", "U", "sweeper", T0 - 100, holder="lane-gone", reason="spend limit")
+    e = next(x for x in _entries(g)[0] if x.name == "lane-gone")
+    assert (e.cls, e.stop_reason) == (FL.FAILED, "spend limit")
+
+
+def test_an_entry_carries_role_items_and_lease():
+    g = Log()
+    for tid in ("A", "B", "C"):
+        g.task(tid, f"{tid}.py")
+    g.session("a", "s1", T0, role="reviewer")
+    g.claim("a", "A", T0, "A.py")
+    g.release("a", "A", T0 + 1)
+    g.claim("a", "B", T0 + 2, "B.py")
+    g.release("a", "B", T0 + 3)
+    g.claim("a", "A", T0 + 4, "A.py")
+    g.release("a", "A", T0 + 5)
+    g.claim("a", "C", T0 + 6, "C.py")
+    e = _entries(g, T0 + 10)[0][0]
+    assert (e.role, e.items, e.items_total) == ("reviewer", ("C", "A", "B"), 3)
+    assert e.lease_s > 0
+    assert _entries(g, T0 + 10, lambda c: setattr(c.lanes, "fleet_items", 2))[0][0].items == (
+        "C",
+        "A",
+    )
+    assert _entries(g, T0 + 10 * 86400)[0][0].lease_s == 0  # lapsed: no lease to show
+
+
+def _many(n: int) -> Log:
+    g = Log()
+    g.task("X", "f.py")
+    for i in range(n):
+        g.session(f"lane-{i:03}", f"s{i}", T0 + i, tool="codex", model="m" * 40)
+    return g
+
+
+def _view(g: Log, *, rows: int | None = None):
+    st, cfg, plan = build_inputs(g.events, T0 + 1000)
+    if rows is not None:
+        cfg.lanes.fleet_max_rows = rows
+    data = {"fleet": [], "fleet_total": 0, "lanes": [], "resume": {}, "text": ""}
+    return AF.fleet_view(
+        data, view="fleet", lane="", events=g.events, st=st, cfg=cfg, now=T0 + 1000, plan=plan
+    )
+
+
+def test_the_listing_is_capped_with_a_visible_stop():
+    out = _view(_many(12), rows=5)
+    assert out.data["fleet_total"] == 12 and len(out.data["fleet"]) == 5
+    assert "7 more" in out.data["text"] and "lanes.fleet_max_rows" in out.data["text"]
+    assert out.data["fleet"][0]["name"] == "lane-011"  # the newest stays
+
+
+def test_a_cap_of_zero_lists_everyone():
+    out = _view(_many(12), rows=0)
+    assert len(out.data["fleet"]) == 12 and "more" not in out.data["text"]
+
+
+def test_the_default_result_stays_under_the_result_ceiling():
+    import json
+
+    out = _view(_many(800))
+    assert out.data["fleet_total"] == 800
+    assert len(json.dumps(out.data)) < 20_000
+
+
+def test_the_brief_resume_offers_reaches_an_agent_past_the_lane_window(repo):
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "X", "--title", "X fixture", "--globs", "f.py")
+    assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
+    later = time.time() + 30 * 86400  # past [lanes] window_s, and the lease has lapsed
+    got = LV.lanes(repo, view="resume", lane="holder", now=later).data["resume"]
+    assert got["eligible"] and got["command"] == "ddflow lanes brief holder"
+    assert "holder" not in [x["name"] for x in LV.lanes(repo, now=later).data["lanes"]]
+    assert LV.lanes(repo, view="brief", lane="holder", now=later).data["lane"] == "holder"
+
+
+def test_a_brief_for_nobody_still_names_only_the_active_lanes(repo):
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "X", "--title", "X fixture", "--globs", "f.py")
+    assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
+    run_cli(repo, "release", "X", agent="holder")
+    later = time.time() + 30 * 86400
+    out = LV.lanes(repo, view="brief", lane="nobody", now=later)
+    assert out.exit != 0 and "none active" in out.reason and "holder" not in out.reason

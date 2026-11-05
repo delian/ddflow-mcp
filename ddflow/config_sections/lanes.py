@@ -31,6 +31,24 @@ class LanesConfig:
             else "a whole number of zero or more"
         ),
     )
+    fleet_max_rows: int = knob(
+        30,
+        doc="Most agents `ddflow lanes fleet` lists: lost work first, then live work, then the most recently heard from. The cut says how many more there are. 0 lists every one.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "a whole number of zero or more"
+        ),
+    )
+    fleet_items: int = knob(
+        10,
+        doc="Items each agent's row in `ddflow lanes fleet` names, newest first; `items_total` still counts them all. 0 names none.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "a whole number of zero or more"
+        ),
+    )
     fleet_failed_patterns: list[str] = knob(
         factory=lambda: [
             r"\b429\b",
