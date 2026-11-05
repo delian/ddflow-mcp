@@ -67,9 +67,7 @@ def bug_dedupe(
             applied=[],
             floor=fl,
         )
-    vectors, note = bugsim.embed_vectors(
-        repo, cfg, [bugsim.record_text(r) for r in records]
-    )
+    vectors, note = bugsim.embed_vectors(repo, cfg, [bugsim.record_text(r) for r in records])
     groups, scores = bugsim.cluster(records, floor=fl, vectors=vectors)
     clusters: list[dict[str, Any]] = []
     applied: list[str] = []
@@ -84,12 +82,21 @@ def bug_dedupe(
         if not dupes:
             continue  # every pair of the cluster was already settled: nothing left to offer
         clusters.append(
-            {"canonical": canonical, "duplicates": dupes, "cause": bugsim.shared_cause(records, group)}
+            {
+                "canonical": canonical,
+                "duplicates": dupes,
+                "cause": bugsim.shared_cause(records, group),
+            }
         )
         if apply:
             for dup in dupes:
                 out = link_record(
-                    repo, dup["id"], "duplicate_of", canonical, reason="bug dedupe --apply", agent=agent
+                    repo,
+                    dup["id"],
+                    "duplicate_of",
+                    canonical,
+                    reason="bug dedupe --apply",
+                    agent=agent,
                 )
                 (applied if out.ok else failed).append(dup["id"])
     data: dict[str, Any] = {
