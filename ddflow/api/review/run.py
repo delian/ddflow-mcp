@@ -304,6 +304,44 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
+def _shed_degraded(revs, st, gate: str, say) -> tuple[list, list]:
+    """(reviewers, shed names) -- the gate's pool with reviewers a quota/exhaustion wall
+    already marked (``RV.degraded_marks``) dropped, and the shed names said, in pool order
+    (the next enabled cross-family reviewer serves). An unmarked reviewer is never dropped:
+    it still gets one run to fail honestly before being marked."""
+    degraded = {
+        name: row
+        for name, row in RV.degraded_marks(st).items()
+        if any(r.name == name for r in revs)
+    }
+    for name in sorted(degraded):
+        say(f"→ shed {name}: degraded ({degraded[name].get('reason') or 'quota/exhaustion'})")
+    return [r for r in revs if r.name not in degraded], sorted(degraded)
+
+
+def _note_degraded(res, r, gate: str, extra_evidence: dict, say) -> None:
+    """Append the quota/exhaustion mark of one review to `extra_evidence` and SAY it, so a
+    degraded reviewer is recorded and surfaced instead of silently folded into
+    `unavailable` (B8efd3d1bc4). No mark for anything but a reviewer's own quota wall."""
+    if not res.degraded:
+        return
+    if extra_evidence is None:
+        extra_evidence = {}
+    extra_evidence.setdefault("review_degraded", []).append(
+        {
+            "reviewer": r.name,
+            "reason": res.degraded,
+            "gate": gate,
+            "model": r.model,
+            "family": r.resolved_family(),
+        }
+    )
+    say(
+        f"→ {r.name} quota/exhaustion ({res.degraded}): marked degraded and shed from "
+        f"{gate} -- the next enabled cross-family reviewer serves until it recovers"
+    )
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -323,7 +361,7 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     return cross[0] if cross else best
 
 
-def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -421,6 +459,15 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         )
 
     it = st.items.get(item)
+    revs, shed = _shed_degraded(revs, st, gate, say)
+    if not revs:
+        return unavailable(
+            f"Every reviewer for gate {gate!r} is degraded ("
+            + ", ".join(shed)
+            + ") and was shed. Recording UNAVAILABLE — which is NOT a pass. "
+            + "`ddflow doctor` names the degraded reviewers.",
+            how="",
+        )
     # The head the diff is taken from, captured BEFORE the diff (B4f5be8179f): a commit
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
@@ -526,6 +573,7 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
                 )
         results.append(res)
         _say_result(say, res)
+        _note_degraded(res, r, gate, extra_evidence, say)
 
     author_model, _ = _author_model(st, agent, "", cfg)
     best = _identifying_reviewer(results, author_model, cfg)
