@@ -38,7 +38,7 @@ from ..core import flowparams as FP
 from ..core import flowsignals as FS
 from ..core.events import Event
 from ..core.model import State
-from ..core.schedule import LIMIT_UNAVAILABLE
+from ..core.schedule import LIMIT_UNAVAILABLE, idle_reserved
 from ..infra import git as G
 from ..infra import proc as P
 from ..infra import signals as SIG
@@ -128,10 +128,14 @@ def read_ring(repo: Path) -> list[dict]:
     return _read(repo)[0]
 
 
+def _flying(state: State, cfg: Config, now: float) -> list[str]:
+    live = state.active_leases(now, cfg.lease.grace_s)
+    return [i for i in live if i in state.items and not state.items[i].removed]
+
+
 def in_flight(state: State, cfg: Config, now: float) -> int:
     """Live leases on items that still exist: what the parallelism limit counts."""
-    live = state.active_leases(now, cfg.lease.grace_s)
-    return sum(1 for i in live if i in state.items and not state.items[i].removed)
+    return len(_flying(state, cfg, now))
 
 
 @contextlib.contextmanager
@@ -220,7 +224,12 @@ def _samples(rows: Sequence[dict]) -> list[FC.Sample]:
 
 
 def _history(rows: Sequence[dict]) -> list[tuple[float, int]]:
-    return [(float(r["at"]), int(r.get("in_flight", 0) or 0)) for r in rows]
+    # What the limit's growth is judged by: a reserved slot idle because the ordinary ones
+    # are full is a slot the limit could not give anyone (`idle_reserved`).
+    return [
+        (float(r["at"]), int(r.get("in_flight", 0) or 0) + int(r.get("reserved_idle", 0) or 0))
+        for r in rows
+    ]
 
 
 def _log_signals(events: Sequence[Event], now: float) -> dict[str, float | None]:
@@ -290,7 +299,9 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
         ctx.cfg, {**SIG.controller_signals(raw), **_log_signals(ctx.log_events(), now)}
     )
     flying = in_flight(ctx.state, ctx.cfg, now)
-    binding = flying >= _fold(ctx, rows, now, fresh=False).limit
+    limit = _fold(ctx, rows, now, fresh=False).limit
+    idle = idle_reserved(ctx.state, ctx.cfg, _flying(ctx.state, ctx.cfg, now), limit)
+    binding = flying + idle >= limit
     reasons = dict(getattr(source, "reasons", {}) or {})
     ensure_local_dir(ctx.repo)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -304,6 +315,7 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
             "at": now,
             "signals": signals,
             "in_flight": flying,
+            "reserved_idle": idle,
             "limit_binding": binding,
             "reasons": reasons,
         }

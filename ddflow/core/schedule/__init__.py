@@ -84,6 +84,10 @@ from ._readiness import is_external as is_external
 from ._readiness import plan_blocker as plan_blocker
 from ._readiness import stale_package_globs as stale_package_globs
 from ._readiness import unpickable as unpickable
+from ._reserved import idle_reserved as idle_reserved
+from ._reserved import ordinary_free as ordinary_free
+from ._reserved import reserved_in_force as reserved_in_force
+from ._reserved import reserved_items as reserved_items
 from ._resources import NO_TREE_TAG as NO_TREE_TAG
 from ._resources import bug_items as bug_items
 from ._resources import capacities as capacities

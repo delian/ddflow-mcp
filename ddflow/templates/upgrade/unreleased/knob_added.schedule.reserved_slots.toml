@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "schedule.reserved_slots"
+new = '0'
+why = "How many slots of the parallelism limit only bug fixes and reserved_tags work may take (default 0)."
+impact = "additive"

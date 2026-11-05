@@ -146,6 +146,8 @@ class Plan:
     #: (auto: ceiling 8; limited by load per core)" or "parallel: 4 (fixed)" -- set only
     #: when the caller passed the limit in force (`plan(parallel=...)`).
     parallel_line: str = ""
+    #: How many slots `schedule.reserved_slots` keeps and for what; "" when none.
+    reserved_note: str = ""
     #: Open phases whose every task is finished (`unpickable`'s "finished_phase"), in
     #: scope of the plan's `phase`. Offered to CLOSE -- the phase's own pipeline, then
     #: `complete` -- and never closed here: its gates still decide (B28268eba1a).
@@ -161,6 +163,8 @@ class Plan:
             parts.append(f"{len(self.capped)} held by {self.cap_note}")
         if self.overlapped:
             parts.append(f"{len(self.overlapped)} overlap an offered item")
+        if self.reserved_note:
+            parts.append(self.reserved_note)
         if self.cycles:
             parts.append(f"{len(self.cycles)} CYCLE(S)")
         if self.interrupted:

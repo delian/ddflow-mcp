@@ -241,6 +241,15 @@ class ScheduleConfig:
         True,
         doc="Offer bug fixes before features (default true). A task is a bug fix when it carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record names it (`ddflow bug found --item`). Priority still orders bugs among themselves and features among themselves, and the parallelism cap hands its slots to bugs first -- so a standing bug is fixed before more features are built on it. `false` orders by priority alone.",
     )
+    reserved_slots: int = knob(
+        0,
+        doc="How many slots of the parallelism limit only reserved work may take (default 0): bug fixes (as `bugs_first` defines them, whether or not it is on) and tasks tagged `reserved_tags`. Ordinary work holds at most limit minus this; a reserved slot with no such work stays free, and reserved work may also use any ordinary slot. `worktree.max_parallel` keeps the same share. One slot of a cap always stays ordinary. `next`, `status` and `brief` say what is reserved.",
+        check=int_at_least(0),
+    )
+    reserved_tags: list[str] = knob(
+        factory=lambda: ["ddflow-gap"],
+        doc='Tags that make a task reserved work for `reserved_slots`, beside bug fixes (default ["ddflow-gap"]).',
+    )
     dx_priority: int = knob(
         8,
         doc="The priority a task gets when filed with none and it is a DX task: tagged one of dx_tags, or its id starts with dx_id_prefix (default 8, lower is offered first). Before this, DX and fix tasks filed without `--priority` landed at 100, behind all feature work (26 DX and 6 fix tasks, 2026-10-16). An explicit `--priority`, 100 included, is never changed.",
