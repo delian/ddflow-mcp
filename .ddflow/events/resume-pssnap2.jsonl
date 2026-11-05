@@ -57,3 +57,4 @@
 {"agent":"resume-pssnap2","data":{"at":1793908317.4517043,"holder":"resume-pssnap2"},"id":"eefa97bbb2f6a70a8115b2d0f","kind":"lease.renewed","lamport":142521,"schema":1,"subject":"PS-snapshot-calibrate","ts":"2026-11-05T19:51:57.545706Z"}
 {"agent":"resume-pssnap2","data":{"at":1793908932.3411758,"holder":"resume-pssnap2"},"id":"e034c30c068e645cb758571e7","kind":"lease.renewed","lamport":142531,"schema":1,"subject":"PS-snapshot-calibrate","ts":"2026-11-05T20:02:12.961195Z"}
 {"agent":"resume-pssnap2","data":{"at":1793909141.342371,"holder":"resume-pssnap2"},"id":"e4d490723512de21f48ea3176","kind":"lease.renewed","lamport":142542,"schema":1,"subject":"PS-snapshot-calibrate","ts":"2026-11-05T20:05:41.434431Z"}
+{"agent":"resume-pssnap2","data":{"at":1793909837.8380256,"holder":"resume-pssnap2"},"id":"e0a4f332ad61dfd9e0895860b","kind":"lease.renewed","lamport":142565,"schema":1,"subject":"PS-snapshot-calibrate","ts":"2026-11-05T20:17:18.591038Z"}
