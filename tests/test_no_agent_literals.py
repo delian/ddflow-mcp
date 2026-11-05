@@ -91,11 +91,6 @@ BASELINE: dict[str, tuple[int, str]] = {
     "ddflow/services/harness.py": (1, "Claude-only onboarding, replaced by B-hx-onboard-generic"),
     "ddflow/services/legacy.py": (1, "the legacy command-file glob an import reads"),
     "ddflow/surfaces/parsers/workflow.py": (1, "the default of `hooks run --harness` (compat)"),
-    "ddflow/services/export/kind_security.py": (
-        1,
-        ".github/SECURITY.md: where GitHub itself looks for the policy file; no agent's path, "
-        "it only shares the directory copilot's descriptor uses",
-    ),
 }
 
 
