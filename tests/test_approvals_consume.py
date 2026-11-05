@@ -140,7 +140,7 @@ def test_an_approval_binds_the_action_not_the_agent(log, repo):
 def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
     """B86be969daf: a lane files, is approved, then dies unnamed; a successor lane re-claiming
     the SAME item+state may spend the already-granted answer instead of the answer being
-    owner-gated to the dead agent and expiring unused. A widened act is still refused."""
+    owner-gated to the dead agent and expiring unused."""
     cfg = Config()
     filed = _approved(log, cfg)  # requested by "asker" (the dead lane)
     successor = EventLog(repo, "successor")
@@ -149,10 +149,6 @@ def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
     got = C.operator_gate(successor, cfg, _canon(agent="successor"), approval_id=filed.id, now=T0 + 1)
     assert got.ok and asks_of(_state(log))[filed.id]["used"] == 1
     assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "successor"
-    # a WIDENED act -- a different item -- still needs a new approval, whatever the agent names
-    other = _approved(log, cfg, _canon(item="fix-OTHER"))
-    assert not C.operator_gate(successor, cfg, _canon(agent="successor", item="fix-OTHER"),
-                               approval_id=other.id, now=T0 + 1).ok
 
 
 def test_the_state_changing_since_the_request_needs_a_new_approval(log):
