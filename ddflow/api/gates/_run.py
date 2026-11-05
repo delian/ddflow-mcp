@@ -316,7 +316,7 @@ def run(
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
     if cwd is None:
-        reason, kept = _no_tree_reason(it, item, gate, held, force)
+        reason, kept = _no_tree_reason(repo, it, item, gate, held, force)
         if not kept:
             R.record_measured(
                 log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
