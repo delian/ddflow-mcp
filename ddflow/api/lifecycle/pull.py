@@ -18,7 +18,7 @@ from ...core import progress as PR
 from ...core.admission import shared_globs
 from ...core.defaults import DEFAULT_NEXT_KIND
 from ...core.model import RUNNING, State
-from ...core.schedule import Caps, caps, critical_path, open_slots
+from ...core.schedule import Caps, caps, critical_path, needs_tree, open_slots
 from ...services import flowstate as FL
 from ...services import modelreg
 from ...services.lanes import launch_template as T
@@ -58,10 +58,11 @@ def _source(repo: Path, cfg: Config, st: State, lane: str, now: float) -> D.Lane
     )
 
 
-def _slots(c: Caps, reason: str) -> D.Slots:
-    """The tighter of the two caps, as the pull answer judges it."""
+def _slots(c: Caps, reason: str, ids: list[str]) -> D.Slots:
+    """The cap the pull answer judges: the item limit, or the worktree limit when that is
+    what left no candidate (an item with no tree of its own is not held by it)."""
     paused = reason if c.paused else ""
-    if c.tree_slots < c.flight_slots:
+    if not ids and c.tree_slots < c.flight_slots:
         return D.Slots(c.with_trees, c.tree_limit, paused)
     return D.Slots(c.in_flight, c.limit, paused)
 
@@ -86,18 +87,23 @@ def _live_families(events: Any, cfg: Config, live: dict[str, Any], now: float) -
     }
 
 
+def _fits(it: Any, free: Any, reserved: frozenset[str]) -> bool:
+    """Is there a slot this item may take? Reserved work may take any free slot, ordinary
+    work its share, and only an item that takes a worktree needs a tree slot."""
+    mine = it.id in reserved or free.ordinary_flight is None
+    flight = free.flight if mine else free.ordinary_flight
+    tree = free.tree if mine else free.ordinary_tree
+    return flight > 0 and (tree > 0 or not needs_tree(it))
+
+
 def _candidates(p: Any, st: State, cfg: Config, c: Caps, live: dict[str, Any]) -> list[str]:
     """Everything ready in every sense but the offer: the cap-held and the items overlapping
-    another offer compete too, since one lane takes one item and `Slots` already judged the
-    cap. An interrupted item does not: its worktree may hold work, and someone salvages that
-    before a lane starts over. With only reserved slots left, only reserved work competes."""
+    another offer compete too, since one lane takes one item, so long as a slot fits them. An
+    interrupted item does not: its worktree may hold work, and someone salvages that before a
+    lane starts over."""
     ids = [*(i.id for i in p.ready), *p.capped, *p.overlapped]
-    ids = [i for i in ids if st.items[i].state != RUNNING]
     free, reserved = open_slots(st, cfg, live, c.live_items, c.limit, c.flight_slots, c.tree_slots)
-    shares = (free.ordinary_flight, free.ordinary_tree)
-    if any(share is not None and share <= 0 for share in shares):
-        return [i for i in ids if i in reserved]
-    return ids
+    return [i for i in ids if st.items[i].state != RUNNING and _fits(st.items[i], free, reserved)]
 
 
 def _ask(
@@ -147,6 +153,7 @@ def next_lane(
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     live = st.active_leases(now, cfg.lease.grace_s)
     c = caps(st, cfg, live, parallel)
+    ids = _candidates(p, st, cfg, c, live)
     a = _ask(
         repo,
         log,
@@ -154,8 +161,8 @@ def next_lane(
         st,
         _source(repo, cfg, st, lane, now),
         lane,
-        _candidates(p, st, cfg, c, live),
-        slots=_slots(c, parallel.reason),
+        ids,
+        slots=_slots(c, parallel.reason, ids),
         phase=phase,
         now=now,
     )

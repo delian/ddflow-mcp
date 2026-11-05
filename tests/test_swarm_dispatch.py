@@ -435,6 +435,20 @@ def test_next_lane_judges_the_cap_plan_counts_with_a_worktree_limit(repo):
     assert "1 in flight of 1" in out.reason
 
 
+def test_a_full_tree_cap_does_not_hold_an_item_that_takes_no_tree(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    (repo / ".ddflow/local/config.toml").write_text(
+        '[schedule]\nparallel = "fixed"\nmax_parallel_tasks = 4\n[worktree]\nmax_parallel = 1\n',
+        encoding="utf-8",
+    )
+    run_cli(repo, "update", "a", "--tags", "no-worktree")
+    _task(repo, "b")
+    assert api.claim(repo, "b", agent="other").exit == 0
+    out = api.next_lane(repo, lane="ds")
+    assert (out.data["status"], out.data["item"]) == (D.OFFER, "a")
+
+
 def test_next_lane_counts_a_holder_of_its_family_against_the_family_cap(repo):
     _queue(repo)
     _approve(repo, "ds")
