@@ -134,6 +134,21 @@ def test_refused_command_substitution_multiline(cmd):
     assert "Instead:" in r.message()
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "echo hi # don't\ngit push 'origin main'",
+        "echo hi # comment\npkill -f myserver",
+    ],
+)
+def test_refused_comment_quote_spans_lines(cmd):
+    # a comment runs to the end of its line, so a quote inside it is not a quote and the next
+    # line's command is still seen
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
 def test_reset_hard_only_on_primary(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     assert _check("git reset --hard HEAD", cwd=tmp_path) is not None
