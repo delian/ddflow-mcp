@@ -29,14 +29,22 @@ def _in_repo(repo, monkeypatch):
     monkeypatch.chdir(repo)
 
 
-def _setup(repo: Path, tmp_path: Path, gates=("critic", "rubber_duck")) -> None:
-    cli = tmp_path / "fake-reviewer"
+def _fake_reviewer(cli: Path, claim: str = "something wrong") -> None:
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
-        'printf "FINDING HIGH a.py:1\\nsomething wrong\\n\\n"\n'
+        f'printf "FINDING HIGH a.py:1\\n{claim}\\n\\n"\n'
         'echo "STATUS: FINDINGS 1"\n'
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+
+
+def _setup(
+    repo: Path, tmp_path: Path, gates=("critic", "rubber_duck"), *, same_finding: bool = True
+) -> None:
+    """Each gate reviewed, each round one finding: the same one under every gate, the way
+    a combined review raises it, or with ``same_finding=False`` a different one per gate."""
+    cli = tmp_path / "fake-reviewer"
+    _fake_reviewer(cli)
     run_cli(repo, "init")
     names = ", ".join(f'"{g}"' for g in gates)
     (repo / ".ddflow" / "config.toml").write_text(
@@ -47,6 +55,8 @@ def _setup(repo: Path, tmp_path: Path, gates=("critic", "rubber_duck")) -> None:
     run_cli(repo, "task", "add", "T1", "--title", "add file", "--globs", "*.py")
     (repo / "a.py").write_text("x = 1\n")
     for g in gates:
+        if not same_finding:
+            _fake_reviewer(cli, f"something wrong for {g}")
         assert api.review(repo, gate=g, item="T1").data["outcome"] == "failed"
 
 
@@ -80,7 +90,9 @@ def test_omitted_gate_resolves_the_only_gate_with_findings_and_says_which(repo, 
 
 
 def test_explicit_gate_is_unchanged(repo, tmp_path):
-    _setup(repo, tmp_path)
+    """Number 1 is a different finding on each gate here: the verdict stays on the gate it
+    names. The same finding under both gates answers on both (test_review_triage_combined)."""
+    _setup(repo, tmp_path, same_finding=False)
     code, _out, err = _cli(repo, "--gate", "rubber_duck")
     assert code == OK, err
     assert [e.data["gate"] for e in _triaged(repo)] == ["rubber_duck"]
@@ -125,15 +137,15 @@ def test_review_outcome_does_not_depend_on_git_activity_outside_the_repo(
     """B77b32b1bdb: forces the path the flake took. A checkout other than the test repo
     moves while the reviewer runs (a sibling lane's commit or stash); the review must
     still be `failed` (it found something), not `unavailable`."""
-    from ddflow.services import review
+    from ddflow.services.review import engine
 
     ticks = iter(range(1_000_000))
-    real = review.git_state
+    real = engine.git_state
 
     def state(where):
         if Path(where).resolve() == repo.resolve():
             return real(where)
         return {"head": str(next(ticks))}  # any other checkout: a new state on every look
 
-    monkeypatch.setattr(review, "git_state", state)
+    monkeypatch.setattr(engine, "git_state", state)
     _setup(repo, tmp_path)  # asserts both reviews come back "failed"

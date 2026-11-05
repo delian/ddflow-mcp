@@ -26,9 +26,11 @@ def _a_person_records_by_hand(monkeypatch):
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
 
 
-def _merged(repo: Path, *, with_ci: bool = False) -> str:
+def _merged(repo: Path, *, with_ci: bool = False, agent: str = "") -> str:
     """T1 claimed, one file committed on its branch, merged: `merged_sha` is set. ``with_ci``
-    also puts `ci` in the pipeline and records it, so a rework clears a stale `ci` gate too."""
+    also puts `ci` in the pipeline and records it, so a rework clears a stale `ci` gate too.
+    ``agent`` is who claims and merges: a second agent's later claim is the race
+    (B-merged-uncompleted-claimable)."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     extra = '\n[gate.unit_tests]\ncommand = "grep -q reworked t.txt"\n'
@@ -41,7 +43,7 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "cfg")
     run_cli(repo, "task", "add", "T1", "--title", "t")
-    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent=agent)
     assert code == 0, out + err
     tree = Path(json.loads(out)["worktree"])
     (tree / "t.txt").write_text("x\n")
@@ -49,7 +51,16 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
     _git(tree, "commit", "-qm", "work")
     if with_ci:
         code, out, err = run_cli(
-            repo, "gate", "record", "T1", "implement", "--outcome", "passed", "--evidence", "e"
+            repo,
+            "gate",
+            "record",
+            "T1",
+            "implement",
+            "--outcome",
+            "passed",
+            "--evidence",
+            "e",
+            agent=agent,
         )
         assert code == 0, out + err
         code, out, err = run_cli(
@@ -60,9 +71,10 @@ def _merged(repo: Path, *, with_ci: bool = False) -> str:
             "ci",
             "--reason",
             "the stale ci gate is reopened by the rework",
+            agent=agent,
         )
         assert code == 0, out + err
-    assert run_cli(repo, "merge", "T1")[0] == 0
+    assert run_cli(repo, "merge", "T1", agent=agent)[0] == 0
     sha = fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
     assert sha, "the merge records a merged_sha"
     return sha
@@ -104,3 +116,29 @@ def test_a_gate_run_after_rework_runs_in_the_new_tree(repo):
     assert "removed its worktree" not in text, text
     rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gate_outcome("unit_tests")
     assert rec == "passed", rec
+
+
+def test_a_second_agents_claim_of_a_merged_uncompleted_item_is_refused(repo):
+    """B-merged-uncompleted-claimable: in the merge -> complete gap another lane's claim must
+    be REFUSED, not treated as fresh work. `item.reworked` would clear the merging lane's
+    gates and its `complete` would then refuse. The merger's OWN re-claim still re-opens
+    (test_reclaiming_a_merged_item_reopens_the_stale_merge)."""
+    _merged(repo, agent="lane-1")
+    before = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    assert before.merged_sha, "lane-1's merge recorded"
+    assert before.gate_outcome("merge") == "passed", "the merge gate is what must survive"
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="lane-2")
+    assert code == 3, out + err  # refused, not a rework
+    it = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    assert it.merged_sha, "the refused claim leaves lane-1's merge intact"
+    assert it.gate_outcome("merge") == "passed", "lane-1's gates are preserved"
+
+
+def test_next_does_not_offer_a_merged_uncompleted_item(repo):
+    """A merged item not yet completed is not fresh work: `next` for a second lane must not
+    list it as ready."""
+    _merged(repo, agent="lane-1")
+    _code, out, _ = run_cli(repo, "--json", "next", agent="lane-2")
+    plan = json.loads(out)
+    ready_ids = [r["id"] for r in plan.get("ready", [])]
+    assert "T1" not in ready_ids, plan
