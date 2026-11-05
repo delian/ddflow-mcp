@@ -20,7 +20,6 @@ from ._fingerprint import (
     _capability_tables,
 )
 
-
 #: SQLite VM steps between two checks of a `read_only_rows` time budget.
 PROGRESS_STEPS = 1000
 
