@@ -37,7 +37,7 @@ from ...core.digest import content_digest
 from ...core.globs import inside
 from ...core.outcome import FAIL
 from ...core.redact import mask_secrets
-from ...core.secret_shapes import shape_hit
+from ...core.secret_shapes import session_secret_patterns, shape_hit
 from ...infra import fsio
 from ...infra import git as G
 from ...infra import proc as P
@@ -54,7 +54,7 @@ _FILE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
 _ROOT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._/-]*")
 _SIGNALS = ("TERM", "INT", "HUP", "KILL")
 _PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----\s+[A-Za-z0-9+/]")
-_LOOSE = frozenset(SessionConfig().redact_patterns)
+_LOOSE = frozenset(session_secret_patterns(SessionConfig(), builtin=False))
 _SSH_LOST = 255  # ssh's own failure, as against the remote command's exit code
 _CHUNK = 65536
 BUNDLE, MANIFEST, RETURN, PROPOSALS = (
@@ -178,9 +178,8 @@ def _secret(text: str, cfg: Config | None) -> bool:
     value`` ones, which refused 129 files here."""
     if shape_hit(text) or _PEM.search(text):
         return True
-    s = cfg.session if cfg else SessionConfig()
-    own = [p for p in (*s.redact_patterns, *s.redact_extra) if p not in _LOOSE]
-    return bool(mask_secrets(text, own)[1])
+    mine = session_secret_patterns(cfg.session if cfg else SessionConfig(), builtin=False)
+    return bool(mask_secrets(text, [p for p in mine if p not in _LOOSE])[1])
 
 
 def _redact(cfg: Config | None) -> Callable[[str], str]:
