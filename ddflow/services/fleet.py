@@ -32,7 +32,7 @@ ORDER = (FAILED, STALLED, WORKING, IDLE, DONE)
 _STOPPED = S.UNFINISHED
 #: Characters of a reason that failure patterns are matched against (display is cut separately).
 RAW_CAP = 2000
-#: Release notes that say the work ended normally; an empty note says nothing went wrong.
+#: Release notes that say nothing went wrong: the work ended normally, or no note at all.
 _RELEASE_OK = ("", "completed", "done", "merged")
 
 
@@ -77,8 +77,10 @@ def _word(e: Event, sessions: dict[str, str]) -> tuple[str, str, bool]:
         return _holder(e), str(e.data.get("reason") or ""), False
     if e.kind == "lease.released":
         note = str(e.data.get("note") or "")
-        normal = note.strip().lower() in _RELEASE_OK
-        return _holder(e), "" if normal else note, normal
+        if note.strip().lower() not in _RELEASE_OK:
+            return _holder(e), note, False
+        # Only the holder's own release shows it carried on; a sweep says nothing about it.
+        return _holder(e), "", str(e.data.get("by") or e.agent) == _holder(e)
     return "", "", False
 
 
@@ -194,7 +196,7 @@ def _lease_left(ln: LN.Lane, st: State, now: float, grace_s: float) -> int:
     ls = it.lease if it and not it.terminal else None
     if ls is None or ls.holder != ln.name or not ls.live(now, grace_s):
         return 0
-    return max(0, int(ls.renewed_at + ls.ttl_s - now))
+    return max(1, int(ls.renewed_at + ls.ttl_s + grace_s - now))  # live, so never read as none
 
 
 def resume(

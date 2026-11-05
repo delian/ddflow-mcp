@@ -316,3 +316,34 @@ def test_the_all_history_ledger_pays_for_no_standing_waits(monkeypatch):
     monkeypatch.setattr(WG, "edges", lambda *a: calls.append(a) or [])
     lanes = FL.ledger(g.events, st, cfg, NOW, plan)
     assert len(lanes) == 5 and calls == [] and "W" in st.waiting  # the caller's state is intact
+
+
+@pytest.mark.parametrize("note", ["", "completed"])
+def test_a_release_by_another_agent_keeps_the_stop_reason(note):
+    """Someone sweeping the lease says nothing about the holder: 87 such releases on record."""
+    g = multi_lane()
+    g.add("lease.expired", "V", "sweeper", T0 - 90, holder="lane-ended", reason="HTTP 429")
+    g.add("lease.released", "V", "sweeper", T0 - 80, holder="lane-ended", by="sweeper", note=note)
+    e = next(x for x in _entries(g)[0] if x.name == "lane-ended")
+    assert e.cls == FL.FAILED and "429" in e.stop_reason
+
+
+def test_a_cleared_reason_leaves_the_lane_resumable():
+    g = multi_lane()
+    g.add("lease.expired", "V", "sweeper", T0 - 90, holder="lane-ended", reason="HTTP 429")
+    g.add("lease.released", "V", "lane-ended", T0 - 80, holder="lane-ended", note="")
+    entries, _l, st, cfg = _entries(g)
+    assert FL.resume(entries, "lane-ended", st, NOW, cfg.lease.grace_s)["eligible"]
+
+
+def test_a_lease_inside_its_grace_still_shows_as_held():
+    g = multi_lane()
+    st, *_ = build_inputs(g.events, T0)
+    ls = st.items["X"].lease
+    now = ls.renewed_at + ls.ttl_s + 10  # past the ttl, inside the grace below
+
+    def edit(cfg):
+        cfg.lease.grace_s = 30
+
+    e = next(x for x in _entries(g, now, edit)[0] if x.name == "lane-work")
+    assert e.lease_s == 20
