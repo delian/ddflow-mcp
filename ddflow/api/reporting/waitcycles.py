@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from functools import cache
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...core import clock
 from ...core import health as H
 from ...core import leasewait as LW
@@ -26,7 +26,7 @@ def progress_of(log, st, cfg, now: float | None = None, events=None, activity=No
     """The `Progress` of this state, reading nothing until first asked: a queue with no
     stuck wait pays no git or log read. Work in flight is progress as of now: a live gate
     run, or a running job within `[health].runaway_s` (past it the job is a RUNAWAY)."""
-    at = time.time() if now is None else now
+    at = CLOCK.wall() if now is None else now
     act = activity or LB.tree_activity(log.root)
     budget = cfg.health.runaway_s
 
@@ -81,7 +81,7 @@ def wait_cycles(
     of it; without, the youngest wait."""
     if not cfg.loops.wait_cycle:
         return []
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     waits, live = _standing(st, cfg, now)
     cycles = LW.find(waits, _held(live, set(), None))
     if not cycles or progress is None:
@@ -98,17 +98,20 @@ def wait_alarms(
     limit = cfg.loops.wait_alarm_s
     if limit <= 0:
         return []
-    now = time.time() if now is None else now
+    now = CLOCK.wall() if now is None else now
     waits, live = _standing(st, cfg, now)
     aged = [w for w in waits if now - w.since >= limit]
     way = {b for w in aged for b, _h in w.on}
     return LW.alarms(aged, _held(live, way, progress), cycles, now, limit)
 
 
-def wait_report(log, st, cfg, events=None, now: float | None = None) -> tuple[list, list]:
+def wait_report(
+    log, st, cfg, events=None, now: float | None = None, activity=None
+) -> tuple[list, list]:
     """``(cycles, alarms)`` as of ``now``: the one answer `doctor`, `status`, `brief` and the
     lanes advisor read."""
-    progress = progress_of(log, st, cfg, now, events)
+    now = CLOCK.wall() if now is None else now
+    progress = progress_of(log, st, cfg, now, events, activity)
     cycles = wait_cycles(st, cfg, now, progress)
     return cycles, wait_alarms(st, cfg, cycles, progress, now)
 
@@ -122,15 +125,21 @@ def wait_rows(cycles: list[LW.Cycle], alarms: list[LW.Alarm]) -> dict[str, list[
     return {k: v for k, v in rows.items() if v}
 
 
+def _runnable(drops: tuple[LW.Drop, ...]) -> str:
+    """The line to run for ``drops``, or `doctor` when `safe` would change it: the quotes it
+    strips are what keep a glob from the shell, and `doctor` prints the commands in full."""
+    line = "; ".join(d.command() for d in drops)
+    return line if line and LN.safe(line) == line else "ddflow doctor"
+
+
 def _deadlock_move(c: LW.Cycle) -> LN.Move:
     loop = " -> ".join(LN.safe(a) for a in (*c.agents, c.agents[0]))
     gives = ", ".join(LN.safe(g) for g in c.release) or "nothing it holds, and reports it"
-    cmds = "; ".join(LN.safe(d.command()) for d in c.drops)
     return LN.Move(
         "deadlock",
         f"lease deadlock {loop}: {LN.safe(c.victim)} yields {gives}",
         tuple(LN.safe(a) for a in c.agents),
-        cmds or "ddflow doctor",
+        _runnable(c.drops),
     )
 
 
@@ -141,7 +150,7 @@ def _alarm_move(a: LW.Alarm) -> LN.Move:
         f"{LN.safe(a.agent)} on {LN.safe(a.item)} has waited {clock.fmt_age(a.age_s)} and "
         f"nothing runs on {way}",
         (LN.safe(a.agent),),
-        "; ".join(LN.safe(d.command()) for d in a.drops) or "ddflow doctor",
+        _runnable(a.drops),
     )
 
 
@@ -185,7 +194,7 @@ def health_lines(log, st, cfg, repo, cycles, now: float | None = None, activity=
     """Finding lines not already shown elsewhere, at most `[health].shown` in full."""
     if not HW.enabled(HW.modes(cfg)):
         return []
-    at = time.time() if now is None else now
+    at = CLOCK.wall() if now is None else now
     by_kind = HW.modes(cfg)
     found = [
         f

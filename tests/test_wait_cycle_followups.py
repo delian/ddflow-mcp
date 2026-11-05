@@ -5,6 +5,7 @@ described, and two waits of one agent on one holder both count."""
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 import time
 from pathlib import Path
@@ -122,8 +123,8 @@ def test_a_wait_past_the_limit_with_nothing_running_raises_an_alarm():
     row = a.as_dict()
     assert row["key"] == "wait_alarm:T1" and row["owner"] == B
     assert row["on"] == [{"item": "T2", "holder": B, "idle_s": 2000.0}]
-    assert row["command"] == "ddflow update T2 --globs x.py"
-    assert row["mcp"] == "ddflow_task action=update id=T2 globs=x.py"
+    assert row["commands"] == ["ddflow update T2 --globs x.py"]
+    assert row["mcp"] == ["ddflow_task action=update id=T2 globs=x.py"]
     line = a.render()
     assert line.startswith("lease wait alarm: agent-a on T1") and "T2 (agent-b, idle" in line
     assert "`ddflow update T2 --globs x.py`" in line
@@ -347,3 +348,45 @@ def test_the_bounded_status_cuts_the_wait_rows_and_says_so():
     OV._bound(data)
     assert len(data["wait_alarms"]) == len(data["wait_cycles"]) == OV.STATUS_LIST_LIMIT
     assert data["truncated"]["lists"]["wait_alarms"] == len(many)
+
+
+def test_an_alarm_on_two_leases_gives_every_command_on_the_wire():
+    held = [LW.Held("L1", B, ("a.py",)), LW.Held("L2", B, ("b.py", "c.py"))]
+    waits = [LW.Wait("T1", A, 0.0, ("a.py", "b.py"), (("L1", B), ("L2", B)))]
+    (a,) = LW.alarms(waits, held, [], now=2000.0, limit=1200.0)
+    row = a.as_dict()
+    assert row["commands"] == ["ddflow release L1", "ddflow update L2 --globs c.py"]
+    assert row["mcp"] == ["ddflow_release id=L1", "ddflow_task action=update id=L2 globs=c.py"]
+
+
+def test_a_kept_glob_survives_the_shell():
+    cmd = LW.Drop("T1", ("a.py",), ("src/**", "my file.py")).command()
+    assert shlex.split(cmd) == ["ddflow", "update", "T1", "--globs", "src/**,my file.py"]
+
+
+def test_a_command_safe_would_change_is_not_offered_to_run():
+    held = [LW.Held("T1", A, ("a.py", "src/**")), LW.Held("T2", B, ("b.py",), 500.0)]
+    waits = [
+        LW.Wait("T1", A, 1.0, ("b.py",), (("T2", B),)),
+        LW.Wait("T2", B, 2.0, ("a.py",), (("T1", A),)),
+    ]
+    (m,) = wait_moves([], LW.find(waits, held), [], 9)
+    assert m.command == "ddflow doctor"  # the quotes `safe` strips are what stop the shell
+
+
+def test_the_time_comes_from_the_clock_port(repo, monkeypatch):
+    _setup(repo)
+    _widen(repo, 1, 2, A)
+    log, st, cfg = _read(repo)
+    cfg.loops.wait_alarm_s = 1
+    from ddflow.api.reporting import waitcycles as WC
+
+    later = time.time() + 5
+
+    class Later:
+        def wall(self) -> float:
+            return later
+
+    monkeypatch.setattr(WC, "CLOCK", Later())
+    _cycles, alarms = WC.wait_report(log, st, cfg, activity=lambda _lz: 0.0)
+    assert [a.item for a in alarms] == ["T1"]

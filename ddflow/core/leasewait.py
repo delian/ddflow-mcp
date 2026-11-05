@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
+from shlex import quote
 from typing import Any
 
 from . import clock
@@ -62,7 +63,7 @@ class Drop:
 
     def command(self) -> str:
         if self.keep:
-            return f"ddflow update {self.item} --globs {','.join(self.keep)}"
+            return f"ddflow update {self.item} --globs {quote(','.join(self.keep))}"
         return f"ddflow release {self.item}"
 
     def mcp(self) -> str:
@@ -172,8 +173,8 @@ class Alarm:
             "owner": self.on[0][1],
             "on": [{"item": i, "holder": h, "idle_s": round(s, 1)} for i, h, s in self.on],
             "drops": [d.as_dict() for d in self.drops],
-            "command": self.drops[0].command() if self.drops else "",
-            "mcp": self.drops[0].mcp() if self.drops else "",
+            "commands": [d.command() for d in self.drops],
+            "mcp": [d.mcp() for d in self.drops],
         }
 
     def render(self) -> str:
