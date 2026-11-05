@@ -1,0 +1,2 @@
+{"agent":"bugfix10","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e521d91a57207a2447d0af6d9","kind":"ddflow.seen","lamport":142788,"schema":1,"subject":"ddflow","ts":"2026-11-05T20:45:18.082868Z"}
+{"agent":"bugfix10","data":{"by":"bugfix10","event":"efff2ea9473adea18ef8b973d","holder":"complete-merged","note":"salvaged: work committed on ddflow/fix-B8efd3d1bc4 (1 commit), resuming as bugfix10"},"id":"e81262eaaefe057a87b5b1e0a","kind":"lease.released","lamport":142789,"schema":1,"subject":"fix-B8efd3d1bc4","ts":"2026-11-05T20:45:18.127292Z"}

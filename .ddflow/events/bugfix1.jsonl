@@ -1,0 +1,2 @@
+{"agent":"bugfix1","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e8c612e04d0a64c5b1ba3d50b","kind":"ddflow.seen","lamport":142786,"schema":1,"subject":"ddflow","ts":"2026-11-05T20:45:13.986485Z"}
+{"agent":"bugfix1","data":{"at":1793911509.6464524,"branch":"","clone":"7267fe","globs":[],"holder":"bugfix1","kind":"task","note":"","resources":[],"ttl_s":5400,"worktree":""},"id":"e13a959298c185073971fbb18","kind":"lease.acquired","lamport":142787,"schema":1,"subject":"fix-B-claim-sync-conflict-silent","ts":"2026-11-05T20:45:14.027793Z"}

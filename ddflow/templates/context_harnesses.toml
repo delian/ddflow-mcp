@@ -4,7 +4,7 @@
 # Not here, by design: descriptors (harnesses/*.toml are not edited) and transcript usage
 # fields ([transcripts] stays with B-am-harness-probe). Window/threshold units differ per
 # client (tokens, ratio, percent): see docs/ddflow/research/compact-window-per-agent.md.
-# Clients in that note without a ddflow descriptor (Roo, Amp, Grok CLI, Pi) have no row.
+# Clients in that note without a ddflow descriptor (Roo, Amp, Pi) have no row.
 
 [meta]
 schema = 1
@@ -68,6 +68,10 @@ compaction_mode = { v = "flag --compaction agentic|basic|off", s = "documented",
 
 [harness.dsh]
 compact_cmd = { v = "/compact", s = "documented", src = "window-note", d = "2026-10-23" }
+
+[harness.grok]
+compact_cmd = { v = "/compact", s = "documented", src = "token-note", d = "2026-10-23", note = "optional context to preserve; the notes call Grok Build 'Grok CLI', read from docs.x.ai/build" }
+window_knob = { v = "config [session] auto_compact_threshold_percent (0-100, default 85); GROK_HOME config", s = "documented", src = "window-note", d = "2026-10-23", note = "[model.<id>] context_window (BYOK) too" }
 
 [harness.windsurf]
 note = "nothing found 2026-10-23"

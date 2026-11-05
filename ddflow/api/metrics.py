@@ -26,7 +26,7 @@ def run_metrics(
     now: float | None = None,
     agent: str = "",
 ) -> O.Outcome:
-    """One of the metrics views (summary, forecast, retro, skips, lanes, stages, locks). Exit 2 when the
+    """One of the metrics views (`services.metrics.VIEWS`). Exit 2 when the
     log holds too little to compute a figure: never a zero standing in for one."""
     log, cfg, st = _load(repo, agent)
     at = time.time() if now is None else now

@@ -349,12 +349,12 @@ def test_the_source_tree_test_is_one_function(monkeypatch):
 
 def test_the_startup_warning_fits_the_install(tmp_path, monkeypatch, capsys):
     repo = _repo(tmp_path, "[lease]\nfrom_the_future = true\n")
-    monkeypatch.setattr(C, "is_source_tree", lambda *a: False)
+    monkeypatch.setattr(CV, "is_source_tree", lambda *a: False)
     C._WARNED.clear()
     Config.load(repo)
     err = capsys.readouterr().err
     assert "merge main" not in err and "ddflow-mcp" in err
-    monkeypatch.setattr(C, "is_source_tree", lambda *a: True)
+    monkeypatch.setattr(CV, "is_source_tree", lambda *a: True)
     C._WARNED.clear()
     Config.load(repo)
     assert "merge main into this tree" in capsys.readouterr().err
