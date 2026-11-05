@@ -11,14 +11,11 @@ seed commit, refuses an excluded path, a link or a secret, reports what lies out
 item's globs, and lands one commit on a host branch whose parent is the original base. It
 never checks out, merges, approves, skips a gate or writes an event: the caller records, the
 host runs the gates, and a remote claim that tests passed is data (D-swarm-answers Q9).
-``parse_proposals`` reads approval PROPOSALS: untrusted data for the operator to answer.
 
 `LaneTransport` is the verbs ADP-lane-transport will move to a port. `SshTransport` is the only
 implementation; ``stdio_argv`` carries ACP over the same ssh. No relay exists (Q8). ``ddflow
 serve`` and its scoped token are not here: the server does not exist yet (MP-transport) and
 the token is SW-remote-trust's.
-
-The numbers are `Knobs`; SW-remote-config wires them to ``[swarm] remote_*``.
 """
 
 from __future__ import annotations
@@ -36,13 +33,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
-from ...config import Config
+from ...config import Config, SessionConfig
 from ...core.globs import inside
 from ...core.outcome import FAIL
+from ...core.redact import mask_secrets
+from ...core.secret_shapes import shape_hit
 from ...infra import git as G
 from ...infra import proc as P
 from ..lane_driver import LaneStatus, Result, failed, ok, unavailable
-from ..redact_report import redact_secrets
+from ..redact_report import redactor
 from . import seedpack as S
 
 _DATE = "1970-01-01T00:00:00Z"
@@ -53,6 +52,8 @@ _HOST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@%:\[\]-]*")
 _FILE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
 _ROOT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._/-]*")
 _SIGNALS = ("TERM", "INT", "HUP", "KILL")
+_PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----\s+[A-Za-z0-9+/]")
+_LOOSE = frozenset(SessionConfig().redact_patterns)
 _SSH_LOST = 255  # ssh's own failure, as against the remote command's exit code
 _CHUNK = 65536
 BUNDLE, MANIFEST, RETURN, PROPOSALS = (
@@ -69,7 +70,7 @@ class RemoteError(RuntimeError):
 
 @dataclass(frozen=True)
 class Knobs:
-    """Every tunable of the remote transport (SW-remote-config feeds them from ``[swarm]``)."""
+    """SW-remote-config feeds these from ``[swarm]``."""
 
     exclude: tuple[str, ...] = (".ddflow", ".env", "**/.env")
     bundle_max_bytes: int = 104857600
@@ -77,7 +78,7 @@ class Knobs:
     return_max_commits: int = 200
     git_timeout_s: int = 120
     scan_max_blob_bytes: int = 1048576
-    scan_batch_bytes: int = 67108864
+    scan_batch_files: int = 64  # at most this many blobs of scan_max_blob_bytes in memory
     branch_prefix: str = "swarm/remote/"
     seed_name: str = "SEED.md"
     proposals_max: int = 5
@@ -110,7 +111,7 @@ class Outbound:
     lane: str
 
     def record(self) -> dict:
-        """What the caller keeps (a note, an event) so ``import_return`` survives a restart."""
+        """What the caller keeps so ``import_return`` survives a restart."""
         d = asdict(self)
         return {k: str(v) if isinstance(v, Path) else v for k, v in d.items()}
 
@@ -142,8 +143,8 @@ def _git(repo: Path, k: Knobs, *args: str, **kw) -> G.GitResult:
 
 
 def _safe(s: str) -> str:
-    """``s`` when it is one harmless path and ref component. Refused, never rewritten: a
-    rewrite could give two lanes one ref, and ``..`` or ``-rf`` must reach no shell."""
+    """``s``, if one harmless path and ref component. Never rewritten: that could give two
+    lanes one ref."""
     if not _FILE.fullmatch(s) or ".." in s or s.endswith((".lock", ".")):
         raise RemoteError(f"{s!r} is not one plain name")
     return s
@@ -181,27 +182,27 @@ def _blobs(repo: Path, k: Knobs, shas: list[str]) -> dict[str, bytes]:
     return got
 
 
-def _batches(todo: list[tuple[str, int]], limit: int) -> Iterable[list[str]]:
-    """The shas of ``todo`` (sha, size) in groups of at most ``limit`` bytes (or one blob)."""
-    group: list[str] = []
-    room = limit
-    for sha, size in todo:
-        if group and size > room:
-            yield group
-            group, room = [], limit
-        group.append(sha)
-        room -= size
-    if group:
-        yield group
+def _secret(text: str, cfg: Config | None) -> bool:
+    """A provider shape, a private key or an operator's own pattern; not the default ``key =
+    value`` ones, which refused 129 files here."""
+    if shape_hit(text) or _PEM.search(text):
+        return True
+    s = cfg.session if cfg else SessionConfig()
+    own = [p for p in (*s.redact_patterns, *s.redact_extra) if p not in _LOOSE]
+    return bool(mask_secrets(text, own)[1])
+
+
+def _redact(cfg: Config | None) -> Callable[[str], str]:
+    """The seed pack's profile, with the operator's patterns."""
+    r = redactor("upstream", cfg)
+    return lambda s: r.text(s).text
 
 
 def _scan(
     repo: Path, k: Knobs, rev: str, cfg: Config | None, only: set[str] | None = None
 ) -> tuple[list[str], list[str]]:
-    """(paths with a secret, paths too big to read) of ``rev``. A binary file is read too: a
-    key is plain text inside it."""
+    """(paths with a secret, paths too big to read) of ``rev``; binary files are read too."""
     by_sha: dict[str, list[str]] = {}
-    sizes: dict[str, int] = {}
     unscanned = []
     for mode, sha, path, size in _tree_entries(repo, k, rev):
         if mode not in _BLOB or (only is not None and path not in only):
@@ -210,11 +211,10 @@ def _scan(
             unscanned.append(path)
             continue
         by_sha.setdefault(sha, []).append(path)
-        sizes[sha] = size
-    hits = []
-    for group in _batches(sorted(sizes.items()), k.scan_batch_bytes):
-        for sha, blob in _blobs(repo, k, group).items():
-            if redact_secrets(blob.decode("utf-8", "replace"), cfg)[1]:
+    hits, shas, step = [], sorted(by_sha), max(1, k.scan_batch_files)
+    for i in range(0, len(shas), step):
+        for sha, blob in _blobs(repo, k, shas[i : i + step]).items():
+            if _secret(blob.decode("utf-8", "replace"), cfg):
                 hits += by_sha[sha]
     return sorted(hits), sorted(unscanned)
 
@@ -254,7 +254,7 @@ def build_outbound(
     knobs: Knobs = DEFAULT,
     cfg: Config | None = None,
 ) -> Outbound:
-    """The directory a remote lane is sent: ``base.bundle``, the seed pack, ``manifest.json``."""
+    """The directory a remote lane is sent: bundle, seed pack, manifest."""
     k = knobs
     repo = Path(repo)
     base_sha = G.run(repo, "rev-parse", "--verify", f"{base}^{{commit}}", timeout=k.git_timeout_s)
@@ -297,7 +297,7 @@ def build_outbound(
         raise
     digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
     seed_path = dest / k.seed_name
-    seed_path.write_text(_seed_text(seed, S.default_redact()), encoding="utf-8")
+    seed_path.write_text(_seed_text(seed, _redact(cfg)), encoding="utf-8")
     manifest = dest / MANIFEST
     manifest.write_text(
         json.dumps(
@@ -329,7 +329,7 @@ def _ref(family: str, item: str, lane: str) -> str:
 
 
 def forget(repo: Path, out: Outbound, knobs: Knobs = DEFAULT) -> None:
-    """Drop the seed ref of one lane, once its branch is settled; the branch itself stays."""
+    """Drop the seed ref of one lane, once its branch is settled."""
     G.run(Path(repo), "update-ref", "-d", out.ref, timeout=knobs.git_timeout_s)
 
 
@@ -429,7 +429,7 @@ def import_return(
 def _inspect(
     repo: Path, k: Knobs, out: Outbound, tip: str, globs: tuple[str, ...], cfg: Config | None
 ) -> Returned:
-    """Everything the host checks of a fetched tip; raises on what is not work at all."""
+    """What the host checks of a fetched tip; raises on what is not work at all."""
     if not G.run(repo, "merge-base", "--is-ancestor", out.root, tip, timeout=k.git_timeout_s).ok:
         raise RemoteError("the returned branch does not descend from the seed commit")
     span = f"{out.root}..{tip}"
@@ -482,9 +482,9 @@ def parse_proposals(
     try:
         rows = json.loads(text)
     except ValueError:
-        return Proposals()
+        return Proposals((), 1)
     if not isinstance(rows, list):
-        return Proposals()
+        return Proposals((), 1)
     n, got, dropped = knobs.proposal_chars, [], 0
     for row in rows:
         kind = row.get("kind") if isinstance(row, dict) else None
@@ -498,8 +498,8 @@ def parse_proposals(
 
 @dataclass(frozen=True)
 class Consent:
-    """A person's go-ahead for one lane on one host (r-consent-outward). The caller reads it
-    from its record; this module checks the scope and the expiry, and never grants one."""
+    """A person's go-ahead for one lane on one host (r-consent-outward), read by the caller
+    from its record; this module only checks its scope and expiry."""
 
     host: str
     item: str
@@ -510,8 +510,8 @@ class Consent:
 
 
 class LaneTransport(Protocol):
-    """Where a remote lane runs. A file is named by a plain ``name`` inside the lane's own
-    directory; a host that cannot be reached is ``unavailable``, never ``failed`` or ok."""
+    """Where a remote lane runs. ``name`` is a plain file in the lane's own directory; a host
+    that cannot be reached is ``unavailable``, never ``failed`` or ok."""
 
     target: str
 
@@ -528,9 +528,10 @@ class LaneTransport(Protocol):
     def cleanup(self, lane: str) -> Result: ...
 
 
-#: An exit code settles it: a recycled pid must not read as the lane still running. `-s`, and
-#: alive asked first: the lane writes its code before it ends, so no moment reads as "gone".
-_ALIVE = '[ ! -s lane.rc ] && [ -f lane.pid ] && kill -0 "$(cat lane.pid)" 2>/dev/null'
+#: The start time `start` wrote proves the pid is still the lane's: a recycled pid never reads
+#: as running and is never signalled. Without ``lstart`` no lane could be stopped: `start` refuses.
+_STAMP = 'ps -o lstart= -p "$(cat lane.pid)"'
+_ALIVE = f'[ ! -s lane.rc ] && [ -s lane.stamp ] && [ "$({_STAMP})" = "$(cat lane.stamp)" ]'
 _OBSERVE = f"""if {_ALIVE}; then echo "running $(cat lane.pid)"
 elif [ -s lane.rc ]; then echo "ended $(cat lane.rc)"
 elif [ -f lane.stopped ]; then echo stopped
@@ -539,9 +540,9 @@ else echo absent; fi"""
 
 
 class SshTransport:
-    """`LaneTransport` over the operator's own ssh login: no key is sent, nothing is forwarded,
-    an unknown host key or a password prompt fails, whatever the operator's ssh config says.
-    The remote needs ``sh``, ``setsid`` and git. What it answers is data, never trusted."""
+    """`LaneTransport` over the operator's own ssh login: nothing is forwarded, and an unknown
+    host key or a password prompt fails, whatever the ssh config says. The remote needs
+    ``sh``, ``setsid`` and git. What it answers is data."""
 
     def __init__(self, host: str, knobs: Knobs = DEFAULT) -> None:
         if not _HOST.fullmatch(host):
@@ -597,11 +598,13 @@ class SshTransport:
         d = self._dir(lane)
         body = f"{shlex.join(argv)}; echo $? > lane.rc"
         line = (
+            '[ -n "$(ps -o lstart= -p $$ 2>/dev/null)" ] || '
+            "{ echo 'the remote ps has no lstart' >&2; exit 3; }\n"
             f"mkdir -p {d} && cd {d} || exit 1\n"
             f"if {_ALIVE}; then echo 'the lane is already running' >&2; exit 3; fi\n"
-            "rm -f lane.rc lane.stopped\n"
+            "rm -f lane.rc lane.stopped lane.stamp\n"
             f"nohup setsid sh -c {shlex.quote(body)} >lane.log 2>&1 </dev/null &\n"
-            "echo $! > lane.pid"
+            f"echo $! > lane.pid\n{_STAMP} > lane.stamp || :"
         )
         return self._call(line)[0]
 
@@ -609,7 +612,7 @@ class SshTransport:
         if sig not in _SIGNALS:
             raise RemoteError(f"signal {sig!r} is not one of {', '.join(_SIGNALS)}")
         d = self._dir(lane)
-        line = f'cd {d} && : > lane.stopped && kill -s {sig} -- "-$(cat lane.pid)"'
+        line = f'cd {d} && {_ALIVE} && : > lane.stopped && kill -s {sig} -- "-$(cat lane.pid)"'
         return self._call(line)[0]
 
     def observe(self, lane: str) -> LaneStatus | Result:
@@ -636,8 +639,8 @@ class SshTransport:
             return self._call(line, stdin=fh, timeout=self._k.copy_timeout_s)[0]
 
     def copy_out(self, lane: str, name: str, local: Path, max_bytes: int) -> Result:
-        """Stream a file back, stopping at ``max_bytes``: the size the host answers is not
-        believed. Nothing is left at ``local`` unless the whole file came."""
+        """Stream a file back, cut at ``max_bytes``: the remote's word on size is not believed.
+        Nothing is left at ``local`` unless the whole file came."""
         argv = self.command(f"cat {self._file(lane, name)}")
         local = Path(local)
         part = local.with_name(f"{local.name}.part")
@@ -674,8 +677,7 @@ class SshTransport:
         return self._judge(code, err)
 
     def stdio_argv(self, lane: str, argv: Sequence[str]) -> tuple[str, ...]:
-        """The ssh argv whose stdin and stdout ARE the lane's: ACP over SSH stdio (Q8), for an
-        `AcpStdioClient`. It runs in the foreground, so nothing of `start` applies."""
+        """The ssh argv whose stdin and stdout ARE the lane's: ACP over SSH stdio (Q8)."""
         d = self._dir(lane)
         return self.command(f"mkdir -p {d} && cd {d} && exec {shlex.join(argv)}")
 
@@ -691,8 +693,8 @@ class SshTransport:
 
 
 def ship(t: LaneTransport, out: Outbound, consent: Consent | None, *, now: float) -> Result:
-    """Send the outbound directory, the one point where code leaves the host. Refused unless
-    a person's consent names this host, item and lane and has not expired."""
+    """Send the outbound directory, the one point where code leaves the host, under a
+    person's unexpired consent for this host, item and lane."""
     want = (t.target, out.item, out.lane)
     if consent is None or (consent.host, consent.item, consent.lane) != want:
         raise RemoteError(f"no consent for lane {out.lane} of {out.item} on {t.target}")
@@ -710,9 +712,9 @@ def ship(t: LaneTransport, out: Outbound, consent: Consent | None, *, now: float
 
 
 def lane_argv(out: Outbound, agent: Sequence[str]) -> tuple[str, ...]:
-    """What runs on the remote, in the lane's directory: unpack the bundle once, run ``agent``
-    in ``work/``, then write the return bundle (none when the lane committed nothing). Only
-    the agent writes to stdout, which ACP owns."""
+    """What runs in the lane's directory: unpack the bundle once, run ``agent`` in ``work/``,
+    then write the return bundle (none if nothing was committed). Only the agent writes to
+    stdout, which ACP owns."""
     fetch = shlex.quote(f"{out.ref}:refs/heads/lane")
     script = (
         "if [ ! -d work ]; then\n"
@@ -736,7 +738,14 @@ class Collected:
     asked: Result  # the proposals' own copy: not ok is "could not tell", not "asked nothing"
 
 
-def collect(t: LaneTransport, out: Outbound, dest: Path, *, knobs: Knobs = DEFAULT) -> Collected:
+def collect(
+    t: LaneTransport,
+    out: Outbound,
+    dest: Path,
+    *,
+    knobs: Knobs = DEFAULT,
+    cfg: Config | None = None,
+) -> Collected:
     """Fetch the return bundle and the proposals, each under its cap, into ``dest``."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -745,5 +754,6 @@ def collect(t: LaneTransport, out: Outbound, dest: Path, *, knobs: Knobs = DEFAU
     got = Proposals()
     read = t.copy_out(out.lane, PROPOSALS, asked, knobs.proposals_max_bytes)
     if read.ok:
-        got = parse_proposals(asked.read_text(encoding="utf-8", errors="replace"), knobs)
+        text = asked.read_text(encoding="utf-8", errors="replace")
+        got = parse_proposals(text, knobs, _redact(cfg))
     return Collected(r, bundle if r.ok else None, got, read)
