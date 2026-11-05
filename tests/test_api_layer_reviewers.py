@@ -134,17 +134,26 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     Only REVIEWED may produce `passed`, and only when it found nothing.
     """
     import inspect
+    from types import SimpleNamespace as NS
 
     from ddflow.api import review as A
+    from ddflow.config import Config
     from ddflow.services import review as R
 
-    # `review` dispatches one gate or several; the one-gate run holds the table.
+    cfg = Config.load(None, env={})
+
+    def outcome(status, *findings):
+        best = NS(status=status, findings=list(findings))
+        return A._gate_outcome(best, [best], None, "", "critic", False, cfg, None, print)[0]
+
+    assert outcome(R.PARTIAL) == "partial"
+    assert outcome(R.UNAVAILABLE) == "unavailable"
+    assert outcome(R.ERROR) == "unavailable"
+    assert outcome(R.REVIEWED) == "passed"
+    assert outcome(R.REVIEWED, R.Finding(severity="LOW", title="nit")) == "failed"
+
+    # `review` dispatches one gate or several; the one-gate run holds the exit codes.
     src = inspect.getsource(A._review_gate)
-    table = src[src.index("outcome = {") : src.index("}[best.status]")]
-    for status in ("PARTIAL", "UNAVAILABLE", "ERROR"):
-        arm = table[table.index(f"RV.{status}:") : table.index("\n", table.index(f"RV.{status}:"))]
-        assert '"passed"' not in arm, f"RV.{status} maps to a pass: {arm.strip()}"
-    assert 'RV.REVIEWED: ("failed" if best.findings else "passed")' in table, table
 
     # And the exit codes: only a real review with no findings is success.
     exits = src[src.index("exit_code = {") : src.index("]\n", src.index("exit_code = {"))]
