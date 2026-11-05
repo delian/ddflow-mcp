@@ -38,7 +38,7 @@ def _setup(repo: Path, tmp_path: Path) -> None:
     cross = _reviewer(tmp_path / "cross")
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(
-        '[worktree]\nenabled = false\n'
+        "[worktree]\nenabled = false\n"
         '[agent]\nfamily = "deepseek"\n'
         f'[[reviewer]]\nname = "same"\nkind = "command"\ncommand = "{same}"\n'
         'model = "deepseek-chat"\nfamily = "deepseek"\ngates = ["critic"]\n'
