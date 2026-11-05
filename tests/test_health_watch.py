@@ -95,7 +95,13 @@ def test_every_lease_the_victim_drops_gets_a_locked_row():
         "files": ["src/utils/**", "conf/*.yml", "docs/**"],
         "remedy": "V yields src/utils/**, conf/*.yml",
         "links": [
-            {"agent": "P", "item": "check", "holder": "V", "blocker": "alpha", "blockers": ["alpha", "beta"]},
+            {
+                "agent": "P",
+                "item": "check",
+                "holder": "V",
+                "blocker": "alpha",
+                "blockers": ["alpha", "beta"],
+            },
             {"agent": "V", "item": "docs", "holder": "P", "blocker": "docs", "blockers": ["docs"]},
         ],
     }
