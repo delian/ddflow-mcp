@@ -147,6 +147,57 @@ def _strip_continuations(text: str) -> str:
     return "".join(out)
 
 
+def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int:
+    """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
+    substitutions inside are navigated but mark no newline. An escaped closer is not the end."""
+    k = j
+    while k < n:
+        c = text[k]
+        if c == closer:
+            return k
+        if c == "'":
+            k2 = text.find("'", k + 1)
+            k = k + 1 if k2 < 0 else k2 + 1
+        elif c == '"':
+            k = _dquote_end(text, n, bodies, k)
+        elif c == "\\":  # an escaped closer (\) / \`) is not the end of the body
+            k += 2 if k + 1 < n else 1
+        elif c == "`":
+            k2 = _find_body(text, n, bodies, k + 1, "`")
+            bodies.append(text[k + 1 : k2])
+            k = k2 + 1
+        elif c == "$" and k + 1 < n and text[k + 1] == "(":
+            k2 = _find_body(text, n, bodies, k + 2, ")")
+            bodies.append(text[k + 2 : k2])
+            k = k2 + 1
+        else:
+            k += 1
+    return k
+
+
+def _dquote_end(text: str, n: int, bodies: list[str], j: int) -> int:
+    """The index after the `"` that opened at `j`, recursing into the `$(` / backtick bodies a
+    double-quoted span holds."""
+    k = j + 1
+    while k < n:
+        cc = text[k]
+        if cc == '"':
+            return k + 1
+        if cc == "\\":
+            k += 2 if k + 1 < n else 1
+        elif cc == "`":
+            k2 = _find_body(text, n, bodies, k + 1, "`")
+            bodies.append(text[k + 1 : k2])
+            k = k2 + 1
+        elif cc == "$" and k + 1 < n and text[k + 1] == "(":
+            k2 = _find_body(text, n, bodies, k + 2, ")")
+            bodies.append(text[k + 2 : k2])
+            k = k2 + 1
+        else:
+            k += 1
+    return k
+
+
 def _scan(text: str) -> tuple[list[str], list[str]]:
     """Split `text` at the newlines that ARE command separators, and note the interiors of the
     `$(` ... `)` / backquoted command substitutions (whose commands run as commands). A newline
@@ -154,54 +205,6 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
     n = len(text)
     cut = [False] * n
     bodies: list[str] = []
-
-    def find_body(j: int, closer: str) -> int:
-        """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
-        substitutions inside are navigated but mark no newline (the body's own newlines belong to
-        the body, re-split when it is run through `_split`)."""
-        k = j
-        while k < n:
-            c = text[k]
-            if c == closer:
-                return k
-            if c == "'":
-                k2 = text.find("'", k + 1)
-                k = k + 1 if k2 < 0 else k2 + 1
-            elif c == '"':
-                k = dquote_end(k)
-            elif c == "\\":  # an escaped closer (\) / \`) is not the end of the body
-                k += 2 if k + 1 < n else 1
-            elif c == "`":
-                k2 = find_body(k + 1, "`")
-                bodies.append(text[k + 1 : k2])
-                k = k2 + 1
-            elif c == "$" and k + 1 < n and text[k + 1] == "(":
-                k2 = find_body(k + 2, ")")
-                bodies.append(text[k + 2 : k2])
-                k = k2 + 1
-            else:
-                k += 1
-        return k
-
-    def dquote_end(j: int) -> int:
-        k = j + 1
-        while k < n:
-            cc = text[k]
-            if cc == '"':
-                return k + 1
-            if cc == "\\":
-                k += 2 if k + 1 < n else 1
-            elif cc == "`":
-                k2 = find_body(k + 1, "`")
-                bodies.append(text[k + 1 : k2])
-                k = k2 + 1
-            elif cc == "$" and k + 1 < n and text[k + 1] == "(":
-                k2 = find_body(k + 2, ")")
-                bodies.append(text[k + 2 : k2])
-                k = k2 + 1
-            else:
-                k += 1
-        return k
 
     i = 0
     while i < n:
@@ -213,15 +216,15 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
             k2 = text.find("'", i + 1)
             i = i + 1 if k2 < 0 else k2 + 1
         elif c == '"':
-            i = dquote_end(i)
+            i = _dquote_end(text, n, bodies, i)
         elif c == "\\":
             i += 2 if i + 1 < n else 1
         elif c == "`":
-            k2 = find_body(i + 1, "`")
+            k2 = _find_body(text, n, bodies, i + 1, "`")
             bodies.append(text[i + 1 : k2])
             i = k2 + 1
         elif c == "$" and i + 1 < n and text[i + 1] == "(":
-            k2 = find_body(i + 2, ")")
+            k2 = _find_body(text, n, bodies, i + 2, ")")
             bodies.append(text[i + 2 : k2])
             i = k2 + 1
         else:
