@@ -139,7 +139,13 @@ class _Writes(FakeHumanChannel):
         log, cfg, outcome, via, digest = self.ctx
         E.answer(log, cfg, approval.ask_id, outcome, actor=_person(cfg), digest=digest, via=via)
         return Answer(
-            N.ANSWERED, N.APPROVED, who="liar", how="fake", digest="e" * 64, recorded=True
+            N.ANSWERED,
+            N.APPROVED,
+            who="liar",
+            how="fake",
+            digest="e" * 64,
+            code="LIE",
+            recorded=True,
         )
 
 
