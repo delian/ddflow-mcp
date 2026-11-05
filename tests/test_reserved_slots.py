@@ -112,6 +112,20 @@ def test_an_item_an_open_bug_names_may_use_the_slot(log, cfg):
     assert _ready(plan(fold(log.read_all()), cfg, agent="me")) == ["F3"]
 
 
+def test_an_unconfirmed_bug_earns_its_item_no_reserved_slot(log, cfg):
+    """`bug_items` is the one definition: a repro that ran and did not fail counts for
+    nothing, here as in the offer order."""
+    _queue(log, "F1", "F2", "F3")
+    log.append("bug.found", "B1", {"summary": "wrong", "item": "F3"})
+    _hold(log, "F1")
+    _hold(log, "F2", "third")
+    _reserve(cfg)
+    st = fold(log.read_all())
+    st.bugs["B1"].reproduced = "no"
+    p = plan(st, cfg, agent="me")
+    assert _ready(p) == [] and p.capped == ["F3"]
+
+
 def test_reserved_tags_is_a_knob(log, cfg):
     _queue(log, "F1", "F2")
     _task(log, "G", "ddflow-gap")
@@ -237,6 +251,17 @@ def test_the_worktree_cap_keeps_a_tree_for_the_reserved_slot(log, cfg):
     cfg.worktree.max_parallel = 2
     p = plan(fold(log.read_all()), cfg, agent="me")
     assert _ready(p) == ["fix-B"] and p.capped == ["F2"]
+
+
+def test_a_full_worktree_cap_is_named_with_its_number(log, cfg):
+    _queue(log, "F1", "F2", "F3")
+    _hold(log, "F1", "x", worktree="/t/f1")
+    _hold(log, "F2", "y", worktree="/t/f2")
+    _reserve(cfg, cap=8)
+    cfg.worktree.max_parallel = 2
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert p.cap_note == "the worktree cap (worktree.max_parallel=2)"
+    assert "worktree cap reached (worktree.max_parallel=2)" in p.blocked[-1].detail
 
 
 def test_a_worktree_lease_counts_against_the_limit_like_any_other(log, cfg):
