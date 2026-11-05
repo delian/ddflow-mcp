@@ -378,7 +378,8 @@ class TestSamples:
                 inside.pop()
 
         class Spied:
-            """The real file, noting who holds the lock at the moment the bytes go in."""
+            """The real file, noting who holds the lock when the bytes go in. The open is noted too:
+            an fd opened before the lock can point at the file a trim then replaces."""
 
             def __init__(self, fh):
                 self.fh = fh
@@ -398,6 +399,7 @@ class TestSamples:
                 return self.fh.write(data)
 
         def spy_open(*a, **k):
+            seen.append(("open", list(inside)))
             return Spied(real_open(*a, **k))
 
         def spy_trim(cx):
@@ -408,7 +410,7 @@ class TestSamples:
         monkeypatch.setattr(M.os, "fdopen", spy_open)
         monkeypatch.setattr(M, "_trim", spy_trim)
         M.record(c, [_ok("a", 1.0), _ok("b", 2.0)])
-        assert {kind for kind, _held in seen} == {"append", "trim"}
+        assert {kind for kind, _held in seen} == {"open", "append", "trim"}
         assert all(held == [c.samples] for _kind, held in seen)
 
     def test_sample_if_due_throttles(self, tmp_path):
