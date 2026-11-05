@@ -276,10 +276,12 @@ class Finding:
 #: Deliberately NOT the token-budget truncation `_truncated` (a chunk lost to its OWN size,
 #: retried in halves): that is the diff's shape, not the endpoint's account. Account walls
 #: are named: an HTTP 403/429 status line (any `HTTP/1.1` style version), the word `quota`
-#: (word-bounded, never inside "quotation"), and a `rate limit`. A BARE "limit exceeded" is
-#: NOT a signal: a `max_tokens`/context limit is the chunk's own shape, not the endpoint.
+#: (word-bounded, never inside "quotation"), and a `rate`/`usage`/`request`/`concurrency`
+#: limit (the endpoint's account). A BARE "limit exceeded" is NOT a signal: a `max_tokens`/
+#: context limit is the chunk's own shape, not the endpoint.
 _EXHAUSTION_RE = re.compile(
-    r"HTTP(?:/\d\.\d)?\s*4(?:03|29)\b|\bquota\b|\brate[ \t-]?limit\b",
+    r"HTTP(?:/\d\.\d)?\s*4(?:03|29)\b|\bquota\b|"
+    r"\b(?:rate|usage|request|concurrency)[ \t-]?limit\b",
     re.IGNORECASE,
 )
 
