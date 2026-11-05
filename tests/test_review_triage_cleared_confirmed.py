@@ -15,13 +15,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli  # noqa: E402
-from test_complete_failed_review_gate import _commit, _failed_and_confirmed, _setup  # noqa: E402
+from test_complete_failed_review_gate import _commit, _failed_and_confirmed, _setup
 
-import ddflow.api.review as api  # noqa: E402
-import ddflow.api.review_settle as ST  # noqa: E402
-from ddflow.core.model import fold  # noqa: E402
-from ddflow.infra.log import EventLog  # noqa: E402
+import ddflow.api.review as api
+import ddflow.api.review_settle as ST
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
 
 
 def _state(repo: Path):
