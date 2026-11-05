@@ -140,6 +140,7 @@ from .lifecycle import (
 )
 from .lifecycle import merge as merge_item
 from .lifecycle import next_ as next_item
+from .lifecycle.pull import next_lane
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
 from .lifecycle import wait as wait_item
@@ -322,6 +323,7 @@ __all__ = [
     "merge_item",
     "model_show",
     "next_item",
+    "next_lane",
     "onboard_run",
     "phase_add",
     "phase_close",
