@@ -17,7 +17,12 @@ A verified token is bound in `services/identity`, where `agent_marker`, `is_agen
 for all of them. The CLI binds what `DDFLOW_TOKEN` presents (`bind_env`), a server binds per
 request (`identity.with_credential`).
 
-What this does NOT stop: a process of the same OS user can write the store and the config, so
+What this does NOT do by default: a caller with no token is still judged by its markers alone,
+so a shell that unsets them passes as the operator, as before tokens existed. Only a presented
+token is held to a role, unless `[agent].require_operator_token` is on (D-operator-token-default:
+off, shell access to the machine is the trust boundary).
+
+And with it on: a process of the same OS user can write the store and the config, so
 locally this holds against accidents and prompt injection, as `identity.agent_marker` says of
 the markers. It is the server, on a host the client cannot reach, that makes a role a boundary.
 """
@@ -214,7 +219,8 @@ def _live_operator(cfg: Config, data: dict[str, Any]) -> bool:
 def _person(cfg: Config, data: dict[str, Any], requested_agent: str, *, first: bool) -> None:
     """Refuse anything but the operator. ``first``: this mints an operator token, and a
     marker-free terminal may mint the first one under `[agent].require_operator_token`, or
-    nobody ever could. Any other role waits for it, so the exception closes with its one use."""
+    nobody ever could, or recover after the last one expired (D-operator-token-default). Any
+    other role waits for a live operator token."""
     why = ID.agent_marker(requested_agent)
     if not why:
         return

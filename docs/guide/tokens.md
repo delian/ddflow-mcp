@@ -33,7 +33,7 @@ and the expiry) and `token.revoked` (who, when and why), and no secret. A pasted
   operator's. A bad, expired or revoked token refuses the call, it never falls back.
 * Every operator-only verb (`approve`, `approvals approve`, `grant add`, `reviewers approve` and
   the rest) asks the same check, so a `bot` token cannot run one even from a bare terminal, and
-  an `operator` token can from anywhere.
+  an `operator` token can from anywhere. A caller with no token is another matter: see below.
 * `DDFLOW_TOKEN` is removed from the environment once read, so a lane or gate started by that
   call does not inherit it. `ddflow mcp` ignores it: a stdio server speaks for whichever agent
   connects.
@@ -49,16 +49,23 @@ ddflow tokens revoke openclaw --reason "left the team"
 Rotation, revocation and pairing are the operator's. There is no MCP tool for them: a token in a
 tool result would sit in an agent's context and transcript.
 
-## Requiring proof
+## The gap that stays open by default
 
-Without a token, the operator-only verbs ask only whether the caller carries an agent marker
-(`--agent`, `DDFLOW_AGENT`, a harness variable), and a shell that unsets them passes. With
-`[agent].require_operator_token = true` they need an operator token. `ddflow pair` still works
-from a marker-free terminal for an operator token while no live one exists: the first one, or
-after the last has expired.
+Tokens do not close the operator-only gap by default. With no token presented, the operator-only
+verbs still ask only whether the caller carries an agent marker (`--agent`, `DDFLOW_AGENT`, a
+harness variable), so a shell that unsets them passes as the operator, exactly as it did before
+tokens existed. This is the operator's decision (D-operator-token-default): shell access to the
+machine is the trust boundary.
 
-This is off by default. Locally it stops accidents and prompt injection, not a hostile process of
-your own user, which can write the store and the config. A role is a hard boundary when the client
+What tokens do change: a call that presents one is held to its role, always.
+
+To close the gap, set `[agent].require_operator_token = true`: those verbs then need an operator
+token. While no live operator token exists, `ddflow pair --role operator` still works from a
+marker-free terminal, for the first one or after the last has expired, so the operator cannot be
+locked out.
+
+Even then, it stops accidents and prompt injection locally, not a hostile process of your own
+user, which can write the store and the config. A role is a hard boundary only when the client
 reaches ddflow through a server on a host it cannot otherwise touch.
 
 ## Knobs
