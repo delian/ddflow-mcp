@@ -587,8 +587,9 @@ def _assemble(
     ``prefix`` (the head and the RESUME slice) is never cut (DX-recover-brief-slice): a
     squeeze takes from the budgeted sections, never from recoverable work. When even the
     note no longer fits after the prefix (a RESUME slice that alone fills the budget),
-    the note is dropped rather than the slice: each trimmed section's own marker already
-    says where its rest is."""
+    the slice stays and the note goes while a trimmed section's own marker still says
+    where its rest is. With no marker left the note stays over the cap: the backstop can
+    cut the body to nothing, and a pack that ends at its head must still say it was cut."""
     set_aside = len(charter) + 2 if charter else 0
     cap = chars - set_aside
     prefix_text = "\n".join(prefix)
@@ -611,7 +612,7 @@ def _assemble(
         text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
-        text += note if len(text) + len(note) <= cap else ""
+        text += note if len(text) + len(note) <= cap or SECTION_TRIMMED not in body else ""
     return text + ("\n\n" + charter if charter else "")
 
 

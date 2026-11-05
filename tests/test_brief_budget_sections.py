@@ -158,8 +158,26 @@ def test_a_tiny_budget_is_still_a_budget(repo):
     cfg.session.brief_max_tokens = 30
     lessons = [{"id": "L-zebra", "title": "t", "rule": "r " * 200}]
     text = M.brief(st, cfg, plan(st, cfg), item="MINE", lessons=lessons, reserve=29)
-    # budget 1 token: nothing but the truncation note survives
-    assert text.startswith("\n\n_[brief truncated at 1 tokens"), text[:200]
+    # budget 1 token: every section goes. The head holds, as nothing cuts the prefix since
+    # DX-recover-brief-slice, and with no section marker left the note must say the pack
+    # was cut: a brief that ends at its head reads as a project with nothing to report.
+    assert text.startswith("# ddflow brief"), text[:200]
+    assert "## " not in text and "L-zebra" not in text, text
+    assert text.endswith(
+        "\n\n_[brief truncated at 1 tokens (session.brief_max_tokens); "
+        "`ddflow show <id>` for detail]_"
+    ), text
+
+
+def test_a_body_cut_to_a_stump_keeps_the_note():
+    """The note may drop only while a section marker stays to say where the rest is."""
+    from ddflow.views import markdown as M
+
+    note = "\n\n_[note]_"
+    lines = ["plain first line " * 2, "- " + "x" * 300]
+    # Room for a stump of the first line, not for the marker that closes the section.
+    text = M._assemble(["# pack"], [("lessons", lines)], 12, note, "", "T")
+    assert M.SECTION_TRIMMED not in text and text.endswith(note), text
 
 
 def test_a_floor_holds_without_overrunning_the_room():
