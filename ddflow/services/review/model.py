@@ -283,7 +283,7 @@ class Finding:
 #: shape, not the endpoint.
 _EXHAUSTION_RE = re.compile(
     r"HTTP(?:/\d\.\d)?\s*(?:403|429)\b|\b(?:403|429)\b|"
-    r"(?<![A-Za-z])quota(?![A-Za-z])|\b(?:rate|usage|request|concurrency)[ \t_-]?limit(?![A-Za-z])",
+    r"(?<![A-Za-z])quota(?![A-Za-z])|\b(?:rate|usage|request|concurrency)[ \t_-]?limits?(?![A-Za-z])",
     re.IGNORECASE,
 )
 
