@@ -437,9 +437,7 @@ def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
     gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
 
     def run(g, where=None):
-        got = subprocess.run(
-            ["sh", "-c", g.command], cwd=where, capture_output=True, text=True
-        )
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
         failed = got.returncode != 0
         return (
             "failed" if failed else "passed",
