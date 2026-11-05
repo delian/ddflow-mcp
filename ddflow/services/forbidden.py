@@ -108,10 +108,45 @@ def _strip_heredocs(text: str) -> str:
     return "\n".join(out)
 
 
+def _logical_lines(text: str) -> list[str]:
+    """`text` split at the newlines that sit OUTSIDE quotes. A quote may span a newline —
+    `python3 -c "<line break>"` is one line to the shell, its newline is data, not a command
+    boundary — so a `;` on the line that opens the quote is still seen for the separator it
+    is. A backslash-newline is a continuation, not a boundary either."""
+    lines: list[str] = []
+    cur: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            lines.append("".join(cur))
+            cur = []
+            i += 1
+        elif ch == "'":  # single quote: literal until the next single quote
+            j = text.find("'", i + 1)
+            cur.append(text[i:] if j < 0 else text[i : j + 1])
+            i = n if j < 0 else j + 1
+        elif ch == '"':  # double quote: literal until an unescaped double quote
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            cur.append(text[i:] if j >= n else text[i : j + 1])
+            i = n if j >= n else j + 1
+        elif ch == "\\" and i + 1 < n:  # an escape: the backslash-newline continues the line
+            cur.append(text[i : i + 2])
+            i += 2
+        else:
+            cur.append(ch)
+            i += 1
+    if cur:
+        lines.append("".join(cur))
+    return lines
+
+
 def _split(text: str) -> list[list[str]]:
     """The commands of `text` as their words (no `sh -c` string looked into)."""
     cmds: list[list[str]] = []
-    for line in _strip_heredocs(text).split("\n"):
+    for line in _logical_lines(_strip_heredocs(text)):
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
         lex.commenters = ""

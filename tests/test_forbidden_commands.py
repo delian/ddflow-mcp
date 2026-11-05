@@ -82,6 +82,34 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        'echo a; git push origin main; python3 -c "\nprint(1)"',
+        'python3 -c "\nprint(1)"; git stash -q',
+        'python3 -c "\nprint(1)"; pkill x',
+        'echo a; python3 -c "\nprint(1)"; git stash -q; pkill x',
+    ],
+)
+def test_refused_multiline_quote_after_semicolon(cmd):
+    # a multi-line quoted string must not stop `_split` from seeing the `;` that follows
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        'python3 -c "print(1)\npkill x"',
+        'python3 -c "print(1)\ngit stash -q"',
+    ],
+)
+def test_allowed_multiline_quote_data(cmd):
+    # a forbidden word inside the quoted data of `python -c` is data, not a command
+    assert _check(cmd) is None, cmd
+
+
 def test_reset_hard_only_on_primary(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     assert _check("git reset --hard HEAD", cwd=tmp_path) is not None
