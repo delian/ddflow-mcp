@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "mcp.lane_tools"
+new = '""'
+why = "Per-lane tool tier for the worker MCP config: `lane=tier` pairs; `ddflow adopt` writes `.ddflow/local/worker-mcp-<lane>.json` for each."
+impact = "additive"
