@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..optimizer import Candidate, Clash, CutResult, Hold, Placement, Slots, Verdict
+from ..optimizer import Candidate, Clash, CutResult, Hold, Placement, Slots, Verdict, fit
 from . import fake
 
 
@@ -51,7 +51,6 @@ class FakeOptimizer:
     ) -> CutResult:
         self.calls.append(("cut", dict(ctx)))
         taken: list[Candidate] = []
-        trees = 0
         out: list[Verdict] = []
         for c in ready:
             forced = self.verdicts.get(c.id, "")
@@ -60,16 +59,11 @@ class FakeOptimizer:
                 out.append(Verdict(c.id, "held"))
             elif other:
                 out.append(Verdict(c.id, "clash", other))
-            elif (
-                forced != "cut"
-                and len(taken) < slots.flight
-                and (not c.needs_tree or trees < slots.tree)
-            ):
-                taken.append(c)
-                trees += c.needs_tree
-                out.append(Verdict(c.id, "taken"))
             else:
-                out.append(Verdict(c.id, "cut"))
+                what = "cut" if forced == "cut" else fit(c, taken, slots)
+                if what == "taken":
+                    taken.append(c)
+                out.append(Verdict(c.id, what))
         return CutResult(tuple(out))
 
     def explain(self, placement: Placement) -> str:

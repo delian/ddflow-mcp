@@ -178,7 +178,7 @@ def test_a_gate_with_no_known_lens_is_never_combined(repo, tmp_path):
 
 def test_a_content_line_starting_with_two_dashes_is_counted(monkeypatch):
     """`--- old note` removed and `+++counter;` added are content, not file headers."""
-    import ddflow.api.review as R
+    from ddflow.api.review import run as R
 
     diff = (
         "diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1,2 +1,2 @@\n"
