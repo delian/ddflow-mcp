@@ -11,7 +11,7 @@ harness), `driver` (names a style or format: stays, keyed by a descriptor field)
 
 | File | Sites | Class | Replacing descriptor field |
 |---|---|---|---|
-| `ddflow/mcpshim/clients.py` | 30 | data | `[client] names` (clientInfo.name strings per harness) |
+| `ddflow/mcpshim/clients.py` | 31 | data | `[client] names` (clientInfo.name strings per harness) |
 | `ddflow/services/hookio.py` | 20 | data | `[hooks] normalizer` / `emitter` (dialect registry key) |
 | `ddflow/services/harnessreg.py` | 6 | data | `[session] env` and `[hooks] style` vocabulary |
 | `ddflow/services/compat_refs.py` | 5 | data | `[commands] dir`, `[skills] dir`, `[instructions] file` |
@@ -37,7 +37,7 @@ harness), `driver` (names a style or format: stays, keyed by a descriptor field)
 | `ddflow/services/harness.py` | 1 | driver | `[instructions] file` (site deleted by B-hx-onboard-generic) |
 | `ddflow/core/bookkeeping.py` | 1 | driver | `[worktrees] dir` |
 
-Totals: data 68, compat 26, model-axis 3, driver 14 (111).
+Totals: data 69, compat 26, model-axis 3, driver 14 (112: the source's 111 plus grok's client row).
 
 ## Substring surface (report only)
 

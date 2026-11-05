@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
+from ...adapters.registry import Registry
 from ...config import Config
 from ...core import clock
 from ...core.events import Event
@@ -18,7 +20,7 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
-from .providers import Context
+from .providers import Context, register
 from .render import forecast as text_forecast
 from .render import lanes as text_lanes
 from .render import retro as text_retro
@@ -31,7 +33,20 @@ from .stages import has_figures as stages_ok
 from .stages import text as stages_text
 from .summary import build, has_figures
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks")
+VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "swarm")
+
+
+#: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
+SWARM: Registry[Callable[..., Any]] = Registry("swarm metrics")
+SWARM.lazy("view", "ddflow.services.swarm_metrics:view")
+SWARM.lazy("rows", "ddflow.services.swarm_metrics:provider")
+
+
+def _swarm_rows(ctx: Context) -> Any:
+    return SWARM["rows"](ctx)
+
+
+register("swarm", _swarm_rows)
 
 
 @dataclass
@@ -102,6 +117,8 @@ def run(
         return Answer(False, str(exc), failed=True)
     if phase and phase not in state.items:
         return Answer(False, f"no phase {phase!r}", failed=True)
+    if view == "swarm":  # the baseline folds the log itself
+        return SWARM["view"](events, state, cfg, now, phase, floor)
     facts = collect(events, state, now, cfg)
     ctx = Context(facts, cfg, now, floor, phase)
     if view == "forecast":

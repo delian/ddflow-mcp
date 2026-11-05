@@ -307,16 +307,17 @@ def test_a_waiver_declared_alone_is_accepted_not_inert(repo):
 
 
 def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):
+    from ddflow.infra import proc as P
     from ddflow.services import enforce as E
 
     def broken(*_a, **_k):
-        raise E.P.TimeoutExpired("git", 30)
+        raise P.TimeoutExpired("git", 30)
 
-    monkeypatch.setattr(E.P, "run", broken)
+    monkeypatch.setattr(P, "run", broken)
     code, msg = E.check_item_trailer("s\n\nItem: T1\n", ["Item"], ids=lambda: {"T1"})
     assert code == 2, msg
     monkeypatch.setattr(
-        E.P, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, "", "fatal")
+        P, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, b"", b"fatal")
     )
     assert E.check_item_trailer("s\n\nItem: T1\n", ["Item"], ids=lambda: {"T1"})[0] == 2
 

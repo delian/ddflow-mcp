@@ -78,6 +78,20 @@ def auto_ids(it: Item, gate: str, cfg=None) -> list[str]:
     )
 
 
+def person_only(it: Item, gate: str) -> bool:
+    """Is ``gate`` a MEASURED baseline-red partial only a person accepts: ``baseline.red`` is
+    True and ``gate run`` did NOT accept it automatically (``baseline.auto.accepted`` is not
+    True -- its failing tests sit in a file the item changed or reaches, or the knob is off)?
+    The standing `complete_unavailable` rule must not answer a completion whose unmet gate is
+    this one; the completion site `_only_unavailable` and the rule's own predicate read THIS
+    helper so the two decisions cannot drift apart (B-complete-self-approves-over-person-only-partial)."""
+    rec = it.gates.get(gate)
+    if rec is None:
+        return False
+    base = (rec.evidence or {}).get("baseline") or {}
+    return base.get("red") is True and (base.get("auto") or {}).get("accepted") is not True
+
+
 def accepted(state: State, it: Item, gate: str, cfg=None) -> AP.Verdict:
     """Has the CURRENT partial outcome of ``gate`` been accepted: automatically (``cfg`` given
     and the measurement allows it) or by a person?"""
