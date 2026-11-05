@@ -91,7 +91,7 @@ def test_a_failed_hook_stage_says_no_test_ran(branch, stubs):
     assert "non-test hooks failed" in res.scope["why"] and "did not run" in res.scope["why"]
 
 
-def test_a_failed_selected_stage_says_the_guards_did_not_run(branch, stubs):
+def test_a_failed_selected_stage_with_no_guards_planned_runs_nothing_more(branch, stubs):
     (stubs / "fail-pytest").write_text("")
     res = CI.run(branch, Config.load(branch), base="main", for_item=True)
     assert res.status == "failed"
