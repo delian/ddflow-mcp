@@ -57,6 +57,6 @@ def test_the_table_is_the_only_place_that_names_a_resource():
     named = [
         uri
         for p in Path(MCP.__file__).parent.rglob("*.py")
-        for uri in re.findall(r'"(ddflow://[^"]*)', p.read_text("utf-8"))
+        for uri in re.findall(r"""["'](ddflow://[^"']*)""", p.read_text("utf-8"))
     ]
     assert sorted(named) == sorted(r.uri for r in RESOURCES) == sorted(RESOURCE_BY_URI)
