@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.capability_verbs"
+new = "{\"read\": [\"help\", \"brief\", \"next\", \"status\", \"show\", \"board\", \"progress\", \"history\", \"list\", \"search\", \"recall\", \"similar\", \"gate status\", \"gate list\", \"decision list\", \"decision show\", \"decision search\", \"decision applicable\", \"rule list\", \"rule show\", \"rule search\", \"lesson search\", \"memory list\", \"version show\", \"flow show\", \"job list\"], \"claim\": [\"claim\", \"heartbeat\", \"release\", \"wait\", \"gate record\", \"gate run\", \"merge\", \"complete\"], \"note\": [\"session note\", \"session message\", \"bug found\"], \"start_lane\": [], \"approve_marked\": []}"
+why = "Which verbs each capability of [agent].roles allows a token holder; a verb no capability names is the operator's."
+effect = "applies only to a call that presents a token; a person at a terminal with no token is unchanged."
+impact = "additive"

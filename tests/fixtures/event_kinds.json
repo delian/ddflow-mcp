@@ -952,6 +952,26 @@
    },
    "v": 1
   },
+  "token.issued": {
+   "fields": {
+    "by": ["str"],
+    "expires_at": ["str"],
+    "id": ["str"],
+    "name": ["str"],
+    "role": ["str"],
+    "rotated_from": ["str"]
+   },
+   "v": 1
+  },
+  "token.revoked": {
+   "fields": {
+    "by": ["str"],
+    "id": ["str"],
+    "name": ["str"],
+    "reason": ["str"]
+   },
+   "v": 1
+  },
   "trigger.evaluated": {
    "fields": {
     "errors": ["list"],

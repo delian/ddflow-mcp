@@ -105,6 +105,10 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         "def.retired",
         "def.superseded",
         "def.merged",
+        # P-remote.auth: who was given a credential and who lost one. The audit of access; a
+        # compaction that dropped it would leave a live token nobody can account for.
+        "token.issued",
+        "token.revoked",
     }
 )
 

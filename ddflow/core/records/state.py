@@ -124,6 +124,9 @@ class State:
     #: person-supplied text, so any full-state export redacts it leaf-wise like every
     #: other field.
     asks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: token id -> who holds a paired token (`token.*` events, `core.handlers.tokens`; read it
+    #: through `tokens_of`). Name, role and dates only: no event carries a secret or a hash.
+    tokens: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: suggestion id -> the folded suggestion (`suggestion.*` events, `core.handlers.suggestions`;
     #: read it through `suggestions_of`). Holds the patch's digest and counts, never its text.
     suggestions: dict[str, dict[str, Any]] = field(default_factory=dict)

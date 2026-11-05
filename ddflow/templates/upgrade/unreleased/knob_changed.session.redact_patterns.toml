@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_changed"
+key = "session.redact_patterns"
+old = "[\"(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\\\s*[:=]\\\\s*\\\\S+\", \"(?i)\\\\b(bearer|basic|token)\\\\s+[A-Za-z0-9._~+/=-]{12,}\", \"(?i)\\\\b(gh[pousr]_[A-Za-z0-9]{16,})\\\\b\", \"(?i)\\\\b(sk-[A-Za-z0-9_-]{16,})\\\\b\", \"(?i)\\\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\\\b\", \"\\\\bAKIA[0-9A-Z]{16}\\\\b\", \"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----\", \"(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----\"]"
+new = "[\"(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\\\s*[:=]\\\\s*\\\\S+\", \"(?i)\\\\b(bearer|basic|token)\\\\s+[A-Za-z0-9._~+/=-]{12,}\", \"(?i)\\\\b(gh[pousr]_[A-Za-z0-9]{16,})\\\\b\", \"(?i)\\\\b(sk-[A-Za-z0-9_-]{16,})\\\\b\", \"(?i)\\\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\\\b\", \"\\\\bAKIA[0-9A-Z]{16}\\\\b\", \"\\\\bddft_[0-9a-f]{12}_[0-9a-f]{64}\\\\b\", \"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----\", \"(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----\"]"
+why = "A bare ddflow token has no key beside it for the key-value pattern to match, so it would reach a record in full if someone pasted it (P-remote.auth, r-secrets)."
+effect = "new records mask a pasted ddflow token; a project that set its own redact_patterns keeps them and should add the pattern, or use redact_extra"

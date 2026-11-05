@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.pair_ttl_s"
+new = "300"
+why = "How long the one-time pairing code stays redeemable."
+effect = "applies only to `ddflow pair`."
+impact = "additive"

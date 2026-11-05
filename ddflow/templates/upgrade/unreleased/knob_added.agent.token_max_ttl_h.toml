@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.token_max_ttl_h"
+new = "720"
+why = "The longest lifetime `ddflow pair --ttl-h` may ask for."
+effect = "applies only to `ddflow pair`."
+impact = "additive"

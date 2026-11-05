@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.pair_code_length"
+new = "10"
+why = "How long the secret part of the pairing code is."
+effect = "applies only to `ddflow pair`."
+impact = "additive"
