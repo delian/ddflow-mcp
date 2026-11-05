@@ -151,6 +151,25 @@ def test_refused_comment_quote_spans_lines(cmd):
     assert "Instead:" in r.message()
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # a $'...' ANSI-C quote escapes its quote: the `)` after it still lives inside the $()
+        # body, so a forbidden command after the `;` must still be seen
+        "echo $(echo $'a\\')' ; git push origin main ; echo done)",
+        "echo $(echo $'a\\')' ; git stash -q ; echo done)",
+        # a comment inside a $() body is not a command, and its `)` is not the close
+        'echo "$(echo # )\ngit push origin main)"',
+        # a case pattern's `)` is a terminator, not the close of the $() body
+        "echo $(case x in x) git push origin main;; esac); echo done",
+    ],
+)
+def test_refused_substitution_body_edge_cases(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
 def test_reset_hard_only_on_primary(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     assert _check("git reset --hard HEAD", cwd=tmp_path) is not None
