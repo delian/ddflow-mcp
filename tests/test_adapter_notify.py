@@ -239,6 +239,12 @@ def test_the_reader_returns_a_whole_line(tty):
     assert N.stdin_reader(1.0) == "yes\n"
 
 
+def test_a_stream_handing_over_two_lines_at_once_keeps_the_second(tty):
+    os.write(tty, b"yes\nno\n")
+    assert N.stdin_reader(1.0) == "yes\n"
+    assert N.stdin_reader(1.0) == "no\n"
+
+
 def test_a_line_with_no_newline_is_cut_at_the_timeout_not_waited_on(tty):
     os.write(tty, b"y")
     began = time.monotonic()
@@ -335,6 +341,7 @@ def test_a_webhook_posts_json_with_the_timeout_it_was_given():
     assert _hook(http=http).notify("hello", N.WARNING).ok
     call = http.calls[-1]
     assert call.timeout == 3.0 and call.headers["Content-Type"] == "application/json"
+    assert call.max_bytes == 0  # a reply of any size costs nothing
     assert _sent(http) == {"event": "notify", "severity": "warning", "text": "hello"}
 
 

@@ -46,8 +46,6 @@ ANSWERED, PENDING = "answered", "pending"
 #: What an approval is answered with: the ask engine's words (a test pins that they match).
 APPROVED, DENIED = "approved", "denied"
 APPROVAL_OPTIONS = (APPROVED, DENIED)
-#: One read of the terminal's descriptor: a line a person types is far shorter.
-READ_BYTES = 4096
 #: What a broken output stream raises: an `OSError`, or a `ValueError` for a closed file or a
 #: character its encoding cannot hold.
 STREAM_ERRORS = (OSError, ValueError)
@@ -162,7 +160,7 @@ def stdin_reader(timeout_s: float) -> str | None:
         if not select.select([fd], [], [], max(0.0, left))[0]:
             _forget_typed(fd)
             return None
-        chunk = os.read(fd, READ_BYTES)
+        chunk = os.read(fd, 1)  # a byte at a time: what follows the newline stays for the next
         if not chunk:
             break
         data += chunk

@@ -66,8 +66,6 @@ APP = "ddflow"
 CARD_TYPE = "application/vnd.microsoft.card.adaptive"
 CARD_SCHEMA = "http://adaptivecards.io/schemas/adaptive-card.json"
 CARD_VERSION = "1.2"
-#: The reply is ignored: only its status counts, so no more of it is read than a status page.
-REPLY_BYTES = 4096
 
 
 def _same(text: str) -> str:
@@ -183,7 +181,7 @@ class WebhookChannel(_Outbound):
                 headers=self._headers(),
                 body=data,
                 timeout=self._timeout_s,
-                max_bytes=REPLY_BYTES,
+                max_bytes=0,  # only the status counts: the reply is not read
             )
         except HttpStatusError as exc:
             return Delivery(self.name, FAILED, f"the endpoint answered {exc.status}")
