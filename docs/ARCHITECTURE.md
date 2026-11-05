@@ -214,10 +214,11 @@ infra/      git.py, proc.py, fsio.py,      disk, git, sqlite, subprocess, contai
             tomlcfg.py, localstore.py
 config/     config_sections/               read by every layer; imports none of them.
                                            Above `core`: core is handed its knobs.
+completion_fast.py   the shell-completion entry point (`python -m ddflow.completion_fast`).
 core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
             handlers/, defs.py, clock.py,
             graph.py, globs.py, redact/
-adapters/   ports.py, registry/,         one module per family: port (Protocol) and
+adapters/   ports.py, registry.py,         one module per family: port (Protocol) and
             fakes/, <family>.py            default adapter, the one Registry[T], shipped
                                            fakes. The BOTTOM layer (below).
 ```
@@ -291,7 +292,7 @@ add-a-port steps and one page per family are in [docs/ddflow/adapters/](ddflow/a
 | `views/markdown/` | the generated views and the budgeted brief |
 | `surfaces/cli.py` | argparse |
 | `surfaces/mcp/` | MCP stdio server |
-| `config.py` | documented knobs, TOML + env, and the one family map |
+| `config/` | documented knobs, TOML + env, and the one family map |
 
 The layer map above and this table are hand-maintained prose and are re-homed by ONE
 consolidation pass after a split wave lands, not by each split lane (a lane re-homes only
