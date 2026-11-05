@@ -139,6 +139,8 @@ def test_refused_command_substitution_multiline(cmd):
     [
         "echo hi # don't\ngit push 'origin main'",
         "echo hi # comment\npkill -f myserver",
+        "echo ok >#x; git push origin main",
+        "echo $(echo x)#; git push origin main",
     ],
 )
 def test_refused_comment_quote_spans_lines(cmd):

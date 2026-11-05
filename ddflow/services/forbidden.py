@@ -212,7 +212,7 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
         if c == "\n":
             cut[i] = True
             i += 1
-        elif c == "#" and (i == 0 or text[i - 1] in " \t\r\n;|&()<>"):
+        elif c == "#" and (i == 0 or text[i - 1] in " \t\r\n;|&"):
             k2 = text.find("\n", i)  # a comment: its quotes are data to the end of the line
             i = k2 if k2 >= 0 else n
         elif c == "'":
