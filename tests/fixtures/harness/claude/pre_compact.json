@@ -1,0 +1,22 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin dump, claude -p with a stdin-dumping hook, scrubbed: paths and ids replaced",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05",
+    "note": "custom_instructions carries the /compact argument."
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "b12ae6be-5f0c-4687-9a33-6681ac070e94",
+    "hook_event_name": "PreCompact",
+    "trigger": "manual",
+    "custom_instructions": "keep the word PONG"
+  },
+  "expect": {
+    "session_id": "s-1"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin dump, claude -p with a stdin-dumping hook, scrubbed: paths and ids replaced",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05",
+    "note": "agent_id and agent_type only; no agent_transcript_path, no last_assistant_message."
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "308d45ce-b787-4413-a397-d58d72755ac7",
+    "agent_id": "ab4a805025bd8f6a6",
+    "agent_type": "general-purpose",
+    "hook_event_name": "SubagentStart"
+  },
+  "expect": {
+    "session_id": "s-1"
+  }
+}

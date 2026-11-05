@@ -1,0 +1,22 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin dump, claude -p with a stdin-dumping hook, scrubbed: paths and ids replaced",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05",
+    "note": "compact_summary IS delivered (refutes Rf340643289, confirms R1f7d864f68 by a live run). Order seen: PreCompact, SubagentStop(agent_type empty), PostCompact, SessionStart source=compact, SessionEnd."
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "b12ae6be-5f0c-4687-9a33-6681ac070e94",
+    "hook_event_name": "PostCompact",
+    "trigger": "manual",
+    "compact_summary": "<analysis>\nThe conversation is short. The user asked me to launch one general-purpose Agent with the prompt \"Reply with the single word PONG and nothing else\", then reply DONE. I launched the agent (ID internal, not to be mentioned), and it completed with the result \"PONG\". The remaining step is to reply \"DONE\". The additional instruction to keep the word PONG is satisfied by the agent's result. No files were touched, no edits were made, no security-relevant constraints apply beyond the standard ones. The system notification was a genuine background-task completion, not user input.\n</analysis>\n\n<summary>\n1. Primary Request and Intent:\n   The user asked me to launch a general-purpose subagent with the prompt \"Reply with the single word PONG and nothing else\", then reply DONE. The subagent has completed and returned \"PONG\". The only remaining action is to reply \"DONE\".\n\n2. Key Technical Concepts:\n   - Agent tool (subagent_type general-purpose) launched in background\n   - Task-notification completion event\n\n3. Files and Code Sections:\n   - None examined, modified, or created.\n\n4. Errors and fixes:\n   - None.\n\n5. Problem Solving:\n   - Task completed. The subagent returned PONG.\n\n6. All user messages:\n   - \"Use the Agent tool (subagent_type general-purpose) with the prompt 'Reply with the single word PONG and nothing else'. Then reply DONE.\"\n   - Additional instruction in the summary request: \"keep the word PONG\"\n\n7. Pending Tasks:\n   - Reply \"DONE\" to the user.\n\n8. Current Work:\n   The subagent (ID ab4a805025bd8f6a6) finished with status completed and result \"PONG\". Its usage was 9,922 subagent tokens, 0 tool uses, duration about 1.3 s.\n\n9. Optional Next Step:\n   Reply to the user with \"DONE\", optionally noting that the subagent returned PONG. The user's request says \"Then reply DONE\", so the reply should be DONE.\n</summary>"
+  },
+  "expect": {
+    "session_id": "s-1"
+  }
+}
