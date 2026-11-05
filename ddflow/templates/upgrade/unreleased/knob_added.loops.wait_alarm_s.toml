@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "loops.wait_alarm_s"
+new = "1200"
+why = "DX-wait-cycle-followups: alarm on a lease wait older than this with nothing running on the leases in its way."
+impact = "additive"

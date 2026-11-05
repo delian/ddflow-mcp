@@ -15,13 +15,13 @@ from typing import Any
 from ..core import outcome as O
 from ..services import healthwatch as HW
 from ._base import _load
-from .reporting.waitcycles import wait_cycles
+from .reporting.waitcycles import progress_of, wait_cycles
 
 
 def findings_for(log, st, cfg, repo: Path, now: float | None = None, activity=None, alive=None):
     """(findings, cycles) as of ``now`` -- what `doctor` and `status` read."""
     at = time.time() if now is None else now
-    cycles = wait_cycles(st, cfg, at)
+    cycles = wait_cycles(st, cfg, at, progress_of(log, st, cfg, at, activity=activity))
     return HW.inspect(log, st, cfg, repo, at, cycles, activity=activity, alive=alive), cycles
 
 

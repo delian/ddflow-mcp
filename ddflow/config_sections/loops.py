@@ -40,11 +40,16 @@ class LoopsConfig:
     )
     wait_cycle: bool = knob(
         True,
-        doc="Report a cycle of agents waiting on each other's leases (a lock deadlock) in `doctor`, naming the agents, items and files and the waiter that has waited least (the victim) and the globs it should drop. Off: waits are still recorded, the cycle is not looked for.",
+        doc="Report a cycle of agents waiting on each other's leases (a lock deadlock) in `doctor`, `status`, `brief` and `lanes advise`, naming the agents, items and files, the holder with the least progress (the victim; on a tie the waiter that has waited least) and the globs it should drop. Off: waits are still recorded, the cycle is not looked for.",
     )
     wait_cycle_shown: int = knob(
         5,
-        doc="How many wait cycles `doctor` prints in full; the rest are counted. 0 prints none.",
+        doc="How many wait cycles, and how many wait alarms, are printed in full; the rest are counted. 0 prints none.",
+        check=int_at_least(0),
+    )
+    wait_alarm_s: int = knob(
+        1200,
+        doc="Raise a wait alarm in `doctor`, `status`, `brief` and `lanes advise` for a recorded lease wait older than this many seconds when nothing runs on the leases in its way: none shows a live gate, a running job or any progress for as long. A wait in a cycle is the cycle's report instead. Keep it below `[lease].ttl_s`, or a wait nobody asks again lapses first. 0 turns the alarm off.",
         check=int_at_least(0),
     )
     #: warn | block

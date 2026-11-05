@@ -66,7 +66,7 @@ from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
-from .waitcycles import wait_cycles, wait_findings, wait_order
+from .waitcycles import wait_findings, wait_order, wait_report
 
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
@@ -459,7 +459,8 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
+    cycles, alarms = wait_report(log, st, cfg, events)
+    problems += wait_findings(cycles, cfg, alarms)
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
@@ -477,6 +478,7 @@ def doctor(
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
         "wait_cycles": [c.as_dict() for c in cycles],
+        "wait_alarms": [a.as_dict() for a in alarms],
         "auto_order": ordered,
         **cost.data(),
     }
