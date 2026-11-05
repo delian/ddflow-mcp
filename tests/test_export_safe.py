@@ -172,7 +172,9 @@ def test_configured_names_are_redacted(proj):
     from types import SimpleNamespace
 
     cfg = Config.load(proj)
-    fake = SimpleNamespace(upstream=SimpleNamespace(redact_extra=["Zephyr"]), session=cfg.session)
+    fake = SimpleNamespace(
+        upstream=SimpleNamespace(redact_extra=["Zephyr"]), session=cfg.session, log=cfg.log
+    )
     assert safe.names_for(fake) == ["Zephyr"]
     red = safe.redact_text("Project Zephyr and ddflow", fake)
     assert "Zephyr" not in red.text and "ddflow" in red.text and red.counts == {"name": 1}
