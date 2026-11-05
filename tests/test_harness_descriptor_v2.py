@@ -46,7 +46,9 @@ def test_a_shipped_v2_section_keeps_its_values_and_its_source():
     assert grok.detect.process_names == ("grok",)
     assert grok.headless.argv == ("grok", "-p") and grok.headless.autonomy == "always-approve"
     assert grok.autonomy.profiles == {"always-approve": "--always-approve"}
-    assert {"detect.process_names", "headless.argv", "autonomy.profiles"} <= set(grok.facts)
+    for key in ("detect.process_names", "headless.argv", "autonomy.profiles"):
+        fact = grok.facts[key]
+        assert fact["s"] == "documented" and fact["src"].startswith("https://docs.x.ai/build/")
 
 
 def test_all_v2_sections_parse():
