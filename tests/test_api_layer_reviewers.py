@@ -152,8 +152,10 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     assert outcome(R.REVIEWED) == "passed"
     assert outcome(R.REVIEWED, R.Finding(severity="LOW", title="nit")) == "failed"
 
-    # `review` dispatches one gate or several; the one-gate run holds the exit codes.
+    # `review` dispatches one gate or several; the one-gate run takes its outcome from the
+    # table above and holds the exit codes.
     src = inspect.getsource(A._review_gate)
+    assert "outcome, extra_evidence = _gate_outcome(" in src
 
     # And the exit codes: only a real review with no findings is success.
     exits = src[src.index("exit_code = {") : src.index("]\n", src.index("exit_code = {"))]
