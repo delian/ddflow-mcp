@@ -52,7 +52,7 @@ def given_keys(raw: dict[str, Any]) -> tuple[str, ...]:
     )
 
 
-def _show(value: Any) -> str:
+def show(value: Any) -> str:
     if isinstance(value, dict):
         return ", ".join(f"{k}={v}" for k, v in value.items())
     if isinstance(value, (tuple, list)):
@@ -146,7 +146,7 @@ def rows(h: Any, *, absent: bool = False) -> list[dict[str, str]]:
                 val = _value(h, key, have)
                 have[key] = (val if val is not None else "", False)
     out = [
-        _row(h, key, _show(value), "none" if is_none else "unverified", h.facts.get(key))
+        _row(h, key, show(value), "none" if is_none else "unverified", h.facts.get(key))
         for key, (value, is_none) in sorted(have.items())
     ]
     if absent:

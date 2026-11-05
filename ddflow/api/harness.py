@@ -23,6 +23,7 @@ from ..services import adopt as AD
 from ..services import claudehooks as CH
 from ..services import harnessfacts as HF
 from ..services import harnessreg as HR
+from ..services import planefacts as PF
 from ..services.harness import mcp_registered
 from ..services.harnessreg import Harness
 from ..services.hookio import DENY_EMITTERS, Plan, emit
@@ -266,13 +267,22 @@ def harness_doctor(repo: Path, which: str = "") -> O.Outcome:
     )
 
 
-def harness_facts(agent: str = "", unverified: bool = False) -> O.Outcome:
-    """The facts table: every descriptor value with status, source, version and date.
-    `unverified` keeps only the leads and adds the sections left out (NOT VERIFIED)."""
-    if agent and HR.get(agent) is None:
-        return O.failed("harness_facts", f"no harness {agent!r}; known: {', '.join(HR.ids())}")
-    targets = [HR.get(agent)] if agent else list(HR.load())
+def harness_facts(agent: str = "", unverified: bool = False, repo: Path | None = None) -> O.Outcome:
+    """The facts table: every descriptor value and control-plane fact with status, source,
+    version and date. `unverified` keeps only the leads and adds the sections left out
+    (NOT VERIFIED). `repo` is the project whose control-plane overrides apply."""
+    try:
+        planes = PF.load(repo)
+    except PF.FactsError as e:
+        return O.failed("harness_facts", str(e))
+    if agent and HR.get(agent) is None and agent not in PF.ids(planes):
+        known = ", ".join([*HR.ids(), *PF.ids(planes)])
+        return O.failed("harness_facts", f"no harness or plane {agent!r}; known: {known}")
+    harness = HR.get(agent) if agent else None
+    targets = [harness] if harness else [] if agent else list(HR.load())
     rs = [r for h in targets for r in HF.rows(h, absent=unverified)]
+    if not harness:
+        rs += PF.rows(planes, agent)
     if unverified:
         rs = [r for r in rs if r["status"] == "unverified"]
     return O.ok("harness_facts", facts=rs, message=HF.table(rs))
@@ -293,7 +303,7 @@ def harness_view(
     if what in ("add", "lint", "test", "probe"):
         return _author(repo, what, id, family, title, directory, run)
     if what == "facts":
-        return harness_facts(id, unverified)
+        return harness_facts(id, unverified, repo)
     if what == "list":
         return harness_list(repo)
     if what == "show":
