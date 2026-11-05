@@ -171,6 +171,33 @@ def _bare_word(text: str, n: int, k: int, word: str) -> bool:
     return end >= n or not (text[end].isalnum() or text[end] == "_")
 
 
+def _case_end(text: str, n: int, k: int) -> int:
+    """Index after the `esac` that closes the `case` at `k`; a quoted, commented or escaped
+    span is text, so an `esac` inside it is not the keyword that ends the case."""
+    depth = 1
+    k += 4
+    while k < n and depth:
+        if text[k] == "#" and text[k - 1] in " \t\r\n;|&":
+            k2 = text.find("\n", k)
+            k = k2 if k2 >= 0 else n
+        elif text[k] == "'":
+            k2 = text.find("'", k + 1)
+            k = k + 1 if k2 < 0 else k2 + 1
+        elif text[k] == "$" and k + 1 < n and text[k + 1] == "'":
+            k = _ansi_c_end(text, n, k)
+        elif text[k] == "\\":
+            k += 2 if k + 1 < n else 1
+        elif _bare_word(text, n, k, "case"):
+            depth += 1
+            k += 4
+        elif _bare_word(text, n, k, "esac"):
+            depth -= 1
+            k += 4
+        else:
+            k += 1
+    return k
+
+
 def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int:
     """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
     substitutions inside are navigated but mark no newline. An escaped closer is not the end."""
@@ -183,21 +210,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
             k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
             k = k2 if k2 >= 0 else n
         elif closer == ")" and _bare_word(text, n, k, "case"):
-            # `case x in p) ... ;; esac`: a `)` there ends a pattern, not this `$(` body
-            depth = 1
-            k += 4
-            while k < n and depth:
-                if text[k] == "#" and text[k - 1] in " \t\r\n;|&":
-                    k2 = text.find("\n", k)  # a comment: not the esac that closes this case
-                    k = k2 if k2 >= 0 else n
-                elif _bare_word(text, n, k, "case"):
-                    depth += 1
-                    k += 4
-                elif _bare_word(text, n, k, "esac"):
-                    depth -= 1
-                    k += 4
-                else:
-                    k += 1
+            k = _case_end(text, n, k)  # a case's `)` separators end patterns, not this `$(` body
         elif c == "'":
             k2 = text.find("'", k + 1)
             k = k + 1 if k2 < 0 else k2 + 1
