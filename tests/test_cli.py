@@ -224,6 +224,7 @@ def test_doctor_detects_a_dependency_cycle(proj):
         "P1",
         "--needs",
         "P1.TB",
+        "--allow-unknown-needs",
     )
     run_cli(
         proj,
@@ -253,6 +254,7 @@ def test_doctor_detects_an_unknown_dependency(proj):
         "P1",
         "--needs",
         "GHOST",
+        "--allow-unknown-needs",
     )
     code, out, _ = run_cli(proj, "doctor")
     assert code == FAIL and "GHOST" in out
