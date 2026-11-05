@@ -1107,7 +1107,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 559 knobs.
+cadences, and the rest of the 562 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2720,7 +2720,8 @@ source was read and nothing happened in the window. Three cases read as zero at 
 
 - a turn with no usable figure counts as `unmetered`, and the total is then a lower bound;
 - Kilo stores a missing figure as 0, so an all-zero turn is `unmetered`, and a window of nothing else
-  is `unavailable`;
+  is `unavailable`. A zero kind beside real figures counts as missing too: a model that never reports
+  cache tokens leaves every total a lower bound until `quota.token_fields` drops those kinds;
 - a Kilo cost of 0 means nobody recorded a cost, so USD is `unavailable` until a real cost appears.
 
 An unreadable transcript, or more bytes than `quota.transcript_max_bytes`, makes the reading
@@ -5375,7 +5376,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 559): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 562): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5955,7 +5956,7 @@ declared once and persists — see
 
 ## Configuration
 
-559 knobs across 51 sections, every one documented in place and listed, with its default
+562 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6022,8 +6023,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=4b5293faa3cb -->
-<details><summary>All 559 knobs across 51 sections</summary>
+<!-- ddflow:begin README/knobs sha=2da95325fed1 -->
+<details><summary>All 562 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6180,6 +6181,8 @@ long default is left to `ddflow config --explain`.
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.optimizer` | `"greedy-v1"` |  |
 | `schedule.bugs_first` | `true` |  |
+| `schedule.reserved_slots` | `0` |  |
+| `schedule.reserved_tags` | `["ddflow-gap"]` |  |
 | `schedule.dx_priority` | `8` |  |
 | `schedule.bug_priority` | `10` |  |
 | `schedule.dx_tags` | `["dx"]` |  |
@@ -6412,14 +6415,15 @@ long default is left to `ddflow config --explain`.
 | `quota.transcript_max_bytes` | `1073741824` |  |
 | `quota.kilo_timeout_s` | `10.0` |  |
 | `log.reuse_parsed` | `true` |  |
-| `log.max_cached_events` | `100000` |  |
+| `log.max_cached_events` | `200000` |  |
 | `log.redact_builtin_shapes` | `true` |  |
 | `log.commit_events` | `true` |  |
 | `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
 | `log.commit_events_message` | `"events: {reason}"` |  |
 | `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
-| `log.snapshot` | `true` |  |
+| `log.snapshot` | `false` |  |
 | `log.snapshot_min_events` | `5000` |  |
+| `log.snapshot_max_mb` | `256` |  |
 | `log.snapshot_stale_days` | `7` |  |
 | `log.snapshot_touch_s` | `86400` |  |
 | `log.evidence_blobs` | `false` |  |

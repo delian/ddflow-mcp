@@ -214,7 +214,9 @@ class TestSnapshot:
         }
         line = {"type": "rate_limit_event", "rate_limit_info": info}
         assert V.snapshot_stream_line(c, json.dumps(line)) == 2
-        assert of(V.read_claude_snapshot(c), "week").value == pytest.approx(20.0)
+        got = V.read_claude_snapshot(c)
+        assert of(got, "5h").value == pytest.approx(10.0)
+        assert of(got, "week").value == pytest.approx(20.0)
 
     def test_a_unified_window_with_no_figure_does_not_hide_the_top_level_one(self, tmp_path):
         c = ctx(tmp_path)
@@ -246,6 +248,13 @@ class TestSnapshot:
         c = ctx(tmp_path)
         assert V.snapshot_stream_line(c, '{"type": "assistant"}') == 0
         assert V.snapshot_stream_line(c, "torn") == 0
+
+    def test_a_version_of_true_is_not_this_version(self, tmp_path):
+        c = ctx(tmp_path)
+        c.snapshot.parent.mkdir(parents=True)
+        row = {"percent": 0, "observed_at": iso(NOW)}
+        c.snapshot.write_text(json.dumps({"version": True, "windows": {"5h": row}}))
+        assert none_of(V.read_claude_snapshot(c))
 
     def test_corrupt_snapshot_is_unavailable_and_a_new_write_heals_it(self, tmp_path):
         c = ctx(tmp_path)
@@ -426,6 +435,17 @@ class TestSamples:
         M.record(c, [_ok("a", 1.0), _ok("b", 2.0)])
         assert {kind for kind, _held in seen} == {"open", "append", "trim"}
         assert all(held == [c.samples] for _kind, held in seen)
+
+    def test_a_sample_landing_during_the_read_wins_the_interval(self, tmp_path, monkeypatch):
+        c = ctx(tmp_path)
+
+        def slow(cx):
+            M.record(cx, [_ok("other", 2.0)])  # another process, while this one reads
+            return [_ok("mine", 1.0)]
+
+        monkeypatch.setitem(M.READERS, "slow", slow)
+        assert M.sample_if_due(c, ["slow"]) is False
+        assert [r["source"] for r in _rows(c)] == ["other"]
 
     def test_sample_if_due_throttles(self, tmp_path):
         c = ctx(tmp_path)

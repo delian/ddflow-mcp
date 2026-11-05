@@ -121,7 +121,8 @@ def _read_snapshot(ctx: B.MeterContext) -> dict[str, Any]:
     """The snapshot's windows. Raises `ValueError`/`OSError` with the reason."""
     data = json.loads(ctx.snapshot.read_text(encoding="utf-8"))
     windows = data.get("windows") if isinstance(data, dict) else None
-    if not isinstance(windows, dict) or data.get("version") != SNAPSHOT_VERSION:
+    version = data.get("version") if isinstance(data, dict) else None
+    if not isinstance(windows, dict) or version is True or version != SNAPSHOT_VERSION:
         raise ValueError("not a snapshot of this version")
     return windows
 

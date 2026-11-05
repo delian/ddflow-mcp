@@ -89,6 +89,14 @@ class TestTranscriptUsage:
         write_transcript(c.claude_projects / "p" / "a.jsonl", [late, lost])
         assert _tokens(c).status == MB.UNAVAILABLE
 
+    def test_a_later_unusable_line_moves_the_turn_into_the_window(self, tmp_path):
+        start = NOW - 5 * HOUR
+        c = ctx(tmp_path, windows={"5h": start, "week": NOW - 168 * HOUR}, token_fields=("output",))
+        late = turn(at=start + 5)
+        late["message"]["usage"] = {"input_tokens": None, "output_tokens": 5}
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [turn(at=start - 10), late])
+        assert (_tokens(c).status, _tokens(c).value) == (MB.OK, 5.0)
+
     def test_rows_without_a_key_are_each_counted(self, tmp_path):
         c = ctx(tmp_path, token_fields=("output",))
         row = turn()
@@ -224,6 +232,22 @@ class TestTranscriptUsage:
         monkeypatch.setattr(L, "_scan", gone)
         assert none_of(L.read_claude_tokens(c))
 
+    def test_a_recent_transcript_gone_at_stat_is_unavailable_beside_an_old_one(
+        self, tmp_path, monkeypatch
+    ):
+        c = ctx(tmp_path)
+        write_transcript(c.claude_projects / "p" / "old.jsonl", [turn()], mtime=NOW - 200 * HOUR)
+        gone = write_transcript(c.claude_projects / "p" / "new.jsonl", [turn(mid="m2")])
+        real = type(gone).stat
+
+        def stat(self, **kw):
+            if self == gone:
+                raise FileNotFoundError("deleted")
+            return real(self, **kw)
+
+        monkeypatch.setattr(type(gone), "stat", stat)
+        assert none_of(L.read_claude_tokens(c))
+
     def test_the_only_transcript_gone_at_stat_is_unavailable(self, tmp_path, monkeypatch):
         c = ctx(tmp_path)
         path = write_transcript(c.claude_projects / "p" / "a.jsonl", [turn()])
@@ -258,6 +282,10 @@ class TestTranscriptUsage:
         assert len(got.rows) == 1 and got.rows[0].input == 10 and got.rows[0].model == "m"
 
 
+#: A row that reports every kind, so no gap of its own: 4 tokens.
+FULL = kilo_tokens(1, 1, 0, 1, 1)
+
+
 def _kilo(c, unit, window="5h"):
     return of(L.read_kilo(c), window, unit)
 
@@ -286,13 +314,10 @@ class TestKilo:
 
     def test_a_zero_row_is_unmetered_not_counted(self, tmp_path):
         c = ctx(tmp_path)
-        rows = [
-            {"at": NOW - 60, "tokens": kilo_tokens(10)},
-            {"at": NOW - 60, "tokens": kilo_tokens()},
-        ]
+        rows = [{"at": NOW - 60, "tokens": FULL}, {"at": NOW - 60, "tokens": kilo_tokens()}]
         kilo_db(c.kilo_db, rows)
         got = _kilo(c, "tokens")
-        assert (got.value, got.unmetered) == (10.0, 1)
+        assert (got.value, got.unmetered) == (4.0, 1)
 
     @pytest.mark.parametrize("row", [{"tokens": kilo_tokens()}, {}])
     def test_only_zero_or_missing_tokens_is_unavailable_never_zero(self, tmp_path, row):
@@ -309,12 +334,28 @@ class TestKilo:
     def test_a_kind_missing_from_one_row_makes_the_total_a_lower_bound(self, tmp_path):
         c = ctx(tmp_path)
         rows = [
-            {"at": NOW - 60, "tokens": kilo_tokens(10)},
+            {"at": NOW - 60, "tokens": FULL},
             {"at": NOW - 60, "tokens": {"input": 100, "output": 50}},
         ]
         kilo_db(c.kilo_db, rows)
         got = _kilo(c, "tokens")
-        assert (got.status, got.value, got.unmetered) == (MB.OK, 160.0, 1)
+        assert (got.status, got.value, got.unmetered) == (MB.OK, 154.0, 1)
+
+    def test_a_zero_beside_a_figure_is_not_a_measured_zero(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("output",))
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": kilo_tokens(100)}])
+        assert _kilo(c, "tokens").status == MB.UNAVAILABLE
+
+    def test_a_zero_kind_makes_the_default_total_a_lower_bound(self, tmp_path):
+        c = ctx(tmp_path)
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": kilo_tokens(100)}])
+        got = _kilo(c, "tokens")
+        assert (got.status, got.value, got.unmetered) == (MB.OK, 100.0, 1)
+
+    def test_a_missing_output_beside_a_zero_reasoning_is_not_a_zero(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("output",))
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": {"input": 10, "reasoning": 0}}])
+        assert _kilo(c, "tokens").status == MB.UNAVAILABLE
 
     def test_no_turn_in_the_window_measures_zero_tokens(self, tmp_path):
         c = ctx(tmp_path)

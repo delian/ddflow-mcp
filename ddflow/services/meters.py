@@ -89,21 +89,30 @@ def _trim(ctx: B.MeterContext) -> None:
     atomic_write(ctx.samples, "".join(reversed(kept)), mode=0o600)
 
 
-def record(ctx: B.MeterContext, readings: Iterable[B.Reading]) -> None:
-    """Append ``readings`` to the sample log. Under the lock, because a trim replaces the file:
-    an append beside it would land in the file being replaced and be lost."""
-    body = "".join(
+def _rows_of(ctx: B.MeterContext, readings: Iterable[B.Reading]) -> str:
+    return "".join(
         json.dumps({"at": ctx.now, **r.to_dict()}, sort_keys=True) + "\n" for r in readings
     )
+
+
+def _append(ctx: B.MeterContext, body: str) -> None:
+    """Add rows to the log. Called under the lock, because a trim replaces the file: an append
+    beside it would land in the file being replaced and be lost."""
+    fd = os.open(ctx.samples, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
+        fh.write(body)
+    if ctx.samples.stat().st_size > ctx.samples_max_bytes:
+        _trim(ctx)
+
+
+def record(ctx: B.MeterContext, readings: Iterable[B.Reading]) -> None:
+    """Append ``readings`` to the sample log."""
+    body = _rows_of(ctx, readings)
     if not body:
         return
     ctx.samples.parent.mkdir(parents=True, exist_ok=True)
     with locked(ctx.samples):
-        fd = os.open(ctx.samples, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        with os.fdopen(fd, "a", encoding="utf-8") as fh:
-            fh.write(body)
-        if ctx.samples.stat().st_size > ctx.samples_max_bytes:
-            _trim(ctx)
+        _append(ctx, body)
 
 
 def _last_at(ctx: B.MeterContext) -> float | None:
@@ -124,10 +133,21 @@ def _last_at(ctx: B.MeterContext) -> float | None:
     return None
 
 
-def sample_if_due(ctx: B.MeterContext, names: Iterable[str] | None = None) -> bool:
-    """Read and record once per `[quota].sample_interval_s`. Whether a sample was taken."""
+def _due(ctx: B.MeterContext) -> bool:
     last = _last_at(ctx)
-    if last is not None and 0 <= ctx.now - last < ctx.sample_interval_s:
+    return last is None or not 0 <= ctx.now - last < ctx.sample_interval_s
+
+
+def sample_if_due(ctx: B.MeterContext, names: Iterable[str] | None = None) -> bool:
+    """Read and record once per `[quota].sample_interval_s`. Whether a sample was taken. The
+    readers can take seconds, so they run outside the lock and the check is made again under
+    it: of two processes that both found it due, the second writes nothing."""
+    if not _due(ctx):
         return False
-    record(ctx, read_all(ctx, names))
+    body = _rows_of(ctx, read_all(ctx, names))
+    ctx.samples.parent.mkdir(parents=True, exist_ok=True)
+    with locked(ctx.samples):
+        if not _due(ctx):
+            return False
+        _append(ctx, body)
     return True

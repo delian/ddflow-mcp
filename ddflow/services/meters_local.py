@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -112,9 +112,7 @@ def _candidates(root: Path, since: float, max_bytes: int) -> list[Path]:
     for path in root.rglob("*.jsonl"):
         try:
             st = path.stat()
-        except FileNotFoundError:
-            continue  # the harness deleted it just now: it does not count as seen
-        except OSError as exc:
+        except OSError as exc:  # gone just now too: a file with no age may hold a recent turn
             raise MeterFailure(f"{path}: {exc}") from exc
         seen += 1
         if st.st_mtime >= since:
@@ -170,8 +168,13 @@ def transcript_usage(root: Path, since: float, max_bytes: int) -> TranscriptUsag
             _scan(path, since, rows, bare)
         except OSError as exc:  # gone since `_candidates` too: its turns are not free
             raise MeterFailure(f"{path}: {exc}") from exc
+    for key, at in bare.items():
+        row = rows.get(key)
+        if row is None:
+            usage.unmetered.append(at)
+        elif at is not None and at > row.at:  # still the same turn, finished later
+            rows[key] = replace(row, at=at)
     usage.rows = list(rows.values())
-    usage.unmetered = [at for key, at in bare.items() if key not in rows]
     return usage
 
 
@@ -259,9 +262,10 @@ def _kilo_rows(ctx: B.MeterContext, since: float) -> list[tuple]:
 
 def _kilo_token_row(row: tuple) -> TokenRow | None:
     """One turn's figures, or None when they are all zero or missing: Kilo's way of not
-    recording them. A kind missing from a turn that holds others stays None, never 0."""
+    recording them. The same goes for each kind: a zero beside real figures may be a measured
+    zero or nothing recorded, and only the second is safe to assume, so it stays None."""
     at, *figures, _cost = row
-    inp, out, reasoning, read, write = (_count(v) for v in figures)
+    inp, out, reasoning, read, write = (_count(v) or None for v in figures)
     if not any((inp, out, reasoning, read, write)):
         return None
     output = None if out is None and reasoning is None else (out or 0) + (reasoning or 0)
