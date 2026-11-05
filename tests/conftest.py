@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -49,11 +50,30 @@ def _no_first_call_start(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_auto_integrator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``[merge_queue].auto_run`` (default on) starts a detached integrator when a release is
+    accepted; the suite's release tests run ``queue run`` themselves and must not race a
+    background one. tests/test_integrator_trigger.py turns it back on with a fake starter."""
+    monkeypatch.setenv("DDFLOW_MERGE_QUEUE_AUTO_RUN", "off")
+
+
+@pytest.fixture(autouse=True)
 def _no_release_check_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     """The release check (``[upgrade].release_check``, default on) must never reach a network
     from the suite; ``run_cli`` subprocesses inherit this. tests/test_upgrade_release_check.py
     turns it back on with a fake index."""
     monkeypatch.setenv("DDFLOW_NO_UPDATE_CHECK", "1")
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_harness_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A harness's marker in the shell that runs the suite makes every call an agent's, so each
+    person-only path a test takes is refused, there and not on CI. `run_cli` subprocesses
+    inherit this too. A test of the marker sets it itself."""
+    from ddflow.services.identity import HARNESS_MARKERS
+
+    for var in HARNESS_MARKERS:
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -188,3 +208,19 @@ def add_block(repo, block, *, shared=False, own="", person=False, agent=""):
     if res.error:
         raise ValueError(res.error)
     return res.path
+
+
+#: The project a real ddflow 0.1.3 built: the starting point of the upgrade-apply tests.
+_OLD_PROJECT = Path(__file__).parent / "fixtures" / "releases" / "0.1.3" / "project"
+
+
+@pytest.fixture
+def old(tmp_path: Path) -> Path:
+    r = tmp_path / "old"
+    shutil.copytree(_OLD_PROJECT, r)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
+    for k, v in (("user.email", "t@e.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        subprocess.run(["git", "-C", str(r), "config", k, v], check=True)
+    subprocess.run(["git", "-C", str(r), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(r), "commit", "-qm", "old"], check=True)
+    return r

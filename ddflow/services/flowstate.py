@@ -320,19 +320,31 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
 def current_limit(
     ctx: FlowCtx, source: SIG.SignalSource | None = None, clock: Clock = time.time
 ) -> FC.Decision:
-    """The parallelism limit in force now. In ``fixed`` mode it is
-    ``max_parallel_tasks``; in ``auto`` the ring folded through the controller, after
-    taking a sample if one is due and a ``source`` was given."""
+    """The parallelism limit in force now: the ring folded through the controller, after
+    taking a sample if one is due and a ``source`` was given. In ``fixed`` mode the fixed
+    knob ``max_parallel_tasks`` is still the ceiling -- the fold may lower it under load
+    (down to ``max_parallel_min``) but never above -- so the label stays ``fixed``."""
     s = ctx.cfg.schedule
-    if s.parallel != "auto":
-        return FC.Decision(s.max_parallel_tasks, "fixed", "fixed", "schedule.parallel = fixed")
     now = clock()
     if source is not None:
         result = sample_if_due(ctx, source, clock)
         if result.unavailable:
             start = FP.params(ctx.cfg).bounds()[1]
-            return FC.Decision(start, "start", FC.NO_SIGNALS, result.reason)
-    return _fold(ctx, read_ring(ctx.repo), now, fresh=True)
+            return FC.Decision(
+                start,
+                "fixed" if s.parallel != "auto" else "start",
+                FC.NO_SIGNALS,
+                result.reason,
+            )
+    decision = _fold(ctx, read_ring(ctx.repo), now, fresh=True)
+    if s.parallel != "auto":
+        # The fold's limit, governed by the signals, but labelled fixed: `_parallel`
+        # reads the mode to phrase the cap, and the limit below the knob says the load
+        # lowered it.
+        return FC.Decision(
+            decision.limit, "fixed", decision.limited_by, decision.reason, decision.admit_paused
+        )
+    return decision
 
 
 def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.Decision:
@@ -355,10 +367,8 @@ def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.
 
 def history_notes(cfg: Config, events: Sequence[Event], now: float | None = None) -> list[str]:
     """doctor's notes for the log-derived signals with too little history to be read
-    (`flowsignals.history_notes`): none in ``fixed`` mode, where nothing is sampled, and
-    none for a signal `[schedule.signals].enabled` switches off."""
-    if cfg.schedule.parallel != "auto":
-        return []
+    (`flowsignals.history_notes`), and none for a signal `[schedule.signals].enabled`
+    switches off."""
     at = time.time() if now is None else now
     return FS.history_notes(FS.Signals(**_log_signals(events, at)), FP.enabled_signals(cfg))
 

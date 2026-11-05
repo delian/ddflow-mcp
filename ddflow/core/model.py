@@ -76,6 +76,7 @@ from .handlers.items import (  # noqa: F401
     _apply_definition,
     _definition,
     _h_added,
+    _h_item_reworked,
     _h_removed,
     _h_reopened,
     _h_state,
@@ -139,6 +140,7 @@ from .handlers.links import (  # noqa: F401
     _links,
     link_targets,
 )
+from .handlers.probe import PROBE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,
@@ -153,6 +155,7 @@ from .handlers.sessions import (  # noqa: F401
     _h_upgrade_applied,
     _session,
 )
+from .handlers.suggestions import SUGGESTION_HANDLERS
 from .handlers.waiting import WAITING_HANDLERS
 
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
@@ -224,7 +227,9 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.unblocked": _h_unblocked,
     "item.resolved": _h_resolved,
     "item.completed": _h_state(DONE),
+    "phase.completed": _h_state(DONE),
     "item.reopened": _h_reopened,
+    "item.reworked": _h_item_reworked,
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
     "review.triaged": _h_review_triaged,
@@ -287,8 +292,12 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **APPROVAL_HANDLERS,
     # first writer: services/waiting.py register (a refused claim or `update --globs`)
     **WAITING_HANDLERS,
+    # first writer: services/handoff/events.py (propose, then the moves)
+    **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: api/probe.py (`ddflow probe`)
+    **PROBE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

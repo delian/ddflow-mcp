@@ -8,6 +8,7 @@ verb's level, and the standing limits of the channels in use). All read the fold
 from __future__ import annotations
 
 import time
+from datetime import timedelta
 from typing import Any
 
 from ...config import Config
@@ -15,6 +16,7 @@ from ...core import clock
 from ...core.handlers.asks import ANSWERED, asks_of
 from ..ask import engine as E
 from . import harness as H
+from . import policy as PO
 from . import relayed as RL
 
 
@@ -57,6 +59,7 @@ def rows(
                 "used": r["used"],
                 "uses": r["uses"],
                 "spent_by": [c["by"] for c in r["consumed"]],
+                "notify": r["notify"],
             }
         )
     return out
@@ -65,9 +68,10 @@ def rows(
 def line(r: dict[str, Any]) -> str:
     who = f" by {r['approver']} via {r['channel']} L{r['level']}" if r["approver"] else ""
     spent = f", spent {r['used']}/{r['uses']}" if r["outcome"] == E.APPROVED else ""
+    note = "  NOTIFIED" if r.get("notify") else ""
     return (
         f"{r['requested_at'][:19]}  {r['id']}  {r['verb']:<24} {r['agent']:<14} "
-        f"{r['status']}{' ' + r['outcome'] if r['outcome'] else ''}{who}{spent}  {r['digest']}"
+        f"{r['status']}{' ' + r['outcome'] if r['outcome'] else ''}{who}{spent}{note}  {r['digest']}"
     )
 
 
@@ -104,6 +108,12 @@ def findings(state, cfg: Config, *, now: float | None = None, events=()) -> list
                 f"{r['id']} ({r['verb']}) was spent at level L{level}, below the L{r['min_level']} "
                 "its tier needs"
             )
+        if r["notify"] and r["answered_by"] == f"policy:{PO.RETRY_RULE_ID}":
+            out.append(
+                f"{r['id']} ({r['verb']}): auto-approved by standing rule {PO.RETRY_RULE_ID} "
+                f"after {r['notify']} unanswered refusal(s) -- the operator is notified here "
+                "instead of asked again"
+            )
         left = clock.epoch(r["answered_at"], default=0.0) + r["use_ttl_s"] - now
         if r["used"] < r["uses"] and r["use_ttl_s"] and left < cfg.approvals.expiry_warn_s:
             when = "expired unused" if left <= 0 else "will expire unused within minutes"
@@ -116,6 +126,7 @@ def findings(state, cfg: Config, *, now: float | None = None, events=()) -> list
         f"{n} approval(s) granted by standing rule {who} (not a person)"
         for who, n in sorted(by_rule.items())
     ]
+    out.extend(_red_base_note(cfg, state, now))
     out.extend(RL.uses(events, state))
     out.extend(standing_notes(cfg, state))
     return out
@@ -151,3 +162,22 @@ def standing_notes(cfg: Config, state) -> list[str]:
             "a command reviewer is the one T3 act a typed chat answer may approve (L2-typed)"
         )
     return notes
+
+
+def _red_base_note(cfg: Config, state, now: float) -> list[str]:
+    """The note that the base branch is red, once automatic baseline-red acceptances reach
+    `[gates].baseline_red_rate_warn` in a day (D-baseline-red-auto-accept)."""
+    recent = sum(
+        1
+        for r in _commands(state)
+        if r["policy"]
+        and r["answered_by"] == "policy:baseline_red_auto"
+        and now - clock.epoch(r["answered_at"], default=0.0) <= timedelta(days=1).total_seconds()
+    )
+    if cfg.gates.baseline_red_rate_warn <= 0 or recent < cfg.gates.baseline_red_rate_warn:
+        return []
+    return [
+        f"the base branch is red: {recent} baseline-red partial(s) were accepted automatically "
+        "in the last 24 hours ([gates].baseline_red_rate_warn); fix the bugs tagged "
+        "baseline-red (`ddflow bug list`) so gates can pass again"
+    ]

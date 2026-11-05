@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.probe_timeout_s"
+new = "30"
+why = "Seconds one probe may take before it is recorded `unavailable` (never `clean`)."
+impact = "additive"

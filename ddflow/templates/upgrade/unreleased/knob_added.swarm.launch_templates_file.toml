@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.launch_templates_file"
+new = "\".ddflow/local/lane-templates.toml\""
+why = "The lane-template file the scheduler launches from (SW-launch)."
+impact = "additive"

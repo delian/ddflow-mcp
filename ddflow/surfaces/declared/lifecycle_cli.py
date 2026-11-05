@@ -46,6 +46,8 @@ def heartbeat_notes(out, a, ctx) -> Iterator[str]:
         yield f"  YIELD REQUESTED: {out.data['yield_requested']}"
     if out.data.get("globs_withheld"):
         yield f"  lease renewed WITHOUT {item}'s newer globs/resources: {out.data['globs_withheld']}"
+    if out.data.get("recall"):
+        yield f"  RECALL: {out.data['recall']}"
 
 
 def wake_text(wake: dict | None) -> str:

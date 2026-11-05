@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.suggest_globs"
+new = "true"
+why = "Offer narrowing of declared-but-never-written globs at merge-ready and learned directories (from finished same-tag tasks) at claim and gate status."
+impact = "additive"

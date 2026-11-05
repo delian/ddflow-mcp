@@ -1,0 +1,9 @@
+[knob]
+"ddflow/services/export/registry.py:RENDER_TIMEOUT_S" = 'export.registry.render_timeout_s'
+
+[exempt]
+"ddflow/services/export/registry.py:MAX_EXPONENT" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'
+"ddflow/services/export/registry.py:MAX_OUTPUT_BYTES" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'
+"ddflow/services/export/registry.py:MAX_RESULT_BITS" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'
+"ddflow/services/export/registry.py:MAX_SEQUENCE" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'
+"ddflow/services/export/registry.py:MIN_BODY_BYTES" = 'safety bound of a sandbox (regex, expression, recursion, input size): a person raising it widens an attack surface; fixed on purpose'

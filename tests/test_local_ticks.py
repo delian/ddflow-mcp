@@ -99,8 +99,8 @@ def test_a_target_given_by_name_is_imported_only_when_it_runs(proj: Path) -> Non
     assert res.status == TK.FAILED and "ModuleNotFoundError" in res.detail
 
 
-def test_the_flow_sample_is_the_one_tick_ddflow_ships() -> None:
-    assert [t.name for t in TK.registered()] == ["flow.sample"]
+def test_the_ticks_ddflow_ships_are_the_flow_sample_and_the_integrator() -> None:
+    assert [t.name for t in TK.registered()] == ["flow.sample", "merge_queue.integrator"]
 
 
 # -- due, claimed, recorded ----------------------------------------------------------------
@@ -372,7 +372,7 @@ def test_load_runs_the_ticks_and_the_flow_sample_is_taken_once_per_interval(proj
     assert second == first, "the second, inside signal_interval_s, did not take another"
 
 
-def test_load_does_not_sample_when_parallel_is_not_auto(proj: Path) -> None:
+def test_load_samples_when_parallel_is_fixed_too(proj: Path) -> None:
     from ddflow.api._base import _load
 
     assert run_cli(proj, "config", "--set", "schedule.parallel", "fixed")[0] == 0
@@ -380,7 +380,7 @@ def test_load_does_not_sample_when_parallel_is_not_auto(proj: Path) -> None:
 
     _load(proj)
 
-    assert not (proj / ".ddflow/local/flow").exists()
+    assert (proj / ".ddflow/local/flow").exists()
 
 
 def test_load_survives_a_registry_that_raises(proj: Path, monkeypatch: pytest.MonkeyPatch) -> None:

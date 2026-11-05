@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "gates.skip_followup"
+new = "\"auto\""
+why = "A skipped gate files a follow-up task to re-run it later."
+impact = "additive"

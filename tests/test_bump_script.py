@@ -74,7 +74,7 @@ def test_a_bump_is_verified_against_the_source_it_wrote_not_stale_bytecode(tmp_p
     before = _version(repo)
     # The bytecode a previous bump (or test run) left behind, for the version now in the
     # tree -- and marked never to be checked against the source.
-    for mod in ("ddflow/__init__.py", "ddflow/surfaces/mcp.py"):
+    for mod in ("ddflow/__init__.py", "ddflow/surfaces/mcp/__init__.py"):
         src = repo / mod
         py_compile.compile(
             str(src),

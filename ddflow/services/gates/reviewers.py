@@ -196,31 +196,106 @@ def reviewer_independence(
     author_model: str,
     gates: Mapping[str, GateDef] | None = None,
 ) -> tuple[bool, str]:
-    """Did at least one reviewer come from a different pretraining family?
+    """Is the review independent enough at `[agent].reviewer_independence`?
 
-    Returns (satisfied, explanation). A same-family panel is reported as unsatisfied
-    even when every reviewer passed, because agreement among models trained on the same
-    distribution measures shared priors, not correctness.
-    """
-    it = state.items.get(item_id)
-    if not it:
-        return False, f"no such item {item_id}"
-    # A router author (Copilot's HydraFusion) is a SET of families: any of them may
-    # have written the diff, so a reviewer must sit outside all of them.
+    (satisfied, explanation); `independence_tier` has the tier. Level `family` reports a
+    same-family panel unsatisfied even when every reviewer passed: agreement among models
+    trained on the same distribution measures shared priors, not correctness."""
+    tier, why = independence_tier(state, cfg, item_id, author_model, gates)
+    return tier != "none", why
+
+
+def _bare(model: str) -> str:
+    """A model id without its provider prefix, lowercased: `a/claude-x` is `claude-x`."""
+    return model.strip().lower().rsplit("/", 1)[-1]
+
+
+def is_author_model(model: str, author: str) -> bool:
+    """Is ``model`` the author's own model (the hard floor), prefix and case blind?"""
+    return bool(_bare(model)) and _bare(model) == _bare(author)
+
+
+def review_tier(cfg: Config, author_model: str, rev_model: str, rev_family: str = "") -> str:
+    """The independence tier of ONE review against the author: `family` (the reviewer's
+    family is outside the author's), `model` (the same family, a different model id), or
+    `none`. The author's own model never counts; a reviewer whose family is not
+    recognised, or an author that is a bare family or an unknown model, establishes
+    nothing. The one place a tier is decided (D-reviewer-independence-soft)."""
     routed, author_fam = _author_identity(author_model, cfg)
-    fams, anonymous, unapproved = _reviewer_fams(state, it, gates, cfg)
-    if why := _author_no_identity_refusal(author_model, routed, author_fam):
-        return False, why
-    # `router_set` returns its members stripped and lowercased, so the router side is
-    # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
-    # overlap, or a reviewer from inside the set would pass as independent.
-    author_set = routed if routed is not None else [author_fam]
-    author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
+    fam = (
+        (_declared_family({"reviewer": "x", "family": rev_family}) or family_of(rev_model, cfg))
+        .strip()
+        .lower()
+    )
+    # A provider prefix does not make another model: compare the last path segment.
+    m, a = _bare(rev_model), _bare(author_model)
+    if not fam or (routed is None and not author_fam) or (m and m == a):
+        return "none"  # nothing established, or the author's own model
+    if fam not in (routed if routed is not None else [author_fam]):
+        return "family"
+    bare = bool(family_name_of(author_model, cfg.agent.families))
+    named_family = bool(family_name_of(rev_model, cfg.agent.families))  # a family is no model
+    return (
+        "model"
+        if routed is None and m and a and m != a and not bare and not named_family
+        else "none"
+    )
+
+
+def model_tier_of(state: State, cfg: Config, item_id: str, author_model: str, gates, fams) -> str:
+    """The recorded model of a reviewer gate that reached tier `model`, "" when none."""
+    it = state.items[item_id]
+    for g, fam in fams:
+        rec = it.gates.get(g)
+        m = str((rec.evidence.get("model") if rec else "") or "").strip()
+        if m and review_tier(cfg, author_model, m, fam) == "model":
+            return m
+    return ""
+
+
+def independence_level(cfg: Config) -> str:
+    """The effective reviewer-independence level: `family` when `[agent].reviewer_independence`
+    says so (the strictest wins over the legacy boolean), `off` when the legacy
+    `reviewer_family_must_differ` is false, else the knob."""
+    if cfg.agent.reviewer_independence == "family":
+        return "family"
+    if not cfg.agent.reviewer_family_must_differ:
+        return "off"
+    return cfg.agent.reviewer_independence
+
+
+def tier_notes(it, gates: Mapping[str, GateDef] | None = None) -> list[str]:
+    """One neutral line when a recorded review reached tier `model` (a different model of
+    the author's family): a normal state, stated once, with the way to a cross-family
+    review as a hint."""
+    # Only a review that RAN counts: an unavailable gate carrying a tier establishes nothing.
+    recs = {
+        g: r
+        for g in reviewer_gates(gates)
+        if (r := it.gates.get(g)) and r.outcome in ("passed", "failed", "partial")
+    }
+    tier = lambda r: r.evidence.get("independence_tier")  # noqa: E731
+    if any(tier(r) == "family" for r in recs.values()):
+        return []  # a cross-family review exists: nothing to hint at
+    got = [
+        f"{g} by {r.evidence.get('model') or r.by}" for g, r in recs.items() if tier(r) == "model"
+    ]
+    if not got:
+        return []
+    return [
+        f"reviewed within the author's model family ({', '.join(got)}; tier model). "
+        f"Hint: a reviewer of another family, if one is configured, is run with "
+        f"`ddflow review --reviewer <name>`."
+    ]
+
+
+def _no_reviewer_refusal(fams, anonymous, unapproved, author_desc: str) -> str:
+    """Why no reviewer could count at all, "" when at least one identified reviewer ran."""
     if unapproved and not fams:
         # The names as recorded, never re-parsed out of the text: a name with a space
         # in it would print an approve command for the wrong reviewer (rubber duck).
         names = sorted({who for _g, who in unapproved})
-        return False, (
+        return (
             f"{'; '.join(f'{g} came from reviewer {w!r}' for g, w in unapproved)}, whose entry a tool wrote and a person has "
             f"not approved, so it is not counted (decision D-reviewer-trust): an agent can "
             f"write a reviewer, so it cannot vouch for one. The operator reviews the "
@@ -231,18 +306,52 @@ def reviewer_independence(
         )
     if not fams:
         if anonymous:
-            return False, (
+            return (
                 f"no reviewer named a model this project recognises "
                 f"({', '.join(anonymous)}), so nothing shows the review came from a "
                 f"different family than the author ({author_desc}). Re-record with "
                 f"`--model <the reviewer's model>`, or teach [agent].families the name."
             )
-        return False, "no reviewer ran at all"
+        return "no reviewer ran at all"
+    return ""
+
+
+def independence_tier(
+    state: State,
+    cfg: Config,
+    item_id: str,
+    author_model: str,
+    gates: Mapping[str, GateDef] | None = None,
+) -> tuple[str, str]:
+    """The ONE independence check (D-reviewer-independence-soft): (tier, explanation) with
+    tier `family` (a reviewer outside the author's family), `model` (only a different
+    model of the author's family, allowed at level `model`) or `none`. At level `off`
+    the tier is `off`. The author's own model never counts; an unrecognised model
+    establishes nothing."""
+    level = independence_level(cfg)
+    if level == "off":
+        return "off", "reviewer independence is off ([agent].reviewer_independence)"
+    it = state.items.get(item_id)
+    if not it:
+        return "none", f"no such item {item_id}"
+    # A router author (Copilot's HydraFusion) is a SET of families: any of them may
+    # have written the diff, so a reviewer must sit outside all of them.
+    routed, author_fam = _author_identity(author_model, cfg)
+    fams, anonymous, unapproved = _reviewer_fams(state, it, gates, cfg)
+    if why := _author_no_identity_refusal(author_model, routed, author_fam):
+        return "none", why
+    # `router_set` returns its members stripped and lowercased, so the router side is
+    # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
+    # overlap, or a reviewer from inside the set would pass as independent.
+    author_set = routed if routed is not None else [author_fam]
+    author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
+    if why := _no_reviewer_refusal(fams, anonymous, unapproved, author_desc):
+        return "none", why
     different = [(g, f) for g, f in fams if f not in author_set]
     if different:
-        return True, f"{different[0][0]} was {different[0][1]} vs author {author_desc}"
+        return "family", f"{different[0][0]} was {different[0][1]} vs author {author_desc}"
     if routed is not None:
-        return False, (
+        return "none", (
             f"every identified reviewer was inside the families the router "
             f"{author_model!r} draws on: "
             + ", ".join(f"{g}={f}" for g, f in fams)
@@ -250,7 +359,13 @@ def reviewer_independence(
             f"family the router used may be reviewing its own work."
             + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
         )
-    return False, (
+    if level == "model" and (m := model_tier_of(state, cfg, item_id, author_model, gates, fams)):
+        return "model", (
+            f"reviewed by {m}, a different model of the author's family {author_fam!r} "
+            f"(tier model). For a review from another family, configure a reviewer of "
+            f"one and run `ddflow review --reviewer <name>`."
+        )
+    return "none", (
         f"every identified reviewer ({', '.join(g for g, _ in fams)}) was family "
         f"{author_fam!r}, the same as the author. Same-family agreement is not "
         f"independent evidence."

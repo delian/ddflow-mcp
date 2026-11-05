@@ -33,6 +33,7 @@ from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
 from ..core.outcome import EXIT_NAMES, INTERRUPTED, exit_for
+from ..infra import threads
 from .cli_pipe import PIPE_CLOSED, run_quietly  # noqa: F401
 from .context import (
     FAIL,
@@ -85,7 +86,7 @@ def cmd_item_update(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     msg = update_message(a.id, out.data)
-    c.out(msg, out.body(("id", "changed", "globs_dropped", "needs_dropped")))
+    c.out(msg, out.body(("id", "changed", "globs_dropped", "globs_withheld", "needs_dropped")))
     return OK
 
 
@@ -332,6 +333,7 @@ CONFLICT_SAFE = {("doctor",), ("help",)}
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI. A reader that stops reading (`ddflow list task | head -1`) is normal
     shell use: it ends quietly with `PIPE_CLOSED`, not with a traceback (B9834dabc40)."""
+    threads.cap_blas_threads()
     return run_quietly(_main, argv)
 
 

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.snapshot"
+new = "true"
+why = "Keep the machine-local lease snapshot the write hook reads instead of folding the log."
+impact = "additive"

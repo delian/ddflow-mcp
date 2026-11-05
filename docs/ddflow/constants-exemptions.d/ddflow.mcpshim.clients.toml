@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/mcpshim/clients.py:MAX_AGE_DAYS" = "how long an unverified `honours` row of the client table is trusted: a fixed window on the data's freshness (no caller can widen it), not a user tunable"

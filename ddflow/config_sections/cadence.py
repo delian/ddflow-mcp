@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._docs import declare, knob
+from ._docs import declare, int_at_least, knob
 
 
 @declare("cadence")
@@ -42,4 +42,14 @@ class CadenceConfig:
     every_days: list[str] = knob(
         factory=list,
         doc='Passes that fall due by the calendar rather than by completed work, as `name=days`: ["bug_hunt=7", "dedupe_sweep=7"]. A name equal to a count-based pass (dedupe_sweep, integration_tests, ...) REPLACES it. `ddflow cadence` reports one due when `cadence --ran <name>` has not been recorded within that many days -- or ever, so a weekly pass that has never run is due now rather than silently never. For a rule like \'a bug hunt every week\' that otherwise lives only in prose, which is where it stops happening.',
+    )
+    recall_recheck_s: int = knob(
+        1800,
+        doc="Seconds between periodic re-scorings of the pre-recorded lessons against an item a worker still holds, re-surfacing any it re-violates mid-work (`services/recall`, Bcd5871e71b). 0 turns the mid-work recheck off. The run is recorded as `cadence.ran recall_recheck:<item>`, so the next scoring waits this long after the last and a heartbeat storm never busy-loops the recall engine.",
+        check=int_at_least(0),
+    )
+    recall_recheck_max: int = knob(
+        3,
+        doc="How many mid-work lesson re-scorings one item may cause before it goes quiet. 0 is no cap. A small number keeps the reminder occasional rather than a nag; the interval `recall_recheck_s` still bounds how fast it can run.",
+        check=int_at_least(0),
     )

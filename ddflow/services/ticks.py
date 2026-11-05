@@ -418,7 +418,9 @@ def _release(path: Path, t: Tick, claimed_at: float) -> None:
 
 
 def _flow_enabled(ctx: TickCtx) -> bool:
-    return getattr(getattr(ctx.cfg, "schedule", None), "parallel", "") == "auto"
+    # Sampled in auto AND fixed: a fixed cap is the ceiling the signals may still lower
+    # under load (Bd07c080a0c), so the ring has to keep up in fixed mode too.
+    return getattr(getattr(ctx.cfg, "schedule", None), "parallel", "") in ("auto", "fixed")
 
 
 def flow_sample(ctx: TickCtx) -> str | None:
@@ -442,5 +444,20 @@ register(
         budget_s=10.0,
         target=flow_sample,
         enabled=_flow_enabled,
+    )
+)
+
+
+def _integrator_enabled(ctx: TickCtx) -> bool:
+    return getattr(getattr(ctx.cfg, "merge_queue", None), "auto_run", "off") == "on"
+
+
+register(
+    Tick(
+        "merge_queue.integrator",
+        every_s=30,
+        budget_s=20.0,
+        target="ddflow.api.mergequeue_start:integrator_tick",
+        enabled=_integrator_enabled,
     )
 )

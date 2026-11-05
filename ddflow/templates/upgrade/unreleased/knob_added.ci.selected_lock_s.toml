@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.selected_lock_s"
+new = "600"
+why = "A selected ci run takes the host-wide suite slot when its predicted seconds exceed this, not on its file count, and the always-run guards no longer count toward ci.selected_lock_tests (Bc07bf8feb4: they alone filled the limit, so every selected run queued)."
+effect = "With at least ci.selected_lock_min_runs measured runs, a selected run above the file limit runs beside a full suite when it is predicted short, and one under it queues when it is predicted long. With fewer runs ci.selected_lock_tests still decides, now over the files the change reaches only. Set 0 to keep the file count alone; ci.selected_lock_tests = 0 still means a selected run never queues. The decision is in the gate evidence as `admission`."
+impact = "additive"

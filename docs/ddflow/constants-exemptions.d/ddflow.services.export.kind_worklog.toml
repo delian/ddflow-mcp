@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/export/kind_worklog.py:DEFAULT_WINDOW_DAYS" = 'export.kind_worklog.default_window_days'
+"ddflow/services/export/kind_worklog.py:NOTE_CHARS" = 'export.kind_worklog.note_chars'

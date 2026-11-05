@@ -133,12 +133,14 @@ def test_complete_accepts_a_lockfile_only_change(repo, tmp_path):
     assert api.review(repo, gate="critic", item="T1").exit == 2
     sent = seen.read_text() if seen.exists() else ""
     assert "SECRET_ISH" not in sent
-    for gate in _pipeline_gates():
+    for gate in (g for g in _pipeline_gates() if g != "merge"):
         code, out, err = run_cli(
             repo, "gate", "record", "T1", gate, "--outcome", "passed", "--evidence", "e",
             agent="a1",
         )  # fmt: skip
         assert code == 0, (gate, out, err)
+    code, out, err = run_cli(repo, "merge", "T1", agent="a1")
+    assert code == 0, out + err
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-sonnet-5-5", agent="a1")
     assert code == 0, out + err
 

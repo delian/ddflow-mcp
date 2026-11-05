@@ -19,6 +19,7 @@ from ...infra.store import Store
 from ...services import choices as CHO
 from ...services import cleanup as CL
 from ...services import gates as G
+from ...services import lanerelease as LR
 from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import searchcore as SC
@@ -60,6 +61,12 @@ def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
     )
 
 
+def _queue_block(repo: Path, st, cfg) -> str:
+    """Entries waiting in the merge queue with nobody integrating, "" when all is well."""
+    warn = LR.warning(repo, cfg, st)
+    return f"\n\n## Merge queue\n\n{warn}" if warn else ""
+
+
 def _waits_block(st, cfg) -> str:
     """The standing `lease.waiting` records (who waits for whom), "" when none."""
     waits = WG.rows(st, cfg, time.time())
@@ -82,7 +89,7 @@ def _progress_block(log, cfg, st, held_ids: list[str]) -> str:
     now = time.time()
     lines = [
         f"- {LB.yield_text(v)}"
-        for v in LB.verdicts(st, cfg, events, now, LB.tree_activity(log.root))
+        for v in LB.verdicts(st, cfg, events, now, LB.tree_activity(log.root), log.root)
         if v.item in held_ids
     ]
     lines += [f"- {LB.notice_text(n)}" for n in LB.broken_notices(events, log.agent_id, st)]
@@ -354,6 +361,7 @@ def brief(
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
     text += _waits_block(st, cfg)
+    text += _queue_block(repo, st, cfg)
     text += _progress_block(log, cfg, st, held_ids)
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen

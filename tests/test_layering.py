@@ -46,12 +46,16 @@ ALLOWED: dict[str, set[str]] = {
     #: the MCP shim and its probes (api and surfaces read its snapshot format): stdlib only, imports no ddflow layer (it must stay tiny and
     #: able to outlive any upgrade of the layers it fronts)
     "mcpshim": set(),
+    #: the model catalog's shipped data (`models/*.toml`), read and validated by
+    #: `services.modelreg`: holds no code, so it imports nothing.
+    "models": set(),
 }
 
 #: Packages that are PART of a layer rather than a layer of their own: `config` is one
 #: module's worth of rule ("read by every layer; imports none") split into a package of
-#: sections, and an import between the two is an import within the layer.
-LAYER_PACKAGES = {"config_sections": "config"}
+#: sections (`config_sections/`) plus the loader machinery (`config/`), and an import
+#: between the two is an import within the layer.
+LAYER_PACKAGES = {"config_sections": "config", "config": "config"}
 
 #: `services` and `views` are deliberately mutual: a service may render a markdown view
 #: as its result (`ddflow render`), and a view reads service types to render them. The
@@ -59,15 +63,22 @@ LAYER_PACKAGES = {"config_sections": "config"}
 #: more honest than an exemption list that grows.
 PEERS = {("services", "views"), ("views", "services")}
 
+#: `adapters` is the BOTTOM, below `config` (D-adapters-answers): ports, default adapters,
+#: fakes and the one `Registry[T]`. Every code layer may import it, it imports no layer.
+ALLOWED["adapters"] = set()
+for _layer_name in [n for n in ALLOWED if n not in ("adapters", "mcpshim", "models")]:
+    ALLOWED[_layer_name].add("adapters")
+
 
 def _layer(path: Path) -> str:
     rel = path.relative_to(PKG)
     if len(rel.parts) > 1:
         return LAYER_PACKAGES.get(rel.parts[0], rel.parts[0])
-    # `__main__.py` IS an entry point — `python -m ddflow` — so it belongs with the
-    # surfaces even though it sits at the top level next to `config.py`.
-    if rel.name == "__main__.py":
-        return "surfaces"  # `python -m ddflow` IS an entry point
+    # `__main__.py` and `completion_fast.py` ARE entry points — `python -m ddflow` and
+    # `python -m ddflow.completion_fast` — so they belong with the surfaces even
+    # though they sit at the top level next to `config.py`.
+    if rel.name in ("__main__.py", "completion_fast.py"):
+        return "surfaces"
     return "api" if rel.name == "api.py" else "config"
 
 
@@ -207,13 +218,15 @@ def test_every_layer_is_declared():
 
 
 def test_no_module_is_left_at_the_top_level_by_accident():
-    """`config.py` and `api.py` are the only modules outside a directory, and both are
-    deliberate: config is read by every layer and imports none, and `api` IS a layer
-    that happens to be one file until it needs to be a package."""
+    """`api.py` is the only module level module outside a directory, and both it and the
+    `config` package are deliberate: config is read by every layer and imports none, and
+    `api` IS a layer that happens to be one file until it needs to be a package.
+    `completion_fast.py` is the second top-level entry point (`python -m
+    ddflow.completion_fast`), so it lives next to `__main__.py` for the same reason."""
     loose = sorted(
         p.name
         for p in PKG.glob("*.py")
-        if p.name not in ("__init__.py", "__main__.py", "config.py", "api.py")
+        if p.name not in ("__init__.py", "__main__.py", "api.py", "completion_fast.py")
     )
     assert not loose, (
         f"{loose} sit outside every layer, so the rule above says nothing about them. "
@@ -544,3 +557,12 @@ def test_no_reexport_shadows_a_submodule():
         f"`from ddflow.api import {clash[0]}` gives the re-export, not the module. "
         f"Rename the re-export (e.g. `review` -> `run_review`)."
     )
+
+
+def test_adapters_is_the_bottom_layer():
+    """Every code layer may import `ddflow.adapters`; it imports no other ddflow layer, so a
+    port, an adapter or a fake can never drag a policy layer in (D-adapters-answers)."""
+    assert ALLOWED["adapters"] == set()
+    for layer, may in ALLOWED.items():
+        if layer not in ("adapters", "mcpshim", "models"):
+            assert "adapters" in may, f"`{layer}` must be allowed to import adapters"

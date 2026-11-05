@@ -26,16 +26,28 @@ def family_modules(*, tools: bool = False) -> tuple[ModuleType, ...]:
     """Every module of this package that declares ``COMMANDS``, by file name.
 
     Registration by convention: a new command family is a new file here with a module-level
-    ``COMMANDS`` tuple, and no registry file names it. The source is read first so a helper
-    module (``*_cli``, ``mutation_params``) that declares none is never imported by the scan.
-    ``tools=True`` also skips a family with no ``tool="ddflow_..."`` (a CLI-only one), so the
-    MCP tool table does not import what only the command line needs.
+    ``COMMANDS`` tuple, and no registry file names it. A family may also be a package whose
+    ``__init__.py`` declares ``COMMANDS`` and re-exports it (the file split in two or more
+    area modules to stay under the file-size cap): its source is read the same way, so a
+    helper module (``*_cli``, ``mutation_params``) that declares none is never imported by
+    the scan. ``tools=True`` also skips a family with no ``tool="ddflow_..."`` (a CLI-only
+    one), so the MCP tool table does not import what only the command line needs.
     """
     found = []
-    for path in sorted(Path(__file__).parent.glob("[a-z]*.py")):
-        text = path.read_text("utf-8")
+    names = sorted(
+        {p.stem for p in Path(__file__).parent.glob("[a-z]*.py")}
+        | {p.parent.name for p in Path(__file__).parent.glob("[a-z]*/__init__.py")}
+    )
+    for name in names:
+        file = Path(__file__).parent / f"{name}.py"
+        if file.is_file():
+            text = file.read_text("utf-8")
+        else:  # a package family: COMMANDS in its __init__, `tool=` in its area modules
+            text = "\n".join(
+                p.read_text("utf-8") for p in sorted((Path(__file__).parent / name).glob("*.py"))
+            )
         if _HAS_COMMANDS.search(text) and (not tools or _HAS_TOOL.search(text)):
-            module = importlib.import_module(f"{__name__}.{path.stem}")
+            module = importlib.import_module(f"{__name__}.{name}")
             if isinstance(
                 getattr(module, "COMMANDS", None), (tuple, list)
             ):  # the text match can be fooled

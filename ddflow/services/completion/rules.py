@@ -28,22 +28,20 @@ from pathlib import Path
 from ...config import Config
 from ...core import ids as IDS
 from ...core.admission import is_shared
-from ...core.globs import inside
 from ...core.model import Item, State
 from ...infra import worktree as W
-from .. import changes as CH
 from .. import chore as CO
 from .. import gate_accept as GA
 from .. import gates as G
-from .. import landed as LD
+from .. import observed_globs as OG
 from .. import review_exclude as RX
-from .. import testselect as TS
 from ..cadence import phase_overdue
 from ..docsonly import diff_is_docs_only
 from ..gates import reviewers as GR
 from ..gates.evidence import commit_tree_entries, worktree_entries
 from ..gates.evidence import tree_being_completed as _tree_being_completed
 from ..gates.reviewed_paths import ignorable
+from ._changed import changed_paths
 
 
 @dataclass
@@ -71,6 +69,11 @@ class Verdict:
     #: Gates in the pipeline that could not run. Recorded on the event as a coverage
     #: gap, so a completion never silently implies they passed.
     coverage_gaps: list[str] = field(default_factory=list)
+    #: Required gates whose outcome is not settled (never passed, never an excused skip,
+    #: never a person-accepted partial): the "required gate(s) not passed" blocker names
+    #: EXACTLY these, so a completion site can tell a gap that is only unavailable/partial
+    #: from one that is a failure, silence or something else, without restating the list.
+    unmet_gates: list[str] = field(default_factory=list)
     independence: str = ""
     kind: str = "task"
     #: "gate: why" for each gate the ACTUAL diff excused (`applies_when`), with the paths
@@ -179,12 +182,14 @@ def _unsettled(
         and not (
             CO.skipped_ok(cfg, it, excused, g)
             or it.gate_satisfied(g, True)
-            or (state is not None and GA.accepted(state, it, g).ok)
+            or (state is not None and GA.accepted(state, it, g, cfg).ok)
         )
     ]
 
 
-def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) -> list[str]:
+def _accepted_warnings(
+    state: State, it: Item, s, required, missing: list[str], cfg=None
+) -> list[str]:
     """One warning for each required gate that is PARTIAL and settles only because a person
     accepted that outcome (Bb999d5e20f): it is audited here, and it was not passed."""
     out = []
@@ -195,12 +200,9 @@ def _accepted_warnings(state: State, it: Item, s, required, missing: list[str]) 
             and g not in s.not_applicable
             and it.gate_outcome(g) == GA.ACCEPTABLE
         ):
-            got = GA.accepted(state, it, g)
+            got = GA.accepted(state, it, g, cfg)
             if got.ok:
-                out.append(
-                    f"gate {g} is PARTIAL ({it.gates[g].reason[:160]}) and settles only because "
-                    f"a person accepted that outcome: {got.reason}. It was not passed."
-                )
+                out.append(GA.warning(it, g, got.reason, cfg))
     return out
 
 
@@ -278,18 +280,14 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     v.warnings += why_not
 
     missing = _unsettled(cfg, it, excused, s, required, state)
-    v.warnings += _accepted_warnings(state, it, s, required, missing)
+    v.unmet_gates = missing
+    v.warnings += _accepted_warnings(state, it, s, required, missing, cfg)
     if missing:
         v.blockers.append(
             f"required gate(s) not passed: {', '.join(missing)} (current outcome: "
             + ", ".join(f"{g}={it.gate_outcome(g) or 'not run'}" for g in missing)
             + ")"
-            + "".join(
-                f"; {g} is partial: re-run it, or a person runs `ddflow approve {item_id} {g}` "
-                f"to accept that baseline-red outcome (it stays partial on the record)"
-                for g in missing
-                if it.gate_outcome(g) == GA.ACCEPTABLE and not GA.refusal(it, g)
-            )
+            + "".join(GA.next_step(it, item_id, g) for g in missing if GA.next_step(it, item_id, g))
         )
 
     # ANY item with work beneath it, not only a phase: a task split into sub-tasks is
@@ -346,6 +344,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         # not in `api.complete`, so the PR-merge settle path enforces it too.
 
         v.blockers += phase_overdue(state, cfg)
+    else:
+        v.blockers += _own_branch_unmerged(state, cfg, it, repo)
 
     inert = G.inert_requirements(cfg)
     if inert:
@@ -372,9 +372,10 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     readme = readme_report(state, cfg, item_id, repo=repo)
     if readme:
-        # "Could not run" is never a blocker: only a README that is known to be missing is.
         blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
         (v.blockers if blocks else v.warnings).append(readme)
+
+    OG.add_notice(v, state, cfg, item_id, repo)
 
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)
@@ -470,6 +471,40 @@ def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> li
     return [f"task branch(es) not merged into {base}: {', '.join(left)} (`ddflow merge <id>`)"]
 
 
+#: Sits in the blocker `_own_branch_unmerged` writes: what `flow.pre_merge_blockers` drops.
+UNMERGED_BLOCKER = "has commits not merged into"
+
+
+def _own_branch_unmerged(state: State, cfg: Config, it: Item, repo: Path) -> list[str]:
+    """The item's OWN branch still holds commits its base lacks. Completing it in that state
+    records the work done while those commits never reached the base — a partial land that
+    drops them without notice (Bd59dded6a4). The branchless phase is backstopped by
+    `_unmerged_branches`; this is each task's own guard. Git unable to answer is treated as
+    unmerged — a conservative blocker, so an unreadable tree cannot silently drop work.
+    A branch still at the tip `merge` landed is merged whatever ancestry says, as a squash
+    leaves none, while the base still holds what landed. A commit added since moves the tip,
+    and a base rewound past the landing no longer holds it: the guard speaks again."""
+    if it.kind == "phase" or not it.branch or it.promote_to:
+        return []
+    base = (
+        it.base
+        if it.base and W.git(repo, "rev-parse", "--verify", "--quiet", it.base).ok
+        else (cfg.worktree.base_ref or W.default_branch(repo))
+    )
+    if not W.branch_exists(repo, it.branch) or W.is_merged(repo, it.branch, base):
+        return []
+    tip = W.rev(repo, it.branch)
+    if it.pr and it.pr.state == "merged" and tip == it.pr.head_sha:
+        return []  # the forge's word: its base may be a stack, and not fetched here
+    if it.merged_sha and tip == it.merged_head and W.is_merged(repo, it.merged_sha, base):
+        return []
+    return [
+        f"branch {it.branch} {UNMERGED_BLOCKER} {base}: `ddflow merge {it.id}` "
+        f"first, so completing it does not drop them (or `ddflow abandon {it.id} --force` "
+        f"to drop them deliberately)"
+    ]
+
+
 README_UNKNOWN = (
     "README check could not run: git could not report this task's diff (no worktree, "
     "branch or landed commit to read, or its base is unreadable), so whether the README "
@@ -548,52 +583,6 @@ def _is_test_or_doc_path(path: str) -> bool:
         or name == "conftest.py"
         or name.lower().endswith(_DOC_SUFFIXES)
     )
-
-
-def changed_paths(repo: Path, it) -> list[str] | None:
-    """The paths the item changed: what landed (`landed_before..landed_after`), or before
-    it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\". A landing restricted to the item's own
-    paths (`update --landed-paths`, B738d7bbeab) reports only the range's changed files
-    inside those, never the whole commit's; a restriction the range no longer answers
-    to is None (fail closed), never empty and never the whole commit."""
-
-    if it.landed_before and it.landed_after:
-        paths = CH.changed_paths(
-            repo, it.landed_before, tip=it.landed_after, include=("committed",), fork=False
-        )
-        if it.landed_paths and paths is not None:
-            # Never the whole commit's; when the range stopped holding the item's work,
-            # None -- like every other "cannot say" here: full pipeline, never a guess
-            # (verified at record time, so this needs the recorded range tampered with).
-            matched = sorted(p for p in paths if any(inside(p, g) for g in it.landed_paths))
-            return matched if matched else None
-        return paths
-    base = it.base or W.default_branch(repo)
-    found, may_cite = _unlanded_paths(repo, it, base)
-    if found or not may_cite:
-        return found
-    # Landed by a plain git merge or a mixed commit, so the branch (if any) differs from the
-    # base by nothing: the commits that cite the item, checked.
-    return LD.cited_paths(repo, it, base) or found
-
-
-def _unlanded_paths(repo: Path, it, base: str) -> tuple[list[str] | None, bool]:
-    """The item's worktree (or, with none, its branch) against its base, and whether
-    the item's cited commits may stand in for it. They may when nothing is left to read: a
-    worktree that differs from the base by nothing, a branch already merged into its base, or
-    no worktree and no branch at all. They may not when the item claims a worktree or branch
-    that git cannot read (None): its real work is unseen, so never guess."""
-    path = W.load_path(repo, it.worktree) if it.worktree else None
-    if path and path.is_dir():
-        seen = TS.changed_files(path, base)
-        return seen, seen == []
-    # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
-    if it.branch and W.rev(repo, it.branch):
-        out = CH.changed_paths(repo, base, tip=it.branch, include=("committed",))
-        # Empty is not "nothing changed" here: a branch already merged into its base, or
-        # the base itself, diffs to nothing whatever the task did.
-        return (sorted(out) if out else None), True
-    return None, not (it.worktree or it.branch)
 
 
 def _coverage_note(it, gaps: list[str]) -> str:

@@ -65,13 +65,32 @@ ABSOLUTE_FLOOR = 0.85  #: share of co-changed tests the selection holds, over al
 
 
 def merge_log(root: Path) -> list[str]:
-    """The ``merge <item>: ...`` commits ddflow wrote, newest first, reachable by ANY path.
-    Not ``--first-parent``: on a branch that merged main in, main's merges sit on the second
-    parent, so a first-parent walk saw an older window than main does and the replay failed
-    on a merge main had long left behind (Bfaef48ced6, Bb5b8b17161). Only ``merge <id>:``
-    subjects: a hand-made ``merge main`` sync commit is not a ddflow merge (B2d1ecadd87)."""
+    """The ``merge <item>: ...`` commits ddflow wrote, newest first, taken from ``main``.
+    Anchored to the ``main`` branch, not HEAD: the window must be the merges main actually
+    shipped, the ones CI's recall guards. Not ``--first-parent``: on a branch that merged main
+    in, main's merges sit on the second parent, so a first-parent walk saw an older window than
+    main does (Bfaef48ced6, Bb5b8b17161); and a walk from HEAD still drifts, because the
+    branch's own tip carries merge commits near the window top and pushes main's off it
+    (B2822f97531). The branch itself is targeted as ``refs/heads/main``, never the bare ``main``:
+    Git resolves a tag named ``main`` before the branch, so the bare name can anchor the window
+    to a stale tag point and drop main's real merges. Fall back to HEAD only when no ``main``
+    branch resolves (a checkout with a renamed default branch, never a ddflow worktree). Only
+    ``merge <id>:`` subjects: a hand-made ``merge main`` sync commit is not a ddflow merge
+    (B2d1ecadd87)."""
+    anchor = (
+        "refs/heads/main"
+        if git_proc(root, "rev-parse", "--verify", "--quiet", "refs/heads/main").returncode == 0
+        else "HEAD"
+    )
     log = git_proc(
-        root, "log", "--merges", "--grep=^merge [^ :]*:", "-n", str(SCAN), "--format=%H %s"
+        root,
+        "log",
+        anchor,
+        "--merges",
+        "--grep=^merge [^ :]*:",
+        "-n",
+        str(SCAN),
+        "--format=%H %s",
     )
     if log.returncode != 0:
         return []
@@ -236,12 +255,15 @@ def test_the_selection_holds_the_tests_recent_merges_changed_with_their_source()
     held = sum(r[1] for r in results)
     lost = [x for r in results for x in r[2]]
     residual = [x for r in results for x in r[3]]
+    # A blind (subprocess-driving) loss is not scored, so it never counts as a fresh route
+    # miss: it is listed in `residual` with a `(blind: ...)` cause, not hidden (B2822f97531).
+    blind = {x[: x.index(" (blind:")] for x in residual if "(blind:" in x}
     if len(results) < 2 or total == 0:
         pytest.skip("too few replayable merges in this history")
     report = f"recall {held}/{total} over {len(results)} merges; misses: {residual}"
     # Exactly the pinned losses: a new one fails, and so does a pinned one the selector now
     # routes (drop its entry then), so the pin cannot go stale or hide a fresh miss.
-    unexpected = [x for x in lost if x not in UNROUTABLE]
+    unexpected = [x for x in lost if x not in UNROUTABLE and x not in blind]
     assert not unexpected, (
         f"the precise selection lost tests the earlier selector held: {unexpected}; {report}"
     )
@@ -259,12 +281,12 @@ def test_a_subprocess_driving_test_is_a_blind_spot_not_a_scored_miss():
     assert not drives_subprocess("# run_cli(repo) is the helper for this\nresult = run_cli_like")
     # a test that imports a changed module AND drives a subprocess is routable: its miss counts
     both = "from ddflow.services import ci\nrun_cli(repo, 'x')"
-    assert not drives_subprocess(both, ["ddflow/services/ci.py"])
+    assert not drives_subprocess(both, ["ddflow/services/ci/__init__.py"])
     assert drives_subprocess(both, ["ddflow/services/gates.py"])
     assert drives_subprocess("import ddflow.api.review\nrun_cli(r)", ["ddflow/api/cirun.py"])
     # shapes a regex missed: a parenthesised multi-line import, a changed package __init__
     multi = "from ddflow.services import (\n    ci,\n)\nrun_cli(repo)\n"
-    assert not drives_subprocess(multi, ["ddflow/services/ci.py"])
+    assert not drives_subprocess(multi, ["ddflow/services/ci/__init__.py"])
     assert not drives_subprocess(
         "from ddflow.api import review\nrun_cli(r)", ["ddflow/api/__init__.py"]
     )
@@ -299,3 +321,57 @@ def test_merge_log_ignores_a_hand_made_sync_merge(tmp_path):
         for sha in merge_log(tmp_path)
     ]
     assert subjects == ["merge T1: real"]
+
+
+def test_merge_log_anchors_to_main_not_the_branch_tip(tmp_path):
+    """B2822f97531: a worktree branched from an older main sees a different (older, or
+    shorter) window of recent merges than main does, so the recall test fails on a merge
+    main has long left behind. The window must be main's recent merges, the same from any
+    checkout: ci guards main, not the branch."""
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    g("commit", "-q", "--allow-empty", "-m", "base")
+    base = git_proc(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    g("checkout", "-q", "-b", "side")
+    g("commit", "-q", "--allow-empty", "-m", "work")
+    g("checkout", "-q", "main")
+    g("commit", "-q", "--allow-empty", "-m", "main")
+    g("merge", "-q", "--no-ff", "-m", "merge T1: real", "side")
+    main_sha = git_proc(tmp_path, "rev-parse", "main").stdout.strip()
+
+    # a worktree branched from base, before main's merge: from its HEAD no ddflow merge is
+    # reachable, but the window is still main's newest merge
+    g("checkout", "-q", "-b", "topic", base)
+    assert merge_log(tmp_path) == [main_sha], merge_log(tmp_path)
+    g("checkout", "-q", "main")
+    assert merge_log(tmp_path) == [main_sha]
+
+
+def test_merge_log_uses_the_main_branch_not_a_tag_named_main(tmp_path):
+    """B2822f97531 (critic finding 1): a tag named ``main`` must not shadow the branch. Git
+    resolves ``refs/tags/main`` before ``refs/heads/main`` for the bare name, so ``main`` can
+    point at a stale open commit and skip main's real merges; the window is the branch's."""
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    g("commit", "-q", "--allow-empty", "-m", "base")
+    base = git_proc(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    g("checkout", "-q", "-b", "side")
+    g("commit", "-q", "--allow-empty", "-m", "work")
+    g("checkout", "-q", "main")
+    g("commit", "-q", "--allow-empty", "-m", "main")
+    g("merge", "-q", "--no-ff", "-m", "merge T1: real", "side")
+    main_sha = git_proc(tmp_path, "rev-parse", "main").stdout.strip()
+    # a tag named `main` at the stale base: the bare name resolves the tag, the branch wins
+    g("tag", "main", base)
+    assert git_proc(tmp_path, "rev-parse", "--verify", "--quiet", "main").stdout.strip() == base
+    assert merge_log(tmp_path) == [main_sha], merge_log(tmp_path)

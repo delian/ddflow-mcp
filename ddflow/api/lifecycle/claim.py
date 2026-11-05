@@ -13,7 +13,7 @@ from ...config import csv_list
 from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.digest import content_digest
-from ...core.model import ABANDONED, DONE, REVIEW, fold
+from ...core.model import REVIEW, fold
 from ...core.schedule import needs_tree
 from ...infra import worktree as W
 from ...services import approval as AP
@@ -21,6 +21,7 @@ from ...services import choices as CHO
 from ...services import claimguards as GD
 from ...services import flow as FS
 from ...services import leases as L
+from ...services import observed_globs as OG
 from ...services import pins_merge as PM
 from ...services import ports as PT
 from ...services import tree_bin as TB
@@ -34,136 +35,35 @@ from .._globwarn import missing_globs
 from ..reporting import new_reports
 from .claim_choice import _bug_default, _tree_choice, _widened
 from .claim_line import _blocking_items, _join_line, _leave_line, _prior_lease, _with_notes
+from .claim_tree import (  # noqa: F401 -- `merge`, `heartbeat`, `operations` read them here
+    _in_leased_tree,
+    _is_items_tree,
+    _recorded_tree,
+    _tree_of,
+    _worktree_held_by,
+    callers_tree,
+)
 from .planning import alternatives_offer
 
 
-def _worktree_held_by(st, stored: str, me: str, repo: Path | None = None, cfg=None) -> str:
-    """Another OPEN item bound to this same worktree, or "".
+def _reopen_stale_merge(log, claimed, item: str) -> dict[str, str]:
+    """A re-claim of an item that had already merged reopens that stale merge, or {}.
 
-    Two items sharing one tree cannot be merged or recovered separately: `merge` would
-    take one item's branch for the other's work, and `recover` could not say whose
-    uncommitted changes it had found. Closed items are ignored — reusing the tree of
-    finished work is exactly what an agent should be able to do. So is an open item
-    that has let go of the tree and left nothing in it (`_tree_let_go`), given ``repo``.
+    `merged_sha` (and the landing pair) survive a merge; a re-claim that binds a tree for
+    new work is a rework, and leaving the old merge standing made `gate run` answer "merged,
+    the merge removed its worktree" and record UNAVAILABLE over the new work while the
+    merge gate still showed [x] (B-rework-of-merged-item-keeps-stale-merge). The claim
+    writes `item.reworked`, which clears those and the item's gates, so the rework re-merges.
     """
-    for item in st.items.values():
-        if item.id == me or item.removed or item.state in (DONE, ABANDONED):
-            continue
-        # `item.worktree`, not `item.lease.worktree`: the fold copies the lease's path
-        # onto the item and KEEPS it after the lease is released, which is the point -- a
-        # released item whose tree still holds its work is exactly the case that must not
-        # be silently co-opted.
-        if (item.worktree or "") == stored:
-            if repo is not None and _tree_let_go(repo, cfg, st, item):
-                continue
-            return item.id
-    return ""
-
-
-def callers_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Any, str]:
-    """(the linked worktree the caller stands in, or None; the OTHER item working it, or "").
-
-    For an item claimed without a worktree, where the caller stands is the best evidence
-    of where its work is -- unless another item is being worked there. Run from item B's
-    tree, item A's gate ran B's suite and recorded it as A's pass (found by the critic
-    review of B8be9373cf5's fix). Shared by `gate run`/`record`, `review` and `merge`, so
-    they cannot disagree about whose tree it is.
-
-    "Being worked" is a LIVE claim: another open item bound to the tree with its lease
-    held. Not `claim`'s stricter held-until-let-go rule, which protects a released item's
-    leftover work from being co-opted: a tree bound to an item that was merged and let go
-    of its lease, carrying newer commits, is exactly where a `--no-worktree` item is
-    worked -- the case this feature exists for -- and treating it as foreign made that
-    item's own gates unavailable.
-    """
-    here = W.current(called_from or repo)
-    if here is None:
-        return None, ""
-    stored = W.store_path(repo, here.path)
-    for other in st.items.values():
-        if other.id == it.id or other.removed or other.state in (DONE, ABANDONED):
-            continue
-        if (other.worktree or "") == stored and other.lease is not None:
-            return None, other.id
-    return here, ""
-
-
-def _tree_let_go(repo: Path, cfg, st, item) -> bool:
-    """True when an OPEN item's tree holds none of its work: lease released, merged, and
-    nothing in the tree that its merge target lacks -- no uncommitted change, and a HEAD
-    the target already contains.
-
-    Open is not the same as occupying. B-release-every-push was merged and released, open
-    only for a review the operator deferred, and still refused the next claim in its tree
-    (B0ff09a29a5) -- whose way out, `--no-worktree`, then broke `merge` and `review`. An
-    expired but unreleased lease still holds: that is `recover`'s, not a claim's.
-    """
-
-    if item.lease is not None or not item.merged_sha:
-        return False
-    tree = W.load_path(repo, item.worktree)
-    if not tree.is_dir():
-        return False
-    if W.dirty(W.Worktree(item=item.id, path=tree, branch=item.branch, base="")):
-        return False
-    target = FS.target(repo, cfg, item, st)
-    return W.git(tree, "merge-base", "--is-ancestor", "HEAD", target).ok
-
-
-def _tree_of(start: Path) -> Path | None:
-    """The git working tree `start` lies in (primary or linked), resolved; None if none.
-
-    The same question `services.enforce._this_worktree` asks of the hook's cwd, asked of
-    an explicit start instead: `--repo` is resolved to the primary, so the cwd of this
-    process is not where the caller is standing.
-    """
-    top = W.git(start, "rev-parse", "--show-toplevel", timeout=30)
-    return Path(top.out).resolve() if top.ok and top.out else None
-
-
-def _in_leased_tree(repo: Path, stored: str, here: Path | None) -> bool:
-    """Is `here` the tree a lease records? The same test `check_commit` applies."""
-    return bool(here and stored and W.load_path(repo, stored).resolve() == here)
-
-
-def _recorded_tree(repo: Path, it) -> Path | None:
-    """The item's own tree from an earlier claim, if it is still on disk; else None.
-
-    Such a tree may hold commits nothing has merged yet. A re-claim must bind to it,
-    not to wherever the caller happens to stand, or `merge` merges an empty branch and
-    the salvage is orphaned.
-    """
-    if it is None or not it.worktree or not it.branch:
-        return None
-    path = W.load_path(repo, it.worktree).resolve()
-    return path if _is_items_tree(repo, path, it.branch) else None
-
-
-def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
-    """Is the tree at `path` still the one that carries `branch`'s work?
-
-    ONE rule for every place a claim would bind an existing tree -- the item's recorded
-    tree and the one `W.create` finds at the default path. A directory there is not
-    proof: it can have been removed and re-added on something unrelated. Git must list
-    it as a worktree of this repository, with `branch` checked out -- or detached (a
-    rebase in progress, a checkout at a commit) with `branch` an ancestor of HEAD. Any
-    other branch, or a detached HEAD holding unrelated work, is someone else's tree.
-    """
-    path = Path(path).resolve()
-    if not branch or not (path.is_dir() and (path / ".git").exists()):
-        return False
-    entry = next(
-        (e for e in W.list_worktrees(repo) if Path(e.get("worktree", "")).resolve() == path),
-        None,
-    )
-    if entry is None:
-        return False
-    if entry.get("branch") == f"refs/heads/{branch}":
-        return True
-    return bool(
-        entry.get("detached")
-        and W.git(path, "merge-base", "--is-ancestor", f"refs/heads/{branch}", "HEAD").ok
-    )
+    if claimed is None or not claimed.merged_sha:
+        return {}
+    log.append("item.reworked", item, {"sha": claimed.merged_sha})
+    return {
+        "reopened_merge": (
+            f"{item} had already merged ({claimed.merged_sha[:12]}); the re-claim reopened "
+            f"it: merged_sha and the item's gates are cleared, so it re-merges from scratch."
+        )
+    }
 
 
 def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
@@ -277,16 +177,16 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
     st = localize(fold(events, strict=False), log, time.time())
-    parked = st.items.get(item)
+    claimed = st.items.get(item)
     no_worktree = no_worktree or (
-        parked is not None and not needs_tree(parked)
+        claimed is not None and not needs_tree(claimed)
     )  # `no-worktree` tag
-    if parked is not None and parked.state == REVIEW and not force:
+    if claimed is not None and claimed.state == REVIEW and not force:
         # Claiming it would let a push ride into the request its reviewers already
         # judged -- and while it ran, `pr sync` would stop watching the request at all.
         return O.refused(
             "item.claimed",
-            f"{item} is in review ({parked.pr.url if parked.pr else 'its request'}); the "
+            f"{item} is in review ({claimed.pr.url if claimed.pr else 'its request'}); the "
             f"reviewers have it. `ddflow pr sync` brings it back if they request changes. "
             f"--force to take it back anyway.",
             id=item,
@@ -296,13 +196,13 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
     bug_globs = None
-    if want is None and parked is not None and not parked.globs and not parked.globs_declared:
-        want, bug_globs = _bug_default(st, cfg, parked, log.agent_id)  # its bug declared files
+    if want is None and claimed is not None and not claimed.globs and not claimed.globs_declared:
+        want, bug_globs = _bug_default(st, cfg, claimed, log.agent_id)  # its bug declared files
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
     if held_before:
-        want = _widened(want, prior, parked)
+        want = _widened(want, prior, claimed)
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
@@ -341,8 +241,13 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     target_item = st.items.get(item)
     port = _apply_port(repo, cfg, log, st, item, target_item, wt, bound.ours)
     out = _claimed(cfg, st, item, lz, bound, port, target_item, called_from or repo, broke)
+    # A re-claim of an already-merged item reopens its stale merge, recorded only once the
+    # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
+    # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
+    out.data.update(_reopen_stale_merge(log, claimed, item))
     if warned := missing_globs(repo, cfg, lz.globs):
         out.data["glob_warnings"] = warned
+    out.data.update(OG.claim_fields(st, cfg, item, repo))
     if bug_globs:
         out.data["globs_from_bug"] = bug_globs
     return _with_notes(out, notes)
@@ -533,7 +438,7 @@ def _create_tree(
         log.append(
             "worktree.created",
             item,
-            {"path": stored, "branch": wt.branch, "base": wt.base},
+            {"path": stored, "branch": wt.branch, "base": wt.base, "base_sha": wt.base_sha},
         )
         L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
         return _Bound(wt, ours=True)

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "handoff.kinds"
+new = "[\"fix\", \"gate_fix\", \"refactor\", \"doc\"]"
+why = "The kinds a suggestion may declare. (D-handoff-peers, LK-sg-events)."
+impact = "additive"

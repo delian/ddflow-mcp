@@ -38,15 +38,16 @@
 # ---
 # name: test_help[ddflow approvals approve]
   '''
-  usage: ddflow approvals approve [-h] [--digest DIGEST] id
+  usage: ddflow approvals approve [-h] [--all] [--digest DIGEST] [ID ...]
   
   positional arguments:
-    id               the request id
+    ID               request id(s); `ID:DIGEST` carries the read-receipt prefix inline
   
   options:
     -h, --help       show this help message and exit
-    --digest DIGEST  the first characters of the digest `ddflow approvals show` printed (a read-
-                     receipt that you looked at this request, not a secret)
+    --all            approve every currently-pending request; each answer still records that
+                     request's digest
+    --digest DIGEST  the read-receipt prefix, one per id in order (repeat, or spell `ID:DIGEST`)
   
   '''
 # ---
@@ -191,7 +192,8 @@
                           channel)
       attest              record the person's answer from the harness transcript (never from your
                           word)
-      approve             a PERSON approves one request, once (refused under an agent identity)
+      approve             a PERSON approves one request or every pending one, once (refused under an
+                          agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
       revoke              a PERSON takes back an approval that is not spent yet
       withdraw            the asker takes back its own request while it waits
@@ -218,7 +220,7 @@
                          refusal files the request and names it)
   
   who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker
-  (CLAUDECODE) and MCP; there is no MCP tool for it. An agent files a request instead.
+  and MCP; there is no MCP tool for it. An agent files a request instead.
   what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red
   (the failing tests also fail on the base branch). The approval is bound to the digest of
   that record (outcome, time, reason): a re-run or re-record is a different outcome and
@@ -226,6 +228,19 @@
   agent route: re-run with `--approval request` to file the request, a person answers it,
   then re-run with `--approval ID`. Pending requests: `ddflow approvals list`; a person
   answers with `ddflow approvals approve ID` (see `ddflow approvals --help`).
+  
+  '''
+# ---
+# name: test_help[ddflow archdeps]
+  '''
+  usage: ddflow archdeps [-h] [--interfaces KIND] [--baseline]
+  
+  options:
+    -h, --help         show this help message and exit
+    --interfaces KIND  Census the interfaces that are not imports: 'all' or one kind (program,
+                       protocol, managed-file, env, network): programs run, wire protocols, other
+                       tools' files, environment variables, network endpoints.
+    --baseline         With interfaces: print the ratchet baseline text instead of the report.
   
   '''
 # ---
@@ -301,6 +316,17 @@
                           render the standard launch brief of subagent NAME for the item (`--item`
                           or the positional id)
     --note NOTE           with --for-agent: the coordinator's note for this item
+  
+  '''
+# ---
+# name: test_help[ddflow bug dedupe]
+  '''
+  usage: ddflow bug dedupe [-h] [--apply] [--floor FLOOR]
+  
+  options:
+    -h, --help     show this help message and exit
+    --apply        link each younger duplicate onto its cluster's canonical (nothing is closed)
+    --floor FLOOR  minimum score to cluster (default: [dedupe].show_floor)
   
   '''
 # ---
@@ -470,11 +496,13 @@
 # ---
 # name: test_help[ddflow bug]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,fixed,invalid,tag,reopen,list,show} ...
+  usage: ddflow bug [-h] {found,file-tasks,dedupe,fixed,invalid,tag,reopen,list,show} ...
   
   positional arguments:
-    {found,file-tasks,fixed,invalid,tag,reopen,list,show}
+    {found,file-tasks,dedupe,fixed,invalid,tag,reopen,list,show}
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
+      dedupe              cluster near-duplicate OPEN bugs by symptom + root cause; --apply links
+                          the younger ones onto each cluster's canonical
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       tag                 add or remove tags on an existing bug, open or closed
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
@@ -845,7 +873,7 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events]
+  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
@@ -853,6 +881,22 @@
     --accept-lost-events  record the present event counts of the shards that lost events (to a
                           force-push, revert, reset or deletion) as known, clearing that PROBLEM;
                           the log is not touched
+    --accept-history      Acknowledge history that cannot be mended in an append-only log (an event
+                          edited by a secret scrub, a Lamport clock regression): records the
+                          findings now open as accepted, with who and why (needs a reason). A person
+                          accepts directly; an agent passes approval=request, the person answers in
+                          chat, and the agent re-runs with the approval id. doctor then reports them
+                          as accepted notes; a changed or new finding is a PROBLEM again
+    --history-reason HISTORY_REASON
+                          why the history is known and accepted (required to accept it)
+    --history-note HISTORY_NOTE
+                          the scrub's commit or a note, recorded with the acceptance
+    --history-only HISTORY_ONLY
+                          accept only these findings: comma-separated event ids or <shard>:<event
+                          number> (default: every open one)
+    --approval APPROVAL   accept-history: an agent's route (`request` files an operator approval to
+                          answer in chat, an approval id records the acceptance); a person accepts
+                          directly
   
   '''
 # ---
@@ -1809,18 +1853,19 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes}
-                          summary (default), forecast, retro <id>, skips or lanes
+    {summary,forecast,retro,skips,lanes,stages,locks}
+                          summary (default), forecast, retro <id>, skips, lanes, stages or locks
     item                  with retro: the item id
   
   options:
     -h, --help            show this help message and exit
     --phase PHASE         limit to one phase
     --since SINCE         only since a duration back (7d, 12h) or a date YYYY-MM-DD
-    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase
+    --group-by GROUP_BY   group outcome rates by gate (default), reviewer, agent, kind or phase;
+                          stages: phase, kind, size, agent
   
   '''
 # ---
@@ -1878,33 +1923,36 @@
 # ---
 # name: test_help[ddflow phase add]
   '''
-  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
+  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--allow-unknown-needs] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
   
   positional arguments:
     id
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --title TITLE
     --needs NEEDS
-    --globs GLOBS        path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
-                         to add more -- every value is kept
+    --globs GLOBS         path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
+                          to add more -- every value is kept
     --tags TAGS
     --body BODY
     --priority PRIORITY
-    --line LINE          release line (default: the current one)
-    --readd              file a REMOVED item's id again. An id still in the queue is always refused:
-                         change it with `ddflow update`
-    --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- filed as a NEW record linked to ID (a
-                         lesson, decision or bug is appended to instead; use --merge-into to append
-                         to a task, phase or research note)
-    --merge-into ID      answer it: append this to record ID instead of filing it (ID must be open
-                         and unclaimed); MCP: relation merge_into:ID
-    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
-    --related ID         answer it: a different record that is related to ID; linked both ways
-    --check              dry run: print the existing records this would be refused as a duplicate of
-                         and write nothing (exit 0 with candidates, 2 with none)
+    --line LINE           release line (default: the current one)
+    --readd               file a REMOVED item's id again. An id still in the queue is always
+                          refused: change it with `ddflow update`
+    --allow-unknown-needs
+                          accept needs that name an id not in the queue (one that will exist later,
+                          or `repo:ID`)
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
   
   '''
 # ---
@@ -1918,6 +1966,20 @@
   options:
     -h, --help  show this help message and exit
     --imported  required: closes an IMPORTED phase (its imported source is the evidence recorded)
+  
+  '''
+# ---
+# name: test_help[ddflow phase complete]
+  '''
+  usage: ddflow phase complete [-h] [--approval APPROVAL] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help           show this help message and exit
+    --approval APPROVAL  an agent: 'request' files an approval request (the operator answers in
+                         chat), then the approval id; a person completes directly
   
   '''
 # ---
@@ -1939,15 +2001,16 @@
 # ---
 # name: test_help[ddflow phase]
   '''
-  usage: ddflow phase [-h] {add,close,list} ...
+  usage: ddflow phase [-h] {add,close,complete,list} ...
   
   positional arguments:
-    {add,close,list}
-      close           close a phase whose work predates ddflow
-      list            list phases with done/total progress
+    {add,close,complete,list}
+      close               close a phase whose work predates ddflow
+      complete            retire a phase whose every task is done or abandoned
+      list                list phases with done/total progress
   
   options:
-    -h, --help        show this help message and exit
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -2114,6 +2177,21 @@
     --ddflow-cmd DDFLOW_CMD
                           how the proposed local hooks reach ddflow (default: `ddflow` on PATH)
     --write               create .pre-commit-config.yaml; an existing one is never replaced (exit 3)
+  
+  '''
+# ---
+# name: test_help[ddflow probe]
+  '''
+  usage: ddflow probe [-h] [--against AGAINST] [--at {claim,gate,merge}] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help            show this help message and exit
+    --against AGAINST     main (default), another item id or a branch
+    --at {claim,gate,merge}
+                          claim, gate or merge: skipped when [locks].probe_at does not list it
   
   '''
 # ---
@@ -2823,16 +2901,19 @@
 # ---
 # name: test_help[ddflow session prompt]
   '''
-  usage: ddflow session prompt [-h] [--text TEXT] [--item ITEM] [session]
+  usage: ddflow session prompt [-h] [--text TEXT] [--item ITEM] [--relayed-by RELAYED_BY] [session]
   
   positional arguments:
-    session      the SESSION id (from `session start`), not the text; omitted: the latest open
-                 session, else an implicit new one
+    session               the SESSION id (from `session start`), not the text; omitted: the latest
+                          open session, else an implicit new one
   
   options:
-    -h, --help   show this help message and exit
-    --text TEXT  the prompt text; without it, read from piped stdin
+    -h, --help            show this help message and exit
+    --text TEXT           the prompt text; without it, read from piped stdin
     --item ITEM
+    --relayed-by RELAYED_BY
+                          the coordinator that relayed the words (so the log tells a relay from the
+                          operator's own)
   
   '''
 # ---
@@ -2947,7 +3028,7 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--allow-unknown-needs] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
@@ -2971,6 +3052,9 @@
     --line LINE           release line (default: the current one)
     --readd               file a REMOVED item's id again. An id still in the queue is always
                           refused: change it with `ddflow update`
+    --allow-unknown-needs
+                          accept needs that name an id not in the queue (one that will exist later,
+                          or `repo:ID`)
     --new                 answer a possible-duplicate refusal: this is a different record, file it
     --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
                           lesson, decision or bug is appended to instead; use --merge-into to append
@@ -3068,7 +3152,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--allow-unknown-needs] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -3084,6 +3168,9 @@
                           ADD these comma-separated ids to the item's needs; the rest are kept
     --remove-needs REMOVE_NEEDS
                           REMOVE these comma-separated ids from the item's needs
+    --allow-unknown-needs
+                          accept needs that name an id not in the queue (one that will exist later,
+                          or `repo:ID`)
     --tags TAGS
     --add-tags ADD_TAGS   ADD these comma-separated tags to the item's tags; the rest are kept
     --remove-tags REMOVE_TAGS
@@ -3381,15 +3468,15 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves}
       init                create .ddflow/ in this repository
-      phase               add, list or close a phase
+      phase               add, list, complete or close a phase
       task                add a task
       split               split an item into sub-tasks in place, keeping its id and history
       resolve             settle a CONTESTED item (rival adds or claims from two clones), on the
@@ -3499,6 +3586,10 @@
                           DDFLOW_AGENT)
       list                list tasks, phases, bugs, research notes, lessons or sessions (what
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
+      archdeps            the external-dependency census: families, importing modules, home,
+                          violations
+      probe               would an item's branch merge clean with main or a peer? (exit 1 =
+                          conflict, 2 = could not tell)
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -3539,12 +3630,14 @@
     'ddflow approvals show',
     'ddflow approvals withdraw',
     'ddflow approve',
+    'ddflow archdeps',
     'ddflow batch',
     'ddflow bisect',
     'ddflow block',
     'ddflow board',
     'ddflow brief',
     'ddflow bug',
+    'ddflow bug dedupe',
     'ddflow bug file-tasks',
     'ddflow bug fixed',
     'ddflow bug found',
@@ -3646,6 +3739,7 @@
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',
+    'ddflow phase complete',
     'ddflow phase list',
     'ddflow pins',
     'ddflow plan',
@@ -3658,6 +3752,7 @@
     'ddflow pr sync',
     'ddflow pr threads',
     'ddflow precommit',
+    'ddflow probe',
     'ddflow progress',
     'ddflow promote',
     'ddflow promote add',

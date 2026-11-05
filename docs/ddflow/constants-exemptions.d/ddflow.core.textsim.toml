@@ -1,0 +1,4 @@
+[exempt]
+"ddflow/core/textsim.py:MIN_WORD_CHARS" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
+"ddflow/core/textsim.py:_MIN_WORD" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
+"ddflow/core/textsim.py:_OPAQUE_MIN" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'

@@ -77,6 +77,7 @@ def h_requested(st: State, ev: Event) -> None:
         "role": "",
         "via": "",
         "human": False,
+        "notify": 0,
         "answered_at": "",
     }
 
@@ -101,6 +102,7 @@ def h_answered(st: State, ev: Event) -> None:
         role=str(d.get("role", "")),
         via=str(d.get("via", "")),
         human=d.get("human") is True,
+        notify=_int(d.get("notify")),
         answered_at=ev.ts,
     )
 

@@ -1,0 +1,3 @@
+[exempt]
+"ddflow/core/leasesnap.py:MAX_SKEW_S" = 'safety bound of the stdlib-only hook reader, which must not load the config (it would cost the milliseconds the snapshot exists to save): a write time or renewal this far ahead of the clock reads as malformed'
+"ddflow/core/leasesnap.py:MAX_CONFIG_BYTES" = 'safety bound of the stdlib-only hook reader: a config file larger than this is not read (it would blow the hook time budget) and the snapshot reads as unreadable'

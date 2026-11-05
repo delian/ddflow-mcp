@@ -68,7 +68,10 @@ _NATIVE = [
     ),
 ]
 
-_COMMANDS = {"claude": {".claude/commands/implement.md": "commands/claude/implement.md"}}
+_COMMANDS = {
+    "claude": {".claude/commands/implement.md": "commands/claude/implement.md"},
+    "kilo": {".kilo/command/ddflow-wave.md": "commands/kilo/ddflow-wave.md"},
+}
 
 _GOOD = """
 id = "demo"
@@ -101,7 +104,10 @@ def test_agent_commands_match_the_table_they_replaced():
 
 
 def test_every_descriptor_loads_and_has_its_delta_doc():
-    deltas = Path(adopt.__file__).resolve().parent.parent / "templates" / "drivers" / "deltas"
+    # adopt is a package now (ddflow/services/adopt/), so counting levels above its
+    # __file__ would land in services/; harnessreg is still a module beside it, so its
+    # __file__.parent.parent is ddflow/ as adopt.py's used to be.
+    deltas = Path(harnessreg.__file__).resolve().parent.parent / "templates" / "drivers" / "deltas"
     for h in harnessreg.load():
         assert (deltas / h.delta).is_file(), f"{h.id}: delta {h.delta} is missing"
         assert h.verified.sources, h.id
@@ -178,6 +184,14 @@ def test_parse_accepts_a_minimal_descriptor():
         (lambda t: t + '\n[hooks]\nstyle = "plugin"\ninject = ["prompt"]\n', "no mapping"),
         (lambda t: t + '\n[instructions]\nnative_path = "X.md"\n', "go together"),
         (lambda t: t + '\n[instructions]\nagents_md = "maybe"\n', "agents_md must be one of"),
+        (
+            lambda t: t + '\n[orchestration]\ndispatch = "task"\n',
+            "orchestration.loop names the wave loop primitive",
+        ),
+        (
+            lambda t: t + '\n[orchestration]\nloop = "none"\n',
+            "orchestration.loop must be one of",
+        ),
         (lambda t: t + "\n[mcp", "demo.toml"),
     ],
 )

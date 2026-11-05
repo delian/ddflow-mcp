@@ -105,19 +105,24 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
         what = "phase" if it.kind == "phase" else "promotion"
         return Scope("full", f"a {what} runs the whole suite")
     failed_sel = _ci_failed_selected(it)
-    if not failed_sel and (why := _ci_not_passed_here(cfg, it, tree)):
+    red = _ci_baseline_red(
+        it, tree
+    )  # measured baseline-red: the gate runs, it does not wait for ci
+    if not failed_sel and not red and (why := _ci_not_passed_here(cfg, it, tree)):
         return Scope("full", why, needs_ci="ci" in _pipeline(cfg, it, tree))
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
         return Scope("full", "no base to compare the change with")
     lines = changed_lines(tree, base)
-    if not failed_sel and (ran := (it.gates["ci"].evidence or {}).get("ci_scope")):
+    if not failed_sel and not red and (ran := (it.gates["ci"].evidence or {}).get("ci_scope")):
         return _after_ci(cfg, st, it, command, tree, base, lines, ran)
     kind = _selectable(cfg, it, lines)
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
-    return _selected(cfg, st, it, command, tree, base, kind, lines, ci_failed=failed_sel)
+    return _selected(
+        cfg, st, it, command, tree, base, kind, lines, ci_failed=failed_sel, ci_red=red
+    )
 
 
 def _pipeline(cfg, it, tree: Path) -> list[str]:
@@ -127,6 +132,23 @@ def _pipeline(cfg, it, tree: Path) -> list[str]:
         return effective_pipeline(W.repo_root(tree), cfg, it)
     except W.GitError:
         return G.pipeline_for(it, cfg)
+
+
+def _ci_baseline_red(it, tree: Path | None = None) -> bool:
+    """Whether the item's ci gate is PARTIAL because its failing tests were measured failing on
+    the base too (D-baseline-red-auto-accept): that is no reason to refuse to start this gate."""
+    ci = it.gates.get("ci")
+    base = (ci.evidence or {}).get("baseline") if ci is not None else None
+    if not (
+        ci is not None
+        and ci.outcome == "partial"
+        and isinstance(base, dict)
+        and base.get("red") is True
+    ):
+        return False
+    # measured on THIS tree: a baseline-red ci of another commit proves nothing about this one
+    ran = G.normal_fingerprint((ci.evidence or {}).get("tree_sha", ""))
+    return tree is None or (bool(ran) and ran == G.normal_fingerprint(G.tree_identity(tree)))
 
 
 def _ci_failed_selected(it) -> bool:
@@ -185,7 +207,7 @@ def _selectable(cfg, it, lines: int | None) -> str:
 
 def _selected(
     cfg, st, it, command: str, tree: Path, base: str, kind: str, lines: int | None,
-    ci_failed: bool = False,
+    ci_failed: bool = False, ci_red: bool = False,
 ) -> Scope:  # fmt: skip
     """The selection for a selectable item, or the whole suite when none can be made."""
     sel = select(tree, base, **limits(cfg))
@@ -226,6 +248,8 @@ def _selected(
             "; the ci gate failed on its selected scope (it must pass before the item completes), "
             "so this gate does not widen it to the whole suite"
             if ci_failed
+            else "; the ci gate is partial, baseline-red only, so this gate runs its own selection"
+            if ci_red
             else "; the ci gate passed the whole suite on this tree"
         ),
         command=cmd,

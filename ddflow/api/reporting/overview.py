@@ -218,7 +218,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         data["waiting"] = waits  # who is refused which files, and by whom (no polling)
     # DX-lease-yield-doctor-status: the operator must see a contended, idle lease too, not
     # only the holder's brief/heartbeat. Wire body carries the facts; the human view the text.
-    yield_vs = LBR.verdicts(st, cfg, events, time.time(), LBR.tree_activity(log.root))
+    yield_vs = LBR.verdicts(st, cfg, events, time.time(), LBR.tree_activity(log.root), log.root)
     if yield_vs:
         data["yield_requested"] = [
             {

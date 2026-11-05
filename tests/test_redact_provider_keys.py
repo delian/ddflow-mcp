@@ -26,6 +26,7 @@ def _fake(prefix: str, n: int) -> str:
 
 KEYS = {
     "google": _fake("AI" + "za", 35),
+    "google-new": "AQ" + "." + ("Fk3Zq9Lm" * 7)[:50],
     "anthropic": _fake("sk-" + "ant-api03-", 40),
     "openai": "sk-" + "FAKEFAKE1234" * 4,
     "openai-proj": "sk-" + "proj-FAKE1234" * 4,
@@ -88,7 +89,7 @@ def test_a_redaction_that_errors_fails_closed(tmp_path, cfg, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(S, "redactor", boom)
+    monkeypatch.setattr(S._record, "redactor", boom)  # the module that defines `redact`
     key = KEYS["google"]
     clean, n = S.redact(f"key {key}", cfg)
     assert clean == RE.FAILED_MARKER and n == 1
@@ -172,7 +173,13 @@ def test_no_shape_is_quadratic_on_hostile_input():
     import time
 
     def worst(n):
-        pieces = ["token=" * n, "a" * (20 * n), "AI" + "za" + "-" * (10 * n)]
+        pieces = [
+            "token=" * n,
+            "a" * (20 * n),
+            "AI" + "za" + "-" * (10 * n),
+            "AQ." * n,
+            "AQ." + "a" * (10 * n),
+        ]
         for prefix in ("sk-", "sk-proj-", "sk_live_", "AKIA", "ghp_", "xox" + "b-", "hf_", "xai-"):
             pieces.append(prefix + "a" * (10 * n))
         text = " ".join(pieces)
@@ -358,3 +365,60 @@ def test_an_aws_id_with_trailing_or_numeric_neighbours_is_caught():
 
 def test_awss_documented_example_key_is_not_a_hit():
     assert shape_hit("AKIA" + "IOSFODNN7EXAMPLE") == ""  # the id .gitleaks.toml allowlists
+
+
+def test_new_google_key_format_is_redacted_everywhere_and_refused_in_a_shard(staged, tmp_path, cfg):
+    key = KEYS["google-new"]
+    assert len(key) == 53 and shape_hit(f"x {key} y") == "google-api-key"
+    assert shape_hit(KEYS["google"]) == "google-api-key"  # the legacy shape stays
+    log = EventLog(tmp_path / "log")
+    S.capture_prompt(log, cfg, "harness-1", f"here is {key} ok")
+    S.note(log, cfg, "s1", f"note {key}")
+    S.prompt(log, cfg, "s1", f"typed {key}")
+    raw = "".join(p.read_text() for p in log.shards())
+    assert key not in raw and key[3:] not in raw
+    repo, shard = staged
+    shard.write_text('{"clean": 1}\n{"text": "k ' + key + '"}\n')
+    _git(repo, "add", "-A")
+    code, msg = ES.check_event_secrets(repo, Config())
+    assert code != 0 and "a.jsonl:2" in msg and key not in msg and key[3:20] not in msg
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "version AQ.2.3 released",
+        "see AQ.config.settings.value for it",
+        "token AQ.abc123",
+        "AQ." + "Fk3Zq9Lm" * 3,
+        "id " + ("Fk3Zq9Lm" * 7)[:50],
+        "blob " + ("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo" * 3) + "==",
+        "AQ" + ("Fk3Zq9Lm" * 7)[:50],
+    ],
+)
+def test_new_google_shape_leaves_lookalikes_alone(text, cfg):
+    assert shape_hit(text) == ""
+    clean, n = S.redact(text, cfg)
+    assert clean == text and n == 0
+
+
+def test_reviewers_list_never_prints_a_key_value(monkeypatch, tmp_path):
+    import sys
+
+    sentinel = "SENTINEL" + "Zq9" * 4
+    for var in ("KIMI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.setenv(var, "AQ" + "." + sentinel)
+    r = subprocess.run(
+        [sys.executable, "-m", "ddflow", "reviewers", "list"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert sentinel not in r.stdout + r.stderr
+
+
+def test_a_legacy_key_glued_before_a_new_one_does_not_hide_its_body(cfg):
+    new = KEYS["google-new"]
+    text = KEYS["google"] + new + " and " + new + KEYS["google"]
+    clean, _n = S.redact(text, cfg)
+    assert new[3:] not in clean and KEYS["google"][4:] not in clean

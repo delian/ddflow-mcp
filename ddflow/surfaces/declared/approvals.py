@@ -78,6 +78,7 @@ _MCP = (
         tool="ddflow_session_asks",
         family="ddflow_session",
         action="asks",
+        own_identity=True,
         tier="all",
         description="Your own approval requests and their state (pending, approved, spent).",
         reason="MCP face of `approvals list`, folded into ddflow_session (D-RA-6)",
@@ -90,6 +91,7 @@ _MCP = (
         tool="ddflow_session_withdraw",
         family="ddflow_session",
         action="withdraw",
+        own_identity=True,
         tier="all",
         description="Take back your own approval request while it waits (the asker only).",
         reason="MCP face of `approvals withdraw` / `approvals request` / `approvals list`, folded into ddflow_session (D-RA-6)",
@@ -167,12 +169,29 @@ COMMANDS: tuple[Command, ...] = (
     ),
     Command(
         path=("approvals", "approve"),
-        summary="a PERSON approves one request, once (refused under an agent identity)",
+        summary="a PERSON approves one request or every pending one, once (refused under an agent identity)",
         tool="",
         reason="a person's act: refused for every agent identity, so no tool carries it",
         params=(
-            Param("id", required=True, positional=True, cli_help="the request id"),
-            _DIGEST,
+            Param(
+                "ids",
+                positional=True,
+                nargs="*",
+                metavar="ID",
+                cli_help="request id(s); `ID:DIGEST` carries the read-receipt prefix inline",
+            ),
+            Param(
+                "all",
+                type="boolean",
+                default=False,
+                cli_help="approve every currently-pending request; each answer still records that request's digest",
+            ),
+            Param(
+                "digest",
+                repeat=True,
+                cli_help="the read-receipt prefix, one per id in order (repeat, or spell `ID:DIGEST`)",
+                metavar="DIGEST",
+            ),
         ),
     ),
     Command(

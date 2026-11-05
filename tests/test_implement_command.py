@@ -106,7 +106,7 @@ def test_adopt_for_claude_writes_implement_which_hands_the_command_to_loop(repo)
 def test_adopt_writes_no_slash_command_for_an_agent_that_has_none(repo):
     run_cli(repo, "adopt", "--agents", "cursor")
     assert not (repo / CMD).exists()
-    assert set(AGENT_COMMANDS) == {"claude"}
+    assert set(AGENT_COMMANDS) == {"claude", "kilo"}
 
 
 def test_adopt_keeps_a_projects_own_implement_command(repo):

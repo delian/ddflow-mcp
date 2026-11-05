@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
@@ -23,8 +26,10 @@ from ...services import configcompat as CC
 from ...services import embed as EMB
 from ...services import eventcommit as EC
 from ...services import external as EX
+from ...services import file_size as FSZ
 from ...services import flakes as FK
 from ...services import flowstate as FL
+from ...services import lanerelease as LR
 from ...services import launchers as LA
 from ...services import leasebreak as LBR
 from ...services import leases as L
@@ -244,6 +249,35 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
+@contextmanager
+def _check(timings: list[tuple[str, float]], name: str) -> Iterator[None]:
+    """Time one named doctor check, appending ``(name, elapsed_seconds)`` to `timings`.
+
+    FOC-doctor-slow: doctor ran over 14 minutes on a 116 MB log with nothing saying
+    WHERE. Timing every check makes the slow one a named row instead of a silent wait,
+    and an over-budget row is reported as a note below.
+    """
+    started = CLOCK.monotonic()
+    try:
+        yield
+    finally:
+        timings.append((name, CLOCK.monotonic() - started))
+
+
+def _over_budget_notes(
+    timings: list[tuple[str, float]], budget: float
+) -> tuple[dict[str, float], list[str]]:
+    """A note per check that exceeded its budget (FOC-doctor-slow); the timing table always."""
+    table = {name: round(secs, 2) for name, secs in timings}
+    if budget <= 0:
+        return table, []
+    return table, [
+        f"doctor check {name} took {secs:.1f}s — over the {budget:g}s per-check budget"
+        for name, secs in timings
+        if secs > budget
+    ]
+
+
 def doctor(
     repo: Path,
     *,
@@ -251,6 +285,8 @@ def doctor(
     parser: Any = None,
     tools: Any = None,
     accept_lost_events: bool = False,
+    accept_history: bool = False,
+    history: tuple[str, str, str, str] = ("", "", "", ""),
     start_texts: Any = None,
 ) -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
@@ -263,14 +299,32 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-    log, cfg, st = _load(repo, agent)
+    timings: list[tuple[str, float]] = []
+    with _check(timings, "load"):
+        log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
     accepted = SM.accept(repo, log) if accept_lost_events else []
     # One read of the whole log serves the data repairs and every pass below (the warm
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
-    repair_ctx = RP.context(repo, log, cfg)
+    with _check(timings, "repairs.context"):
+        repair_ctx = RP.context(repo, log, cfg)
+    if accept_history:  # recorded as `repair.applied`; the report below reads it back
+        reason, note, only, approval = history  # (reason, note, only ids, approval)
+        why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
+        if why:
+            return O.refused("doctor", why, text=why)
+        keys = stamp.get("keys")
+        repair_ctx = RP.accepted.accepting(
+            repair_ctx,
+            reason,
+            note,
+            only,
+            approved=frozenset(keys) if keys is not None else None,
+            by=stamp.get("approved_by", ""),
+        )
+        st = repair_ctx.st
     events = repair_ctx.events
     store = Store(repo, cfg)
     cost = SC.report(repo, cfg, agent, start_texts)  # first: it refreshes the index (stale check)
@@ -279,12 +333,10 @@ def doctor(
     # A PROBLEM (B36aa4c8ee5): a shard with two Lamport runs had two writers sharing an
     # agent id, and a lease claimed under it is "mine" in both clones. Claims record
     # their clone, so a double claim is also a CONTESTED item below.
-    for shard, (n, before, after) in log.clock_regressions().items():
-        problems.append(
-            f"{shard}: Lamport clock decreases at event {n} ({before} -> {after}) — two "
-            "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
-            "`[agent].id`, or drop both to derive a per-clone id)"
-        )
+    # (a person's `--accept-history` turns a known one into a note: services/repairs/accepted)
+    clock_problems, clock_notes = RP.accepted.clock_findings(repair_ctx)
+    problems += clock_problems
+    notes += clock_notes
     # A PROBLEM (Ba24a8d32ee): a shard holding fewer events than this clone last saw lost them
     # to a force-push, revert, reset or deletion. Never repaired here.
     problems += [g.render() for g in SM.lost(repo, log)]
@@ -295,7 +347,8 @@ def doctor(
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     notes.extend(OVR.notes(events, st, cfg))  # forced completions, skips, typed-chat T3 uses ...
     notes.extend(AUD.findings(st, cfg))  # an approved answer without proof, an expiring approval
-    notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
+    with _check(timings, "embed"):
+        notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
@@ -307,6 +360,7 @@ def doctor(
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
+    notes.extend(FSZ.doctor_notes(repo, cfg.quality.max_file_bytes))  # r-small-files
     notes.extend([*RH.doctor_notes(repo), *RH.host_notes()])  # identity, core.bare, orphan suites
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
@@ -325,12 +379,14 @@ def doctor(
         notes.append(UP.skipped_kinds_advice(st))
 
     notes.extend(UP.doctor_notes(st))
+    notes.extend(LR.warning(repo, cfg, st).splitlines())  # released entries with no integrator
     notes.extend(US.doctor_notes(repo, st))  # a start check that never reached an answer
     if release := UC.proposal(repo, cfg):  # a newer ddflow release (D-self-upgrade 2)
         notes.append(release)
     notes.extend(fold_problem_notes(st))
 
-    p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
+    with _check(timings, "plan"):
+        p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
     problems += _contest_problems(st)
 
@@ -387,8 +443,9 @@ def doctor(
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
-    for f in PR.detect(log.read_all(), st, cfg):
-        (problems if f.severity == "block" else notes).append(f.render())
+    with _check(timings, "progress"):
+        for f in PR.detect(log.read_all(), st, cfg):
+            (problems if f.severity == "block" else notes).append(f.render())
     found, held = _recovery_findings(L.scan(log, cfg, repo))
     problems += found
     notes += held
@@ -406,9 +463,13 @@ def doctor(
     ordered = wait_order(log, st, cfg, cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
+    table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
+    notes += over
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
+        "check_timings": table,
+        "over_budget": over,
         "events": st.event_count,
         "items": len(st.items),
         "agent": log.agent_id,

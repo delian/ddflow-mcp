@@ -171,3 +171,30 @@ def test_a_chunk_that_does_not_split_says_it_was_not_retried(tmp_path):
     res = review(rev, one, "i", split_rounds=2)
     assert len(seen.read_text().split()) == 1  # one hunk, one file: nothing to halve
     assert "not retried" in res.unreviewed[0]["reason"], res.unreviewed
+
+
+def test_a_chunk_lost_to_time_settles_at_the_bound_not_after_a_hedge_copy(tmp_path):
+    """A hedge copy of a chunk that just ran out of its own time is cancelled, not run: it
+    is the SAME chunk with the SAME budget and timeout, so it times out identically. With
+    one request in flight (`max_concurrency=1`) the hedge copy was queued and started only
+    after the first timed out, so a 6-chunk round spent hedge x timeout_s per lost chunk
+    while the tick claimed 'each request is cut at timeout_s' (B-review-chunk-timeout-not-
+    enforced: chunks waited to 3600s on a 1800s timeout)."""
+    seen = tmp_path / "seen.txt"
+    cli = tmp_path / "fake-reviewer"
+    cli.write_text(f"#!/bin/sh\ncat >/dev/null\necho x >> '{seen}'\nsleep 20\n")
+    cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+    rev = Reviewer(
+        name="fake",
+        kind="command",
+        command=str(cli),
+        model="m",
+        hedge=2,
+        timeout_s=2,
+        max_concurrency=1,
+    )
+    one = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1 @@\n+x = 1\n"
+    res = review(rev, one, "i", split_rounds=1)
+    assert res.status == UNAVAILABLE
+    assert len(seen.read_text().split()) == 1  # the queued hedge copy was cancelled, not run
+    assert json.dumps(res.unreviewed).lower().count("did not converge") >= 1, res.unreviewed

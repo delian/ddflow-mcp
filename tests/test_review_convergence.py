@@ -147,7 +147,7 @@ def test_a_converged_round_weighs_every_reviewers_findings(monkeypatch):
     from ddflow.services import review as RV
 
     monkeypatch.setattr(
-        api, "_last_review", lambda it, gate: {"chunk_findings": [{"severity": "HIGH"}]}
+        api.records, "_last_review", lambda it, gate: {"chunk_findings": [{"severity": "HIGH"}]}
     )
     low = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="nit")])
     high = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="HIGH", title="bad")])
@@ -194,8 +194,86 @@ def test_a_round_with_no_earlier_findings_does_not_converge(monkeypatch):
     from ddflow.config import Config
     from ddflow.services import review as RV
 
-    monkeypatch.setattr(api, "_last_review", lambda it, gate: {})
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: {})
     med = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", title="m")])
     cfg = Config.load(None, env={})
     outcome, _ = api._gate_outcome(med, [med], object(), "T1", "critic", True, cfg, None, print)
+    assert outcome == "failed"
+
+
+def test_a_repeated_untriaged_below_floor_finding_still_blocks(monkeypatch):
+    """Bug B-floor-passes-repeated-untriaged-nit: an earlier below-floor finding the author
+    neither fixed nor answered, raised AGAIN by a later full re-review, keeps blocking --
+    the floor filters only NEW below-floor findings."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "chunk_findings": [
+            {
+                "severity": "MEDIUM",
+                "digest": "abc123",
+                "title": "m",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ]
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    repeated = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", digest="abc123", title="m")]
+    )
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], object(), "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "failed"
+
+    # A NEW below-floor finding of the same severity is still filtered (the floor stands).
+    fresh = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", digest="xyz", title="m")]
+    )
+    outcome, ev = api._gate_outcome(
+        fresh, [fresh], object(), "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "passed" and ev["converged"]["findings_below_floor"] == 1
+
+
+def test_a_refuted_prior_finding_is_not_still_standing(monkeypatch):
+    """`_still_standing` drops a REFUTED prior finding (settled, no longer stands: re-raising
+    it below the floor is filtered), but keeps a CONFIRMED one (still a real defect: blocks)."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "chunk_findings": [
+            {
+                "severity": "MEDIUM",
+                "digest": "abc123",
+                "title": "m",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ]
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    cfg = Config.load(None, env={})
+    repeated = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", digest="abc123", title="m")]
+    )
+
+    refuted = NS(triage={"critic": {"abc123": {"verdict": "refuted"}}})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], refuted, "T1", "critic", True, cfg, None, print
+    )
+    assert outcome == "passed"
+
+    confirmed = NS(triage={"critic": {"abc123": {"verdict": "confirmed"}}})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], confirmed, "T1", "critic", True, cfg, None, print
+    )
     assert outcome == "failed"

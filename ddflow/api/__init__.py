@@ -42,6 +42,7 @@ from __future__ import annotations
 from ._base import _load
 from ._dedupe import Answer as DedupeAnswer
 from ._dedupe import check_add as dedupe_check_add
+from .arch_deps import archdeps
 from .briefing import agent_brief
 from .cirun import ci_tool
 from .completion import completion_verdict
@@ -88,6 +89,7 @@ from .items import (
     ItemEdit,
     phase_add,
     phase_close,
+    phase_complete,
     resolve,
     split,
     task_add,
@@ -99,6 +101,7 @@ from .knowledge import (
 )
 from .knowledge import (
     LessonDraft,
+    bug_dedupe,
     bug_file_tasks,
     bug_fixed,
     bug_found,
@@ -156,6 +159,7 @@ from .operations import (
     relevant_tests,
 )
 from .plan import plan_apply, plan_check, plan_confirm, plan_lint
+from .probe import probe as conflict_probe
 from .records import record_resource_listing, record_resource_read
 from .report import item_report, show_report
 from .reporting import (
@@ -243,9 +247,11 @@ __all__ = [
     "abandon",
     "adopt_project",
     "agent_brief",
+    "archdeps",
     "block",
     "board",
     "brief",
+    "bug_dedupe",
     "bug_file_tasks",
     "bug_fixed",
     "bug_found",
@@ -261,6 +267,7 @@ __all__ = [
     "complete",
     "completion_verdict",
     "configure",
+    "conflict_probe",
     "decision_add",
     "decision_applicable",
     "decision_list",
@@ -318,6 +325,7 @@ __all__ = [
     "onboard_run",
     "phase_add",
     "phase_close",
+    "phase_complete",
     "phase_progress",
     "pins",
     "plan_apply",

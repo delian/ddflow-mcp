@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.undeclared_write"
+new = "\"warn\""
+why = "What `gate status`, `brief` and `complete` do about files a task wrote outside its lease globs: warn names them and the exact `update --globs` call, block makes `complete` refuse, off disables."
+impact = "additive"

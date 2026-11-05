@@ -71,6 +71,19 @@ def test_an_uncontended_lease_is_never_judged_however_old():
     assert LB.judge(_cfg(), _beats(3), "T1", _lease(NOW - 10**6), [], NOW, _none) is None
 
 
+def test_a_live_gate_run_is_progress_and_never_asked_or_broken(tmp_path):
+    from ddflow.services.gates import running as RUN
+
+    # Its last real event is long gone, but its ci gate is still running: that run is work
+    # in flight, so the holder is not idle however long the run lasts (B-long-ci-run-holds
+    # -globs-while-waiter-asks-yield).
+    marker = RUN.mark_started(tmp_path, "T1", "ci", sha="abc")
+    assert marker is not None  # this process's own pid runs the gate -> still live
+    gate = Event("gate.started", "T1", {"gate": "ci"}, ts=clock_iso(NOW - 5000))
+    v = LB.judge(_cfg(), [gate], "T1", _lease(NOW - 5000), ["T2"], NOW, _none, repo=tmp_path)
+    assert v is None  # a running gate is progress, not idleness
+
+
 def test_a_hold_limit_below_the_idle_limit_still_asks_before_it_breaks():
     v = LB.judge(_cfg(idle=900, hold=600), [], "T1", _lease(NOW - 700), ["T2"], NOW, _none)
     assert v and v.yield_requested and v.breakable  # breakable always implies asked

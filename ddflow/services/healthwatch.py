@@ -221,7 +221,7 @@ def _park_break(log, st, cfg, item: str, events, now, activity, mode) -> dict[st
     if not asks:
         return None
     claimant = asks[0]["item"]
-    v = LB.judge(cfg, events, item, lease, [a["item"] for a in asks], now, activity)
+    v = LB.judge(cfg, events, item, lease, [a["item"] for a in asks], now, activity, log.root)
     if v is None or not v.breakable:
         return _move(
             "break",

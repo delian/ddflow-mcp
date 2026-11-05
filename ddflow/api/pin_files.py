@@ -11,6 +11,7 @@ from ..infra import git as G
 from ..infra.fsio import LockTimeout
 from ..services import approval as AP
 from ..services import leasekeep as LK
+from ..services import mergedrivers as MD
 from ..services import pins as PN
 from ..services import pins_merge as PM
 from ..services import pins_written as PW
@@ -45,6 +46,8 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
     if top is not None and top.ok and top.out.strip():
         repo = Path(top.out.strip())
     cfg = Config.load(repo)
+    if verb == "drivers":
+        return _drivers(repo, cfg, check=check, install=install)
     if install:
         actions = PM.install(repo, cfg)
         if not actions:
@@ -65,6 +68,38 @@ def pins_regenerate(  # noqa: PLR0913 -- one keyword per regeneration facet; the
         approval=approval,
         on_progress=on_progress,
     )
+
+
+def _drivers(repo: Path, cfg: Config, *, check: bool, install: bool) -> O.Outcome:
+    """`pins drivers`: show the merge-driver lines; `--install` (the consent) writes them;
+    `--check` verifies the merged baselines are still sorted and unique."""
+    if check and install:
+        return O.failed(
+            "pins",
+            "--check and --install are separate steps: run `ddflow pins drivers --install`, then `ddflow pins drivers --check` (MCP: ddflow_pins document=drivers install=true, then check=true)",
+        )
+    if check:
+        bad = MD.check_baselines(repo, cfg)
+        return (
+            O.failed("pins", "; ".join(bad))
+            if bad
+            else O.ok("pins", note="baselines are sorted and unique")
+        )
+    if install:
+        gaps = [f"unavailable: {u}" for u in MD.plan(repo, cfg).unavailable]
+        acts = MD.apply(repo, cfg)
+        if acts:
+            return O.ok("pins", installed=acts, note="\n".join(gaps))
+        if gaps:  # a driver that could not be set up is not "already set up"
+            return O.nothing("pins", "; ".join(gaps))
+        return O.nothing("pins", "merge drivers already set up")
+    p = MD.plan(repo, cfg)
+    note = "\n".join(p.lines()) or "nothing to add: the merge drivers are already set up"
+    if p.unavailable and p.empty():
+        note = "\n".join(p.lines())  # the unavailable lines, never "already set up"
+    if not p.empty():
+        note += f"\nwrite these with: {MD.NEXT_CLI}  (MCP: {MD.NEXT_MCP})"
+    return O.ok("pins", note=note)
 
 
 def _regenerate_tail(
@@ -125,7 +160,7 @@ def _after_merge_note(primary: Path, repo: Path, cfg, before, watched, *, check:
 def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approval: str):
     """The pins-are-stale class route (verb pins.regenerate): consume an operator approval of
     re-recording ``before`` with ``only`` (``approval`` = request or id), else a person."""
-    log, cfg = _load(primary, agent)
+    log, cfg, _st = _load(primary, agent)
     if not AP.agent_marker(agent):
         return O.refused("pins", "--approval is an agent's route; a person re-records directly")
     canon = Canon(
@@ -137,7 +172,7 @@ def _regenerate_approval(primary: Path, *, agent: str, before, only: str, approv
     )
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
     if not decision.ok:
-        return O.refused("pins", "refusing: " + decision.message)
+        return O.refused("pins", decision.message)
     return decision.stamp
 
 

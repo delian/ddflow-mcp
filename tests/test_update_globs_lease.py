@@ -148,21 +148,25 @@ def _two_claims(repo) -> None:
     assert code == 0, out + err
 
 
-def test_widening_into_another_live_lease_is_refused_and_records_nothing(repo):
-    """Before B209 an update never reached the lease; once it does, it is a way to take
-    paths, and must be refused exactly where `claim` would be."""
+def test_widening_partly_into_another_live_lease_keeps_the_subset(repo):
+    """B-ddflow-glob-widen-refused-broad: once an update reaches the lease it is a way to
+    take paths, and must refuse exactly where `claim` would -- but a widening that only
+    PARTLY overlaps takes the non-overlapping subset and withholds the rest, rather than
+    refusing the whole list."""
     _two_claims(repo)
-    n = len(EventLog(repo, "reader").read_all())
-    code, out, err = run_cli(repo, "update", "T1", "--globs", "src/a.py,docs/x.md", agent=HOLDER)
-    assert code == 3, (code, out, err)
-    assert "T2" in out + err and OTHER in out + err, out + err
-    # The edit and the lease change record nothing; the refusal only registers the wait
-    # (DX-no-hold-and-wait), one `lease.waiting` event.
-    kinds = [e.kind for e in EventLog(repo, "reader").read_all()[n:]]
-    assert kinds == ["lease.waiting"], kinds
+    code, out, err = run_cli(
+        repo, "update", "T1", "--globs", "src/a.py,src/c.py,docs/x.md", agent=HOLDER
+    )
+    assert code == 0, (code, out, err)
+    assert "withheld" in out + err and "docs/x.md" in out + err, out + err
     st = fold(EventLog(repo, "reader").read_all(), strict=False)
-    assert st.items["T1"].globs == ["src/a.py"]
-    assert st.items["T1"].lease.globs == ["src/a.py"]
+    assert st.items["T1"].globs == ["src/a.py", "src/c.py"]
+    assert st.items["T1"].lease.globs == ["src/a.py", "src/c.py"]
+    # The withheld glob is registered as waiting (DX-no-hold-and-wait), not dropped
+    # silently: exactly the withheld path, tied to T1's own wait.
+    assert ("T1" in st.waiting) and (list(st.waiting["T1"]["globs"]) == ["docs/x.md"]), st.waiting
+    kinds = [e.kind for e in EventLog(repo, "reader").read_all()]
+    assert "lease.waiting" in kinds, kinds
 
 
 def test_widening_clear_of_other_leases_still_works(repo):

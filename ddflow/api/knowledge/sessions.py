@@ -11,6 +11,7 @@ from ...services import eventcommit as EC
 from ...services import inbox as IB
 from ...services import sessions as S
 from .._base import _load
+from .self_assessment import auto_file
 
 
 def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "") -> O.Outcome:
@@ -27,14 +28,21 @@ _EMPTY_SESSION_TEXT = (
 
 
 def session_prompt(
-    repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
+    repo: Path,
+    session: str,
+    text: str,
+    *,
+    item: str = "",
+    relayed_by: str = "",
+    agent: str = "",
 ) -> O.Outcome:
     """Record the operator's own words, with credentials redacted before they touch disk.
 
     Empty or whitespace-only text is refused, recording nothing: an empty prompt in the
     log is a hole `ddflow replay` cannot see as one. A missing session id is not a
     reason to refuse: the latest open session is used, else an implicit one is opened,
-    and `how` says which.
+    and `how` says which. ``relayed_by`` names the coordinator a relay passed the words
+    through (a subagent's answer arrives relayed, not from the operator directly).
     """
 
     if not (text or "").strip():
@@ -47,7 +55,10 @@ def session_prompt(
         return O.ok("session.prompt", redactions=0, session=session, how="off")
     sid, how = S.resolve(log, session)
     return O.ok(
-        "session.prompt", redactions=S.prompt(log, cfg, sid, text, item=item), session=sid, how=how
+        "session.prompt",
+        redactions=S.prompt(log, cfg, sid, text, item=item, relayed_by=relayed_by),
+        session=sid,
+        how=how,
     )
 
 
@@ -103,7 +114,13 @@ def session_end(repo: Path, session: str, *, summary: str = "", agent: str = "")
 
     log, cfg, _st = _load(repo, agent)
     S.end(log, session, summary=summary)
-    return O.ok("session.ended", session=session, **EC.commit_at(log, cfg, "stop", "stop"))
+    assessed = auto_file(repo, text=summary, trigger="session_end", agent=agent)
+    return O.ok(
+        "session.ended",
+        session=session,
+        self_assessment=assessed.data,
+        **EC.commit_at(log, cfg, "stop", "stop"),
+    )
 
 
 def history(

@@ -35,6 +35,15 @@ treated as "no problem".
 
 from __future__ import annotations
 
+from .baseline import (  # noqa: F401
+    auto_decision,
+    cache_load,
+    cache_store,
+    only_tests_failed,
+    read_full,
+    test_files_of,
+    write_full,
+)
 from .baseline_red import bug_id, candidate_ids, on_base, reason_text  # noqa: F401
 from .defs import (  # noqa: F401
     DEFAULT_GATES,
@@ -151,12 +160,18 @@ from .reviewers import (  # noqa: F401
     family_of,
     git_state,
     git_state_change,
+    independence_level,
+    independence_tier,
+    is_author_model,
     is_reviewer_gate,
+    model_tier_of,
+    review_tier,
     reviewer_gates,
     reviewer_independence,
     reviewer_ran,
     router_set,
     run_watching_git,
+    tier_notes,
 )
 from .rounds import delta_rounds, full_rounds, kept_copy, rounds_used, settled_pass  # noqa: F401
 from .runner import (  # noqa: F401
@@ -173,13 +188,16 @@ from .runner import (  # noqa: F401
 from .running import (  # noqa: F401
     Marker,
     RunTerminated,
+    claim_started,
     clear_started,
     dead_runs,
     live_run,
+    live_run_any,
     mark_started,
     start_lock,
     terminating,
 )
+from .skip_followup import file_for_skip, record_side_effect, settle  # noqa: F401
 from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,
     Runner,

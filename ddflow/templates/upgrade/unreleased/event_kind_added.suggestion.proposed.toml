@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "suggestion.proposed"
+why = "An agent proposed a bounded patch, held as data, to the agent that holds the lease on the file it needs."
+impact = "additive"

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "quality.max_file_bytes"
+new = "30000"
+why = "A tracked .py file larger than this many bytes is over the r-small-files limit (doctor lists it, the ratchet fails a new one)."
+impact = "additive"

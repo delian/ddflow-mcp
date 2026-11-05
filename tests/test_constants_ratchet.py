@@ -81,6 +81,36 @@ def test_bug_window_is_a_single_knob_not_a_hidden_duplicate() -> None:
     assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in keys
 
 
+def test_lane_headless_secret_min_is_exempt_and_reasoned() -> None:
+    """B-lanes-knobs-manifest-secretmin-ratchet: SECRET_MIN shipped in neither table and
+    the ratchet went red. It is a redaction heuristic (shorter values are not worth
+    redacting and would mangle text), so it is an [exempt] structural constant, not a tunable
+    knob -- lock that it stays classified, WITH a reason, wherever lane_headless is re-homed."""
+    reg = ca.load_register(ROOT)
+    key = "ddflow/services/lane_headless.py:SECRET_MIN"
+    assert reg.exempt.get(key), f"SECRET_MIN left [exempt] (or lost its reason): {key}"
+
+
+def test_ci_main_drift_reclassifies_moves_and_new_constants() -> None:
+    """B-ci-main-constants-ratchet: main went red on real register drift -- the package
+    splits moved constants to new modules (re-pinned at the CURRENT home, old key gone)
+    and newly-landed constants shipped unclassified. Lock the re-pin and the reasoned
+    classification, so a later split must re-pin again rather than drift silently."""
+    reg = ca.load_register(ROOT)
+    for key in (
+        "ddflow/api/records/_kind.py:CELL_MAX",
+        "ddflow/infra/store/_fingerprint.py:INDEX_TOUCH_S",
+        "ddflow/services/enforce/hooks.py:MAX_LISTED_PATHS",
+    ):
+        assert key in reg.knob, f"moved constant not re-pinned at its new home: {key}"
+    for key in (
+        "ddflow/config_sections/approvals.py:STANDING_WINDOW_MAX_S",
+        "ddflow/services/inbox.py:READ_CAP",
+        "ddflow/services/review_keys.py:MAX_KEY_FILE_BYTES",
+    ):
+        assert reg.exempt.get(key), f"new constant not classified (or unreasoned): {key}"
+
+
 def test_detector_folds_no_stale_value_from_a_rebound_name(tmp_path: Path) -> None:
     src = (
         "HOUR = 1\n"

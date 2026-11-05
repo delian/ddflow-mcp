@@ -100,18 +100,13 @@ def test_the_container_host_rewrite_applies_to_every_reviewer_backend(monkeypatc
     from ddflow.services import review as R
 
     monkeypatch.setattr(container, "in_container", lambda: True)
-    seen: list[str] = []
+    from ddflow.adapters.fakes.http import FakeHttpClient
 
-    class _Boom(OSError):
-        pass
-
-    def _fake_urlopen(req, timeout=0):
-        seen.append(req.full_url)
-        raise _Boom("not really opening a socket")
-
-    # Every reviewer request goes through `_open`'s opener (cancellable sockets).
-    monkeypatch.setattr(R._OPENER, "open", _fake_urlopen)
+    # Every reviewer request goes through the package's HTTP client (cancellable sockets).
+    http = FakeHttpClient().when(raises="connection")
+    monkeypatch.setattr(R, "_client", lambda: http)
     R._post_json("http://127.0.0.1:11434/v1/messages", {}, {}, 5)
+    seen = [c.url for c in http.calls]
     assert seen and "127.0.0.1" not in seen[0], (
         f"inside a container the reviewer's loopback endpoint is the CONTAINER's "
         f"loopback, so this request goes nowhere: {seen}"
@@ -306,6 +301,7 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     import inspect
 
     from ddflow.surfaces import mcp as M
+    from ddflow.surfaces.mcp import _core as MC
 
     read = inspect.getsource(M.Server._m_resources_read)  # the `resources/read` handler
     assert "fold(" not in read, f"resources/read still folds the log itself:\n{read}"
@@ -313,8 +309,15 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     assert "RESOURCE_BY_URI" in read and read.count("resource.read(") == 1, (
         f"one path, one call:\n{read}"
     )
-    table = inspect.getsource(M)
-    table = table[table.index("RESOURCES: tuple") : table.index("class Server")]
+    # The table lives in the split package's `_core` module; `RESOURCE_BY_URI` is derived
+    # from it right after, so the whole table is the slice between the two.
+    src = inspect.getsource(MC)
+    # Take the LAST marker occurrence (the module-level definitions), so a docstring that
+    # mentions both names in passing cannot stand in for the real table.
+    start = src.rindex("RESOURCES: tuple")
+    end = src.rindex("RESOURCE_BY_URI")
+    assert start < end, "RESOURCE_BY_URI must follow the RESOURCES table it derives from"
+    table = src[start:end]
     assert "fold(" not in table and "EventLog" not in table, "a resource folds the log itself"
 
 

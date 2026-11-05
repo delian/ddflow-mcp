@@ -1,0 +1,2 @@
+[knob]
+"ddflow/adapters/mcp.py:POLL_S" = 'mcp.poll_s'

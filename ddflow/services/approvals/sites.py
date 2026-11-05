@@ -49,9 +49,10 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/api/chore.py:chore_approve": 1,
     "ddflow/api/lifecycle/claim.py:_claim_by_approval": 1,
     "ddflow/api/lifecycle/claim.py:_agent_marker_of": 1,
-    "ddflow/api/lifecycle/complete.py:_approved_force": 1,
-    "ddflow/api/lifecycle/complete.py:_person_force": 1,
-    "ddflow/api/lifecycle/complete.py:_ask_hint": 1,
+    "ddflow/api/lifecycle/complete/approval.py:_approved_force": 1,
+    "ddflow/api/lifecycle/complete/approval.py:_person_force": 1,
+    "ddflow/api/lifecycle/complete/approval.py:_ask_hint": 1,
+    "ddflow/services/phase_complete.py:complete_phase": 1,
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
@@ -64,6 +65,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
     "ddflow/api/setup.py:configure": 1,
     "ddflow/api/pin_files.py:_regenerate_approval": 1,
+    "ddflow/services/repairs/accepted.py:gate": 1,
 }
 
 MARKER_NAMES = frozenset({"agent_marker", "is_agent", "_is_agent", "reviewer_agent_marker"})
@@ -200,6 +202,16 @@ SITES: tuple[Site, ...] = (
         "ddflow reviewers add --preset ...",
     ),
     Site(
+        "history.accept",
+        "A",
+        T2,
+        L1,
+        "the findings accepted (a digest of their keys: an event's id and content, or a "
+        "clock regression's shard, position and values) and the ids named",
+        ("ddflow/services/repairs/accepted.py:gate",),
+        "ddflow doctor --accept-history --history-reason WHY --approval request|ID",
+    ),
+    Site(
         "config.set",
         "C",
         T2,
@@ -264,11 +276,20 @@ SITES: tuple[Site, ...] = (
         L1,
         "the item and its unmet completion conditions (never a failed review gate)",
         (
-            "ddflow/api/lifecycle/complete.py:_approved_force",
-            "ddflow/api/lifecycle/complete.py:_person_force",
-            "ddflow/api/lifecycle/complete.py:_ask_hint",
+            "ddflow/api/lifecycle/complete/approval.py:_approved_force",
+            "ddflow/api/lifecycle/complete/approval.py:_person_force",
+            "ddflow/api/lifecycle/complete/approval.py:_ask_hint",
         ),
         "ddflow complete <id> --approval request|ID",
+    ),
+    Site(
+        "phase.complete",
+        "C",
+        T2,
+        L1,
+        "the phase and the settled state of every task under it",
+        ("ddflow/services/phase_complete.py:complete_phase",),
+        "ddflow phase complete <id> --approval request|ID",
     ),
 )
 

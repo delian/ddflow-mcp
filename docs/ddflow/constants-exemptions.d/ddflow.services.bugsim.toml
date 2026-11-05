@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/bugsim.py:_MIN_CLUSTER" = 'a cluster is two or more bugs by definition; a structural fact of the union-find grouping, not a preference'

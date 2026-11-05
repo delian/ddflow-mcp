@@ -106,6 +106,7 @@ def test_the_checks_fields_join_the_event(repo):
 
 def test_task_add_writes_its_shape_and_a_sub_task_releases_the_parents_lease(repo):
     A.phase_add(repo, "P", title="phase")
+    A.phase_add(repo, "N", title="need")
     A.task_add(repo, "T", title="parent", parent="P", globs="a/**", needs="N", priority=7)
     [ev] = _data(EventLog(repo), "T")
     assert ev == {

@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/gates/reasons.py:WHY_CHARS" = 'how much of a recorded reason one `gate status` row shows; a display cut of a line, the whole reason stays in the record and in `show`'

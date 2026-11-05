@@ -1,0 +1,3 @@
+[knob]
+"ddflow/services/verifypack.py:MAX_BODY_CHARS" = 'verifypack.max_body_chars'
+"ddflow/services/verifypack.py:MAX_STAT_LINES" = 'verifypack.max_stat_lines'

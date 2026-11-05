@@ -58,6 +58,13 @@ def test_a_taken_name_is_an_error_unless_the_same_definition_or_replace_is_allow
         _reg(same_ok=True, replace=True)
 
 
+def test_registering_none_twice_is_a_duplicate_not_an_overwrite():
+    r: Registry[object] = Registry("fn")
+    r.register(None, "ghost")
+    with pytest.raises(DuplicateName, match=r"fn .ghost. is already registered$"):
+        r.register(None, "ghost")
+
+
 def test_an_unknown_name_lists_those_known_and_is_a_keyerror_for_mapping_get():
     r = _reg()
     r.register("a:1")
@@ -91,6 +98,24 @@ def test_a_lazy_target_imports_when_first_used_and_the_listing_says_so():
         Lazy("nonsense").resolve()
 
 
+def test_a_lazy_target_registered_twice_is_a_no_op_when_same_ok():
+    r: Registry[object] = Registry("fn", same_ok=True)
+    r.lazy("join", "os.path:join")
+    r.lazy("join", "os.path:join")  # the same lazy definition again: a no-op
+    import os.path
+
+    assert r["join"] is os.path.join
+    with pytest.raises(DuplicateName, match="with another definition"):
+        r.lazy("join", "os.path:split")
+
+
+def test_a_registered_none_still_blocks_a_lazy_target():
+    r: Registry[object] = Registry("fn")
+    r.register(None, "occupied")
+    with pytest.raises(DuplicateName, match=r"fn .occupied. is already registered$"):
+        r.lazy("occupied", "os.path:join")
+
+
 def test_a_loader_fills_the_registry_once_and_a_failure_is_not_remembered():
     calls = []
 
@@ -122,6 +147,13 @@ def test_a_loader_that_fails_midway_registers_nothing_and_the_error_is_the_real_
             r.names()
     assert r.table == {}
     assert r.names() == ["a", "b"]
+
+
+def test_a_loader_that_duplicates_a_key_registers_nothing():
+    r: Registry[int] = Registry("t", key=lambda _: "x", loader=lambda: [1, 2])
+    with pytest.raises(DuplicateName):
+        r.names()
+    assert r.table == {}  # atomic: nothing half-registered on a duplicate mid-fill
 
 
 def test_removing_a_name_from_a_loaded_registry_sticks():
@@ -164,7 +196,7 @@ EXPORT_KINDS = [
     "status",
     "worklog",
 ]
-TICKS = ["flow.sample"]
+TICKS = ["flow.sample", "merge_queue.integrator"]
 SEARCH_SOURCES = [
     "records",
     "sessions",
@@ -180,7 +212,7 @@ ITEM_KINDS = ["task", "phase", "bug", "doc", "research", "job"]
 HARNESSES = [
     "claude", "gemini", "codex", "copilot", "vscode", "kilo", "cursor", "kimi", "opencode",
     "glm", "qwen", "antigravity", "devin", "qodo", "tabnine", "aider", "cline", "windsurf",
-    "replit", "openhands", "goose", "cody", "dsh",
+    "replit", "openhands", "goose", "cody", "dsh", "grok",
 ]  # fmt: skip
 
 
@@ -249,8 +281,8 @@ def test_the_item_kinds_stay_a_plain_table_and_the_harnesses_list_the_same_names
 #: Hand-rolled `register*()` functions that mutate a module-level table and have not moved to
 #: `Registry` yet. This set may only shrink: a new seam uses `ddflow.core.registry`.
 HAND_ROLLED = {
-    "ddflow/core/schedule.py:register_filter",
-    "ddflow/core/schedule.py:register_key",
+    "ddflow/core/schedule/_filters.py:register_filter",
+    "ddflow/core/schedule/_filters.py:register_key",
     "ddflow/services/cadence.py:register_due",
     "ddflow/services/guidance/checks.py:register",
     "ddflow/services/guidance/review.py:register_trigger",
@@ -298,7 +330,7 @@ def _hand_rolled() -> set[str]:
     found: set[str] = set()
     for path in sorted((ROOT / "ddflow").rglob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
-        if rel == "ddflow/core/registry.py":
+        if rel in ("ddflow/core/registry.py", "ddflow/adapters/registry.py"):
             continue
         tree = ast.parse(path.read_text("utf-8"))
         names = _module_names(tree)

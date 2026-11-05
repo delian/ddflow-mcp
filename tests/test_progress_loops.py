@@ -267,6 +267,16 @@ def test_two_live_items_writing_the_same_files_are_reported():
     assert found and "src/x.py" in found[0].detail
 
 
+def test_a_phase_sharing_globs_with_its_own_task_is_not_duplicate_work():
+    """A phase never runs files, so a phase and its own task declaring the same globs is
+    the normal structure, not a duplicate (B-phase-globs-duplicate-work-with-own-task)."""
+    evs = [
+        ev(1, "phase.added", "P", {"globs": ["src/x.py"]}),
+        ev(2, "task.added", "T", {"parent": "P", "globs": ["src/x.py"]}),
+    ]
+    assert "duplicate_work" not in kinds(detect(evs))
+
+
 def test_a_finished_duplicate_is_not_reported():
     """Two items may legitimately touch one file over time — just not at once."""
     evs = [
@@ -412,7 +422,19 @@ def test_loops_exits_two_when_there_is_nothing_wrong(repo):
 def test_doctor_surfaces_loops(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--title", "c")
-    run_cli(repo, "task", "add", "A", "--title", "A fixture", "--phase", "P1", "--needs", "B")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "A",
+        "--title",
+        "A fixture",
+        "--phase",
+        "P1",
+        "--needs",
+        "B",
+        "--allow-unknown-needs",
+    )
     run_cli(repo, "task", "add", "B", "--title", "B fixture", "--phase", "P1", "--needs", "A")
     code, out, _ = run_cli(repo, "doctor")
     assert code == FAIL
