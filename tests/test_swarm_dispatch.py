@@ -449,6 +449,16 @@ def test_a_full_tree_cap_does_not_hold_an_item_that_takes_no_tree(repo):
     assert (out.data["status"], out.data["item"]) == (D.OFFER, "a")
 
 
+@pytest.mark.parametrize("wanted", [0, 1])
+def test_worktrees_off_still_offers_with_or_without_a_reservation(wanted):
+    st = _state(_q("a"))
+    cfg = Config()
+    cfg.worktree.enabled = False
+    cfg.schedule.reserved_slots = wanted
+    plan = SimpleNamespace(ready=[st.items["a"]], capped=[], overlapped=[])
+    assert PL._candidates(plan, st, cfg, caps(st, cfg, {}), {}) == ["a"]
+
+
 def test_next_lane_counts_a_holder_of_its_family_against_the_family_cap(repo):
     _queue(repo)
     _approve(repo, "ds")
