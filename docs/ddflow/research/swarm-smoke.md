@@ -64,8 +64,9 @@ refuses (B59a07c283d). The model corrected it on the next turn. No call was lost
 tool call appeared as plain text.
 
 `tool_call_reliable` exists only in the task text. The field that holds this is the route's `tool_call` catalog fact, and no route is
-committed. On this evidence `smoke.tool_call_fact` gives `v = true, s = "verified"` for both routes (20 calls and a 0.9 rate required,
-the 20 being this smoke's choice). The operator's `.ddflow/local/models.toml` does not exist yet, so nothing was written.
+committed. This evidence supports `v = true, s = "verified"` for both routes: each has over 20 calls and a rate above the 0.9 that
+`conformance_min_accuracy` asks for (the 20 is this smoke's own bar). The operator's `.ddflow/local/models.toml` does not exist yet, so
+nothing was written. `smoke.judge` reports each run's rate; turning it into a fact is left to the route that writes one.
 
 These are short, scripted runs of 5 to 14 calls. They say nothing about long sessions.
 

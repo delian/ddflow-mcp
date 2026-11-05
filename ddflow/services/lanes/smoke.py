@@ -74,6 +74,7 @@ class Check:
 @dataclass(frozen=True)
 class Verdict:
     checks: tuple[Check, ...]
+    reliability: Reliability
 
     @property
     def outcome(self) -> str:
@@ -216,7 +217,8 @@ def judge(
             _heartbeat(stream.calls),
             _logged("gate_record", of(*_GATE_KINDS), "gate outcome"),
             _stop(stream.calls, of(*PAST_THE_LEASE), exit_code),
-        )
+        ),
+        reliability(stream.calls),
     )
 
 
@@ -229,14 +231,3 @@ def majority(outcomes: Sequence[str]) -> str:
     if votes == 0 or votes * 2 < len(outcomes):
         return UNAVAILABLE
     return PASSED if passed * 2 > votes else FAILED
-
-
-def tool_call_fact(
-    r: Reliability, *, min_calls: int, min_rate: float, src: str, day: str
-) -> dict[str, Any]:
-    """The route's ``tool_call`` catalog fact (`services.facts`) the evidence supports. Too few
-    calls prove nothing either way: that stays ``unverified``."""
-    note = f"{r.calls - r.bad}/{r.calls} calls well formed on live lanes"
-    if r.calls < min_calls or r.rate is None:
-        return {"v": True, "s": "unverified", "src": src, "d": day, "note": note}
-    return {"v": r.rate >= min_rate, "s": "verified", "src": src, "d": day, "note": note}

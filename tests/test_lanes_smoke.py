@@ -136,6 +136,10 @@ def test_a_bad_call_lowers_the_rate():
 # --- the judgement ---------------------------------------------------------------------------
 
 
+def test_the_verdict_carries_the_runs_tool_call_reliability():
+    assert judged().reliability == S.Reliability(calls=5, bad=0)
+
+
 def test_a_clean_run_passes_every_step():
     v = judged()
     assert v.outcome == S.PASSED
@@ -251,16 +255,3 @@ def test_too_few_judged_runs_decide_nothing():
 
 def test_a_tie_is_not_a_pass():
     assert S.majority([S.PASSED, S.FAILED]) == S.FAILED
-
-
-# --- the fact --------------------------------------------------------------------------------
-
-
-def test_the_fact_is_verified_only_on_enough_clean_calls():
-    r = S.Reliability(calls=40, bad=0)
-    fact = S.tool_call_fact(r, min_calls=20, min_rate=0.9, src="smoke", day="2026-11-05")
-    assert fact["v"] is True and fact["s"] == "verified"
-    few = S.tool_call_fact(S.Reliability(5, 0), min_calls=20, min_rate=0.9, src="s", day="d")
-    assert few["s"] == "unverified"
-    poor = S.tool_call_fact(S.Reliability(40, 10), min_calls=20, min_rate=0.9, src="s", day="d")
-    assert poor["v"] is False and poor["s"] == "verified"
