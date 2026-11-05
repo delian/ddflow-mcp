@@ -24,12 +24,7 @@ from ddflow.services.swarm import remote as R
 from ddflow.services.swarm import seedpack as S
 
 FAKE_KEY = "-".join(["sk", "ant", "api03", "FAKEFAKEFAKE0123456789abcdefABCDEF0123456789zz"])
-ENV = {
-    "GIT_AUTHOR_NAME": "t",
-    "GIT_AUTHOR_EMAIL": "t@example.invalid",
-    "GIT_COMMITTER_NAME": "t",
-    "GIT_COMMITTER_EMAIL": "t@example.invalid",
-}
+ENV = {f"GIT_{r}_{w}": "t" for r in ("AUTHOR", "COMMITTER") for w in ("NAME", "EMAIL")}
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -43,6 +38,11 @@ def git(cwd: Path, *args: str) -> str:
     return p.stdout.strip()
 
 
+def _commit(cwd: Path) -> None:
+    git(cwd, "add", "-A")
+    git(cwd, "commit", "-q", "-m", "c")
+
+
 @pytest.fixture
 def repo(tmp_path):
     r = tmp_path / "host"
@@ -53,13 +53,16 @@ def repo(tmp_path):
     (r / "README.md").write_text("hi\n")
     (r / ".ddflow" / "events").mkdir(parents=True)
     (r / ".ddflow" / "events" / "x.jsonl").write_text('{"event":"private"}\n')
-    git(r, "add", "-A")
-    git(r, "commit", "-q", "-m", "one")
+    _commit(r)
     return r
 
 
 def _seed() -> str:
     return S.render(S.build(S.SeedInput(item_id="X-1", item_title="t", item_body="b")))
+
+
+def _out(repo, tmp_path, **kw):
+    return R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", **kw)
 
 
 def test_outbound_has_bundle_seed_manifest(repo, tmp_path):
@@ -86,20 +89,18 @@ def test_bundle_has_no_event_log_nor_history(repo, tmp_path):
 
 def test_secret_in_tracked_file_refuses_and_names_path(repo, tmp_path):
     (repo / "src" / "cfg.py").write_text(f'KEY = "{FAKE_KEY}"\n')
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "leak")
+    _commit(repo)
     with pytest.raises(R.RemoteError) as e:
-        R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+        _out(repo, tmp_path)
     assert "src/cfg.py" in str(e.value) and FAKE_KEY not in str(e.value)
     assert not (tmp_path / "o" / "base.bundle").exists()
 
 
 def test_secret_path_can_be_excluded_by_knob(repo, tmp_path):
     (repo / "src" / "cfg.py").write_text(f'KEY = "{FAKE_KEY}"\n')
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "leak")
+    _commit(repo)
     k = dataclasses.replace(R.Knobs(), exclude=(*R.Knobs().exclude, "src/cfg.py"))
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+    out = _out(repo, tmp_path, knobs=k)
     assert "cfg.py" not in git(repo, "ls-tree", "-r", "--name-only", out.root)
 
 
@@ -116,7 +117,7 @@ def test_seed_text_is_redacted_again(repo, tmp_path):
 def test_bundle_size_cap(repo, tmp_path):
     k = dataclasses.replace(R.Knobs(), bundle_max_bytes=10)
     with pytest.raises(R.RemoteError, match="bundle_max_bytes"):
-        R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+        _out(repo, tmp_path, knobs=k)
     assert "refs/ddflow" not in git(repo, "for-each-ref")
 
 
@@ -129,13 +130,12 @@ def _worker(tmp_path, out, edits: dict[str, str]):
     for p, t in edits.items():
         (w / p).parent.mkdir(parents=True, exist_ok=True)
         (w / p).write_text(t)
-    git(w, "add", "-A")
-    git(w, "commit", "-q", "-m", "work")
+    _commit(w)
     return w
 
 
 def test_return_from_pushed_branch_lands_on_host_branch(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": "print('b')\n", "src/new.py": "x=1\n"})
     got = R.import_return(repo, w, out, globs=("src/*.py",), branch="work")
     assert got.ok and got.branch == "swarm/remote/X-1/l"
@@ -149,7 +149,7 @@ def test_return_from_pushed_branch_lands_on_host_branch(repo, tmp_path):
 
 
 def test_return_from_bundle_file(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": "print('c')\n"})
     ret = tmp_path / "ret.bundle"
     git(w, "bundle", "create", str(ret), "work")
@@ -158,14 +158,14 @@ def test_return_from_bundle_file(repo, tmp_path):
 
 
 def test_outside_globs_reported_not_hidden(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"README.md": "changed\n"})
     got = R.import_return(repo, w, out, globs=("src/**",), branch="work")
     assert got.outside_globs == ("README.md",)
 
 
 def test_touching_event_log_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {".ddflow/events/evil.jsonl": '{"event":"approval"}\n'})
     got = R.import_return(repo, w, out, globs=("**",), branch="work")
     assert not got.ok and got.branch == "" and got.violations == (".ddflow/events/evil.jsonl",)
@@ -173,25 +173,24 @@ def test_touching_event_log_is_refused(repo, tmp_path):
 
 
 def test_returned_secret_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/k.py": f"K='{FAKE_KEY}'\n"})
     got = R.import_return(repo, w, out, globs=("src/**",), branch="work")
     assert not got.ok and got.secret_paths == ("src/k.py",) and got.branch == ""
 
 
 def test_unrelated_history_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = tmp_path / "other"
     git(tmp_path, "init", "-q", "-b", "x", str(w))
     (w / "f").write_text("1")
-    git(w, "add", "-A")
-    git(w, "commit", "-q", "-m", "unrelated")
+    _commit(w)
     with pytest.raises(R.RemoteError, match="descend"):
         R.import_return(repo, w, out, globs=("**",), branch="x")
 
 
 def test_remote_sources_refused_no_network(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     for src in (
         "ssh://example.invalid/r.git",
         "git@example.invalid:r.git",
@@ -202,7 +201,7 @@ def test_remote_sources_refused_no_network(repo, tmp_path):
 
 
 def test_return_size_and_commit_caps(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": "print('d')\n"})
     ret = tmp_path / "ret.bundle"
     git(w, "bundle", "create", str(ret), "work")
@@ -215,7 +214,7 @@ def test_return_size_and_commit_caps(repo, tmp_path):
 
 
 def test_import_leaves_the_host_tree_alone(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": "print('e')\n"})
     R.import_return(repo, w, out, globs=("**",), branch="work")
     assert git(repo, "status", "--porcelain") == ""
@@ -234,7 +233,7 @@ def test_proposals_are_data_never_approvals():
     assert [p.kind[:5] for p in got.proposals] == ["compl", "xxxxx"]
     assert all(p.trust == "unknown" for p in got.proposals)
     assert FAKE_KEY not in got.proposals[0].reason
-    assert got.dropped == 2 and not hasattr(got.proposals[0], "approved")
+    assert got.dropped == 2 and not any(hasattr(p, "approved") for p in got.proposals)
     assert 'trust="unknown"' in got.proposals[0].fenced()
 
 
@@ -251,25 +250,23 @@ def test_ddflow_config_and_nested_dotenv_stay_home(repo, tmp_path):
     (repo / "src" / ".env").write_text("A=1\n")
     git(repo, "add", "-f", "-A")
     git(repo, "commit", "-q", "-m", "cfg")
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     tree = git(repo, "ls-tree", "-r", "--name-only", out.root)
     assert ".ddflow" not in tree and ".env" not in tree and "src/a.py" in tree
 
 
 def test_key_inside_a_binary_file_is_found(repo, tmp_path):
     (repo / "src" / "blob.bin").write_bytes(b"\0\xff " + FAKE_KEY.encode() + b" \0")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "bin")
+    _commit(repo)
     with pytest.raises(R.RemoteError, match=r"src/blob\.bin"):
-        R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+        _out(repo, tmp_path)
 
 
 def test_file_too_big_to_scan_needs_consent_that_saw_it(repo, tmp_path):
     (repo / "src" / "big.txt").write_text("x" * 200)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "big")
+    _commit(repo)
     k = dataclasses.replace(R.Knobs(), scan_max_blob_bytes=100)
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+    out = _out(repo, tmp_path, knobs=k)
     assert out.unscanned == ("src/big.txt",)
     assert json.loads(out.manifest.read_text())["unscanned"] == list(out.unscanned)
     t = Recording()
@@ -283,15 +280,14 @@ def test_file_too_big_to_scan_needs_consent_that_saw_it(repo, tmp_path):
 def test_scan_reads_a_tree_in_batches(repo, tmp_path):
     (repo / "src" / "b.py").write_text(f'K = "{FAKE_KEY}"\n')
     (repo / "src" / "c.py").write_text("y = 2\n" * 40)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "many")
+    _commit(repo)
     k = dataclasses.replace(R.Knobs(), scan_batch_bytes=1)
     with pytest.raises(R.RemoteError, match=r"src/b\.py"):
-        R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+        _out(repo, tmp_path, knobs=k)
 
 
 def test_seed_commit_survives_gc_until_forget(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     git(repo, "gc", "-q", "--prune=now")
     w = _worker(tmp_path, out, {"src/a.py": "print('g')\n"})
     ret = tmp_path / "ret.bundle"
@@ -302,15 +298,13 @@ def test_seed_commit_survives_gc_until_forget(repo, tmp_path):
 
 
 def test_outbound_record_round_trip(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     back = R.Outbound.from_record(json.loads(json.dumps(out.record())))
     assert back == out
     assert out.base not in out.manifest.read_text()  # the lane is not told the host's commit
 
 
-@pytest.mark.parametrize(
-    ("item", "lane"), [("a-b", "c"), ("a", "b-c")], ids=["item-dash", "lane-dash"]
-)
+@pytest.mark.parametrize(("item", "lane"), [("a-b", "c"), ("a", "b-c")])
 def test_two_lanes_never_share_a_branch(repo, tmp_path, item, lane):
     out = R.build_outbound(repo, "main", item, lane, _seed(), tmp_path / "o")
     w = _worker(tmp_path, out, {"src/a.py": "print('n')\n"})
@@ -336,33 +330,42 @@ def _link_worker(tmp_path, out, mode: str):
     return w
 
 
-@pytest.mark.parametrize(
-    ("mode", "path"), [("120000", "src/key"), ("160000", "vendor/sub")], ids=["symlink", "gitlink"]
-)
+@pytest.mark.parametrize(("mode", "path"), [("120000", "src/key"), ("160000", "vendor/sub")])
 def test_returned_link_is_refused(repo, tmp_path, mode, path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _link_worker(tmp_path, out, mode)
     got = R.import_return(repo, w, out, globs=("**",), branch="work")
     assert not got.ok and got.violations == (path,) and got.branch == ""
 
 
 def test_returned_change_to_ddflow_config_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {".ddflow/config.toml": "[gates]\nrequired=[]\n"})
     got = R.import_return(repo, w, out, globs=("**",), branch="work")
     assert not got.ok and got.violations == (".ddflow/config.toml",)
 
 
+def test_lane_history_keeps_no_ref_once_landed(repo, tmp_path):
+    out = _out(repo, tmp_path)
+    w = _worker(tmp_path, out, {"src/a.py": "print('h')\n", "src/k.py": f"K='{FAKE_KEY}'\n"})
+    git(w, "rm", "-q", "src/k.py")
+    git(w, "commit", "-q", "-m", "hide it")
+    got = R.import_return(repo, w, out, globs=("**",), branch="work")
+    assert got.ok and "refs/ddflow/remote/" not in git(repo, "for-each-ref")
+    assert git(repo, "rev-list", "--count", f"{out.base}..{got.branch}") == "1"
+
+
 def test_refused_return_keeps_no_ref(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/k.py": f"K='{FAKE_KEY}'\n"})
     got = R.import_return(repo, w, out, globs=("**",), branch="work")
     assert not got.ok and got.tip
     assert "refs/ddflow/remote/" not in git(repo, "for-each-ref")
+    assert git(repo, "for-each-ref", "refs/heads/swarm") == ""
 
 
 def test_return_with_no_change_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = tmp_path / "idle"
     git(tmp_path, "init", "-q", "-b", "x", str(w))
     git(w, "fetch", "-q", str(out.bundle), f"{out.ref}:refs/heads/work")
@@ -371,16 +374,17 @@ def test_return_with_no_change_is_refused(repo, tmp_path):
     assert "refs/ddflow/remote/" not in git(repo, "for-each-ref")
 
 
-def test_returned_unscanned_file_is_reported(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+def test_returned_file_too_big_to_scan_is_refused(repo, tmp_path):
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/big.txt": "x" * 200})
     k = dataclasses.replace(R.Knobs(), scan_max_blob_bytes=100)
     got = R.import_return(repo, w, out, globs=("**",), branch="work", knobs=k)
-    assert got.ok and got.unscanned == ("src/big.txt",)
+    assert not got.ok and got.unscanned == ("src/big.txt",) and got.branch == ""
+    assert git(repo, "for-each-ref", "refs/heads/swarm") == ""
 
 
 def test_pushed_branch_over_the_size_cap_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": os.urandom(4000).hex()})
     k = dataclasses.replace(R.Knobs(), return_max_bytes=100)
     with pytest.raises(R.RemoteError, match="return_max_bytes"):
@@ -388,8 +392,9 @@ def test_pushed_branch_over_the_size_cap_is_refused(repo, tmp_path):
     assert "refs/ddflow/remote/" not in git(repo, "for-each-ref")
 
 
-def test_tree_git_itself_calls_malformed_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+@pytest.mark.parametrize("via", ["branch", "bundle"])
+def test_malformed_tree_never_lands(repo, tmp_path, via):
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": "print('m')\n"})
     blob = git(w, "rev-parse", "HEAD:src/a.py")
     p = subprocess.run(
@@ -400,13 +405,39 @@ def test_tree_git_itself_calls_malformed_is_refused(repo, tmp_path):
     )
     bad = git(w, "commit-tree", p.stdout.decode().strip(), "-p", "work", "-m", "evil")
     git(w, "update-ref", "refs/heads/work", bad)
+    src, kw = w, {"branch": "work"}
+    if via == "bundle":
+        src, kw = tmp_path / "ret.bundle", {}
+        git(w, "bundle", "create", "-q", str(src), "work")
     with pytest.raises(R.RemoteError):
-        R.import_return(repo, w, out, globs=("**",), branch="work")
+        R.import_return(repo, src, out, globs=("**",), **kw)
     assert git(repo, "for-each-ref", "refs/heads/swarm") == ""
 
 
+def test_name_that_is_not_text_cannot_hide_a_link_or_a_secret(repo, tmp_path):
+    out = _out(repo, tmp_path)
+    w = _worker(tmp_path, out, {"src/z.py": "z=1\n"})
+    os.symlink("/etc/shadow", os.fsencode(w) + b"/src/\xff")
+    with open(os.fsencode(w) + b"/src/\xfe", "w") as fh:
+        fh.write(f"K='{FAKE_KEY}'\n")
+    _commit(w)
+    got = R.import_return(repo, w, out, globs=("**",), branch="work")
+    assert not got.ok and len(got.violations) == 1 and len(got.secret_paths) == 1
+
+
+def test_excluded_file_with_a_name_that_is_not_text_stays_home(repo, tmp_path):
+    with open(os.fsencode(repo) + b"/.ddflow/\xff", "w") as fh:
+        fh.write("private\n")
+    _commit(repo)
+    out = _out(repo, tmp_path)
+    assert ".ddflow" not in git(repo, "ls-tree", "-r", "--name-only", out.root)
+    w = _worker(tmp_path, out, {"src/a.py": "print('o')\n"})
+    got = R.import_return(repo, w, out, globs=("**",), branch="work")
+    assert got.ok and "377" in git(repo, "ls-tree", "--name-only", f"{got.branch}:.ddflow")
+
+
 def test_forged_ref_name_in_a_bundle_is_refused(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     w = _worker(tmp_path, out, {"src/a.py": "print('f')\n"})
     ret = tmp_path / "ret.bundle"
     git(w, "bundle", "create", "-q", str(ret), "work")
@@ -419,9 +450,9 @@ def test_module_cannot_write_the_log_or_answer_a_gate():
     """D-swarm-answers Q9, structurally: nothing here reaches the log, gates or approvals."""
     tree = ast.parse(Path(R.__file__).read_text())
     mods = [
-        f"{'.' * n.level}{n.module or ''}.{a.name}"
+        f"{getattr(n, 'module', '') or ''}.{a.name}"
         for n in ast.walk(tree)
-        if isinstance(n, ast.ImportFrom)
+        if isinstance(n, ast.Import | ast.ImportFrom)
         for a in n.names
     ]
     for word in ("event", "gate", "approval", "lifecycle", "ddflow.api"):
@@ -522,12 +553,7 @@ def test_copy_out_over_the_cap_leaves_nothing(ssh, tmp_path):
     r = t.copy_out("l", "r", back, 1000)
     assert r.status == "failed" and "1000" in r.detail
     assert not back.exists() and not list(tmp_path.glob("back*"))
-
-
-def test_copy_out_of_a_missing_file_is_failed_not_empty(ssh, tmp_path):
-    k, _ = ssh
-    r = R.SshTransport("h", k).copy_out("l", "nothing", tmp_path / "x", 1000)
-    assert r.status == "failed" and not (tmp_path / "x").exists()
+    assert t.copy_out("l", "nothing", back, 1000).status == "failed" and not back.exists()
 
 
 @pytest.mark.parametrize("name", ["../x", "a/b", ".hidden", "-f", ""])
@@ -617,14 +643,10 @@ def test_hanging_host_is_cut_by_the_timeouts(ssh, tmp_path):
     assert time.monotonic() - begun < 15 and not (tmp_path / "g").exists()
 
 
-def test_unreadable_answer_is_failed(ssh):
+def test_unreadable_answer_is_failed_and_missing_ssh_unavailable(ssh, tmp_path):
     k, _ = ssh
     assert R.SshTransport("garbage", k).observe("l").status == "failed"
-
-
-def test_missing_ssh_binary_is_unavailable(tmp_path):
-    k = dataclasses.replace(R.Knobs(), ssh_argv=(str(tmp_path / "no-ssh"),))
-    t = R.SshTransport("h", k)
+    t = R.SshTransport("h", dataclasses.replace(k, ssh_argv=(str(tmp_path / "no-ssh"),)))
     assert t.observe("l").status == "unavailable"
     assert t.copy_out("l", "f", tmp_path / "g", 10).status == "unavailable"
 
@@ -668,10 +690,9 @@ class Recording:
         {"lane": "other"},
         {"expires_at": 50.0},
     ],
-    ids=["none", "host", "item", "lane", "expired"],
 )
 def test_nothing_leaves_without_consent_for_this_host_item_and_lane(repo, tmp_path, bad):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     t = Recording()
     with pytest.raises(R.RemoteError, match="consent"):
         R.ship(t, out, None if bad is None else _consent(out, **bad), now=60.0)
@@ -679,7 +700,7 @@ def test_nothing_leaves_without_consent_for_this_host_item_and_lane(repo, tmp_pa
 
 
 def test_ship_stops_at_the_first_copy_that_fails(repo, tmp_path):
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o")
+    out = _out(repo, tmp_path)
     t = Recording()
     assert R.ship(t, out, _consent(out), now=60.0).status == "failed"
     assert t.sent == ["base.bundle", "SEED.md"]
@@ -687,7 +708,7 @@ def test_ship_stops_at_the_first_copy_that_fails(repo, tmp_path):
 
 def test_trip_out_and_back_over_ssh(repo, tmp_path, ssh):
     k, home = ssh
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+    out = _out(repo, tmp_path, knobs=k)
     t = R.SshTransport("h", k)
     assert R.ship(t, out, _consent(out), now=60.0).ok
     assert t.start("l", R.lane_argv(out, AGENT)).ok
@@ -703,7 +724,7 @@ def test_trip_out_and_back_over_ssh(repo, tmp_path, ssh):
 
 def test_lane_that_did_no_work_returns_nothing(repo, tmp_path, ssh):
     k, _ = ssh
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+    out = _out(repo, tmp_path, knobs=k)
     t = R.SshTransport("h", k)
     assert R.ship(t, out, _consent(out), now=60.0).ok
     assert t.start("l", R.lane_argv(out, ("true",))).ok
@@ -741,7 +762,7 @@ class _Pipe:
 
 def test_acp_speaks_through_the_ssh_stdio_with_clean_stdout(repo, tmp_path, ssh):
     k, _ = ssh
-    out = R.build_outbound(repo, "main", "X-1", "l", _seed(), tmp_path / "o", knobs=k)
+    out = _out(repo, tmp_path, knobs=k)
     t = R.SshTransport("h", k)
     assert R.ship(t, out, _consent(out), now=60.0).ok
     argv = t.stdio_argv("l", R.lane_argv(out, (sys.executable, "-c", ACP_AGENT)))

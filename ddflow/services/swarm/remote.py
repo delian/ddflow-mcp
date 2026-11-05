@@ -126,13 +126,13 @@ class Returned:
     ok: bool
     branch: str  # the host branch holding the work; "" when refused
     sha: str
-    tip: str  # the lane's own tip (under refs/ddflow/remote/ unless refused)
+    tip: str  # the lane's own tip, for the record: no ref keeps it
     changed: tuple[str, ...]
     outside_globs: tuple[str, ...]
     violations: tuple[str, ...]  # excluded paths and links the lane touched
     secret_paths: tuple[str, ...]
     commits: int
-    unscanned: tuple[str, ...] = ()  # changed files the secret scan could not read
+    unscanned: tuple[str, ...] = ()  # changed files too big to scan: refused too
 
 
 def _git(repo: Path, k: Knobs, *args: str, **kw) -> G.GitResult:
@@ -263,19 +263,10 @@ def build_outbound(
 
     def tree(env: dict[str, str]) -> str:
         _git(repo, k, "read-tree", base_sha_s, env=env)
-        names = _git(repo, k, "ls-files", "-z", env=env, z=True).paths() or []
-        drop = [n for n in names if _excluded(n, k)]
+        drop = [p for _, _, p, _ in _tree_entries(repo, k, base_sha_s) if _excluded(p, k)]
         if drop:
-            _git(
-                repo,
-                k,
-                "update-index",
-                "--force-remove",
-                "-z",
-                "--stdin",
-                env=env,
-                input="\0".join(drop) + "\0",
-            )
+            raw = b"".join(os.fsencode(p) + b"\0" for p in drop)
+            _git(repo, k, "update-index", "--force-remove", "-z", "--stdin", env=env, input=raw)
         return _git(repo, k, "write-tree", env=env).out
 
     tree_sha = _with_index(repo, k, tree)
@@ -337,9 +328,8 @@ def _ref(family: str, item: str, lane: str) -> str:
 
 
 def forget(repo: Path, out: Outbound, knobs: Knobs = DEFAULT) -> None:
-    """Drop the host refs of one lane, once its branch is settled; the branch itself stays."""
-    for ref in (out.ref, _ref("remote", out.item, out.lane)):
-        G.run(Path(repo), "update-ref", "-d", ref, timeout=knobs.git_timeout_s)
+    """Drop the seed ref of one lane, once its branch is settled; the branch itself stays."""
+    G.run(Path(repo), "update-ref", "-d", out.ref, timeout=knobs.git_timeout_s)
 
 
 def _source(source: object, k: Knobs, branch: str | None) -> tuple[Path, str]:
@@ -372,21 +362,13 @@ def _land(repo: Path, k: Knobs, out: Outbound, tip: str, lane: str) -> tuple[str
 
     def tree(env: dict[str, str]) -> str:
         _git(repo, k, "read-tree", tip, env=env)
-        back = [
-            f"{m} {sha}\t{path}"
+        back = b"".join(
+            f"{m} {sha}\t".encode() + os.fsencode(path) + b"\0"
             for m, sha, path, _ in _tree_entries(repo, k, out.base)
             if _excluded(path, k)
-        ]
+        )
         if back:
-            _git(
-                repo,
-                k,
-                "update-index",
-                "--add",
-                "--index-info",
-                env=env,
-                input="\n".join(back) + "\n",
-            )
+            _git(repo, k, "update-index", "--add", "-z", "--index-info", env=env, input=back)
         return _git(repo, k, "write-tree", env=env).out
 
     t = _with_index(repo, k, tree)
@@ -409,8 +391,9 @@ def import_return(
 ) -> Returned:
     """Take a lane's pushed branch or bundle from a local path; land it on a host branch.
 
-    Whatever is refused leaves no ref behind. The size of a pushed branch can only be measured
-    once fetched; a bundle file is measured first, so prefer ``collect`` for an untrusted lane.
+    Only the landed commit stays: the lane's own history, which nothing scanned, keeps no
+    ref. A pushed branch can only be measured once fetched; a bundle file is measured first,
+    so prefer ``collect`` for an untrusted lane.
     """
     k, repo = knobs, Path(repo)
     src, srcref = _source(source, k, branch)
@@ -434,14 +417,12 @@ def import_return(
     tip = _git(repo, k, "rev-parse", "--verify", dest).out
     try:
         got = _inspect(repo, k, out, tip, tuple(globs), cfg)
-        if got.ok:
-            name, sha = _land(repo, k, out, tip, out.lane)
-            return dataclasses.replace(got, branch=name, sha=sha)
-    except RemoteError:
+        if not got.ok:
+            return got
+        name, sha = _land(repo, k, out, tip, out.lane)
+        return dataclasses.replace(got, branch=name, sha=sha)
+    finally:
         G.run(repo, "update-ref", "-d", dest, timeout=k.git_timeout_s)
-        raise
-    G.run(repo, "update-ref", "-d", dest, timeout=k.git_timeout_s)
-    return got
 
 
 def _inspect(
@@ -457,7 +438,7 @@ def _inspect(
     size = int(_git(repo, k, "rev-list", "--objects", "--disk-usage", span).out)
     if size > k.return_max_bytes:
         raise RemoteError(f"{size} bytes is over [swarm] remote_return_max_bytes")
-    names = _git(repo, k, "diff", "--name-only", "--no-renames", "-z", out.root, tip, z=True)
+    names = _git(repo, k, "diff", "--name-only", "--no-renames", out.root, tip, z=True)
     changed = tuple(sorted(names.paths() or []))
     if not changed:
         raise RemoteError("the returned branch makes no change to the seed commit")
@@ -467,7 +448,7 @@ def _inspect(
     outside = tuple(p for p in changed if not any(inside(p, g) for g in globs))
     hits, unscanned = _scan(repo, k, tip, cfg, touched)
     return Returned(
-        not bad and not hits, "", "", tip, changed, outside, bad, tuple(hits), commits,
+        not (bad or hits or unscanned), "", "", tip, changed, outside, bad, tuple(hits), commits,
         tuple(unscanned),
     )  # fmt: skip
 
@@ -738,7 +719,7 @@ def lane_argv(out: Outbound, agent: Sequence[str]) -> tuple[str, ...]:
         "if [ ! -d work ]; then\n"
         "git init -q work >&2 &&\n"
         f"git -C work fetch -q ../{BUNDLE} {fetch} >&2 &&\n"
-        "git -C work checkout -q lane >&2 || exit 125\n"
+        "git -C work checkout -q lane >&2 || { rm -rf work; exit 125; }\n"
         "fi\n"
         f"cd work || exit 125\nrm -f ../{RETURN}\n"
         f"{shlex.join(agent)}\nrc=$?\n"
