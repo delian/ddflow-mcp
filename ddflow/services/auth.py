@@ -59,7 +59,7 @@ ISSUED_KIND, REVOKED_KIND = "token.issued", "token.revoked"
 _TOKEN = re.compile(r"ddft_([0-9a-f]{12})_[0-9a-f]{64}")
 _CODE = re.compile(r"([0-9a-f]{6})-([0-9A-Z]+)")
 _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
-_FORMAT = 1
+STORE_VERSION = 1
 _PRIVATE_FILE, _PRIVATE_DIR = 0o600, 0o700
 _OTHERS_WRITE = stat.S_IWGRP | stat.S_IWOTH
 _NO_TOKEN = (("mcp",), ("tokens", "redeem"))
@@ -140,7 +140,7 @@ def _store(repo: Path | str) -> Path:
 
 
 def _empty() -> dict[str, Any]:
-    return {"format": _FORMAT, "tokens": {}, "pairings": {}}
+    return {"format": STORE_VERSION, "tokens": {}, "pairings": {}}
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -164,7 +164,7 @@ def _read(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError) as exc:
         raise AuthRefused(f"refusing: the token store {path} is unreadable ({exc}).") from exc
-    if not isinstance(data, dict) or data.get("format") != _FORMAT:
+    if not isinstance(data, dict) or data.get("format") != STORE_VERSION:
         raise AuthRefused(f"refusing: the token store {path} is not one this ddflow reads.")
     return {**_empty(), **data}
 

@@ -304,6 +304,10 @@ TERMINAL_ONLY: dict[str, str] = {
         "T3: a command reviewer runs any program and can print any verdict, so only a person "
         "adds one; over chat it would let whoever types into the session run code"
     ),
+    "ddflow/services/auth.py:_person": (
+        "T3: minting or ending a credential prints or relies on a secret, and a token that "
+        "passed through chat sits in an agent's context and transcript (P-remote.auth)"
+    ),
 }
 
 #: Refusals NOT yet routed, honestly listed with the follow-up that routes them (not T3: the
