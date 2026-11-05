@@ -85,7 +85,7 @@ def read_only_rows(
     is never created or changed. A file that cannot be read for any reason (missing, locked,
     not a database, another schema) is no rows."""
     try:
-        uri = f"{path.resolve().as_uri()}?mode=ro"
+        uri = f"{path.absolute().as_uri()}?mode=ro"
         with closing(sqlite3.connect(uri, uri=True, timeout=timeout_s)) as con:
             return con.execute(sql, params).fetchall()
     except (sqlite3.Error, OSError):
