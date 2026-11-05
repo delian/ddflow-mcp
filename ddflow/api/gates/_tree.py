@@ -118,33 +118,55 @@ def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     return (repo, "") if gdef.cwd != "worktree" else item_tree(repo, cfg, st, it, called_from)
 
 
-def _no_tree_reason(it, item: str, gate: str, held: str, force: bool = False) -> tuple[str, str]:
+def _kept_tree(repo: Path, it) -> Path | None:
+    """The item's worktree path when a merge KEPT it on disk (``--keep`` or
+    ``[worktree].remove_on_merge = false``), else None.
+
+    `merge` records `merged_sha` for a removed and a kept tree alike, so a message that
+    says "the merge removed its worktree" off that field alone is false for a kept tree
+    (B-gate-run-after-keep-merge): the tree was never removed, the kept checkout merely
+    does not stand at the merged tree (a merge-commit lands main's other commits beneath
+    the branch tip), so it is not the place a post-merge gate may honestly measure."""
+    if not it.worktree:
+        return None
+    path = W.load_path(repo, it.worktree)
+    return path if path.is_dir() else None
+
+
+def _no_tree_reason(repo: Path, it, item: str, gate: str, held: str, force: bool = False) -> tuple[str, str]:
     """(why a worktree gate has nowhere to run, the recorded outcome it leaves standing or "").
     A MERGED item's tree is gone (DX-gate-run-after-merge): a pre-merge pass is kept and
-    `complete` uses it; without one the reason says to run gates before `ddflow merge`."""
+    `complete` uses it; without one the reason says to run gates before `ddflow merge`.
+    A KEPT tree (B-gate-run-after-keep-merge) is not "removed", and the reason says so."""
     if it.merged_sha:
         sha = it.merged_sha[:12]
         prior = it.gate_outcome(gate)
+        kept = _kept_tree(repo, it)
+        disposition = (
+            f"its worktree was KEPT at {kept}, but that tree does not stand at the merged "
+            f"tree (it was moved or dirtied off the merge)"
+            if kept is not None
+            else "the merge removed its worktree"
+        )
         if prior == "passed" and force:
             return (
-                f"{item} merged ({sha}) and the merge removed its worktree: --force asked "
-                f"for a fresh {gate} measurement that cannot be taken, so the pre-merge "
-                f"pass is REPLACED by unavailable (it stays in the log). Record the real "
-                f"outcome with `ddflow gate record {item} {gate} --outcome passed "
-                f"--evidence ...`.",
+                f"{item} merged ({sha}) and {disposition}: --force asked for a fresh {gate} "
+                f"measurement that cannot be taken, so the pre-merge pass is REPLACED by "
+                f"unavailable (it stays in the log). Record the real outcome with "
+                f"`ddflow gate record {item} {gate} --outcome passed --evidence ...`.",
                 "",
             )
         if prior == "passed":
             return (
-                f"{item} merged ({sha}) and the merge removed its worktree: the recorded "
-                f"{gate} outcome (passed before the merge) stands and `complete` uses it.",
+                f"{item} merged ({sha}) and {disposition}: the recorded {gate} outcome "
+                f"(passed before the merge) stands and `complete` uses it.",
                 prior,
             )
         return (
-            f"{item} merged ({sha}) and the merge removed its worktree, so {gate} cannot run "
-            f"now; gates are run before `ddflow merge {item}`. Recording UNAVAILABLE; "
-            f"if it did pass on the merged tree, say so with `ddflow gate record {item} "
-            f"{gate} --outcome passed --evidence ...`.",
+            f"{item} merged ({sha}) and {disposition}, so {gate} cannot run now; gates are "
+            f"run before `ddflow merge {item}`. Recording UNAVAILABLE; if it did pass on the "
+            f"merged tree, say so with `ddflow gate record {item} {gate} --outcome passed "
+            f"--evidence ...`.",
             "",
         )
     why = (
