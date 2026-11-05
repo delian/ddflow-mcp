@@ -108,17 +108,35 @@ def _strip_heredocs(text: str) -> str:
     return "\n".join(out)
 
 
-def _logical_lines(text: str) -> list[str]:
-    """`text` split at the newlines that ARE command separators. A newline is data, not a
-    boundary, only inside the literal body of a quote — `python3 -c "<line break>"` is one line
-    to the shell — so a `;` on the line that opens the quote is still seen for the separator
-    it is. The shell still runs the `$(` ... `)` / backtick bodies a `"..."` holds, so their
-    newlines stay separators; a backslash-newline is a continuation, not a boundary either."""
+def _strip_continuations(text: str) -> str:
+    """`text` with a backslash-newline OUTSIDE a single quote removed: a line continuation
+    joins a `$` / backtick across the break, so it is still read as a command substitution.
+    A single-quoted body is literal, so its backslash stays."""
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "'":
+            j = text.find("'", i + 1)
+            out.append(text[i:] if j < 0 else text[i : j + 1])
+            i = n if j < 0 else j + 1
+        elif c == "\\" and i + 1 < n and text[i + 1] == "\n":
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _scan(text: str) -> tuple[list[str], list[str]]:
+    """Split `text` at the newlines that ARE command separators, and note the interiors of the
+    `$(` ... `)` / backquoted command substitutions (whose commands run as commands). A newline
+    is data only inside a quote's literal body; a single-quoted `$(` or backtick is data."""
     n = len(text)
     cut = [False] * n
+    bodies: list[str] = []
 
-    def mark_command(i: int, closer: str) -> int:
-        """Classify the `\n` at command position as separators; return the index of `closer`."""
+    def command(i: int, closer: str) -> int:
         j = i
         while j < n:
             c = text[j]
@@ -127,22 +145,26 @@ def _logical_lines(text: str) -> list[str]:
             if c == "\n":
                 cut[j] = True
                 j += 1
-            elif c == "\\":  # an escape outside quotes: the next char is data, not a separator
+            elif c == "\\":  # an escape: skip it and its character (a continuation is stripped)
                 j += 2 if j + 1 < n else 1
-            elif c == "'":  # single quote: its body is literal data until the next single quote
+            elif c == "'":
                 k = text.find("'", j + 1)
                 j = j + 1 if k < 0 else k + 1
             elif c == '"':
-                j = mark_dquote(j)
-            elif c == "`":  # a backtick body is command position: its newlines are separators
-                j = mark_command(j + 1, "`") + 1
+                j = dquote(j)
+            elif c == "`":
+                k = command(j + 1, "`")
+                bodies.append(text[j + 1 : k])
+                j = k + 1
             elif c == "$" and j + 1 < n and text[j + 1] == "(":
-                j = mark_command(j + 2, ")") + 1
+                k = command(j + 2, ")")
+                bodies.append(text[j + 2 : k])
+                j = k + 1
             else:
                 j += 1
         return j
 
-    def mark_dquote(j: int) -> int:
+    def dquote(j: int) -> int:
         """From the `"` at `j`: its literal body is data, but `$(` / backtick bodies inside
         recurse as command position (their newlines are separators). Returns after the `"`."""
         k = j + 1
@@ -153,14 +175,18 @@ def _logical_lines(text: str) -> list[str]:
             if cc == "\\":
                 k += 2 if k + 1 < n else 1
             elif cc == "`":
-                k = mark_command(k + 1, "`") + 1
+                kk = command(k + 1, "`")
+                bodies.append(text[k + 1 : kk])
+                k = kk + 1
             elif cc == "$" and k + 1 < n and text[k + 1] == "(":
-                k = mark_command(k + 2, ")") + 1
+                kk = command(k + 2, ")")
+                bodies.append(text[k + 2 : kk])
+                k = kk + 1
             else:
                 k += 1
         return k
 
-    mark_command(0, "")
+    command(0, "")
 
     lines: list[str] = []
     cur: list[str] = []
@@ -172,7 +198,17 @@ def _logical_lines(text: str) -> list[str]:
             cur.append(ch)
     if cur:
         lines.append("".join(cur))
-    return lines
+    return lines, bodies
+
+
+def _logical_lines(text: str) -> list[str]:
+    """The command-position spans of `text`: `_scan` at its newlines, continuations stripped."""
+    return _scan(_strip_continuations(text))[0]
+
+
+def _substitutions(text: str) -> list[str]:
+    """The interiors of the `$(` ... `)` / backquoted command substitutions in `text`."""
+    return _scan(_strip_continuations(text))[1]
 
 
 def _split(text: str) -> list[list[str]]:
@@ -198,19 +234,24 @@ def _split(text: str) -> list[list[str]]:
 
 
 def _commands(text: str) -> list[list[str]]:
-    """Each command of `text` as its words, and of the strings given to `sh -c` (three levels)."""
+    """Each command of `text` as its words, of the strings given to `sh -c`, and of the
+    `$(` ... `)` / backquoted command substitutions (three nested levels of each)."""
     cmds = _split(text)
     todo = cmds
-    for _ in range(3):  # three nested `sh -c` levels are looked into
+    bodies = _substitutions(text)
+    for _ in range(3):
         found: list[list[str]] = []
         for c in todo:
-            body = _head(c)
-            if body and body[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in body:
-                i = body.index("-c")
-                if i + 1 < len(body):
-                    found.extend(_split(body[i + 1]))
+            head = _head(c)
+            if head and head[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in head:
+                i = head.index("-c")
+                if i + 1 < len(head):
+                    found.extend(_split(head[i + 1]))
+        for b in bodies:
+            found.extend(_split(b))
         cmds.extend(found)
         todo = found
+        bodies = [s for b in bodies for s in _substitutions(b)]
     return cmds
 
 
