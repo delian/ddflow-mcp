@@ -48,8 +48,8 @@ class TokenRow:
 
     at: float
     model: str
-    input: int
-    output: int
+    input: int | None
+    output: int | None
     cache_read: int | None = None
     cache_write: int | None = None
 
@@ -95,8 +95,8 @@ def _merged(old: TokenRow, new: TokenRow) -> TokenRow:
     return TokenRow(
         max(old.at, new.at),
         old.model,
-        max(old.input, new.input),
-        max(old.output, new.output),
+        most(old.input, new.input),
+        most(old.output, new.output),
         most(old.cache_read, new.cache_read),
         most(old.cache_write, new.cache_write),
     )
@@ -153,7 +153,8 @@ def _scan(path: Path, since: float, rows: dict, bare: dict) -> None:
             key = (mid, rid) if mid and rid else (str(path), n)
             row = _row_of(message, at)
             if row is None:
-                bare.setdefault(key, at)
+                held = bare.get(key, at)  # the latest time, as `_merged`; no time beats any
+                bare[key] = None if held is None or at is None else max(held, at)
             else:
                 rows[key] = _merged(rows[key], row) if key in rows else row
 
@@ -176,6 +177,11 @@ def transcript_usage(root: Path, since: float, max_bytes: int) -> TranscriptUsag
 
 def _breakdown(rows: Iterable[TokenRow]) -> dict[str, int]:
     return {kind: sum(getattr(r, kind) or 0 for r in rows) for kind in TOKEN_FIELDS}
+
+
+def _gaps(ctx: B.MeterContext, rows: Iterable[TokenRow]) -> int:
+    """Turns missing a kind the total counts: the total is a lower bound by that many."""
+    return sum(1 for r in rows if any(getattr(r, k) is None for k in ctx.token_fields))
 
 
 def _tokens(
@@ -219,8 +225,9 @@ def read_claude_tokens(ctx: B.MeterContext) -> list[B.Reading]:
     for window, start in ctx.windows.items():
         rows = [r for r in usage.rows if r.at >= start]
         bare = sum(1 for at in usage.unmetered if at is None or at >= start)
-        gaps = sum(1 for r in rows if any(getattr(r, k) is None for k in ctx.token_fields))
-        out.append(_tokens(ctx, CLAUDE_SOURCE, CLAUDE, window, _breakdown(rows), bare + gaps))
+        out.append(
+            _tokens(ctx, CLAUDE_SOURCE, CLAUDE, window, _breakdown(rows), bare + _gaps(ctx, rows))
+        )
     return out
 
 
@@ -252,12 +259,13 @@ def _kilo_rows(ctx: B.MeterContext, since: float) -> list[tuple]:
 
 def _kilo_token_row(row: tuple) -> TokenRow | None:
     """One turn's figures, or None when they are all zero or missing: Kilo's way of not
-    recording them."""
-    at, inp, out, reasoning, read, write, _cost = row
-    kinds = [_count(v) or 0 for v in (inp, out, reasoning, read, write)]
-    if not any(kinds):
+    recording them. A kind missing from a turn that holds others stays None, never 0."""
+    at, *figures, _cost = row
+    inp, out, reasoning, read, write = (_count(v) for v in figures)
+    if not any((inp, out, reasoning, read, write)):
         return None
-    return TokenRow(at / 1000, "", kinds[0], kinds[1] + kinds[2], kinds[3], kinds[4])
+    output = None if out is None and reasoning is None else (out or 0) + (reasoning or 0)
+    return TokenRow(at / 1000, "", inp, output, read, write)
 
 
 def _kilo_cost(row: tuple) -> float | None:
@@ -299,7 +307,8 @@ def read_kilo(ctx: B.MeterContext) -> list[B.Reading]:
     for window, start in ctx.windows.items():
         inside = [t for t in turns if t[0] / 1000 >= start]
         rows = [r for r in map(_kilo_token_row, inside) if r is not None]
-        out.append(_tokens(ctx, KILO, KILO, window, _breakdown(rows), len(inside) - len(rows)))
+        bare = len(inside) - len(rows)
+        out.append(_tokens(ctx, KILO, KILO, window, _breakdown(rows), bare + _gaps(ctx, rows)))
         out.append(_usd(ctx, window, [_kilo_cost(t) for t in inside]))
     return out
 

@@ -180,6 +180,14 @@ class TestSnapshot:
         assert V.snapshot_statusline(later, json.dumps(only_week)) == 1
         assert of(V.read_claude_snapshot(later), "5h").observed_at == iso(NOW)
 
+    def test_an_older_figure_never_replaces_a_newer_one(self, tmp_path):
+        new, old = ctx(tmp_path, now=NOW + 100), ctx(tmp_path, now=NOW)
+        late = {"rate_limits": {"five_hour": {"used_percentage": 80, "resets_at": int(NOW + HOUR)}}}
+        early = {"rate_limits": {"five_hour": {"used_percentage": 0, "resets_at": int(NOW + HOUR)}}}
+        V.snapshot_statusline(new, json.dumps(late))
+        assert V.snapshot_statusline(old, json.dumps(early)) == 0
+        assert of(V.read_claude_snapshot(new), "5h").value == 80.0
+
     def test_stream_event_single_window_is_rescaled(self, tmp_path):
         c = ctx(tmp_path)
         line = {

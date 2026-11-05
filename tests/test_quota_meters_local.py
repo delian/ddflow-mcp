@@ -68,6 +68,27 @@ class TestTranscriptUsage:
         write_transcript(c.claude_projects / "p" / "a.jsonl", rows)
         assert _tokens(c).value == 500.0
 
+    @pytest.mark.parametrize("first", [-10, 5])
+    def test_a_turn_with_no_figure_seen_twice_counts_at_its_latest_time(self, tmp_path, first):
+        start = NOW - 5 * HOUR
+        c = ctx(tmp_path, windows={"5h": start, "week": NOW - 168 * HOUR})
+        rows = []
+        for at in sorted((start + first, start + 5)):
+            row = turn(at=at)
+            del row["message"]["usage"]
+            rows.append(row)
+        write_transcript(c.claude_projects / "p" / "a.jsonl", rows)
+        got = _tokens(c)
+        assert got.status == MB.UNAVAILABLE and got.unmetered == 1
+
+    def test_a_turn_with_no_figure_and_then_no_time_counts_in_every_window(self, tmp_path):
+        c = ctx(tmp_path)
+        late, lost = turn(at=NOW - 6 * HOUR), turn()
+        del late["message"]["usage"], lost["message"]["usage"]
+        lost["timestamp"] = "yesterday"
+        write_transcript(c.claude_projects / "p" / "a.jsonl", [late, lost])
+        assert _tokens(c).status == MB.UNAVAILABLE
+
     def test_rows_without_a_key_are_each_counted(self, tmp_path):
         c = ctx(tmp_path, token_fields=("output",))
         row = turn()
@@ -279,6 +300,21 @@ class TestKilo:
         kilo_db(c.kilo_db, [{"at": NOW - 60, **row}])
         got = _kilo(c, "tokens")
         assert got.status == MB.UNAVAILABLE and got.value is None and got.unmetered == 1
+
+    def test_a_kind_the_row_does_not_hold_is_never_a_zero(self, tmp_path):
+        c = ctx(tmp_path, token_fields=("cache_read",))
+        kilo_db(c.kilo_db, [{"at": NOW - 60, "tokens": {"input": 100, "output": 50}}])
+        assert _kilo(c, "tokens").status == MB.UNAVAILABLE
+
+    def test_a_kind_missing_from_one_row_makes_the_total_a_lower_bound(self, tmp_path):
+        c = ctx(tmp_path)
+        rows = [
+            {"at": NOW - 60, "tokens": kilo_tokens(10)},
+            {"at": NOW - 60, "tokens": {"input": 100, "output": 50}},
+        ]
+        kilo_db(c.kilo_db, rows)
+        got = _kilo(c, "tokens")
+        assert (got.status, got.value, got.unmetered) == (MB.OK, 160.0, 1)
 
     def test_no_turn_in_the_window_measures_zero_tokens(self, tmp_path):
         c = ctx(tmp_path)

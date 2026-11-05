@@ -148,9 +148,16 @@ def read_claude_snapshot(ctx: B.MeterContext) -> list[B.Reading]:
     return out
 
 
+def _is_newer(row: object, now: float) -> bool:
+    """Was ``row`` observed after ``now``? A writer delayed on its way to the lock must not put
+    an older figure over a newer one."""
+    observed = _reset_of(_table(row).get("observed_at"))
+    return observed is not None and observed > now
+
+
 def _write(ctx: B.MeterContext, figures: dict[str, dict[str, Any]], origin: str) -> int:
     """Merge ``figures`` over the snapshot, window by window. A corrupt snapshot is derived
-    data, so a fresh event replaces it. How many windows were written."""
+    data, so a fresh event replaces it. A newer figure stays. How many windows were written."""
     if not figures:
         return 0
     ctx.snapshot.parent.mkdir(parents=True, exist_ok=True)
@@ -163,9 +170,11 @@ def _write(ctx: B.MeterContext, figures: dict[str, dict[str, Any]], origin: str)
             windows = _read_snapshot(ctx)
         except (OSError, ValueError):
             windows = {}
-        body = {"version": SNAPSHOT_VERSION, "windows": {**windows, **stamped}}
-        atomic_write(ctx.snapshot, json.dumps(body, sort_keys=True), mode=0o600)
-    return len(stamped)
+        fresh = {w: row for w, row in stamped.items() if not _is_newer(windows.get(w), ctx.now)}
+        if fresh:
+            body = {"version": SNAPSHOT_VERSION, "windows": {**windows, **fresh}}
+            atomic_write(ctx.snapshot, json.dumps(body, sort_keys=True), mode=0o600)
+    return len(fresh)
 
 
 def _row(value: float | None, resets: object) -> dict[str, Any] | None:
