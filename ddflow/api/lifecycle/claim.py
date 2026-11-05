@@ -46,6 +46,20 @@ from .claim_tree import (  # noqa: F401 -- `merge`, `heartbeat`, `operations` re
 from .planning import alternatives_offer
 
 
+def _merged_by(events, item: str) -> str:
+    """The agent that most recently merged ``item``, "" if none.
+
+    `worktree.merged` is the one record of a landing, and its event agent is who ran it. A
+    re-claim of an item it did NOT merge is not a rework that merger asked for; the merger's
+    own re-claim is (B-merged-uncompleted-claimable).
+    """
+    merger = ""
+    for ev in events:
+        if ev.kind == "worktree.merged" and ev.subject == item and ev.agent:
+            merger = ev.agent
+    return merger
+
+
 def _reopen_stale_merge(log, claimed, item: str) -> dict[str, str]:
     """A re-claim of an item that had already merged reopens that stale merge, or {}.
 
@@ -192,6 +206,21 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
             id=item,
             alternatives=[],
         )
+    if claimed is not None and claimed.merged_sha and not claimed.terminal and not force:
+        # B-merged-uncompleted-claimable: a merged item that is not yet completed is not
+        # fresh work. In the merge -> complete gap another lane's claim ran item.reworked,
+        # which cleared every gate, and the merging lane's `complete` was then refused.
+        # Refuse the re-claim here: it is not a rework the claimer asked for. The merger's
+        # own re-claim IS (below, `_reopen_stale_merge`), so a deliberate rework keeps working.
+        if log.agent_id != _merged_by(events, item):
+            return O.refused(
+                "item.claimed",
+                f"{item} is merged ({claimed.merged_sha[:12]}) but not completed; it is not "
+                f"fresh work for another agent to claim. `ddflow complete {item}` records it "
+                f"(needs no lease). Re-claim as the merged lane, or `--force`, to rework it.",
+                id=item,
+                alternatives=[],
+            )
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
