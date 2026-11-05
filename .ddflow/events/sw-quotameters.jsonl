@@ -159,3 +159,5 @@
 {"agent":"sw-quotameters","data":{"tags":["no-deps","dx","wave:0"]},"id":"e68c28292daafb7e4a146771f","kind":"task.updated","lamport":141712,"schema":1,"subject":"DX-gate-run-full-parity","ts":"2026-11-05T18:07:47.773733Z"}
 {"agent":"sw-quotameters","data":{"at":1793902077.880208,"holder":"sw-quotameters"},"id":"e72638b65c094117d4f0a637e","kind":"lease.renewed","lamport":141713,"schema":1,"subject":"B-quota-meters","ts":"2026-11-05T18:07:57.967268Z"}
 {"agent":"sw-quotameters","data":{"at":1793902769.7023883,"holder":"sw-quotameters"},"id":"eabd6a115610e6763382ba5e6","kind":"lease.renewed","lamport":141827,"schema":1,"subject":"B-quota-meters","ts":"2026-11-05T18:19:30.023632Z"}
+{"agent":"sw-quotameters","data":{"at":1793903383.364525,"holder":"sw-quotameters"},"id":"efd75e34c91032c4efef964c2","kind":"lease.renewed","lamport":141902,"schema":1,"subject":"B-quota-meters","ts":"2026-11-05T18:29:43.472917Z"}
+{"agent":"sw-quotameters","data":{"tags":["swarm","pilot","wave:0"]},"id":"ec9b2d557d363b0fd61281836","kind":"task.updated","lamport":141906,"schema":1,"subject":"SW-live-smoke","ts":"2026-11-05T18:30:07.208746Z"}
