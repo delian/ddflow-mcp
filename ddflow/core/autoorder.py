@@ -126,15 +126,18 @@ def propose(
 
     for cyc in cycles:
         agents = tuple(cyc.get("agents", []))
-        victims = set(_victim_items(cyc))
+        links = cyc.get("links", [])
+        victim_edges = [(v, k["item"]) for v in _victim_items(cyc) for k in links if v in _blockers(k)]
+        fallbacks = [(k["item"], b) for k in links for b in _blockers(k)]
         why: list[str] = []
-        resolved = False
-        for later, earlier in _candidates(cyc):
+        added = 0
+        already = False
+        # every dropped lease of the victim must yield: one edge each, or the next can take
+        # the files straight back.
+        for later, earlier in victim_edges:
             if earlier in reach(later):
-                resolved = True  # this pair is already ordered
-                if later in victims:
-                    continue  # a dropped lease already handled: order the next drop too
-                break  # a fallback pair already ordered: nothing to add
+                already = True  # this drop is already ordered: nothing for this one
+                continue
             if later in reach(earlier):
                 why.append(f"{later}/{earlier}: would close a needs cycle")
                 continue
@@ -144,10 +147,25 @@ def propose(
                 continue
             edges.append(Edge(later, earlier, agents, tuple(cyc.get("files", []))))
             needs.setdefault(later, []).append(earlier)
-            resolved = True
-            if later not in victims:
+            added += 1
+        # no drop could be ordered: one fallback edge (the waiter waits for a blocker).
+        if added == 0:
+            for later, earlier in fallbacks:
+                if later == earlier:
+                    continue
+                if earlier in reach(later):
+                    already = True
+                    break
+                if later in reach(earlier):
+                    why.append(f"{later}/{earlier}: would close a needs cycle")
+                    continue
+                bad = eligible(items.get(later)) or eligible(items.get(earlier))
+                if bad:
+                    why.append(f"{later}/{earlier}: {bad}")
+                    continue
+                edges.append(Edge(later, earlier, agents, tuple(cyc.get("files", []))))
+                needs.setdefault(later, []).append(earlier)
                 break  # one fallback edge is enough
-            # a dropped lease still needs an edge of its own: order the next drop too
-        if not resolved:
+        if added == 0 and not already:
             notes.append(f"no edge for {' -> '.join(agents)}: {'; '.join(why) or 'no candidate'}")
     return edges, notes
