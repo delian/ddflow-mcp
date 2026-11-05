@@ -173,7 +173,7 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "id",
-                help="Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance.",
+                help="Stable id you choose: `supersedes` and commit messages cite it.",
                 cli_help="",
                 default="",
             ),
@@ -196,13 +196,13 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "supersedes",
-                help="Comma-separated lesson ids this replaces. The old one is retired, not deleted: the corpus stops growing without losing what was once believed.",
+                help="Comma-separated lesson ids this replaces; each is retired, not deleted.",
                 cli_help="",
                 default="",
             ),
             Param(
                 "pattern",
-                help="A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Prefer it to a remembered rule when mechanical: a count says 'worse', never 'which'. Refused if it does not compile.",
+                help="A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Refused if it does not compile.",
                 cli_help="regex this lesson forbids. Scans NOW and stores WHICH sites match, so `lesson verify` can name what reappeared — a count could only say it got worse",
                 default="",
             ),
@@ -288,7 +288,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "max_chars",
                 type="integer",
-                help="Total budget for the answer. The point of a budget is that recall is called at the START of work, where a long answer costs the context the work itself needs.",
+                help="Total budget for the answer.",
                 cli_help="",
                 default=RECALL_MAX_CHARS,
             ),

@@ -495,7 +495,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "landed_paths",
-                help="With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone.",
+                help="With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside a MIXED commit, verified inside its declared globs and the landing's changed files; the pipeline judges those alone.",
                 cli_help="restrict the recorded landing to the item's own paths (comma-separated globs, verified inside the item's declared globs and the landing's changed files), so a commit that also changed code does not force the code pipeline on a docs-only item",
                 action=_Globs,
             ),

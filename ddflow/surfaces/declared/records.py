@@ -587,8 +587,7 @@ COMMANDS: tuple[Command, ...] = (
             Param("item", help="Item it concerns.", cli_help="", default=""),
             Param(
                 "relayed_by",
-                help="The coordinator (agent) that relayed the words, when the operator's "
-                "answer reached this agent through a coordinator rather than directly.",
+                help="The coordinator that relayed the words, when the operator's answer came through one.",
                 cli_help="the coordinator that relayed the words (so the log tells a relay from the operator's own)",
                 default="",
             ),
