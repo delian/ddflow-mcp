@@ -11,7 +11,7 @@ import re
 import shlex
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
@@ -26,6 +26,7 @@ from ..flakes import failure_evidence
 from ..gateenv import child_env
 from ..pins import pin_files
 from ..pins import regenerate as regenerate_pins
+from . import admission as AD
 from .precommit import DEFAULT_COMMAND, PRE_COMMIT_CONFIG, PRE_PUSH_RUN, resolve_command
 from .scratch import merge_tree
 from .shell import scope_to_diff, tool_missing
@@ -66,7 +67,7 @@ def _merge_base(
     )
 
 
-def run(
+def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     repo: Path,
     cfg: Config,
     *,
@@ -78,6 +79,7 @@ def run(
     full: bool = False,
     changed_from: str = "",
     tick: tuple[Callable[[], None], float] | None = None,
+    rates: Sequence[float] = (),
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
     ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
@@ -92,7 +94,10 @@ def run(
     the default command (they run on that diff, not over every file): default ``base``.
 
     ``tick`` is (a callback, seconds): called that often while the command runs, on this thread:
-    the caller renews its lease there (DX-long-op-renew)."""
+    the caller renews its lease there (DX-long-op-renew).
+
+    ``rates`` is what past runs measured (`admission.measured_rates`), for the decision whether
+    a selected run takes the suite slot; none: the file count decides."""
     repo = Path(repo)
     cmd, why = (command.strip(), "") if command.strip() else resolve_command(repo, cfg)
     if not cmd:
@@ -123,7 +128,7 @@ def run(
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
             scope = CS.plan(cfg, tree, base, requested=asked)
         used: dict[str, dict] = {}
-        full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope)
+        full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope, rates)
         holder = _holder(repo, ref)
         try:
             p, out_prefix, waited = _run_locked(
@@ -263,16 +268,15 @@ def _with_workers(
     return cmd
 
 
-def _needs_suite_slot(cfg: Config, cmd: str, scope) -> bool:
-    """Does this run queue for the host-wide full-suite slot? The whole suite does; so does a
-    SELECTED run of more test files than `[ci].selected_lock_tests` (0: never): a long
-    selection is a full suite's load, and it ran beside the holder with a worker per core."""
+def _needs_suite_slot(cfg: Config, cmd: str, scope, rates: Sequence[float] = ()) -> bool:
+    """Does this run queue for the host-wide full-suite slot? The whole suite does; a SELECTED
+    run does when `admission.decide` says it is heavy, and the scope keeps why."""
     if _runs_whole_suite(cmd, scope):
         return True
-    limit = int(cfg.ci.selected_lock_tests)
-    if limit <= 0 or scope is None or scope.scope != "selected":
+    if scope is None or scope.scope != "selected":
         return False
-    return len(scope.tests) + len(scope.always) > limit
+    scope.admission = AD.decide(cfg, len(scope.tests), rates)
+    return scope.admission["slot"]
 
 
 def _runs_whole_suite(cmd: str, scope) -> bool:
@@ -422,6 +426,8 @@ def _scope_evidence(scope, sha: str) -> dict:
     ev = scope.evidence(sha)
     if used := getattr(scope, "workers", None):
         ev["workers"] = used
+    if admission := getattr(scope, "admission", None):
+        ev["admission"] = admission
     if scope.scope == "selected":
         # stage -> True (passed) | False (ran and failed) | "unavailable" (never started)
         unran = getattr(scope, "unran", set())
