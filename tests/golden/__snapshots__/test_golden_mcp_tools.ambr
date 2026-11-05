@@ -1297,7 +1297,7 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips, lanes, stages, locks or swarm."
+          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
          },
          "lane": {
           "type": "string",
