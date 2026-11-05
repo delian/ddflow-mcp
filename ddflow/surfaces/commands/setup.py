@@ -267,9 +267,18 @@ def cmd_upgrade(a, c: Ctx) -> int:
     return out.exit
 
 
+def _names_defaults(a) -> bool:
+    """Is this `config defaults`, or a `--write` that only that form takes?"""
+    word = not a.set and list(getattr(a, "value", None) or []) == ["defaults"]
+    return word or bool(getattr(a, "write", False))
+
+
 def _config_defaults(a, c: Ctx) -> int:
     """`ddflow config defaults [--write]`: the packaged file, or the file regenerated."""
     write = bool(getattr(a, "write", False))
+    if a.set or list(getattr(a, "value", None) or []) != ["defaults"]:
+        print("--write goes with `defaults`: ddflow config defaults --write", file=sys.stderr)
+        return FAIL
     out = A.configure(c.repo, A.ConfigEdit(defaults=True, write=write), agent=c.requested_agent)
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
@@ -279,11 +288,8 @@ def _config_defaults(a, c: Ctx) -> int:
 
 
 def cmd_config(a, c: Ctx) -> int:
-    if not a.set and list(getattr(a, "value", None) or []) == ["defaults"]:
+    if _names_defaults(a):
         return _config_defaults(a, c)
-    if getattr(a, "write", False):
-        print("--write goes with `defaults`: ddflow config defaults --write", file=sys.stderr)
-        return FAIL
     key, value = _config_key_value(a)
     if getattr(a, "value", None) and not key:
         print("a value alone sets nothing: ddflow config KEY VALUE [--local]", file=sys.stderr)

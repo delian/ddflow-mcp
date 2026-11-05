@@ -157,7 +157,7 @@ def test_a_damaged_file_warns_and_leaves_the_built_in_defaults(packaged, tmp_pat
     assert Config.load(None, env={}).lease.ttl_s == Config().lease.ttl_s
     Config.load(None, env={})
     err = capsys.readouterr().err
-    assert err.count("default.toml") == 1 and "pins regenerate" in err
+    assert err.count("ddflow: warning") == 1 and "pins regenerate" in err
 
 
 def test_a_missing_file_warns_and_leaves_the_built_in_defaults(packaged, tmp_path, capsys):
