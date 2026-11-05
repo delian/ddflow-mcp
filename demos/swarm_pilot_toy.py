@@ -37,8 +37,9 @@ MIN_SAMPLES = 10
 VERBS = frozenset(
     {"init", "phase", "task", "next", "claim", "gate", "merge", "complete", "metrics", "show"}
 )
-#: The git verbs the harness uses; `config` only names the sandbox's committer.
-GIT_VERBS = frozenset({"add", "commit", "config", "remote", "rev-parse"})
+#: The git verbs the harness uses: `config` is not one, so nothing can repoint the repository.
+GIT_VERBS = frozenset({"add", "commit", "remote", "rev-parse"})
+COMMITTER = ("swarm pilot sandbox", "toy@sandbox.invalid")
 PASSED_ENV = ("LANG", "LC_ALL")
 
 
@@ -96,6 +97,10 @@ def clean_env(home: Path) -> dict[str, str]:
         "PYTHONPATH": str(ROOT),
         "PYTHONDONTWRITEBYTECODE": "1",
         "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_AUTHOR_NAME": COMMITTER[0],
+        "GIT_AUTHOR_EMAIL": COMMITTER[1],
+        "GIT_COMMITTER_NAME": COMMITTER[0],
+        "GIT_COMMITTER_EMAIL": COMMITTER[1],
     }
 
 
@@ -165,7 +170,7 @@ class Sandbox:
 
     def __init__(self, repo: Path) -> None:
         self.repo = apart_from_host(repo)
-        self.home = self.repo.parent / f"{self.repo.name}.home"
+        self.home = apart_from_host(self.repo.parent / f"{self.repo.name}.home")
         self.env = clean_env(self.home)
 
     @classmethod
@@ -184,12 +189,12 @@ class Sandbox:
             raise Refused(f"{self.repo} has a remote: a sandbox has nowhere to push")
 
     def git(self, *argv: str, cwd: Path | None = None) -> str:
-        """Stdout of one git verb in this sandbox; `Refused` off the list, so a `--git-dir` or a
-        `core.worktree` cannot point it at another repository."""
-        if argv[0] not in GIT_VERBS or (argv[0] == "config" and not argv[1].startswith("user.")):
-            raise Refused(f"git {' '.join(argv[:2])}: not a pilot verb")
+        """Stdout of one git verb in this sandbox or its worktrees; `Refused` otherwise."""
+        tree = (cwd or self.repo).resolve()
+        if not argv or argv[0] not in GIT_VERBS or not tree.is_relative_to(self.repo):
+            raise Refused(f"git {' '.join(argv[:2])} in {tree}: not a pilot verb")
         p = subprocess.run(
-            ["git", "-C", str(cwd or self.repo), *argv],
+            ["git", "-C", str(tree), *argv],
             capture_output=True,
             text=True,
             check=True,
@@ -245,8 +250,6 @@ def _scaffold(sb: Sandbox) -> None:
         env=sb.env,
         capture_output=True,
     )
-    sb.git("config", "user.email", "toy@sandbox.invalid")
-    sb.git("config", "user.name", "swarm pilot sandbox")
     (sb.repo / "tests").mkdir()
     (sb.repo / "tests" / "__init__.py").write_text("")
     (sb.repo / "README.md").write_text("# Swarm pilot sandbox\n\nThrowaway: safe to delete.\n")

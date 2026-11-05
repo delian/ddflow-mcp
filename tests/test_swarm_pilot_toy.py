@@ -84,18 +84,33 @@ def test_no_constructor_route_reaches_the_host():
         T.Sandbox(ROOT)
 
 
-def test_a_link_in_the_host_keeps_home_and_temp_files_out_of_it(tmp_path):
+def test_a_link_in_the_host_keeps_home_and_temp_files_out_of_it(tmp_path, monkeypatch):
     """Through a link the repository resolves away from the host; its home must follow it."""
-    outside = tmp_path / "sb"
+    host, outside = tmp_path / "host", tmp_path / "sb"
+    host.mkdir()
     outside.mkdir()
-    link = ROOT / ".ddflow" / f"pilot-link-{os.getpid()}"
-    link.symlink_to(outside)
-    try:
-        sb = T.Sandbox(link)
-    finally:
-        link.unlink()
-    assert sb.repo == outside.resolve() and sb.home == outside.resolve().parent / "sb.home"
+    monkeypatch.setattr(T, "ROOT", host)
+    (host / "out").symlink_to(outside)
+    sb = T.Sandbox(host / "out")
+    assert sb.repo == outside.resolve() and sb.home == tmp_path.resolve() / "sb.home"
     assert sb.env["TMPDIR"] == str(sb.home)
+
+
+def test_a_home_that_links_into_the_host_is_refused(tmp_path, monkeypatch):
+    host = tmp_path / "host"
+    host.mkdir()
+    monkeypatch.setattr(T, "ROOT", host)
+    (tmp_path / "sb.home").symlink_to(host)
+    with pytest.raises(T.Refused, match="inside"):
+        T.Sandbox(tmp_path / "sb")
+
+
+def test_a_home_that_is_the_host_is_refused(tmp_path, monkeypatch):
+    host = tmp_path / "pilot.home"
+    host.mkdir()
+    monkeypatch.setattr(T, "ROOT", host)
+    with pytest.raises(T.Refused, match="inside"):
+        T.Sandbox(tmp_path / "pilot")
 
 
 def test_a_symlink_into_the_host_is_refused(tmp_path):
@@ -202,11 +217,23 @@ def test_the_guard_runs_on_every_verb_a_sandbox_is_given(tiny):
 
 @pytest.mark.parametrize(
     "argv",
-    [("--git-dir", "/x/.git", "status"), ("config", "core.worktree", "/x"), ("push", "origin")],
+    [
+        ("--git-dir", "/x/.git", "status"),
+        ("config", "core.worktree", "/x"),
+        ("config", "user.email", "x", "--file", "/x/.git/config"),
+        ("config",),
+        ("push", "origin"),
+        (),
+    ],
 )
 def test_git_cannot_be_pointed_elsewhere(tiny, argv):
     with pytest.raises(T.Refused, match="not a pilot verb"):
         tiny.git(*argv)
+
+
+def test_git_cannot_run_outside_the_sandbox(tiny):
+    with pytest.raises(T.Refused, match="not a pilot verb"):
+        tiny.git("add", "-A", cwd=ROOT)
 
 
 def test_a_second_run_of_one_sandbox_is_refused(tiny):
@@ -225,6 +252,15 @@ def test_a_host_that_cannot_answer_is_not_called_isolated(tiny, monkeypatch):
     monkeypatch.setattr(T, "ROOT", tiny.repo / "no-such-dir")
     with pytest.raises(RuntimeError, match="cannot ask the host"):
         R._isolated(tiny)
+
+
+def test_a_tag_named_main_does_not_hide_a_known_commit(tmp_path, monkeypatch):
+    sb = _sandbox(tmp_path, items=T.ITEMS[:1], min_samples=1)
+    subprocess.run(
+        ["git", "-C", str(sb.repo), "tag", "-a", "main", "-m", "x"], check=True, env=sb.env
+    )
+    monkeypatch.setattr(T, "ROOT", sb.repo)  # its own head: as if the host held it
+    assert not R._isolated(sb)
 
 
 def test_a_sandbox_whose_head_the_host_knows_is_not_isolated(tiny, monkeypatch):
@@ -330,7 +366,9 @@ def test_a_pair_that_cannot_be_compared_is_not_judged(after, word):
     assert "NOT COMPARABLE" in text and "met" not in text.replace("NOT MEASURED", "").lower()
 
 
-@pytest.mark.parametrize(("before", "after"), [(3, 1), (3, 3), (None, None)])
+@pytest.mark.parametrize(
+    ("before", "after"), [(3, 1), (3, 3), (None, None), (None, 3), (0, 3), (-1, 3), (1, None)]
+)
 def test_the_baseline_must_have_the_fewer_lanes(before, after):
     rep = R.judge(_side(lanes=before), _side(lanes=after, per_hour=9.0))
     assert not rep["comparable"] and any("lanes" in why for why in rep["why_not"])
@@ -362,6 +400,23 @@ def test_a_finished_board_never_reports_a_deadline():
     board = R.Board(["toy-01"], 0)
     board.finish("toy-01")
     assert board.over() and board.failure == ""
+
+
+def test_the_deadline_reads_the_items_under_the_lock():
+    """Unlocked, a lane finishing beside it raised `Set changed size` and failed a finished run."""
+    board = R.Board(["toy-01"], 0)
+
+    class Watched(set):
+        def __bool__(self):
+            assert board.lock.locked()
+            return len(self) > 0
+
+        def __iter__(self):
+            assert board.lock.locked()
+            return super().__iter__()
+
+    board.left = Watched(board.left)
+    assert board.over() and "deadline" in board.failure
 
 
 def test_a_lane_never_claims_what_another_lane_took():

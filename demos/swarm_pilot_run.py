@@ -198,7 +198,7 @@ def run(sb: T.Sandbox, lanes: int, worker: Worker, *, max_s: float = MAX_S) -> N
 
 def _isolated(sb: T.Sandbox) -> bool:
     """The sandbox's head is unknown to the host, and the sandbox still has no remote."""
-    head = sb.git("rev-parse", "main").strip()
+    head = sb.git("rev-parse", "main^{commit}").strip()
     known = subprocess.run(
         ["git", "-C", str(T.ROOT), "cat-file", "-e", head],
         capture_output=True,
@@ -237,8 +237,9 @@ def _why_not(before: dict, after: dict) -> list[str]:
         for k in ("worker", "work_s", "items")
         if before[k] != after[k]
     ]
-    if (before["lanes"] or 0) >= (after["lanes"] or 0):
-        why.append(f"lanes: {before['lanes']} before and {after['lanes']} after, want fewer before")
+    lanes = before["lanes"], after["lanes"]
+    if not all(isinstance(n, int) and n >= 1 for n in lanes) or lanes[0] >= lanes[1]:
+        why.append(f"lanes: {lanes[0]} before and {lanes[1]} after, want fewer before")
     for name, s in (("before", before), ("after", after)):
         if s["merged"] != s["items"]:
             why.append(f"{name}: {s['merged']} of {s['items']} items merged")

@@ -38,7 +38,7 @@ path. Each of these is checked and tested:
   provider key, no `PATH` entry in the host, and a `HOME` and temp directory of its own beside the
   repository.
 - Only the verbs a pilot needs can be called: `review`, `lanes`, `config` and `reviewers` are refused,
-  and so is `--force`.
+  and so is `--force`. Git takes four verbs, none of them `config`, and only inside the sandbox.
 - The report checks the head of the sandbox is unknown to the host and counts overrides. A side that
   fails either, merged fewer items than it holds, or differs in worker, work time or item count is
   reported NOT COMPARABLE, and no target is judged.
