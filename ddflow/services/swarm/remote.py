@@ -282,7 +282,7 @@ def build_outbound(
     ref = _ref("remote-base", item_id, lane)
     # the ref stays until `forget`: a return bundle needs the root, and gc would prune it
     _git(repo, k, "update-ref", ref, root)
-    dest = Path(dest)
+    dest = Path(dest).resolve()  # git runs in the repository, this code in the caller's cwd
     bundle = dest / BUNDLE
     try:
         dest.mkdir(parents=True, exist_ok=True)
