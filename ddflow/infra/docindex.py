@@ -88,7 +88,7 @@ def read_only_rows(
         uri = f"{path.resolve().as_uri()}?mode=ro"
         with closing(sqlite3.connect(uri, uri=True, timeout=timeout_s)) as con:
             return con.execute(sql, params).fetchall()
-    except sqlite3.Error:
+    except (sqlite3.Error, OSError):
         return []
 
 

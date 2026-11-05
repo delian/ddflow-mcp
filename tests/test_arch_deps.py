@@ -173,6 +173,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.infra.worktree",
         "ddflow.mcpshim.probe_server",
         "ddflow.services.approvals.audit",
+        "ddflow.services.approvals.harness",
         "ddflow.services.approvals.view",
         "ddflow.services.backups",
         "ddflow.services.bisect",

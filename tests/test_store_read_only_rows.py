@@ -11,6 +11,7 @@ import sqlite3
 from pathlib import Path
 
 from ddflow.infra.docindex import read_only_rows
+from ddflow.services import archdeps as A
 
 
 def _db(path: Path) -> Path:
@@ -49,7 +50,19 @@ def test_a_wrong_schema_is_no_rows(tmp_path: Path) -> None:
     assert read_only_rows(db, "SELECT * FROM absent_table") == []
 
 
+def test_a_path_that_cannot_be_resolved_is_no_rows(tmp_path: Path) -> None:
+    loop = tmp_path / "loop.db"
+    loop.symlink_to(loop)
+    assert read_only_rows(loop, "SELECT 1") == []
+
+
 def test_a_write_is_refused_and_the_file_keeps_its_rows(tmp_path: Path) -> None:
     db = _db(tmp_path / "store.db")
     assert read_only_rows(db, "DELETE FROM part") == []
     assert read_only_rows(db, "SELECT count(*) FROM part") == [(2,)]
+
+
+def test_the_approvals_harness_reaches_kilo_through_it_not_through_sqlite3() -> None:
+    root = Path(__file__).resolve().parents[1]
+    sqlite = next(f for f in A.scan(root).families if f.family == "sqlite3")
+    assert "ddflow.services.approvals.harness" not in sqlite.importers
