@@ -2748,15 +2748,18 @@
           Seconds after which a vendor percent reading counts as stale (default 900).
           A reading is also stale once its window's reset has passed. A stale figure
           keeps its value and carries `stale: true`: it is never presented as current.
-      quota.claude_state = '~/.claude.json'   [default]
-          The Claude Code state file holding `cachedUsageUtilization`, the vendor's
-          cached percent and reset per window. ddflow only reads it and never calls
-          the vendor's usage endpoint with the user's credentials (D-quotas-governor).
-      quota.claude_projects = '~/.claude/projects'   [default]
-          The directory of Claude Code transcripts, read for token counts, subagent
-          transcripts included.
-      quota.kilo_db = '~/.local/share/kilo/kilo.db'   [default]
-          Kilo's SQLite store, opened read-only for token and cost counts per message.
+      quota.claude_state = ''   [default]
+          The harness state file holding `cachedUsageUtilization`, the vendor's cached
+          percent and reset per window. Empty (default): the path in
+          `templates/meter_sources.toml`. ddflow only reads it and never calls the
+          vendor's usage endpoint with the user's credentials (D-quotas-governor).
+      quota.claude_projects = ''   [default]
+          The directory of harness transcripts, read for token counts, subagent
+          transcripts included. Empty (default): the path in
+          `templates/meter_sources.toml`.
+      quota.kilo_db = ''   [default]
+          The SQLite message store, opened read-only for token and cost counts per
+          message. Empty (default): the path in `templates/meter_sources.toml`.
       quota.snapshot_path = ''   [default]
           The file holding the latest vendor percent taken from a statusline or
           stream-json event. Empty (default): `vendor-usage.json` in the user's state
@@ -2772,6 +2775,10 @@
       quota.sample_interval_s = 300   [default]
           The shortest time between two samples taken by `sample_if_due` (default
           300).
+      quota.sample_tail_bytes = 8192   [default]
+          How much of the sample log's end `sample_if_due` reads to find its last row
+          (default 8192). A row longer than this reads as no last row, so a sample is
+          taken.
       quota.token_windows = ['5h', 'day', 'week']   [default]
           The rolling windows the token and session counters total over: any of 5h,
           day, week, month, total. A longer window reads more: `total` reads every
@@ -2786,7 +2793,7 @@
           reading is UNAVAILABLE with this knob named, never a partial sum that would
           understate the use.
       quota.kilo_timeout_s = 10.0   [default]
-          Seconds one read of the Kilo store may take (default 10). Over it the
+          Seconds one read of the message store may take (default 10). Over it the
           reading is UNAVAILABLE.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every

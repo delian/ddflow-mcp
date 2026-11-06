@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "quota.claude_projects"
-new = "\"~/.claude/projects\""
+new = "\"\""
 why = "The usage meters (B-quota-meters): each reader's source, bound and staleness is a knob."
 impact = "additive"

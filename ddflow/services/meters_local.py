@@ -31,9 +31,9 @@ from ..core import clock
 from ..infra.store._schema import ReadOnlyError, ReadOnlyTimeout, read_only_rows
 from . import meters_base as B
 
-CLAUDE = "claude-code"
+CLAUDE = B.sources()["transcripts"]["harness"]
 CLAUDE_SOURCE = "claude-tokens"
-KILO = "kilo"
+KILO = B.sources()["store"]["harness"]
 SESSIONS_SOURCE = "ddflow-sessions"
 
 
@@ -250,12 +250,12 @@ WHERE s.time_updated >= ? AND json_extract(m.data, '$.role') = 'assistant'
 def _kilo_rows(ctx: B.MeterContext, since: float) -> list[tuple]:
     """The assistant turns from ``since`` on, inside `[quota].kilo_timeout_s`."""
     if not ctx.kilo_db.is_file():
-        raise MeterFailure(f"no Kilo store at {ctx.kilo_db}")
+        raise MeterFailure(f"no message store at {ctx.kilo_db}")
     start = int(since * 1000)
     try:
         return read_only_rows(ctx.kilo_db, _KILO_SQL, (start, start), timeout_s=ctx.kilo_timeout_s)
     except ReadOnlyTimeout as exc:
-        raise MeterFailure("the read ran over [quota].kilo_timeout_s") from exc
+        raise MeterFailure(f"the read ran over its {ctx.kilo_timeout_s}s budget") from exc
     except ReadOnlyError as exc:
         raise MeterFailure(f"{ctx.kilo_db}: {exc}") from exc
 
@@ -281,7 +281,7 @@ def _usd(ctx: B.MeterContext, window: str, costs: list[float | None]) -> B.Readi
     """A total only over costs really reported: a cost of 0 is one nobody recorded."""
     known = [c for c in costs if c is not None]
     if not known:
-        reason = "Kilo reported no cost in the window"
+        reason = "the store reported no cost in the window"
         return B.unavailable(KILO, KILO, window, "usd", reason, ctx.now, len(costs))
     return B.Reading(
         KILO,

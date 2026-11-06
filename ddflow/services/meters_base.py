@@ -12,14 +12,17 @@ snapshot and the sample log live in the user's state directory (D-quotas-governo
 from __future__ import annotations
 
 import math
-import os
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
+from functools import cache
 from pathlib import Path
 from typing import Any
 
+from ..adapters import env as ENV
+from ..adapters import toml as TOML
 from ..config import Config
 from ..core import clock
+from ..infra import paths
 from .quota import PERCENT_LIMIT, WINDOWS
 
 OK = "ok"
@@ -89,6 +92,7 @@ class MeterContext:
     kilo_timeout_s: float
     samples_max_bytes: int
     sample_interval_s: float
+    sample_tail_bytes: int
     #: The project's events, for the session counter; None when the caller has none.
     events: Sequence[Any] | None = None
 
@@ -132,9 +136,15 @@ def is_stale(ctx: MeterContext, observed: float, resets: float | None) -> bool:
     return resets is not None and resets <= ctx.now
 
 
+@cache
+def sources() -> dict[str, Any]:
+    """`templates/meter_sources.toml`: which harness each meter reads, and its default paths."""
+    return TOML.TomlLibIo().read(paths.templates_dir() / "meter_sources.toml")
+
+
 def state_dir() -> Path:
     """The user's state directory for ddflow: `$XDG_STATE_HOME/ddflow`, else the default."""
-    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    base = ENV.DEFAULT.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(base) / "ddflow"
 
 
@@ -149,13 +159,14 @@ def _windows(names: Sequence[str], now: float) -> dict[str, float]:
 def context(cfg: Config, *, now: float | None = None, events: Sequence[Any] | None = None):
     """The `MeterContext` of ``cfg``, at ``now`` (the clock when None)."""
     q = cfg.quota
+    data = sources()
     at = clock.now_utc().timestamp() if now is None else now
     return MeterContext(
         now=at,
         stale_after_s=q.stale_after_s,
-        claude_state=Path(q.claude_state).expanduser(),
-        claude_projects=Path(q.claude_projects).expanduser(),
-        kilo_db=Path(q.kilo_db).expanduser(),
+        claude_state=Path(q.claude_state or data["vendor"]["state"]).expanduser(),
+        claude_projects=Path(q.claude_projects or data["transcripts"]["root"]).expanduser(),
+        kilo_db=Path(q.kilo_db or data["store"]["path"]).expanduser(),
         snapshot=Path(q.snapshot_path).expanduser()
         if q.snapshot_path
         else state_dir() / SNAPSHOT_NAME,
@@ -166,5 +177,6 @@ def context(cfg: Config, *, now: float | None = None, events: Sequence[Any] | No
         kilo_timeout_s=q.kilo_timeout_s,
         samples_max_bytes=q.samples_max_bytes,
         sample_interval_s=q.sample_interval_s,
+        sample_tail_bytes=q.sample_tail_bytes,
         events=events,
     )

@@ -27,6 +27,7 @@ def ctx(tmp: Path, **over) -> MB.MeterContext:
         "kilo_timeout_s": 5.0,
         "samples_max_bytes": 1 << 20,
         "sample_interval_s": 300,
+        "sample_tail_bytes": 8192,
         "events": None,
     }
     return MB.MeterContext(**{**base, **over})

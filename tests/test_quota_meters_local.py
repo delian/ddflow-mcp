@@ -410,7 +410,7 @@ class TestKilo:
         c = ctx(tmp_path, kilo_timeout_s=0.0)
         kilo_db(c.kilo_db, [{"at": NOW - 60 - n, "tokens": kilo_tokens(1)} for n in range(500)])
         got = _kilo(c, "tokens")
-        assert got.status == MB.UNAVAILABLE and "kilo_timeout_s" in got.reason
+        assert got.status == MB.UNAVAILABLE and "budget" in got.reason
 
     def test_a_path_with_uri_characters_still_opens(self, tmp_path):
         odd = tmp_path / "a b?c#d"

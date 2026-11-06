@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "quota.kilo_db"
-new = "\"~/.local/share/kilo/kilo.db\""
+new = "\"\""
 why = "The usage meters (B-quota-meters): each reader's source, bound and staleness is a knob."
 impact = "additive"

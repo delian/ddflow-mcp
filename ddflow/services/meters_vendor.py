@@ -27,7 +27,7 @@ from ..infra.tomlcfg import locked
 from . import meters_base as B
 from .quota import account_tag
 
-HARNESS = "claude-code"
+HARNESS = B.sources()["vendor"]["harness"]
 #: The vendor's window names -> ours. Per-model and overage windows are not quota windows here.
 WINDOW_OF = {"five_hour": "5h", "seven_day": "week"}
 CACHE_SOURCE = "claude-cache"

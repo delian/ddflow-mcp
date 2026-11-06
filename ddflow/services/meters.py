@@ -3,7 +3,8 @@
 Every reader takes a `MeterContext` and returns `Reading`s (`meters_base`). `read_all` runs
 them and never raises: a reader that breaks is an UNAVAILABLE reading with the reason, because
 a meter is read inside other commands and a missing figure must not become a crash or a zero
-(r-no-silent-cost). A new source is one `register` call (P-governor.context-meter, B-gap-spend).
+(r-no-silent-cost). A new source is one `READERS.register` call (P-governor.context-meter,
+B-gap-spend).
 
 `best` picks the figure a caller should act on, and says when it is stale. Reading writes
 nothing: only `record` and `sample_if_due` touch the sample log.
@@ -16,6 +17,7 @@ import os
 from collections.abc import Callable, Iterable, Sequence
 
 from ..core import clock
+from ..core.registry import Registry
 from ..infra.fsio import atomic_write
 from ..infra.tomlcfg import locked
 from . import meters_base as B
@@ -23,23 +25,12 @@ from . import meters_local as L
 from . import meters_vendor as V
 
 Reader = Callable[[B.MeterContext], list[B.Reading]]
-#: How much of the sample log's end to read for its last row.
-TAIL_BYTES = 8192
-
-READERS: dict[str, Reader] = {
-    V.SNAPSHOT_SOURCE: V.read_claude_snapshot,
-    V.CACHE_SOURCE: V.read_claude_cache,
-    L.CLAUDE_SOURCE: L.read_claude_tokens,
-    L.KILO: L.read_kilo,
-    L.SESSIONS_SOURCE: L.read_ddflow_sessions,
-}
-
-
-def register(name: str, reader: Reader) -> None:
-    """Add a reader. A name is taken once: two readers under one name would hide each other."""
-    if name in READERS:
-        raise ValueError(f"meter {name!r} is already registered")
-    READERS[name] = reader
+READERS: Registry[Reader] = Registry("meter", order="registered")
+READERS.register(V.read_claude_snapshot, V.SNAPSHOT_SOURCE)
+READERS.register(V.read_claude_cache, V.CACHE_SOURCE)
+READERS.register(L.read_claude_tokens, L.CLAUDE_SOURCE)
+READERS.register(L.read_kilo, L.KILO)
+READERS.register(L.read_ddflow_sessions, L.SESSIONS_SOURCE)
 
 
 def read_all(ctx: B.MeterContext, names: Iterable[str] | None = None) -> list[B.Reading]:
@@ -119,7 +110,7 @@ def _last_at(ctx: B.MeterContext) -> float | None:
     """The time of the log's last row, from its end only."""
     try:
         with ctx.samples.open("rb") as fh:
-            fh.seek(max(0, ctx.samples.stat().st_size - TAIL_BYTES))
+            fh.seek(max(0, ctx.samples.stat().st_size - ctx.sample_tail_bytes))
             tail = fh.read().decode("utf-8", "replace").splitlines()
     except OSError:
         return None

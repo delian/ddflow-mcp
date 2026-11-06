@@ -41,16 +41,16 @@ class QuotaConfig:
         check=_positive,
     )
     claude_state: str = knob(
-        "~/.claude.json",
-        doc="The Claude Code state file holding `cachedUsageUtilization`, the vendor's cached percent and reset per window. ddflow only reads it and never calls the vendor's usage endpoint with the user's credentials (D-quotas-governor).",
+        "",
+        doc="The harness state file holding `cachedUsageUtilization`, the vendor's cached percent and reset per window. Empty (default): the path in `templates/meter_sources.toml`. ddflow only reads it and never calls the vendor's usage endpoint with the user's credentials (D-quotas-governor).",
     )
     claude_projects: str = knob(
-        "~/.claude/projects",
-        doc="The directory of Claude Code transcripts, read for token counts, subagent transcripts included.",
+        "",
+        doc="The directory of harness transcripts, read for token counts, subagent transcripts included. Empty (default): the path in `templates/meter_sources.toml`.",
     )
     kilo_db: str = knob(
-        "~/.local/share/kilo/kilo.db",
-        doc="Kilo's SQLite store, opened read-only for token and cost counts per message.",
+        "",
+        doc="The SQLite message store, opened read-only for token and cost counts per message. Empty (default): the path in `templates/meter_sources.toml`.",
     )
     snapshot_path: str = knob(
         "",
@@ -70,6 +70,11 @@ class QuotaConfig:
         doc="The shortest time between two samples taken by `sample_if_due` (default 300).",
         check=_positive,
     )
+    sample_tail_bytes: int = knob(
+        8192,
+        doc="How much of the sample log's end `sample_if_due` reads to find its last row (default 8192). A row longer than this reads as no last row, so a sample is taken.",
+        check=_positive,
+    )
     token_windows: list[str] = knob(
         factory=lambda: ["5h", "day", "week"],
         doc="The rolling windows the token and session counters total over: any of 5h, day, week, month, total. A longer window reads more: `total` reads every transcript and is usually over `transcript_max_bytes`, which then reports UNAVAILABLE.",
@@ -87,6 +92,6 @@ class QuotaConfig:
     )
     kilo_timeout_s: float = knob(
         10.0,
-        doc="Seconds one read of the Kilo store may take (default 10). Over it the reading is UNAVAILABLE.",
+        doc="Seconds one read of the message store may take (default 10). Over it the reading is UNAVAILABLE.",
         check=_positive,
     )

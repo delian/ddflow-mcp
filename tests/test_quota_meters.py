@@ -5,11 +5,13 @@ from __future__ import annotations
 import contextlib
 import json
 import stat
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
 from quota_meters_support import HOUR, NOW, ctx, iso, none_of, of, window, write_cache
 
+from ddflow.adapters.registry import DuplicateName
 from ddflow.config import Config
 from ddflow.services import meters as M
 from ddflow.services import meters_base as MB
@@ -277,13 +279,13 @@ class TestRegistry:
         def boom(_c):
             raise RuntimeError("no")
 
-        monkeypatch.setitem(M.READERS, "boom", boom)
+        monkeypatch.setitem(M.READERS.table, "boom", boom)
         got = [r for r in M.read_all(ctx(tmp_path)) if r.source == "boom"]
         assert len(got) == 1 and got[0].status == MB.UNAVAILABLE and "no" in got[0].reason
 
     def test_a_name_cannot_be_registered_twice(self):
-        with pytest.raises(ValueError, match="already"):
-            M.register("claude-cache", V.read_claude_cache)
+        with pytest.raises(DuplicateName, match="already"):
+            M.READERS.register(V.read_claude_cache, "claude-cache")
 
     def test_nothing_readable_gives_no_number_at_all(self, tmp_path):
         got = M.read_all(ctx(tmp_path))
@@ -323,7 +325,7 @@ class TestBest:
         def boom(_c):
             raise RuntimeError("no")
 
-        monkeypatch.setitem(M.READERS, "boom", boom)
+        monkeypatch.setitem(M.READERS.table, "boom", boom)
         got = M.best(M.read_all(ctx(tmp_path), ["boom"]), "5h", "tokens")
         assert got is not None and got.status == MB.UNAVAILABLE and "no" in got.reason
 
@@ -443,9 +445,14 @@ class TestSamples:
             M.record(cx, [_ok("other", 2.0)])  # another process, while this one reads
             return [_ok("mine", 1.0)]
 
-        monkeypatch.setitem(M.READERS, "slow", slow)
+        monkeypatch.setitem(M.READERS.table, "slow", slow)
         assert M.sample_if_due(c, ["slow"]) is False
         assert [r["source"] for r in _rows(c)] == ["other"]
+
+    def test_a_row_past_the_tail_bound_reads_as_no_last_row(self, tmp_path):
+        c = ctx(tmp_path, sample_tail_bytes=8)
+        M.record(c, [_ok("a", 7.0)])
+        assert M.sample_if_due(c, ["claude-cache"]) is True
 
     def test_sample_if_due_throttles(self, tmp_path):
         c = ctx(tmp_path)
@@ -482,6 +489,20 @@ class TestConfig:
         cfg = Config()
         cfg.quota.samples_path = str(tmp_path / "x.jsonl")
         assert MB.context(cfg, now=NOW).samples == tmp_path / "x.jsonl"
+
+    def test_the_harness_paths_come_from_the_data_file_until_a_knob_sets_one(self, tmp_path):
+        data = MB.sources()
+        c = MB.context(Config(), now=NOW)
+        assert c.claude_state == Path(data["vendor"]["state"]).expanduser()
+        assert c.kilo_db == Path(data["store"]["path"]).expanduser()
+        cfg = Config()
+        cfg.quota.kilo_db = str(tmp_path / "k.db")
+        assert MB.context(cfg, now=NOW).kilo_db == tmp_path / "k.db"
+
+    def test_the_tail_bound_is_a_knob(self):
+        cfg = Config()
+        cfg.quota.sample_tail_bytes = 64
+        assert MB.context(cfg, now=NOW).sample_tail_bytes == 64
 
     def test_total_has_no_since_it_reads_from_the_start(self):
         cfg = Config()
