@@ -292,11 +292,13 @@
 # ---
 # name: test_help[ddflow board]
   '''
-  usage: ddflow board [-h] [--phase PHASE]
+  usage: ddflow board [-h] [--phase PHASE] [--full]
   
   options:
     -h, --help     show this help message and exit
     --phase PHASE
+    --full         print everything: lift the default output caps ([output] max_rows, max_chars) for
+                   this call
   
   '''
 # ---
@@ -873,10 +875,12 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
+  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
+    --full                print everything: lift the default output caps ([output] max_rows,
+                          max_chars) for this call
     --upgrade             the upgrade plan instead (the same as `ddflow upgrade`)
     --accept-lost-events  record the present event counts of the shards that lost events (to a
                           force-push, revert, reset or deletion) as known, clearing that PROBLEM;
@@ -1918,13 +1922,16 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE]
+  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
     --phase PHASE        limit to this phase; exit 1 if it names no phase or item
     --kind {task,phase}
     --lane LANE          answer this idle lane: its best item and a note for claim
+    --full               print everything: lift the default output caps ([output] max_rows,
+                         max_chars) for this call
+    --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -2430,14 +2437,17 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
   
   options:
-    -h, --help   show this help message and exit
+    -h, --help       show this help message and exit
     --item ITEM
     --apply
     --all
     --plan
+    --full           print everything: lift the default output caps ([output] max_rows, max_chars)
+                     for this call
+    --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -3039,12 +3049,14 @@
 # ---
 # name: test_help[ddflow status]
   '''
-  usage: ddflow status [-h] [--by-tag BY_TAG]
+  usage: ddflow status [-h] [--by-tag BY_TAG] [--full]
   
   options:
     -h, --help       show this help message and exit
     --by-tag BY_TAG  also print per-value counts for this label namespace, e.g. wave or track, with
                      the top blockers per value
+    --full           print everything: lift the default output caps ([output] max_rows, max_chars)
+                     for this call
   
   '''
 # ---

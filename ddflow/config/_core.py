@@ -43,6 +43,7 @@ from ..config_sections.mcp import McpConfig
 from ..config_sections.memory import MemoryConfig
 from ..config_sections.merge_queue import MergeQueueConfig
 from ..config_sections.metrics import MetricsConfig
+from ..config_sections.output import OutputConfig
 from ..config_sections.pins import PinsConfig
 from ..config_sections.plan import PlanConfig
 from ..config_sections.prompts import PromptsConfig
@@ -164,6 +165,7 @@ class Config:
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
     grants: GrantsConfig = field(default_factory=GrantsConfig)
     approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
     handoff: HandoffConfig = field(default_factory=HandoffConfig)

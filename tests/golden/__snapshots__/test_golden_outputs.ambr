@@ -3301,6 +3301,37 @@
       digest.spotcheck_min = 1   [default]
           How many gates passed on refutation, not yet completed, make one spot-check
           entry in the operator queue. 0 turns that entry off.
+      output.max_rows = 50   [default]
+          Rows a list shows by default in `board`, `doctor`, `recover`, `next` and
+          `status` (CLI and MCP, text and `--json`). The rest is counted: the answer
+          says how many more there are, and the exact call that shows them. 0 lifts
+          the row cap for every call, as `--full` does for one, unless `allow_full` is
+          false.
+      output.max_chars = 30000   [default]
+          Characters a default answer of those commands may hold (text and serialised
+          `--json` alike; about 4 characters a token, so 30000 is roughly 7500 tokens,
+          well under the 25000-token cap an MCP client puts on a tool result). A
+          `--json` body that carries both prose and rows (`board`) gives each half. A
+          longer answer is cut on a line boundary and ends in a footer; a `--json`
+          body first loses rows until it fits and keeps its schema, adding `truncated`
+          and `next`. 0 lifts the character cap, unless `allow_full` is false.
+      output.non_ascii_weight = 4   [default]
+          How many characters of `max_chars` one non-ASCII character of prose costs. A
+          character count is only a token estimate for ASCII: 30000 characters
+          measured 5737 tokens of English, 52366 of rare CJK and 84470 of emoji with
+          the Qwen tokenizer, so at weight 1 a non-ASCII report can pass the
+          25000-token cap on a tool result. At 4 the same cap keeps 7500 such
+          characters, about 21000 tokens at the worst measured rate. 1 counts plain
+          characters.
+      output.allow_full = True   [default]
+          Whether `--full` / `full=true` may lift the caps, and whether 0 in
+          `max_rows` or `max_chars` does. Set it to false in the committed config to
+          keep every answer bounded (a shared MCP host, a context-limited fleet): a
+          `full` request then gets the capped answer, and every cut answer says the
+          lift is off, so nothing is silently different. This is a setting, not an
+          enforced lock: ddflow has no organisation layer yet, so the local layer or
+          `DDFLOW_OUTPUT_ALLOW_FULL` can still override it. Default true: a person at
+          a terminal asking for everything gets everything.
       grants.max_count = 3   [default]
           The most extra rounds ONE operator grant may carry (default 3): `ddflow
           grant add --count N` above it is refused. A grant is the operator's recorded

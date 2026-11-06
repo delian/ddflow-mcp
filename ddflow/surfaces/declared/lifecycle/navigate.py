@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from shlex import quote
 
+from ....views.output_caps import from_args as _cap
+from ..capflags import capped
 from ._shared import (
     AB,
     DEFAULT_CHECK_RECOVERY,
@@ -29,8 +31,9 @@ def _next(repo, a, agent):
     """`next`, or with `--lane` the pull answer for that lane."""
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
     if lane := a.get("lane", ""):
-        return _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
-    return _api().next_item(repo, kind=kind, phase=phase, agent=agent)
+        out = _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
+        return _cap(repo, out, f"next --lane {lane}", a)  # its footer names the lane call
+    return _cap(repo, _api().next_item(repo, kind=kind, phase=phase, agent=agent), "next", a)
 
 
 def _next_notes(out, a, ctx):
@@ -52,10 +55,9 @@ COMMANDS: tuple[Command, ...] = (
         path=("next",),
         summary="what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)",
         tool="ddflow_next",
-        description="What may be started RIGHT NOW, and for everything that may not, the reason. "
-        "Independent items in the ready set can be run in parallel worktrees by "
-        "separate agents. Returns ready=[] when nothing is actionable — that is a "
-        "result, not an error, and it never means 'pick something anyway'.",
+        description="What may be started RIGHT NOW, and why the rest may not. Independent "
+        "ready items can run in parallel worktrees. ready=[] is a result, not an error: "
+        "it never means 'pick something anyway'.",
         call=_next,
         payload="",
         cli=CliPolicy(notes=_next_notes, human=_next_text),
@@ -79,6 +81,7 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="answer this idle lane: its best item and a note for claim",
                 default="",
             ),
+            *capped(True),
         ),
     ),
     Command(

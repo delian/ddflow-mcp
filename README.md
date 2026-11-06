@@ -1120,7 +1120,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 579 knobs.
+cadences, and the rest of the 583 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5404,7 +5404,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 579): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 583): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5688,7 +5688,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=a34cbc7cb955 -->
+<!-- ddflow:begin README/tools sha=b0c89db0c31e -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5765,7 +5765,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_job_end` | all | Record that a job ended and how. |
 | Doing the work | `ddflow_job_list` | all | Long-running jobs and their LIVE status: running, exited (with the exit code its log recorded), gone… |
 | Doing the work | `ddflow_job_run` | all | Launch a LONG-RUNNING command for an item (a training run, a data generation, a model server) detached into… |
-| Doing the work | `ddflow_next` | core | What may be started RIGHT NOW, and for everything that may not, the reason. |
+| Doing the work | `ddflow_next` | core | What may be started RIGHT NOW, and why the rest may not. |
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
@@ -5986,7 +5986,7 @@ declared once and persists — see
 
 ## Configuration
 
-579 knobs across 51 sections, every one documented in place and listed, with its default
+583 knobs across 52 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6053,8 +6053,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7d7c9b8070fc -->
-<details><summary>All 579 knobs across 51 sections</summary>
+<!-- ddflow:begin README/knobs sha=521cedf3805c -->
+<details><summary>All 583 knobs across 52 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6510,6 +6510,10 @@ long default is left to `ddflow config --explain`.
 | `digest.escalate_after_red_main` | `"6h"` |  |
 | `digest.text_chars` | `400` |  |
 | `digest.spotcheck_min` | `1` |  |
+| `output.max_rows` | `50` |  |
+| `output.max_chars` | `30000` |  |
+| `output.non_ascii_weight` | `4` |  |
+| `output.allow_full` | `true` |  |
 | `grants.max_count` | `3` |  |
 | `grants.ttl_h` | `48` |  |
 | `approvals.use_ttl_s` | `3600` |  |
