@@ -202,9 +202,11 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     # must not skip that commit and start from a base the caller never held (Be40e9c84d5).
     merge_since = W.rev(repo, wt.base)
     _commit_shards_before_merge(log, cfg, item)
-    # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
-    # (it lands the event shards on the primary), so a landing check against a rev read
-    # before it would misread a refused git merge the shard commit caused as "landed anyway".
+    # Capture the pre-merge base AFTER the shard commit above, when one was made: that
+    # commit moves the base (it lands the event shards on the primary), so a landing check
+    # against a rev read before it would misread a refused git merge the shard commit caused
+    # as "landed anyway". Under ff-only the helper commits nothing, so `landed_before` equals
+    # `merge_since`: still the right read for `_landed_anyway`, just with no shard commit stepped.
     landed_before = W.rev(repo, wt.base)
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
