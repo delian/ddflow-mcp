@@ -346,15 +346,20 @@ def test_a_flag_defaults_can_not_honour_is_refused_not_dropped(tmp_path, argv):
 
 
 @pytest.mark.parametrize(
-    "argv",
-    [("config", "--write"), ("config", "--set", "lease.ttl_s", "9", "--write")],
+    ("argv", "says", "never"),
+    [
+        (("config", "--write"), "goes with `defaults`", "takes no --set"),
+        (("config", "--set", "lease.ttl_s", "9", "--write"), "takes no --set", "goes with"),
+    ],
     ids=["bare", "with-set"],
 )
-def test_write_without_defaults_changes_nothing(tmp_path, argv):
+def test_write_without_defaults_changes_nothing(tmp_path, argv, says, never):
+    """Each misuse says its own thing: the other row's wording must not appear."""
     repo = _project(tmp_path)
     before = (repo / ".ddflow" / "config.toml").read_bytes()
     code, _out, err = run_cli(repo, *argv)
-    assert code == 1 and "ddflow config defaults" in err
+    assert code == 1 and says in err and never not in err
+    assert "ddflow config defaults" in err
     assert (repo / ".ddflow" / "config.toml").read_bytes() == before
 
 
