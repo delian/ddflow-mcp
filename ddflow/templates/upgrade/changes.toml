@@ -2523,3 +2523,38 @@ key = "lease.release_at_merge"
 new = "true"
 why = "Whether the lease ends when the merge lands (default) instead of at complete; off restores the hold to complete."
 impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.fleet_window_s"
+new = '0'
+why = "How far back `ddflow lanes fleet` lists an agent; 0 lists every agent ever seen."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.fleet_max_rows"
+new = '18'
+why = "Most agents `ddflow lanes fleet` lists; the cut says how many more; 0 lists all."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.fleet_items"
+new = '5'
+why = "Items each agent's row in `ddflow lanes fleet` names, newest first."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.fleet_failed_patterns"
+new = '["\\b429\\b", "rate.?limit", "spend.?limit", "quota", "overloaded", "context (window|length|exhaust)", "max.?tokens", "crash", "\\bOOM\\b"]'
+why = "Stop-reason patterns that class a stopped agent `failed` in the fleet registry."
+impact = "additive"
+
+[[release.change]]
+kind = "knob_added"
+key = "lanes.fleet_reason_chars"
+new = '120'
+why = "Characters of a stop reason the fleet registry keeps."
+impact = "additive"

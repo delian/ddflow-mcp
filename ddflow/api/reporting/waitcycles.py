@@ -190,7 +190,9 @@ def wait_order(log, st, cfg, cycles: list[LW.Cycle], notes: list[str], repo=None
     return {**ordered, "standing": AOS.auto_edges(log.read_all(), st)}
 
 
-def health_lines(log, st, cfg, repo, cycles, now: float | None = None, activity=None) -> list[str]:
+def health_lines(
+    log, st, cfg, repo, cycles, now: float | None = None, activity=None, recoveries=None
+) -> list[str]:
     """Finding lines not already shown elsewhere, at most `[health].shown` in full."""
     if not HW.enabled(HW.modes(cfg)):
         return []
@@ -198,7 +200,9 @@ def health_lines(log, st, cfg, repo, cycles, now: float | None = None, activity=
     by_kind = HW.modes(cfg)
     found = [
         f
-        for f in HW.inspect(log, st, cfg, repo, at, cycles, activity=activity)
+        for f in HW.inspect(
+            log, st, cfg, repo, at, cycles, activity=activity, recoveries=recoveries
+        )
         # a lapsed lease is shown by `recover`'s notes; a live lease whose process is gone is not
         if by_kind[f.kind] != "off"
         and (f.kind != H.CRASHED or f.evidence.get("pids"))

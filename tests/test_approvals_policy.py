@@ -291,6 +291,74 @@ def test_complete_unavailable_never_answers_failing_tests_the_base_could_not_mea
     assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": blind}))
 
 
+def test_complete_unavailable_never_answers_a_person_only_baseline_red_partial():
+    """B-complete-self-approves-over-person-only-partial: a `partial` is a coverage gap the
+    standing `complete_unavailable` rule answers; but a MEASURED baseline-red partial whose
+    `baseline.auto.accepted` is False (its failing tests sit in a file the item changed or
+    reaches) is a person's call -- `gate_accept.next_step` names only `ddflow approve` -- and
+    must not be auto-answered."""
+    from types import SimpleNamespace
+
+    from ddflow.api.lifecycle.complete.approval import _only_unavailable
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    v = SimpleNamespace(unmet_gates=["unit_tests"], blockers=["b"], coverage_gaps=["unit_tests"])
+    coverage = GateRecord(gate="unit_tests", outcome="partial")
+    person_only = GateRecord(
+        gate="unit_tests",
+        outcome="partial",
+        evidence={
+            "baseline": {
+                "red": True,
+                "auto": {
+                    "accepted": False,
+                    "why": "failing test file(s) the item changed or reaches: tests/t.py",
+                },
+            }
+        },
+    )
+    assert _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": coverage}))
+    assert not _only_unavailable(v, Item(id="T1", kind="task", gates={"unit_tests": person_only}))
+
+
+def test_complete_unavailable_predicate_and_site_share_the_person_only_guard():
+    """B-complete-self-approves-over-person-only-partial: the rule's OWN predicate
+    (`_unavailable_unmet_only`) refuses a person-only baseline-red partial, through the SAME
+    `gate_accept.person_only` helper the completion site reads, so they cannot drift apart."""
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(
+                gate="unit_tests",
+                outcome="partial",
+                evidence={"baseline": {"red": True, "auto": {"accepted": False}}},
+            ),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+    )
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False
+    # The complementary case at this same boundary: a plain unavailable coverage gap (not
+    # person-only) IS answered -- the same predicate returns True there, so it distinguishes
+    # the two and cannot be a blanket `lambda *a: False`.
+    gap = Item(
+        id="T2",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(gate="unit_tests", outcome="unavailable"),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+    )
+    assert PO.RULES["complete_unavailable"].when(gap, "unit_tests", cfg) is True
+
+
 def _only_unavailable_repo(repo, unit):
     """A minimal task whose pipeline is exactly implement,unit_tests,merge and whose ONLY unmet
     required gate is `unit_tests` = `unit`. reviewer independence is off so the completion
@@ -324,6 +392,63 @@ def test_a_routine_completion_never_auto_answers_a_failed_gate_end_to_end(repo):
     assert _state(repo).items["T1"].state != "done"
 
 
+def _person_only_baseline_red(repo):
+    """`_only_unavailable_repo` with unit_tests = a MEASURED baseline-red partial whose
+    `baseline.auto.accepted` is False (its failing tests are the item's own): the exact
+    state only a person accepts (`ddflow approve T1 unit_tests`), never the standing rule."""
+    _only_unavailable_repo(repo, "partial")
+    log = EventLog(repo, "ddflow-gate-run")
+    log.append(
+        "gate.partial",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "by": "ddflow",
+            "reason": "baseline-red: tests/t.py::test_x, bug B1",
+            "evidence": {
+                "baseline": {
+                    "red": True,
+                    "base": "main",
+                    "ids": ["tests/t.py::test_x"],
+                    "auto": {
+                        "accepted": False,
+                        "why": "failing test file(s) the item changed or reaches: tests/t.py",
+                    },
+                }
+            },
+        },
+    )
+
+
+def test_a_routine_completion_never_auto_answers_a_person_only_baseline_red_partial(repo):
+    """B-complete-self-approves-over-person-only-partial: a plain `complete` (no --approval)
+    over a baseline-red partial whose failing tests are the item's own must refuse and
+    surface `ddflow approve`, never silently spend the standing `complete_unavailable` rule."""
+    _person_only_baseline_red(repo)
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 3, (out, err)
+    assert "ddflow approve" in out + err
+    assert _state(repo).items["T1"].state != "done"
+
+
+def test_a_person_accepted_baseline_red_partial_is_not_refused_for_the_agent_complete(repo):
+    """B-complete-self-approves-over-person-only-partial, round-2: once a PERSON accepts the
+    measured baseline-red partial (`ddflow approve T1 unit_tests`), the verdict settles that
+    gate (`gate_accept.accepted`, completion/rules `_unsettled`), so `gate_accept.person_only`
+    is never consulted for it and a plain agent `complete` completes -- NOT the refusal the
+    UNACCEPTED case gets. The refusal keys on the unsettled state, not on the person's record
+    of it, so an operator's acceptance is honoured."""
+    _person_only_baseline_red(repo)
+    code, out, err = run_cli(repo, "approve", "T1", "unit_tests", "--note", "accepted the base bug")
+    assert code == 0, (out, err)
+    assert _state(repo).items["T1"].gate_outcome("unit_tests") == "partial", (
+        "acceptance keeps the partial outcome; it does not pass it"
+    )
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 0, (out, err)
+    assert _state(repo).items["T1"].state == "done"
+
+
 def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_asked(
     proj,
     monkeypatch,
@@ -342,6 +467,14 @@ def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_ask
     )
     first = C.operator_gate(log, cfg, canon)
     assert first.ok  # opens the window, anchored now
+    # `claim_unavailable` answers a vanished/lapsed HOLDER (B-claim-unavailable-fires-past-deps):
+    # give T1 a lapsed lease (holder gone, TTL long past) so this claim.force is the takeover the
+    # rule documents -- never a no-holder item, which the rule must refuse, not auto-approve.
+    log.append(
+        "lease.acquired",
+        "T1",
+        {"holder": "gone", "at": 0.0, "ttl_s": 1, "globs": ["t.py"]},
+    )
     # A SECOND generic T2 refusal while the window is still open is also auto-approved ...
     still = C.operator_gate(log, cfg, claim)
     assert (

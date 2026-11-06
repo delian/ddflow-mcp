@@ -183,3 +183,41 @@ def test_a_link_blocked_by_two_leases_falls_back_to_the_eligible_one():
     items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", terminal=True), "T3": AO.Cand("T3")}
     (e,), _ = AO.propose([cyc], items)
     assert (e.later, e.earlier) == ("T1", "T3")
+
+
+def test_two_dropped_leases_of_the_victim_each_wait_for_the_waiter():
+    # The victim holds two leases in the waiter's way; each must be ordered to wait, or
+    # the second can take the files straight back once the first is ordered to yield.
+    cyc = {
+        "agents": ["a", "b"],
+        "files": ["src/a.py"],
+        "victim": "a",
+        "victim_item": "T2",
+        "links": [
+            {"agent": "a", "item": "T2", "holder": "b", "blocker": "T1", "blockers": ["T1"]},
+            {"agent": "b", "item": "T1", "holder": "a", "blocker": "T2", "blockers": ["T2", "T4"]},
+        ],
+    }
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2"), "T4": AO.Cand("T4")}
+    edges, notes = AO.propose([cyc], items)
+    assert [(e.later, e.earlier) for e in edges] == [("T2", "T1"), ("T4", "T1")]
+    assert not notes
+
+
+def test_the_second_drop_is_ordered_even_when_the_first_is_already_ordered():
+    # The first dropped lease is already ordered to wait; the second is not, and it must
+    # still be ordered (the already-ordered branch must not stop the loop early).
+    cyc = {
+        "agents": ["a", "b"],
+        "files": ["src/a.py"],
+        "victim": "a",
+        "victim_item": "T2",
+        "links": [
+            {"agent": "a", "item": "T2", "holder": "b", "blocker": "T1", "blockers": ["T1"]},
+            {"agent": "b", "item": "T1", "holder": "a", "blocker": "T2", "blockers": ["T2", "T4"]},
+        ],
+    }
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", needs=("T1",)), "T4": AO.Cand("T4")}
+    edges, notes = AO.propose([cyc], items)
+    assert [(e.later, e.earlier) for e in edges] == [("T4", "T1")]
+    assert not notes

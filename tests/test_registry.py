@@ -192,6 +192,7 @@ EXPORT_KINDS = [
     "decisions",
     "roadmap",
     "rules",
+    "security",
     "sessions",
     "status",
     "worklog",

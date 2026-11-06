@@ -35,8 +35,7 @@ FLOOR = 0.5
 
 def _recs(*pairs: tuple[str, str]) -> list[dict]:
     return [
-        {"id": bid, "kind": "bug", "title": "", "body": body, "item": ""}
-        for bid, body in pairs
+        {"id": bid, "kind": "bug", "title": "", "body": body, "item": ""} for bid, body in pairs
     ]
 
 
@@ -67,7 +66,9 @@ def test_the_semantic_signal_clusters_disjoint_paraphrases():
     b = ("B2", "an agent's lease is held forever and the work is stranded")
     distinct = ("B3", "the README still documents a config knob that was removed")
     records = _recs(a, b, distinct)
-    assert bugsim.cluster(records, floor=FLOOR)[0] == [], "a word-disjoint paraphrase matched overlap"
+    assert bugsim.cluster(records, floor=FLOOR)[0] == [], (
+        "a word-disjoint paraphrase matched overlap"
+    )
     # B1 ~ B2 are the same meaning (cosine 1.0); B3 is orthogonal to both.
     vectors = [(1.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
     groups, _scores = bugsim.cluster(records, floor=FLOOR, vectors=vectors)

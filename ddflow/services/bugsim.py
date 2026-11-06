@@ -37,8 +37,7 @@ CAUSE_WORDS = 10
 def record_text(rec: Mapping[str, Any]) -> str:
     """The text a matcher reads: the title and the body, as `similar_records` projects them."""
     return " ".join(
-        x for x in (" ".join(str(rec.get("title") or "").split()), str(rec.get("body") or ""))
-        if x
+        x for x in (" ".join(str(rec.get("title") or "").split()), str(rec.get("body") or "")) if x
     )
 
 

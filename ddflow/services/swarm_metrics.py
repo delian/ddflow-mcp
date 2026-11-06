@@ -15,6 +15,8 @@ collector ``ddflow metrics`` uses; there is no second one) and answers over a wi
 A figure under ``[metrics] min_samples`` merged items is None, never a zero. The same call
 with ``since``/``until`` gives the "before" and "after" of a lane-consolidation or pilot
 comparison; ``compare`` turns two results into the ratios the swarm targets are stated in.
+``view`` is the ``swarm`` view of ``ddflow metrics`` and ``provider`` the headline rows of its
+summary; ``metrics.service`` resolves both when first used.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from ..core.model import State
 from ..core.schedule import critical_path, inherited_deps
 from .metrics.facts import Facts, Span, collect
 from .metrics.providers import Context
+from .metrics.service import Answer
 from .metrics.summary import RAN
 from .swarm.ledger import BUG_WINDOW_S
 
@@ -37,6 +40,13 @@ HOUR = 3600.0
 TARGET_THROUGHPUT_X = 1.8
 TARGET_COST_X = 1.3
 TARGET_REWORK_POINTS = 5.0
+
+#: Why an agent-hours ratio is not judged against TARGET_COST_X (D-swarm-pilot-2026-11-05).
+COST_NOT_MEASURED = (
+    "the 1.3x cost target is stated in dollars; this is agent-hours, not dollars, "
+    "so the target is not measured"
+)
+UNAVAILABLE = "n/a"
 
 
 def _merged(ctx: Context, until: float | None) -> list[Span]:
@@ -161,7 +171,7 @@ def _cost(events: Sequence[Event], facts: Facts, items: set[str], now: float, mi
     return {
         "usd_total": usd if usd_events else None,
         "usd_per_item": usd / n if usd_events and n >= minimum else None,
-        "agent_hours_per_item": agent_h / n if n >= minimum else None,
+        "agent_hours_per_item": agent_h / n if agent_h and n >= minimum else None,
         "events_with_cost": usd_events,
     }
 
@@ -240,7 +250,11 @@ def _ratio(after: float | None, before: float | None) -> float | None:
 
 
 def compare(before: dict, after: dict) -> dict:
-    """Ratios of two ``baseline`` results against the swarm targets (None: not derivable)."""
+    """Ratios of two ``baseline`` results against the swarm targets (None: not derivable).
+
+    ``cost_x`` falls back to the agent-hours proxy so a pair still compares like with like, but
+    only dollars judge the cost target: on the proxy ``targets["cost"]`` stays None and
+    ``not_measured`` says why."""
     thr = _ratio(after["throughput"]["per_hour"], before["throughput"]["per_hour"])
     usd = _ratio(after["cost"]["usd_per_item"], before["cost"]["usd_per_item"])
     proxy = _ratio(after["cost"]["agent_hours_per_item"], before["cost"]["agent_hours_per_item"])
@@ -255,25 +269,65 @@ def compare(before: dict, after: dict) -> dict:
         "rework_points": points,
         "targets": {
             "throughput": None if thr is None else thr >= TARGET_THROUGHPUT_X,
-            "cost": None if cost_x is None else cost_x <= TARGET_COST_X,
+            "cost": None if usd is None else usd <= TARGET_COST_X,
             "rework": None if points is None else points <= TARGET_REWORK_POINTS,
         },
+        "not_measured": {} if usd is not None else {"cost": COST_NOT_MEASURED},
     }
 
 
+def _figure(value: float | None, unit: str = "", digits: int = 2) -> str:
+    return UNAVAILABLE if value is None else f"{value:.{digits}f}{unit}"
+
+
+def text(data: dict) -> str:
+    """The human form of a ``baseline`` result: ``ddflow metrics swarm``."""
+    rate, cp = data["rework"]["rate"], data["critical_path"]
+    out = [
+        f"swarm baseline: {data['merged']} merged item(s)",
+        f"  merged items per hour   {_figure(data['throughput']['per_hour'])}",
+        f"  rework rate             {_figure(None if rate is None else rate * 100, '%')}",
+        f"  agent-hours per item    {_figure(data['cost']['agent_hours_per_item'], digits=4)}",
+        f"  dollars per item        {_figure(data['cost']['usd_per_item'])}",
+        f"  critical path           {cp['length'] or UNAVAILABLE} item(s), "
+        f"slack {_figure(cp['slack_s'], 's')}, parallelism {_figure(cp['parallelism'])}",
+    ]
+    if data["unavailable"]:
+        out += ["", "unavailable (not zero):"]
+        out += [f"  {k}: {why}" for k, why in sorted(data["unavailable"].items())]
+    return "\n".join(out)
+
+
 def provider(ctx: Context) -> list[dict]:
-    """A ``metrics.register`` provider: the baseline's headline rows for ``ddflow metrics``."""
+    """The ``metrics.register`` provider: the baseline's headline rows for ``ddflow metrics``."""
     merged = _merged(ctx, None)
     n = len(merged)
+    items = {s.item for s in merged}
     rw = _rework(ctx, merged, BUG_WINDOW_S)
-    claimed = [s.first_claim for s in merged if s.first_claim is not None]
-    wall = (max(s.completed_at or 0.0 for s in merged) - min(claimed)) if claimed else 0.0
+    wall = _wall(merged)[2]
+    agent_s = _held_s(ctx.facts, items, ctx.now) + _review_s(ctx.facts, items)
     return [
         {
             "metric": "swarm.merged_per_hour",
             "group": "",
             "n": n,
-            "value": n / (wall / HOUR) if wall > 0 else None,
+            "value": n / (wall / HOUR) if wall else None,
         },
         {"metric": "swarm.rework_rate", "group": "", "n": n, "value": rw["rate"]},
+        {
+            "metric": "swarm.agent_hours_per_item",
+            "group": "",
+            "n": n,
+            "value": agent_s / HOUR / n if agent_s and n else None,  # no lease: unmeasured, not 0
+        },
     ]
+
+
+def view(
+    events: Sequence[Event], state: State, cfg: Config, now: float, phase: str, since: float | None
+) -> Answer:
+    """``ddflow metrics swarm``: the baseline, exit 2 while it rests on too few merged items."""
+    data = baseline(events, state, cfg, now, phase=phase, since=since)
+    ok = data["throughput"]["per_hour"] is not None
+    why = f"not enough data: {data['unavailable'].get('throughput', '')}"
+    return Answer(ok, "" if ok else why, metrics=data, text=text(data))

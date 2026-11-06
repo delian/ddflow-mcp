@@ -1605,11 +1605,12 @@
 # ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise}] [lane]
+  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume}] [lane]
   
   positional arguments:
-    {state,brief,advise}  state (default), brief <lane> or advise
-    lane                  with brief: the lane name, or a unique part of it
+    {state,brief,advise,fleet,resume}
+                          state (default), brief <lane>, advise, fleet or resume <lane>
+    lane                  with brief or resume: the lane name, or a unique part of it
   
   options:
     -h, --help            show this help message and exit
@@ -1852,11 +1853,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,swarm}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks}
-                          summary (default), forecast, retro <id>, skips, lanes, stages or locks
+    {summary,forecast,retro,skips,lanes,stages,locks,swarm}
+                          summary (default), forecast, retro <id>, skips, lanes, stages, locks or
+                          swarm
     item                  with retro: the item id
   
   options:
