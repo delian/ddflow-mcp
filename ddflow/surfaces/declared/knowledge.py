@@ -202,7 +202,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "pattern",
-                help="A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Prefer it to a remembered rule when mechanical: a count says 'worse', never 'which'. Refused if it does not compile.",
+                help="A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Refused if it does not compile.",
                 cli_help="regex this lesson forbids. Scans NOW and stores WHICH sites match, so `lesson verify` can name what reappeared — a count could only say it got worse",
                 default="",
             ),
@@ -255,7 +255,7 @@ COMMANDS: tuple[Command, ...] = (
         path=("recall",),
         summary="'have we been here before?' — search decisions, lessons, research, bugs, tasks and past prompts at once",
         tool="ddflow_recall",
-        description="'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons, research verdicts, operational memories, past bugs, similar tasks and the operator's earlier prompts. CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK, so nothing is said or learned twice. Results are labelled by kind (a binding decision, a transferable lesson and an old prompt change what you do differently); a superseded decision names its replacement -- follow that.",
+        description="'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons, research verdicts, operational memories, past bugs, similar tasks and the operator's earlier prompts. CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK, so nothing is said or learned twice. Results are labelled by kind; a superseded decision names its replacement -- follow that.",
         call=lambda repo, a, agent: _api().recall(
             repo,
             a.get("query", "") or "",

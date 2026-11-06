@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin dump, claude -p with a stdin-dumping hook, scrubbed: paths and ids replaced",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05",
+    "note": "agent_transcript_path is given here; SubagentStart has no such field."
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "308d45ce-b787-4413-a397-d58d72755ac7",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "ab4a805025bd8f6a6",
+    "agent_type": "general-purpose",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "~/.claude/projects/-w/s-1/subagents/agent-ab4a805025bd8f6a6.jsonl",
+    "last_assistant_message": "PONG",
+    "background_tasks": [
+      {
+        "id": "ab4a805025bd8f6a6",
+        "type": "subagent",
+        "status": "running",
+        "description": "Reply PONG",
+        "agent_type": "general-purpose"
+      }
+    ],
+    "session_crons": []
+  },
+  "expect": {
+    "session_id": "s-1"
+  }
+}

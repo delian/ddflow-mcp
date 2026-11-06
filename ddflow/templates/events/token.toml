@@ -1,0 +1,9 @@
+# Event kinds owned by token. One [[kind]] per kind.
+
+[[kind]]
+name = "token.issued"
+doc = "A paired bearer token was issued to a named client with a role."
+
+[[kind]]
+name = "token.revoked"
+doc = "A paired bearer token was ended, by a person or by its rotation."

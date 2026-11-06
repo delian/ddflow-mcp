@@ -74,7 +74,8 @@ def test_two_agent_cycle_resolves_in_apply_mode(repo):
     out = _doctor(repo)
     assert len(out["auto_order"]["applied"]) == 1
     needs = _needs(repo)
-    assert needs["T2"] == ["T1"] and not needs["T1"]  # the victim waits for the other
+    # T1 was claimed first and neither shows work since, so its holder has the least progress
+    assert needs["T1"] == ["T2"] and not needs["T2"]  # the victim waits for the other
     assert find_cycles(_state(repo).items) == []
 
 
@@ -106,7 +107,7 @@ def test_apply_is_idempotent_and_the_edge_is_marked_auto(repo):
     events = EventLog(repo, "reader").read_all()
     assert all(e.kind != "task.updated" for e in events[n:])
     (edge,) = AOS.auto_edges(events, _state(repo))
-    assert edge["later"] == "T2" and edge["earlier"] == "T1" and "T2 now waits" in edge["reason"]
+    assert edge["later"] == "T1" and edge["earlier"] == "T2" and "T1 now waits" in edge["reason"]
 
 
 def test_off_mode_does_nothing(repo):
@@ -120,8 +121,8 @@ def test_edge_is_reversible_by_update_needs(repo):
     _ring(repo, 2)
     _mode(repo, "apply")
     _doctor(repo)
-    assert run_cli(repo, "update", "T2", "--needs", "", agent=AGENTS[1])[0] == 0
-    assert _needs(repo)["T2"] == []
+    assert run_cli(repo, "update", "T1", "--needs", "", agent=AGENTS[0])[0] == 0
+    assert _needs(repo)["T1"] == []
     assert AOS.auto_edges(EventLog(repo, "reader").read_all(), _state(repo)) == []
 
 
@@ -182,3 +183,41 @@ def test_a_link_blocked_by_two_leases_falls_back_to_the_eligible_one():
     items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", terminal=True), "T3": AO.Cand("T3")}
     (e,), _ = AO.propose([cyc], items)
     assert (e.later, e.earlier) == ("T1", "T3")
+
+
+def test_two_dropped_leases_of_the_victim_each_wait_for_the_waiter():
+    # The victim holds two leases in the waiter's way; each must be ordered to wait, or
+    # the second can take the files straight back once the first is ordered to yield.
+    cyc = {
+        "agents": ["a", "b"],
+        "files": ["src/a.py"],
+        "victim": "a",
+        "victim_item": "T2",
+        "links": [
+            {"agent": "a", "item": "T2", "holder": "b", "blocker": "T1", "blockers": ["T1"]},
+            {"agent": "b", "item": "T1", "holder": "a", "blocker": "T2", "blockers": ["T2", "T4"]},
+        ],
+    }
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2"), "T4": AO.Cand("T4")}
+    edges, notes = AO.propose([cyc], items)
+    assert [(e.later, e.earlier) for e in edges] == [("T2", "T1"), ("T4", "T1")]
+    assert not notes
+
+
+def test_the_second_drop_is_ordered_even_when_the_first_is_already_ordered():
+    # The first dropped lease is already ordered to wait; the second is not, and it must
+    # still be ordered (the already-ordered branch must not stop the loop early).
+    cyc = {
+        "agents": ["a", "b"],
+        "files": ["src/a.py"],
+        "victim": "a",
+        "victim_item": "T2",
+        "links": [
+            {"agent": "a", "item": "T2", "holder": "b", "blocker": "T1", "blockers": ["T1"]},
+            {"agent": "b", "item": "T1", "holder": "a", "blocker": "T2", "blockers": ["T2", "T4"]},
+        ],
+    }
+    items = {"T1": AO.Cand("T1"), "T2": AO.Cand("T2", needs=("T1",)), "T4": AO.Cand("T4")}
+    edges, notes = AO.propose([cyc], items)
+    assert [(e.later, e.earlier) for e in edges] == [("T4", "T1")]
+    assert not notes

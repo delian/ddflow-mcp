@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ... import _threads
 from ...adapters.mcp import StdioServer
 from ...infra import proc as PROC
+from ...infra import threads
 from ...infra.worktree import repo_root
 from .. import mcp_upgrade as _upgrade
 from ..mcp_protocol import SERVER_INFO
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     spawn servers from a fixed directory.
     """
 
-    _threads.cap_blas_threads()
+    threads.cap_blas_threads()
     ap = argparse.ArgumentParser(
         prog="ddflow-mcp",
         description="ddflow MCP stdio server. Add to your agent's MCP config as:\n"

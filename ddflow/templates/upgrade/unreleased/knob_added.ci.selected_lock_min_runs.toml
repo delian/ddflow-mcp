@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "ci.selected_lock_min_runs"
+new = "5"
+why = "The fewest measured ci runs ci.selected_lock_s needs; with fewer, the file count decides, as it did."
+impact = "additive"

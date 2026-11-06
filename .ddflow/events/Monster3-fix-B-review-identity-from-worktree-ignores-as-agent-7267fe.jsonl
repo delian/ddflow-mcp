@@ -1,0 +1,2 @@
+{"agent":"Monster3-fix-B-review-identity-from-worktree-ignores-as-agent-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e39dfddc19533f5b2c9637ded","kind":"ddflow.seen","lamport":138229,"schema":1,"subject":"ddflow","ts":"2026-11-05T01:53:24.229561Z"}
+{"agent":"Monster3-fix-B-review-identity-from-worktree-ignores-as-agent-7267fe","data":{"tags":["bugfix","wave:0"]},"id":"e0eb51cdd316c9b6c6265e693","kind":"task.updated","lamport":138230,"schema":1,"subject":"fix-B-ci-merge-tree-stale-after-queue-wait","ts":"2026-11-05T01:53:24.281141Z"}

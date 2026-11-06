@@ -1,18 +1,23 @@
 {
   "_meta": {
-    "recorded": false,
-    "synthetic": true,
-    "source": "documented payload shape from the descriptor's [verified] sources; replace with a live recording (B-ac-fixtures)",
-    "version": "unversioned"
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin, `ddflow harness record`, scrubbed",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05"
   },
   "stdin": {
     "session_id": "s-1",
-    "prompt": "hello",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
     "cwd": "/w",
-    "model": "m"
+    "prompt_id": "00000000-0000-0000-0000-000000000001",
+    "permission_mode": "default",
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "Run the Bash command: echo PONG. Then call the MCP tool ddflow_brief once. Then reply DONE."
   },
   "expect": {
     "session_id": "s-1",
-    "prompt": "hello"
+    "prompt": "Run the Bash command: echo PONG. Then call the MCP tool ddflow_brief once. Then reply DONE.",
+    "cwd": "/w"
   }
 }

@@ -20,6 +20,40 @@ from ._fingerprint import (
     _capability_tables,
 )
 
+#: SQLite VM steps between two checks of a `read_only_rows` time budget.
+PROGRESS_STEPS = 1000
+
+
+class ReadOnlyError(Exception):
+    """A database another tool owns could not be read, with the reason."""
+
+
+class ReadOnlyTimeout(ReadOnlyError):
+    """A read of such a database ran over its time budget."""
+
+
+def read_only_rows(path: Path, sql: str, params: tuple = (), *, timeout_s: float) -> list[tuple]:
+    """The rows of one query on a SQLite file ddflow does not own: opened read-only, so it
+    can neither change the file nor create one, and stopped at ``timeout_s`` because such a
+    file can be many gigabytes. Raises `ReadOnlyError` with the reason, a timeout as
+    `ReadOnlyTimeout`."""
+    deadline = time.monotonic() + timeout_s
+    try:
+        con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=timeout_s)
+    except (sqlite3.Error, OSError, RuntimeError) as exc:  # RuntimeError: a symlink loop
+        raise ReadOnlyError(str(exc)) from exc
+    try:
+        con.set_progress_handler(lambda: time.monotonic() > deadline, PROGRESS_STEPS)
+        return con.execute(sql, params).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "interrupted" in str(exc):
+            raise ReadOnlyTimeout(f"over its {timeout_s}s budget") from exc
+        raise ReadOnlyError(str(exc)) from exc
+    except sqlite3.Error as exc:
+        raise ReadOnlyError(str(exc)) from exc
+    finally:
+        con.close()
+
 
 class _SchemaMixin:
     def __init__(self, root: Path, cfg: Config | None = None) -> None:

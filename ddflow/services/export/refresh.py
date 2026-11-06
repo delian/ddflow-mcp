@@ -181,7 +181,7 @@ def refresh_selected(
 
 
 def _one(root: Path, cfg: Config, q: Any, spec: ops.Spec, verify: bool) -> DocOutcome:
-    o = DocOutcome(spec.doc, spec.path)
+    o = DocOutcome(spec.doc, ops.target_of(root, spec))
     try:
         if spec.mode not in (R.WHOLE, R.REGION):
             o.action, o.message = "skipped", f"mode {spec.mode} is not refreshed automatically"

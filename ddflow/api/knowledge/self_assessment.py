@@ -16,7 +16,7 @@ from pathlib import Path
 from ...core import outcome as O
 from ...services import self_assessment as SA
 from .._base import _load
-from . import bugs
+from .bugs import bug_found
 
 
 def auto_file(
@@ -56,7 +56,7 @@ def auto_file(
     skipped: list[str] = []
     failed: list[str] = []
     for defect in defects:
-        out = bugs.bug_found(
+        out = bug_found(
             repo,
             summary=defect.summary,
             title=defect.title,

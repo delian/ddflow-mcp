@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "hooks.fixture_max_reply_bytes"
+new = "65536"
+why = "`ddflow harness record` replaces an MCP reply longer than this, after redaction, by a `_truncated` record with its size, so a committed fixture stays bounded and a cut is visible (B-ac-fixtures)."
+impact = "additive"

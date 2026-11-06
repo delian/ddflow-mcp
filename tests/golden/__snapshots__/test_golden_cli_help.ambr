@@ -292,11 +292,13 @@
 # ---
 # name: test_help[ddflow board]
   '''
-  usage: ddflow board [-h] [--phase PHASE]
+  usage: ddflow board [-h] [--phase PHASE] [--full]
   
   options:
     -h, --help     show this help message and exit
     --phase PHASE
+    --full         print everything: lift the default output caps ([output] max_rows, max_chars) for
+                   this call
   
   '''
 # ---
@@ -873,10 +875,12 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
+  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
+    --full                print everything: lift the default output caps ([output] max_rows,
+                          max_chars) for this call
     --upgrade             the upgrade plan instead (the same as `ddflow upgrade`)
     --accept-lost-events  record the present event counts of the shards that lost events (to a
                           force-push, revert, reset or deletion) as known, clearing that PROBLEM;
@@ -1265,6 +1269,25 @@
   
   '''
 # ---
+# name: test_help[ddflow harness record]
+  '''
+  usage: ddflow harness record [-h] [--prepare DIR] [--from DIR] [--write] [--dest DIR] [--agent-version AGENT_VERSION] id
+  
+  positional arguments:
+    id                    a descriptor id
+  
+  options:
+    -h, --help            show this help message and exit
+    --prepare DIR         a new scratch project with capture taps
+    --from DIR            a prepared project after a session
+    --write               write the fixtures (default: report)
+    --dest DIR            default: tests/fixtures/harness in this tree
+    --agent-version AGENT_VERSION
+                          what `<agent> --version` says; --from needs it, a fixture always carries
+                          it
+  
+  '''
+# ---
 # name: test_help[ddflow harness show]
   '''
   usage: ddflow harness show [-h] id
@@ -1291,10 +1314,10 @@
 # ---
 # name: test_help[ddflow harness]
   '''
-  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe} ...
+  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe,record} ...
   
   positional arguments:
-    {list,show,doctor,facts,add,lint,test,probe}
+    {list,show,doctor,facts,add,lint,test,probe,record}
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
@@ -1304,6 +1327,8 @@
                           problems)
       test                the offline conformance of one descriptor
       probe               what the agent's binary would be asked; runs nothing without --run
+      record              live payload fixtures: what is recorded, --prepare a scratch project, or
+                          take --from
   
   options:
     -h, --help            show this help message and exit
@@ -1605,11 +1630,12 @@
 # ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise}] [lane]
+  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume}] [lane]
   
   positional arguments:
-    {state,brief,advise}  state (default), brief <lane> or advise
-    lane                  with brief: the lane name, or a unique part of it
+    {state,brief,advise,fleet,resume}
+                          state (default), brief <lane>, advise, fleet or resume <lane>
+    lane                  with brief or resume: the lane name, or a unique part of it
   
   options:
     -h, --help            show this help message and exit
@@ -1852,11 +1878,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,swarm}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks}
-                          summary (default), forecast, retro <id>, skips, lanes, stages or locks
+    {summary,forecast,retro,skips,lanes,stages,locks,swarm}
+                          summary (default), forecast, retro <id>, skips, lanes, stages, locks or
+                          swarm
     item                  with retro: the item id
   
   options:
@@ -1895,12 +1922,16 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}]
+  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
     --phase PHASE        limit to this phase; exit 1 if it names no phase or item
     --kind {task,phase}
+    --lane LANE          answer this idle lane: its best item and a note for claim
+    --full               print everything: lift the default output caps ([output] max_rows,
+                         max_chars) for this call
+    --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -1920,35 +1951,52 @@
   
   '''
 # ---
+# name: test_help[ddflow pair]
+  '''
+  usage: ddflow pair [-h] --role ROLE [--ttl-h TTL_H] name
+  
+  positional arguments:
+    name           the client: its token's name is its identity
+  
+  options:
+    -h, --help     show this help message and exit
+    --role ROLE    its role, a name in [agent].roles
+    --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
 # name: test_help[ddflow phase add]
   '''
-  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
+  usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--allow-unknown-needs] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
   
   positional arguments:
     id
   
   options:
-    -h, --help           show this help message and exit
+    -h, --help            show this help message and exit
     --title TITLE
     --needs NEEDS
-    --globs GLOBS        path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
-                         to add more -- every value is kept
+    --globs GLOBS         path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag
+                          to add more -- every value is kept
     --tags TAGS
     --body BODY
     --priority PRIORITY
-    --line LINE          release line (default: the current one)
-    --readd              file a REMOVED item's id again. An id still in the queue is always refused:
-                         change it with `ddflow update`
-    --new                answer a possible-duplicate refusal: this is a different record, file it
-    --extends ID         answer it: this adds to record ID -- filed as a NEW record linked to ID (a
-                         lesson, decision or bug is appended to instead; use --merge-into to append
-                         to a task, phase or research note)
-    --merge-into ID      answer it: append this to record ID instead of filing it (ID must be open
-                         and unclaimed); MCP: relation merge_into:ID
-    --duplicate-of ID    answer it: this is the same thing as record ID (handled like --extends)
-    --related ID         answer it: a different record that is related to ID; linked both ways
-    --check              dry run: print the existing records this would be refused as a duplicate of
-                         and write nothing (exit 0 with candidates, 2 with none)
+    --line LINE           release line (default: the current one)
+    --readd               file a REMOVED item's id again. An id still in the queue is always
+                          refused: change it with `ddflow update`
+    --allow-unknown-needs
+                          accept needs that name an id not in the queue (one that will exist later,
+                          or `repo:ID`)
+    --new                 answer a possible-duplicate refusal: this is a different record, file it
+    --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
+                          lesson, decision or bug is appended to instead; use --merge-into to append
+                          to a task, phase or research note)
+    --merge-into ID       answer it: append this to record ID instead of filing it (ID must be open
+                          and unclaimed); MCP: relation merge_into:ID
+    --duplicate-of ID     answer it: this is the same thing as record ID (handled like --extends)
+    --related ID          answer it: a different record that is related to ID; linked both ways
+    --check               dry run: print the existing records this would be refused as a duplicate
+                          of and write nothing (exit 0 with candidates, 2 with none)
   
   '''
 # ---
@@ -2389,14 +2437,17 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
   
   options:
-    -h, --help   show this help message and exit
+    -h, --help       show this help message and exit
     --item ITEM
     --apply
     --all
     --plan
+    --full           print everything: lift the default output caps ([output] max_rows, max_chars)
+                     for this call
+    --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -2998,12 +3049,14 @@
 # ---
 # name: test_help[ddflow status]
   '''
-  usage: ddflow status [-h] [--by-tag BY_TAG]
+  usage: ddflow status [-h] [--by-tag BY_TAG] [--full]
   
   options:
     -h, --help       show this help message and exit
     --by-tag BY_TAG  also print per-value counts for this label namespace, e.g. wave or track, with
                      the top blockers per value
+    --full           print everything: lift the default output caps ([output] max_rows, max_chars)
+                     for this call
   
   '''
 # ---
@@ -3024,7 +3077,7 @@
 # ---
 # name: test_help[ddflow task add]
   '''
-  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
+  usage: ddflow task add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--kind KIND] [--resources RESOURCES] [--priority PRIORITY] [--line LINE] [--readd] [--allow-unknown-needs] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--phase PHASE] [--parent PARENT] [--lines LINES] [--port-of PORT_OF] id
   
   positional arguments:
     id
@@ -3048,6 +3101,9 @@
     --line LINE           release line (default: the current one)
     --readd               file a REMOVED item's id again. An id still in the queue is always
                           refused: change it with `ddflow update`
+    --allow-unknown-needs
+                          accept needs that name an id not in the queue (one that will exist later,
+                          or `repo:ID`)
     --new                 answer a possible-duplicate refusal: this is a different record, file it
     --extends ID          answer it: this adds to record ID -- filed as a NEW record linked to ID (a
                           lesson, decision or bug is appended to instead; use --merge-into to append
@@ -3130,6 +3186,69 @@
   
   '''
 # ---
+# name: test_help[ddflow tokens list]
+  '''
+  usage: ddflow tokens list [-h] [--all]
+  
+  options:
+    -h, --help  show this help message and exit
+    --all       also expired and revoked
+  
+  '''
+# ---
+# name: test_help[ddflow tokens redeem]
+  '''
+  usage: ddflow tokens redeem [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow tokens revoke]
+  '''
+  usage: ddflow tokens revoke [-h] --reason REASON name
+  
+  positional arguments:
+    name             the token's name or id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON  why this credential ended
+  
+  '''
+# ---
+# name: test_help[ddflow tokens rotate]
+  '''
+  usage: ddflow tokens rotate [-h] [--ttl-h TTL_H] name
+  
+  positional arguments:
+    name           the token's name or id
+  
+  options:
+    -h, --help     show this help message and exit
+    --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
+# name: test_help[ddflow tokens]
+  '''
+  usage: ddflow tokens [-h] {redeem,list,revoke,rotate} ...
+  
+  positional arguments:
+    {redeem,list,revoke,rotate}
+      redeem              exchange a one-time code (read from stdin) for the token, shown once
+      list                who holds a token: names, roles and dates from the log, never a secret
+      revoke              a PERSON ends a token (by name or id) and any pairing waiting for that
+                          name
+      rotate              a PERSON mints a code that replaces a token; the old one works until it is
+                          redeemed
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow unblock]
   '''
   usage: ddflow unblock [-h] [--note NOTE] id
@@ -3145,7 +3264,7 @@
 # ---
 # name: test_help[ddflow update]
   '''
-  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
+  usage: ddflow update [-h] [--title TITLE] [--body BODY] [--append-body APPEND_BODY] [--needs NEEDS] [--add-needs ADD_NEEDS] [--remove-needs REMOVE_NEEDS] [--allow-unknown-needs] [--tags TAGS] [--add-tags ADD_TAGS] [--remove-tags REMOVE_TAGS] [--line LINE] [--resources RESOURCES] [--globs GLOBS] [--add-globs ADD_GLOBS] [--remove-globs REMOVE_GLOBS] [--priority PRIORITY] [--queue] [--landed LANDED] [--landed-paths LANDED_PATHS] [--parent PARENT] [--phase PHASE] [--kind KIND] [--worktree WORKTREE] id
   
   positional arguments:
     id
@@ -3161,6 +3280,9 @@
                           ADD these comma-separated ids to the item's needs; the rest are kept
     --remove-needs REMOVE_NEEDS
                           REMOVE these comma-separated ids from the item's needs
+    --allow-unknown-needs
+                          accept needs that name an id not in the queue (one that will exist later,
+                          or `repo:ID`)
     --tags TAGS
     --add-tags ADD_TAGS   ADD these comma-separated tags to the item's tags; the rest are kept
     --remove-tags REMOVE_TAGS
@@ -3458,13 +3580,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3580,6 +3702,8 @@
                           violations
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
+      pair                a PERSON mints a one-time code for a named client with a role (`tokens
+                          redeem` spends it)
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -3682,6 +3806,7 @@
     'ddflow harness lint',
     'ddflow harness list',
     'ddflow harness probe',
+    'ddflow harness record',
     'ddflow harness show',
     'ddflow harness test',
     'ddflow health',
@@ -3726,6 +3851,7 @@
     'ddflow model show',
     'ddflow next',
     'ddflow onboard',
+    'ddflow pair',
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',
@@ -3802,6 +3928,11 @@
     'ddflow task fold',
     'ddflow task list',
     'ddflow tests',
+    'ddflow tokens',
+    'ddflow tokens list',
+    'ddflow tokens redeem',
+    'ddflow tokens revoke',
+    'ddflow tokens rotate',
     'ddflow unblock',
     'ddflow update',
     'ddflow upgrade',

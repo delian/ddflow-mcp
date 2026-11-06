@@ -270,7 +270,11 @@ def next_text(out, a, ctx) -> str | None:
     p = out.data["_render"]["plan"]
     if not p.ready:
         return "\n".join(
-            [out.reason, *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:10])]
+            [
+                out.reason,
+                *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:10]),
+                *([note] if (note := out.data.get("_footer")) else []),
+            ]
         )
     lines = [f"Ready ({p.summary()}):"]
     for it in p.ready:
@@ -283,6 +287,8 @@ def next_text(out, a, ctx) -> str | None:
     lines += [f"  (blocked) {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:6]]
     if p.finished:
         lines.append(p.close_note())
+    if note := out.data.get("_footer"):
+        lines.append(note)
     return "\n".join(lines)
 
 
@@ -324,6 +330,12 @@ def _bug_globs_line(note: dict, item: str) -> str:
 def _claimed_line(item: str, d: dict) -> str:
     via = f" (the fix task of bug {d['bug']})" if d.get("bug") else ""
     return f"claimed {item}{via} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+
+
+def _sync_warn(d: dict) -> str:
+    """The create-time base-sync warning, or "" — a warning lives behind a helper so it
+    never raises `claim_text`'s complexity grade (B-claim-sync-conflict-silent)."""
+    return f"\n  WARNING:  {d['sync_warn']}" if d.get("sync_warn") else ""
 
 
 def claim_via_bug(repo, a: dict, agent: str, called_from=None):
@@ -400,6 +412,7 @@ def claim_text(out, a, ctx) -> str:
             f"\n  a tree of its own, because {d['tree']['why']}."
             f"\n  cd there and work."
         )
+    msg += _sync_warn(d)
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"

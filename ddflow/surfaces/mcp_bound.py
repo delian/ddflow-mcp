@@ -24,6 +24,7 @@ from typing import Any
 
 from ..core import limits as L
 from ..core.textcut import clip
+from ..views.output_caps import take_note
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
 NEXT_BLOCKED_SHOWN = 10
@@ -77,6 +78,9 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_next`: the ready items, whole; the blocked list cut, its reasons counted."""
     if not isinstance(body, dict) or not isinstance(body.get("blocked"), list):
         return body, None
+    if args.get("full") or "truncated" in body:
+        # `full=true` lifts the cut; a body `output_caps` already cut names its own footer.
+        return {**body, "ready": [_lean(i) for i in body.get("ready") or []]}, None
     out = dict(body)
     blocked = body["blocked"]
     out["ready"] = [_lean(i) for i in body.get("ready") or []]
@@ -276,9 +280,16 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     return body, None
 
 
+def bound_recover(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
+    """`ddflow_recover`: the body is a bare array, so a cut (`output_caps`) is told in a
+    second content block, never by changing the array's shape."""
+    return body, take_note() or None
+
+
 #: tool name -> the projection its MCP body goes through.
 BOUNDS = {
     "ddflow_next": bound_next,
+    "ddflow_recover": bound_recover,
     "ddflow_show": bound_show,
     "ddflow_recall": bound_recall,
     "ddflow_decision_list": bound_decisions,

@@ -35,10 +35,12 @@ def render_recover(out, a) -> str:
 
 def _render_plan(out) -> str:
     actions = out.data["_render"]["actions"]
-    if not actions and not out.data.get("paused"):
+    total = out.data.get("count", len(actions))  # the plan's size: `actions` may be one page
+    note = out.data.get("_footer")  # a page past the end has rows to name, just not here
+    if not actions and not note and not out.data.get("paused"):
         return ""
     lines = []
-    if not actions:
+    if not actions and not note:
         # A paused-but-empty plan must say so: the operator cannot tell the brake is
         # on from silence.
         lines.append(
@@ -48,11 +50,11 @@ def _render_plan(out) -> str:
         return "\n".join(lines)
     if out.data.get("paused"):
         lines.append(
-            f"recovery plan: {len(actions)} action(s). PAUSED: the kill switch is on, so "
+            f"recovery plan: {total} action(s). PAUSED: the kill switch is on, so "
             "`ddflow recover --all --apply` refuses and nothing will run.\n"
         )
     else:
-        lines.append(f"recovery plan: {len(actions)} action(s).\n")
+        lines.append(f"recovery plan: {total} action(s).\n")
     for a in actions:
         lines.append(f"  [{a.cls.upper():9}] {a.item}  attempts {a.attempts}")
         lines.append(f"       {a.reason}")
@@ -63,6 +65,8 @@ def _render_plan(out) -> str:
             "Nothing here runs PROPOSE or OPERATOR: `ddflow recover --all --apply` performs "
             "only SAFE_AUTO."
         )
+    if note:
+        lines.append(note)
     return "\n".join(lines)
 
 

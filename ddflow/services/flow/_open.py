@@ -47,12 +47,14 @@ def pre_merge_blockers(
     unfinished spends that time on something ddflow would then refuse to complete -- and
     the refusal arrives after the merge, when it can no longer stop anything. So the
     verdict is computed as if the merge gate had passed, and anything left is a reason
-    not to ask anyone yet.
+    not to ask anyone yet. A branch not merged yet is no such reason: the request is what
+    merges it.
     """
     hypo = copy.deepcopy(st)
     it = hypo.items[item_id]
     it.gates["merge"] = GateRecord(gate="merge", outcome="passed")
-    return CM.verdict(hypo, cfg, item_id, repo=repo, model=model).blockers
+    blockers = CM.verdict(hypo, cfg, item_id, repo=repo, model=model).blockers
+    return [b for b in blockers if CM.UNMERGED_BLOCKER not in b]
 
 
 def pr_body(st: State, it: Item, *, on: Item | None) -> str:

@@ -491,11 +491,13 @@ _VALUE_FLAGS = frozenset(
 def _without_test_locations(args: list[str], root: Path) -> list[str]:
     """``args`` minus the TEST LOCATIONS it names (`tests/`, `tests/test_x.py`,
     `tests/test_x.py::test_y`), so the selected files replace them. Everything else is
-    kept -- an option's value above all, even one naming a file (`-c pytest.ini`)."""
+    kept -- an option's value above all, even one naming a file (`-c pytest.ini`). A test file
+    ``root`` lacks is a location too: a command narrowed on a branch names files the base has
+    not, and pytest aborts over one (B-baseline-branch-only-test-no-tests-ran)."""
     out: list[str] = []
     for i, t in enumerate(args):
         value_of_flag = i > 0 and args[i - 1] in _VALUE_FLAGS
-        location = "::" in t or (root / t).is_dir() or (is_test_file(t) and (root / t).exists())
+        location = "::" in t or (root / t).is_dir() or is_test_file(t)
         if t.startswith("-") or value_of_flag or not location:
             out.append(t)
     return out

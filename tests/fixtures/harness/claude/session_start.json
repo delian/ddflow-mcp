@@ -1,16 +1,21 @@
 {
   "_meta": {
-    "recorded": false,
-    "synthetic": true,
-    "source": "documented payload shape from the descriptor's [verified] sources; replace with a live recording (B-ac-fixtures)",
-    "version": "unversioned"
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin, `ddflow harness record`, scrubbed",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05"
   },
   "stdin": {
     "session_id": "s-1",
-    "source": "startup",
-    "cwd": "/w"
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "hook_event_name": "SessionStart",
+    "source": "startup"
   },
   "expect": {
-    "session_id": "s-1"
+    "session_id": "s-1",
+    "source": "startup",
+    "cwd": "/w"
   }
 }

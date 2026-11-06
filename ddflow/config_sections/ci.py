@@ -53,11 +53,23 @@ class CiConfig:
     )
     max_concurrent_suites: int = knob(
         1,
-        doc="How many full test suites (the CI-parity run of `ddflow ci run --full`, the merge queue, the after-merge check and the `unit_tests` gate when its command names no test file) may run at once on this host, counted across every project and agent of the user through a lock in the user's state directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. A selected run queues only above `selected_lock_tests` test files.",
+        doc="How many full test suites (the CI-parity run of `ddflow ci run --full`, the merge queue, the after-merge check and the `unit_tests` gate when its command names no test file) may run at once on this host, counted across every project and agent of the user through a lock in the user's state directory. A run over the limit waits `suite_wait_s`, then is UNAVAILABLE ('blocked on <holder> since <time>'), never a pass. A selected run queues only when it is heavy: see `selected_lock_s`.",
     )
     selected_lock_tests: int = knob(
         20,
-        doc="A SELECTED `ddflow ci run` (tests_scope = selected) that runs more test files than this -- the selection plus the always-run guards -- queues for the host-wide full-suite slot like the whole suite does: a long selection is a full suite's load. Default 20; 0: a selected run never queues. Either way its pytest workers are the computed count (`[ci].workers`, at most `max_workers`, never above the files), not one per core (B1401457afd).",
+        doc="A SELECTED `ddflow ci run` (tests_scope = selected) that reaches more test files than this queues for the host-wide full-suite slot like the whole suite does, when too few measured runs exist for `selected_lock_s` to decide. The always-run guards are not counted: every item runs them, so they say nothing of the change. Default 20; 0: a selected run never queues, whatever is measured. Either way its pytest workers are the computed count (`[ci].workers`, at most `max_workers`, never above the files), not one per core (B1401457afd).",
+    )
+    selected_lock_s: int = knob(
+        600,
+        doc="A SELECTED `ddflow ci run` predicted to run longer than this many seconds queues for the host-wide full-suite slot. The prediction is the median worker-seconds per selected test file of past `ci` gates (their run time without the queue wait and the always-run guards), times the selected files, over the workers `[ci].workers` computes now: a loaded host grants fewer workers, so the same selection predicts longer. Default 600. The gate evidence records the decision as `admission`: `basis` is `measured` only when past runs gave the prediction, else `file_count`. 0: only `selected_lock_tests` decides.",
+    )
+    selected_lock_min_runs: int = knob(
+        5,
+        doc="The fewest measured `ci` runs `selected_lock_s` needs; with fewer, `selected_lock_tests` decides. A run measures only when it ended in a verdict, its selected tests ran, and it recorded its seconds and worker count. At least 1.",
+    )
+    selected_lock_runs: int = knob(
+        50,
+        doc="How many of the newest measured `ci` runs the prediction of `selected_lock_s` takes its median from, which also bounds the search of the log. At least 1.",
     )
     suite_wait_s: int = knob(
         1800,

@@ -48,7 +48,14 @@ _FIELDS = (
 def bad_id(item: str) -> str:
     """Why ``item`` cannot be a local id, or "". A colon is how a dependency names an item
     in ANOTHER repository (`repo:ID`); a local `foo:bar` was taken for one, looked up
-    in the sibling observations, and blocked everything that needed it (rubber-duck)."""
+    in the sibling observations, and blocked everything that needed it (rubber-duck). A
+    leading hyphen is refused too: every command that then names the item (``show``,
+    ``claim``, ``update``, ...) parses the id as an option, which no quoting can fix."""
+    if item.startswith("-"):
+        return (
+            f"{item!r}: an item id may not start with a hyphen -- every command that "
+            f"names it then parses the id as an option, which quoting cannot fix"
+        )
     if ":" in item:
         return (
             f"{item!r}: a colon marks a dependency in another repository (`repo:ID`, "
