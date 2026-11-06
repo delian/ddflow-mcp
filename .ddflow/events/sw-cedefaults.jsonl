@@ -119,3 +119,5 @@
 {"agent":"sw-cedefaults","data":{"at":1794000688.520255,"holder":"sw-cedefaults"},"id":"e0b7811414876be818ae9119a","kind":"lease.renewed","lamport":146020,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T21:31:28.616230Z"}
 {"agent":"sw-cedefaults","data":{"at":1794000825.4247973,"holder":"sw-cedefaults"},"id":"e795c6e83a85a6745b1c0ea25","kind":"lease.renewed","lamport":146025,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T21:33:45.523074Z"}
 {"agent":"sw-cedefaults","data":{"at":1794001060.030772,"holder":"sw-cedefaults"},"id":"eb2204a92ff6518c6a17fc217","kind":"lease.renewed","lamport":146087,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T21:37:40.134443Z"}
+{"agent":"sw-cedefaults","data":{"at":1794001316.4804397,"holder":"sw-cedefaults"},"id":"ee119e2285d36402f14529161","kind":"lease.renewed","lamport":146160,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T21:41:56.582280Z"}
+{"agent":"sw-cedefaults","data":{"at":1794001571.3800766,"holder":"sw-cedefaults"},"id":"eb6310bff91e6d55ad92da32a","kind":"lease.renewed","lamport":146182,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T21:46:11.477242Z"}
