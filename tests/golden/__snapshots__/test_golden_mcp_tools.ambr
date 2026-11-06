@@ -682,6 +682,10 @@
           "type": "string",
           "description": "'task' (default) or 'phase'."
          },
+         "lane": {
+          "type": "string",
+          "description": "Answer this idle lane."
+         },
          "full": {
           "type": "boolean",
           "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. Without it a long answer is cut and ends in a footer naming the exact next call."
@@ -974,10 +978,6 @@
           "type": "boolean",
           "description": "Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). ..."
          },
-         "allow_unknown_needs": {
-          "type": "boolean",
-          "description": "Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). Off, an unknown id is refused naming the nearest id."
-         },
          "relation": {
           "type": "string",
           "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. ..."
@@ -1189,7 +1189,7 @@
          },
          "full": {
           "type": "boolean",
-          "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. Without it a long answer is cut and ends in a footer naming the exact next call."
+          "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. ..."
          },
          "limit": {
           "type": "integer",

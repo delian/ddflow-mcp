@@ -1901,12 +1901,13 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--full] [--cursor CURSOR]
+  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
     --phase PHASE        limit to this phase; exit 1 if it names no phase or item
     --kind {task,phase}
+    --lane LANE          answer this idle lane: its best item and a note for claim
     --full               print everything: lift the default output caps ([output] max_rows,
                          max_chars) for this call
     --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
