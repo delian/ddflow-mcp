@@ -26,6 +26,8 @@ resume_own = true
 shared_globs = []
 new_file_globs = ["ddflow/templates/upgrade/unreleased/*.toml", "tests/test_*.py"]
 append_only_globs = []
+scan_view_trees_max = 16
+scan_view_verdicts_max = 0
 
 [worktree]
 enabled = true
@@ -36,6 +38,7 @@ merge_strategy = "no-ff"
 remove_on_merge = true
 dispose_finished = true
 sweep_min_age_s = 3600
+sweep_interval_s = 900
 max_parallel = 0
 sync_before_start = true
 adopt_existing = true
@@ -118,7 +121,7 @@ verify_load_ratio = 1.0
 
 [session]
 log_prompts = true
-redact_patterns = ["(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\s*[:=]\\s*\\S+", "(?i)\\b(bearer|basic|token)\\s+[A-Za-z0-9._~+/=-]{12,}", "(?i)\\b(gh[pousr]_[A-Za-z0-9]{16,})\\b", "(?i)\\b(sk-[A-Za-z0-9_-]{16,})\\b", "(?i)\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\b", "\\bAKIA[0-9A-Z]{16}\\b", "(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", "(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----"]
+redact_patterns = ["(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\s*[:=]\\s*\\S+", "(?i)\\b(bearer|basic|token)\\s+[A-Za-z0-9._~+/=-]{12,}", "(?i)\\b(gh[pousr]_[A-Za-z0-9]{16,})\\b", "(?i)\\b(sk-[A-Za-z0-9_-]{16,})\\b", "(?i)\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\b", "\\bAKIA[0-9A-Z]{16}\\b", "\\bddft_[0-9a-f]{12}_[0-9a-f]{64}\\b", "(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", "(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----"]
 redact_extra = []
 redact_lookup_network = true
 brief_max_tokens = 1200
@@ -169,6 +172,8 @@ phase_full_suite = "require"
 auto_order = "propose"
 optimizer = "greedy-v1"
 bugs_first = true
+reserved_slots = 0
+reserved_tags = ["ddflow-gap"]
 dx_priority = 8
 bug_priority = 10
 dx_tags = ["dx"]
@@ -281,6 +286,7 @@ max_duplicate_items = 2
 no_progress_window = 60
 wait_cycle = true
 wait_cycle_shown = 5
+wait_alarm_s = 1200
 on_detect = "warn"
 
 [locks]
@@ -299,6 +305,11 @@ probe_merge_tree_min_git = "2.38"
 [lanes]
 window_s = 86400
 stale_after_s = 0
+fleet_window_s = 0
+fleet_max_rows = 18
+fleet_items = 5
+fleet_failed_patterns = ["\\b429\\b", "rate.?limit", "spend.?limit", "quota", "overloaded", "context (window|length|exhaust)", "max.?tokens", "crash", "\\bOOM\\b"]
+fleet_reason_chars = 120
 watch_interval_s = 5
 advise_max = 10
 brief_notes = 3
@@ -385,6 +396,7 @@ manifest_max_files = 40
 exclude_pin_files = true
 chunk_max_tokens = 0
 split_rounds = 2
+degraded_cooldown_s = 3600
 
 [swarm]
 w_critical = 3.0
@@ -416,20 +428,38 @@ seed_max_lessons = 6
 seed_entry_chars = 600
 seed_item_chars = 1500
 seed_handoff_chars = 1200
+dispatch_note_chars = 500
+dispatch_why_items = 5
 launch_enabled = false
 launch_templates_file = ".ddflow/local/lane-templates.toml"
 launch_max_budget_usd = 5.0
 
+[quota]
+stale_after_s = 900
+claude_state = ""
+claude_projects = ""
+kilo_db = ""
+snapshot_path = ""
+samples_path = ""
+samples_max_bytes = 4194304
+sample_interval_s = 300
+sample_tail_bytes = 8192
+token_windows = ["5h", "day", "week"]
+token_fields = ["input", "output", "cache_read", "cache_write"]
+transcript_max_bytes = 1073741824
+kilo_timeout_s = 10.0
+
 [log]
 reuse_parsed = true
-max_cached_events = 100000
+max_cached_events = 200000
 redact_builtin_shapes = true
 commit_events = true
 commit_events_at = ["merge", "complete", "release", "stop"]
 commit_events_message = "events: {reason}"
 pre_push_events = "warn"
-snapshot = true
+snapshot = false
 snapshot_min_events = 5000
+snapshot_max_mb = 256
 snapshot_stale_days = 7
 snapshot_touch_s = 86400
 evidence_blobs = false
@@ -495,6 +525,12 @@ escalate_after_red_main = "6h"
 text_chars = 400
 spotcheck_min = 1
 
+[output]
+max_rows = 50
+max_chars = 30000
+non_ascii_weight = 4
+allow_full = true
+
 [grants]
 max_count = 3
 ttl_h = 48
@@ -530,6 +566,8 @@ kinds = ["fix", "gate_fix", "refactor", "doc"]
 [hooks]
 forbidden_commands = ["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]
 allowed_commands = ["ddflow review --force --reason"]
+fixture_max_age_months = 6
+fixture_max_reply_bytes = 65536
 
 [release]
 manifest_lint = "block"
@@ -537,6 +575,7 @@ manifest_lint = "block"
 [mcp]
 tools = "auto"
 worker_tools = "core"
+lane_tools = ""
 profile_lean_budget_tokens = 16000
 profile_mid_budget_tokens = 32000
 output_schemas = "off"
@@ -602,6 +641,13 @@ default_role = "agent"
 operator_role = "operator"
 ask_ttl_s = 86400
 ask_code_length = 8
+token_ttl_h = 168
+token_max_ttl_h = 720
+pair_ttl_s = 300
+pair_code_length = 10
+pair_max_attempts = 5
+capability_verbs = {read = ["help", "brief", "next", "status", "show", "board", "progress", "history", "list", "search", "recall", "similar", "gate status", "gate list", "decision list", "decision show", "decision search", "decision applicable", "rule list", "rule show", "rule search", "lesson search", "memory list", "version show", "flow show", "job list"], claim = ["claim", "heartbeat", "release", "wait", "gate record", "gate run", "merge", "complete"], note = ["session note", "session message", "bug found"], start_lane = [], approve_marked = []}
+require_operator_token = false
 
 [ids]
 bug = "{prefix}{hash}"
