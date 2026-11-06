@@ -74,6 +74,11 @@ def _writable(s: str) -> str:
     return s.encode("utf-8", "replace").decode("utf-8")
 
 
+def _escaped(s: str) -> str:
+    """``s`` as it reads inside a JSON string."""
+    return json.dumps(s, ensure_ascii=False)[1:-1]
+
+
 def encoded(path: str) -> str:
     """The form an agent uses for a directory name: every non-alphanumeric a dash."""
     return re.sub(r"[^A-Za-z0-9]", "-", path)
@@ -134,8 +139,9 @@ class Scrubber:
         """The KINDS of this machine's text still in ``doc``; never the text itself."""
         blob = json.dumps(doc, ensure_ascii=False)
         found = []
-        roots = {self._root, _writable(self._root)}
-        homes = {self._home, _writable(self._home)}
+        # `blob` is JSON text, so a backslash or quote in a path appears there escaped.
+        roots = {x for r in (self._root, _writable(self._root)) for x in (r, _escaped(r))}
+        homes = {x for h in (self._home, _writable(self._home)) for x in (h, _escaped(h))}
         if any(r in blob or encoded(r) in blob for r in roots):
             found.append("project path")
         if any(len(h) > 1 and (h in blob or encoded(h) in blob) for h in homes):

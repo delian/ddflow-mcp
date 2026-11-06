@@ -79,6 +79,13 @@ def test_a_path_with_a_byte_that_is_not_utf8_is_still_scrubbed_and_caught():
     assert s.leaks({"a": f"{root}/f"}) == ["project path"], "the raw form is caught too"
 
 
+def test_a_path_with_a_backslash_is_scrubbed_and_caught_through_json_escaping():
+    root = "/tmp/a\\b"  # a backslash is a legal POSIX filename character
+    s = _scrubber(root=root)
+    assert s.value(f"{root}/f") == "/w/f"
+    assert s.leaks({"a": f"{root}/f"}) == ["project path"]
+
+
 def test_the_scrub_cuts_a_long_string_and_says_so():
     got = _scrubber().value("x" * (HRec.MAX_STRING + 50))
     assert len(got) < HRec.MAX_STRING + 40
