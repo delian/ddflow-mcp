@@ -591,6 +591,7 @@ VERSION_CONSTANTS = (
     ("ddflow.services.ticks", "FORMAT"),
     ("ddflow.services.quota", "STORE_VERSION"),
     ("ddflow.services.auth", "STORE_VERSION"),
+    ("ddflow.services.meters_vendor", "SNAPSHOT_VERSION"),
     ("ddflow.services.swarm.lanehooks_plugin", "VERSION"),
 )
 

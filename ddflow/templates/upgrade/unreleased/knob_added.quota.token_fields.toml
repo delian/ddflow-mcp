@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "quota.token_fields"
+new = "[\"input\", \"output\", \"cache_read\", \"cache_write\"]"
+why = "The usage meters (B-quota-meters): each reader's source, bound and staleness is a knob."
+impact = "additive"

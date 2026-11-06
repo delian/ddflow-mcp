@@ -131,6 +131,30 @@ def _state(repo):
     return fold(EventLog(repo, "reader").read_all(), strict=False)
 
 
+def test_an_inflight_gate_run_is_not_yield_requested_by_the_heartbeat(repo):
+    """The heartbeat is the place a contended-but-not-idle lease is told to yield. It used
+    to judge WITHOUT the repo, so `_live_gate` could not see a still-alive gate run and a
+    lane whose unit_tests run sat #k in the full-suite queue was told to yield / it could
+    be broken (bug B42016bbc0e).
+
+    ``RUN.mark_started`` is the faithful model of BOTH an in-flight state `_live_gate`
+    reads: a started run AND one still queued on the suite lock carry the SAME
+    `.running.<pid>.json` marker -- `gate run` writes it (`_mark_or_refuse_twin`) before
+    `run_command_gate` reaches `suitelock.SL.hold`, and the process stays alive while it
+    waits -- so the queued state is this marker with a live pid, exactly what is set here.
+    """
+    from ddflow.services.gates import running as RUN
+
+    _setup(repo, hold=10 * AGO)
+    assert run_cli(repo, "claim", "T2", "--no-worktree", agent=B)[0] == 3  # records the wait
+    _backdate(repo, "T1", AGO)
+    marker = RUN.mark_started(repo, "T1", "unit_tests", sha="abc")  # the gate is in flight
+    assert marker is not None  # this process's own pid: still live while the heartbeat's child runs
+    code, out, err = run_cli(repo, "heartbeat", "T1", agent=A)
+    assert code == 0, err
+    assert "YIELD REQUESTED" not in out + err and "no progress" not in out + err
+
+
 def test_claim_breaks_a_heartbeat_only_lease_and_tells_both_agents(repo):
     _setup(repo)
     assert run_cli(repo, "claim", "T2", "--no-worktree", "--break", agent=B)[0] == 3  # fresh
