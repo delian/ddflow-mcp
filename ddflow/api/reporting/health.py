@@ -429,8 +429,9 @@ def doctor(
         urls = []
     notes.extend(CT.warnings(repo, cfg, urls))
     # Reviewers a quota/exhaustion wall marked degraded and shed (B8efd3d1bc4): surfaced
-    # here rather than as a run of silently `unavailable` rubber_duck/critic gates.
-    notes.extend(degraded_notes(st))
+    # here rather than as a run of silently `unavailable` rubber_duck/critic gates. Only a
+    # mark still within [review].degraded_cooldown_s is still a shed (bug B066719c493).
+    notes.extend(degraded_notes(st, cfg.review.degraded_cooldown_s))
 
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A

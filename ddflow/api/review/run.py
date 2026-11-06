@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -304,14 +305,21 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
-def _shed_degraded(revs, st, gate: str, say) -> tuple[list, list]:
+def _shed_degraded(revs, st, gate: str, cooldown_s: float, say) -> tuple[list, list]:
     """(reviewers, shed names) -- the gate's pool with reviewers a quota/exhaustion wall
     already marked (``RV.degraded_marks``) dropped, and the shed names said, in pool order
     (the next enabled cross-family reviewer serves). An unmarked reviewer is never dropped:
-    it still gets one run to fail honestly before being marked."""
+    it still gets one run to fail honestly before being marked.
+
+    ``cooldown_s`` is `[review].degraded_cooldown_s`: a reviewer is shed only while its
+    mark is younger than that many seconds. A mark at or past the cooldown is EXPIRED,
+    so the reviewer is re-probed (and re-marked if the wall is still up) instead of shed
+    forever -- a transient 429 used to permanently disable a cross-family reviewer
+    (bug B066719c493). <= 0 re-probes on every review (the mark blocks no run).
+    """
     degraded = {
         name: row
-        for name, row in RV.degraded_marks(st).items()
+        for name, row in RV.active_degraded_marks(st, cooldown_s).items()
         if any(r.name == name for r in revs)
     }
     for name in sorted(degraded):
@@ -319,10 +327,13 @@ def _shed_degraded(revs, st, gate: str, say) -> tuple[list, list]:
     return [r for r in revs if r.name not in degraded], sorted(degraded)
 
 
-def _note_degraded(res, r, gate: str, extra_evidence: dict, say) -> None:
+def _note_degraded(res, r, gate: str, cooldown_s: float, extra_evidence: dict, say) -> None:
     """Append the quota/exhaustion mark of one review to `extra_evidence` and SAY it, so a
     degraded reviewer is recorded and surfaced instead of silently folded into
-    `unavailable` (B8efd3d1bc4). No mark for anything but a reviewer's own quota wall."""
+    `unavailable` (B8efd3d1bc4). No mark for anything but a reviewer's own quota wall.
+
+    The mark carries ``at`` (the epoch second it was written) so it can EXPIRE after
+    `[review].degraded_cooldown_s` and the reviewer is re-probed (bug B066719c493)."""
     if not res.degraded:
         return
     if extra_evidence is None:
@@ -334,11 +345,13 @@ def _note_degraded(res, r, gate: str, extra_evidence: dict, say) -> None:
             "gate": gate,
             "model": r.model,
             "family": r.resolved_family(),
+            "at": time.time(),
         }
     )
     say(
         f"→ {r.name} quota/exhaustion ({res.degraded}): marked degraded and shed from "
-        f"{gate} -- the next enabled cross-family reviewer serves until it recovers"
+        f"{gate} -- re-probed after {cooldown_s}s once the mark expires (the next enabled "
+        f"cross-family reviewer serves meanwhile)"
     )
 
 
@@ -490,7 +503,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
 
     it = st.items.get(item)
     author_model, _ = _author_model(st, agent, "", cfg)
-    revs, shed = _shed_degraded(revs, st, gate, say)
+    revs, shed = _shed_degraded(revs, st, gate, cfg.review.degraded_cooldown_s, say)
     if not revs:
         return unavailable(
             f"Every reviewer for gate {gate!r} is degraded ("
@@ -605,7 +618,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
                 )
         results.append(res)
         _say_result(say, res)
-        _note_degraded(res, r, gate, extra_evidence, say)
+        _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
     best = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
