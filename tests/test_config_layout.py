@@ -87,6 +87,16 @@ def test_every_section_comes_from_its_module_and_is_re_exported():
     assert len(set(_section_types().values())) == len(SECTION_MODULES)
 
 
+def test_a_section_modules_public_tables_are_re_exported():
+    """B-config-reexport-lost-export-table-keys: the package split dropped a public
+    name of `config.py`. `config_sections` states `ddflow.config` re-exports every name
+    it defines; a pre-split public table must stay importable from `ddflow.config`."""
+    from ddflow.config_sections import export
+
+    assert hasattr(C, "EXPORT_TABLE_KEYS"), "ddflow.config dropped EXPORT_TABLE_KEYS"
+    assert C.EXPORT_TABLE_KEYS is export.EXPORT_TABLE_KEYS
+
+
 def test_the_knob_docs_are_one_registry():
     assert C.KNOB_DOCS is KNOB_DOCS
     explained = [k for k, *_ in C.Config().explain()]

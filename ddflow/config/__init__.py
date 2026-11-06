@@ -26,6 +26,7 @@ from ..config_sections.export import (  # noqa: F401
     EXPORT_DEFAULT_TARGETS,
     EXPORT_MODES,
     EXPORT_REFRESH_MODES,
+    EXPORT_TABLE_KEYS,
 )
 from ..config_sections.flow import (  # noqa: F401
     FLOW_CLAIMS,
