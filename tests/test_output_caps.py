@@ -419,5 +419,8 @@ def test_next_lane_answer_goes_through_the_cap_like_the_queue(repo, monkeypatch)
     monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", "1000")
     out = navigate._next(repo, {"lane": "L"}, "agent")
     assert len(json.dumps(out.data, default=str)) < len(note) and "truncated" in out.data
+    # The lift it names is the lane call, not the queue's `next`.
+    assert out.data["next"]["full_cli"] == "ddflow next --lane L --full"
+    assert out.data["next"]["full_mcp"] == "ddflow_next lane=L full=true"
     full = navigate._next(repo, {"lane": "L", "full": True}, "agent")
     assert full.data["note"] == note

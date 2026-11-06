@@ -32,9 +32,8 @@ def _next(repo, a, agent):
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
     if lane := a.get("lane", ""):
         out = _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
-    else:
-        out = _api().next_item(repo, kind=kind, phase=phase, agent=agent)
-    return _cap(repo, out, "next", a)
+        return _cap(repo, out, f"next --lane {lane}", a)  # its footer names the lane call
+    return _cap(repo, _api().next_item(repo, kind=kind, phase=phase, agent=agent), "next", a)
 
 
 def _next_notes(out, a, ctx):

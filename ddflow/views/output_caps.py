@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shlex
 from contextvars import ContextVar
 from typing import Any
 
@@ -111,7 +112,7 @@ def _cut_board(data: dict[str, Any], limit: int, start: int, info: dict[str, int
 def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> dict[str, int]:
     """Cut `data`'s lists in place; return {list: real length} (+ board extras)."""
     info: dict[str, int] = {}
-    paged = COMMANDS[command][3]
+    paged = _entry(command)[3]
     if command == "board":
         _cut_board(data, limit, start, info)
     skip = _BOARD_KEYS if command == "board" else ()
@@ -138,13 +139,23 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
     return info
 
 
+def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
+    """`COMMANDS` row of ``command``. ``next --lane L`` is `next` for that lane: the calls it
+    names keep the lane, and its answer (one item and a note) pages no list."""
+    base, _, lane = command.partition(" --lane ")
+    cli, tool, narrow, paged = COMMANDS[base]
+    if not lane:
+        return cli, tool, narrow, paged
+    return f"{cli} --lane {shlex.quote(lane)}", f"{tool} lane={lane}", narrow, ""
+
+
 def _page_calls(command: str, row: int) -> tuple[str, str]:
     """The exact CLI and MCP calls that resume a cut list at ``row``."""
-    return f"{COMMANDS[command][0]} --cursor {row}", f"{COMMANDS[command][1]} cursor={row}"
+    return f"{_entry(command)[0]} --cursor {row}", f"{_entry(command)[1]} cursor={row}"
 
 
 def _calls(command: str, flag: str, mcp_arg: str) -> str:
-    cli, tool, _n, _p = COMMANDS[command]
+    cli, tool, _n, _p = _entry(command)
     return f"`{cli} {flag}` (MCP: `{tool} {mcp_arg}`)"
 
 
@@ -152,7 +163,7 @@ def footer(
     command: str, info: dict[str, Any], rows: int, cut_chars: int, full_refused: bool
 ) -> str:
     """The one-line footer naming the exact next calls."""
-    _cli, _tool, narrow, paged = COMMANDS[command]
+    _cli, _tool, narrow, paged = _entry(command)
     parts: list[str] = []
     lists = {
         k: v
@@ -183,7 +194,7 @@ def footer(
 
 
 def _next_field(command: str, info: dict[str, Any], full_refused: bool) -> dict[str, str]:
-    cli, tool, narrow, paged = COMMANDS[command]
+    cli, tool, narrow, paged = _entry(command)
     out: dict[str, str] = {}
     if info.get("next_row") is not None and paged:
         out["cursor_cli"], out["cursor_mcp"] = _page_calls(command, info["next_row"])
@@ -358,13 +369,13 @@ def apply(
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
     budget = max(1, chars // 2) if wire and chars else chars
-    start = max(0, int(cursor or 0)) if COMMANDS[command][3] else 0
+    start = max(0, int(cursor or 0)) if _entry(command)[3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
     text, cut_chars = _cut_text(
         work.get("text"), budget if chars else 0, cfg.output.non_ascii_weight
     )
     reasons = _reasons(out.data.get("blocked")) if "blocked" in info else {}
-    if not info and not cut_chars and not (start and COMMANDS[command][3]):
+    if not info and not cut_chars and not (start and _entry(command)[3]):
         return out
     out.data = _annotate(work, command, info, limit, (text, cut_chars), full_refused)
     if reasons:  # `next`: the cut blocked list is still counted by reason, as `bound_next` does
@@ -397,7 +408,7 @@ def _annotate(
     work["truncated"].pop("all", None)
     if not full_refused:
         work["truncated"]["all"] = (
-            f"`{COMMANDS[command][0]} --full` (MCP: `{COMMANDS[command][1]} full=true`) "
+            f"`{_entry(command)[0]} --full` (MCP: `{_entry(command)[1]} full=true`) "
             "lists every entry"
         )
     work["next"] = _next_field(command, info, full_refused)
