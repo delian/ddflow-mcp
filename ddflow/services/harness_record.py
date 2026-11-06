@@ -102,6 +102,8 @@ class Scrubber:
         return f"00000000-0000-0000-0000-{n:012d}"
 
     def text(self, s: str) -> str:
+        # A lone surrogate (`"\\ud800"` in captured JSON) cannot be written as UTF-8.
+        s = s.encode("utf-8", "replace").decode("utf-8")
         # Paths first, longest first: an id inside a path must not break the path's match.
         for raw, new in self._literals:
             s = s.replace(raw, new)

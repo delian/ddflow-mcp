@@ -408,7 +408,15 @@ def test_a_reply_over_the_cap_says_it_was_cut_and_keeps_nothing_unscrubbed(repo,
     cut = pair["response"][HRec.TRUNCATED]
     assert cut["cap"] == 100 and cut["bytes"] > 100
     assert "result" not in pair["response"], "a cut reply never reads as a complete one"
+    assert str(scratch) not in json.dumps(pair)
     assert pair["response"]["id"] == 1
+
+
+def test_a_lone_surrogate_in_a_reply_is_recorded_not_a_crash(repo, tmp_path):
+    scratch = _prepare(repo, tmp_path)
+    _mcp_log(scratch, {"text": "\ud800 tail"})
+    [pair] = _pairs_of(repo, scratch, tmp_path / "fixtures")
+    assert pair["response"]["result"]["text"].endswith(" tail")
 
 
 def test_the_cap_goes_by_size_and_never_by_method():
