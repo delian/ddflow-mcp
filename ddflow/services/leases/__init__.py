@@ -42,6 +42,7 @@ _SUBMODULE_OF = {
     "_fold": "common",
     "glob_clash": "common",
     "glob_clashes": "common",
+    "clash_report": "common",
     "unfinished_leases": "common",
     "holder_changed_paths": "common",
     "_clash_text": "common",

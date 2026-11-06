@@ -17,7 +17,7 @@ from ...core.schedule import plan as _plan
 from ...infra.log import EventLog
 from .. import leasebreak as LB
 from .. import leases as _leases
-from .common import _clone_field, _fold, glob_clash, glob_clashes
+from .common import _clone_field, _fold, clash_report, glob_clash, glob_clashes
 from .model import LeaseError, Offer
 from .remote import _remote_drop, _remote_renew, _remote_take
 
@@ -267,12 +267,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
         if clash and (not force or existing is not None):
             other_id, lease, pair = clash
-            # Every conflicting glob and holder, or the caller would re-claim once per held
-            # glob to discover them all (B-glob-refusal-names-one-conflict).
-            named = "; ".join(
-                f"{p0!r} overlaps {p1!r} held by {lz.holder} on {oid}"
-                for oid, lz, (p0, p1) in glob_clashes(state, cfg, it, holder, mine, now)
-            )
+            named, _ids = clash_report(glob_clashes(state, cfg, it, holder, mine, now))
             raise LeaseError(
                 f"{item_id} writes {named}"
                 + (

@@ -176,16 +176,14 @@ def _claim_blocker(
     # stored ones, READY was followed by a claim refused for its own globs (B7036cf788c).
     clash = L.glob_clash(st, cfg, it, me, list(it.globs if globs is None else globs), now)
     if clash is not None:
-        clashes = L.glob_clashes(st, cfg, it, me, list(it.globs if globs is None else globs), now)
-        named = "; ".join(
-            f"{oid} held by {lz.holder} ({p0} vs {p1})"
-            for oid, lz, (p0, p1) in clashes
+        named, ids = L.clash_report(
+            L.glob_clashes(st, cfg, it, me, list(it.globs if globs is None else globs), now)
         )
         return Blocked(
             it.id,
             "conflict",
             f"globs overlap {named}",
-            [c[0] for c in clashes],
+            ids,
         )
     short = _resource_blocker(cfg, it, live)
     if short is not None:
