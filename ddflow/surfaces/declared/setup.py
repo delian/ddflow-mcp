@@ -72,10 +72,15 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "value",
-                help="the value, when --set is used; or `KEY VALUE` with no --set (ddflow config review.max_rounds 0 --local)",
+                help="the value, when --set is used; or `KEY VALUE` with no --set (ddflow config review.max_rounds 0 --local); or `defaults`, to print the packaged default.toml",
                 positional=True,
                 nargs="*",
                 default=[],
+            ),
+            Param(
+                "write",
+                type="boolean",
+                help="with `defaults`: regenerate the packaged default.toml in ddflow's own source tree",
             ),
             Param(
                 "append_toml",

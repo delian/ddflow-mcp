@@ -3,10 +3,20 @@
     ddflow config --explain               every knob, its value, where it came from
     ddflow config --explain --filter lease   just one section
     ddflow config --append-toml '...'     add config without a shell editor
+    ddflow config defaults                the packaged default.toml, every default in one file
 
-Resolution, lowest to highest: dataclass defaults → `.ddflow/config.toml` →
-`DDFLOW_<SECTION>_<KNOB>` in the environment. Every knob carries its documentation in
-place, and a test asserts it, so the reference cannot rot away from the code.
+Resolution, lowest to highest: the packaged `default.toml` → `.ddflow/config.toml` →
+`.ddflow/local/config.toml` → `DDFLOW_<SECTION>_<KNOB>` in the environment. Every knob
+carries its documentation in place, and a test asserts it, so the reference cannot rot away
+from the code.
+
+`default.toml` ships with ddflow and is generated from the section declarations: never edit
+it, and set a project's value in `.ddflow/config.toml` instead. Working on ddflow itself,
+`ddflow config defaults --write` (or `ddflow pins regenerate --only default-toml`) rewrites
+it after a knob or a default gate changed; the `default-toml` pin fails until you do. Over
+MCP, `ddflow_configure` with no arguments lists the same values with their meaning. A
+damaged or missing file warns and leaves the built-in defaults in effect; a stale one warns
+and its values apply.
 
 **An unknown section or knob is an ERROR, never a silent drop.** `[leases]` for `[lease]`
 used to leave every knob at its default while the operator believed the file was in

@@ -713,17 +713,20 @@
 # ---
 # name: test_help[ddflow config]
   '''
-  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [--approval APPROVAL] [value ...]
+  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--write] [--append-toml APPEND_TOML] [--local] [--approval APPROVAL] [value ...]
   
   positional arguments:
     value                 the value, when --set is used; or `KEY VALUE` with no --set (ddflow config
-                          review.max_rounds 0 --local)
+                          review.max_rounds 0 --local); or `defaults`, to print the packaged
+                          default.toml
   
   options:
     -h, --help            show this help message and exit
     --explain
     --filter FILTER
     --set SET             edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'
+    --write               with `defaults`: regenerate the packaged default.toml in ddflow's own
+                          source tree
     --append-toml APPEND_TOML
                           append this TOML to .ddflow/config.toml (validated first)
     --local               write --set/--append-toml to the git-ignored .ddflow/local/config.toml:

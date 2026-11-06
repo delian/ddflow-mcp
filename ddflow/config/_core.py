@@ -67,6 +67,7 @@ from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
 from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
 from ._errors import InvalidValue
+from ._packaged import apply_packaged
 from ._tree import _is_code_tree
 from ._warn import _warn_unknown
 
@@ -224,6 +225,7 @@ class Config:
         for sec in cfg._sections():
             for f in fields(getattr(cfg, sec)):
                 cfg.sources[f"{sec}.{f.name}"] = "default"
+        apply_packaged(cfg)  # the lowest layer; everything below reads over it
 
         if root is not None:
             path = layer_path(root, "file")
