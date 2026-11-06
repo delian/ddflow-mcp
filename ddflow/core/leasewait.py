@@ -63,8 +63,8 @@ class Drop:
 
     def command(self) -> str:
         if self.keep:
-            return f"ddflow update {self.item} --globs {quote(','.join(self.keep))}"
-        return f"ddflow release {self.item}"
+            return f"ddflow update {quote(self.item)} --globs {quote(','.join(self.keep))}"
+        return f"ddflow release {quote(self.item)}"
 
     def mcp(self) -> str:
         if self.keep:
@@ -204,9 +204,10 @@ def _drop(lease: Held, asked: tuple[str, ...]) -> Drop | None:
 def _remedy(victim: Link, prev: Link, drops: tuple[Drop, ...]) -> str:
     """The sentence for ``victim``: ``drops`` are its leases ``prev`` (the waiter for the
     victim's lease) is blocked on."""
+    waits = ", ".join(f"`ddflow wait --item {quote(b)}`" for b in victim.blockers)
     then = (
         f"then {prev.agent} retries on {', '.join(prev.items)}, and {victim.agent} waits for "
-        f"{victim.holder}'s lease (`ddflow wait --item {victim.blocker}`)"
+        f"{victim.holder}'s lease ({waits})"
     )
     if not drops:
         return f"{victim.agent} should stop waiting and report to the coordinator; {then}."

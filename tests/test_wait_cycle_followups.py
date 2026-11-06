@@ -419,3 +419,26 @@ def test_doctor_json_carries_the_alarm_and_says_none_when_there_is_none(repo):
     time.sleep(1.2)
     rows = json.loads(run_cli(repo, "--json", "doctor", agent=A)[1])["wait_alarms"]
     assert rows[0]["key"] == "wait_alarm:T1" and rows[0]["commands"]
+
+
+def test_an_item_id_survives_the_shell_too():
+    hostile = "x; touch pwn"
+    kept = LW.Drop(hostile, ("a.py",), ("b.py",)).command()
+    assert shlex.split(kept) == ["ddflow", "update", hostile, "--globs", "b.py"]
+    gone = LW.Drop(hostile, ("a.py",), ()).command()
+    assert shlex.split(gone) == ["ddflow", "release", hostile]
+
+
+def test_a_victim_blocked_on_two_leases_is_told_to_wait_for_both():
+    held = [
+        LW.Held("b1", B, ("b1.py",), 900.0),
+        LW.Held("b2", B, ("b2.py",), 900.0),
+        LW.Held("a3", A, ("a3.py",), 100.0),
+    ]
+    waits = [
+        LW.Wait("a3", A, 1.0, ("b1.py", "b2.py"), (("b1", B), ("b2", B))),
+        LW.Wait("b1", B, 2.0, ("a3.py",), (("a3", A),)),
+    ]
+    (c,) = LW.find(waits, held)
+    assert c.victim == A
+    assert "`ddflow wait --item b1`" in c.remedy and "`ddflow wait --item b2`" in c.remedy
