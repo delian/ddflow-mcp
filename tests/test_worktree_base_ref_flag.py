@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import write_config
+
 from ddflow.config import Config, InvalidValue
 
 
@@ -21,3 +23,9 @@ def test_base_ref_refuses_a_leading_dash_value():
 def test_base_ref_accepts_empty_and_branch_names():
     for value in ("", "main", "origin/main", "master"):
         Config.check({"worktree": {"base_ref": value}}, written={"worktree.base_ref"})
+
+
+def test_base_ref_setting_a_flag_value_is_refused_when_written(repo):
+    err, _ = write_config(repo, [("worktree.base_ref", "--local")], check_workflow=False)
+    assert err, "setting worktree.base_ref to a flag value was not refused"
+    assert "worktree.base_ref" in str(err)
