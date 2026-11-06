@@ -300,6 +300,12 @@ def unmerged(repo: Path | str, timeout: float | None = LISTING_TIMEOUT) -> list[
     return paths(repo, "diff", "--name-only", "--diff-filter=U", timeout=timeout)
 
 
+def real_path(path: Path | str) -> str:
+    """``path`` with its symlinks followed, as git spells a worktree. Never raises on a
+    symlink loop, which `Path.resolve` does on Python 3.11 and 3.12."""
+    return os.path.realpath(str(path))
+
+
 def branch_tip_aheads(repo: Path | str, base: str) -> dict[str, int]:
     """Commits ahead of ``base`` per local branch-tip object id, one `for-each-ref`.
 

@@ -19,15 +19,10 @@ guess: unknown is not zero.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from . import git as G
 from . import worktree as W
-
-
-def _real(path: Path | str) -> str:
-    return os.path.realpath(str(path))
 
 
 class RepoFacts:
@@ -63,14 +58,14 @@ class RepoFacts:
             except G.GitError:  # could not tell: `head` then asks each tree for itself
                 listed = []
             self._heads = {
-                _real(w["worktree"]): w.get("HEAD", "") for w in listed if "worktree" in w
+                G.real_path(w["worktree"]): w.get("HEAD", "") for w in listed if "worktree" in w
             }
         return self._heads
 
     def head(self, path: Path | str) -> str:
         """The HEAD commit of the worktree at ``path``: from the one listing, else asked for
         (a tree the listing lacks); "" when git cannot say."""
-        key = _real(path)
+        key = G.real_path(path)
         heads = self._worktree_heads()
         if key not in heads:
             heads[key] = G.head_commit(path)

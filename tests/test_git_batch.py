@@ -8,6 +8,7 @@ Before: the recovery scan measured every expired lease with its own `git status`
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,8 @@ from conftest import run_cli
 
 from ddflow.api import lifecycle as LC
 from ddflow.api import reporting as RP
+from ddflow.infra import git as G
+from ddflow.infra.gitbatch import RepoFacts
 from ddflow.infra.log import EventLog
 
 STALE = 126
@@ -195,3 +198,32 @@ def test_the_cap_stays_out_of_doctor(repo, monkeypatch):
     log = EventLog(repo, "r")
     RP.health_lines(log, fold(log.read_all(), strict=False), Config.load(repo), repo, [])
     assert views and not any(views), views
+
+
+def test_real_path_follows_a_symlink_as_realpath_does(tmp_path):
+    (tmp_path / "real" / "sub").mkdir(parents=True)
+    (tmp_path / "link").symlink_to(tmp_path / "real")
+    (tmp_path / "chain").symlink_to(tmp_path / "link")
+    (tmp_path / "rel").symlink_to("real/sub")
+    (tmp_path / "dangling").symlink_to(tmp_path / "gone")
+    for name in ("link", "chain", "rel", "link/sub", "chain/sub/..", "dangling", "missing/x"):
+        assert G.real_path(tmp_path / name) == os.path.realpath(tmp_path / name), name
+    assert G.real_path(tmp_path / "link") == os.path.realpath(tmp_path / "real")
+
+
+def test_a_symlink_loop_is_a_path_and_never_an_exception(tmp_path):
+    """`Path.resolve` raises RuntimeError on a loop on Python 3.11 and 3.12; `realpath` does
+    not, and a recovery scan must not die on one tree (PS-git-batch)."""
+    (tmp_path / "a").symlink_to(tmp_path / "b")
+    (tmp_path / "b").symlink_to(tmp_path / "a")
+    assert G.real_path(tmp_path / "a") == os.path.realpath(tmp_path / "a")
+
+
+def test_a_tree_named_through_a_symlink_or_a_loop_gets_an_honest_head(repo, tmp_path):
+    (tmp_path / "alias").symlink_to(repo)
+    (tmp_path / "a").symlink_to(tmp_path / "b")
+    (tmp_path / "b").symlink_to(tmp_path / "a")
+    facts = RepoFacts(repo)
+    assert facts.head(tmp_path / "alias") == _git(repo, "rev-parse", "HEAD")
+    assert facts.head(tmp_path / "a") == ""
+    assert facts.ahead(tmp_path / "a", "main") == -1
