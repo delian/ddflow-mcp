@@ -87,6 +87,29 @@ def test_lanes_in_a_cycle_are_locked():
     assert found[0].evidence["via"] == "cycle" and "agent-b yields" in found[0].fix
 
 
+def test_every_lease_the_victim_drops_gets_a_locked_row():
+    # V holds two leases in P's way; both are in the cycle, so a second one is not
+    # silently missing from the LOCKED rows (B-autoorder-first-drop-only).
+    cycle = {
+        "agents": ["P", "V"],
+        "files": ["src/utils/**", "conf/*.yml", "docs/**"],
+        "remedy": "V yields src/utils/**, conf/*.yml",
+        "links": [
+            {
+                "agent": "P",
+                "item": "check",
+                "holder": "V",
+                "blocker": "alpha",
+                "blockers": ["alpha", "beta"],
+            },
+            {"agent": "V", "item": "docs", "holder": "P", "blocker": "docs", "blockers": ["docs"]},
+        ],
+    }
+    found = H.inspect([], [], [], [cycle], NOW, LIM)
+    items = [f.item for f in found]
+    assert "alpha" in items and "beta" in items  # both dropped leases, not only the first
+
+
 def test_a_job_past_its_budget_is_a_runaway():
     procs = [H.Proc("J1", "T1", NOW - 4000, True), H.Proc("J2", "T1", NOW - 4000, False)]
     procs.append(H.Proc("J3", "T1", NOW - 60, True))

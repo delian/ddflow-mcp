@@ -14,6 +14,7 @@ from .. import worktree as _W
 from ..container import default_worktree_root
 from ._local import copy_local_files
 from ._locate import Worktree, _ignore_inside, default_branch, repo_root
+from ._merge import merging
 from ._remote import rev
 from ._state import sync
 
@@ -79,6 +80,27 @@ def isolate_venv(root: Path, tree: Path) -> bool:
     return True
 
 
+def _abandon_broken_sync(wt: Worktree, r: G.GitResult) -> str:
+    """Abort the merge `sync` left half-done and describe it.
+
+    A freshly-created tree is clean, so a failed `sync` here is a real merge failure:
+    a branch that has diverged from base leaves MERGE_HEAD set, staged paths and
+    conflict markers the agent never chose. Abort that unfinished merge so the tree is
+    back at the branch tip, and say so — the wrong answer is `created` with no warning,
+    which let an agent commit a merge it did not make (B-claim-sync-conflict-silent).
+    """
+    detail = (r.out or r.err).strip().splitlines() or ["base sync failed"]
+    if merging(wt.path) is not True:
+        # Nothing to abort: git refused before it judged the branch (or the tree is
+        # unreadable). The note still says the sync did not land cleanly.
+        return f"base sync did not land: {detail[0].strip()}"
+    aborted = _W.git(wt.path, "merge", "--abort")
+    note = f"base sync conflicted and was aborted: {detail[0].strip()}"
+    if not aborted.ok:
+        note += f" (aborting the merge ALSO failed: {aborted.err or aborted.out})"
+    return note
+
+
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:
     """Create (or adopt) the worktree for an item. Idempotent by design.
 
@@ -125,7 +147,9 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
         wt.base_sha = rev(root, branch)
     wt.created = True
     if cfg.worktree.sync_before_start and have_branch:
-        sync(wt, cfg)
+        r = sync(wt, cfg)
+        if not r.ok:
+            wt.sync_note = _abandon_broken_sync(wt, r)
     isolate_venv(root, path)
     wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
     return wt
