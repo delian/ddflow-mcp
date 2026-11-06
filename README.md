@@ -220,6 +220,7 @@ the same implementation, so neither drifts from the other.
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` · `ddflow doctor --accept-lost-events` (the operator's word that events a history rewrite took out of a shard are known, see [Events that vanished from a shard](#events-that-vanished-from-a-shard)) | `ddflow_doctor` (`--accept-lost-events` is CLI-only) |
 | **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, migrations (registered breaking-change migrations and the files each would rewrite), contested records (a decision, lesson or research id two agents defined differently: each is listed with its rivals and the `ddflow resolve` command; an apply prints it and resolves nothing, the MCP connect proposal and the upgrade notice mention it), config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--snapshot] [--confirm KEY ... --reason WHY]`; **undo it:** `ddflow upgrade --restore [NAME]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`, `snapshot`, `restore`) |
+| **give a gateway or remote client its own identity and role** | `ddflow pair NAME --role ROLE` at the host, then `ddflow tokens redeem` at the client; `ddflow tokens list`, `rotate`, `revoke` ([guide](docs/guide/tokens.md)) | none: a person's act |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
@@ -5612,6 +5613,8 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
+
+`ddflow harness record <id>` turns one live session into the payload fixtures the conformance suite replays; a tier-2 agent has a checklist a person walks under `docs/ddflow/agents/checklist/`.
 
 CI, Make or a human need no row: the CLI is complete on its own.
 

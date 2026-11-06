@@ -46,6 +46,11 @@ EXEMPTIONS: tuple[Command, ...] = (
         "agent identity like `approve`, so no tool carries it; `list` goes with it",
     ),
     Command(
+        path=("tokens",),
+        reason="a person's act (P-remote.auth): a minted secret must not enter an agent's context, "
+        "so no tool carries `redeem`, `rotate` or `revoke`; `list` goes with them",
+    ),
+    Command(
         path=("approvals",),
         reason="a person's act (P-remote-approvals): `approve`, `deny` and `revoke` are refused under "
         "any agent identity, so no tool carries them; an agent asks through its refusals and "

@@ -31,6 +31,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "tests/fixtures/event_kinds.json",
         "ddflow/core/redact/log.py",
         "tests/test_coherence_coverage.py",
+        "tests/coherence_exempt.py",
     ):
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / rel, tmp_path / rel)
@@ -38,6 +39,7 @@ def tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(EK, "FIXTURE", tmp_path / "tests/fixtures/event_kinds.json")
     monkeypatch.setattr(EK, "REDACT", tmp_path / "ddflow/core/redact/log.py")
     monkeypatch.setattr(EK, "COHERENCE", tmp_path / "tests/test_coherence_coverage.py")
+    monkeypatch.setattr(EK, "COHERENCE_EXEMPT", tmp_path / "tests/coherence_exempt.py")
     monkeypatch.setattr(EK, "FRAGMENTS", tmp_path / "frag")
     shutil.copytree(ROOT / "ddflow/templates/events", tmp_path / "events")
     monkeypatch.setattr(EK, "EVENTS", tmp_path / "events")

@@ -1092,7 +1092,7 @@
           Record every operator prompt verbatim as an event. This is what makes
           'rebuild the project from the logs alone' possible; turning it off forfeits
           that.
-      session.redact_patterns = ['(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\s*[:=]\\s*\\S+', '(?i)\\b(bearer|basic|token)\\s+[A-Za-z0-9._~+/=-]{12,}', '(?i)\\b(gh[pousr]_[A-Za-z0-9]{16,})\\b', '(?i)\\b(sk-[A-Za-z0-9_-]{16,})\\b', '(?i)\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\b', '\\bAKIA[0-9A-Z]{16}\\b', '(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', '(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----']   [default]
+      session.redact_patterns = ['(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\\s*[:=]\\s*\\S+', '(?i)\\b(bearer|basic|token)\\s+[A-Za-z0-9._~+/=-]{12,}', '(?i)\\b(gh[pousr]_[A-Za-z0-9]{16,})\\b', '(?i)\\b(sk-[A-Za-z0-9_-]{16,})\\b', '(?i)\\b(xox[abprs]-[A-Za-z0-9-]{10,})\\b', '\\bAKIA[0-9A-Z]{16}\\b', '\\bddft_[0-9a-f]{12}_[0-9a-f]{64}\\b', '(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', '(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----']   [default]
           Regexes applied to every logged prompt and note before it touches disk. The
           log is committed, so an unredacted secret is a leaked secret.
       session.redact_extra = []   [default]
@@ -3508,6 +3508,14 @@
           one `--force` ddflow itself documents, `ddflow review --force --reason
           "..."` for an extra review round. A command matching an entry here is
           allowed even when it also matches a forbidden one.
+      hooks.fixture_max_age_months = 6   [default]
+          A recorded payload fixture or a walked tier-2 checklist older than this many
+          whole months is flagged for re-recording: by `ddflow harness record <id>`,
+          and in the fixture gap report. A flag, never a failure.
+      hooks.fixture_max_reply_bytes = 65536   [default]
+          `ddflow harness record` keeps an MCP reply in session/mcp.json up to this
+          many bytes, after redaction. A longer reply is replaced by `_truncated` with
+          its size and this cap, so a fixture never reads as complete when it is not.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest
@@ -3985,6 +3993,40 @@
           (`ddflow config --set agent.ask_code_length 6`), for this machine (add
           --local), per run (DDFLOW_AGENT_ASK_CODE_LENGTH), or over MCP with
           `ddflow_configure`.
+      agent.token_ttl_h = 168   [default]
+          Hours a paired token lives unless `ddflow pair --ttl-h` says otherwise
+          (default 168, a week). There is no never-expiring token: pair again or
+          rotate (`ddflow tokens rotate`).
+      agent.token_max_ttl_h = 720   [default]
+          The longest `ddflow pair --ttl-h` may ask for, in hours (default 720, 30
+          days); above it the pairing is refused.
+      agent.pair_ttl_s = 300   [default]
+          Seconds the one-time code `ddflow pair` shows stays redeemable (default
+          300). It is meant to be read out and used at once.
+      agent.pair_code_length = 10   [default]
+          Characters in the secret part of the one-time pairing code (8..64, default
+          10).
+      agent.pair_max_attempts = 5   [default]
+          Wrong guesses a pairing survives (default 5): the last one burns it, and the
+          operator pairs again.
+      agent.capability_verbs = {'read': ['help', 'brief', 'next', 'status', 'show', 'board', 'progress', 'history', 'list', 'search', 'recall', 'similar', 'gate status', 'gate list', 'decision list', 'decision show', 'decision search', 'decision applicable', 'rule list', 'rule show', 'rule search', 'lesson search', 'memory list', 'version show', 'flow show', 'job list'], 'claim': ['claim', 'heartbeat', 'release', 'wait', 'gate record', 'gate run', 'merge', 'complete'], 'note': ['session note', 'session message', 'bug found'], 'start_lane': [], 'approve_marked': []}   [default]
+          Capability name (`[agent].roles`) to the verbs it allows a token holder:
+          `gate status`, or a glob like `gate *`. Read with [agent].roles this is the
+          per-role verb list, and it is deny by default: a verb no capability names is
+          the operator's, whose role holds `*` (or the capability `operator`). A token
+          is checked against it on every call; a person at a terminal with no token is
+          not.
+      agent.require_operator_token = False   [default]
+          Off by default, so with no token presented a shell that unsets its agent
+          markers still passes as the operator: that gap stays open unless this is on
+          (D-operator-token-default). On: the verbs that today only ask whether the
+          caller carries an agent marker also need an operator token (`DDFLOW_TOKEN`),
+          so a shell with its markers unset is no longer a person. While no live
+          operator token exists, `ddflow pair --role operator` still works from a
+          marker-free terminal, or nobody could mint the first one or recover after
+          the last expired. A same-user process can still edit config and the store:
+          this stops accidents and prompt injection, not a hostile process of the same
+          user.
       ids.bug = '{prefix}{hash}'   [default]
           Bug ids. Default {prefix}{hash}: B and ten hex digits, as ever
           (B9c56de9d58). Tokens: {prefix} (the kind's letter), {seq} (next free

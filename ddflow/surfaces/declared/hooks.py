@@ -386,6 +386,10 @@ COMMANDS: tuple[Command, ...] = (
     Command(path=("harness", "lint"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "test"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("harness", "probe"), reason=_COVERED.format("ddflow_hooks")),
+    Command(
+        path=("harness", "record"),
+        reason="a person's step around a session they run and pay for, and it writes fixtures into a source tree; an agent never calls it",
+    ),
     Command(path=("model",), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("model", "show"), reason=_COVERED.format("ddflow_hooks")),
     Command(path=("companions", "list"), reason="covered by ddflow_companions"),

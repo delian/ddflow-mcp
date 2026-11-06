@@ -56,6 +56,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/gate_accept.py:approve": 1,
     "ddflow/services/approval.py:grant": 1,  # approve.partial and chore.approve share it
     "ddflow/services/reviewer_trust.py:approve": 1,
+    "ddflow/services/auth.py:_person": 1,
     "ddflow/services/export/select.py:_is_agent": 1,  # the wrapper
     "ddflow/services/export/select.py:enable": 1,
     "ddflow/services/export/select.py:disable": 1,
@@ -143,6 +144,15 @@ SITES: tuple[Site, ...] = (
         "the pending command reviewer entry (the program it runs)",
         ("ddflow/services/reviewer_trust.py:approve",),
         "ddflow reviewers approve <name>",
+    ),
+    Site(
+        "token.manage",
+        "A",
+        T3,
+        L4,
+        "the client name and role of the credential minted, rotated or revoked",
+        ("ddflow/services/auth.py:_person",),
+        "ddflow pair <name> --role <role>",
     ),
     Site(
         "export.ack",
@@ -303,6 +313,10 @@ TERMINAL_ONLY: dict[str, str] = {
     "ddflow/services/reviewer_trust.py:write": (
         "T3: a command reviewer runs any program and can print any verdict, so only a person "
         "adds one; over chat it would let whoever types into the session run code"
+    ),
+    "ddflow/services/auth.py:_person": (
+        "T3: minting or ending a credential prints or relies on a secret, and a token that "
+        "passed through chat sits in an agent's context and transcript (P-remote.auth)"
     ),
 }
 

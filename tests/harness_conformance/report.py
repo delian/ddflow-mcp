@@ -12,11 +12,14 @@ from __future__ import annotations
 import json
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 for _up in (1, 2):  # tests/ (harness_conformance) and the repo root (ddflow)
     sys.path.insert(0, str(Path(__file__).resolve().parents[_up]))
 
+from ddflow.config_sections.hooks import HooksConfig  # noqa: E402
+from ddflow.services import harness_record as HRec  # noqa: E402
 from ddflow.services import harnessreg as HR  # noqa: E402
 from harness_conformance import declared as D  # noqa: E402
 
@@ -27,6 +30,7 @@ SHARE_MIN = 2
 
 def rows() -> list[dict]:
     out = []
+    months = HooksConfig().fixture_max_age_months
     for hid, kind, name in D.all_checks():
         fx = D.load(hid, kind, name)
         meta = (fx or {}).get("_meta")
@@ -38,6 +42,7 @@ def rows() -> list[dict]:
                 "status": D.status(fx),
                 "recorded": meta.get("recorded", False),
                 "version": meta.get("version", "-"),
+                "flags": HRec.fixture_flags(meta, today=date.today(), months=months),
             }
         )
     return out
@@ -77,10 +82,10 @@ def zero_python() -> dict:
 
 def render() -> str:
     rs = rows()
-    lines = ["| agent | check | status | recorded | version |", "|---|---|---|---|---|"]
+    lines = ["| agent | check | status | recorded | version | flags |", "|---|---|---|---|---|---|"]
     lines += [
         f"| {r['agent']} | {r['check']} | {r['status']} | {str(r['recorded']).lower()} "
-        f"| {r['version']} |"
+        f"| {r['version']} | {'; '.join(r['flags']) or '-'} |"
         for r in rs
     ]
     c = Counter(r["status"] for r in rs)
