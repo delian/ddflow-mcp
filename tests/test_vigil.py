@@ -9,9 +9,13 @@ reusing the existing verbs -- so this test fails against the unfixed code, which
 
 from __future__ import annotations
 
+import importlib
+
 from conftest import run_cli
 
-from ddflow.api.reporting import vigil as VV
+# The seam-patching tests reach internals: import the MODULE, not the re-exported `vigil`
+# function (`ddflow.api.reporting.vigil` re-exports the function over the submodule name).
+VV = importlib.import_module("ddflow.api.reporting.vigil")
 
 
 class _Rev:
