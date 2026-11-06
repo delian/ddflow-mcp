@@ -153,6 +153,27 @@ def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
     assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "successor"
 
 
+def test_a_pre_fix_agent_bound_approval_is_still_spent_by_a_successor(log, repo):
+    """B86be969daf migration: an approval filed BEFORE the fix stored its digest over the
+    requesting agent (the legacy v1 record signed ``agent``). After the fix the actor is out of
+    the digest, but the legacy digest must still match, or the already-granted answer strands."""
+    cfg = Config()
+    canon = _canon()  # agent="asker", the pre-fix requester
+    legacy = canon.digest_named("asker")
+    asked = E.request(
+        log, cfg, subject=canon.subject(), digest=legacy, command=R.command_of(canon, cfg)
+    )  # fmt: skip
+    E.answer(
+        log, cfg, asked.id, "approved", actor=A.resolve_actor(cfg, "me"),
+        digest=legacy, level=0, now=T0,
+    )  # fmt: skip
+    successor = EventLog(repo, "successor")
+    got = C.operator_gate(
+        successor, cfg, _canon(agent="successor"), approval_id=asked.id, now=T0 + 1
+    )  # fmt: skip
+    assert got.ok and asks_of(_state(log))[asked.id]["used"] == 1
+
+
 def test_the_state_changing_since_the_request_needs_a_new_approval(log):
     cfg = Config()
     filed = _approved(log, cfg)

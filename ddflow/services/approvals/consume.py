@@ -77,12 +77,16 @@ def _problem(
         )
     if row["outcome"] != E.APPROVED:
         return f"{ask_id} was denied by {row['answered_by']}"
-    if row["digest"] != canon.digest():
+    # The digest binds the action without the actor. A pre-existing approval's stored digest
+    # was computed over the legacy record that signed ``requested_by``; accept it too so an
+    # already-granted, unspent answer is not stranded when the actor leaves the digest.
+    stored = row["digest"]
+    if stored != canon.digest() and stored != canon.digest_named(row["requested_by"]):
         return (
             f"{ask_id} is of other state than this command acts on now (the command, its "
             "arguments, the gate's outcome or the findings changed): request a new approval"
         )
-    verdict = E.judge(row, canon.digest())
+    verdict = E.judge(row, stored)
     if not verdict.ok:
         return verdict.reason
     if level < row["min_level"] and not H.typed_t3(row, cfg or Config(), level):

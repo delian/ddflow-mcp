@@ -63,11 +63,23 @@ class Canon:
             "state": self.state,
         }
 
+    def record_named(self, agent: str) -> dict[str, Any]:
+        """The legacy v1 record that signed the requesting agent in the digest (pre-B86be969daf).
+        Kept only so a pre-existing, still-unspent approval -- whose stored digest was computed
+        over ``{... "agent": <requester>}`` -- stays spendable after the actor leaves the digest."""
+        rec = self.record()
+        rec["agent"] = agent
+        return rec
+
     def json(self) -> str:
         return json.dumps(self.record(), sort_keys=True, separators=(",", ":"))
 
     def digest(self) -> str:
         return content_digest(self.json())
+
+    def digest_named(self, agent: str) -> str:
+        payload = json.dumps(self.record_named(agent), sort_keys=True, separators=(",", ":"))
+        return content_digest(payload)
 
     def subject(self) -> str:
         """`cmd:<verb>:<item>:<target>`, the ask's subject (what `verdict` is asked about)."""
