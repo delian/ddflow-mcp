@@ -136,6 +136,16 @@ def test_the_display_cut_never_changes_the_class():
     assert e.cls == FL.FAILED and e.stop_reason == ""
 
 
+def test_a_failure_marker_past_the_raw_cap_is_still_matched():
+    """Patterns match the whole recorded reason, so a marker past 2000 chars classes failed."""
+    g = multi_lane()
+    reason = ("x" * 2100) + " quota exceeded"
+    g.add("lease.expired", "U", "sweeper", T0 + 1000, holder="lane-gone", reason=reason)
+    entries, *_ = _entries(g)
+    e = next(x for x in entries if x.name == "lane-gone")
+    assert e.cls == FL.FAILED
+
+
 def test_fleet_and_resume_over_cli_and_mcp(repo):
     import json
 
