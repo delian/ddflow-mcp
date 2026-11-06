@@ -166,11 +166,9 @@ def _render(data: dict[str, Any]) -> str:
         lines.append("reviewers: none")
     else:
         lines.append("reviewers:")
-        lines += [
-            f"  [{r['reachability']}] {r['name']}"
-            + (f"  ({r['reason']})" if r["reason"] else "")
-            for r in reviewers
-        ]
+        for r in reviewers:
+            reason = f"  ({r['reason']})" if r["reason"] else ""
+            lines.append(f"  [{r['reachability']}] {r['name']}{reason}")
     if data["reviewer_latency_ratio"] is not None:
         lines.append(f"reviewer latency: {data['reviewer_latency_ratio']}x usual")
     lines.append("")
