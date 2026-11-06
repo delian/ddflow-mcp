@@ -78,14 +78,19 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
 def test_cross_family_first_and_degraded_shed_before_any_attempt(repo, tmp_path):
     diary = _setup(repo, tmp_path)
 
-    # Mark the 429d reviewer degraded with its one honest attempt.
+    # COLD gate (the first run): the fast cross-family reviewer must run before the slow
+    # same-family one even though config lists the slow one first, without relying on a
+    # prior shed.
     api.review(repo, gate="rubber_duck", item="T1", branch="feat")
+    cold = diary.read_text().split()
+    assert cold.index("fast") < cold.index("slow"), cold
     diary.write_text("")
 
     # The later gate: the degraded reviewer is shed without paying its attempt, and the
     # fast cross-family reviewer runs before the slow same-family one.
     out = api.review(repo, gate="critic", item="T1", branch="feat")
     assert out.data["outcome"] == "passed", out.data["text"]
-    invoked = diary.read_text().split()
-    assert invoked == ["fast", "slow"], invoked
+    invited = diary.read_text().split()
+    assert invited == ["fast", "slow"], invited
+    assert "exhausted" not in invited, invited
     assert "shed exhausted" in out.data["text"], out.data["text"]
