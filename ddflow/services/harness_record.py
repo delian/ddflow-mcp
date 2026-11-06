@@ -134,10 +134,11 @@ class Scrubber:
         """The KINDS of this machine's text still in ``doc``; never the text itself."""
         blob = json.dumps(doc, ensure_ascii=False)
         found = []
-        root, home = _writable(self._root), _writable(self._home)
-        if root in blob or encoded(root) in blob:
+        roots = {self._root, _writable(self._root)}
+        homes = {self._home, _writable(self._home)}
+        if any(r in blob or encoded(r) in blob for r in roots):
             found.append("project path")
-        if len(home) > 1 and (home in blob or encoded(home) in blob):
+        if any(len(h) > 1 and (h in blob or encoded(h) in blob) for h in homes):
             found.append("home")
         if any(raw in blob for raw in self._sessions):
             found.append("session id")

@@ -76,6 +76,7 @@ def test_a_path_with_a_byte_that_is_not_utf8_is_still_scrubbed_and_caught():
     s = _scrubber(root=root)
     assert s.value(f"{root}/f") == "/w/f"
     assert s.leaks({"a": "/tmp/caf?/proj/f"}) == ["project path"]
+    assert s.leaks({"a": f"{root}/f"}) == ["project path"], "the raw form is caught too"
 
 
 def test_the_scrub_cuts_a_long_string_and_says_so():
