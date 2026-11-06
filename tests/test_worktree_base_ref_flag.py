@@ -12,7 +12,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
 from conftest import write_config
 
 from ddflow.config import Config, InvalidValue
