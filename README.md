@@ -2713,6 +2713,43 @@ collapse to one count line (a brief about an item -- named, held or suggested --
 of them; one about no item at all, the newest five). So a backlog of uncollected jobs never
 pushes the item's own section out of the token budget. `ddflow job list` shows them all.
 
+## Usage meters
+
+Before ddflow can respect a quota it has to know how much of it is gone. The meters answer that from
+what is already on this machine, and they never call a vendor's usage endpoint with your credentials.
+`ddflow.services.meters` keeps a registry of readers; `read_all` runs them and `best` picks the figure
+to act on, preferring a fresh one and marking a stale one as stale.
+
+| Reader | Reads | Gives |
+|---|---|---|
+| `claude-snapshot` | The last statusline or stream-json `rate_limit_event`, kept in a snapshot file | Vendor percent and reset, 5h and week |
+| `claude-cache` | `cachedUsageUtilization` in `~/.claude.json` | Vendor percent and reset, 5h and week |
+| `claude-tokens` | Claude Code transcripts, subagents included, once per (message.id, requestId) | Tokens per window |
+| `kilo` | Kilo's message rows, opened read-only | Tokens and USD per window |
+| `ddflow-sessions` | `session.started` in this project's log | Sessions per window, this project only |
+
+Each reading carries its `source`, `observed_at` and a `stale` flag. A percent is stale after
+`quota.stale_after_s`, or once its window has reset. **A reading that cannot be taken is `unavailable`
+with a reason, never zero**, and the type refuses anything else. A measured zero is still a zero: the
+source was read and nothing happened in the window. Three cases read as zero at a glance and are not:
+
+- a turn with no usable figure counts as `unmetered`, and the total is then a lower bound;
+- Kilo stores a missing figure as 0, so an all-zero turn is `unmetered`, and a window of nothing else
+  is `unavailable`. A zero kind beside real figures counts as missing too: a model that never reports
+  cache tokens leaves every total a lower bound until `quota.token_fields` drops those kinds;
+- a Kilo cost of 0 means nobody recorded a cost, so USD is `unavailable` until a real cost appears.
+
+An unreadable transcript, or more bytes than `quota.transcript_max_bytes`, makes the reading
+`unavailable` rather than a partial sum, because a partial sum would understate what was used. Kilo's
+session totals are not used: they hold a session's whole life, not one window.
+
+`claude-snapshot` has nothing to read yet: the command that writes its file comes with the quota surfaces.
+Until then that reader reports `unavailable` and `claude-cache` carries the percent.
+
+The snapshot and the sample log are per user (`$XDG_STATE_HOME/ddflow`, or `quota.snapshot_path` and
+`quota.samples_path`), because several projects share one account. They hold figures only, with an
+account as a short digest, never a raw id. The `[quota]` knobs are in the [configuration table](#configuration).
+
 ## Dependencies on another repository
 
 ```toml

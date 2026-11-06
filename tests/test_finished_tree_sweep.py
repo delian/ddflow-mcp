@@ -106,6 +106,7 @@ def test_the_brief_runs_the_sweep(repo, monkeypatch):
     tree = _seed(repo, "T6")
     _finish(repo, "T6")
     assert run_cli(repo, "config", "worktree.sweep_min_age_s", "0")[0] == 0
+    assert run_cli(repo, "config", "worktree.sweep_interval_s", "0")[0] == 0
     code, _out, err = run_cli(repo, "brief")
     assert code == 0, err
     assert not tree.exists()
@@ -115,6 +116,7 @@ def test_the_knob_turns_the_sweep_off(repo):
     tree = _seed(repo, "T7")
     _finish(repo, "T7")
     assert run_cli(repo, "config", "worktree.sweep_min_age_s", "0")[0] == 0
+    assert run_cli(repo, "config", "worktree.sweep_interval_s", "0")[0] == 0
     assert run_cli(repo, "config", "worktree.dispose_finished", "false")[0] == 0
     assert run_cli(repo, "brief")[0] == 0
     assert tree.exists()
@@ -149,6 +151,7 @@ def test_the_brief_keeps_the_tree_its_caller_stands_in_even_over_mcp(repo):
     tree = _seed(repo, "T13")
     _finish(repo, "T13")
     assert run_cli(repo, "config", "worktree.sweep_min_age_s", "0")[0] == 0
+    assert run_cli(repo, "config", "worktree.sweep_interval_s", "0")[0] == 0
     LC.brief(repo, called_from=tree, agent="later")
     assert tree.exists()
     LC.brief(repo, agent="later")
