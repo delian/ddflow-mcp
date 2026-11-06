@@ -334,8 +334,10 @@ def active_degraded_marks(
     ``cooldown_s`` seconds. A mark AT or past the cooldown is expired -- the reviewer's
     rate window is presumed reset, so it is re-eligible and must be re-attempted (and
     re-marked if the wall is still up) rather than shed forever (bug B066719c493).
-    ``cooldown_s`` <= 0 re-probes on every review (no mark blocks a run); a mark with no
-    ``at`` (written before the timestamp existed) is treated as fresh: shed until re-marked.
+    ``cooldown_s`` <= 0 re-probes on every review (no mark blocks a run). A mark with no
+    ``at`` (written before the fix carried a timestamp) is treated as EXPIRED, so a
+    reviewer already marked degraded before this fix is re-probed once and re-marked with
+    a timestamp if the wall is still up, instead of staying shed forever for lack of one.
 
     ``now`` is the caller's clock; it defaults to ``time.time()`` so a test can freeze it.
     """
@@ -345,7 +347,7 @@ def active_degraded_marks(
     return {
         name: row
         for name, row in degraded_marks(state).items()
-        if row.get("at") is None or now - row["at"] < cooldown_s
+        if row.get("at") is not None and now - row["at"] < cooldown_s
     }
 
 
@@ -355,8 +357,8 @@ def degraded_notes(state: Any) -> list[str]:
     Derived from ``review_degraded`` marks ``api.review`` recorded on gate results (the
     committed "approvals log" record): one line per degraded reviewer naming what was hit,
     so the operator sees the wall instead of a run of silently `unavailable` gates. The
-    mark expires on its own after `[review].degraded_cooldown_s`, when the reviewer is
-    re-probed rather than re-enabled by hand (bug B066719c493).
+    mark expires on its own after `[review].degraded_cooldown_s` (`active_degraded_marks`),
+    when the reviewer is re-probed rather than re-enabled by hand (bug B066719c493).
     """
     return [
         f"reviewer {name!r} is degraded ({row.get('reason') or 'quota/exhaustion'}): shed "

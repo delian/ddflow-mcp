@@ -105,6 +105,9 @@ def test_an_exhausted_reviewer_is_marked_shed_and_the_healthy_one_serves(repo, t
     marks = st.items["T1"].gates["rubber_duck"].evidence.get("review_degraded")
     assert [m["reviewer"] for m in marks] == ["exhausted"], marks
     assert marks[0]["reason"] == "HTTP 403", marks
+    assert marks[0]["gate"] == "rubber_duck", marks
+    assert marks[0]["model"] == "kimi-for-coding-highspeed", marks
+    assert marks[0]["family"] == "moonshot", marks
     # The mark is stamped with the epoch second it was written, so it can expire.
     assert isinstance(marks[0]["at"], float) and marks[0]["at"] > 0, marks
 
@@ -165,8 +168,9 @@ def test_a_degraded_mark_expires_after_the_cooldown(repo, tmp_path):
     assert "exhausted" in active_degraded_marks(st, cooldown_s=3600, now=1000.0)
     assert "exhausted" in active_degraded_marks(st, cooldown_s=3600, now=4599.0)
     assert "exhausted" not in active_degraded_marks(st, cooldown_s=3600, now=4600.0)
-    # A mark with no timestamp (written before the fix) is still treated as fresh.
-    assert "exhausted" in active_degraded_marks(_marked_state(None), cooldown_s=3600, now=9_999_999.0)
+    # A mark with no timestamp (written before the fix) is treated as expired, so an
+    # already-degraded reviewer is re-probed too, not shed forever for lack of one.
+    assert "exhausted" not in active_degraded_marks(_marked_state(None), cooldown_s=3600, now=9_999_999.0)
 
 
 def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_path):
