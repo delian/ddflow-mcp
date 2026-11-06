@@ -128,3 +128,4 @@
 {"agent":"sw-cedefaults","data":{"at":1794002589.1841316,"holder":"sw-cedefaults"},"id":"e7d94a7e379e5cdf2748ac1a8","kind":"lease.renewed","lamport":146256,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T22:03:09.283739Z"}
 {"agent":"sw-cedefaults","data":{"at":1794002847.0255222,"holder":"sw-cedefaults"},"id":"e66546da64e1a805efea0dca5","kind":"lease.renewed","lamport":146270,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T22:07:27.126235Z"}
 {"agent":"sw-cedefaults","data":{"at":1794003103.584904,"holder":"sw-cedefaults"},"id":"ef7c8409d0cf87a9868a7edc7","kind":"lease.renewed","lamport":146278,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T22:11:43.686023Z"}
+{"agent":"sw-cedefaults","data":{"gate":"unit_tests"},"id":"e60628ffc8882e516308ae0b3","kind":"gate.started","lamport":146300,"schema":1,"subject":"CE-defaults-file","ts":"2026-11-06T22:15:51.039018Z"}
