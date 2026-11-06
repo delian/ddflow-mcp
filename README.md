@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=ede9a1895679 -->
+<!-- ddflow:begin README/toc sha=63419feb4897 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -295,6 +295,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [The check every add runs](#the-check-every-add-runs)
 - [Operational memory](#operational-memory)
 - [Resources and long-running jobs](#resources-and-long-running-jobs)
+- [Usage meters](#usage-meters)
 - [Dependencies on another repository](#dependencies-on-another-repository)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
@@ -1115,7 +1116,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 542 knobs.
+cadences, and the rest of the 567 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5384,7 +5385,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 542): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 567): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5964,7 +5965,7 @@ declared once and persists — see
 
 ## Configuration
 
-542 knobs across 50 sections, every one documented in place and listed, with its default
+567 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6031,8 +6032,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=fb7cc70bd3a1 -->
-<details><summary>All 542 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=9f7376804776 -->
+<details><summary>All 567 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6058,6 +6059,8 @@ long default is left to `ddflow config --explain`.
 | `lease.shared_globs` | `[]` |  |
 | `lease.new_file_globs` | (long: see `ddflow config --explain`) |  |
 | `lease.append_only_globs` | `[]` |  |
+| `lease.scan_view_trees_max` | `16` |  |
+| `lease.scan_view_verdicts_max` | `0` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |
 | `worktree.branch_prefix` | `"ddflow/"` |  |
@@ -6066,6 +6069,7 @@ long default is left to `ddflow config --explain`.
 | `worktree.remove_on_merge` | `true` |  |
 | `worktree.dispose_finished` | `true` |  |
 | `worktree.sweep_min_age_s` | `3600` |  |
+| `worktree.sweep_interval_s` | `900` |  |
 | `worktree.max_parallel` | `0` |  |
 | `worktree.sync_before_start` | `true` |  |
 | `worktree.adopt_existing` | `true` |  |
@@ -6189,6 +6193,8 @@ long default is left to `ddflow config --explain`.
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.optimizer` | `"greedy-v1"` |  |
 | `schedule.bugs_first` | `true` |  |
+| `schedule.reserved_slots` | `0` |  |
+| `schedule.reserved_tags` | `["ddflow-gap"]` |  |
 | `schedule.dx_priority` | `8` |  |
 | `schedule.bug_priority` | `10` |  |
 | `schedule.dx_tags` | `["dx"]` |  |
@@ -6294,6 +6300,11 @@ long default is left to `ddflow config --explain`.
 | `locks.probe_merge_tree_min_git` | `"2.38"` |  |
 | `lanes.window_s` | `86400` |  |
 | `lanes.stale_after_s` | `0` |  |
+| `lanes.fleet_window_s` | `0` |  |
+| `lanes.fleet_max_rows` | `18` |  |
+| `lanes.fleet_items` | `5` |  |
+| `lanes.fleet_failed_patterns` | (long: see `ddflow config --explain`) |  |
+| `lanes.fleet_reason_chars` | `120` |  |
 | `lanes.watch_interval_s` | `5` |  |
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
@@ -6404,15 +6415,29 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `quota.stale_after_s` | `900` |  |
+| `quota.claude_state` | `""` |  |
+| `quota.claude_projects` | `""` |  |
+| `quota.kilo_db` | `""` |  |
+| `quota.snapshot_path` | `""` |  |
+| `quota.samples_path` | `""` |  |
+| `quota.samples_max_bytes` | `4194304` |  |
+| `quota.sample_interval_s` | `300` |  |
+| `quota.sample_tail_bytes` | `8192` |  |
+| `quota.token_windows` | `["5h", "day", "week"]` |  |
+| `quota.token_fields` | (long: see `ddflow config --explain`) |  |
+| `quota.transcript_max_bytes` | `1073741824` |  |
+| `quota.kilo_timeout_s` | `10.0` |  |
 | `log.reuse_parsed` | `true` |  |
-| `log.max_cached_events` | `100000` |  |
+| `log.max_cached_events` | `200000` |  |
 | `log.redact_builtin_shapes` | `true` |  |
 | `log.commit_events` | `true` |  |
 | `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
 | `log.commit_events_message` | `"events: {reason}"` |  |
 | `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
-| `log.snapshot` | `true` |  |
+| `log.snapshot` | `false` |  |
 | `log.snapshot_min_events` | `5000` |  |
+| `log.snapshot_max_mb` | `256` |  |
 | `log.snapshot_stale_days` | `7` |  |
 | `log.snapshot_touch_s` | `86400` |  |
 | `log.evidence_blobs` | `false` |  |
@@ -6492,6 +6517,7 @@ long default is left to `ddflow config --explain`.
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
 | `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |
+| `mcp.lane_tools` | `""` |  |
 | `mcp.profile_lean_budget_tokens` | `16000` |  |
 | `mcp.profile_mid_budget_tokens` | `32000` |  |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
