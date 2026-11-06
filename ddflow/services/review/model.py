@@ -367,11 +367,6 @@ def degraded_notes(state: Any, cooldown_s: float = 0.0) -> list[str]:
         f"from its gates, re-probed when the mark expires"
         for name, row in sorted(active_degraded_marks(state, cooldown_s).items())
     ]
-    return [
-        f"reviewer {name!r} is degraded ({row.get('reason') or 'quota/exhaustion'}): shed "
-        f"from its gates, re-probed when the mark expires"
-        for name, row in sorted(degraded_marks(state).items())
-    ]
 
 
 def finding_digest(severity: str, location: str, title: str, detail: str) -> str:
