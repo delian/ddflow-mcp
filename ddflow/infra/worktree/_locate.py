@@ -187,6 +187,10 @@ class Worktree:
     created: bool = False
     #: git-ignored files copied in from the primary (`[worktree].local_files`)
     local_files: list[str] = field(default_factory=list)
+    #: Non-empty when the create-time base sync left an unfinished merge that had to be
+    #: aborted (a branch/base conflict): claim surfaces it so the agent never silently
+    #: commits a merge it did not choose (B-claim-sync-conflict-silent).
+    sync_note: str = ""
 
 
 def list_worktrees(repo: Path) -> list[dict[str, str]]:

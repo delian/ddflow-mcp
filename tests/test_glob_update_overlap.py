@@ -128,6 +128,22 @@ def test_a_shared_file_the_holder_changed_is_inert(repo, monkeypatch):
     assert ok.ok, ok.reason
 
 
+def test_rereating_a_shared_glob_is_not_queued_behind_a_waiter(repo):
+    """B-update-queue-ignores-shared-globs: re-stating a shared glob the item already holds
+    must not be refused as 'queued behind' an earlier waiter that also asked for it."""
+    run_cli(repo, "config", "lease.shared_globs", '["README.md"]')
+    run_cli(repo, "task", "add", "H1", "--title", "holder", "--globs", "changes.toml")
+    run_cli(repo, "task", "add", "Q1", "--title", "queuer", "--globs", "changes.toml,README.md")
+    run_cli(repo, "task", "add", "M1", "--title", "mine", "--globs", "README.md")
+    assert A.claim(repo, "H1", no_worktree=True, agent=HOLDER).ok
+    assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
+    # Q1's claim is queued: changes.toml is held by HOLDER; README.md is shared.
+    assert not A.claim(repo, "Q1", no_worktree=True, agent="agent-queuer", queue=True).ok
+    ok = AI.update(repo, "M1", AI.ItemEdit(globs=["README.md", "other.py"]), agent=ME)
+    assert ok.ok, ok.reason
+    assert _items(repo)["M1"].globs == ["README.md", "other.py"], _items(repo)["M1"].globs
+
+
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "H1", "--title", "H1 fixture", "--globs", "pkg/exact.py")

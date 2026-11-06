@@ -7,6 +7,7 @@ stage (D-unify kind-pipeline). No network or process I/O live here.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -269,6 +270,74 @@ class Finding:
     digest: str = ""
 
 
+#: A reply or transport error that says the REVIEWER's own quota/exhaustion wall was hit --
+#: the account pays, not the diff's shape. Shedding sends the gate to a DIFFERENT endpoint
+#: (a different account), which fixing the chunk size, the timeout or the key cannot.
+#: Deliberately NOT the token-budget truncation `_truncated` (a chunk lost to its OWN size,
+#: retried in halves): that is the diff's shape, not the endpoint's account. Account walls
+#: are named: an HTTP 403/429 status code (with or without an `HTTP/1.1` prefix, e.g.
+#: httpx's bare ``403 Forbidden``), the word `quota` (a token, so "insufficient_quota" and
+#: "exceeded your quota" match but "quotation" does not), and a `rate`/`usage`/`request`/
+#: `concurrency` limit (space/tab/hyphen/underscore separator, the endpoint's account). A
+#: BARE "limit exceeded" is NOT a signal: a `max_tokens`/context limit is the chunk's own
+#: shape, not the endpoint.
+_EXHAUSTION_RE = re.compile(
+    r"HTTP(?:/\d\.\d)?\s*(?:403|429)\b|\b(?:403|429)\b|"
+    r"(?<![A-Za-z])quota(?![A-Za-z])|\b(?:rate|usage|request|concurrency)[ \t_-]?limits?(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
+
+def classify_exhaustion(text: str) -> str:
+    """A non-empty reason when ``text`` says a REVIEWER hit its own quota/exhaustion wall.
+
+    ``"HTTP 403"``, ``"quota"``, ``"rate limit"``, ``"rate limit exceeded"`` -- the signal
+    that the endpoint's account (a 5-hour limit, an exhausted key) can no longer review,
+    which no chunk tuning fixes and a different reviewer endpoint might. This is the marker
+    the failover shed reads, and `doctor` reports, instead of the gate being silently
+    `unavailable`. ``""`` for anything else: a clipped reply, an off-contract answer, a
+    chunk too large for ``max_tokens`` -- a BARE "limit exceeded" counts as nothing, since
+    it cannot be told from the chunk's own ``max_tokens``/context limit.
+    """
+    m = _EXHAUSTION_RE.search(text or "")
+    if not m:
+        return ""
+    hit = m.group(0)
+    return hit.upper() if hit.upper().startswith("HTTP") else " ".join(hit.split()).lower()
+
+
+def degraded_marks(state: Any) -> dict[str, dict[str, Any]]:
+    """reviewer name -> its latest quota/exhaustion mark, from recorded review evidence.
+
+    The mark is written by ``api.review._review_gate`` into the gate record it appends
+    (the committed "approvals log" record) as ``review_degraded``, so it is derived from
+    the log, never a second store. One row per reviewer, newest last, so the LAST mark
+    for a name is the one in effect.
+    """
+    marks: dict[str, dict[str, Any]] = {}
+    for item in getattr(state, "items", {}).values():
+        for run in getattr(item, "gate_history", ()) or ():
+            evidence = getattr(run, "evidence", None) or {}
+            for row in evidence.get("review_degraded", ()) or ():
+                if row.get("reviewer"):
+                    marks[row["reviewer"]] = row
+    return marks
+
+
+def degraded_notes(state: Any) -> list[str]:
+    """The doctor notes for reviewers a quota/exhaustion wall marked degraded and shed.
+
+    Derived from ``review_degraded`` marks ``api.review`` recorded on gate results (the
+    committed "approvals log" record): one line per degraded reviewer naming what was hit,
+    so the operator sees the wall instead of a run of silently `unavailable` gates.
+    """
+    return [
+        f"reviewer {name!r} is degraded ({row.get('reason') or 'quota/exhaustion'}): shed "
+        f"from its gates until it recovers -- re-enable it in reviewers.toml"
+        for name, row in sorted(degraded_marks(state).items())
+    ]
+
+
 def finding_digest(severity: str, location: str, title: str, detail: str) -> str:
     """A finding's identity for triage: its whole text, so a re-review's finding is the
     same one only when the reviewer said the same thing (decision D-review-triage).
@@ -358,6 +427,11 @@ class ReviewResult:
     #: config). A re-review of chunk N merges only into a record of the SAME cut.
     diff_sha: str = ""
     max_chunk_chars: int = 0
+    #: Non-empty when the reviewer itself hit a quota/exhaustion wall (`classify_exhaustion`):
+    #: an HTTP 403/429, a vendor quota/rate-limit message. Not the diff's shape (a truncated
+    #: chunk, an off-contract reply), which is retried or absorbed -- this is the ENDPOINT's
+    #: account, which no chunk tuning fixes and a different reviewer's account might.
+    degraded: str = ""
 
     @property
     def label(self) -> str:

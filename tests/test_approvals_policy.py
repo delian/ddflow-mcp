@@ -467,6 +467,14 @@ def test_a_windowed_rule_stops_the_instant_the_window_lapses_and_a_person_is_ask
     )
     first = C.operator_gate(log, cfg, canon)
     assert first.ok  # opens the window, anchored now
+    # `claim_unavailable` answers a vanished/lapsed HOLDER (B-claim-unavailable-fires-past-deps):
+    # give T1 a lapsed lease (holder gone, TTL long past) so this claim.force is the takeover the
+    # rule documents -- never a no-holder item, which the rule must refuse, not auto-approve.
+    log.append(
+        "lease.acquired",
+        "T1",
+        {"holder": "gone", "at": 0.0, "ttl_s": 1, "globs": ["t.py"]},
+    )
     # A SECOND generic T2 refusal while the window is still open is also auto-approved ...
     still = C.operator_gate(log, cfg, claim)
     assert (

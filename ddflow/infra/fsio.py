@@ -23,7 +23,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import stat
 import tempfile
 import time
@@ -33,6 +32,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ddflow import FORMAT_LEVEL, __version__
+from ddflow.adapters import fs as _fs
 from ddflow.core.digest import content_digest
 from ddflow.core.events import is_older
 
@@ -404,14 +404,29 @@ def repo_rel(
 def copy_file(src: Path | str, dst: Path | str) -> None:
     """Copy the file ``src`` to ``dst``, preserving its metadata, like ``shutil.copy2``.
 
-    The worktree layer moves machine-local convenience files with this rather than
-    importing ``shutil`` outside the file home."""
-    shutil.copy2(src, dst)
+    The path operations (this, `copy_tree`, `move`, `rmtree`) are the `Fs` port's
+    (`ddflow.adapters.fs`): callers import them here rather than ``shutil``."""
+    _fs.DEFAULT.copy_file(src, dst)
+
+
+def copy_tree(src: Path | str, dst: Path | str, *, dirs_exist_ok: bool = False) -> None:
+    """Copy the directory tree ``src`` to ``dst``."""
+    _fs.DEFAULT.copy_tree(src, dst, dirs_exist_ok=dirs_exist_ok)
+
+
+def move(src: Path | str, dst: Path | str) -> None:
+    """Move ``src`` to ``dst``, across filesystems if need be."""
+    _fs.DEFAULT.move(src, dst)
+
+
+def replace_path(src: Path | str, dst: Path | str) -> None:
+    """Rename ``src`` over ``dst`` atomically (same filesystem), like ``os.replace``."""
+    _fs.DEFAULT.replace_path(src, dst)
 
 
 def rmtree(path: Path | str, *, ignore_errors: bool = True) -> None:
     """Remove the directory tree at ``path``, ignoring errors by default."""
-    shutil.rmtree(path, ignore_errors=ignore_errors)
+    _fs.DEFAULT.rmtree(path, ignore_errors=ignore_errors)
 
 
 @dataclass(frozen=True, slots=True)
