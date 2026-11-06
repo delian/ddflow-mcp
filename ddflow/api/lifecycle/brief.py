@@ -4,6 +4,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -14,6 +15,7 @@ from ...core import progress as PR
 from ...core import provenance as PV
 from ...core.budget import Budget, approx_tokens
 from ...core.measuring import is_measuring
+from ...infra import fsio
 from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import choices as CHO
@@ -234,10 +236,43 @@ def _sweep_finished(
     if is_measuring():
         return
     try:
-        if not dry_run:
+        if not dry_run and _sweep_due(repo, cfg):
+            _sweep_stamp(
+                repo
+            )  # the ATTEMPT is stamped: a sweep that raises is not retried per call
             CL.sweep_finished(repo, cfg, log, st, callers=callers)
     except Exception:
         pass
+
+
+def _sweep_stamp_path(repo: Path) -> Path:
+    return Path(repo) / ".ddflow" / "local" / "sweep-finished.last"
+
+
+def _sweep_due(repo: Path, cfg, *, now: float | None = None) -> bool:
+    """Is it time for the brief to sweep? At most once per ``worktree.sweep_interval_s``
+    (PS-git-batch: the sweep dropped 96 branches in 17 s on every brief). The time of the last
+    ATTEMPTED sweep is a derived, local stamp (``.ddflow/local/sweep-finished.last``), written
+    before the sweep so one that raises (an expensive failing sweep) is retried after the
+    interval, not on every brief; losing the stamp costs one early sweep. Interval 0 sweeps on every brief, as before."""
+    every = cfg.worktree.sweep_interval_s
+    now = time.time() if now is None else now
+    if every <= 0:
+        return True
+    try:
+        last = float(_sweep_stamp_path(repo).read_text().strip())
+    except (OSError, ValueError):
+        return True  # no stamp, or a torn one: sweep now
+    return not math.isfinite(last) or now - last >= every  # "nan" is a torn stamp too
+
+
+def _sweep_stamp(repo: Path) -> None:
+    stamp = _sweep_stamp_path(repo)
+    try:
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        fsio.replace_text(stamp, f"{time.time()}\n", fsync=False)
+    except OSError:
+        pass  # a stamp that cannot be written only means the next brief sweeps too
 
 
 def brief(
@@ -303,7 +338,7 @@ def brief(
             rules = f"See `{candidate}` (loaded separately by your agent)."
             break
 
-    recovery = L.scan(log, cfg, repo, state=loaded) if check_recovery else []
+    recovery = L.scan(log, cfg, repo, state=loaded, view=True) if check_recovery else []
     live = sorted(
         (m for m in st.memories.values() if m.live),
         key=lambda m: (m.origin_at or m.at, m.at),

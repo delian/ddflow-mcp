@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.scan_view_verdicts_max"
+new = "0"
+why = "How many merged-but-unfinished items status and brief weigh the full completion for (dozens of git calls each); `ddflow recover` weighs all. (PS-git-batch)"
+effect = "Default-behaviour change, an exception to r-upgrade-safe (D-git-batch-defaults): status and brief now only say such an item is merged and name `ddflow recover` for what `complete` still wants. To restore the old behaviour set lease.scan_view_verdicts_max to at least the number of such items, e.g. 1000000 (0, the new default, weighs none)."
+impact = "additive"
