@@ -1,6 +1,6 @@
 """PROTOTYPE of the hot/cold event tiering of D-hot-cold-tiering. Not wired into anything.
 
-Stdlib only, no ddflow imports: it exists so the design's claims are executable
+Stdlib and `core.digest` only: it exists so the design's claims are executable
 (tests/test_hot_cold_design_fixture.py) before any production change relies on them.
 The design is docs/ddflow/decisions/hot-cold.md; read it first.
 
@@ -14,13 +14,14 @@ by (lamport, id), is the full log that replay, export and verify read.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from ...core.digest import hasher
 
 HOT = "hot"
 COLD = "cold"
@@ -96,7 +97,7 @@ class _Pending:
     count: int
     last_at: float
     holder: str
-    h: Any = field(default_factory=hashlib.sha256)
+    h: Any = field(default_factory=hasher)
 
 
 class TierWriter:
@@ -187,7 +188,7 @@ def reexpand(root: Path, ref: Ref) -> list[dict[str, Any]]:
     if not path.exists():
         raise Unavailable(f"{ref.shard} is not in this clone; pull the clone that wrote it")
     blob = path.read_bytes()[ref.start : ref.end]
-    if hashlib.sha256(blob).hexdigest() != ref.sha256:
+    if hasher(blob).hexdigest() != ref.sha256:
         raise DigestMismatch(ref.shard)
     return [json.loads(x) for x in blob.split(b"\n") if x]
 
@@ -234,17 +235,3 @@ def search(
             except Unavailable as e:
                 unavailable.append(str(e))
     return {"hits": hits, "unavailable": unavailable, "truncated": truncated}
-
-
-def git_merge(a: Path, b: Path, into: Path) -> None:
-    """What git does with two clones: a union of files. A same-named file on both sides with
-    different bytes is the conflict the per-agent naming rule exists to make impossible."""
-    for src in (a, b):
-        for p in Path(src).rglob("*.jsonl"):
-            dst = Path(into) / p.relative_to(src)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if dst.exists() and dst.read_bytes() != p.read_bytes():
-                raise FileExistsError(
-                    f"merge conflict on {p.relative_to(src)}: two writers, one file"
-                )
-            dst.write_bytes(p.read_bytes())

@@ -223,7 +223,16 @@ def test_an_item_that_is_already_free_returns_at_once(proj):
         # A cycle does not clear when anyone finishes.
         (
             [
-                ("task", "add", "C1", "--title", "C1 fixture", "--needs", "C2"),
+                (
+                    "task",
+                    "add",
+                    "C1",
+                    "--title",
+                    "C1 fixture",
+                    "--needs",
+                    "C2",
+                    "--allow-unknown-needs",
+                ),
                 ("task", "add", "C2", "--title", "C2 fixture", "--needs", "C1"),
             ],
             "C1",

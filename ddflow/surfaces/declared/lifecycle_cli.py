@@ -332,6 +332,12 @@ def _claimed_line(item: str, d: dict) -> str:
     return f"claimed {item}{via} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
 
 
+def _sync_warn(d: dict) -> str:
+    """The create-time base-sync warning, or "" — a warning lives behind a helper so it
+    never raises `claim_text`'s complexity grade (B-claim-sync-conflict-silent)."""
+    return f"\n  WARNING:  {d['sync_warn']}" if d.get("sync_warn") else ""
+
+
 def claim_via_bug(repo, a: dict, agent: str, called_from=None):
     """`claim` of an item, or of an OPEN bug's fix task -- filed first when it has none
     (Bee5f08be7b). An id in the queue always means the item; an unknown or closed bug is
@@ -406,6 +412,7 @@ def claim_text(out, a, ctx) -> str:
             f"\n  a tree of its own, because {d['tree']['why']}."
             f"\n  cd there and work."
         )
+    msg += _sync_warn(d)
     # Every claim says what it now covers: an agent that passed ten paths and was
     # recorded holding one had no way to tell (Bb3cb64444e).
     msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"

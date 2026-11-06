@@ -207,25 +207,36 @@ def _crashed(ln: Lane, now: float) -> Finding:
     )
 
 
+def _link_locks(k: dict[str, Any]) -> list[tuple[str, str]]:
+    """The (item, holder) pairs one cycle link locks: the waiter's item, then each lease of
+    the holder in its way (``blocker`` is the first; ``blockers`` names the rest)."""
+    locks = [(k["item"], k["agent"])]
+    blocks = [k["blocker"]] if k.get("blocker") else []
+    blocks += list(k.get("blockers") or [])
+    locks += [(b, k["holder"]) for b in dict.fromkeys(blocks) if b and b != k["item"]]
+    return locks
+
+
 def _cycle_locks(cycles: list[dict[str, Any]], seen: set[tuple[str, str]]) -> list[Finding]:
     out = []
     for c in cycles:
         loop = " -> ".join([*c["agents"], c["agents"][0]])
         for k in c["links"]:
-            if (k["item"], k["agent"]) in seen:
-                continue
-            seen.add((k["item"], k["agent"]))
-            out.append(
-                Finding(
-                    LOCKED,
-                    k["item"],
-                    k["agent"],
-                    0.0,
-                    f"in a lease deadlock {loop} over {', '.join(c['files']) or 'its files'}",
-                    c["remedy"] or "`ddflow doctor` names the edge that ends it",
-                    {"cycle": c["agents"], "via": "cycle"},
+            for item, holder in _link_locks(k):
+                if (item, holder) in seen:
+                    continue
+                seen.add((item, holder))
+                out.append(
+                    Finding(
+                        LOCKED,
+                        item,
+                        holder,
+                        0.0,
+                        f"in a lease deadlock {loop} over {', '.join(c['files']) or 'its files'}",
+                        c["remedy"] or "`ddflow doctor` names the edge that ends it",
+                        {"cycle": c["agents"], "via": "cycle"},
+                    )
                 )
-            )
     return out
 
 

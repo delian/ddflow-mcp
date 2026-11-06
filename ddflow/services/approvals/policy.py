@@ -45,10 +45,19 @@ class Rule:
     when: Callable[[Any, str, Config], bool]
 
 
-def _true(_it, _target: str, _cfg: Config) -> bool:
-    """A generic-verb rule whose only item-level gate is the site digest: the outstanding-window
-    and `standing_verbs` checks `apply` makes are its whole predicate."""
-    return True
+def _claim_unavailable(it, target: str, cfg: Config) -> bool:
+    """`claim_unavailable`: the item is HELD by a lease that has LAPSED -- its holder gone
+    (vanished/unavailable, a crashed or dead lane) -- which is exactly the takeover a
+    `claim.force` over it performs. The rule is documented for that recovery, never for a
+    plain claim the scheduler just refused for its dependencies: a dep-blocked item with NO
+    holder, and a LIVE holder, are not "a vanished holder", so the rule must not answer them.
+    Its old `_true` predicate answered ANY `claim.force` once the standing window was open, so
+    a plain agent claim of a dep-unmet item (refused by `plan_blocker`, re-run as
+    `claim.force`) was silently force-granted over its unmet dependencies
+    (B-claim-unavailable-fires-past-deps). Requiring a lapsed lease is what stops that: no
+    lease -> no answer, a live holder -> no answer."""
+    lease = it.lease
+    return lease is not None and not lease.live(clock.now_utc().timestamp(), cfg.lease.grace_s)
 
 
 def _unavailable_enough(it, gate: str, cfg: Config) -> bool:
@@ -73,7 +82,10 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     `unavailable` nor `partial`, so the outcome check refuses it. An excused required
     gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
     already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
-    the verdict alone knows what `applies_when` excused."""
+    the verdict alone knows what `applies_when` excused. A `partial` that only a person
+    accepts (`GA.person_only`, a measured baseline-red partial `gate run` did not
+    auto-accept) is refused here too, so the rule's own predicate and the completion site
+    read the SAME helper and cannot drift (B-complete-self-approves-over-person-only-partial)."""
     required = set(required_gates(cfg))
     for g in required:
         if it.gate_outcome(g) == GateOutcome.FAILED.value:
@@ -83,6 +95,7 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
         g in required
         and not it.gate_satisfied(g, True)
         and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        and not GA.person_only(it, g)
         for g in names
     )
 
@@ -113,7 +126,7 @@ RULES: dict[str, Rule] = {
             "claim_unavailable",
             "claim.force",
             "claim an item held by a vanished/unavailable holder, inside the standing window",
-            _true,
+            _claim_unavailable,
         ),
     )
 }
@@ -185,6 +198,14 @@ def refusals(state, canon: Canon) -> int:
     return n
 
 
+def retry_armed(cfg: Config, canon: Canon) -> bool:
+    """Is the retry-threshold rule armed for ``canon``: `[approvals].auto_approve_after_retries`
+    above 0 and ``canon.verb`` a generic T2 retry verb. While armed, the refusal site's re-file of
+    an unresolved retry verb must be a NEW filing, not the deduplicated pending one, so
+    `refusals` accumulates over distinct filings and the threshold becomes reachable."""
+    return cfg.approvals.auto_approve_after_retries > 0 and canon.verb in RETRY_VERBS
+
+
 def _approved(
     log, cfg: Config, canon: Canon, reason: str, rule_id: str, *, notify: int = 0
 ) -> dict[str, Any]:
@@ -237,7 +258,7 @@ def apply(
         return _approved(log, cfg, canon, reason, rule_id)
     if canon.site.min_level <= 1:  # the retry rule, like every policy answer, never above L1
         threshold = cfg.approvals.auto_approve_after_retries
-        if threshold > 0 and canon.verb in RETRY_VERBS:
+        if retry_armed(cfg, canon):
             n = refusals(state, canon)
             if n >= threshold:
                 # COUNT-based, never window-gated, always notifies: record and tell the operator.

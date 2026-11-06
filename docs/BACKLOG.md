@@ -92,7 +92,7 @@ mechanically the entry was left open.
   is removed; the recipe breaks `progress` and `loops`), B86 by making the read cheap
   instead — parsing was 84% of it, not the fold the entry blamed.
 * **Six are individual items**: B7 (dogfooding, CLOSED, below), B13 (Windows untested — `fcntl.flock`
-  is POSIX-only), B95 (THEORETICAL: `tree_fingerprint` is blind to a re-edited binary),
+  is POSIX-only), B95 (REFUTED 2026-11-04: `tree_fingerprint` does see a re-edited binary),
   B114 (`companions --verify` should launch and check it speaks MCP), B148 (blocked on the
   protocol-version question), B163 (three of the C901-hidden functions are split; whether
   `build_parser` gets a `# noqa` instead of a file-wide ignore is a one-line decision).
@@ -1066,9 +1066,8 @@ one commit earlier, and two were in the tests written to catch exactly their cla
   complete") was the case it could not detect, and a gate that passed on superseded
   source read as fresh evidence. The existing test passed by adding an UNTRACKED file,
   which moves the path list — it proved the case that already worked. `git diff HEAD`
-  now goes into the digest. **Known limit, documented not papered over:** `git diff`
-  renders a binary file as "Binary files differ", so a re-edited binary is still
-  invisible; `--binary` costs far more than it buys. *Cross-family critic, CONFIRMED.*
+  now goes into the digest. This entry used to name a re-edited binary as a known limit;
+  that was wrong, see B95. *Cross-family critic, CONFIRMED.*
 
 - **B88. The typed and argv paths resolved DIFFERENT identities. ✅ CLOSED.** B80
   threaded identity through both paths only for a DECLARED name. Undeclared, the argv
@@ -1139,7 +1138,10 @@ one commit earlier, and two were in the tests written to catch exactly their cla
   once, served as an MCP resource — never mentioning `ddflow_identify`.
   *roborev, mixed CONFIRMED/doc-drift.*
 
-- **B95. `tree_fingerprint` is blind to a re-edited BINARY file. FILED, THEORETICAL.**
+- **B95. `tree_fingerprint` is blind to a re-edited BINARY file. REFUTED 2026-11-04.**
+  The claim below was never probed and is false: above its "Binary files … differ" line
+  `git diff` prints `index <old>..<new>`, and `<new>` is the working copy's blob id, so
+  the digest moves (R-B95-binary-reedit; `tests/test_tree_identity.py` pins it). As filed:
   `git diff` emits "Binary files … differ" with no content, so the B87 fix does not
   cover binaries. No probe ships because no gate in any pipeline here tests a binary
   artifact, so the defect has no reachable consequence today. The fix (`--binary`,

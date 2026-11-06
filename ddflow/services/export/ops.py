@@ -25,6 +25,7 @@ docs_gate decides when a selected whole-file document regenerates itself; the tr
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from dataclasses import dataclass, field, fields
@@ -62,6 +63,7 @@ class Spec:
     redact: bool
     refresh: str
     selected: bool
+    elsewhere: tuple[str, ...] = ()  # the kind's `also_at`, unless a path was given
 
 
 @dataclass
@@ -165,7 +167,17 @@ def spec_for(
         redact=bool(t.get("redact", cfg.export.redact)),
         refresh=str(t.get("refresh") or cfg.export.refresh),
         selected=doc in cfg.export.documents,
+        elsewhere=() if path or t.get("path") else kind.also_at,
     )
+
+
+def target_of(repo: Path, spec: Spec) -> str:
+    """The file ``spec`` means in ``repo``: its path, unless that does not exist and the
+    document already lives at one of the kind's other places."""
+    for rel in (spec.path, *spec.elsewhere):
+        if os.path.isfile(Path(repo) / rel):  # unlike Path.is_file, never raises
+            return rel
+    return spec.path
 
 
 def selection(cfg: Config) -> list[str]:
@@ -331,7 +343,7 @@ def write_doc(
     template: Template | str | None = None,
 ) -> W.WriteResult:
     """Write (or ``check`` / ``diff``) ``spec`` to ``target`` or its own path, in its mode."""
-    path = target or spec.path
+    path = target or target_of(repo, spec)
     if spec.mode == R.WHOLE:
         doc = render(repo, cfg, q, spec, max_bytes=0, template=template)
         return W.write_whole(repo, path, doc, check=check, diff=diff, force=force)
@@ -384,7 +396,7 @@ def state_of(repo: Path, cfg: Config, q: Q.Query, spec: Spec) -> tuple[str, str]
     in both cases ddflow will not overwrite it without ``--force``.
     """
     try:
-        path, _rel = W.safe_target(repo, spec.path)
+        path, _rel = W.safe_target(repo, target_of(repo, spec))
     except ExportError as exc:
         return "stale", f"unsafe target: {exc}"
     if not path.exists():
@@ -475,7 +487,7 @@ def listing(repo: Path, cfg: Config) -> list[dict[str, Any]]:
                 }
             )
             continue
-        row.update(target=spec.path, mode=spec.mode, selected=spec.selected)
+        row.update(target=target_of(repo, spec), mode=spec.mode, selected=spec.selected)
         if not spec.selected:
             row.update(state="not selected", detail="")
         else:

@@ -93,11 +93,11 @@
          },
          "landed": {
           "type": "string",
-          "description": "A commit already on the base that holds the fix (the fix task was claimed after it landed): the test must fail on its first parent and pass on it; the fix task is ended naming it."
+          "description": "A commit already on the base that holds the fix (the fix task was claimed after it landed): the test must fail on ..."
          },
          "lint_exempt": {
           "type": "string",
-          "description": "For a CI-filed LINT bug (a check that is not a test, e.g. ruff format --check): why it needs no regression test (what made the check green). Recorded as regression_verified=exempt-lint; instead of regression_test."
+          "description": "For a CI-filed LINT bug (a check that is not a test, e.g. ..."
          },
          "mutation": {
           "type": "string",
@@ -153,7 +153,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. ..."
          },
          "check_only": {
           "type": "boolean",
@@ -365,7 +365,7 @@
          },
          "command": {
           "type": "string",
-          "description": "The command you ran. With `exit_code` it makes an outcome evidence; a gate in `gates.evidence_required` is rejected without them."
+          "description": "The command you ran. With `exit_code` it makes an outcome evidence; ..."
          },
          "exit_code": {
           "type": "string",
@@ -490,7 +490,7 @@
          },
          "id": {
           "type": "string",
-          "description": "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance."
+          "description": "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; ..."
          },
          "title": {
           "type": "string",
@@ -522,11 +522,11 @@
          },
          "supersedes": {
           "type": "string",
-          "description": "Comma-separated lesson ids this replaces. The old one is retired, not deleted: the corpus stops growing without losing what was once believed."
+          "description": "Comma-separated lesson ids this replaces. ..."
          },
          "pattern": {
           "type": "string",
-          "description": "A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Prefer it to a remembered rule when mechanical: a count says 'worse', never 'which'. Refused if it does not compile."
+          "description": "A regex naming the mistake in CODE. ..."
          },
          "globs": {
           "type": "string",
@@ -534,7 +534,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. ..."
          },
          "check_only": {
           "type": "boolean",
@@ -550,7 +550,7 @@
          },
          "max_chars": {
           "type": "integer",
-          "description": "Total budget for the answer. The point of a budget is that recall is called at the START of work, where a long answer costs the context the work itself needs."
+          "description": "Total budget for the answer. ..."
          },
          "sources": {
           "type": "string",
@@ -562,7 +562,7 @@
          },
          "kind": {
           "type": "string",
-          "description": "Comma-separated subset of the configured kinds to look in: bug,task,phase,lesson,decision,research,memory. Default: all of them."
+          "description": "Comma-separated subset of the configured kinds to look in: bug,task,phase,lesson,decision,research,memory. ..."
          },
          "item": {
           "type": "string",
@@ -840,7 +840,7 @@
          },
          "relayed_by": {
           "type": "string",
-          "description": "The coordinator (agent) that relayed the words, when the operator's answer reached this agent through a coordinator rather than directly."
+          "description": "The coordinator (agent) that relayed the words, when the operator's answer reached this agent through a coordinator ..."
          },
          "model": {
           "type": "string",
@@ -936,7 +936,7 @@
         "properties": {
          "id": {
           "type": "string",
-          "description": "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance."
+          "description": "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; ..."
          },
          "title": {
           "type": "string",
@@ -944,11 +944,11 @@
          },
          "needs": {
           "type": "string",
-          "description": "Comma-separated ids it depends on. Pass an EMPTY string to clear them — that is how you break a dependency cycle the loop detector found."
+          "description": "Comma-separated ids it depends on. ..."
          },
          "globs": {
           "type": "string",
-          "description": "Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); the result names what it dropped. Empty: none, and a fix task then takes none from its bug."
+          "description": "Path globs this item writes, comma-separated or a JSON array. REPLACES the list (a claimed item's lease too); ..."
          },
          "body": {
           "type": "string",
@@ -964,11 +964,15 @@
          },
          "line": {
           "type": "string",
-          "description": "Release line this lands on (a name from [flow.lines], or the current line). Omit for the current line; tasks inherit a phase's line."
+          "description": "Release line this lands on (a name from [flow.lines], or the current line). Omit for the current line; ..."
          },
          "readd": {
           "type": "boolean",
-          "description": "File a REMOVED item's id again with this definition. An id still in the queue is always refused -- change that item with ddflow_update."
+          "description": "File a REMOVED item's id again with this definition. ..."
+         },
+         "allow_unknown_needs": {
+          "type": "boolean",
+          "description": "Accept needs that name no id in the queue (an id that will exist later, or a repo:ID dependency). ..."
          },
          "allow_unknown_needs": {
           "type": "boolean",
@@ -976,7 +980,7 @@
          },
          "relation": {
           "type": "string",
-          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. Omit at first."
+          "description": "Answer to a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | related:ID | merge_into:ID. ..."
          },
          "check_only": {
           "type": "boolean",
@@ -996,15 +1000,15 @@
          },
          "parent": {
           "type": "string",
-          "description": "Move the task under this phase (or task); empty makes it top level. Refused for a finished item, a missing parent, or a dependency cycle."
+          "description": "Move the task under this phase (or task); empty makes it top level. ..."
          },
          "resources": {
           "type": "string",
-          "description": "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses while live claims use up the capacity ([schedule] resources). Declare for a GPU job, model server or long run. Empty clears."
+          "description": "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. ..."
          },
          "lines": {
           "type": "string",
-          "description": "Release lines a FIX must reach, e.g. '1,2,3': written where [flow].port_strategy says, plus a port task `<id>@<line>` per other line."
+          "description": "Release lines a FIX must reach, e.g. ..."
          },
          "port_of": {
           "type": "string",
@@ -1044,7 +1048,7 @@
          },
          "mechanism": {
           "type": "string",
-          "description": "WHY it would work in this repo. The middle field of the triple — claim, mechanism, falsifier — and the one most often skipped."
+          "description": "WHY it would work in this repo. ..."
          },
          "budget": {
           "type": "string",
@@ -1056,7 +1060,7 @@
          },
          "append_body": {
           "type": "string",
-          "description": "Text to ADD after the item's current body (a blank line between); the original is kept. Use it for a note or a decision instead of re-sending the body."
+          "description": "Text to ADD after the item's current body (a blank line between); the original is kept. ..."
          },
          "queue": {
           "type": "boolean",
@@ -1064,15 +1068,15 @@
          },
          "landed": {
           "type": "string",
-          "description": "Record work already on main: a commit, or <before>..<after>; verified as ancestors of the base touching the item's globs. For work merged outside `ddflow merge`."
+          "description": "Record work already on main: a commit, or <before>..<after>; ..."
          },
          "landed_paths": {
           "type": "string",
-          "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work that landed in a MIXED commit. Each is verified inside the item's declared globs and inside the landing's changed files; the pipeline is then judged on those paths alone."
+          "description": "With `--landed`, or alone after a landing is recorded: the item's own paths (globs) inside that commit, for work ..."
          },
          "worktree": {
           "type": "string",
-          "description": "Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch."
+          "description": "Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way ..."
          },
          "reason": {
           "type": "string",
@@ -1080,7 +1084,7 @@
          },
          "force": {
           "type": "boolean",
-          "description": "Remove although it still has open children or dependents. Both leave the queue inconsistent in a way the scheduler reports; read the refusal before overriding."
+          "description": "Remove although it still has open children or dependents. ..."
          },
          "keep": {
           "type": "string",
@@ -1088,7 +1092,7 @@
          },
          "refile_as": {
           "type": "string",
-          "description": "Comma-separated new ids, one per definition NOT kept, in `show` order: each is re-added under its new id in the same transaction."
+          "description": "Comma-separated new ids, one per definition NOT kept, in `show` order: each is re-added under its new id in the ..."
          },
          "imported": {
           "type": "boolean",
@@ -1193,7 +1197,7 @@
          },
          "by_tag": {
           "type": "string",
-          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the done/running/ready/review/blocked/abandoned/open counts, the buckets the plan puts them in, and the open dependencies blocking the most items (e.g. 'wave' or 'track')."
+          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the ..."
          },
          "out": {
           "type": "string",
@@ -1201,7 +1205,7 @@
          },
          "show": {
           "type": "string",
-          "description": "Print ONE view instead of writing files: lessons, lessons-summary, research, or board. This is what the ddflow:// resources are served from."
+          "description": "Print ONE view instead of writing files: lessons, lessons-summary, research, or board. ..."
          },
          "kind": {
           "type": "string",
@@ -1253,7 +1257,7 @@
          },
          "sort": {
           "type": "string",
-          "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). Default: newest change first."
+          "description": "kind=bug: order the rows by severity (critical first, id as the tiebreak, bugs without one last). ..."
          },
          "tail": {
           "type": "integer",
@@ -1309,11 +1313,11 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips, lanes, stages or locks."
+          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief."
+          "description": "Lane name (or a unique part); with view=brief or resume."
          },
          "group_by": {
           "type": "string",
@@ -1333,7 +1337,7 @@
          },
          "interfaces": {
           "type": "string",
-          "description": "Census the interfaces that are not imports: 'all' or one kind (program, protocol, managed-file, env, network): programs run, wire protocols, other tools' files, environment variables, network endpoints."
+          "description": "Census the interfaces that are not imports: 'all' or one kind (program, protocol, managed-file, env, network): ..."
          },
          "baseline": {
           "type": "boolean",

@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from ._docs import declare, knob
 
 
+def _whole(v: object) -> str:
+    ok = isinstance(v, int) and not isinstance(v, bool) and v >= 0
+    return "" if ok else "a whole number of zero or more"
+
+
 @declare("lanes")
 @dataclass
 class LanesConfig:
@@ -21,6 +26,40 @@ class LanesConfig:
     stale_after_s: int = knob(
         0,
         doc="Seconds without a heartbeat after which a lane that still holds its lease is reported `stale` instead of `working`. 0 (the default) uses lease.ttl_s, the moment the lease itself is due to lapse.",
+    )
+    fleet_window_s: int = knob(
+        0,
+        doc="How far back an agent's last event may be for `ddflow lanes fleet` to list it. 0 (the default) lists every agent the log has ever seen: the fleet registry is durable history, unlike the lane ledger's window_s.",
+        check=_whole,
+    )
+    fleet_max_rows: int = knob(
+        18,
+        doc="Most agents `ddflow lanes fleet` lists: lost work first, then live work, then the most recently heard from. The cut says how many more there are. 0 lists every one.",
+        check=_whole,
+    )
+    fleet_items: int = knob(
+        5,
+        doc="Items each agent's row in `ddflow lanes fleet` names, newest first; `items_total` still counts them all. 0 names none.",
+        check=_whole,
+    )
+    fleet_failed_patterns: list[str] = knob(
+        factory=lambda: [
+            r"\b429\b",
+            r"rate.?limit",
+            r"spend.?limit",
+            r"quota",
+            r"overloaded",
+            r"context (window|length|exhaust)",
+            r"max.?tokens",
+            r"crash",
+            r"\bOOM\b",
+        ],
+        doc="Case-insensitive regular expressions: an agent that stopped with its item unfinished and whose recorded stop reason (session summary, lease expiry reason or release note) matches one is classed `failed` in `ddflow lanes fleet`; any other stop is `stalled`. A pattern that does not compile is skipped.",
+    )
+    fleet_reason_chars: int = knob(
+        120,
+        doc="Characters of a stop reason `ddflow lanes fleet` keeps and prints (made safe to print first). 0 prints none. The cut is for display only: failure patterns match the whole recorded reason.",
+        check=_whole,
     )
     watch_interval_s: int = knob(
         5,
@@ -71,11 +110,7 @@ class LanesConfig:
     slot_wait_s: int = knob(
         600,
         doc="Seconds a launched lane waits for a free endpoint or GPU slot before giving up with a report (it holds no lease while it waits and starts no daemon). 0 tries each slot once.",
-        check=lambda v: (
-            ""
-            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
-            else "a whole number of zero or more"
-        ),
+        check=_whole,
     )
     release_mode: str = knob(
         "flag",

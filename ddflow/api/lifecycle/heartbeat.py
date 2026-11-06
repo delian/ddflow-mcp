@@ -150,7 +150,7 @@ def _yield_request(log, cfg, item: str) -> str:
     st = localize(fold(log.read_all(), strict=False), log, now)
     asked = [
         LB.yield_text(v)
-        for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root))
+        for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root), log.root)
         if v.item == item
     ]
     asked.append(HW.stop_notice(st, item))  # the watchdog's stop request (DX-health-watch)

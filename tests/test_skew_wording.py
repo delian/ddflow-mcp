@@ -21,7 +21,7 @@ def _flat(path: str) -> str:
 def test_the_refusal_opens_the_same_way_for_every_install_kind(monkeypatch):
     remedy = {"installed": "Upgrade ddflow-mcp to >= 0.2.0", "source-tree": "Merge main into this"}
     for kind in ("installed", "source-tree"):
-        monkeypatch.setattr(LOG, "install_kind", lambda kind=kind: kind)
+        monkeypatch.setattr(LOG._skew, "install_kind", lambda kind=kind: kind)
         msg = LOG.skew_message("0.1.0", "0.2.0", "bob")
         assert msg.startswith(OPENER) and remedy[kind] in msg
         other = remedy["source-tree" if kind == "installed" else "installed"]

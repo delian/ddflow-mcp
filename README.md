@@ -431,6 +431,15 @@ overwritten by accident: `release` and `gate run|record|skip` on it exit 3 namin
 unless you pass `--force --reason "<why>"` (CLI only; recorded as `forced` on the event).
 Agents of the same clone, an expired lease and a lease with no recorded clone are unaffected.
 
+**Stuck waits.** A refused claim leaves a recorded wait, so `doctor`, `status`, `brief` and
+`lanes advise` can say when waiting will not end. Agents waiting on each other are a **lease
+deadlock**: the report names the loop, the victim (the holder with the least progress) and
+the commands that free the contested files. A wait older than `[loops].wait_alarm_s` (default
+1200 seconds, 0 turns it off) with nothing running on the leases in its way (no live gate, no
+running job, no progress for as long) raises a **lease wait alarm** with the same commands.
+`ddflow --json status` carries both as `wait_cycles` and `wait_alarms`. Nothing is taken from
+anyone: the holder acts on it.
+
 **The task pipeline.** Ten gates, in order. Heavy borders are the gates
 `gates.required` names by default (`implement`, `unit_tests`, `merge`); the rest still
 need *some* outcome — passed, failed, unavailable, partial, or an explicit skip with a
@@ -2296,6 +2305,21 @@ subagent may map it to its model choice (see the driver, `docs/ddflow/drivers/im
 It is advice only: it never affects scheduling, gates or reviewer independence, and an unknown
 value such as `tier:foo` is ignored and reported by `ddflow doctor` as a note, not an error.
 
+### Pull dispatch: `ddflow next --lane NAME`
+
+`ddflow next --lane NAME` answers an idle lane with the best item for it: the scheduler core's
+pick (`[swarm]` weights and hard constraints) among everything ready, within the parallel limit.
+It only reads. The answer carries a one-line dispatch note with the figures and reasons; the
+lane records it by claiming with `ddflow claim <item> --note "<note>"`, the command the text form prints.
+
+NAME is a `[template.<name>]` in `swarm.launch_templates_file`. Family and trust come from that
+template and the model catalog, and nothing is defaulted: with no template, a template a person
+has not approved at its digest, no declared `trust`, or a family or model the catalog cannot
+vouch for, the answer is `unavailable` and offers nothing (a locally named model needs its row
+in `.ddflow/local/models.toml`). Exit 0 is an offer; exit 2 is
+`unavailable`, `hold` (the parallel limit or paused admission) or `none` (nothing eligible, with
+the first `swarm.dispatch_why_items` refusals). It starts nothing: launching is a separate step.
+
 ## Work that changes shape while you do it
 
 Tasks can be added at any time, including while their parent is being worked — mid-task
@@ -2696,6 +2720,43 @@ another host (they may be running) up to the newest five; their exited or killed
 collapse to one count line (a brief about an item -- named, held or suggested -- lists none
 of them; one about no item at all, the newest five). So a backlog of uncollected jobs never
 pushes the item's own section out of the token budget. `ddflow job list` shows them all.
+
+## Usage meters
+
+Before ddflow can respect a quota it has to know how much of it is gone. The meters answer that from
+what is already on this machine, and they never call a vendor's usage endpoint with your credentials.
+`ddflow.services.meters` keeps a registry of readers; `read_all` runs them and `best` picks the figure
+to act on, preferring a fresh one and marking a stale one as stale.
+
+| Reader | Reads | Gives |
+|---|---|---|
+| `claude-snapshot` | The last statusline or stream-json `rate_limit_event`, kept in a snapshot file | Vendor percent and reset, 5h and week |
+| `claude-cache` | `cachedUsageUtilization` in `~/.claude.json` | Vendor percent and reset, 5h and week |
+| `claude-tokens` | Claude Code transcripts, subagents included, once per (message.id, requestId) | Tokens per window |
+| `kilo` | Kilo's message rows, opened read-only | Tokens and USD per window |
+| `ddflow-sessions` | `session.started` in this project's log | Sessions per window, this project only |
+
+Each reading carries its `source`, `observed_at` and a `stale` flag. A percent is stale after
+`quota.stale_after_s`, or once its window has reset. **A reading that cannot be taken is `unavailable`
+with a reason, never zero**, and the type refuses anything else. A measured zero is still a zero: the
+source was read and nothing happened in the window. Three cases read as zero at a glance and are not:
+
+- a turn with no usable figure counts as `unmetered`, and the total is then a lower bound;
+- Kilo stores a missing figure as 0, so an all-zero turn is `unmetered`, and a window of nothing else
+  is `unavailable`. A zero kind beside real figures counts as missing too: a model that never reports
+  cache tokens leaves every total a lower bound until `quota.token_fields` drops those kinds;
+- a Kilo cost of 0 means nobody recorded a cost, so USD is `unavailable` until a real cost appears.
+
+An unreadable transcript, or more bytes than `quota.transcript_max_bytes`, makes the reading
+`unavailable` rather than a partial sum, because a partial sum would understate what was used. Kilo's
+session totals are not used: they hold a session's whole life, not one window.
+
+`claude-snapshot` has nothing to read yet: the command that writes its file comes with the quota surfaces.
+Until then that reader reports `unavailable` and `claude-cache` carries the percent.
+
+The snapshot and the sample log are per user (`$XDG_STATE_HOME/ddflow`, or `quota.snapshot_path` and
+`quota.samples_path`), because several projects share one account. They hold figures only, with an
+account as a short digest, never a raw id. The `[quota]` knobs are in the [configuration table](#configuration).
 
 ## Dependencies on another repository
 
@@ -3140,6 +3201,14 @@ in the record and in `gate status`; `complete` warns that it settled only on tha
 and `verify` notes it. A re-run or re-record needs its own acceptance; `failed`,
 `unavailable` and a hand-recorded or `partial_exits` partial cannot be accepted this way.
 
+**A failure the base could not be compared with is `unavailable`**, not new and not
+baseline-red: the run on the base gave no verdict for them (pytest aborted with exit 4 or 5,
+was cut short with 2 or 3 before reaching them all, or passed having counted no test), so
+`baseline.unmeasured` lists the ids and the reason names the cause. A test
+the base lacks needs no run and stays a new failure, and one id measured passing there keeps
+the gate `failed`. The standing `complete_unavailable` rule does not answer such a gate, since
+its tests did fail: re-run it, or have a person decide.
+
 ---
 
 ## Parallelism and coordination
@@ -3365,7 +3434,14 @@ cap's words are `schedule.max_parallel_tasks=N` when the fixed knob holds, and, 
 load, `fixed: limit N, limited by <signal>`. A
 shrink never touches a running lease: in flight above the new limit simply leaves no slot
 until enough finish; the limit is never below 1, and a critical signal pauses new
-admissions for that evaluation only. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
+admissions for that evaluation only. `[schedule].reserved_slots` keeps slots of the limit for
+bug fixes and tasks tagged `reserved_tags`: with limit 3 and one reserved, two features run,
+the third is held though a slot is free, and a bug fix still starts. A bug fix in flight fills
+the reserved share first and may overflow into an ordinary slot; an idle reserved slot stays
+free rather than go to a feature. `worktree.max_parallel` keeps the same share of its trees.
+The offer does this, as with the cap: `claim` of a named item applies neither. `next`, `status`
+and `brief` say it (`parallel: 3 (fixed); 1 of 3 slot(s) reserved for bug fixes and tags
+ddflow-gap`). What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
 person — a dependency cycle, an expired lease under `reclaim_policy = "report"` — it
 refuses at once rather than sleeping to its timeout.
 
@@ -3396,6 +3472,12 @@ default `lease.ttl_s`); `waiting-on-glob` (names the holder) and `waiting-on-dep
 the log does not say whether the context ran out or the process died, and `lanes` does not
 guess. `--watch` redraws when the log changes or every `lanes.watch_interval_s`.
 
+`ddflow lanes fleet` is the durable registry: every agent the log has seen, past the lane
+window, with role, harness, model, items, lease and last stop reason, classed `failed`,
+`stalled`, `working`, `idle` or `done` in that order. `[lanes] fleet_max_rows` cuts the listing
+and says how many more there are. `ddflow lanes resume <lane>` answers how to resume a stopped
+lane, or who took its item over; it starts nothing.
+
 `ddflow lanes brief <lane>` renders what a coordinator would otherwise write by hand as the
 lane's first prompt: the objective (the item's title and body), its phase, tags, needs and
 globs, the open lease and worktree, and the lane's previous run (its last session summary
@@ -3420,6 +3502,8 @@ How many items may be in flight adapts by default (decision D-adaptive-flow-acce
 | `adapt_up_after_s` | `600` | healthy seconds, with the limit binding, before +1; no increase for twice this after a decrease |
 | `adapt_cooldown_s` | `300` | minimum seconds between two decreases |
 | `signal_interval_s` | `60` | seconds between two samples (taken by next, brief, claim and heartbeat; no daemon) |
+| `reserved_slots` | `0` | slots of the limit only bug fixes and `reserved_tags` work may take; ordinary work holds at most limit minus this, an idle reserved slot stays free, and one slot of a cap always stays ordinary |
+| `reserved_tags` | `["ddflow-gap"]` | tags that make a task reserved work, beside bug fixes |
 | `[schedule.signals]` | all enabled; `load_per_core` low 0.15, high 0.75 | `enabled = [...]` switches signals; per signal `low` / `high` / optional `critical` marks, higher worse |
 
 The shipped marks (decisions D-adaptive-flow-accepted and D-unify 8); `high` shrinks the limit,
@@ -5075,8 +5159,9 @@ rendered in a sandbox); you ask for a document, you do not write it.
 
 **What can be exported:** `roadmap` (Now / Next / Later with progress), `bugs` (open, fixed,
 invalid), `status`, `worklog` (coalesced per item, grouped by day), `sessions`, `decisions`
-(an index), `rules` (decisions in force by governing path, lessons, the enforced workflow) and
-`changelog` (Keep a Changelog form, from finished items, fixed bugs and version tags).
+(an index), `rules` (decisions in force by governing path, lessons, the enforced workflow),
+`changelog` (Keep a Changelog form, from finished items, fixed bugs and version tags) and
+`security` (a GitHub-compatible `SECURITY.md`: supported versions and known issues).
 Replay is not a kind (`ddflow export replay` is refused): it carries paths and addresses.
 Output is deterministic: the same log gives the same bytes, with no clock in the body.
 
@@ -5090,12 +5175,15 @@ Output is deterministic: the same log gives the same bytes, with no clock in the
 | `decisions` | `DECISIONS.md` | `since` `limit` `status` | an index: id, status, date, title, what it governs |
 | `rules` | `RULES.md` | `limit` `tag` | decisions in force by governing path, lessons by tag, the enforced workflow |
 | `changelog` | `CHANGELOG.md` | `tag` (`--version`) | Keep a Changelog 1.1: Unreleased and one section per version tag |
+| `security` | `SECURITY.md` | none | supported, deprecated and unsupported release lines; known issues from bugs tagged security |
 
 The **roadmap** lists phases in dependency order then priority: Now is work in flight, Next
 the top `next` ready phases, Later the rest (task lists capped at `tasks`, Later as counts), each
 with percent, counts by status, what it waits on, its release line and whether it is on the
 critical path. `[export.roadmap]` takes `hide` (id prefixes or tags, default `["BL-"]`), `next`
 (3), `tasks` (8), `graph` (25; the phases the Mermaid dependency graph draws, edges implied by a longer path removed, 0 for none) `eta` (true; the metrics forecast's range per Now / Next phase, labelled an estimate and left out when there is not enough data) and `show_hidden`; `--phase` names a hidden batch to show it. `--since` (default: the latest version tag's date) adds a Changed section (phases and tasks added, completed, blocked, reprioritised since) and writes `since=` into the header; each phase lists the decisions whose globs overlap its own and the research about it.
+
+The **security** document keeps two named regions (mode `region`) of `SECURITY.md`, or of `.github/SECURITY.md` or `docs/SECURITY.md` when the policy already lives there. Supported Versions has one row per `MAJOR.MINOR` line of the version tags: the newest line and the `[flow.lines]` maintenance lines are supported, `[export.security]` `supported_lines` adds lines (`"1.2"`, or `"1"` for a major), `deprecated_lines` marks some deprecated (it wins), and the rest are unsupported. Known Issues lists the non-invalid bugs carrying one of `tags` (default `["security", "secbug"]`), on the bug or its fix task, with the version holding the fix (by ancestry; `by date` when the fix has no landing). A release is marked `vulnerable: <id>, fixed in <version>` when it was tagged at or after the bug was found and lacks the fix; the newest release is also marked for anything no release has fixed. `disclose` decides what a row publishes beside the id and severity: `ids` (default) nothing, `fixed` the title of a fixed issue, `all` the title of an open one too, which is the operator's call. With no such bug the section says "None recorded." Dependency advisories and security-pass findings are not recorded yet, and the document says it does not cover them. The Reporting section lies outside the regions: a new file gets a TODO for the owner (ddflow never invents a contact) and it is never written again. A file with no markers is left alone until `--update --force`, which needs the operator's approval from an agent, appends the regions to its end.
 
 Every default target is at the repo root; `[export.<doc>].path` moves it. `rules` exports
 decisions in force, lessons and workflow settings: imported rulebooks are not exported. The

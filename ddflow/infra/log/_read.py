@@ -25,6 +25,8 @@ from ._parse import (
     _PARSE_CACHE,
     _SNAP_COVERED,
     _SNAP_ORDER,
+    _SNAP_SWEPT,
+    _SNAP_SWEPT_MAX,
     _SNAPSHOT_SLOT,
     _SNAPSHOTS,
     SNAPSHOT_ENV,
@@ -170,16 +172,61 @@ class _ReadMixin:
             if time.time() - path.stat().st_mtime > self.log_cfg.snapshot_touch_s:
                 os.utime(path)
 
-    def _collect_stale_snapshots(self, mine: Path) -> None:
+    def _collect_stale_snapshots(self, mine: Path, max_bytes: int | None = None) -> None:
         """Remove the snapshots of other code untouched for `[log].snapshot_stale_days`, and the
-        pre-fingerprint `read-snapshot.bin` once it is that old. Best effort."""
+        pre-fingerprint `read-snapshot.bin` once it is that old; then, while all snapshots
+        together exceed `max_bytes` (default `[log].snapshot_max_mb`), the oldest of the
+        others. Best effort."""
         stem = SNAPSHOT_FILE.removesuffix(".bin")
         cutoff = time.time() - self.log_cfg.snapshot_stale_days * 86400
+        if max_bytes is None:
+            max_bytes = self.log_cfg.snapshot_max_mb * 1_000_000
+        others: list[tuple[float, int, Path]] = []
+        total = 0
+        with contextlib.suppress(OSError):
+            total = mine.stat().st_size
         for f in mine.parent.glob(f"{stem}*.bin"):
             if f == mine or not re.fullmatch(rf"{re.escape(stem)}(-[0-9a-f]{{16}})?\.bin", f.name):
                 continue
             with contextlib.suppress(OSError):
-                if f.is_file() and f.stat().st_mtime < cutoff:
+                st = f.stat()
+                if not f.is_file():
+                    continue
+                if st.st_mtime < cutoff:
+                    f.unlink()
+                else:
+                    others.append((st.st_mtime, st.st_size, f))
+                    total += st.st_size
+        mine_size = total - sum(o[1] for o in others)
+        if mine_size > max_bytes:  # the current file alone is over the cap
+            with contextlib.suppress(OSError):
+                mine.unlink()
+                _SNAP_COVERED.pop(self.dir, None)
+                total -= mine_size
+        for _, size, f in sorted(others):
+            if total <= max_bytes:
+                break
+            with contextlib.suppress(OSError):
+                f.unlink(
+                    missing_ok=True
+                )  # gone already (a sibling collected it): still not counted
+                total -= size
+
+    def _discard_disabled_snapshots(self) -> None:
+        """`[log].snapshot = false` neither reads nor writes a snapshot, so the files an
+        earlier setting left (~113 MB per fingerprint at 137k events) are dead weight: delete
+        them, once per process per log. The per-process environment switch never does."""
+        if self.log_cfg.snapshot or not self.cache_writes or self.dir in _SNAP_SWEPT:
+            return
+        if (
+            len(_SNAP_SWEPT) >= _SNAP_SWEPT_MAX
+        ):  # bounded: a sweep repeated for a forgotten dir is harmless
+            _SNAP_SWEPT.clear()
+        _SNAP_SWEPT.add(self.dir)
+        stem = SNAPSHOT_FILE.removesuffix(".bin")
+        for f in (self.dir.parent / "local").glob(f"{stem}*.bin"):
+            if re.fullmatch(rf"{re.escape(stem)}(-[0-9a-f]{{16}})?\.bin", f.name):
+                with contextlib.suppress(OSError):
                     f.unlink()
 
     def _snapshot_enabled(self) -> bool:
@@ -303,10 +350,15 @@ class _ReadMixin:
             bytes_out = 0
             with fsio.atomic_file(target, fsync=False) as fh:
                 fh.write(b" " * (_SNAPSHOT_SLOT - 1) + b"\n")
+                cap = self.log_cfg.snapshot_max_mb * 1_000_000
                 for frame in self._frames(deltas, order):
                     fh.write(frame)
                     sized.update(frame)
                     bytes_out += len(frame)
+                    if (
+                        bytes_out + _SNAPSHOT_SLOT > cap
+                    ):  # the header slot counts toward the file size
+                        raise ValueError("the snapshot is over [log].snapshot_max_mb")
                 meta = {
                     "format": SNAPSHOT_FORMAT,
                     "version": running_version(),
@@ -366,6 +418,7 @@ class _ReadMixin:
         the on-disk snapshot is neither read nor trusted for that call.
         """
         self.skipped_lines = 0
+        self._discard_disabled_snapshots()
         live = self.shards()
         # A deleted shard's entry would otherwise live for the process lifetime: nothing
         # visits a path `shards()` no longer returns, so `_read_delta` never sees it. That

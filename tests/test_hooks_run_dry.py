@@ -136,6 +136,7 @@ def test_dry_run_session_start_does_not_record_external_observations(repo):
         "GEN.1 fixture",
         "--needs",
         "trainer:132.D",
+        "--allow-unknown-needs",
         "--globs",
         "g.py",
     )

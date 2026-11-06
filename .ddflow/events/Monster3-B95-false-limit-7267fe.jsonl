@@ -1,0 +1,2 @@
+{"agent":"Monster3-B95-false-limit-7267fe","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e791deb345035444ee1320b36","kind":"ddflow.seen","lamport":136944,"schema":1,"subject":"ddflow","ts":"2026-11-04T22:17:20.873113Z"}
+{"agent":"Monster3-B95-false-limit-7267fe","data":{"tags":["bugfix","wave:0"]},"id":"ef810e2f3f41d4be0d0070722","kind":"task.updated","lamport":136945,"schema":1,"subject":"fix-B-stale-globs-after-split-wave","ts":"2026-11-04T22:17:20.907359Z"}

@@ -122,6 +122,57 @@ def test_a_bare_family_author_still_accepts_another_family(cfg):
     assert GR.review_tier(cfg, "anthropic", "gpt-5", "openai") == "family"
 
 
+def _cross_family(gate, model, fam):
+    """The evidence `ddflow review` records for one clean cross-family reviewer."""
+    return {"reviewer": model, "model": model, "family": fam}
+
+
+def test_an_unknown_author_with_a_cross_family_panel_is_independent(log, cfg, gd):
+    """Bug B1a30dc3303: an author with no session model has no family to compare a
+    reviewer with, so no SINGLE reviewer can be shown to differ from it. Reviewers from
+    TWO different families (grok=xai, gemini=google) reviewed, though, and the author has
+    exactly one family -- one of them is outside it whatever it is."""
+    item(log)
+    G.record(
+        log,
+        cfg,
+        "T1",
+        "critic",
+        "passed",
+        evidence=_cross_family("grok-4.7", "grok-4.7", "xai"),
+        gates=gd,
+    )
+    G.record(
+        log,
+        cfg,
+        "T1",
+        "rubber_duck",
+        "passed",
+        evidence=_cross_family("gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "google"),
+        gates=gd,
+    )
+    st = fold(log.read_all())
+    tier, why = GR.independence_tier(st, cfg, "T1", "")
+    assert tier == "family", why
+    assert G.reviewer_independence(st, cfg, "T1", "")[0]
+
+
+def test_an_unknown_author_with_a_single_family_panel_is_still_refused(log, cfg, gd):
+    """The multi-family panel is the ONLY thing that can save an unknown author: one
+    family still cannot be shown to differ from it."""
+    item(log)
+    G.record(
+        log,
+        cfg,
+        "T1",
+        "critic",
+        "passed",
+        evidence=_cross_family("grok-4.7", "grok-4.7", "xai"),
+        gates=gd,
+    )
+    assert GR.independence_tier(fold(log.read_all()), cfg, "T1", "")[0] == "none"
+
+
 def test_a_record_without_a_model_never_becomes_a_model_tier(log, cfg, gd):
     item(log)
     G.record(
