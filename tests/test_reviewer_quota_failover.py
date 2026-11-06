@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import stat
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -22,7 +21,7 @@ from helpers import git as _git
 import ddflow.api.review as api
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-from ddflow.services.review import active_degraded_marks, classify_exhaustion, degraded_marks
+from ddflow.services.review import active_degraded_marks, classify_exhaustion
 
 
 def _prompt_logger(tmp_path: Path, name: str, stdout: str, exit_code: int) -> Path:
@@ -59,7 +58,9 @@ def _setup(repo: Path, tmp_path: Path, *, cooldown_s: int = 3600) -> tuple[Path,
     exhausted = _prompt_logger(tmp_path, "exhausted", "HTTP 403: rate limit exceeded", 1)
     healthy = _prompt_logger(tmp_path, "healthy", "STATUS: NO FINDINGS", 0)
     run_cli(repo, "init")
-    (repo / ".ddflow" / "config.toml").write_text(_config(exhausted, healthy, cooldown_s=cooldown_s))
+    (repo / ".ddflow" / "config.toml").write_text(
+        _config(exhausted, healthy, cooldown_s=cooldown_s)
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
     run_cli(repo, "task", "add", "T1", "--title", "add x", "--globs", "*.py")
@@ -133,7 +134,7 @@ def test_a_doctor_note_names_the_degraded_reviewer(repo, tmp_path):
     assert any("'exhausted' is degraded" in n for n in notes), notes
 
 
-def _marked_state(mark_at: float) -> object:
+def _marked_state(mark_at: float | None) -> object:
     """A fold state whose only item recorded one reviewer gone degraded at `mark_at`.
 
     ``mark_at`` None writes a mark with NO timestamp (what a pre-fix log holds)."""
@@ -149,13 +150,16 @@ def _marked_state(mark_at: float) -> object:
         row["at"] = mark_at
 
     class _Run:
-        evidence = {"review_degraded": [row]}
+        def __init__(self) -> None:
+            self.evidence = {"review_degraded": [row]}
 
     class _Item:
-        gate_history = [_Run()]
+        def __init__(self) -> None:
+            self.gate_history = [_Run()]
 
     class _State:
-        items = {"T1": _Item()}
+        def __init__(self) -> None:
+            self.items = {"T1": _Item()}
 
     return _State()
 
@@ -170,7 +174,9 @@ def test_a_degraded_mark_expires_after_the_cooldown(repo, tmp_path):
     assert "exhausted" not in active_degraded_marks(st, cooldown_s=3600, now=4600.0)
     # A mark with no timestamp (written before the fix) is treated as expired, so an
     # already-degraded reviewer is re-probed too, not shed forever for lack of one.
-    assert "exhausted" not in active_degraded_marks(_marked_state(None), cooldown_s=3600, now=9_999_999.0)
+    assert "exhausted" not in active_degraded_marks(
+        _marked_state(None), cooldown_s=3600, now=9_999_999.0
+    )
 
 
 def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_path):
