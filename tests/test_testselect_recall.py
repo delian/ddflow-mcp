@@ -55,6 +55,9 @@ UNROUTABLE = {
         "the pin transcript, cut at the selection budget; `ddflow pins regenerate` re-records it "
         "and ci's always-run guards cover the change"
     ),
+    "977bb788 tests/test_reviewer_quota_failover.py": (
+        "shed-degraded re-probe's behaviour tests, cut at the selection budget"
+    ),
 }
 #: A test that drives the program in a SUBPROCESS (`run_cli(...)`, `subprocess.run`) imports
 #: nothing it exercises: the selector's stated blind spot (`testselect`, "What it misses"), a

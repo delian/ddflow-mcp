@@ -50,6 +50,16 @@ def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
     return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
 
 
+def _commit_shards_before_merge(log, cfg, item: str) -> None:
+    """Commit the primary's uncommitted event shards before the git merge, unless the
+    strategy is a fast-forward: landing them on the target drifts it past the branch's fork
+    and makes ``git merge --ff-only`` report diverged branches instead of landing
+    (B83b4102c08). For ff-only the shards are committed after the landing, on the
+    fast-forwarded target, by the post-merge `commit_at` in `merge`."""
+    if cfg.worktree.merge_strategy != "ff-only":
+        EC.commit_at(log, cfg, "merge", f"merge {item}")
+
+
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
     """The first failed-gate blocker that stops ``item`` landing, or ""."""
     found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
@@ -191,7 +201,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     # also moves the base by landing the event shards (B6b7e47955e); the range a caller saw
     # must not skip that commit and start from a base the caller never held (Be40e9c84d5).
     merge_since = W.rev(repo, wt.base)
-    EC.commit_at(log, cfg, "merge", f"merge {item}")
+    _commit_shards_before_merge(log, cfg, item)
     # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
     # (it lands the event shards on the primary), so a landing check against a rev read
     # before it would misread a refused git merge the shard commit caused as "landed anyway".
