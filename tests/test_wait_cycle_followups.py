@@ -390,3 +390,32 @@ def test_the_time_comes_from_the_clock_port(repo, monkeypatch):
     monkeypatch.setattr(WC, "CLOCK", Later())
     _cycles, alarms = WC.wait_report(log, st, cfg, activity=lambda _lz: 0.0)
     assert [a.item for a in alarms] == ["T1"]
+
+
+def test_lanes_advise_names_a_deadlock_and_its_commands(repo):
+    _setup(repo)
+    _widen(repo, 1, 2, A)
+    _widen(repo, 2, 1, B)
+    data = json.loads(run_cli(repo, "--json", "lanes", "advise", agent=A)[1])
+    (move,) = [m for m in data["moves"] if m["kind"] == "deadlock"]
+    assert "agent-a -> agent-b -> agent-a" in move["text"]
+    assert move["command"].startswith("ddflow ") and "[deadlock]" in data["text"]
+
+
+def test_lanes_advise_raises_the_alarm(repo):
+    _setup(repo)
+    assert run_cli(repo, "config", "loops.wait_alarm_s", "1", agent=A)[0] == 0
+    _widen(repo, 1, 2, A)
+    time.sleep(1.2)
+    data = json.loads(run_cli(repo, "--json", "lanes", "advise", agent=A)[1])
+    assert [m["kind"] for m in data["moves"]].count("wait-alarm") == 1
+
+
+def test_doctor_json_carries_the_alarm_and_says_none_when_there_is_none(repo):
+    _setup(repo)
+    assert json.loads(run_cli(repo, "--json", "doctor", agent=A)[1])["wait_alarms"] == []
+    assert run_cli(repo, "config", "loops.wait_alarm_s", "1", agent=A)[0] == 0
+    _widen(repo, 1, 2, A)
+    time.sleep(1.2)
+    rows = json.loads(run_cli(repo, "--json", "doctor", agent=A)[1])["wait_alarms"]
+    assert rows[0]["key"] == "wait_alarm:T1" and rows[0]["commands"]

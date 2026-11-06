@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import cache
-from typing import Any
+from typing import Any, NamedTuple
 
 from ...adapters.clock import DEFAULT as CLOCK
 from ...core import clock
@@ -105,15 +105,20 @@ def wait_alarms(
     return LW.alarms(aged, _held(live, way, progress), cycles, now, limit)
 
 
-def wait_report(
-    log, st, cfg, events=None, now: float | None = None, activity=None
-) -> tuple[list, list]:
-    """``(cycles, alarms)`` as of ``now``: the one answer `doctor`, `status`, `brief` and the
-    lanes advisor read."""
+class WaitReport(NamedTuple):
+    """What is stuck among the standing waits; unpacks as ``cycles, alarms``."""
+
+    cycles: list[LW.Cycle]
+    alarms: list[LW.Alarm]
+
+
+def wait_report(log, st, cfg, events=None, now: float | None = None, activity=None) -> WaitReport:
+    """The report as of ``now``: the one answer `doctor`, `status`, `brief` and the lanes
+    advisor read."""
     now = CLOCK.wall() if now is None else now
     progress = progress_of(log, st, cfg, now, events, activity)
     cycles = wait_cycles(st, cfg, now, progress)
-    return cycles, wait_alarms(st, cfg, cycles, progress, now)
+    return WaitReport(cycles, wait_alarms(st, cfg, cycles, progress, now))
 
 
 def wait_rows(cycles: list[LW.Cycle], alarms: list[LW.Alarm]) -> dict[str, list[dict[str, Any]]]:

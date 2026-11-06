@@ -462,9 +462,10 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    cycles, alarms = wait_report(log, st, cfg, events)
-    problems += wait_findings(cycles, cfg, alarms)
-    ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    problems += wait_findings(
+        (waits := wait_report(log, st, cfg, events)).cycles, cfg, waits.alarms
+    )
+    ordered = wait_order(log, st, cfg, waits.cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
@@ -481,7 +482,8 @@ def doctor(
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
         "wait_cycles": [],
-        **wait_rows(cycles, alarms),
+        "wait_alarms": [],
+        **wait_rows(*waits),
         "auto_order": ordered,
         **cost.data(),
     }

@@ -17,6 +17,7 @@ from ..services.lanes.redraw import watch as _watch
 from ._base import _load
 from .fleet import fleet_view
 from .lifecycle.planning import plan_for
+from .reporting.waitcycles import wait_moves, wait_report
 
 VIEWS = ("state", "brief", "advise", "fleet", "resume")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
@@ -67,7 +68,9 @@ def lanes(
         brief = LN.lane_brief(found, st, cfg, ledger)
         return O.ok("lanes", **{**data, "lane": found.name, "brief": brief})
     if view == "advise":
-        moves = LN.advise(ledger, limit, max_moves=cfg.lanes.advise_max)
+        cap = cfg.lanes.advise_max
+        cycles, alarms = wait_report(log, st, cfg, events, at)
+        moves = wait_moves(LN.advise(ledger, limit, max_moves=cap), cycles, alarms, cap)
         data["moves"] = [m.as_dict() for m in moves]
         data["text"] = LN.render_advice(moves)
         data["limit"] = {"limit": limit.limit, "mode": limit.mode, "reason": limit.reason}
