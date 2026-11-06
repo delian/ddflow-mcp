@@ -55,6 +55,10 @@ def test_vigil_reports_severities_lanes_and_a_reviewer_line(repo, monkeypatch):
     assert bugs["open_total"] == 3
     # the active lane named, with its item, so the coordinator sees WHAT each lane holds
     assert any(ln["name"] == "holder" and ln["item"] == "X" for ln in out.data["lanes"])
+    # the one-pass contract also carries fixed-in-window and lane-age
+    assert bugs["fixed_in_window"] == 0  # the seeded bugs are open, none fixed in window
+    assert all("lane_age_s" in ln for ln in out.data["lanes"])
+    assert out.data["approvals_pending"] == 0  # a fresh repo has no pending approvals
     # reviewer reachability in DATA: up (reachable) or 429 (quota wall), not stubbed away
     assert any(r["reachability"] in ("up", "429") for r in out.data["reviewers"])
     # the fresh repo has no pin recipes, so `pins --check` cannot run: `stale_pins` is the
