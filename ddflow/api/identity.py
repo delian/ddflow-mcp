@@ -8,15 +8,15 @@ config. `resolve_actor` and `require` are the role and capability answer
 from __future__ import annotations
 
 from ..services.actors import Actor, require, resolve_actor
-from ..services.identity import TOKEN_ENV, AgentId, bind, resolve, via_mcp
+from ..services.identity import AgentId, bind, resolve, token_presented, via_mcp
 
 __all__ = [
-    "TOKEN_ENV",
     "Actor",
     "AgentId",
     "bind",
     "require",
     "resolve",
     "resolve_actor",
+    "token_presented",
     "via_mcp",
 ]

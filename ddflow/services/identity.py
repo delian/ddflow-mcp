@@ -46,6 +46,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from ..adapters.env import DEFAULT as ENV
 from ..config import Config
 from ..core.model import Lease, State, fold
 from ..infra import worktree as W
@@ -79,6 +80,11 @@ class Credential:
 
 _CREDENTIAL: ContextVar[Credential | None] = ContextVar("ddflow_credential", default=None)
 _PROOF_REQUIRED: ContextVar[bool] = ContextVar("ddflow_proof_required", default=False)
+
+
+def token_presented() -> bool:
+    """Whether this process was handed a token to prove, read through the Env port."""
+    return bool(ENV.get(TOKEN_ENV))
 
 
 def credential() -> Credential | None:

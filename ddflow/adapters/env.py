@@ -9,6 +9,7 @@ Stdlib only, no other ddflow layer.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import Protocol, runtime_checkable
 
@@ -41,7 +42,10 @@ class SystemEnv:
         return dict(os.environ)
 
     def take(self, name: str) -> str:
-        return os.environ.pop(name, "")
+        value = self.get(name, "") or ""
+        with contextlib.suppress(KeyError):
+            del os.environ[name]
+        return value
 
 
 #: The one stateless instance callers default to; a test passes `FakeEnv` instead.

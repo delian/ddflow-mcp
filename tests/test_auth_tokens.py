@@ -20,6 +20,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.adapters.env import SystemEnv
+from ddflow.adapters.fakes.env import FakeEnv
 from ddflow.config import Config
 from ddflow.core.events import PROVENANCE_KINDS
 from ddflow.core.handlers.tokens import tokens_of
@@ -27,6 +29,7 @@ from ddflow.core.model import fold
 from ddflow.core.redact import mask_secrets
 from ddflow.infra.log import EventLog
 from ddflow.services import actors as AC
+from ddflow.services import archifaces as IF
 from ddflow.services import auth as AU
 from ddflow.services import identity as ID
 
@@ -278,6 +281,25 @@ def test_a_presented_token_leaves_the_environment(proj, monkeypatch):
     monkeypatch.setenv(AU.TOKEN_ENV, _token(proj, monkeypatch))
     assert AU.bind_env(proj, Config(), ("status",)).name == "openclaw"
     assert AU.TOKEN_ENV not in os.environ
+
+
+def test_taking_a_variable_returns_it_and_removes_it(monkeypatch):
+    monkeypatch.setenv("DDFLOW_PROBE_TAKE", "value")
+    assert SystemEnv().take("DDFLOW_PROBE_TAKE") == "value"
+    assert "DDFLOW_PROBE_TAKE" not in os.environ
+    assert SystemEnv().take("DDFLOW_PROBE_TAKE") == ""
+    fake = FakeEnv({"X": "1"})
+    assert fake.take("X") == "1" and fake.get("X") is None and fake.take("X") == ""
+
+
+def test_token_support_adds_no_environment_read_to_the_census():
+    """Measured on the real tree: the port stays at main's sites, and nothing reads the token
+    outside it."""
+    counts = IF.counts(IF.scan(Path(__file__).resolve().parents[1]))
+    assert counts[("env", "<dynamic>", "ddflow/adapters/env.py")] == 1
+    assert counts[("env", "<all>", "ddflow/adapters/env.py")] == 1
+    assert ("env", "<dynamic>", "ddflow/surfaces/context.py") not in counts
+    assert not [k for k in counts if k[1] == AU.TOKEN_ENV or k[2] == "ddflow/services/auth.py"]
 
 
 def test_the_mcp_server_does_not_take_a_token_from_its_environment(proj, monkeypatch):
