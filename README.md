@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=ede9a1895679 -->
+<!-- ddflow:begin README/toc sha=e9977e53ecea -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -284,6 +284,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [What it reports rather than fixes](#what-it-reports-rather-than-fixes)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
   - [Model-tier hint (advisory)](#model-tier-hint-advisory)
+  - [Pull dispatch: `ddflow next --lane NAME`](#pull-dispatch-ddflow-next---lane-name)
 - [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
 - [Architectural decisions](#architectural-decisions)
 - [Recall — "have we been here before?"](#recall--have-we-been-here-before)

@@ -684,7 +684,7 @@
          },
          "lane": {
           "type": "string",
-          "description": "Answer this idle lane: its best item and a note for claim."
+          "description": "Answer this idle lane."
          },
          "as_agent": {
           "type": "string",

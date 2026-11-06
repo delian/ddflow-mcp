@@ -75,7 +75,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "lane",
-                help="Answer this idle lane: its best item and a note for claim.",
+                help="Answer this idle lane.",
                 cli_help="answer this idle lane: its best item and a note for claim",
                 default="",
             ),
