@@ -68,6 +68,12 @@ _WALKED = re.compile(r"^Date walked: (\S+)", re.M)
 _GOLDEN = ("prompt", "source", "model", "cwd", "tool")
 
 
+def _writable(s: str) -> str:
+    """``s`` with each lone surrogate a `?`: a captured `"\\ud800"`, or a path with a byte that
+    is not UTF-8, cannot be written to a UTF-8 file as it is."""
+    return s.encode("utf-8", "replace").decode("utf-8")
+
+
 def encoded(path: str) -> str:
     """The form an agent uses for a directory name: every non-alphanumeric a dash."""
     return re.sub(r"[^A-Za-z0-9]", "-", path)
@@ -87,6 +93,7 @@ class Scrubber:
             encoded(home): _ENCODED_HOME_MARK,
             **(extra or {}),
         }
+        pairs |= {_writable(k): v for k, v in pairs.items()}  # matched after the cleanup
         real = {k: v for k, v in pairs.items() if len(k) > 1}  # a home of "/" names nothing
         self._literals = sorted(real.items(), key=lambda kv: -len(kv[0]))
         self._sessions: dict[str, str] = {}
@@ -102,8 +109,7 @@ class Scrubber:
         return f"00000000-0000-0000-0000-{n:012d}"
 
     def text(self, s: str) -> str:
-        # A lone surrogate (`"\\ud800"` in captured JSON) cannot be written as UTF-8.
-        s = s.encode("utf-8", "replace").decode("utf-8")
+        s = _writable(s)
         # Paths first, longest first: an id inside a path must not break the path's match.
         for raw, new in self._literals:
             s = s.replace(raw, new)
@@ -128,9 +134,10 @@ class Scrubber:
         """The KINDS of this machine's text still in ``doc``; never the text itself."""
         blob = json.dumps(doc, ensure_ascii=False)
         found = []
-        if self._root in blob or encoded(self._root) in blob:
+        root, home = _writable(self._root), _writable(self._home)
+        if root in blob or encoded(root) in blob:
             found.append("project path")
-        if len(self._home) > 1 and (self._home in blob or encoded(self._home) in blob):
+        if len(home) > 1 and (home in blob or encoded(home) in blob):
             found.append("home")
         if any(raw in blob for raw in self._sessions):
             found.append("session id")

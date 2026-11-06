@@ -71,6 +71,13 @@ def test_a_session_id_inside_a_longer_one_leaves_no_tail():
     assert s.value("id=abcd1234XYZ abcd1234") == "id=s-2 s-1"
 
 
+def test_a_path_with_a_byte_that_is_not_utf8_is_still_scrubbed_and_caught():
+    root = "/tmp/caf\udce9/proj"  # how Python spells a non-UTF-8 byte of a POSIX path
+    s = _scrubber(root=root)
+    assert s.value(f"{root}/f") == "/w/f"
+    assert s.leaks({"a": "/tmp/caf?/proj/f"}) == ["project path"]
+
+
 def test_the_scrub_cuts_a_long_string_and_says_so():
     got = _scrubber().value("x" * (HRec.MAX_STRING + 50))
     assert len(got) < HRec.MAX_STRING + 40
