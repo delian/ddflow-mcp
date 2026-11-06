@@ -78,11 +78,17 @@ def problems(data: dict[str, Any]) -> list[str]:
     """Every defect of a parsed facts file, one string each."""
     sources = data.get("sources", {})
     planes = data.get("plane", {})
-    for key, table in (("sources", sources), ("plane", planes)):
-        if not isinstance(table, dict):
-            return [f"[{key}] is not a table"]
+    shape = [
+        f"[{k}] is not a table"
+        for k, t in (("sources", sources), ("plane", planes))
+        if not isinstance(t, dict)
+    ]
+    if not isinstance(planes, dict):
+        return shape
+    if not isinstance(sources, dict):
+        sources = {}
     harnesses = set(harnessreg.ids())
-    out = []
+    out = list(shape)
     for name, row in sorted(planes.items()):
         if name in harnesses:
             out.append(f"plane {name!r} reuses a harness id")

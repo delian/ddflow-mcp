@@ -69,6 +69,11 @@ def test_a_wrong_shape_is_a_defect_not_a_crash(data):
     assert "is not a table" in " ".join(planefacts.problems(data))
 
 
+def test_a_bad_sources_table_does_not_hide_a_plane_defect():
+    found = planefacts.problems({"sources": "x", "plane": {"p": "y"}})
+    assert any("[sources]" in f for f in found) and any("plane.p" in f for f in found)
+
+
 def test_rows_of_a_plane_it_does_not_have_are_empty():
     assert planefacts.rows(planefacts.load(), "nosuch") == []
 
