@@ -129,3 +129,4 @@
 {"agent":"sw-cpfacts","data":{"exit_code":3,"note":"exited 3 (from its log); `job end` records it (collected)"},"id":"e016b0ee5d98f28972bd3a240","kind":"job.ended","lamport":145825,"schema":1,"subject":"J00779dce94","ts":"2026-11-06T18:26:26.302421Z"}
 {"agent":"sw-cpfacts","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e2a2e8bd2962cb86fb71c8a4a","kind":"job.ended","lamport":145826,"schema":1,"subject":"J2f0ff5bb2c","ts":"2026-11-06T18:26:26.360479Z"}
 {"agent":"sw-cpfacts","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"ef8328622f6dbb5849873e402","kind":"job.ended","lamport":145827,"schema":1,"subject":"J672d67d8c8","ts":"2026-11-06T18:26:26.417806Z"}
+{"agent":"sw-cpfacts","data":{"tags":["wave:0"]},"id":"eec755ab488f54442ac581640","kind":"task.updated","lamport":145829,"schema":1,"subject":"RF-native-descriptor","ts":"2026-11-06T18:26:49.099417Z"}
