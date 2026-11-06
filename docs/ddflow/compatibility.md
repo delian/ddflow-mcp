@@ -84,6 +84,7 @@ release, is checked by name only).
 | `core.textsim.VERSION` | 2 | the similarity tokens, weights and record digest | any release that changes how text is compared | the index stores it and rebuilds when it differs; nothing outside the index keeps it |
 | `services.ticks.FORMAT` | 1 | `.ddflow/local/ticks.json`, machine-local schedule state | rarely | written beside the data but not checked by readers yet: a shape change must stay readable by the old reader or be recomputed (an unreadable file reads as empty) |
 | `services.quota.STORE_VERSION` | 1 | the user-level `quotas.json` (usage quotas) | when the file shape changes | a newer file is read for the fields this version knows and kept whole when this one writes; an older or missing version is refused |
+| `services.meters_vendor.SNAPSHOT_VERSION` | 1 | the user-level `vendor-usage.json`, the vendor percent taken from a statusline or stream-json event | when the file shape changes | derived data: a file of another version reads as unavailable, and the next event replaces it |
 | `services.swarm.lanehooks_plugin.VERSION` | 1 | the lane-private pre-tool hook plugin template the swarm lanehooks write into a lane's home (`ddflow-lane-hook.js`, SW-lane-hooks) | when the template text changes: its digest is what the operator approves once per template | none to run: the plugin is written per lane from the template and removed with the lane; a lane keeps its own copy until it is next (re)rendered |
 
 The local state files that carry NO version are the markers and caches under `.ddflow/local/`

@@ -579,6 +579,18 @@
           edit; .gitattributes is tracked, so commit it with the config. Only globs in
           the COMMITTED config get a line: one set with --local is this machine's and
           writes no rule for every clone. doctor reports a missing line.
+      lease.scan_view_trees_max = 16   [default]
+          The most worktrees a read-only view (`status`, `brief`) measures for the
+          recovery report. Each measured tree is a `git status` process, so a log with
+          126 stale leases made `status` spawn hundreds; a tree beyond the cap is
+          reported as NOT MEASURED -- treated as holding work, never as clean -- and
+          `ddflow recover` always measures every one. 0 measures none in a view.
+      lease.scan_view_verdicts_max = 0   [default]
+          The most merged-but-unfinished items for which a read-only view (`status`,
+          `brief`) weighs the full completion (what `complete` would still want),
+          which costs dozens of git calls each. Past the cap the advice says the item
+          is merged and to run `ddflow complete` or `ddflow recover` for the rest.
+          `ddflow recover` always weighs every one.
       worktree.enabled = True   [default]
           Whether tasks run in isolated git worktrees. Turn off only for a single-
           agent, single-task project; parallel agents in one tree destroy each other's
@@ -626,6 +638,13 @@
           an item finished a moment ago may be the directory an agent is still
           standing in, so only trees finished longer ago than this are swept at
           session start.
+      worktree.sweep_interval_s = 900   [default]
+          The most often the `brief` sweeps finished items' leftover worktrees
+          (`dispose_finished`): the sweep drops a git branch per tree and took 17 s on
+          a project with 96 of them, which no session start should pay on every call.
+          The time of the last sweep is a local stamp (`.ddflow/local/sweep-
+          finished.last`); losing it only brings the next sweep forward. 0 sweeps on
+          every brief, as before.
       worktree.max_parallel = 0   [default]
           Ceiling on simultaneously active task worktrees. Guards disk and CPU; the
           scheduler queues beyond it rather than refusing. 0 (the default) means
@@ -2744,6 +2763,57 @@
       swarm.launch_max_budget_usd = 5.0   [default]
           Ceiling on any template's `budget_usd`: a launch from a template that asks
           for more is refused, whatever its approval. Zero removes the ceiling.
+      quota.stale_after_s = 900   [default]
+          Seconds after which a vendor percent reading counts as stale (default 900).
+          A reading is also stale once its window's reset has passed. A stale figure
+          keeps its value and carries `stale: true`: it is never presented as current.
+      quota.claude_state = ''   [default]
+          The harness state file holding `cachedUsageUtilization`, the vendor's cached
+          percent and reset per window. Empty (default): the path in
+          `templates/meter_sources.toml`. ddflow only reads it and never calls the
+          vendor's usage endpoint with the user's credentials (D-quotas-governor).
+      quota.claude_projects = ''   [default]
+          The directory of harness transcripts, read for token counts, subagent
+          transcripts included. Empty (default): the path in
+          `templates/meter_sources.toml`.
+      quota.kilo_db = ''   [default]
+          The SQLite message store, opened read-only for token and cost counts per
+          message. Empty (default): the path in `templates/meter_sources.toml`.
+      quota.snapshot_path = ''   [default]
+          The file holding the latest vendor percent taken from a statusline or
+          stream-json event. Empty (default): `vendor-usage.json` in the user's state
+          directory (`$XDG_STATE_HOME/ddflow`, else `~/.local/state/ddflow`), because
+          several projects share one account.
+      quota.samples_path = ''   [default]
+          The local usage sample log. Empty (default): `usage-samples.jsonl` in the
+          user's state directory, for the same reason. It holds figures only, never
+          prompt text or a raw account id.
+      quota.samples_max_bytes = 4194304   [default]
+          The size the sample log may reach before its oldest rows are dropped
+          (default 4 MiB). Trimming keeps the newest rows up to half this size.
+      quota.sample_interval_s = 300   [default]
+          The shortest time between two samples taken by `sample_if_due` (default
+          300).
+      quota.sample_tail_bytes = 8192   [default]
+          How much of the sample log's end `sample_if_due` reads to find its last row
+          (default 8192). A row longer than this reads as no last row, so a sample is
+          taken.
+      quota.token_windows = ['5h', 'day', 'week']   [default]
+          The rolling windows the token and session counters total over: any of 5h,
+          day, week, month, total. A longer window reads more: `total` reads every
+          transcript and is usually over `transcript_max_bytes`, which then reports
+          UNAVAILABLE.
+      quota.token_fields = ['input', 'output', 'cache_read', 'cache_write']   [default]
+          Which token kinds a reading's total includes: any of input, output,
+          cache_read, cache_write (default all four). The per-kind figures stay in the
+          reading's detail either way.
+      quota.transcript_max_bytes = 1073741824   [default]
+          The most transcript bytes one reading may scan (default 1 GiB). Over it the
+          reading is UNAVAILABLE with this knob named, never a partial sum that would
+          understate the use.
+      quota.kilo_timeout_s = 10.0   [default]
+          Seconds one read of the message store may take (default 10). Over it the
+          reading is UNAVAILABLE.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
