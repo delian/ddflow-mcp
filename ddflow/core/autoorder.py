@@ -25,6 +25,36 @@ OPT_OUT = "no-auto-order"
 DECIDE_TAGS = frozenset({"decide", "decision"})
 ACTOR = "ddflow:auto-order"
 
+_ADDED, _ALREADY, _SKIP = "added", "already", "skip"
+
+
+def _take(
+    later: str,
+    earlier: str,
+    items: Mapping[str, Cand],
+    needs: dict[str, list[str]],
+    out: list[Edge],
+    why: list[str],
+    agents: tuple[str, ...],
+    files: tuple[str, ...],
+) -> str:
+    """Try one ``(later, earlier)`` edge: ``_ADDED`` it, found it ``_ALREADY`` (implied), or
+    ``_SKIP``ped it (in ``why``)."""
+    if later == earlier:
+        return _SKIP
+    if earlier in closure(later, lambda n: needs.get(n, [])):
+        return _ALREADY
+    if later in closure(earlier, lambda n: needs.get(n, [])):
+        why.append(f"{later}/{earlier}: would close a needs cycle")
+        return _SKIP
+    bad = eligible(items.get(later)) or eligible(items.get(earlier))
+    if bad:
+        why.append(f"{later}/{earlier}: {bad}")
+        return _SKIP
+    out.append(Edge(later, earlier, agents, files))
+    needs.setdefault(later, []).append(earlier)
+    return _ADDED
+
 
 def is_decide(tags) -> bool:
     """Does a tag list mark a decide task (case and padding ignored)?"""
@@ -90,15 +120,17 @@ def _blockers(k: Mapping[str, Any]) -> list[str]:
     )
 
 
-def _candidates(cycle: Mapping[str, Any]) -> list[tuple[str, str]]:
-    """(later, earlier) pairs in the order to try them: the victim's item waits for the
-    waiter it blocks; then each waiter for the items it waits behind."""
-    links = cycle.get("links", [])
-    out: list[tuple[str, str]] = []
+def _victim_items(cycle: Mapping[str, Any]) -> list[str]:
+    """Every lease the victim must drop to end this cycle, in deterministic order.
+
+    ``cycle['victim_item']`` is only the first drop; the link whose blockers name it is the
+    waiter the victim yields to, and that link's blockers are all of the victim's items in
+    the way. Each must be ordered to yield, or the rest can take the files straight back."""
     victim_item = cycle.get("victim_item", "")
-    out += [(victim_item, k["item"]) for k in links if victim_item in _blockers(k)]
-    out += [(k["item"], b) for k in links for b in _blockers(k)]
-    return list(dict.fromkeys(p for p in out if p[0] != p[1]))
+    for k in cycle.get("links", []):
+        if victim_item and victim_item in _blockers(k):
+            return _blockers(k)
+    return [victim_item] if victim_item else []
 
 
 def propose(
@@ -109,28 +141,30 @@ def propose(
     edges: list[Edge] = []
     notes: list[str] = []
 
-    def reach(a: str) -> list[str]:
-        return closure(a, lambda n: needs.get(n, []))
-
     for cyc in cycles:
         agents = tuple(cyc.get("agents", []))
+        links = cyc.get("links", [])
+        files = tuple(cyc.get("files", []))
         why: list[str] = []
-        done = False
-        for later, earlier in _candidates(cyc):
-            if earlier in reach(later):
-                done = True  # already ordered: nothing to add
-                break
-            if later in reach(earlier):
-                why.append(f"{later}/{earlier}: would close a needs cycle")
-                continue
-            bad = eligible(items.get(later)) or eligible(items.get(earlier))
-            if bad:
-                why.append(f"{later}/{earlier}: {bad}")
-                continue
-            edges.append(Edge(later, earlier, agents, tuple(cyc.get("files", []))))
-            needs.setdefault(later, []).append(earlier)
-            done = True
-            break
-        if not done:
+        added = 0
+        already = False
+        # Every dropped lease of the victim must yield: one edge each, or the next can take
+        # the files straight back.
+        drew = [(v, k["item"]) for v in _victim_items(cyc) for k in links if v in _blockers(k)]
+        for later, earlier in drew:
+            got = _take(later, earlier, items, needs, edges, why, agents, files)
+            added += got == _ADDED
+            already = already or got == _ALREADY
+        # No drop could be ordered: one fallback edge (the waiter waits for a blocker).
+        if added == 0 and not already:
+            for later, earlier in [(k["item"], b) for k in links for b in _blockers(k)]:
+                got = _take(later, earlier, items, needs, edges, why, agents, files)
+                if got == _ALREADY:
+                    already = True
+                    break
+                if got == _ADDED:
+                    added = 1  # one fallback edge is enough
+                    break
+        if added == 0 and not already:
             notes.append(f"no edge for {' -> '.join(agents)}: {'; '.join(why) or 'no candidate'}")
     return edges, notes

@@ -118,33 +118,57 @@ def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     return (repo, "") if gdef.cwd != "worktree" else item_tree(repo, cfg, st, it, called_from)
 
 
-def _no_tree_reason(it, item: str, gate: str, held: str, force: bool = False) -> tuple[str, str]:
+def _kept_tree(repo: Path, it) -> Path | None:
+    """The item's worktree when a merge KEPT it (``--keep`` / ``[worktree].remove_on_merge
+    = false``), else None.
+
+    `it.worktree` is the PERSISTENT record: `merge` clears it on a `worktree.removed` event
+    (the fold handler), so a non-empty `it.worktree` means the merge kept the tree and a
+    removed one reads empty. The question is read off the record, not re-sniffed from the
+    filesystem: a later foreign removal that never attributes a `worktree.removed` to the
+    item (a manual `rm`, a force-removal with a different subject) leaves `it.worktree`
+    set, and reading the directory's presence would say "the merge removed its worktree"
+    for a tree the merge kept (B-gate-run-after-keep-merge)."""
+    if not it.worktree:
+        return None
+    return W.load_path(repo, it.worktree)
+
+
+def _no_tree_reason(
+    repo: Path, it, item: str, gate: str, held: str, force: bool = False
+) -> tuple[str, str]:
     """(why a worktree gate has nowhere to run, the recorded outcome it leaves standing or "").
     A MERGED item's tree is gone (DX-gate-run-after-merge): a pre-merge pass is kept and
-    `complete` uses it; without one the reason says to run gates before `ddflow merge`."""
+    `complete` uses it; without one the reason says to run gates before `ddflow merge`.
+    A KEPT tree (B-gate-run-after-keep-merge) is not "removed", and the reason says so."""
     if it.merged_sha:
         sha = it.merged_sha[:12]
         prior = it.gate_outcome(gate)
+        kept = _kept_tree(repo, it)
+        disposition = (
+            f"its worktree was KEPT at {kept}, but that tree does not stand at the merged tree"
+            if kept is not None
+            else "the merge removed its worktree"
+        )
         if prior == "passed" and force:
             return (
-                f"{item} merged ({sha}) and the merge removed its worktree: --force asked "
-                f"for a fresh {gate} measurement that cannot be taken, so the pre-merge "
-                f"pass is REPLACED by unavailable (it stays in the log). Record the real "
-                f"outcome with `ddflow gate record {item} {gate} --outcome passed "
-                f"--evidence ...`.",
+                f"{item} merged ({sha}) and {disposition}: --force asked for a fresh {gate} "
+                f"measurement that cannot be taken, so the pre-merge pass is REPLACED by "
+                f"unavailable (it stays in the log). Record the real outcome with "
+                f"`ddflow gate record {item} {gate} --outcome passed --evidence ...`.",
                 "",
             )
         if prior == "passed":
             return (
-                f"{item} merged ({sha}) and the merge removed its worktree: the recorded "
-                f"{gate} outcome (passed before the merge) stands and `complete` uses it.",
+                f"{item} merged ({sha}) and {disposition}: the recorded {gate} outcome "
+                f"(passed before the merge) stands and `complete` uses it.",
                 prior,
             )
         return (
-            f"{item} merged ({sha}) and the merge removed its worktree, so {gate} cannot run "
-            f"now; gates are run before `ddflow merge {item}`. Recording UNAVAILABLE; "
-            f"if it did pass on the merged tree, say so with `ddflow gate record {item} "
-            f"{gate} --outcome passed --evidence ...`.",
+            f"{item} merged ({sha}) and {disposition}, so {gate} cannot run now; gates are "
+            f"run before `ddflow merge {item}`. Recording UNAVAILABLE; if it did pass on the "
+            f"merged tree, say so with `ddflow gate record {item} {gate} --outcome passed "
+            f"--evidence ...`.",
             "",
         )
     why = (
