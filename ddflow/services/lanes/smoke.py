@@ -140,7 +140,8 @@ def read_stream(lines: Iterable[str]) -> Stream:
             calls.append(_call(part, step))
         elif row.get("type") == "step_finish":
             spent = part.get("tokens") if isinstance(part.get("tokens"), dict) else {}
-            tokens += spent.get("total") or 0
+            total = spent.get("total")
+            tokens += total if isinstance(total, int) and not isinstance(total, bool) else 0
     return Stream(tuple(calls), tokens, unreadable)
 
 

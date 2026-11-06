@@ -79,6 +79,15 @@ def test_a_line_that_is_not_json_is_counted_not_fatal():
     assert s.unreadable == 1 and len(s.calls) == 5
 
 
+def test_a_token_count_that_is_not_a_number_is_ignored():
+    odd = [
+        '{"type":"step_finish","part":{"tokens":{"total":"many"}}}',
+        '{"type":"step_finish","part":{"tokens":{"total":true}}}',
+        step_finish(7),
+    ]
+    assert S.read_stream(odd).tokens == 7
+
+
 def test_a_ddflow_refusal_inside_a_completed_call_is_a_refusal():
     """Live: a refused gate record arrives as status `completed` with the refusal in the output."""
     out = '{"refusal":{"reason":"no commit ahead","outcome":"refused","exit":3},"schema":"x"}\n\nno commit'
