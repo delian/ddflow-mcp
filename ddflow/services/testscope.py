@@ -10,6 +10,8 @@ from ..core.bookkeeping import STATE_EXCLUDE, is_state
 from ..infra import git as GIT
 from ..infra import worktree as W
 from . import gates as G
+from .completion import changed_paths
+from .docsonly import diff_is_trivial
 from .pipeline_diff import effective_pipeline
 from .testselect import Selected, run_command, select
 
@@ -117,7 +119,7 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     lines = changed_lines(tree, base)
     if not failed_sel and not red and (ran := (it.gates["ci"].evidence or {}).get("ci_scope")):
         return _after_ci(cfg, st, it, command, tree, base, lines, ran)
-    kind = _selectable(cfg, it, lines)
+    kind = _selectable(cfg, it, lines, trivial=_is_trivial(cfg, it, tree))
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
     return _selected(
@@ -193,12 +195,24 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
     return ""
 
 
-def _selectable(cfg, it, lines: int | None) -> str:
-    """Why ``it`` may run the selection ("a bug fix (...)", "a small task (...)"), or,
-    starting "not ", why it may not."""
+def _is_trivial(cfg, it, tree: Path) -> bool:
+    """Whether ``it``'s actual diff is trivial (format-only/docs/comment; Bbd88c54354): such
+    a change runs the SCOPED tests, never the whole suite, because it changes no behavior."""
+    try:
+        repo = W.repo_root(tree)
+    except W.GitError:
+        return False
+    return diff_is_trivial(it, cfg, repo, changed_paths(repo, it))
+
+
+def _selectable(cfg, it, lines: int | None, *, trivial: bool = False) -> str:
+    """Why ``it`` may run the selection ("a bug fix (...)", "a small task (...)", "a trivial
+    change (...)"), or, starting "not ", why it may not."""
     small = cfg.gates.unit_tests_small_lines
     if it.fixes:
         return f"a bug fix ({', '.join(it.fixes)})"
+    if trivial:
+        return "a trivial change (format-only/docs/comment; no behavior change)"
     if lines is not None and small > 0 and lines < small:
         return f"a small task ({lines} changed lines < [gates].unit_tests_small_lines = {small})"
     size = "its size is unknown" if lines is None else f"{lines} changed lines"
