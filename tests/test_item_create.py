@@ -68,6 +68,7 @@ def test_add_task_appends_the_event_and_tells_the_state(repo):
     ("draft", "says"),
     [
         (IT.TaskDraft("a:b"), "colon"),
+        (IT.TaskDraft("-x"), "hyphen"),
         (IT.TaskDraft("X", globs=['"src/**"']), "cannot be paths"),
         (IT.TaskDraft("X", parent="NOPE"), "no such parent"),
     ],
