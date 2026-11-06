@@ -553,8 +553,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=1c5ea4fa11ad -->
-<details><summary>All 94 commands</summary>
+<!-- ddflow:begin README/commands sha=0b5124e97267 -->
+<details><summary>All 96 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -649,6 +649,8 @@ needs a line written by hand here.
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
 | `ddflow probe` | would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell) |
+| `ddflow pair` | a PERSON mints a one-time code for a named client with a role (`tokens redeem` spends it) |
+| `ddflow tokens` | see `ddflow tokens --help` |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
 | `ddflow watch` | wait for a job, a file line, a process or a gate, renewing your leases; exit 2 = not yet (resume with the… |
 | `ddflow waves` | print the dependency waves; --stamp writes the derived wave:N tags, --check exits 1 when they are stale |
@@ -1118,7 +1120,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 573 knobs.
+cadences, and the rest of the 582 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5402,7 +5404,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 573): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 582): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5984,7 +5986,7 @@ declared once and persists — see
 
 ## Configuration
 
-573 knobs across 52 sections, every one documented in place and listed, with its default
+582 knobs across 52 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6051,8 +6053,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=c12feaaeb1eb -->
-<details><summary>All 573 knobs across 52 sections</summary>
+<!-- ddflow:begin README/knobs sha=f333406bc3de -->
+<details><summary>All 582 knobs across 52 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6539,6 +6541,8 @@ long default is left to `ddflow config --explain`.
 | `handoff.kinds` | `["fix", "gate_fix", "refactor", "doc"]` |  |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
+| `hooks.fixture_max_age_months` | `6` |  |
+| `hooks.fixture_max_reply_bytes` | `65536` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
 | `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |
@@ -6598,6 +6602,13 @@ long default is left to `ddflow config --explain`.
 | `agent.operator_role` | `"operator"` |  |
 | `agent.ask_ttl_s` | `86400` |  |
 | `agent.ask_code_length` | `8` |  |
+| `agent.token_ttl_h` | `168` |  |
+| `agent.token_max_ttl_h` | `720` |  |
+| `agent.pair_ttl_s` | `300` |  |
+| `agent.pair_code_length` | `10` |  |
+| `agent.pair_max_attempts` | `5` |  |
+| `agent.capability_verbs` | (long: see `ddflow config --explain`) |  |
+| `agent.require_operator_token` | `false` |  |
 | `ids.bug` | `"{prefix}{hash}"` |  |
 | `ids.lesson` | `"{prefix}{hash}"` |  |
 | `ids.research` | `"{prefix}{hash}"` |  |
