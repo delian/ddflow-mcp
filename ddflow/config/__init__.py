@@ -112,6 +112,7 @@ from ._core import (  # noqa: F401
     PlanConfig,
     PromptsConfig,
     QualityConfig,
+    QuotaConfig,
     RagConfig,
     ReinstructConfig,
     ReleaseConfig,

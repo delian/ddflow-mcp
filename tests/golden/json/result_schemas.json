@@ -2472,7 +2472,10 @@
    "brief",
    "moves",
    "limit",
-   "text"
+   "text",
+   "fleet",
+   "fleet_total",
+   "resume"
   ],
   "output_schema": {
    "type": "object",
@@ -2488,6 +2491,9 @@
     "moves": {},
     "limit": {},
     "text": {},
+    "fleet": {},
+    "fleet_total": {},
+    "resume": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

@@ -41,6 +41,11 @@ def _count(value: object) -> str:
     return "" if ok else "a whole number of zero or more"
 
 
+def _positive_int(value: object) -> str:
+    ok = isinstance(value, int) and not isinstance(value, bool) and value > 0
+    return "" if ok else "a whole number above zero"
+
+
 @declare("swarm")
 @dataclass
 class SwarmConfig:
@@ -213,6 +218,16 @@ class SwarmConfig:
     seed_handoff_chars: int = knob(
         1200,
         doc="Characters of an earlier lane's handoff note kept in the seed pack. Zero drops the note.",
+        check=_count,
+    )
+    dispatch_note_chars: int = knob(
+        500,
+        doc="Longest dispatch note `ddflow next --lane` returns for `claim --note`, in characters. The figures come first, so a cut loses only the reasons.",
+        check=_positive_int,
+    )
+    dispatch_why_items: int = knob(
+        5,
+        doc="How many refusals `ddflow next --lane` names when nothing is eligible; the rest are counted, not listed. Zero gives the count alone.",
         check=_count,
     )
     launch_enabled: bool = knob(

@@ -25,6 +25,11 @@ records), so there is nothing to record and nothing to drift. It writes no event
                                      conflict and red-main rates; says when a falsifier
                                      (`[metrics] lock_falsifier_*_pct`) tripped and the call that
                                      switches back to strict locking (`lock_revert_key/value`).
+    ddflow metrics swarm             the baseline a lane fleet must beat: merged items per hour,
+                                     rework rate, agent-hours per item, dollars when events carry
+                                     `cost_usd`, critical-path slack and parallelism; `--phase` and
+                                     `--since` give the window. `ddflow metrics` carries the same
+                                     headline rows as `swarm.*`.
 
 A figure that rests on fewer than `[metrics] min_samples` samples is `n/a`, never 0, and a
 view with no figure at all exits 2 ("not enough data"). The forecast is an ESTIMATE of the
@@ -34,5 +39,5 @@ durations of completed items of its kind, with unlimited agents and no rework.
 Other services add metrics without editing this one: `services.metrics.register(name, fn)`
 (rows with `metric`, `group`, `n`, `value`) and `register_dimension(name, fn)` for a new
 `--group-by`. Over MCP it is `ddflow_metrics` with `view` = summary, forecast, retro, skips,
-lanes, stages or locks. The `[metrics]` knobs set the minimum sample, the forecast draws, seed and percentiles,
+lanes, stages, locks or swarm. The `[metrics]` knobs set the minimum sample, the forecast draws, seed and percentiles,
 and the grid.

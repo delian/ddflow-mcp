@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..core.outcome import FAIL
+from . import fsio
 from . import proc as P
 
 #: Seconds a git call may run unless the caller says otherwise.
@@ -298,3 +299,185 @@ def status(
 def unmerged(repo: Path | str, timeout: float | None = LISTING_TIMEOUT) -> list[str] | None:
     """The paths a merge left unmerged, ``-z`` exact; None when git could not list them."""
     return paths(repo, "diff", "--name-only", "--diff-filter=U", timeout=timeout)
+
+
+def real_path(path: Path | str) -> str:
+    """``path`` with its symlinks followed, as git spells a worktree. Never raises on a
+    symlink loop, which `Path.resolve` does on Python 3.11 and 3.12."""
+    return os.path.realpath(str(path))
+
+
+def branch_tip_aheads(repo: Path | str, base: str) -> dict[str, int]:
+    """Commits ahead of ``base`` per local branch-tip object id, one `for-each-ref`.
+
+    Empty when git could not answer, or has no ``ahead-behind`` atom (before 2.41)."""
+    r = run(repo, "for-each-ref", f"--format=%(objectname) %(ahead-behind:{base})", "refs/heads")
+    out: dict[str, int] = {}
+    if r.ok:
+        for line in r.out.splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1].isdigit():  # noqa: PLR2004 -- oid ahead behind
+                out[parts[0]] = int(parts[1])
+    return out
+
+
+def head_commit(path: Path | str) -> str:
+    """The HEAD commit of the tree at ``path``; "" when git cannot say."""
+    r = run(path, "rev-parse", "--verify", "--quiet", "HEAD")
+    return r.out if r.ok else ""
+
+
+def commits_ahead(
+    repo: Path | str, base: str, head: str, *, timeout: float | None = GIT_TIMEOUT
+) -> int:
+    """Commits of ``head`` that ``base`` lacks; -1 when it could not be told."""
+    r = run(repo, "rev-list", "--count", f"{base}..{head}", timeout=timeout)
+    return int(r.out) if r.ok and r.out.isdigit() else -1
+
+
+def commits_missing_from(repo: Path | str, shas: list[str], base: str) -> set[str] | None:
+    """Which of ``shas`` the ``base`` lacks, one `rev-list --no-walk`; None when git refused
+    (an unknown object among them)."""
+    r = run(repo, "rev-list", "--no-walk", *shas, f"^{base}", "--")
+    return set(r.out.split()) if r.ok else None
+
+
+def is_ancestor(
+    repo: Path | str, sha: str, base: str, *, timeout: float | None = GIT_TIMEOUT
+) -> bool | None:
+    """Is ``sha`` reachable from ``base``? None when git could not tell: exit 128 is an
+    unknown commit, not "not an ancestor"."""
+    r = run(repo, "merge-base", "--is-ancestor", sha, base, timeout=timeout)
+    return r.ok if r.code in (0, 1) else None
+
+
+def tree_entries(repo: Path | str, rev: str, *, timeout: float | None = GIT_TIMEOUT) -> list:
+    """(mode, sha, path, size) of every entry of ``rev``, exact names; a gitlink has size 0.
+    Raises `GitError`."""
+    raw = run(repo, "ls-tree", "-r", "-l", rev, z=True, timeout=timeout, check=True).out_bytes
+    out = []
+    for rec in (raw or b"").split(b"\0"):
+        if rec:
+            meta, _, path = rec.partition(b"\t")
+            mode, kind, sha, size = meta.split()
+            count = int(size) if kind == b"blob" else 0
+            out.append((mode.decode(), sha.decode(), os.fsdecode(path), count))
+    return out
+
+
+def read_blobs(
+    repo: Path | str, shas: list[str], *, timeout: float | None = GIT_TIMEOUT
+) -> dict[str, bytes]:
+    """The content of each blob by one ``cat-file --batch``. Raises `GitError`."""
+    if not shas:
+        return {}
+    feed = "\n".join(shas) + "\n"
+    r = run(repo, "cat-file", "--batch", input=feed, binary=True, timeout=timeout, check=True)
+    data, got, i = r.out_bytes or b"", {}, 0
+    while i < len(data):
+        nl = data.index(b"\n", i)
+        sha, _kind, size = data[i:nl].decode().split()
+        got[sha] = data[nl + 1 : nl + 1 + int(size)]
+        i = nl + 1 + int(size) + 1
+    return got
+
+
+def commit_of(repo: Path | str, rev: str, *, timeout: float | None = GIT_TIMEOUT) -> str:
+    """``rev`` as a commit id; "" when it names none."""
+    r = run(repo, "rev-parse", "--verify", f"{rev}^{{commit}}", timeout=timeout)
+    return r.out if r.ok else ""
+
+
+def rewrite_tree(
+    repo: Path | str,
+    rev: str,
+    *,
+    drop: list[str] | None = None,
+    add: list[tuple[str, str, str]] | None = None,
+    timeout: float | None = GIT_TIMEOUT,
+) -> str:
+    """The id of ``rev``'s tree minus the paths ``drop`` plus ``add`` ((mode, sha, path)), built
+    in a private index: no checkout, the real index untouched. Raises `GitError`."""
+    with fsio.scratch_dir("ddflow-idx-") as d:
+        kw: dict = {"env": {"GIT_INDEX_FILE": str(d / "index")}, "timeout": timeout, "check": True}
+        run(repo, "read-tree", rev, **kw)
+        if drop:
+            names = b"".join(os.fsencode(p) + b"\0" for p in drop)
+            run(repo, "update-index", "--force-remove", "-z", "--stdin", input=names, **kw)
+        if add:
+            lines = b"".join(f"{m} {sha}\t".encode() + os.fsencode(p) + b"\0" for m, sha, p in add)
+            run(repo, "update-index", "--add", "-z", "--index-info", input=lines, **kw)
+        return run(repo, "write-tree", **kw).out
+
+
+def commit_tree(
+    repo: Path | str,
+    tree: str,
+    message: str,
+    *,
+    parent: str = "",
+    env: dict[str, str] | None = None,
+    timeout: float | None = GIT_TIMEOUT,
+) -> str:
+    """A commit of ``tree`` with no working tree involved. Raises `GitError`."""
+    args = ["commit-tree", tree, "-m", message, *(["-p", parent] if parent else [])]
+    return run(repo, *args, env=env, timeout=timeout, check=True).out
+
+
+def set_ref(repo: Path | str, ref: str, sha: str, *, timeout: float | None = GIT_TIMEOUT) -> None:
+    """Point ``ref`` at ``sha``. Raises `GitError`."""
+    run(repo, "update-ref", ref, sha, timeout=timeout, check=True)
+
+
+def delete_ref(repo: Path | str, ref: str, *, timeout: float | None = GIT_TIMEOUT) -> bool:
+    """Drop ``ref``; False when git would not."""
+    return run(repo, "update-ref", "-d", ref, timeout=timeout).ok
+
+
+def bundle_create(
+    repo: Path | str, dest: Path, ref: str, *, timeout: float | None = GIT_TIMEOUT
+) -> None:
+    """Write a bundle of ``ref`` to ``dest``. Raises `GitError`."""
+    run(repo, "bundle", "create", "-q", str(dest), ref, timeout=timeout, check=True)
+
+
+def bundle_heads(bundle: Path, *, timeout: float | None = GIT_TIMEOUT) -> list[str]:
+    """The refs a bundle file carries, tags too, without its HEAD line. Raises `GitError`."""
+    out = run(bundle.parent, "bundle", "list-heads", str(bundle), timeout=timeout, check=True).out
+    refs = [line.split()[1] for line in out.splitlines() if len(line.split()) > 1]
+    return [r for r in refs if r != "HEAD"]
+
+
+def fetch_untrusted(
+    repo: Path | str,
+    source: Path,
+    ref: str,
+    dest: str,
+    *,
+    timeout: float | None = GIT_TIMEOUT,
+) -> None:
+    """Fetch ``ref`` of a local bundle or repository into ``dest``: malformed objects refused,
+    no tags, no submodules, no FETCH_HEAD, no transport but a file. Raises `GitError`."""
+    args = ["-c", "transfer.fsckObjects=true", "fetch", "--no-tags", "--no-write-fetch-head"]
+    args += ["--no-recurse-submodules", "-q", str(source), f"+{ref}:{dest}"]
+    env = {"GIT_ALLOW_PROTOCOL": "file"}
+    run(repo, *args, env=env, timeout=timeout, check=True)
+
+
+def span_bytes(repo: Path | str, span: str, *, timeout: float | None = GIT_TIMEOUT) -> int:
+    """Disk size of the objects a revision range adds. Raises `GitError`."""
+    r = run(repo, "rev-list", "--objects", "--disk-usage", span, timeout=timeout, check=True)
+    return int(r.out)
+
+
+def changed_paths(
+    repo: Path | str, old: str, new: str, *, timeout: float | None = GIT_TIMEOUT
+) -> list[str]:
+    """The paths that differ between two commits, renames as two. Raises `GitError`."""
+    args = ("diff", "--name-only", "--no-renames", old, new)
+    return run(repo, *args, z=True, timeout=timeout, check=True).paths() or []
+
+
+def init_repo(path: Path | str) -> bool:
+    """Make ``path`` a git repository; False when git could not."""
+    return run(path, "init", "-q").ok

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from shlex import quote
+
 from ._shared import (
     AB,
     DEFAULT_CHECK_RECOVERY,
@@ -22,6 +24,29 @@ from ._shared import (
     _wait_timeout,
 )
 
+
+def _next(repo, a, agent):
+    """`next`, or with `--lane` the pull answer for that lane."""
+    kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
+    if lane := a.get("lane", ""):
+        return _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
+    return _api().next_item(repo, kind=kind, phase=phase, agent=agent)
+
+
+def _next_notes(out, a, ctx):
+    """A pull answer says everything in its text; the queue's notes read its plan."""
+    return () if a.get("lane") else L.next_notes(out, a, ctx)
+
+
+def _next_text(out, a, ctx):
+    if not a.get("lane"):
+        return L.next_text(out, a, ctx)
+    if out.exit == OK:
+        d = out.data
+        return f"{d['lane']}: take {d['item']}\n  ddflow claim {quote(d['item'])} --note {quote(d['note'])}"
+    return f"{a['lane']}: {out.reason}"
+
+
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("next",),
@@ -31,14 +56,9 @@ COMMANDS: tuple[Command, ...] = (
         "Independent items in the ready set can be run in parallel worktrees by "
         "separate agents. Returns ready=[] when nothing is actionable — that is a "
         "result, not an error, and it never means 'pick something anyway'.",
-        call=lambda repo, a, agent: _api().next_item(
-            repo,
-            kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
-            phase=a.get("phase", "") or "",
-            agent=agent,
-        ),
+        call=_next,
         payload="",
-        cli=CliPolicy(notes=L.next_notes, human=L.next_text),
+        cli=CliPolicy(notes=_next_notes, human=_next_text),
         params=(
             Param(
                 "phase",
@@ -52,6 +72,12 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="",
                 default=DEFAULT_NEXT_KIND,
                 choices=("task", "phase"),
+            ),
+            Param(
+                "lane",
+                help="Answer this idle lane.",
+                cli_help="answer this idle lane: its best item and a note for claim",
+                default="",
             ),
         ),
     ),

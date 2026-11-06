@@ -64,6 +64,17 @@ useDefault = true
   regexes = ['''^[0-9a-f]{40}$''']
 
 [[allowlists]]
+  # [session].redact_patterns holds the REGEX that masks a PEM block, and an upgrade note about
+  # that knob quotes its value: `PRIVATE KEY-----.*?-----END`, a wildcard where a real key has
+  # its base64 body. Scoped to ONE rule, ONLY the upgrade notes, ONLY that literal source text:
+  # a real key in those files, or the same rule in any other file, still fires.
+  description = "the PEM redaction regex quoted in an upgrade note is not a private key"
+  targetRules = ["private-key"]
+  condition = "AND"
+  paths = ['''^ddflow/templates/upgrade/''']
+  regexes = ['''PRIVATE KEY-----\.\*\?-----END''']
+
+[[allowlists]]
   # The now-REVOKED Gemini API key sits unredacted in one committed event-log shard line
   # (the bridge-cse session shard, commit 1deb264357; the history rewrite did not move it
   # — bug B5dc280b4eb). Google now answers 403 "API key was reported as leaked" for it, so

@@ -682,6 +682,10 @@
           "type": "string",
           "description": "'task' (default) or 'phase'."
          },
+         "lane": {
+          "type": "string",
+          "description": "Answer this idle lane."
+         },
          "as_agent": {
           "type": "string",
           "description": "Subagent name, this call only."
@@ -1297,11 +1301,11 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips, lanes, stages or locks."
+          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief."
+          "description": "Lane name (or a unique part); with view=brief or resume."
          },
          "group_by": {
           "type": "string",

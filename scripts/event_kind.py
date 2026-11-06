@@ -10,7 +10,7 @@ A kind needs six edits, each found otherwise by a failing test, one suite round 
   2. fixture    `tests/fixtures/event_kinds.json`, the kind and its fields' JSON types
   3. redact     `core/redact/log.py` LOG_TEXT_FIELDS (free text) or LOG_VERBATIM_FIELDS /
                 LOG_VERBATIM_NAMES (a lookup) for every str, dict or list field
-  4. coherence  `tests/test_coherence_coverage.py` CHECKED or EXEMPT, with a reason
+  4. coherence  `tests/test_coherence_coverage.py` CHECKED or `tests/coherence_exempt.py` EXEMPT, with a reason
   5. fragment   `ddflow/templates/upgrade/unreleased/event_kind_added.<kind>.toml`
   6. registry   `ddflow/templates/events/<owner>.toml`, a [[kind]] with the kind's doc
 
@@ -41,6 +41,7 @@ from ddflow.core.model import HANDLERS  # noqa: E402
 FIXTURE = ROOT / "tests" / "fixtures" / "event_kinds.json"
 REDACT = ROOT / "ddflow" / "core" / "redact" / "log.py"
 COHERENCE = ROOT / "tests" / "test_coherence_coverage.py"
+COHERENCE_EXEMPT = ROOT / "tests" / "coherence_exempt.py"
 EVENTS = ROOT / "ddflow" / "templates" / "events"
 FRAGMENTS = ROOT / "ddflow" / "templates" / "upgrade" / "unreleased"
 MIN_REASON = 20
@@ -52,22 +53,22 @@ TYPES = {"str", "int", "float", "bool", "null", "list", "dict"}
 def _coherence() -> tuple[set[str], set[str]]:
     """(CHECKED, EXEMPT) kinds of the coherence test, read from its source (an AST scan: the
     module imports the test fixtures, so it is not imported)."""
-    tree = ast.parse(COHERENCE.read_text(encoding="utf-8"))
     out: dict[str, set[str]] = {}
-    for node in tree.body:
-        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") in (
-            "CHECKED",
-            "EXEMPT",
-        ):
-            keys: set[str] = set()
-            assert isinstance(node.value, ast.Dict)
-            for k, v in zip(node.value.keys, node.value.values, strict=True):
-                if k is None:  # **dict.fromkeys((kinds...), reason)
-                    assert isinstance(v, ast.Call) and isinstance(v.args[0], ast.Tuple)
-                    keys |= {e.value for e in v.args[0].elts if isinstance(e, ast.Constant)}
-                elif isinstance(k, ast.Constant):
-                    keys.add(k.value)
-            out[node.target.id] = keys
+    for path in (COHERENCE, COHERENCE_EXEMPT):
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") in (
+                "CHECKED",
+                "EXEMPT",
+            ):
+                keys: set[str] = set()
+                assert isinstance(node.value, ast.Dict)
+                for k, v in zip(node.value.keys, node.value.values, strict=True):
+                    if k is None:  # **dict.fromkeys((kinds...), reason)
+                        assert isinstance(v, ast.Call) and isinstance(v.args[0], ast.Tuple)
+                        keys |= {e.value for e in v.args[0].elts if isinstance(e, ast.Constant)}
+                    elif isinstance(k, ast.Constant):
+                        keys.add(k.value)
+                out[node.target.id] = keys
     return out["CHECKED"], out["EXEMPT"]
 
 
@@ -111,7 +112,9 @@ def lacks(kind: str, snapshot: dict, checked: set[str], exempt: set[str]) -> lis
         if set(types) & TEXT_TYPES and not known:
             out.append(f"redact: field {name!r} is neither LOG_TEXT_FIELDS nor a lookup")
     if kind not in checked and kind not in exempt and not kind.startswith("gate."):
-        out.append("coherence: in neither CHECKED nor EXEMPT of tests/test_coherence_coverage.py")
+        out.append(
+            "coherence: in neither CHECKED of tests/test_coherence_coverage.py nor EXEMPT of tests/coherence_exempt.py"
+        )
     if kind not in {k.name for k in EK.load_dir(EVENTS)}:
         out.append("registry: declared in no ddflow/templates/events/<owner>.toml")
     if not (FRAGMENTS / f"event_kind_added.{kind}.toml").exists() and not _released(kind):
@@ -211,7 +214,9 @@ def add(kind: str, args: argparse.Namespace) -> list[str]:
         )
         done.append(f"redact: {len(pairs)} lookup field(s)")
     if args.exempt and kind not in checked | exempt:
-        _insert(COHERENCE, "EXEMPT: dict[str, str] = {", [f"    {_q(kind)}: {_q(args.exempt)},"])
+        _insert(
+            COHERENCE_EXEMPT, "EXEMPT: dict[str, str] = {", [f"    {_q(kind)}: {_q(args.exempt)},"]
+        )
         done.append("coherence: EXEMPT")
     done += _declare(kind, owner, args.why)
     return done

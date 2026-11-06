@@ -363,7 +363,8 @@ def _act(
             EXIT_REFUSED,
         )
     w = ops.write_doc(repo, cfg, q, spec, target=out, force=bool(force), template=tmpl)
-    return ops.Result(spec.doc, w.rel, spec.mode, w.action, w.code, message=f"{w.rel}: {w.action}")
+    message = "; ".join([f"{w.rel}: {w.action}", *w.notes])
+    return ops.Result(spec.doc, w.rel, spec.mode, w.action, w.code, message=message)
 
 
 #: The most an MCP print returns, whatever `max_bytes` asks for: a tool result is read into a

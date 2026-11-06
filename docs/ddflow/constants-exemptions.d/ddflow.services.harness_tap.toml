@@ -1,0 +1,5 @@
+[exempt]
+"ddflow/services/harness_tap.py:MAX_EVENTS" = "safety bound of a capture run by the agent under test, outside any project config"
+"ddflow/services/harness_tap.py:MAX_PAYLOAD_BYTES" = "safety bound of a capture run by the agent under test, outside any project config"
+"ddflow/services/harness_tap.py:MAX_MCP_BYTES" = "safety bound of a capture run by the agent under test, outside any project config"
+"ddflow/services/harness_tap.py:STOP_GRACE_S" = "how long a server whose agent left may linger; the tap reads no project config"

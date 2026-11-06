@@ -173,7 +173,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "intent",
-                help="What the change is MEANT to do. The reviewer flags where the diff and the intent disagree, so without it there is nothing to disagree with. Defaults to the item's title and body.",
+                help="What the change is MEANT to do; the reviewer flags where the diff disagrees. Defaults to the item's title and body.",
                 cli_help="what the change is meant to do (defaults to the item's title/body)",
                 default="",
             ),
