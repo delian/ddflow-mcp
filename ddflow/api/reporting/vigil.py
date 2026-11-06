@@ -135,28 +135,20 @@ def _render(data: dict[str, Any]) -> str:
     lines = [
         "# vigil",
         "",
-        (
-            "bugs: "
-            f"{sev_line} open"
-            f" ({bugs['fixed_in_window']} fixed in the last "
-            f"{bugs['window_s'] // 86400}d)"
-        ),
-        "stale pins: " + (
-            "none"
-            if data["stale_pins"] == []
-            else (
-                "unavailable (could not check)"
-                if data["stale_pins"] is None
-                else ", ".join(data["stale_pins"])
-            )
-        ),
-        f"lanes ({len(data['lanes'])} active):",
+        f"bugs: {sev_line} open ({bugs['fixed_in_window']} fixed in the last "
+        f"{bugs['window_s'] // 86400}d)",
     ]
-    lines += [
-        f"  [{ln['state']}] {ln['name']}  item {ln['item'] or '-'}"
-        f"  ({ln['lane_age_s']}s in state)"
-        for ln in data["lanes"]
-    ]
+    if data["stale_pins"] is None:
+        line = "stale pins: unavailable (could not check)"
+    elif data["stale_pins"] == []:
+        line = "stale pins: none"
+    else:
+        line = "stale pins: " + ", ".join(data["stale_pins"])
+    lines.append(line)
+    lines.append(f"lanes ({len(data['lanes'])} active):")
+    for ln in data["lanes"]:
+        lines.append(f"  [{ln['state']}] {ln['name']}  item {ln['item'] or '-'}"
+                      f"  ({ln['lane_age_s']}s in state)")
     lines.append(f"interrupted: {data['interrupted']}")
     lines.append(f"pending approvals: {data['approvals_pending']}")
     reviewers = data["reviewers"]
