@@ -452,3 +452,49 @@ def test_the_newest_answer_across_both_channels_wins(log, cfg):
         "\n".join(json.dumps(r) for r in [_asked(row["text"]), _answered(row["text"], yes)]) + "\n"
     )
     assert H.find(cfg, row).tool_use_id == "U1"  # 2026-10-23 > 1970: the newer Claude answer
+
+
+def test_an_answer_in_kilo_to_the_canonical_ask_is_auto_attested_to_approved(log, cfg):
+    """The auto-attest loop (B3068414423): after the operator answers the surfaced CANONICAL
+    question in Kilo, `attest_pending` attests it without the agent naming the id -- a chat
+    answer alone flips the request to approved, no terminal, no `--all` approve."""
+    row = _file(log, _kilo_cfg(cfg))
+    yes, _ = H.labels(row["id"])
+    _kilo_db(cfg, [_kilo_question(row["text"], yes)])
+    results = H.attest_pending(log, cfg)
+    assert any(r["id"] == row["id"] and r["ok"] for r in results)
+    got = asks_of(_state(log))[row["id"]]
+    assert got["outcome"] == "approved" and got["via"] == "harness" and got["proof"] == "kilo:prt_1"
+    spent = C.operator_gate(log, cfg, _canon(), approval_id=row["id"])
+    assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2
+
+
+def test_auto_attest_leaves_a_request_without_an_answer_pending(log, cfg):
+    """Auto-attest waits, never invents: a pending request with no transcript answer is not
+    attested, and the run reports it still waiting."""
+    row = _file(log, _kilo_cfg(cfg))
+    results = H.attest_pending(log, cfg)
+    assert any(r["id"] == row["id"] and not r["ok"] for r in results)
+    assert asks_of(_state(log))[row["id"]]["state"] == "pending"
+
+
+def test_attest_all_over_the_cli_auto_attests(log, cfg, repo):
+    """`ddflow approvals attest --all`: one agent-run call after the operator answers attests
+    every pending request whose canonical question is answered, no id named."""
+    run_cli(repo, "init")
+    projects = Path(cfg.approvals.transcript_dirs[0])
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
+    log = EventLog(repo, "bot")
+    row = _file(log, Config())
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
+    assert code == 2, (out, err)  # nothing answered yet
+    d = projects / "slug"
+    d.mkdir(parents=True)
+    (d / "s.jsonl").write_text("\n".join(json.dumps(r) for r in _approved_row(row)))
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
+    assert code == 0, (out, err)
+    here = Config()
+    here.approvals.transcript_dirs = [str(projects)]
+    spent = C.operator_gate(log, here, _canon(), approval_id=row["id"])
+    assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2

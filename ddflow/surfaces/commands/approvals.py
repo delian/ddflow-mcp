@@ -109,6 +109,8 @@ def cmd_approvals_ask(a, c: Ctx) -> int:
 
 
 def cmd_approvals_attest(a, c: Ctx) -> int:
+    if a.all:
+        return _finish(c, AH.approvals_attest_all(c.repo, agent=c.requested_agent), "attest")
     return _finish(c, AH.approvals_attest(c.repo, a.id, agent=c.requested_agent), "attest")
 
 
