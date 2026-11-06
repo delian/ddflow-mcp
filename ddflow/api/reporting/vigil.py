@@ -147,8 +147,10 @@ def _render(data: dict[str, Any]) -> str:
     lines.append(line)
     lines.append(f"lanes ({len(data['lanes'])} active):")
     for ln in data["lanes"]:
-        lines.append(f"  [{ln['state']}] {ln['name']}  item {ln['item'] or '-'}"
-                      f"  ({ln['lane_age_s']}s in state)")
+        lines.append(
+            f"  [{ln['state']}] {ln['name']}  item {ln['item'] or '-'}"
+            f"  ({ln['lane_age_s']}s in state)"
+        )
     lines.append(f"interrupted: {data['interrupted']}")
     lines.append(f"pending approvals: {data['approvals_pending']}")
     reviewers = data["reviewers"]
