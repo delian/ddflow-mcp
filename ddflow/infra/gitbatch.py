@@ -52,19 +52,7 @@ class RepoFacts:
     def _tip_aheads(self, base: str) -> dict[str, int]:
         """Commits ahead of ``base`` per branch-tip object id, one `for-each-ref`."""
         if base not in self._tips:
-            r = G.run(
-                self.repo,
-                "for-each-ref",
-                f"--format=%(objectname) %(ahead-behind:{base})",
-                "refs/heads",
-            )
-            out: dict[str, int] = {}
-            if r.ok:
-                for line in r.out.splitlines():
-                    parts = line.split()
-                    if len(parts) == 3 and parts[1].isdigit():  # noqa: PLR2004 -- oid ahead behind
-                        out[parts[0]] = int(parts[1])
-            self._tips[base] = out
+            self._tips[base] = G.branch_tip_aheads(self.repo, base)
         return self._tips[base]
 
     def _worktree_heads(self) -> dict[str, str]:
@@ -85,8 +73,7 @@ class RepoFacts:
         key = _real(path)
         heads = self._worktree_heads()
         if key not in heads:
-            r = G.run(path, "rev-parse", "--verify", "--quiet", "HEAD")
-            heads[key] = r.out if r.ok else ""
+            heads[key] = G.head_commit(path)
         return heads[key]
 
     def ahead(self, path: Path | str, base: str) -> int:
@@ -102,8 +89,7 @@ class RepoFacts:
             return known
         key = (head, base)
         if key not in self._counts:
-            r = G.run(self.repo, "rev-list", "--count", f"{base}..{head}")
-            self._counts[key] = int(r.out) if r.ok and r.out.isdigit() else -1
+            self._counts[key] = G.commits_ahead(self.repo, base, head)
         return self._counts[key]
 
     def prefetch_on_base(self, shas: list[str], base: str) -> None:
@@ -116,10 +102,9 @@ class RepoFacts:
         step = 500  # commits per query: argv stays small
         for i in range(0, len(todo), step):
             chunk = todo[i : i + step]
-            r = G.run(self.repo, "rev-list", "--no-walk", *chunk, f"^{base}", "--")
-            if not r.ok:
+            missing = G.commits_missing_from(self.repo, chunk, base)
+            if missing is None:
                 continue
-            missing = set(r.out.split())
             for s in chunk:
                 # An abbreviated id would never match the full ones git prints: not remembered.
                 if len(s) in (40, 64):
@@ -129,8 +114,8 @@ class RepoFacts:
         """Is ``sha`` reachable from ``base``?"""
         key = (sha, base)
         if key not in self._on_base:
-            r = G.run(self.repo, "merge-base", "--is-ancestor", sha, base)
-            if r.code not in (0, 1):  # 128 is an unknown commit, not "not an ancestor"
+            known = G.is_ancestor(self.repo, sha, base)
+            if known is None:
                 return False  # unknown: not remembered, and never "on the base"
-            self._on_base[key] = r.ok
+            self._on_base[key] = known
         return self._on_base[key]

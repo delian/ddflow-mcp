@@ -298,3 +298,43 @@ def status(
 def unmerged(repo: Path | str, timeout: float | None = LISTING_TIMEOUT) -> list[str] | None:
     """The paths a merge left unmerged, ``-z`` exact; None when git could not list them."""
     return paths(repo, "diff", "--name-only", "--diff-filter=U", timeout=timeout)
+
+
+def branch_tip_aheads(repo: Path | str, base: str) -> dict[str, int]:
+    """Commits ahead of ``base`` per local branch-tip object id, one `for-each-ref`.
+
+    Empty when git could not answer, or has no ``ahead-behind`` atom (before 2.41)."""
+    r = run(repo, "for-each-ref", f"--format=%(objectname) %(ahead-behind:{base})", "refs/heads")
+    out: dict[str, int] = {}
+    if r.ok:
+        for line in r.out.splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1].isdigit():  # noqa: PLR2004 -- oid ahead behind
+                out[parts[0]] = int(parts[1])
+    return out
+
+
+def head_commit(path: Path | str) -> str:
+    """The HEAD commit of the tree at ``path``; "" when git cannot say."""
+    r = run(path, "rev-parse", "--verify", "--quiet", "HEAD")
+    return r.out if r.ok else ""
+
+
+def commits_ahead(repo: Path | str, base: str, head: str) -> int:
+    """Commits of ``head`` that ``base`` lacks; -1 when it could not be told."""
+    r = run(repo, "rev-list", "--count", f"{base}..{head}")
+    return int(r.out) if r.ok and r.out.isdigit() else -1
+
+
+def commits_missing_from(repo: Path | str, shas: list[str], base: str) -> set[str] | None:
+    """Which of ``shas`` the ``base`` lacks, one `rev-list --no-walk`; None when git refused
+    (an unknown object among them)."""
+    r = run(repo, "rev-list", "--no-walk", *shas, f"^{base}", "--")
+    return set(r.out.split()) if r.ok else None
+
+
+def is_ancestor(repo: Path | str, sha: str, base: str) -> bool | None:
+    """Is ``sha`` reachable from ``base``? None when git could not tell: exit 128 is an
+    unknown commit, not "not an ancestor"."""
+    r = run(repo, "merge-base", "--is-ancestor", sha, base)
+    return r.ok if r.code in (0, 1) else None
