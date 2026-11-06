@@ -57,6 +57,10 @@ def apply(  # noqa: PLR0913, PLR0917
     found["bug"] = bug
     found["auto"] = BL.auto_decision(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
     reason = BR.reason_text(ids, bug)
+    if not bug:
+        not_filed = found.get("not_filed")
+        if not_filed:
+            reason = f"{reason}: {not_filed}"
     if why:
         ev["reason"] = reason  # the headline names the base, not the superseded "NOT a pass"
     return "partial", reason
@@ -134,7 +138,12 @@ def _file(
             f"{item}'s {gate} gate (baseline-red)"
         ),
     )
-    return str(out.data.get("id", "")) if out.exit == 0 else ""
+    if out.exit == 0:
+        return str(out.data.get("id", ""))
+    # A refusal (a near-duplicate, an invalid field) is not "filed": say WHY, never a silent
+    # "" that reads as "bug not filed" with nothing to act on (B-baseline-bug-not-filed-silently).
+    found["not_filed"] = out.reason
+    return ""
 
 
 def _linked(repo: Path, agent: str, ids: list[str]) -> str:
