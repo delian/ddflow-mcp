@@ -302,3 +302,9 @@
 {"agent":"sw-pull","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e69336aeb93cc4190007435e8","kind":"job.ended","lamport":145261,"schema":1,"subject":"J47c5af2ffe","ts":"2026-11-06T14:08:36.403536Z"}
 {"agent":"sw-pull","data":{"exit_code":2,"note":"exited 2 (from its log); `job end` records it (collected)"},"id":"ec10319b05a432e0090406f27","kind":"job.ended","lamport":145262,"schema":1,"subject":"J725fec53a1","ts":"2026-11-06T14:08:36.467011Z"}
 {"agent":"sw-pull","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e3a655d867c45af675c56b49b","kind":"job.ended","lamport":145263,"schema":1,"subject":"J12a98b26af","ts":"2026-11-06T14:08:36.529906Z"}
+{"agent":"sw-pull","data":{"tags":["scheduling","optimizer","wave:0"]},"id":"e5518289ce99ef033aaac893a","kind":"task.updated","lamport":145264,"schema":1,"subject":"OPT-swarm-unify","ts":"2026-11-06T14:09:07.385629Z"}
+{"agent":"sw-pull","data":{"tags":["wave:0"]},"id":"ec919c9a77284edc47b5f16ea","kind":"task.updated","lamport":145265,"schema":1,"subject":"SW-digest","ts":"2026-11-06T14:09:07.450219Z"}
+{"agent":"sw-pull","data":{"tags":["wave:0"]},"id":"eef0e76e16389fd529d64a646","kind":"task.updated","lamport":145266,"schema":1,"subject":"SW-hedge","ts":"2026-11-06T14:09:07.515048Z"}
+{"agent":"sw-pull","data":{"tags":["swarm","wave:0"]},"id":"e86ff3e5c6d84f5b70b9e4435","kind":"task.updated","lamport":145267,"schema":1,"subject":"SW-pull-followups","ts":"2026-11-06T14:09:07.588664Z"}
+{"agent":"sw-pull","data":{"tags":["wave:0"]},"id":"e8c48eec0cd87ffcec476eb3d","kind":"task.updated","lamport":145268,"schema":1,"subject":"SW-reassign","ts":"2026-11-06T14:09:07.653964Z"}
+{"agent":"sw-pull","data":{"tags":["bugfix","swarm","wave:0"]},"id":"e3b6d0fdd00b53989c233707e","kind":"task.updated","lamport":145269,"schema":1,"subject":"fix-B60ff757d13","ts":"2026-11-06T14:09:07.726235Z"}
