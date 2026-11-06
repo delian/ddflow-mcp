@@ -1923,6 +1923,20 @@
   
   '''
 # ---
+# name: test_help[ddflow pair]
+  '''
+  usage: ddflow pair [-h] --role ROLE [--ttl-h TTL_H] name
+  
+  positional arguments:
+    name           the client: its token's name is its identity
+  
+  options:
+    -h, --help     show this help message and exit
+    --role ROLE    its role, a name in [agent].roles
+    --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
 # name: test_help[ddflow phase add]
   '''
   usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--allow-unknown-needs] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
@@ -3139,6 +3153,69 @@
   
   '''
 # ---
+# name: test_help[ddflow tokens list]
+  '''
+  usage: ddflow tokens list [-h] [--all]
+  
+  options:
+    -h, --help  show this help message and exit
+    --all       also expired and revoked
+  
+  '''
+# ---
+# name: test_help[ddflow tokens redeem]
+  '''
+  usage: ddflow tokens redeem [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow tokens revoke]
+  '''
+  usage: ddflow tokens revoke [-h] --reason REASON name
+  
+  positional arguments:
+    name             the token's name or id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON  why this credential ended
+  
+  '''
+# ---
+# name: test_help[ddflow tokens rotate]
+  '''
+  usage: ddflow tokens rotate [-h] [--ttl-h TTL_H] name
+  
+  positional arguments:
+    name           the token's name or id
+  
+  options:
+    -h, --help     show this help message and exit
+    --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
+# name: test_help[ddflow tokens]
+  '''
+  usage: ddflow tokens [-h] {redeem,list,revoke,rotate} ...
+  
+  positional arguments:
+    {redeem,list,revoke,rotate}
+      redeem              exchange a one-time code (read from stdin) for the token, shown once
+      list                who holds a token: names, roles and dates from the log, never a secret
+      revoke              a PERSON ends a token (by name or id) and any pairing waiting for that
+                          name
+      rotate              a PERSON mints a code that replaces a token; the old one works until it is
+                          redeemed
+  
+  options:
+    -h, --help            show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow unblock]
   '''
   usage: ddflow unblock [-h] [--note NOTE] id
@@ -3470,13 +3547,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3592,6 +3669,8 @@
                           violations
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
+      pair                a PERSON mints a one-time code for a named client with a role (`tokens
+                          redeem` spends it)
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -3738,6 +3817,7 @@
     'ddflow model show',
     'ddflow next',
     'ddflow onboard',
+    'ddflow pair',
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',
@@ -3814,6 +3894,11 @@
     'ddflow task fold',
     'ddflow task list',
     'ddflow tests',
+    'ddflow tokens',
+    'ddflow tokens list',
+    'ddflow tokens redeem',
+    'ddflow tokens revoke',
+    'ddflow tokens rotate',
     'ddflow unblock',
     'ddflow update',
     'ddflow upgrade',

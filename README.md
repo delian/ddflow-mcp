@@ -220,6 +220,7 @@ the same implementation, so neither drifts from the other.
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` · `ddflow doctor --accept-lost-events` (the operator's word that events a history rewrite took out of a shard are known, see [Events that vanished from a shard](#events-that-vanished-from-a-shard)) | `ddflow_doctor` (`--accept-lost-events` is CLI-only) |
 | **see what upgrading this project to the running ddflow would change** | `ddflow upgrade [--plan]` (alias `ddflow doctor --upgrade`) -- the plan, by category: data repairs, migrations (registered breaking-change migrations and the files each would rewrite), contested records (a decision, lesson or research id two agents defined differently: each is listed with its rivals and the `ddflow resolve` command; an apply prints it and resolves nothing, the MCP connect proposal and the upgrade notice mention it), config (new knobs, changed defaults; a value anyone set is marked *needs operator confirmation*), instructions (drifted driver docs and rules, *stale* after a release or *hand-edited*), hooks, MCP launch, opt-in features. Writes nothing; exit 0 up to date, 1 while the plan has items. **Do it:** `ddflow upgrade --apply [CATEGORIES] [--snapshot] [--confirm KEY ... --reason WHY]`; **undo it:** `ddflow upgrade --restore [NAME]` (see "Applying an upgrade") | `ddflow_upgrade` (`apply`, `confirm`, `reason`, `snapshot`, `restore`) |
+| **give a gateway or remote client its own identity and role** | `ddflow pair NAME --role ROLE` at the host, then `ddflow tokens redeem` at the client; `ddflow tokens list`, `rotate`, `revoke` ([guide](docs/guide/tokens.md)) | none: a person's act |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts get <name> [--arg KEY=VALUE]` (rendered, exactly as `prompts/get` gives it) · `prompts show <name>` (its source) | `prompts/list` · `prompts/get` |
 | **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
@@ -552,8 +553,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=1c5ea4fa11ad -->
-<details><summary>All 94 commands</summary>
+<!-- ddflow:begin README/commands sha=0b5124e97267 -->
+<details><summary>All 96 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -648,6 +649,8 @@ needs a line written by hand here.
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
 | `ddflow probe` | would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell) |
+| `ddflow pair` | a PERSON mints a one-time code for a named client with a role (`tokens redeem` spends it) |
+| `ddflow tokens` | see `ddflow tokens --help` |
 | `ddflow sync` | merge the item's recorded base into its branch when that is safe; --check only measures |
 | `ddflow watch` | wait for a job, a file line, a process or a gate, renewing your leases; exit 2 = not yet (resume with the… |
 | `ddflow waves` | print the dependency waves; --stamp writes the derived wave:N tags, --check exits 1 when they are stale |
@@ -1117,7 +1120,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 569 knobs.
+cadences, and the rest of the 576 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5401,7 +5404,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 569): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 576): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5981,7 +5984,7 @@ declared once and persists — see
 
 ## Configuration
 
-569 knobs across 51 sections, every one documented in place and listed, with its default
+576 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6048,8 +6051,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=663edc6c40d1 -->
-<details><summary>All 569 knobs across 51 sections</summary>
+<!-- ddflow:begin README/knobs sha=80b32febdb64 -->
+<details><summary>All 576 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6591,6 +6594,13 @@ long default is left to `ddflow config --explain`.
 | `agent.operator_role` | `"operator"` |  |
 | `agent.ask_ttl_s` | `86400` |  |
 | `agent.ask_code_length` | `8` |  |
+| `agent.token_ttl_h` | `168` |  |
+| `agent.token_max_ttl_h` | `720` |  |
+| `agent.pair_ttl_s` | `300` |  |
+| `agent.pair_code_length` | `10` |  |
+| `agent.pair_max_attempts` | `5` |  |
+| `agent.capability_verbs` | (long: see `ddflow config --explain`) |  |
+| `agent.require_operator_token` | `false` |  |
 | `ids.bug` | `"{prefix}{hash}"` |  |
 | `ids.lesson` | `"{prefix}{hash}"` |  |
 | `ids.research` | `"{prefix}{hash}"` |  |

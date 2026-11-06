@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.token_ttl_h"
+new = "168"
+why = "How long a paired bearer token lives (P-remote.auth)."
+effect = "applies only to tokens minted with `ddflow pair`; nothing changes until one is."
+impact = "additive"
