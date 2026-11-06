@@ -153,16 +153,18 @@ def _render(data: dict[str, Any]) -> str:
     ]
     lines.append(f"interrupted: {data['interrupted']}")
     lines.append(f"pending approvals: {data['approvals_pending']}")
-    lines.append("reviewers: " + ("unavailable" if data["reviewers"] is None else ""))
-    lines += (
-        [
+    reviewers = data["reviewers"]
+    if reviewers is None:
+        lines.append("reviewers: unavailable")
+    elif reviewers == []:
+        lines.append("reviewers: none")
+    else:
+        lines.append("reviewers:")
+        lines += [
             f"  [{r['reachability']}] {r['name']}"
             + (f"  ({r['reason']})" if r["reason"] else "")
-            for r in data["reviewers"]
+            for r in reviewers
         ]
-        if data["reviewers"]
-        else []
-    )
     if data["reviewer_latency_ratio"] is not None:
         lines.append(f"reviewer latency: {data['reviewer_latency_ratio']}x usual")
     lines.append("")
