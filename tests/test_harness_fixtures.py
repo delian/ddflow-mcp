@@ -217,6 +217,21 @@ def test_the_tap_stops_a_server_nobody_reads_any_more(tmp_path):
     p.stdin.close()
 
 
+def test_an_agent_that_leaves_ends_a_silent_server_that_reads_to_eof(tmp_path):
+    """The agent closes both its ends (what leaving is). ddflow's server serves until stdin EOF,
+    so a silent one stops and the tap exits: under a timeout, so a hang fails instead of waiting."""
+    server = [sys.executable, "-c", "import sys; sys.stdin.read()"]
+    p = subprocess.Popen(
+        [sys.executable, "-m", HRec.TAP_MODULE, "mcp", str(tmp_path / "cap"), "--", *server],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        cwd=ROOT,
+    )
+    p.stdout.close()
+    p.stdin.close()
+    assert p.wait(timeout=30) == 0
+
+
 def test_a_tap_that_cannot_start_a_server_says_so_by_its_exit():
     assert _tap("mcp", "cap", "no-dashes", "x").returncode == 1
     assert _tap("hook").returncode == 0
