@@ -71,25 +71,27 @@ def _fixed_in_window(bugs: dict[str, Any], now: float) -> int:
 def _stale_pins(repo: Path, cfg) -> list[str] | None:
     """Stale pin-file names: ``pins regenerate --check``'s answer, narrowed to the names.
 
-    ``None`` when the check could not run (a failed recipe, or the recipes could not be
-    read): a check that did not run must not render as a clean "none". ``pins --check``
-    remains the verb that names the cause."""
+    ``None`` when the check could not RUN (a failed recipe, or the recipes could not be
+    read): a check that did not run must not render as a clean "none". Only a run with no
+    recipe error lists its stale names; ``pins --check`` remains the verb that names the
+    error."""
     try:
         out = pins_regenerate(repo, check=True, verb="regenerate")
     except Exception:
         return None
-    stale = [p["name"] for p in (out.data.get("pins") or []) if p.get("stale")]
-    if stale:
-        return stale
-    return [] if out.exit == O.OK else None
+    pins = out.data.get("pins") or []
+    if out.exit == O.OK:
+        return [p["name"] for p in pins if p.get("stale")]
+    if any(p.get("error") for p in pins):
+        return None  # a recipe errored: the check did not finish, never a clean list
+    return [p["name"] for p in pins if p.get("stale")] or None
 
 
-def _reviewer_rows(repo: Path, cfg, st) -> list[dict[str, str]] | None:
-    """Each enabled reviewer's reachability: ``up``, ``down`` (nothing answering) or
-    ``429`` (its own quota/exhaustion wall recorded on the last review). The fleet's
-    slowness -- which ddflow measures as ONE ratio, not per reviewer -- is the separate
-    ``reviewer_latency_ratio`` field, never a per-reviewer state (a healthy reviewer is not
-    "slow" because its neighbour was). ``None``: the reviewer list could not be read."""
+def _reviewer_rows(repo: Path, cfg, st, slow: float | None) -> list[dict[str, str]] | None:
+    """Each enabled reviewer's reachability: ``up`` (answering; fleet not slow), ``429``
+    (its own quota/exhaustion wall recorded on the last review), ``slow`` (answering while
+    the fleet latency ratio is above 1x -- ddflow's only slowness signal), or ``down``
+    (nothing answering). ``None``: the reviewer list could not be read."""
     try:
         reviewers = [r for r in RVM.load_reviewers(repo) if r.enabled]
     except Exception:
@@ -106,14 +108,16 @@ def _reviewer_rows(repo: Path, cfg, st) -> list[dict[str, str]] | None:
                     "reason": mark.get("reason") or "quota/exhaustion",
                 }
             )
-        else:
+        elif _reviewer_up(r.base_url):
             rows.append(
                 {
                     "name": r.name,
-                    "reachability": "up" if _reviewer_up(r.base_url) else "down",
+                    "reachability": "slow" if slow is not None and slow > 1.0 else "up",
                     "reason": "",
                 }
             )
+        else:
+            rows.append({"name": r.name, "reachability": "down", "reason": ""})
     return rows
 
 
@@ -209,7 +213,7 @@ def vigil(repo: Path, *, agent: str = "") -> O.Outcome:
         "interrupted": len(plan.interrupted),
         "approvals_pending": len(pending),
         "pending_approval_ids": [r["id"] for r in pending],
-        "reviewers": _reviewer_rows(repo, cfg, st),
+        "reviewers": _reviewer_rows(repo, cfg, st, reviewer_latency_ratio),
         "reviewer_latency_ratio": reviewer_latency_ratio,
     }
     out = O.ok("vigil", **data)
