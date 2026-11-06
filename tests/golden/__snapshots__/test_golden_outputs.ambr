@@ -3477,6 +3477,14 @@
           one `--force` ddflow itself documents, `ddflow review --force --reason
           "..."` for an extra review round. A command matching an entry here is
           allowed even when it also matches a forbidden one.
+      hooks.fixture_max_age_months = 6   [default]
+          A recorded payload fixture or a walked tier-2 checklist older than this many
+          whole months is flagged for re-recording: by `ddflow harness record <id>`,
+          and in the fixture gap report. A flag, never a failure.
+      hooks.fixture_max_reply_bytes = 65536   [default]
+          `ddflow harness record` keeps an MCP reply in session/mcp.json up to this
+          many bytes, after redaction. A longer reply is replaced by `_truncated` with
+          its size and this cap, so a fixture never reads as complete when it is not.
       release.manifest_lint = 'block'   [default]
           What a release does when the code changes a config knob (added, default
           changed, removed) or an event kind that the shipped upgrade manifest

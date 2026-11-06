@@ -1,0 +1,4 @@
+[exempt]
+"ddflow/services/harness_record.py:MAX_STRING" = "keeps a committed fixture a readable size; a test fixture's shape, not an operator's tuning"
+"ddflow/services/harness_record.py:MIN_SESSION_ID" = "below it a replacement would mangle ordinary text; a scrub heuristic, not a preference"
+"ddflow/services/harness_record.py:MAX_PAIRS" = "one MCP pair per method and tool fits under it; bounds a committed fixture"

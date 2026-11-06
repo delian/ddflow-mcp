@@ -1120,7 +1120,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 576 knobs.
+cadences, and the rest of the 578 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5404,7 +5404,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 576): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 578): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5615,6 +5615,8 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 
 One row per `ddflow/harnesses/<id>.toml`; `ddflow harness show <id>` says what each agent gets, event by event. To add an agent see [`docs/ddflow/adding-a-harness.md`](docs/ddflow/adding-a-harness.md).
 <!-- ddflow:end README/agents -->
+
+`ddflow harness record <id>` turns one live session into the payload fixtures the conformance suite replays; a tier-2 agent has a checklist a person walks under `docs/ddflow/agents/checklist/`.
 
 CI, Make or a human need no row: the CLI is complete on its own.
 
@@ -5984,7 +5986,7 @@ declared once and persists — see
 
 ## Configuration
 
-576 knobs across 51 sections, every one documented in place and listed, with its default
+578 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6051,8 +6053,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=80b32febdb64 -->
-<details><summary>All 576 knobs across 51 sections</summary>
+<!-- ddflow:begin README/knobs sha=817b52da6c32 -->
+<details><summary>All 578 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6535,6 +6537,8 @@ long default is left to `ddflow config --explain`.
 | `handoff.kinds` | `["fix", "gate_fix", "refactor", "doc"]` |  |
 | `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
 | `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
+| `hooks.fixture_max_age_months` | `6` |  |
+| `hooks.fixture_max_reply_bytes` | `65536` |  |
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
 | `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |

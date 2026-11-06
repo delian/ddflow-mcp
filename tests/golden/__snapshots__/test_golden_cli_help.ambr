@@ -1265,6 +1265,25 @@
   
   '''
 # ---
+# name: test_help[ddflow harness record]
+  '''
+  usage: ddflow harness record [-h] [--prepare DIR] [--from DIR] [--write] [--dest DIR] [--agent-version AGENT_VERSION] id
+  
+  positional arguments:
+    id                    a descriptor id
+  
+  options:
+    -h, --help            show this help message and exit
+    --prepare DIR         a new scratch project with capture taps
+    --from DIR            a prepared project after a session
+    --write               write the fixtures (default: report)
+    --dest DIR            default: tests/fixtures/harness in this tree
+    --agent-version AGENT_VERSION
+                          what `<agent> --version` says; --from needs it, a fixture always carries
+                          it
+  
+  '''
+# ---
 # name: test_help[ddflow harness show]
   '''
   usage: ddflow harness show [-h] id
@@ -1291,10 +1310,10 @@
 # ---
 # name: test_help[ddflow harness]
   '''
-  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe} ...
+  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe,record} ...
   
   positional arguments:
-    {list,show,doctor,facts,add,lint,test,probe}
+    {list,show,doctor,facts,add,lint,test,probe,record}
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
@@ -1304,6 +1323,8 @@
                           problems)
       test                the offline conformance of one descriptor
       probe               what the agent's binary would be asked; runs nothing without --run
+      record              live payload fixtures: what is recorded, --prepare a scratch project, or
+                          take --from
   
   options:
     -h, --help            show this help message and exit
@@ -3773,6 +3794,7 @@
     'ddflow harness lint',
     'ddflow harness list',
     'ddflow harness probe',
+    'ddflow harness record',
     'ddflow harness show',
     'ddflow harness test',
     'ddflow health',

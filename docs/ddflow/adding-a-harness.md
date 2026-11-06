@@ -130,6 +130,36 @@ instead of a recording says `"recorded": false` and `"version": "unversioned"`; 
 conformance run accepts it and the table of gaps keeps it visible. An agent with a command
 hook and no fixtures is reported as a skipped test, a visible gap.
 
+### Recording them
+
+`ddflow harness record` takes the recording. It never starts the agent or calls a model: the
+session is yours, and so is what it costs.
+
+```sh
+ddflow harness record acmecli --prepare /tmp/acme-rec    # a new scratch project, adopted, with taps
+cd /tmp/acme-rec && acme                                 # one prompt, one tool call, one ddflow_brief
+V="$(acme --version)"
+ddflow harness record acmecli --from /tmp/acme-rec --agent-version "$V"          # report only
+ddflow harness record acmecli --from /tmp/acme-rec --agent-version "$V" --write
+```
+
+`--prepare` writes a capture hook for every event the descriptor maps (adopt alone installs only a
+few) and stands a tap in front of the MCP server. `--from` keeps the first payload of each event
+and writes `<event>.json`, plus `session/mcp.json` (request and reply pairs) and
+`session/adopt.json` (what adopt wrote). A reply over `[hooks].fixture_max_reply_bytes` is replaced,
+after redaction, by `_truncated` with its size; a long string ends in `[cut N chars]`. Each file carries the date and the
+`--agent-version` you give; without one the answer is `unavailable` and nothing is written.
+
+Paths, session ids and UUIDs are replaced and the rest goes through the `log` redaction profile.
+A leak that survives refuses the whole write. Read the result before committing it anyway: a
+prompt or a tool's output is kept as it was said. A re-recording replaces the fixture; git
+holds the older one. An agent whose hook style has no writer gets its MCP traffic tapped only,
+and `--prepare` says so.
+
+`ddflow harness record <id>` alone lists what is recorded and flags a recording older than
+`[hooks].fixture_max_age_months`, or of another major version with `--agent-version`. A tier-2
+agent's line also gives its checklist's `Date walked`, flagged by the same age.
+
 ## The delta note
 
 Copy the shape of an existing delta (for example `deltas/gemini-cli.md`): the driver is
@@ -158,7 +188,7 @@ From D-agent-compat. Put the agent in the lowest tier you can honestly support.
 | Tier | Agents | Test |
 |---|---|---|
 | 1 live headless smoke | agents with a headless mode, an MCP client and hooks (Claude Code, Codex CLI, Gemini CLI, Copilot CLI, Kilo, opencode, Qwen Code, ...) | a real run with a 3 USD cap, majority of 3, weekly and before a release |
-| 2 fixtures only | IDE agents with no headless mode (Cursor IDE, Cline, Antigravity, Aider, ...) | recorded payload fixtures and the conformance run |
+| 2 fixtures only | IDE agents with no headless mode (Cursor IDE, Cline, Antigravity, Aider, ...) | recorded payload fixtures, the conformance run, and a person walking `docs/ddflow/agents/checklist/<agent>.md` |
 | 3 advisory cloud bots | cloud agents that open pull requests | a sandbox repository, when the operator creates one |
 | 4 event sources only | Dependabot, Renovate, CodeRabbit, Qodo | none; their events are read |
 
