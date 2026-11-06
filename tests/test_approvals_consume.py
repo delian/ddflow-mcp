@@ -7,6 +7,7 @@ unchanged; these tests only ever answer as a person at a terminal.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ import pytest
 
 from ddflow.config import Config
 from ddflow.core import clock
+from ddflow.core.digest import content_digest
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -156,10 +158,17 @@ def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
 def test_a_pre_fix_agent_bound_approval_is_still_spent_by_a_successor(log, repo):
     """B86be969daf migration: an approval filed BEFORE the fix stored its digest over the
     requesting agent (the legacy v1 record signed ``agent``). After the fix the actor is out of
-    the digest, but the legacy digest must still match, or the already-granted answer strands."""
+    the digest, but the legacy digest must still match, or the already-granted answer strands.
+
+    The legacy digest is built from a hardcoded pre-fix record literal (the actor present), not
+    from the new ``canon.digest_named`` helper, so the test pins the old byte format itself."""
     cfg = Config()
     canon = _canon()  # agent="asker", the pre-fix requester
-    legacy = canon.digest_named("asker")
+    legacy_rec = {
+        "v": 1, "verb": canon.verb, "agent": "asker", "item": canon.item,
+        "target": canon.target, "args": dict(canon.args), "state": canon.state,
+    }  # fmt: skip
+    legacy = content_digest(json.dumps(legacy_rec, sort_keys=True, separators=(",", ":")))
     asked = E.request(
         log, cfg, subject=canon.subject(), digest=legacy, command=R.command_of(canon, cfg)
     )  # fmt: skip
