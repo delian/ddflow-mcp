@@ -33,7 +33,7 @@ def _quiet_pins_and_reviewers(monkeypatch, reviewers=(("gemini", "up"),)):
     check probes endpoints; both are what this test is NOT about, so they are stubbed."""
     monkeypatch.setattr(VV, "_stale_pins", lambda repo, cfg: [])
     rows = [{"name": n, "reachability": r, "reason": ""} for n, r in reviewers]
-    monkeypatch.setattr(VV, "_reviewer_rows", lambda repo, cfg, st, now: rows)
+    monkeypatch.setattr(VV, "_reviewer_rows", lambda repo, cfg, st, now, slow=None: rows)
 
 
 def test_vigil_reports_severities_lanes_and_a_reviewer_line(repo, monkeypatch):

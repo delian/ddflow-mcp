@@ -26,11 +26,12 @@ from ...core import clock
 from ...core import flowsignals as FSX
 from ...core import outcome as O
 from ...services import lanes as LN
-from ...services import pins as PN
 from ...services.approvals import view as V
 from ...services.review import engine as RVE
 from ...services.review import model as RVM
 from .._base import _load
+from ..pin_files import pins_regenerate
+from ..knowledge.bug_list import BUG_SEVERITIES
 from ..knowledge.bug_list import BUG_SEVERITIES
 from ..lifecycle.planning import plan_for
 
@@ -54,33 +55,42 @@ def _open_by_severity(bugs: dict[str, Any]) -> dict[str, int]:
 
 
 def _fixed_in_window(bugs: dict[str, Any], now: float) -> int:
-    """Bugs closed as fixed whose ``fixed_at`` is within ``VIGIL_FIXED_WINDOW_S``."""
+    """Bugs closed as fixed whose ``fixed_at`` is within ``VIGIL_FIXED_WINDOW_S``.
+
+    ``not b.open`` is explicit rather than implied: a bug that was reopened reads open
+    again, and a record must never count in both ``open_total`` and here."""
     return sum(
         1
         for b in bugs.values()
-        if b.fixed_at and clock.age_s(b.fixed_at, now) <= VIGIL_FIXED_WINDOW_S
+        if b.fixed_at and not b.open and clock.age_s(b.fixed_at, now) <= VIGIL_FIXED_WINDOW_S
     )
 
 
-def _stale_pins(repo: Path, cfg) -> list[str]:
+def _stale_pins(repo: Path, cfg) -> list[str] | None:
     """Stale pin-file names: ``pins regenerate --check``'s answer, narrowed to the names.
 
-    A check that cannot run yields nothing here (the snapshot still answers); ``pins --
-    check`` remains the verb that names the cause."""
+    ``None`` when the check could not run (a failed recipe, or the recipes could not be
+    read): a check that did not run must not render as a clean "none". ``pins --check``
+    remains the verb that names the cause."""
     try:
-        rep = PN.regenerate(repo, cfg, check=True)
+        out = pins_regenerate(repo, check=True, verb="regenerate")
     except Exception:
-        return []
-    return [p.name for p in rep.stale]
+        return None
+    stale = [p["name"] for p in (out.data.get("pins") or []) if p.get("stale")]
+    if stale:
+        return stale
+    return [] if out.exit == O.OK else None
 
 
-def _reviewer_rows(repo: Path, cfg, st, now: float) -> list[dict[str, str]]:
-    """Each enabled reviewer's reachability: ``up``, ``down`` (nothing answering) or
-    ``429`` (its own quota/exhaustion wall recorded on the last review)."""
+def _reviewer_rows(repo: Path, cfg, st, now: float, slow: float | None) -> list[dict[str, str]] | None:
+    """Each enabled reviewer's reachability: ``up``, ``down`` (nothing answering), ``429``
+    (its own quota/exhaustion wall recorded on the last review) or ``slow`` (answering, but
+    recent reviews measured it slower than usual). ``None``: the reviewer list could not be
+    read, which is not the same as "no reviewers"."""
     try:
         reviewers = [r for r in RVM.load_reviewers(repo) if r.enabled]
     except Exception:
-        return []
+        return None
     marks = RVM.degraded_marks(st)
     rows: list[dict[str, str]] = []
     for r in reviewers:
@@ -94,7 +104,13 @@ def _reviewer_rows(repo: Path, cfg, st, now: float) -> list[dict[str, str]]:
                 }
             )
         elif _reviewer_up(r.base_url):
-            rows.append({"name": r.name, "reachability": "up", "reason": ""})
+            rows.append(
+                {
+                    "name": r.name,
+                    "reachability": "slow" if slow is not None and slow > 1.0 else "up",
+                    "reason": "",
+                }
+            )
         else:
             rows.append({"name": r.name, "reachability": "down", "reason": ""})
     return rows
@@ -120,7 +136,15 @@ def _render(data: dict[str, Any]) -> str:
             f" ({bugs['fixed_in_window']} fixed in the last "
             f"{bugs['window_s'] // 86400}d)"
         ),
-        "stale pins: " + (", ".join(data["stale_pins"]) or "none"),
+        "stale pins: " + (
+            "none"
+            if data["stale_pins"] == []
+            else (
+                "unavailable (could not check)"
+                if data["stale_pins"] is None
+                else ", ".join(data["stale_pins"])
+            )
+        ),
         f"lanes ({len(data['lanes'])} active):",
     ]
     lines += [
@@ -130,11 +154,18 @@ def _render(data: dict[str, Any]) -> str:
     ]
     lines.append(f"interrupted: {data['interrupted']}")
     lines.append(f"pending approvals: {data['approvals_pending']}")
-    lines.append("reviewers:")
-    lines += [
-        f"  [{r['reachability']}] {r['name']}" + (f"  ({r['reason']})" if r["reason"] else "")
-        for r in data["reviewers"]
-    ]
+    lines.append("reviewers: " + ("unavailable" if data["reviewers"] is None else ""))
+    lines += (
+        [
+            f"  [{r['reachability']}] {r['name']}"
+            + (f"  ({r['reason']})" if r["reason"] else "")
+            for r in data["reviewers"]
+        ]
+        if data["reviewers"]
+        else []
+    )
+    if data["reviewer_latency_ratio"] is not None:
+        lines.append(f"reviewer latency: {data['reviewer_latency_ratio']}x usual")
     lines.append("")
     return "\n".join(lines)
 
@@ -161,6 +192,7 @@ def vigil(repo: Path, *, agent: str = "") -> O.Outcome:
         for d in (ln.as_dict(now) for ln in ledger)
     ]
     pending = V.waiting_for_a_person(st, now)
+    reviewer_latency_ratio = FSX.reviewer_latency_ratio(events, now)
     data: dict[str, Any] = {
         "bugs": {
             "open_total": sum(by_severity.values()),
@@ -174,8 +206,8 @@ def vigil(repo: Path, *, agent: str = "") -> O.Outcome:
         "interrupted": len(plan.interrupted),
         "approvals_pending": len(pending),
         "pending_approval_ids": [r["id"] for r in pending],
-        "reviewers": _reviewer_rows(repo, cfg, st, now),
-        "reviewer_latency_ratio": FSX.reviewer_latency_ratio(events, now),
+        "reviewers": _reviewer_rows(repo, cfg, st, now, reviewer_latency_ratio),
+        "reviewer_latency_ratio": reviewer_latency_ratio,
     }
     out = O.ok("vigil", **data)
     out.data["text"] = _render(data)
