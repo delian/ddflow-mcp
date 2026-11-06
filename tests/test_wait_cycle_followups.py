@@ -442,3 +442,28 @@ def test_a_victim_blocked_on_two_leases_is_told_to_wait_for_both():
     (c,) = LW.find(waits, held)
     assert c.victim == A
     assert "`ddflow wait --item b1`" in c.remedy and "`ddflow wait --item b2`" in c.remedy
+
+
+def test_commands_for_a_hyphen_id_reach_the_item_through_the_real_parser(repo):
+    assert run_cli(repo, "init", agent=A)[0] == 0
+    add = ("task", "add", "--title", "t", "--globs", "a.py,b.py", "--", "-x")
+    assert run_cli(repo, *add, agent=A)[0] == 0
+    assert run_cli(repo, "claim", "--no-worktree", "--", "-x", agent=A)[0] == 0
+    update = LW.Drop("-x", ("a.py",), ("b.py",)).command()
+    assert run_cli(repo, *shlex.split(update)[1:], agent=A)[0] == 0
+    show = json.loads(run_cli(repo, "--json", "show", "--", "-x", agent=A)[1])
+    assert show["globs"] == ["b.py"]
+    release = LW.Drop("-x", ("b.py",), ()).command()
+    assert run_cli(repo, *shlex.split(release)[1:], agent=A)[0] == 0
+    show = json.loads(run_cli(repo, "--json", "show", "--", "-x", agent=A)[1])
+    assert show["state"] == "open"
+
+
+def test_the_wait_in_a_remedy_keeps_a_hyphen_id_a_value():
+    held = [LW.Held("-b", B, ("b.py",)), LW.Held("a3", A, ("a3.py",))]
+    waits = [
+        LW.Wait("a3", A, 2.0, ("b.py",), (("-b", B),)),
+        LW.Wait("-b", B, 1.0, ("a3.py",), (("a3", A),)),
+    ]
+    (c,) = LW.find(waits, held)
+    assert c.victim == A and "`ddflow wait --item=-b`" in c.remedy

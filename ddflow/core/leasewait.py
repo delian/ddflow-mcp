@@ -62,9 +62,16 @@ class Drop:
     keep: tuple[str, ...]
 
     def command(self) -> str:
-        if self.keep:
-            return f"ddflow update {quote(self.item)} --globs {quote(','.join(self.keep))}"
-        return f"ddflow release {quote(self.item)}"
+        """The line to run. An id with a leading hyphen goes after `--`, or the parser takes
+        it for an option (`quote` leaves it as it is)."""
+        item, globs = quote(self.item), quote(",".join(self.keep))
+        if self.item.startswith("-"):
+            return (
+                f"ddflow update --globs {globs} -- {item}"
+                if self.keep
+                else (f"ddflow release -- {item}")
+            )
+        return f"ddflow update {item} --globs {globs}" if self.keep else f"ddflow release {item}"
 
     def mcp(self) -> str:
         if self.keep:
@@ -201,10 +208,14 @@ def _drop(lease: Held, asked: tuple[str, ...]) -> Drop | None:
     return Drop(lease.item, wanted, tuple(g for g in lease.globs if g not in wanted))
 
 
+def _wait_command(item: str) -> str:
+    return f"ddflow wait --item{'=' if item.startswith('-') else ' '}{quote(item)}"
+
+
 def _remedy(victim: Link, prev: Link, drops: tuple[Drop, ...]) -> str:
     """The sentence for ``victim``: ``drops`` are its leases ``prev`` (the waiter for the
     victim's lease) is blocked on."""
-    waits = ", ".join(f"`ddflow wait --item {quote(b)}`" for b in victim.blockers)
+    waits = ", ".join(f"`{_wait_command(b)}`" for b in victim.blockers)
     then = (
         f"then {prev.agent} retries on {', '.join(prev.items)}, and {victim.agent} waits for "
         f"{victim.holder}'s lease ({waits})"
