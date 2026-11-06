@@ -43,12 +43,11 @@ def _canon(**over):
     return Canon(**base)
 
 
-def test_the_digest_binds_everything_but_the_agents_reason():
+def test_the_digest_binds_everything_but_the_agent_and_the_agents_reason():
     d = _canon().digest()
     assert d == _canon().digest()
     for change in (
         {"verb": "grant.add"},
-        {"agent": "other"},
         {"item": "fix-Y"},
         {"target": "ci"},
         {"state": "s2"},
@@ -56,6 +55,9 @@ def test_the_digest_binds_everything_but_the_agents_reason():
     ):
         assert _canon(**change).digest() != d, change
     assert _canon(args={"a": "1", "b": "2"}).digest() == _canon(args={"b": "2", "a": "1"}).digest()
+    assert (
+        _canon(agent="other").digest() == d
+    )  # a successor agent binds the same action (B86be969daf)
 
 
 def test_only_an_inventoried_verb_with_an_agent_can_be_asked_about():

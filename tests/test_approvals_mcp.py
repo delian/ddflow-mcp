@@ -128,11 +128,11 @@ def test_an_approval_for_command_a_is_refused_on_command_b(proj):
     assert skip(proj, "T1", ask_id)[1] is False  # the refusal on B spent nothing: A still works
 
 
-def test_another_agent_cannot_spend_the_approval(proj):
+def test_a_successor_agent_can_spend_the_approval(proj):
     ask_id = ask(proj, "bot")
     assert person_approves(proj, ask_id)[0] == 0
     _out, err = skip(proj, "T1", ask_id, agent="mallory")
-    assert err
+    assert not err  # B86be969daf: a successor lane may spend a predecessor's approved answer
 
 
 def test_an_edited_digest_is_not_an_approval(proj):

@@ -67,8 +67,9 @@ def _problem(
     ask_id = row["id"]
     if row["verb"] != canon.verb:
         return f"{ask_id} is an approval for '{row['verb']}', not '{canon.verb}'"
-    if row["requested_by"] != canon.agent:
-        return f"{ask_id} was requested by {row['requested_by']}; only that agent may spend it"
+    # Not owner-gated: the digest binds the ACTION (verb, item, target, args, state), not the
+    # actor, and `judge` below re-verifies the answer. A successor lane re-running the same act
+    # may spend a predecessor's granted answer, so a dead agent does not orphan it (B86be969daf).
     if row["state"] != ANSWERED:
         state = E.status(row, now)
         return f"{ask_id} is {state}" + (
@@ -76,12 +77,16 @@ def _problem(
         )
     if row["outcome"] != E.APPROVED:
         return f"{ask_id} was denied by {row['answered_by']}"
-    if row["digest"] != canon.digest():
+    # The digest binds the action without the actor. A pre-existing approval's stored digest
+    # was computed over the legacy record that signed ``requested_by``; accept it too so an
+    # already-granted, unspent answer is not stranded when the actor leaves the digest.
+    stored = row["digest"]
+    if stored != canon.digest() and stored != canon.digest_named(row["requested_by"]):
         return (
             f"{ask_id} is of other state than this command acts on now (the command, its "
             "arguments, the gate's outcome or the findings changed): request a new approval"
         )
-    verdict = E.judge(row, canon.digest())
+    verdict = E.judge(row, stored)
     if not verdict.ok:
         return verdict.reason
     if level < row["min_level"] and not H.typed_t3(row, cfg or Config(), level):
