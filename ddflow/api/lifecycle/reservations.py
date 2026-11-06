@@ -176,12 +176,16 @@ def _claim_blocker(
     # stored ones, READY was followed by a claim refused for its own globs (B7036cf788c).
     clash = L.glob_clash(st, cfg, it, me, list(it.globs if globs is None else globs), now)
     if clash is not None:
-        other_id, lz, pair = clash
+        clashes = L.glob_clashes(st, cfg, it, me, list(it.globs if globs is None else globs), now)
+        named = "; ".join(
+            f"{oid} held by {lz.holder} ({p0} vs {p1})"
+            for oid, lz, (p0, p1) in clashes
+        )
         return Blocked(
             it.id,
             "conflict",
-            f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})",
-            [other_id],
+            f"globs overlap {named}",
+            [c[0] for c in clashes],
         )
     short = _resource_blocker(cfg, it, live)
     if short is not None:
@@ -196,8 +200,8 @@ def _claim_blocker(
             return Blocked(
                 it.id,
                 "conflict",
-                f"those files are queued behind {ahead.holder} ({ahead.item}), who asked "
-                f"for them first ([lease].wait_queue)",
+                f"those files ({', '.join(ahead.globs)}) are queued behind {ahead.holder} "
+                f"({ahead.item}), who asked for them first ([lease].wait_queue)",
                 [ahead.item],
             )
     if fair and repo is not None:

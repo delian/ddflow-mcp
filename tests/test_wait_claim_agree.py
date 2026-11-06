@@ -22,6 +22,21 @@ def _proj(repo, *tasks):
         run_cli(repo, *args)
 
 
+def test_claim_refusal_lists_every_conflicting_holder(repo):
+    # B-glob-refusal-names-one-conflict: one refusal must name every holder, not just the
+    # first, so a caller does not re-claim once per held glob to discover them all.
+    _proj(repo, ("A", "src/a.py"), ("B", "src/b.py"), ("Y", "src/a.py,src/b.py"))
+    assert A.claim(repo, "A", no_worktree=True, agent=HOLDER).ok
+    assert A.claim(repo, "B", no_worktree=True, agent="agent-holder2").ok
+    out = A.claim(repo, "Y", no_worktree=True, agent=WAITER)
+    assert not out.ok
+    # The refusal itself must name every conflicting glob + holder, not just the first
+    # (the "Recorded:" waiter line already did; the refusal line must too).
+    main = out.reason.split("\n\nRecorded:")[0]
+    assert "src/a.py" in main and "src/b.py" in main
+    assert HOLDER in main and "agent-holder2" in main
+
+
 def test_overlapping_lease_blocks_wait_names_holder_then_ready_and_claim_succeeds(repo):
     _proj(repo, ("X", "src/**"), ("Y", "src/a.py"))
     assert A.claim(repo, "X", no_worktree=True, agent=HOLDER).ok

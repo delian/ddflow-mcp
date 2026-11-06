@@ -9,7 +9,7 @@ from __future__ import annotations
 from ...config import Config
 from ...core import clock
 from ...core import globs as GL
-from ...core.admission import conflicts, glob_conflict, is_shared
+from ...core.admission import conflicts, glob_conflict, glob_clashes as _glob_clashes, is_shared
 from ...core.flow import line_key
 from ...core.model import Item, Lease, State, fold
 from ...infra import worktree as W
@@ -32,6 +32,27 @@ def _fold(log: EventLog) -> State:
     """The state of the log as read now: the `decide` that `EventLog.decide_then_append`
     runs outside the append lock, and again under it if the log changed in between."""
     return localize(fold(log.read_all(), strict=False), log, _leases.time.time())
+
+
+def glob_clashes(
+    state: State, cfg: Config, it: Item, holder: str, globs: list[str], now: float
+) -> list[tuple[str, Lease, tuple[str, str]]]:
+    """Every OTHER live lease ``globs`` would overlap: [(item id, lease, pair), ...].
+
+    `glob_clash` is the first of these; `claim` and `update --globs` name them all.
+    """
+    return [
+        (c.item, c.lease, c.pair)
+        for c in _glob_clashes(
+            state,
+            cfg,
+            it,
+            globs,
+            holder,
+            against="live",
+            live=unfinished_leases(state, cfg, now),
+        )
+    ]
 
 
 def glob_clash(
