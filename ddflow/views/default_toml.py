@@ -59,11 +59,11 @@ def current() -> str:
     """The file as it is on disk, "" when there is none (or it is not a regular file, which
     a read could block on). Undecodable bytes are replaced, so a damaged file reads as stale
     and the write that repairs it can still run."""
-    if not PACKAGED_DEFAULTS.is_file():
-        return ""
     try:
+        if not PACKAGED_DEFAULTS.is_file():
+            return ""
         return PACKAGED_DEFAULTS.read_bytes().decode("utf-8", "replace")
-    except OSError:
+    except OSError:  # a permission error or a symlink loop: the file is as good as missing
         return ""
 
 

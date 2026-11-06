@@ -354,7 +354,7 @@ def test_write_without_defaults_changes_nothing(tmp_path, argv):
     repo = _project(tmp_path)
     before = (repo / ".ddflow" / "config.toml").read_bytes()
     code, _out, err = run_cli(repo, *argv)
-    assert code == 1 and "ddflow config defaults --write" in err
+    assert code == 1 and "ddflow config defaults" in err
     assert (repo / ".ddflow" / "config.toml").read_bytes() == before
 
 
@@ -368,10 +368,44 @@ def test_set_beside_write_is_named_as_the_problem(tmp_path):
 
 
 def test_setting_a_key_to_the_word_defaults_is_still_a_plain_write(tmp_path):
-    """Not the packaged file: `--set KEY defaults` writes the string `defaults` to KEY."""
-    code, out, _err = run_cli(_project(tmp_path), "config", "--set", "lease.ttl_s", "defaults")
-    assert "packaged defaults" not in out and "[lease]" not in out
-    assert code != 0  # ttl_s is an integer: refused, by the writer
+    """Not the packaged file: `--set KEY defaults` goes to the writer with the string."""
+    code, out, err = run_cli(_project(tmp_path), "config", "--set", "lease.ttl_s", "defaults")
+    assert code != 0 and out == ""
+    assert "lease.ttl_s" in err and "goes with" not in err and "does not go with" not in err
+
+
+@pytest.mark.parametrize("how", ["denied", "loop"])
+def test_an_unstatable_path_reads_as_missing(tmp_path, monkeypatch, how):
+    """`Path.is_file()` raises for a permission error or a symlink loop: never out of `current`."""
+    path = tmp_path / "default.toml"
+    monkeypatch.setattr(DT, "PACKAGED_DEFAULTS", path)
+    if how == "loop":
+        path.symlink_to(path)
+    else:
+
+        def deny(self):
+            raise PermissionError(13, "denied")
+
+        monkeypatch.setattr(Path, "is_file", deny)
+    assert DT.current() == ""
+    assert DT.main(["--check"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("section", "knob", "raw"),
+    [("lease", "ttl_s", "true"), ("lease", "heartbeat_s", "false")],
+    ids=["true-for-int", "false-for-int"],
+)
+def test_a_bool_for_an_int_knob_is_not_called_a_non_boolean(
+    packaged, tmp_path, capsys, section, knob, raw
+):
+    path = tmp_path / "default.toml"
+    path.write_text(f"[{section}]\n{knob} = {raw}\n", "utf-8")
+    packaged(path)
+    cfg = Config.load(None, env={})
+    assert getattr(getattr(cfg, section), knob) == getattr(getattr(Config(), section), knob)
+    err = capsys.readouterr().err
+    assert f"{section}.{knob}" in err and "not a boolean" not in err
 
 
 def test_write_without_defaults_leaves_the_packaged_file_alone(tmp_path):

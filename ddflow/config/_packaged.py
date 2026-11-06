@@ -72,8 +72,10 @@ def _lay_section(cfg: Any, sec: str, table: dict[str, Any], drift: list[str]) ->
         if knob not in known:
             drift.append(f"{sec}.{knob}")
         elif _differs(getattr(target, knob), raw):
-            if isinstance(getattr(target, knob), bool) is not isinstance(raw, bool):
-                bad = f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: not a boolean"
+            have = getattr(target, knob)
+            if isinstance(have, bool) is not isinstance(raw, bool):
+                want = "a boolean" if isinstance(have, bool) else f"a {type(have).__name__}"
+                bad = f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: not {want}"
                 _say(f"{bad}; {_BUILT_IN}")
                 continue
             try:  # a copy: the parse is shared by every load in this process

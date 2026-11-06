@@ -277,7 +277,7 @@ def _config_defaults(a, c: Ctx) -> int:
     """`ddflow config defaults [--write]`: the packaged file, or the file regenerated."""
     write = bool(getattr(a, "write", False))
     if a.set:  # only `--set K V --write` reaches here: `--set K defaults` is a plain write
-        print("--write does not go with --set: ddflow config defaults --write", file=sys.stderr)
+        print("`config defaults` takes no --set: ddflow config defaults [--write]", file=sys.stderr)
         return FAIL
     if list(getattr(a, "value", None) or []) != ["defaults"]:
         print("--write goes with `defaults`: ddflow config defaults --write", file=sys.stderr)
