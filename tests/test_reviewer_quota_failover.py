@@ -189,10 +189,12 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
         "the expired reviewer was not re-probed: it is still shed forever" + "\n" + after
     )
     # It re-hit the wall on the re-probe and was marked degraded again, so it stays shed
-    # for the NEXT gate (the mark is fresh), not dropped permanently. The re-mark is a
-    # SECOND review_degraded row with a newer `at`, not the first run's mark (grok finding:
-    # re-invoking then dropping the mark must still fail this test).
+    # for the NEXT gate (the mark is fresh), not dropped permanently. The re-mark is a NEW
+    # review_degraded row strictly newer than the first run's mark: a run that never
+    # re-probes, or re-probes but drops the re-mark, leaves no such newer row and fails.
     st = fold(EventLog(repo).read_all(), strict=False)
-    marks = st.items["T1"].gates["critic"].evidence.get("review_degraded")
-    assert marks and marks[-1]["reviewer"] == "exhausted", marks
-    assert marks[-1]["at"] is not None, marks
+    first = st.items["T1"].gates["rubber_duck"].evidence["review_degraded"]
+    second = st.items["T1"].gates["critic"].evidence.get("review_degraded")
+    assert first and first[-1]["reviewer"] == "exhausted", first
+    assert second and second[-1]["reviewer"] == "exhausted", second
+    assert second[-1]["at"] > first[-1]["at"], (first, second)
