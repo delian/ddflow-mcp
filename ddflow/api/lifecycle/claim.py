@@ -326,6 +326,7 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
         # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
         globs=list(lz.globs),
         broke=broke,
+        sync_warn=wt.sync_note if wt else "",
         tree=_tree_choice(cfg, bound),
     )
 
