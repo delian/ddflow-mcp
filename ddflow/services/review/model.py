@@ -351,15 +351,22 @@ def active_degraded_marks(
     }
 
 
-def degraded_notes(state: Any) -> list[str]:
+def degraded_notes(state: Any, cooldown_s: float = 0.0) -> list[str]:
     """The doctor notes for reviewers a quota/exhaustion wall marked degraded and shed.
 
     Derived from ``review_degraded`` marks ``api.review`` recorded on gate results (the
     committed "approvals log" record): one line per degraded reviewer naming what was hit,
-    so the operator sees the wall instead of a run of silently `unavailable` gates. The
-    mark expires on its own after `[review].degraded_cooldown_s` (`active_degraded_marks`),
-    when the reviewer is re-probed rather than re-enabled by hand (bug B066719c493).
+    so the operator sees the wall instead of a run of silently `unavailable` gates. Only a
+    mark still WITHIN `[review].degraded_cooldown_s` is reported as shed; an expired mark
+    is dropped, matching `active_degraded_marks` -- the reviewer is re-probed, not still
+    shed (bug B066719c493). ``cooldown_s`` 0 (the default) sheds for no duration, so it
+    reports nothing: the caller passes the live `[review].degraded_cooldown_s`.
     """
+    return [
+        f"reviewer {name!r} is degraded ({row.get('reason') or 'quota/exhaustion'}): shed "
+        f"from its gates, re-probed when the mark expires"
+        for name, row in sorted(active_degraded_marks(state, cooldown_s).items())
+    ]
     return [
         f"reviewer {name!r} is degraded ({row.get('reason') or 'quota/exhaustion'}): shed "
         f"from its gates, re-probed when the mark expires"

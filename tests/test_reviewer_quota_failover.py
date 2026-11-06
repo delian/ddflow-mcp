@@ -128,7 +128,7 @@ def test_a_doctor_note_names_the_degraded_reviewer(repo, tmp_path):
     from ddflow.services.review import degraded_notes
 
     st = fold(EventLog(repo).read_all(), strict=False)
-    notes = degraded_notes(st)
+    notes = degraded_notes(st, cooldown_s=3600)
     assert notes, "the degraded mark must produce a doctor note"
     assert any("'exhausted' is degraded" in n for n in notes), notes
 
