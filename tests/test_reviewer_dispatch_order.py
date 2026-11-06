@@ -83,6 +83,7 @@ def test_cross_family_first_and_degraded_shed_before_any_attempt(repo, tmp_path)
     # prior shed.
     api.review(repo, gate="rubber_duck", item="T1", branch="feat")
     cold = diary.read_text().split()
+    assert {"fast", "slow"} <= set(cold), cold
     assert cold.index("fast") < cold.index("slow"), cold
     diary.write_text("")
 
@@ -92,5 +93,4 @@ def test_cross_family_first_and_degraded_shed_before_any_attempt(repo, tmp_path)
     assert out.data["outcome"] == "passed", out.data["text"]
     invited = diary.read_text().split()
     assert invited == ["fast", "slow"], invited
-    assert "exhausted" not in invited, invited
     assert "shed exhausted" in out.data["text"], out.data["text"]
