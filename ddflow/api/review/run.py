@@ -362,11 +362,11 @@ def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
     Degraded/429 reviewers are shed BEFORE this runs (`_shed_degraded`), so the cascade
     B8efd3d1bc4 dropped decides the pool's members and this only orders what remains.
     """
-    ranked = [
-        (r, _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2))
-        for r in revs
-    ]
-    ordered = [r for r, _ in sorted(ranked, key=lambda pair: pair[1])]
+
+    def rank(r):
+        return _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2)
+
+    ordered = sorted(revs, key=rank)
     if [r.name for r in ordered] != [r.name for r in revs]:
         say("→ order (cross-family first): " + ", ".join(r.name for r in ordered))
     return ordered
