@@ -19,7 +19,6 @@ from __future__ import annotations
 import copy
 import functools
 import sys
-import tomllib
 from dataclasses import fields
 from typing import Any
 
@@ -53,7 +52,7 @@ def packaged() -> dict[str, Any]:
     """The parsed packaged file, or `{}` (having warned) when it can not be read."""
     try:
         return read_toml(PACKAGED_DEFAULTS)
-    except (OSError, UnicodeDecodeError, ConfigConflict, tomllib.TOMLDecodeError) as exc:
+    except (OSError, ValueError, ConfigConflict) as exc:  # ValueError: bad UTF-8 or TOML
         _say(f"cannot read the packaged {PACKAGED_DEFAULTS}: {exc}; {_BUILT_IN}")
         return {}
 
