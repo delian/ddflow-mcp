@@ -62,7 +62,9 @@ def _fixed_in_window(bugs: dict[str, Any], now: float) -> int:
     return sum(
         1
         for b in bugs.values()
-        if b.fixed_at and not b.open and clock.age_s(b.fixed_at, now) <= VIGIL_FIXED_WINDOW_S
+        if b.fixed_at
+        and not b.open
+        and 0 <= clock.age_s(b.fixed_at, now) <= VIGIL_FIXED_WINDOW_S
     )
 
 

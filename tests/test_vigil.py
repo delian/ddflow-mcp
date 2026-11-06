@@ -53,7 +53,8 @@ def test_vigil_reports_severities_lanes_and_a_reviewer_line(repo, monkeypatch):
     assert any(ln["name"] == "holder" and ln["item"] == "X" for ln in out.data["lanes"])
     # reviewer reachability in DATA: up (reachable) or 429 (quota wall), not stubbed away
     assert any(r["reachability"] in ("up", "429") for r in out.data["reviewers"])
-    # the fresh repo has no pin recipes, so `pins --check` cannot run: "unavailable", never "none"
+    # the fresh repo has no pin recipes, so `pins --check` cannot run: `stale_pins` is the
+    # `None` sentinel (unavailable), never a clean empty [] that would render as "none"
     assert out.data["stale_pins"] is None
     # ... and the reviewer up/429 line renders
     assert "up" in out.data["text"]
