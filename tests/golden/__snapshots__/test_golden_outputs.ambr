@@ -2668,6 +2668,20 @@
           recorded as unreviewed with how many parts were, and the findings of the
           parts that were are kept (bug B587e607ad9: a ~4.5k-char chunk got no answer
           in 1800 s twice).
+      review.degraded_cooldown_s = 3600   [default]
+          How many seconds a reviewer marked degraded by a quota/exhaustion wall (an
+          HTTP 403/429, a vendor quota or rate limit) stays shed from its gates before
+          it is re-probed (default 3600, one hour). One transient rate-limit used to
+          disable a cross-family reviewer forever (bug B066719c493): the mark would
+          never clear, so grok/gemini/kimi stayed shed and every `complete` refused on
+          reviewer-independence. A degraded reviewer is dropped from the gate's pool
+          only while this mark is younger than this many seconds; once it is older,
+          the reviewer is re-attempted for the next gate (and re-marked if the wall is
+          still up). 0 re-probes a degraded reviewer on every review (the mark blocks
+          no run); a negative value also re-probes on every review. Change it for the
+          project (`ddflow config review.degraded_cooldown_s 1800`), for this machine
+          (add --local), per run (DDFLOW_REVIEW_DEGRADED_COOLDOWN_S), or over MCP with
+          `ddflow_configure`.
       swarm.w_critical = 3.0   [default]
           Weight of the critical-path term in the dispatch score: an item on the
           longest dependency chain is offered before one with slack. Zero ignores the
