@@ -47,6 +47,7 @@ from ..config_sections.pins import PinsConfig
 from ..config_sections.plan import PlanConfig
 from ..config_sections.prompts import PromptsConfig
 from ..config_sections.quality import QualityConfig
+from ..config_sections.quota import QuotaConfig
 from ..config_sections.rag import RagConfig
 from ..config_sections.reinstruct import ReinstructConfig
 from ..config_sections.release import ReleaseConfig
@@ -153,6 +154,7 @@ class Config:
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
+    quota: QuotaConfig = field(default_factory=QuotaConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)

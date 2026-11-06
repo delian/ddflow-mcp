@@ -342,6 +342,36 @@ def _note_degraded(res, r, gate: str, extra_evidence: dict, say) -> None:
     )
 
 
+#: Dispatch rank by independence tier: a reviewer OUTSIDE the author's family first, a
+#: different model of the same family next, and one that establishes nothing (the
+#: author's own model, or a model no map recognises) last. Falls back to the tail for a
+#: tier `review_tier` never returns, so an unknown enough reviewer still runs, just last.
+_TIER_RANK = {"family": 0, "model": 1, "none": 2}
+
+
+def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
+    """`revs` with the fast cross-family tier led, so a slow same-family reviewer is not
+    paid for before an outside-family one can serve (bug B19066e802f), and a reviewer
+    that establishes nothing runs last instead of first in config order.
+
+    The sort is STABLE: within a tier, config order survives, so order only yields when a
+    tier makes it. When the author cannot be named here (`[agent].family` and the session
+    model are both empty) `review_tier` returns `none` for every reviewer and the pool
+    keeps its config order -- a gate must not reorder on a guess about independence.
+
+    Degraded/429 reviewers are shed BEFORE this runs (`_shed_degraded`), so the cascade
+    B8efd3d1bc4 dropped decides the pool's members and this only orders what remains.
+    """
+
+    def rank(r):
+        return _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2)
+
+    ordered = sorted(revs, key=rank)
+    if [r.name for r in ordered] != [r.name for r in revs]:
+        say("→ order (cross-family first): " + ", ".join(r.name for r in ordered))
+    return ordered
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -459,6 +489,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         )
 
     it = st.items.get(item)
+    author_model, _ = _author_model(st, agent, "", cfg)
     revs, shed = _shed_degraded(revs, st, gate, say)
     if not revs:
         return unavailable(
@@ -468,6 +499,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
             + "`ddflow doctor` names the degraded reviewers.",
             how="",
         )
+    revs = _order_cross_family_first(revs, author_model, cfg, say)
     # The head the diff is taken from, captured BEFORE the diff (B4f5be8179f): a commit
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
@@ -575,7 +607,6 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         _say_result(say, res)
         _note_degraded(res, r, gate, extra_evidence, say)
 
-    author_model, _ = _author_model(st, agent, "", cfg)
     best = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
         best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
