@@ -670,7 +670,7 @@
     'ddflow_next': '''
       {
        "name": "ddflow_next",
-       "description": "What may be started RIGHT NOW, and for everything that may not, the reason. Independent items in the ready set can be run in parallel worktrees by separate agents. Returns ready=[] when nothing is actionable — that is a result, not an error, and it never means 'pick something anyway'.",
+       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -688,11 +688,11 @@
          },
          "full": {
           "type": "boolean",
-          "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. Without it a long answer is cut and ends in a footer naming the exact next call."
+          "description": "Lift the output caps ([output] max_rows, max_chars) for this call."
          },
          "cursor": {
           "type": "integer",
-          "description": "Where to resume a cut list: the number the previous answer's footer gave (default 0)."
+          "description": "Row to resume a cut list at."
          },
          "as_agent": {
           "type": "string",
@@ -1189,7 +1189,7 @@
          },
          "full": {
           "type": "boolean",
-          "description": "Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. ..."
+          "description": "Lift the output caps ([output] max_rows, max_chars) for this call."
          },
          "limit": {
           "type": "integer",
@@ -1197,7 +1197,7 @@
          },
          "by_tag": {
           "type": "string",
-          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the ..."
+          "description": "Group the live items by this label namespace (e.g. ..."
          },
          "out": {
           "type": "string",

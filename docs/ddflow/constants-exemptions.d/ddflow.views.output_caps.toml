@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/views/output_caps.py:MIN_CLIP" = 'structural floor under [output].max_chars: below 80 characters a clipped string no longer says what it was, so the clip stops there whatever the cap; not a workload setting'

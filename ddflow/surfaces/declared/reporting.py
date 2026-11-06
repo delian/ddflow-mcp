@@ -297,20 +297,16 @@ COMMANDS: tuple[Command, ...] = (
             "which, what is in flight and who holds it, what is ready to start, what is "
             "blocked, how many agent-hours and commits went in, and whether anything is "
             "looping or waiting to be recovered. This is the tool for 'what is the "
-            "status of this project?' and 'what has been completed?'. With ``by_tag`` "
-            "(the ``--by-tag KEY`` flag): per-value counts for the KEY label namespace "
-            "too — done/running/ready/review/blocked/abandoned per ``wave:N`` or "
-            "``track:fix`` value, and per value what blocks it."
+            "status of this project?' and 'what has been completed?'. ``by_tag`` "
+            "(``--by-tag KEY``) adds per-value counts for a label namespace."
         ),
         handler=_status_handler,
         params=(
             Param(
                 "by_tag",
                 help=(
-                    "Also group the live items by this label namespace (KEY or KEY:*): per "
-                    "value the done/running/ready/review/blocked/abandoned/open counts, the "
-                    "buckets the plan puts them in, and the open dependencies blocking the "
-                    "most items (e.g. 'wave' or 'track')."
+                    "Group the live items by this label namespace (e.g. 'wave' or 'track'): "
+                    "per value the state counts and the dependencies blocking most items."
                 ),
                 default="",
                 cli_help=(

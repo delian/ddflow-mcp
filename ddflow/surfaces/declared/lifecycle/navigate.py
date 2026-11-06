@@ -54,10 +54,9 @@ COMMANDS: tuple[Command, ...] = (
         path=("next",),
         summary="what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)",
         tool="ddflow_next",
-        description="What may be started RIGHT NOW, and for everything that may not, the reason. "
-        "Independent items in the ready set can be run in parallel worktrees by "
-        "separate agents. Returns ready=[] when nothing is actionable — that is a "
-        "result, not an error, and it never means 'pick something anyway'.",
+        description="What may be started RIGHT NOW, and why the rest may not. Independent "
+        "ready items can run in parallel worktrees. ready=[] is a result, not an error: "
+        "it never means 'pick something anyway'.",
         call=_next,
         payload="",
         cli=CliPolicy(notes=_next_notes, human=_next_text),

@@ -9,14 +9,14 @@ from ..registry import Param
 FULL = Param(
     "full",
     type="boolean",
-    help="Lift the default output caps ([output].max_rows / max_chars) for this call and return everything. Without it a long answer is cut and ends in a footer naming the exact next call.",
+    help="Lift the output caps ([output] max_rows, max_chars) for this call.",
     cli_help="print everything: lift the default output caps ([output] max_rows, max_chars) for this call",
     default=False,
 )
 CURSOR = Param(
     "cursor",
     type="integer",
-    help="Where to resume a cut list: the number the previous answer's footer gave (default 0).",
+    help="Row to resume a cut list at.",
     cli_help="resume a cut list at this row (the number the previous footer gave)",
     default=0,
 )
