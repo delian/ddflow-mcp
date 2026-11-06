@@ -17,14 +17,13 @@ Two properties are load-bearing:
 from __future__ import annotations
 
 import json
-import os
 import sys
 import threading
-import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, NoReturn
 
-from ..infra import proc
+from ..infra import fsio, proc
 
 #: Hook payloads kept per capture: a short session is what a recording is.
 MAX_EVENTS = 500
@@ -44,13 +43,15 @@ def store_hook(capture: Path, event: str, raw: bytes) -> bool:
     """Keep one payload as its own file, named so a sort is the order they fired in."""
     d = capture / HOOKS_DIR
     d.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR)
-    if sum(1 for _ in d.iterdir()) >= MAX_EVENTS:
-        return False
-    path = d / f"{time.time_ns()}-{os.getpid()}-{event}.json"
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, PRIVATE_FILE)
-    with os.fdopen(fd, "wb") as f:
-        f.write(raw)
-    return True
+    count = sum(1 for _ in d.iterdir())
+    while count < MAX_EVENTS:
+        try:
+            path = d / f"{count:06d}-{event}.json"
+            fsio.atomic_write(path, raw, mode=PRIVATE_FILE, exclusive=True, fsync=False)
+            return True
+        except FileExistsError:  # a hook of the same event fired beside this one
+            count += 1
+    return False
 
 
 def hook(capture: Path, event: str, stdin: BinaryIO) -> int:
@@ -79,9 +80,10 @@ class McpLog:
         self._f: BinaryIO | None = None
         try:
             capture.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR)
-            fd = os.open(capture / MCP_LOG, os.O_CREAT | os.O_APPEND | os.O_WRONLY, PRIVATE_FILE)
-            self._f = os.fdopen(fd, "ab")
-            self._written = os.fstat(fd).st_size  # a restarted agent adds to the same file
+            path = capture / MCP_LOG
+            self._f = path.open("ab")
+            path.chmod(PRIVATE_FILE)
+            self._written = path.stat().st_size  # a restarted agent adds to the same file
         except OSError as exc:
             print(f"harness tap: no mcp log: {exc}", file=sys.stderr)
 
@@ -98,42 +100,21 @@ class McpLog:
             self._f.flush()
 
 
-def _pump(src: BinaryIO, dst: BinaryIO, log: McpLog, direction: str) -> None:
-    """Line by line until EOF. Logged before it passes: the tap leaves the moment the server
-    exits, so a line must be on disk before anything can answer it. A logging failure never
-    stops the bytes."""
-    try:
-        for line in iter(src.readline, b""):
-            try:
-                log.note(direction, line)
-            except (OSError, ValueError) as exc:
-                print(f"harness tap: mcp log: {exc}", file=sys.stderr)
-            dst.write(line)
-            dst.flush()
-    except (BrokenPipeError, ValueError):
-        pass  # the other end went away: the session is over
-    finally:
+def _guarded(log: McpLog) -> Callable[[str, bytes], None]:
+    """``log.note`` that only ever complains: a logging failure must not stop the bytes."""
+
+    def note(direction: str, line: bytes) -> None:
         try:
-            dst.close()
-        except OSError:
-            pass
+            log.note(direction, line)
+        except (OSError, ValueError) as exc:
+            print(f"harness tap: mcp log: {exc}", file=sys.stderr)
+
+    return note
 
 
-def mcp(capture: Path, argv: list[str]) -> int:
+def mcp(capture: Path, argv: list[str]) -> NoReturn:
     """Run the server and stand between it and the agent, until the server exits."""
-    log = McpLog(capture)
-    child = proc.spawn_stdio(argv, stderr=None)
-    assert child.stdin is not None and child.stdout is not None
-    up = threading.Thread(
-        target=_pump, args=(sys.stdin.buffer, child.stdin, log, "in"), daemon=True
-    )
-    up.start()
-    _pump(child.stdout, sys.stdout.buffer, log, "out")
-    try:
-        return child.wait(timeout=STOP_GRACE_S)
-    except proc.TimeoutExpired:  # the agent left and nothing reads the server's output now
-        proc.stop_group(child)
-        return 0
+    proc.relay_stdio(argv, _guarded(McpLog(capture)), grace_s=STOP_GRACE_S)
 
 
 def main(argv: list[str]) -> int:
@@ -141,9 +122,7 @@ def main(argv: list[str]) -> int:
     if verb == "hook" and rest[0] and len(argv) == len(("hook", "dir", "event")):
         return hook(Path(capture), rest[0], sys.stdin.buffer)
     if verb == "mcp" and rest[0] == "--" and argv[3:]:
-        # Not a normal exit: the upstream pump is a daemon blocked in a read of stdin, and the
-        # interpreter's shutdown aborts on that lock. Everything is written by now.
-        os._exit(mcp(Path(capture), argv[3:]))
+        mcp(Path(capture), argv[3:])
     print("usage: harness_tap hook <capture> <event> | mcp <capture> -- <argv>", file=sys.stderr)
     return 1 if verb == "mcp" else 0  # a hook never fails; a server that did not start does
 

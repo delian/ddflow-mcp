@@ -72,7 +72,7 @@ def _prepare(repo: Path, h: HR.Harness, target: str, agent: str) -> O.Outcome:
         root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return O.refused(KIND, f"cannot make {root}: {exc.strerror or exc}")
-    if not G.run(root, "init", "-q").ok:
+    if not G.init_repo(root):
         return O.failed(KIND, f"git init failed in {root}")
     adopted = setup(root, Adoption(agents=h.id), agent=agent)
     if adopted.exit != O.OK:
@@ -124,7 +124,9 @@ def _from(
         redactor=redactor("log", cfg),
         extra={str(Path(HRec.__file__).resolve().parents[2]): "<ddflow>"},
     )
-    rec = HRec.build(h, src, scrub, version=version, today=_today())
+    cap = cfg.hooks.fixture_max_reply_bytes
+    when = str(stamp.get("prepared") or _today())  # the session's day, not this re-scrub's
+    rec = HRec.build(h, src, scrub, version=version, today=when, reply_cap=cap)
     if not rec.files:
         why = f"{src} holds no session: nothing was captured"
         return O.nothing(KIND, why, id=h.id, status="empty", fixtures=[], message=why)

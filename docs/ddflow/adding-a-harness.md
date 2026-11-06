@@ -145,8 +145,9 @@ ddflow harness record acmecli --from /tmp/acme-rec --agent-version "$V" --write
 
 `--prepare` writes a capture hook for every event the descriptor maps (adopt alone installs only a
 few) and stands a tap in front of the MCP server. `--from` keeps the first payload of each event
-and writes `<event>.json`, plus `session/mcp.json` (request and reply pairs, a `tools/list` reply
-reduced to the names) and `session/adopt.json` (what adopt wrote). Each carries the date and the
+and writes `<event>.json`, plus `session/mcp.json` (request and reply pairs) and
+`session/adopt.json` (what adopt wrote). A reply over `[hooks].fixture_max_reply_bytes` is replaced,
+after redaction, by `_truncated` with its size; a long string ends in `[cut N chars]`. Each file carries the date and the
 `--agent-version` you give; without one the answer is `unavailable` and nothing is written.
 
 Paths, session ids and UUIDs are replaced and the rest goes through the `log` redaction profile.

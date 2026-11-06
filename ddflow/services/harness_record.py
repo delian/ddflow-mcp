@@ -55,6 +55,8 @@ _HOME_MARK = "ddflowrecordhomemark"
 _ENCODED_HOME_MARK = "ddflowrecordencodedhomemark"
 #: Characters kept of one string: a tool's output is not what a fixture is for.
 MAX_STRING = 4000
+#: The key a reply over `[hooks].fixture_max_reply_bytes` is replaced by, so a cut reads as one.
+TRUNCATED = "_truncated"
 #: A session id shorter than this identifies nothing, and replacing it would mangle the text.
 MIN_SESSION_ID = 8
 #: Request/response pairs kept, one per method and tool.
@@ -251,7 +253,7 @@ def _payloads(capture: Path) -> dict[str, list[bytes]]:
     """Every stored payload by event, oldest first."""
     out: dict[str, list[bytes]] = {}
     for p in sorted((capture / Tap.HOOKS_DIR).glob("*.json")):
-        out.setdefault(p.stem.split("-", 2)[2], []).append(p.read_bytes())
+        out.setdefault(p.stem.rsplit("-", 1)[1], []).append(p.read_bytes())
     return out
 
 
@@ -294,13 +296,15 @@ def _pairs(capture: Path) -> list[dict]:
     return pairs
 
 
-def _reduced(pair: dict) -> dict:
-    """A tools/list reply is the whole catalog: its names are what a replay can use."""
-    result = pair["response"].get("result")
-    if pair["method"] == "tools/list" and isinstance(result, dict):
-        names = [t.get("name") for t in result.get("tools", []) if isinstance(t, dict)]
-        return {**pair, "response": {**pair["response"], "result": {"tools": names}}}
-    return pair
+def _capped(pair: dict, cap: int) -> dict:
+    """``pair`` with a reply over ``cap`` bytes replaced by a record of the cut, by size alone.
+    Runs on a scrubbed pair, so what is kept was redacted whole first."""
+    reply = pair["response"]
+    size = len(json.dumps(reply, ensure_ascii=False).encode())
+    if size <= cap:
+        return pair
+    cut = {"id": reply.get("id"), TRUNCATED: {"bytes": size, "cap": cap}}
+    return {**pair, "response": cut}
 
 
 def _meta(version: str, today: str, source: str) -> dict[str, Any]:
@@ -327,6 +331,7 @@ def build(
     *,
     version: str,
     today: str,
+    reply_cap: int,
 ) -> Recording:
     """The fixtures of one capture, scrubbed: the first payload of each event."""
     capture = source / CAPTURE_DIR
@@ -353,13 +358,13 @@ def build(
             "stdin": stdin,
             "expect": _expect(h, event, stdin, plan.normalizer),
         }
-    pairs = [scrubber.value(_reduced(p)) for p in _pairs(capture)]
+    pairs = [_capped(scrubber.value(p), reply_cap) for p in _pairs(capture)]
     if pairs:
         rec.files[f"{SESSION_DIR}/mcp.json"] = {
             "_meta": _meta(
                 version,
                 today,
-                "live MCP traffic through the tap, scrubbed; a tools/list reply is reduced to its names",
+                "live MCP traffic through the tap, scrubbed",
             ),
             "pairs": pairs,
         }

@@ -27,7 +27,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from . import resources as R
 
@@ -218,6 +218,45 @@ def run_piped(
         clock.cancel()
         if p.poll() is None:
             stop_group(p)
+
+
+def pump_lines(src: Any, dst: Any, note: Callable[[str, bytes], None], direction: str) -> None:
+    """Copy ``src`` to ``dst`` line by line until EOF, closing ``dst``. ``note`` sees each line
+    BEFORE it passes, so a line is recorded before anything can answer it. A reader that
+    went away ends the copy quietly: that is how such a session ends."""
+    try:
+        for line in iter(src.readline, b""):
+            note(direction, line)
+            dst.write(line)
+            dst.flush()
+    except (BrokenPipeError, ValueError):
+        pass
+    finally:
+        with contextlib.suppress(OSError):
+            dst.close()
+
+
+def relay_stdio(argv: list[str], note: Callable[[str, bytes], None], *, grace_s: float) -> NoReturn:
+    """Stand between this process's own stdio and ``argv``, then END this process with the
+    child's exit code: its stdin goes to the child and the child's stdout comes back, ``note``
+    seeing each line (direction ``in`` or ``out``), until the child closes its stdout.
+
+    Unlike `run_piped` nothing cuts the run and stderr stays the caller's: a server lives as
+    long as its session. The exit is 0 when the child had to be stopped, because its reader
+    left and it did not exit within ``grace_s``. It is `os._exit`: the upstream copy is a
+    daemon blocked on our stdin and a normal shutdown aborts on that lock; both copies flush
+    every line. Raises OSError when the child cannot start."""
+    child = spawn_stdio(argv, stderr=None)
+    assert child.stdin is not None and child.stdout is not None
+    args = (sys.stdin.buffer, child.stdin, note, "in")
+    threading.Thread(target=pump_lines, args=args, daemon=True).start()
+    pump_lines(child.stdout, sys.stdout.buffer, note, "out")
+    try:
+        code = child.wait(timeout=grace_s)
+    except TimeoutExpired:
+        stop_group(child)
+        code = 0
+    os._exit(code)
 
 
 def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:

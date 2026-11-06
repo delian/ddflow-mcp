@@ -476,3 +476,8 @@ def changed_paths(
     """The paths that differ between two commits, renames as two. Raises `GitError`."""
     args = ("diff", "--name-only", "--no-renames", old, new)
     return run(repo, *args, z=True, timeout=timeout, check=True).paths() or []
+
+
+def init_repo(path: Path | str) -> bool:
+    """Make ``path`` a git repository; False when git could not."""
+    return run(path, "init", "-q").ok
