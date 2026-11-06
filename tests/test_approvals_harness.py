@@ -498,3 +498,22 @@ def test_attest_all_over_the_cli_auto_attests(log, cfg, repo):
     here.approvals.transcript_dirs = [str(projects)]
     spent = C.operator_gate(log, here, _canon(), approval_id=row["id"])
     assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2
+
+
+def test_attest_all_reports_a_refused_request_beside_an_attested_one(log, cfg, repo):
+    """`attest --all` is not an overall success when one answered request attests and another
+    is refused: the refusal is reported, never dropped behind the ok (review finding)."""
+    run_cli(repo, "init")
+    projects = Path(cfg.approvals.transcript_dirs[0])
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
+    log = EventLog(repo, "bot")
+    row = _file(log, Config())  # T2, answerable over chat
+    t3 = _file(log, Config(), _canon(verb="config.reviewer_command", item="", target=""))
+    d = projects / "slug"
+    d.mkdir(parents=True)
+    (d / "s.jsonl").write_text("\n".join(json.dumps(r) for r in _approved_row(row)))
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
+    assert code == 3, (out, err)  # attested one, refused one: not a clean success
+    assert "refused" in err
+    assert asks_of(fold(EventLog(repo, "bot").read_all(), strict=False))[row["id"]]["state"] == "answered"

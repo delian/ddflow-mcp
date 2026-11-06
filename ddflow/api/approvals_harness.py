@@ -63,12 +63,21 @@ def approvals_attest_all(repo: Path, *, agent: str = "") -> O.Outcome:
     log, cfg, _st = _load(repo, agent)
     results = H.attest_pending(log, cfg, repo=repo)
     attested = [r["id"] for r in results if r["ok"]]
-    refused = [r["message"] for r in results if not r["ok"] and not r["message"].startswith(H.WAITING)]
-    if attested:
-        text = "\n".join(r["message"] for r in results if r["ok"])
-        return O.ok("approvals.attest", id=attested, text=text)
+    refused = [r for r in results if not r["ok"] and not r["message"].startswith(H.WAITING)]
+    lines = [r["message"] for r in results if r["ok"]]
     if refused:
-        return O.refused("approvals.attest", "; ".join(refused))
+        # A refusal among the answered requests is not dropped behind a success: `attest` said
+        # no to one request, and `--all` reports it (a mix is not an overall success).
+        why = "; ".join(r["message"] for r in refused)
+        return O.refused(
+            "approvals.attest",
+            f"{len(attested)} attested; {len(refused)} refused — {why}",
+            id=attested,
+            refused=[{"id": r["id"], "reason": r["message"]} for r in refused],
+            text="\n".join(lines),
+        )
+    if attested:
+        return O.ok("approvals.attest", id=attested, text="\n".join(lines))
     return O.nothing(
         "approvals.attest",
         "no pending request has an answer yet, or none is pending: put `ddflow approvals ask "
