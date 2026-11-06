@@ -358,6 +358,70 @@ def test_write_without_defaults_changes_nothing(tmp_path, argv):
     assert (repo / ".ddflow" / "config.toml").read_bytes() == before
 
 
+def test_set_beside_write_is_named_as_the_problem(tmp_path):
+    """The message blames `--set`, not a missing `defaults`, and nothing is written."""
+    before = PACKAGED_DEFAULTS.read_bytes()
+    code, out, err = run_cli(_project(tmp_path), "config", "--set", "lease.ttl_s", "9", "--write")
+    assert code == 1 and out == ""
+    assert "--set" in err and "goes with `defaults`" not in err
+    assert PACKAGED_DEFAULTS.read_bytes() == before
+
+
+def test_setting_a_key_to_the_word_defaults_is_still_a_plain_write(tmp_path):
+    """Not the packaged file: `--set KEY defaults` writes the string `defaults` to KEY."""
+    code, out, _err = run_cli(_project(tmp_path), "config", "--set", "lease.ttl_s", "defaults")
+    assert "packaged defaults" not in out and "[lease]" not in out
+    assert code != 0  # ttl_s is an integer: refused, by the writer
+
+
+def test_write_without_defaults_leaves_the_packaged_file_alone(tmp_path):
+    before = PACKAGED_DEFAULTS.read_bytes()
+    repo = _project(tmp_path)
+    for argv in (("config", "--write"), ("config", "--set", "lease.ttl_s", "9", "--write")):
+        assert run_cli(repo, *argv)[0] == 1
+    assert PACKAGED_DEFAULTS.read_bytes() == before
+
+
+def test_a_file_that_is_not_a_regular_file_reads_as_missing_and_never_blocks(tmp_path, monkeypatch):
+    """A FIFO at the path would block a read forever."""
+    fifo = tmp_path / "default.toml"
+    os.mkfifo(fifo)
+    monkeypatch.setattr(DT, "PACKAGED_DEFAULTS", fifo)
+    assert DT.current() == ""
+
+
+def test_printing_a_missing_or_undecodable_file_fails_cleanly(tmp_path, monkeypatch):
+    path = tmp_path / "default.toml"
+    monkeypatch.setattr(DT, "PACKAGED_DEFAULTS", path)
+    assert API.configure(tmp_path, API.ConfigEdit(defaults=True)).exit == 1  # missing
+    path.write_bytes(b"\xff")
+    assert API.configure(tmp_path, API.ConfigEdit(defaults=True)).exit == 0  # replaced, printed
+
+
+def test_an_int_for_a_bool_knob_is_a_bad_value_not_an_equal_one(packaged, tmp_path, capsys):
+    """`False == 0` in Python, and TOML has no such equality."""
+    knob = next(f.name for f in dataclasses.fields(Config().lease) if f.type == "bool")
+    path = tmp_path / "default.toml"
+    path.write_text(f"[lease]\n{knob} = {int(getattr(Config().lease, knob))}\n", "utf-8")
+    packaged(path)
+    cfg = Config.load(None, env={})
+    assert isinstance(getattr(cfg.lease, knob), bool)
+    assert f"lease.{knob}" in capsys.readouterr().err
+
+
+def test_the_foreign_gate_tables_are_passed_over_by_design():
+    """`[gate.*]` is `Config._FOREIGN_TABLES`: another reader owns it, so it is not drift."""
+    assert "gate" in Config._FOREIGN_TABLES and "gate" in _shipped()
+
+
+def test_key_drift_points_at_the_repair(packaged, tmp_path, capsys):
+    path = tmp_path / "default.toml"
+    path.write_text("[lease]\nno_such_knob = 1\n", "utf-8")
+    packaged(path)
+    Config.load(None, env={})
+    assert "pins regenerate --only default-toml" in capsys.readouterr().err
+
+
 def test_the_cli_prints_the_file_whole(tmp_path):
     code, out, _err = run_cli(_project(tmp_path), "config", "defaults")
     assert code == 0

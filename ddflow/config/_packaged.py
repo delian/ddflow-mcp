@@ -57,6 +57,12 @@ def packaged() -> dict[str, Any]:
         return {}
 
 
+def _differs(have: Any, raw: Any) -> bool:
+    """Does the packaged ``raw`` differ from the declared ``have``? Python says `False == 0`;
+    TOML does not, so a bool against a non-bool is a difference (and then a bad value)."""
+    return have != raw or isinstance(have, bool) is not isinstance(raw, bool)
+
+
 def _lay_section(cfg: Any, sec: str, table: dict[str, Any], drift: list[str]) -> None:
     """Lay one `[sec]` table under ``cfg``, adding to ``drift`` each key that is not the
     declaration's. Only a declared field is a knob: every object has a `__class__`."""
@@ -65,7 +71,11 @@ def _lay_section(cfg: Any, sec: str, table: dict[str, Any], drift: list[str]) ->
     for knob, raw in table.items():
         if knob not in known:
             drift.append(f"{sec}.{knob}")
-        elif getattr(target, knob) != raw:
+        elif _differs(getattr(target, knob), raw):
+            if isinstance(getattr(target, knob), bool) is not isinstance(raw, bool):
+                bad = f"the packaged {PACKAGED_DEFAULTS} holds a bad {sec}.{knob}: not a boolean"
+                _say(f"{bad}; {_BUILT_IN}")
+                continue
             try:  # a copy: the parse is shared by every load in this process
                 cfg._apply_knob(sec, knob, copy.deepcopy(raw), "default", False)
                 drift.append(f"{sec}.{knob}")
