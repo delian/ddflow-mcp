@@ -181,6 +181,7 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
     assert out.data["outcome"] == "passed", out.data["text"]
     assert "marked degraded" in out.data["text"], out.data["text"]
     st = fold(EventLog(repo).read_all(), strict=False)
+    rubber_duck_at = st.items["T1"].gates["rubber_duck"].evidence["review_degraded"][-1]["at"]
     critic_rec = st.items["T1"].gates.get("critic")
     critic_before = list((critic_rec.evidence.get("review_degraded") or []) if critic_rec else [])
 
@@ -192,11 +193,13 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
         "the expired reviewer was not re-probed: it is still shed forever" + "\n" + after
     )
     # It re-hit the wall on the re-probe and was marked degraded again in critic's own
-    # evidence, so it stays shed for the NEXT gate (the mark is fresh), not dropped
-    # permanently. A run that never re-probes, or re-probes but drops the re-mark, leaves
-    # critic's review_degraded ungrown and the revision mark's `at` unchanged.
+    # evidence, so it stays shed for the NEXT gate (the mark is FRESH, stamped now), not
+    # dropped permanently. A run that never re-probes, or re-probes but drops the re-mark,
+    # leaves critic's review_degraded ungrown. The fresh `at` (strictly newer than the
+    # first run's mark) is what the next cooldown is measured from.
     st_after = fold(EventLog(repo).read_all(), strict=False)
     critic_rec = st_after.items["T1"].gates.get("critic")
     critic_after = list((critic_rec.evidence.get("review_degraded") or []) if critic_rec else [])
     assert len(critic_after) == len(critic_before) + 1, critic_after
     assert critic_after[-1]["reviewer"] == "exhausted", critic_after
+    assert critic_after[-1]["at"] > rubber_duck_at, (rubber_duck_at, critic_after)
