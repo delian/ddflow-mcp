@@ -6,11 +6,11 @@ A read verb (r-read-verbs-read-only): it appends nothing. The choice is
 
 from __future__ import annotations
 
-import time
-import tomllib
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
+from ...adapters.toml import TomlError, TomlLibIo
 from ...config import Config
 from ...config_sections.agent import family_for
 from ...core import outcome as O
@@ -36,8 +36,8 @@ def _declares_trust(path: Path, name: str) -> bool:
     """Does the template's own table name a tier? A `Template` reads 0 for one it omits, and
     a tier nobody wrote is unknown, not the lowest."""
     try:
-        tables = tomllib.loads(path.read_text("utf-8")).get("template", {})
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        tables = TomlLibIo().read(path).get("template", {})
+    except (OSError, TomlError):
         return False
     row = tables.get(name) if isinstance(tables, dict) else None
     return isinstance(row, dict) and "trust" in row
@@ -147,7 +147,7 @@ def next_lane(
     log, cfg, st = _load(repo, agent)
     if unknown := _unknown_phase(st, phase):
         return O.failed("next", unknown, phase=phase)
-    now = time.time()
+    now = CLOCK.wall()
     me = cfg.agent.id or log.agent_id
     p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me)
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
