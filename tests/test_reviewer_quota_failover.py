@@ -181,7 +181,8 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
     assert out.data["outcome"] == "passed", out.data["text"]
     assert "marked degraded" in out.data["text"], out.data["text"]
     st = fold(EventLog(repo).read_all(), strict=False)
-    critic_before = list(st.items["T1"].gates.get("critic").evidence.get("review_degraded") or [])
+    critic_rec = st.items["T1"].gates.get("critic")
+    critic_before = list((critic_rec.evidence.get("review_degraded") or []) if critic_rec else [])
 
     before = (tmp_path / "exhausted.seen").read_text()
     out2 = api.review(repo, gate="critic", item="T1", branch="feat")
@@ -195,6 +196,7 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
     # permanently. A run that never re-probes, or re-probes but drops the re-mark, leaves
     # critic's review_degraded ungrown and the revision mark's `at` unchanged.
     st_after = fold(EventLog(repo).read_all(), strict=False)
-    critic_after = list(st_after.items["T1"].gates["critic"].evidence.get("review_degraded") or [])
+    critic_rec = st_after.items["T1"].gates.get("critic")
+    critic_after = list((critic_rec.evidence.get("review_degraded") or []) if critic_rec else [])
     assert len(critic_after) == len(critic_before) + 1, critic_after
     assert critic_after[-1]["reviewer"] == "exhausted", critic_after
