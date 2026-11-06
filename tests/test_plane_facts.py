@@ -74,6 +74,13 @@ def test_a_bad_sources_table_does_not_hide_a_plane_defect():
     assert any("[sources]" in f for f in found) and any("plane.p" in f for f in found)
 
 
+def test_a_bad_sources_table_is_not_blamed_on_each_fact():
+    fact = {"v": 1, "s": "documented", "src": "b", "d": "2026-11-05"}
+    assert planefacts.problems({"sources": "x", "plane": {"p": {"k": fact}}}) == [
+        "[sources] is not a table"
+    ]
+
+
 def test_rows_of_a_plane_it_does_not_have_are_empty():
     assert planefacts.rows(planefacts.load(), "nosuch") == []
 

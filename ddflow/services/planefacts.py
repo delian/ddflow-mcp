@@ -86,7 +86,7 @@ def problems(data: dict[str, Any]) -> list[str]:
     if not isinstance(planes, dict):
         return shape
     if not isinstance(sources, dict):
-        sources = {}
+        sources = None  # already reported above; do not blame each fact for it
     harnesses = set(harnessreg.ids())
     out = list(shape)
     for name, row in sorted(planes.items()):
