@@ -136,6 +136,7 @@ from .lifecycle import (
     claim,
     complete,
     heartbeat,
+    next_lane,
     unblock,
 )
 from .lifecycle import merge as merge_item
@@ -322,6 +323,7 @@ __all__ = [
     "merge_item",
     "model_show",
     "next_item",
+    "next_lane",
     "onboard_run",
     "phase_add",
     "phase_close",

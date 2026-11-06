@@ -2750,6 +2750,12 @@
       swarm.seed_handoff_chars = 1200   [default]
           Characters of an earlier lane's handoff note kept in the seed pack. Zero
           drops the note.
+      swarm.dispatch_note_chars = 500   [default]
+          Longest dispatch note `ddflow next --lane` returns for `claim --note`, in
+          characters. The figures come first, so a cut loses only the reasons.
+      swarm.dispatch_why_items = 5   [default]
+          How many refusals `ddflow next --lane` names when nothing is eligible; the
+          rest are counted, not listed. Zero gives the count alone.
       swarm.launch_enabled = False   [default]
           Whether the scheduler may start lanes itself from operator-approved
           templates (D-swarm-answers Q2). Off by default: a lane then starts only when

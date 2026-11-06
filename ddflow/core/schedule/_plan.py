@@ -14,7 +14,7 @@ from ..model import REVIEW, RUNNING, Item, State
 from ._filters import PlanCtx, item_blocker, order_terms
 from ._parallel import _cap_words, parallel_line
 from ._readiness import Blocked, Plan, unpickable
-from ._reserved import open_slots, reserved_note, tree_cap
+from ._reserved import caps, open_slots, reserved_note
 from ._resources import bug_items, interrupted, needs_tree
 
 #: What a plan names as holding work back when a slot is free but reserved.
@@ -238,19 +238,9 @@ def plan(
     # holds only candidates from `phase`, so with `--phase` the cap was applied against
     # a count of ~0 and two agents each asking about their own phase were both told to
     # go ahead.
-    live_items = [i for i in live if i in state.items and not state.items[i].removed]
-    in_flight = len(live_items)
-    with_trees = len([i for i in live_items if live[i].worktree])
-    # The limit in force: the caller's Decision (adaptive or fixed, `services/flowstate`),
-    # else `max_parallel_tasks` as it always was. A shrink never touches a running lease:
-    # in flight above the limit simply leaves no slot. Floor 1.
-    limit = max(1, parallel.limit) if parallel is not None else cfg.schedule.max_parallel_tasks
-    paused = parallel is not None and parallel.admit_paused
-    flight_slots = 0 if paused else max(0, limit - in_flight)
-    if cfg.worktree.enabled:
-        tree_slots = max(0, tree_cap(cfg, limit) - with_trees)
-    else:
-        tree_slots = flight_slots  # no trees are made, so no tree cap applies
+    c = caps(state, cfg, live, parallel)
+    live_items, in_flight, with_trees, limit = c.live_items, c.in_flight, c.with_trees, c.limit
+    flight_slots, tree_slots = c.flight_slots, c.tree_slots
     slots = min(flight_slots, tree_slots)
     if slots == flight_slots:
         cap = _cap_words(cfg, parallel, limit)
