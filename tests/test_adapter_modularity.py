@@ -12,6 +12,7 @@ This test is the dry run: a throwaway family in a temporary package is found wit
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -102,6 +103,12 @@ def test_discovery_order_is_the_sorted_module_names(tmp_path, monkeypatch):
             del sys.modules[name]
 
 
+def _families_named(names: set[str], text: str) -> list[str]:
+    """The names in `text`, each ending a word of an identifier: `Fs` is in `Fs,`, `FakeFs` and
+    `FsPort`, never in `Fsio`, which is another family."""
+    return sorted(n for n in names if re.search(rf"{re.escape(n)}(?![a-z0-9_])", text))
+
+
 def test_the_shared_files_name_no_family_that_has_its_own_files():
     """A family named in a shared file is a family that had to edit it."""
     import ddflow.adapters as A
@@ -112,8 +119,16 @@ def test_the_shared_files_name_no_family_that_has_its_own_files():
         text = (ROOT / rel).read_text("utf-8")
         # the baseline ceiling names the legacy ports; in prose "Git" is also just a word
         names = every - LEGACY if rel.endswith((".md", "test_ports_contract.py")) else every
-        named = sorted(n for n in names if n in text)
+        named = _families_named(names, text)
         assert not named, f"{rel} names {named}: it is a per-family file now, not a shared list"
+
+
+def test_a_family_named_in_a_shared_file_is_caught_and_a_longer_name_is_not():
+    """The guard still bites on the real ceiling file, and only `Fsio` does not count as `Fs`."""
+    text = (ROOT / "tests" / "test_ports_contract.py").read_text("utf-8")
+    assert "Fsio" in text and _families_named({"Fs"}, text) == []
+    for mention in ("Fs", "`Fs`", "from .fs import Fs\n", "FakeFs", "LocalFs", "FsPort", "(Fs)"):
+        assert _families_named({"Fs"}, text + mention) == ["Fs"], mention
 
 
 def test_every_family_has_its_four_per_family_homes():
