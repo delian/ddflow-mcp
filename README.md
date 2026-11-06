@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=ede9a1895679 -->
+<!-- ddflow:begin README/toc sha=8e8631b33231 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -284,6 +284,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [What it reports rather than fixes](#what-it-reports-rather-than-fixes)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
   - [Model-tier hint (advisory)](#model-tier-hint-advisory)
+  - [Pull dispatch: `ddflow next --lane NAME`](#pull-dispatch-ddflow-next---lane-name)
 - [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
 - [Architectural decisions](#architectural-decisions)
 - [Recall — "have we been here before?"](#recall--have-we-been-here-before)
@@ -295,6 +296,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [The check every add runs](#the-check-every-add-runs)
 - [Operational memory](#operational-memory)
 - [Resources and long-running jobs](#resources-and-long-running-jobs)
+- [Usage meters](#usage-meters)
 - [Dependencies on another repository](#dependencies-on-another-repository)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
@@ -1115,7 +1117,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 542 knobs.
+cadences, and the rest of the 573 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5399,7 +5401,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 542): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 573): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5681,7 +5683,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=a34cbc7cb955 -->
+<!-- ddflow:begin README/tools sha=b0c89db0c31e -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5758,7 +5760,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_job_end` | all | Record that a job ended and how. |
 | Doing the work | `ddflow_job_list` | all | Long-running jobs and their LIVE status: running, exited (with the exit code its log recorded), gone… |
 | Doing the work | `ddflow_job_run` | all | Launch a LONG-RUNNING command for an item (a training run, a data generation, a model server) detached into… |
-| Doing the work | `ddflow_next` | core | What may be started RIGHT NOW, and for everything that may not, the reason. |
+| Doing the work | `ddflow_next` | core | What may be started RIGHT NOW, and why the rest may not. |
 | Doing the work | `ddflow_release` | standard | Give up a lease without completing the item — when you are handing off, stopping, or recovering someone… |
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
@@ -5979,7 +5981,7 @@ declared once and persists — see
 
 ## Configuration
 
-542 knobs across 51 sections, every one documented in place and listed, with its default
+573 knobs across 52 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6046,8 +6048,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=19de8e1407c1 -->
-<details><summary>All 542 knobs across 51 sections</summary>
+<!-- ddflow:begin README/knobs sha=c12feaaeb1eb -->
+<details><summary>All 573 knobs across 52 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6073,6 +6075,8 @@ long default is left to `ddflow config --explain`.
 | `lease.shared_globs` | `[]` |  |
 | `lease.new_file_globs` | (long: see `ddflow config --explain`) |  |
 | `lease.append_only_globs` | `[]` |  |
+| `lease.scan_view_trees_max` | `16` |  |
+| `lease.scan_view_verdicts_max` | `0` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |
 | `worktree.branch_prefix` | `"ddflow/"` |  |
@@ -6081,6 +6085,7 @@ long default is left to `ddflow config --explain`.
 | `worktree.remove_on_merge` | `true` |  |
 | `worktree.dispose_finished` | `true` |  |
 | `worktree.sweep_min_age_s` | `3600` |  |
+| `worktree.sweep_interval_s` | `900` |  |
 | `worktree.max_parallel` | `0` |  |
 | `worktree.sync_before_start` | `true` |  |
 | `worktree.adopt_existing` | `true` |  |
@@ -6204,6 +6209,8 @@ long default is left to `ddflow config --explain`.
 | `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
 | `schedule.optimizer` | `"greedy-v1"` |  |
 | `schedule.bugs_first` | `true` |  |
+| `schedule.reserved_slots` | `0` |  |
+| `schedule.reserved_tags` | `["ddflow-gap"]` |  |
 | `schedule.dx_priority` | `8` |  |
 | `schedule.bug_priority` | `10` |  |
 | `schedule.dx_tags` | `["dx"]` |  |
@@ -6294,6 +6301,7 @@ long default is left to `ddflow config --explain`.
 | `loops.no_progress_window` | `60` |  |
 | `loops.wait_cycle` | `true` |  |
 | `loops.wait_cycle_shown` | `5` |  |
+| `loops.wait_alarm_s` | `1200` |  |
 | `loops.on_detect` | `"warn"` | `warn` \| `block` |
 | `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
 | `locks.suggest_globs` | `true` |  |
@@ -6308,6 +6316,11 @@ long default is left to `ddflow config --explain`.
 | `locks.probe_merge_tree_min_git` | `"2.38"` |  |
 | `lanes.window_s` | `86400` |  |
 | `lanes.stale_after_s` | `0` |  |
+| `lanes.fleet_window_s` | `0` |  |
+| `lanes.fleet_max_rows` | `18` |  |
+| `lanes.fleet_items` | `5` |  |
+| `lanes.fleet_failed_patterns` | (long: see `ddflow config --explain`) |  |
+| `lanes.fleet_reason_chars` | `120` |  |
 | `lanes.watch_interval_s` | `5` |  |
 | `lanes.advise_max` | `10` |  |
 | `lanes.brief_notes` | `3` |  |
@@ -6415,18 +6428,34 @@ long default is left to `ddflow config --explain`.
 | `swarm.seed_entry_chars` | `600` |  |
 | `swarm.seed_item_chars` | `1500` |  |
 | `swarm.seed_handoff_chars` | `1200` |  |
+| `swarm.dispatch_note_chars` | `500` |  |
+| `swarm.dispatch_why_items` | `5` |  |
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `quota.stale_after_s` | `900` |  |
+| `quota.claude_state` | `""` |  |
+| `quota.claude_projects` | `""` |  |
+| `quota.kilo_db` | `""` |  |
+| `quota.snapshot_path` | `""` |  |
+| `quota.samples_path` | `""` |  |
+| `quota.samples_max_bytes` | `4194304` |  |
+| `quota.sample_interval_s` | `300` |  |
+| `quota.sample_tail_bytes` | `8192` |  |
+| `quota.token_windows` | `["5h", "day", "week"]` |  |
+| `quota.token_fields` | (long: see `ddflow config --explain`) |  |
+| `quota.transcript_max_bytes` | `1073741824` |  |
+| `quota.kilo_timeout_s` | `10.0` |  |
 | `log.reuse_parsed` | `true` |  |
-| `log.max_cached_events` | `100000` |  |
+| `log.max_cached_events` | `200000` |  |
 | `log.redact_builtin_shapes` | `true` |  |
 | `log.commit_events` | `true` |  |
 | `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
 | `log.commit_events_message` | `"events: {reason}"` |  |
 | `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
-| `log.snapshot` | `true` |  |
+| `log.snapshot` | `false` |  |
 | `log.snapshot_min_events` | `5000` |  |
+| `log.snapshot_max_mb` | `256` |  |
 | `log.snapshot_stale_days` | `7` |  |
 | `log.snapshot_touch_s` | `86400` |  |
 | `log.evidence_blobs` | `false` |  |
@@ -6510,6 +6539,7 @@ long default is left to `ddflow config --explain`.
 | `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
 | `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
 | `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |
+| `mcp.lane_tools` | `""` |  |
 | `mcp.profile_lean_budget_tokens` | `16000` |  |
 | `mcp.profile_mid_budget_tokens` | `32000` |  |
 | `mcp.output_schemas` | `"off"` | `off` \| `on` |
@@ -6527,6 +6557,9 @@ long default is left to `ddflow config --explain`.
 | `ci.max_workers` | `48` |  |
 | `ci.max_concurrent_suites` | `1` |  |
 | `ci.selected_lock_tests` | `20` |  |
+| `ci.selected_lock_s` | `600` |  |
+| `ci.selected_lock_min_runs` | `5` |  |
+| `ci.selected_lock_runs` | `50` |  |
 | `ci.suite_wait_s` | `1800` |  |
 | `ci.suite_queue_stale_s` | `120` |  |
 | `ci.suite_queue_grace_s` | `120` |  |

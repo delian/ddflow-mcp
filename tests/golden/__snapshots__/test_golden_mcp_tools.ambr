@@ -688,11 +688,11 @@
          },
          "full": {
           "type": "boolean",
-          "description": "Lift the output caps ([output] max_rows, max_chars) for this call."
+          "description": "Lift the output caps."
          },
          "cursor": {
           "type": "integer",
-          "description": "Row to resume a cut list at."
+          "description": "Row to resume at."
          },
          "as_agent": {
           "type": "string",
@@ -1189,7 +1189,7 @@
          },
          "full": {
           "type": "boolean",
-          "description": "Lift the output caps ([output] max_rows, max_chars) for this call."
+          "description": "Lift the output caps."
          },
          "limit": {
           "type": "integer",
