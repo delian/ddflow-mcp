@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin, `ddflow harness record`, scrubbed",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05"
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "00000000-0000-0000-0000-000000000001",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "ToolSearch",
+    "tool_input": {
+      "query": "select:mcp__ddflow__ddflow_brief",
+      "max_results": 1
+    },
+    "tool_response": {
+      "matches": [
+        "mcp__ddflow__ddflow_brief"
+      ],
+      "query": "select:mcp__ddflow__ddflow_brief",
+      "total_deferred_tools": 32
+    },
+    "tool_use_id": "toolu_01QQZMZ1JiNgPQ8Pa1GgpuNA",
+    "duration_ms": 3
+  },
+  "expect": {
+    "session_id": "s-1",
+    "cwd": "/w",
+    "tool": "ToolSearch"
+  }
+}

@@ -670,7 +670,7 @@
     'ddflow_next': '''
       {
        "name": "ddflow_next",
-       "description": "What may be started RIGHT NOW, and for everything that may not, the reason. Independent items in the ready set can be run in parallel worktrees by separate agents. Returns ready=[] when nothing is actionable — that is a result, not an error, and it never means 'pick something anyway'.",
+       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -681,6 +681,18 @@
          "kind": {
           "type": "string",
           "description": "'task' (default) or 'phase'."
+         },
+         "lane": {
+          "type": "string",
+          "description": "Answer this idle lane."
+         },
+         "full": {
+          "type": "boolean",
+          "description": "Lift the output caps."
+         },
+         "cursor": {
+          "type": "integer",
+          "description": "Row to resume at."
          },
          "as_agent": {
           "type": "string",
@@ -1175,13 +1187,17 @@
           "type": "string",
           "description": "Limit to one phase (and, for forecast, its critical path)."
          },
+         "full": {
+          "type": "boolean",
+          "description": "Lift the output caps."
+         },
          "limit": {
           "type": "integer",
           "description": "Items listed per wave in the text view (default 10; 0 = all)."
          },
          "by_tag": {
           "type": "string",
-          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the ..."
+          "description": "Group the live items by this label namespace (e.g. ..."
          },
          "out": {
           "type": "string",
@@ -1297,11 +1313,11 @@
          },
          "view": {
           "type": "string",
-          "description": "summary (default), forecast, retro, skips, lanes, stages or locks."
+          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief."
+          "description": "Lane name (or a unique part); with view=brief or resume."
          },
          "group_by": {
           "type": "string",

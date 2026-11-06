@@ -128,6 +128,43 @@ def _routers_members(v: Any) -> tuple[Any, list[str]]:
     ]
 
 
+#: Shortest and longest one-time code: below this a guess within the attempts is thinkable.
+MIN_CODE, MAX_CODE = 8, 64
+
+
+def _positive(v: object) -> str:
+    return "" if isinstance(v, int) and not isinstance(v, bool) and v > 0 else "must be above 0"
+
+
+def _code_length(v: object) -> str:
+    fits = isinstance(v, int) and not isinstance(v, bool) and MIN_CODE <= v <= MAX_CODE
+    return "" if fits else f"must be {MIN_CODE}..{MAX_CODE}"
+
+
+def _verb_table(v: object) -> str:
+    fits = isinstance(v, dict) and all(
+        isinstance(m, list) and all(isinstance(x, str) for x in m) for m in v.values()
+    )
+    return "" if fits else 'must be a table of lists of verbs, e.g. { read = ["status"] }'
+
+
+def _capability_verbs() -> dict[str, list[str]]:
+    return {
+        "read": [
+            "help", "brief", "next", "status", "show", "board", "progress", "history", "list",
+            "search", "recall", "similar", "gate status", "gate list", "decision list", "decision show",
+            "decision search", "decision applicable", "rule list", "rule show", "rule search",
+            "lesson search", "memory list", "version show", "flow show", "job list",
+        ],
+        "claim": [
+            "claim", "heartbeat", "release", "wait", "gate record", "gate run", "merge", "complete",
+        ],
+        "note": ["session note", "session message", "bug found"],
+        "start_lane": [],
+        "approve_marked": [],
+    }  # fmt: skip
+
+
 @declare("agent")
 @dataclass
 class AgentConfig:
@@ -216,4 +253,41 @@ class AgentConfig:
     ask_code_length: int = knob(
         8,
         doc="How many characters the one-time code of an ask has, when the transport asks for one (a remote channel proves the person got the message by presenting it). Read aloud or typed on a phone, so it avoids look-alike characters; the engine never makes it shorter than 4. Default 8. Change it for the project (`ddflow config --set agent.ask_code_length 6`), for this machine (add --local), per run (DDFLOW_AGENT_ASK_CODE_LENGTH), or over MCP with `ddflow_configure`.",
+    )
+    # Paired tokens (`services/auth`, P-remote.auth). Beside the roles: which verbs a capability
+    # allows is the other half of the table above. Deliberately no knob for where the hashes live:
+    # a cloned project's config must not point verification at a file it wrote.
+    token_ttl_h: int = knob(
+        168,
+        doc="Hours a paired token lives unless `ddflow pair --ttl-h` says otherwise (default 168, a week). There is no never-expiring token: pair again or rotate (`ddflow tokens rotate`).",
+        check=_positive,
+    )
+    token_max_ttl_h: int = knob(
+        720,
+        doc="The longest `ddflow pair --ttl-h` may ask for, in hours (default 720, 30 days); above it the pairing is refused.",
+        check=_positive,
+    )
+    pair_ttl_s: int = knob(
+        300,
+        doc="Seconds the one-time code `ddflow pair` shows stays redeemable (default 300). It is meant to be read out and used at once.",
+        check=_positive,
+    )
+    pair_code_length: int = knob(
+        10,
+        doc=f"Characters in the secret part of the one-time pairing code ({MIN_CODE}..{MAX_CODE}, default 10).",
+        check=_code_length,
+    )
+    pair_max_attempts: int = knob(
+        5,
+        doc="Wrong guesses a pairing survives (default 5): the last one burns it, and the operator pairs again.",
+        check=_positive,
+    )
+    capability_verbs: dict[str, list[str]] = knob(
+        factory=_capability_verbs,
+        doc="Capability name (`[agent].roles`) to the verbs it allows a token holder: `gate status`, or a glob like `gate *`. Read with [agent].roles this is the per-role verb list, and it is deny by default: a verb no capability names is the operator's, whose role holds `*` (or the capability `operator`). A token is checked against it on every call; a person at a terminal with no token is not.",
+        check=_verb_table,
+    )
+    require_operator_token: bool = knob(
+        False,
+        doc="Off by default, so with no token presented a shell that unsets its agent markers still passes as the operator: that gap stays open unless this is on (D-operator-token-default). On: the verbs that today only ask whether the caller carries an agent marker also need an operator token (`DDFLOW_TOKEN`), so a shell with its markers unset is no longer a person. While no live operator token exists, `ddflow pair --role operator` still works from a marker-free terminal, or nobody could mint the first one or recover after the last expired. A same-user process can still edit config and the store: this stops accidents and prompt injection, not a hostile process of the same user.",
     )

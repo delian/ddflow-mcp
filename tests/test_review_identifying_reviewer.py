@@ -75,3 +75,38 @@ def test_independence_is_satisfied_by_the_identifying_cross_family_reviewer(repo
     cfg = Config.load(repo, env={})
     ok, why = G.reviewer_independence(st, cfg, "T1", "deepseek")
     assert ok, why
+
+
+def _setup_unknown_author(repo: Path, tmp_path: Path) -> None:
+    """The author has NO session model (and no `[agent].family`), so its family is
+    unknown, and the critic gate goes to TWO cross-family reviewers: grok (xai) and
+    gemini (google). Both review clean (bug B1a30dc3303)."""
+    xai = _reviewer(tmp_path / "rxai")
+    google = _reviewer(tmp_path / "rgoogle")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        f'[[reviewer]]\nname = "grok"\nkind = "command"\ncommand = "{xai}"\n'
+        'model = "grok-4.7"\nfamily = "xai"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "gemini"\nkind = "command"\ncommand = "{google}"\n'
+        'model = "gemini-2.5-pro"\nfamily = "google"\ngates = ["critic"]\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+
+
+def test_an_unknown_author_accepts_a_clean_cross_family_panel(repo, tmp_path):
+    _setup_unknown_author(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="T1", branch="feat")
+    assert out.exit == 0, out.reason
+    ev = _ev(repo)
+    assert ev["family"] in ("xai", "google"), ev
+    st = fold(EventLog(repo).read_all(), strict=False)
+    cfg = Config.load(repo, env={})
+    ok, why = G.reviewer_independence(st, cfg, "T1", "")
+    assert ok, why

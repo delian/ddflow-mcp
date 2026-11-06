@@ -5,8 +5,8 @@ model family and the capabilities its role holds. Nothing is decided per role in
 capability is a name a consumer asks for (``can(actor, "waive")``) and the `[agent].roles`
 table says who holds it (decisions D-remote and D-shared-engines-r2 10). This is the engine
 the serve auth, hub and scoped tokens, the approvals engine and waiver approvers are to call
-(`resolve_actor`, `require`) rather than each branching on "is this an agent"; those consumers
-land as their own items, none calls it yet.
+(`resolve_actor`, `require`) rather than each branching on "is this an agent"; a token verified
+by `services/auth` reaches every caller through `identity.credential`.
 
 Where the role comes from, strongest first:
 
@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..config import Config, family_for, router_set
-from .identity import is_agent
+from .identity import credential, is_agent
 
 ANY = "*"
 
@@ -80,7 +80,10 @@ def resolve_actor(
     model: str = "",
 ) -> Actor:
     """The actor behind a call. ``credential_role`` is a role a token proved; ``authenticated``
-    says the id itself was proved (so `[agent].actors` may name its role)."""
+    says the id itself was proved (so `[agent].actors` may name its role). A token bound for
+    this call (`identity.credential`) outranks all of it: its name is the id, its role the role."""
+    if (proof := credential()) is not None:
+        agent_id, credential_role, authenticated = proof.name, proof.role, True
     role, source = _role(cfg, agent_id, requested_agent, via_mcp, credential_role, authenticated)
     members = router_set(model, cfg.agent.routers) if model else None
     return Actor(

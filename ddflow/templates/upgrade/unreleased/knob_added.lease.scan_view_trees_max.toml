@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "lease.scan_view_trees_max"
+new = "16"
+why = "status and brief measure at most this many stale worktrees (one git process each); `ddflow recover` is never capped. (PS-git-batch)"
+effect = "Default-behaviour change, an exception to r-upgrade-safe (D-git-batch-defaults): past 16 stale worktrees, status and brief report the rest NOT MEASURED and treat them as holding work. To restore the old behaviour set lease.scan_view_trees_max to at least the number of stale worktrees, e.g. 1000000 (there is no unlimited value, and 0 measures none)."
+impact = "additive"

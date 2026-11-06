@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..core.admission import glob_conflict
+from ..core.admission import conflicts, glob_conflict, shared_globs
 from ..core.globs import overlap as globs_overlap
 
 
@@ -190,10 +190,14 @@ def queue_ahead(
     # starts again at the back (`register` restarts `since`), so it is judged as new.
     same = mine is not None and mine["holder"] == holder and sorted(mine["globs"]) == sorted(globs)
     cutoff = mine["since"] if same else float("inf")
+    # A shared glob (`[lease] shared_globs`) is not exclusive, so an earlier waiter that asked
+    # for it is not "ahead" of a request that merely re-states it (B-update-queue-ignores-
+    # shared-globs): judge the overlap as `conflicts` does, shared globs excluded.
+    shared = shared_globs(cfg)
     for other, w in sorted(held.items(), key=lambda kv: (kv[1]["since"], kv[0])):
         if not w["queue"] or w["holder"] == holder or other == item_id or w["since"] >= cutoff:
             continue
-        if not any(globs_overlap(a, b) for a in globs for b in w["globs"]):
+        if not conflicts(globs, w["globs"], shared):
             continue
         # Its place is kept while its files are held, and for `waiter_reservation_s` after
         # they free up (the time it needs to come back and take them).

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -304,6 +305,86 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
+def _shed_degraded(revs, st, gate: str, cooldown_s: float, say) -> tuple[list, list]:
+    """(reviewers, shed names) -- the gate's pool with reviewers a quota/exhaustion wall
+    already marked (``RV.degraded_marks``) dropped, and the shed names said, in pool order
+    (the next enabled cross-family reviewer serves). An unmarked reviewer is never dropped:
+    it still gets one run to fail honestly before being marked.
+
+    ``cooldown_s`` is `[review].degraded_cooldown_s`: a reviewer is shed only while its
+    mark is younger than that many seconds. A mark at or past the cooldown is EXPIRED,
+    so the reviewer is re-probed (and re-marked if the wall is still up) instead of shed
+    forever -- a transient 429 used to permanently disable a cross-family reviewer
+    (bug B066719c493). <= 0 re-probes on every review (the mark blocks no run).
+    """
+    degraded = {
+        name: row
+        for name, row in RV.active_degraded_marks(st, cooldown_s).items()
+        if any(r.name == name for r in revs)
+    }
+    for name in sorted(degraded):
+        say(f"→ shed {name}: degraded ({degraded[name].get('reason') or 'quota/exhaustion'})")
+    return [r for r in revs if r.name not in degraded], sorted(degraded)
+
+
+def _note_degraded(res, r, gate: str, cooldown_s: float, extra_evidence: dict, say) -> None:
+    """Append the quota/exhaustion mark of one review to `extra_evidence` and SAY it, so a
+    degraded reviewer is recorded and surfaced instead of silently folded into
+    `unavailable` (B8efd3d1bc4). No mark for anything but a reviewer's own quota wall.
+
+    The mark carries ``at`` (the epoch second it was written) so it can EXPIRE after
+    `[review].degraded_cooldown_s` and the reviewer is re-probed (bug B066719c493)."""
+    if not res.degraded:
+        return
+    if extra_evidence is None:
+        extra_evidence = {}
+    extra_evidence.setdefault("review_degraded", []).append(
+        {
+            "reviewer": r.name,
+            "reason": res.degraded,
+            "gate": gate,
+            "model": r.model,
+            "family": r.resolved_family(),
+            "at": time.time(),
+        }
+    )
+    say(
+        f"→ {r.name} quota/exhaustion ({res.degraded}): marked degraded and shed from "
+        f"{gate} -- re-probed after {cooldown_s}s once the mark expires (the next enabled "
+        f"cross-family reviewer serves meanwhile)"
+    )
+
+
+#: Dispatch rank by independence tier: a reviewer OUTSIDE the author's family first, a
+#: different model of the same family next, and one that establishes nothing (the
+#: author's own model, or a model no map recognises) last. Falls back to the tail for a
+#: tier `review_tier` never returns, so an unknown enough reviewer still runs, just last.
+_TIER_RANK = {"family": 0, "model": 1, "none": 2}
+
+
+def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
+    """`revs` with the fast cross-family tier led, so a slow same-family reviewer is not
+    paid for before an outside-family one can serve (bug B19066e802f), and a reviewer
+    that establishes nothing runs last instead of first in config order.
+
+    The sort is STABLE: within a tier, config order survives, so order only yields when a
+    tier makes it. When the author cannot be named here (`[agent].family` and the session
+    model are both empty) `review_tier` returns `none` for every reviewer and the pool
+    keeps its config order -- a gate must not reorder on a guess about independence.
+
+    Degraded/429 reviewers are shed BEFORE this runs (`_shed_degraded`), so the cascade
+    B8efd3d1bc4 dropped decides the pool's members and this only orders what remains.
+    """
+
+    def rank(r):
+        return _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2)
+
+    ordered = sorted(revs, key=rank)
+    if [r.name for r in ordered] != [r.name for r in revs]:
+        say("→ order (cross-family first): " + ", ".join(r.name for r in ordered))
+    return ordered
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -313,7 +394,9 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
     `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, exactly as before.
+    unknown here the first tied reviewer is named, but the panel's other families are
+    carried in `reviewer_families` so a clean cross-family round is still seen (bug
+    B1a30dc3303).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
@@ -321,7 +404,7 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     return cross[0] if cross else best
 
 
-def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -419,6 +502,17 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         )
 
     it = st.items.get(item)
+    author_model, _ = _author_model(st, agent, "", cfg)
+    revs, shed = _shed_degraded(revs, st, gate, cfg.review.degraded_cooldown_s, say)
+    if not revs:
+        return unavailable(
+            f"Every reviewer for gate {gate!r} is degraded ("
+            + ", ".join(shed)
+            + ") and was shed. Recording UNAVAILABLE — which is NOT a pass. "
+            + "`ddflow doctor` names the degraded reviewers.",
+            how="",
+        )
+    revs = _order_cross_family_first(revs, author_model, cfg, say)
     # The head the diff is taken from, captured BEFORE the diff (B4f5be8179f): a commit
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
@@ -524,8 +618,8 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
                 )
         results.append(res)
         _say_result(say, res)
+        _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
-    author_model, _ = _author_model(st, agent, "", cfg)
     best = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
         best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say

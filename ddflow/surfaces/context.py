@@ -15,6 +15,7 @@ belongs in `api/`.
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
 import sys
 import textwrap
@@ -39,6 +40,7 @@ from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
 from . import projectkinds as PK
+from .registry import parsed_path
 from .render import emit_json
 
 #: Splitting into one piece is a rename, not a split.
@@ -95,6 +97,13 @@ class Ctx:
 
             harness = self.requested_agent = harness_identity.declared(
                 self.repo, scope=HR.session_fingerprint(os.environ)
+            )
+        # Before the identity: a presented token IS the identity (P-remote.auth). `api.auth`
+        # is imported only when there is a token to read or a proof to demand. A proof a server
+        # bound for this request (`identity.with_credential`) stands: nothing here clears it.
+        if ID.token_presented() or self.cfg.agent.require_operator_token:
+            importlib.import_module("ddflow.api.auth").bind_env(
+                self.repo, self.cfg, parsed_path(args)
             )
         who = ID.resolve(self.repo, self.cfg, self.requested_agent)
         # The layer that actually won, not a guess from comparing values. With nothing set

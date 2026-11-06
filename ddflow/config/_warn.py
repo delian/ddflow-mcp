@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from ..config_sections._compat import is_source_tree, upgrade_advice
+from ..config_sections import _compat as CV
 from ._tree import _CODE_TREE
 
 #: (root, key) already warned about in this process. `Config.load` runs several times per
@@ -46,7 +46,7 @@ def _warn_unknown(
     if members:
         what.append(f"{'; '.join(members)}; the rest of each is applied")
     # How to catch up depends on how this ddflow is installed: a checkout merges main.
-    fix = "merge main into this tree" if is_source_tree() else upgrade_advice(kind="index")
+    fix = "merge main into this tree" if CV.is_source_tree() else CV.upgrade_advice(kind="index")
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
         f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "

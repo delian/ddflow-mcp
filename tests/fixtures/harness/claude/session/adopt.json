@@ -1,0 +1,53 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "what `ddflow adopt` wrote, scrubbed",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05"
+  },
+  "wrote": [
+    ".claude/agents/ddflow-implementer.md",
+    ".claude/agents/ddflow-researcher.md",
+    ".claude/agents/ddflow-reviewer.md",
+    ".claude/commands/implement.md",
+    ".claude/settings.json",
+    ".gitattributes",
+    ".gitignore",
+    ".mcp.json",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/ddflow/drivers/deltas/claude-code.md",
+    "docs/ddflow/drivers/implement-phase.md"
+  ],
+  "config": {
+    ".mcp.json": {
+      "mcpServers": {
+        "ddflow": {
+          "command": "~/src/ddflow/.venv/bin/python3",
+          "args": [
+            "-m",
+            "ddflow.surfaces.mcp"
+          ],
+          "env": {
+            "PYTHONPATH": "~/src/ddflow"
+          }
+        }
+      }
+    },
+    ".claude/settings.json": {
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "# ddflow:begin hooks/prompt ddflow=0.2.10 fmt=1 sha=9814452d611c\nif [ -x \"~/src/ddflow/.venv/bin/python3\" ] && [ -f \"~/src/ddflow/ddflow/__init__.py\" ]; then PYTHONPATH=\"~/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"~/src/ddflow/.venv/bin/python3\" -m ddflow hooks run prompt --harness claude; elif command -v ddflow >/dev/null 2>&1; then ddflow hooks run prompt --harness claude; else echo 'ddflow: not found (the launcher recorded in this hook no longer exists and none is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install --claude' >&2; fi || true\n# ddflow:end hooks/prompt\n"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

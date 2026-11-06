@@ -43,10 +43,12 @@ from ..config_sections.mcp import McpConfig
 from ..config_sections.memory import MemoryConfig
 from ..config_sections.merge_queue import MergeQueueConfig
 from ..config_sections.metrics import MetricsConfig
+from ..config_sections.output import OutputConfig
 from ..config_sections.pins import PinsConfig
 from ..config_sections.plan import PlanConfig
 from ..config_sections.prompts import PromptsConfig
 from ..config_sections.quality import QualityConfig
+from ..config_sections.quota import QuotaConfig
 from ..config_sections.rag import RagConfig
 from ..config_sections.reinstruct import ReinstructConfig
 from ..config_sections.release import ReleaseConfig
@@ -154,6 +156,7 @@ class Config:
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
+    quota: QuotaConfig = field(default_factory=QuotaConfig)
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     pins: PinsConfig = field(default_factory=PinsConfig)
@@ -163,6 +166,7 @@ class Config:
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
     grants: GrantsConfig = field(default_factory=GrantsConfig)
     approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
     handoff: HandoffConfig = field(default_factory=HandoffConfig)

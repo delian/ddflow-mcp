@@ -65,6 +65,53 @@ def test_a_failure_the_base_shows_too_is_recorded_partial_baseline_red(repo) -> 
     assert bug in fold(EventLog(repo).read_all(), strict=False).bugs
 
 
+def test_a_refused_baseline_bug_says_why_no_bug_is_filed(repo, monkeypatch) -> None:
+    """B-baseline-bug-not-filed-silently: `bug_found` refuses (a near-duplicate is not filed),
+    and the reason must reach the evidence and the reason text instead of a silent 'bug not
+    filed'."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.core import outcome as O
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    monkeypatch.setattr(
+        GB,
+        "bug_found",
+        lambda *a, **k: O.refused("bug.found", "reads like an existing record B-baseline-red"),
+    )
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    ev: dict = {"failed_tests": [ID]}
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    outcome, why = GB.apply(
+        repo,
+        cfg,
+        "worker",
+        it,
+        "unit_tests",
+        gdef,
+        "failed",
+        ev,
+        lambda g, where=None: (
+            "failed",
+            {"exit": 1, "failed_tests": [ID], "summary": ["1 failed in 0.1s"]},
+        ),
+        False,
+    )
+    assert outcome == "partial", why
+    assert "reads like an existing record" in why, why
+    assert "reads like an existing record" in ev["baseline"]["not_filed"], ev["baseline"]
+
+
 def test_a_failure_the_base_does_not_show_stays_failed(repo) -> None:
     _project(repo, base_healthy=True)
     (repo / "healthy").unlink()  # the item's tree breaks what the base has
@@ -408,3 +455,47 @@ def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -
     outcome, why = GB.apply(repo, cfg, "w", it, "unit_tests", gdef, "failed", ev, None, False)
     assert outcome == "failed" and "new failure" not in why
     assert "new_failures" not in ev["baseline"] and not ev["baseline"].get("unmeasured")
+
+
+def _sha(repo: Path, ref: str = "HEAD") -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", ref], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
+    """B48c70b6773: the candidate forks from a red main; main then moves on and fixes the
+    failing test. The baseline is measured on the candidate's own merge-base (still red), not
+    the moved main tip (green) -- otherwise the branch's unchanged failure reads as new."""
+    from ddflow.services.gates import baseline_red as BR
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # main fails test_a (no `healthy` file)
+    red = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-qc", "cand"], check=True)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "main"], check=True)
+    (repo / "healthy").write_text("")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fix test_a on main"], check=True)
+    green = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "cand"], check=True)
+    assert green != red  # main has moved: the move is the whole point of the test
+
+    gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
+
+    def run(g, where=None):
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
+        failed = got.returncode != 0
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
+
+    found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
+    assert found["red"] is True, found
+    assert found["base_sha"] == red, found

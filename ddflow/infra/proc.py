@@ -27,7 +27,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from . import resources as R
 
@@ -168,6 +168,95 @@ def spawn_stdio(
         text=text,
         start_new_session=True,
     )
+
+
+@dataclass
+class PipedEnd:
+    """How `run_piped` ended: ``answer`` when ``work`` ended it, else ``code`` and the head of
+    ``stderr``. ``error`` is what kept it from starting; ``code`` below 0 is a kill."""
+
+    answer: Any = None
+    code: int | None = None
+    stderr: bytes = b""
+    error: OSError | None = None
+
+
+def run_piped(
+    argv: list[str],
+    work: Callable[[subprocess.Popen], Any],
+    *,
+    timeout: float,
+    stderr_bytes: int = 4096,
+) -> PipedEnd:
+    """Run ``argv`` in a session of its own with its binary pipes given to ``work``, the whole
+    cut at ``timeout`` seconds. A ``work`` that returns a value ends the run there and then;
+    None lets it go on to its exit status. stderr is drained alongside, so a chatty child
+    cannot stall, and a descendant that keeps the pipe open cannot hold the answer back.
+    Never signals a pid already reaped."""
+    try:
+        p = spawn_stdio(argv)
+    except OSError as exc:
+        return PipedEnd(error=exc)
+    head = bytearray()
+
+    def drain() -> None:
+        while chunk := p.stderr.read1(65536):  # type: ignore[union-attr]
+            head.extend(chunk[: stderr_bytes - len(head)])
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+    clock = threading.Timer(timeout, kill_group, (p,))
+    clock.start()
+    try:
+        answer = work(p)
+        if answer is not None:
+            return PipedEnd(answer=answer)
+        code = p.wait()
+        reader.join(1)
+        return PipedEnd(code=code, stderr=bytes(head))
+    finally:
+        clock.cancel()
+        if p.poll() is None:
+            stop_group(p)
+
+
+def pump_lines(src: Any, dst: Any, note: Callable[[str, bytes], None], direction: str) -> None:
+    """Copy ``src`` to ``dst`` line by line until EOF, closing ``dst``. ``note`` sees each line
+    BEFORE it passes, so a line is recorded before anything can answer it. A reader that
+    went away ends the copy quietly: that is how such a session ends."""
+    try:
+        for line in iter(src.readline, b""):
+            note(direction, line)
+            dst.write(line)
+            dst.flush()
+    except (BrokenPipeError, ValueError):
+        pass
+    finally:
+        with contextlib.suppress(OSError):
+            dst.close()
+
+
+def relay_stdio(argv: list[str], note: Callable[[str, bytes], None], *, grace_s: float) -> NoReturn:
+    """Stand between this process's own stdio and ``argv``, then END this process with the
+    child's exit code: its stdin goes to the child and the child's stdout comes back, ``note``
+    seeing each line (direction ``in`` or ``out``), until the child closes its stdout.
+
+    Unlike `run_piped` nothing cuts the run and stderr stays the caller's: a server lives as
+    long as its session. The exit is 0 when the child had to be stopped, because its reader
+    left and it did not exit within ``grace_s``. It is `os._exit`: the upstream copy is a
+    daemon blocked on our stdin and a normal shutdown aborts on that lock; both copies flush
+    every line. Raises OSError when the child cannot start."""
+    child = spawn_stdio(argv, stderr=None)
+    assert child.stdin is not None and child.stdout is not None
+    args = (sys.stdin.buffer, child.stdin, note, "in")
+    threading.Thread(target=pump_lines, args=args, daemon=True).start()
+    pump_lines(child.stdout, sys.stdout.buffer, note, "out")
+    try:
+        code = child.wait(timeout=grace_s)
+    except TimeoutExpired:
+        stop_group(child)
+        code = 0
+    os._exit(code)
 
 
 def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:

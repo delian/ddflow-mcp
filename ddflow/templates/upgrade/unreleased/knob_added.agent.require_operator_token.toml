@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "agent.require_operator_token"
+new = "false"
+why = "Whether the operator-only verbs need an operator token instead of the absence of an agent marker."
+effect = "off by default, so nothing changes and a shell with no agent marker still passes as the operator; on, a shell with no token is refused those verbs, except `ddflow pair --role operator` from a shell with no agent marker while no live operator token exists."
+impact = "additive"
