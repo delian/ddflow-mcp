@@ -62,9 +62,7 @@ def _fixed_in_window(bugs: dict[str, Any], now: float) -> int:
     return sum(
         1
         for b in bugs.values()
-        if b.fixed_at
-        and not b.open
-        and 0 <= clock.age_s(b.fixed_at, now) <= VIGIL_FIXED_WINDOW_S
+        if b.fixed_at and not b.open and 0 <= clock.age_s(b.fixed_at, now) <= VIGIL_FIXED_WINDOW_S
     )
 
 
@@ -129,9 +127,7 @@ def _reviewer_up(url: str) -> bool:
 def _render(data: dict[str, Any]) -> str:
     bugs = data["bugs"]
     by_sev = bugs["open_by_severity"]
-    sev_line = ", ".join(
-        f"{by_sev.get(sev, 0)} {sev}" for sev in (*BUG_SEVERITIES, "unspecified")
-    )
+    sev_line = ", ".join(f"{by_sev.get(sev, 0)} {sev}" for sev in (*BUG_SEVERITIES, "unspecified"))
     lines = [
         "# vigil",
         "",
