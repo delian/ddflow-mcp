@@ -3,16 +3,23 @@
 Regression test for bug B3a86c5cfb9: the coordinator reconstructed its hourly snapshot
 via 5+ shell pipelines (bug count+severity, stale pins, active lanes, interrupted,
 pending approvals, reviewer reachability). `vigil` returns that whole block in one pass,
-reusing the existing verbs rather than reimplementing them -- so this test fails against
-the unfixed code, which has no `vigil` at all.
+reusing the existing verbs -- so this test fails against the unfixed code, which has no
+`vigil` at all.
 """
 
 from __future__ import annotations
 
-import pytest
 from conftest import run_cli
 
 from ddflow.api.reporting import vigil as VV
+
+
+class _Rev:
+    """A reviewer the real classification code reads (name/enabled/base_url are all it asks)."""
+
+    name = "gemini"
+    enabled = True
+    base_url = "http://127.0.0.1:1"
 
 
 def _seed(repo):
@@ -28,17 +35,11 @@ def _seed(repo):
         assert code == 0, (out, err)
 
 
-def _quiet_pins_and_reviewers(monkeypatch, reviewers=(("gemini", "up"),)):
-    """Deterministic, offline: the pins check runs the snapshot suite and the reviewer
-    check probes endpoints; both are what this test is NOT about, so they are stubbed."""
-    monkeypatch.setattr(VV, "_stale_pins", lambda repo, cfg: [])
-    rows = [{"name": n, "reachability": r, "reason": ""} for n, r in reviewers]
-    monkeypatch.setattr(VV, "_reviewer_rows", lambda repo, cfg, st, now, slow=None: rows)
-
-
 def test_vigil_reports_severities_lanes_and_a_reviewer_line(repo, monkeypatch):
     _seed(repo)
-    _quiet_pins_and_reviewers(monkeypatch)
+    # Exercise the REAL classification: one reachable, non-degraded reviewer reads "up".
+    monkeypatch.setattr(VV.RVM, "load_reviewers", lambda repo: [_Rev()])
+    monkeypatch.setattr(VV, "_reviewer_up", lambda url: True)
 
     out = VV.vigil(repo)
 
@@ -50,24 +51,24 @@ def test_vigil_reports_severities_lanes_and_a_reviewer_line(repo, monkeypatch):
     assert bugs["open_total"] == 3
     # the active lane named, with its item, so the coordinator sees WHAT each lane holds
     assert any(ln["name"] == "holder" and ln["item"] == "X" for ln in out.data["lanes"])
-    # a reviewer up/429 line: the reachability each enabled reviewer is in, up or rate-limited
+    # reviewer reachability in DATA: up (reachable) or 429 (quota wall), not stubbed away
     assert any(r["reachability"] in ("up", "429") for r in out.data["reviewers"])
-    assert out.data["stale_pins"] == []
-    assert out.data["interrupted"] == 0
-    assert out.data["approvals_pending"] == 0
+    # the fresh repo has no pin recipes, so `pins --check` cannot run: "unavailable", never "none"
+    assert out.data["stale_pins"] is None
+    # ... and the reviewer up/429 line renders
+    assert "up" in out.data["text"]
 
 
-def test_vigil_cli_text_folds_the_same_facts_into_lines(repo, monkeypatch):
+def test_vigil_cli_is_one_declaration(repo):
     _seed(repo)
-    _quiet_pins_and_reviewers(monkeypatch)
     code, out, err = run_cli(repo, "vigil")
     assert code == 0, (out, err)
     assert "critical" in out and "high" in out
     assert "holder" in out and "X" in out
-    assert "up" in out
+    assert "interrupted: 0" in out
 
 
-def test_vigil_has_an_mcp_tool(repo, monkeypatch):
+def test_vigil_has_an_mcp_tool():
     from ddflow.surfaces.mcp import TOOLS
 
     assert "ddflow_vigil" in TOOLS

@@ -82,11 +82,12 @@ def _stale_pins(repo: Path, cfg) -> list[str] | None:
     return [] if out.exit == O.OK else None
 
 
-def _reviewer_rows(repo: Path, cfg, st, now: float, slow: float | None) -> list[dict[str, str]] | None:
-    """Each enabled reviewer's reachability: ``up``, ``down`` (nothing answering), ``429``
-    (its own quota/exhaustion wall recorded on the last review) or ``slow`` (answering, but
-    recent reviews measured it slower than usual). ``None``: the reviewer list could not be
-    read, which is not the same as "no reviewers"."""
+def _reviewer_rows(repo: Path, cfg, st) -> list[dict[str, str]] | None:
+    """Each enabled reviewer's reachability: ``up``, ``down`` (nothing answering) or
+    ``429`` (its own quota/exhaustion wall recorded on the last review). The fleet's
+    slowness -- which ddflow measures as ONE ratio, not per reviewer -- is the separate
+    ``reviewer_latency_ratio`` field, never a per-reviewer state (a healthy reviewer is not
+    "slow" because its neighbour was). ``None``: the reviewer list could not be read."""
     try:
         reviewers = [r for r in RVM.load_reviewers(repo) if r.enabled]
     except Exception:
@@ -103,16 +104,14 @@ def _reviewer_rows(repo: Path, cfg, st, now: float, slow: float | None) -> list[
                     "reason": mark.get("reason") or "quota/exhaustion",
                 }
             )
-        elif _reviewer_up(r.base_url):
+        else:
             rows.append(
                 {
                     "name": r.name,
-                    "reachability": "slow" if slow is not None and slow > 1.0 else "up",
+                    "reachability": "up" if _reviewer_up(r.base_url) else "down",
                     "reason": "",
                 }
             )
-        else:
-            rows.append({"name": r.name, "reachability": "down", "reason": ""})
     return rows
 
 
@@ -206,7 +205,7 @@ def vigil(repo: Path, *, agent: str = "") -> O.Outcome:
         "interrupted": len(plan.interrupted),
         "approvals_pending": len(pending),
         "pending_approval_ids": [r["id"] for r in pending],
-        "reviewers": _reviewer_rows(repo, cfg, st, now, reviewer_latency_ratio),
+        "reviewers": _reviewer_rows(repo, cfg, st),
         "reviewer_latency_ratio": reviewer_latency_ratio,
     }
     out = O.ok("vigil", **data)

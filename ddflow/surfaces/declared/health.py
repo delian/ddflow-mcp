@@ -17,7 +17,7 @@ def _text(out, a) -> str:
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("vigil",),
-        summary="one compact health snapshot: bug severity counts, stale pins, active lanes, interrupted, pending approvals, reviewer up/429/slow",
+        summary="one compact health snapshot: bug severity counts, stale pins, active lanes, interrupted, pending approvals, reviewer up/down/429",
         tool="ddflow_vigil",
         tier="all",
         family="ddflow_view",
@@ -26,8 +26,9 @@ COMMANDS: tuple[Command, ...] = (
             "One compact health snapshot in one pass: open bugs by severity + fixed in the "
             "window, stale pins, active lanes with their items and lane age, the interrupted "
             "count, pending approvals, and each reviewer's reachability (up/down/429) with the "
-            "aggregate latency ratio. Reuses the other verbs (bug list, pins --check, lanes, "
-            "approvals pending, reviewers test) rather than reimplementing them. Read-only."
+            "fleet latency ratio (the 'slow' signal). Reuses the other verbs (bug list, pins "
+            "--check, lanes, approvals pending, reviewers test) rather than reimplementing them. "
+            "Read-only."
         ),
         call=lambda repo, a, agent: _api().reporting.vigil(repo, agent=agent),
         payload=(
