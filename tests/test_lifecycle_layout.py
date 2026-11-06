@@ -33,6 +33,7 @@ PUBLIC = [
     "heartbeat",
     "merge",
     "next_",
+    "next_lane",
     "release",
     "remove",
     "sync",
