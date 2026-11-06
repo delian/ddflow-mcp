@@ -87,10 +87,10 @@ def _py_ast_equal(before: bytes, after: bytes) -> bool:
 
 def _shebang(src: bytes) -> bytes:
     """Line 0 when it is a shebang (`#!` at column 0), else b'' -- the file's exec behavior.
-    Anything else (a leading space, a `#` comment) is not a shebang and carries no exec
-    semantics."""
-    lines = src.splitlines()
-    return lines[0] if lines and lines[0].startswith(b"#!") else b""
+    The raw bytes up to the first newline, `\\r` included, so a CRLF ending (a `\\r` Python
+    folds into the interpreter path on exec) is a different shebang from the LF one."""
+    first = src.split(b"\n", 1)[0] if b"\n" in src else src
+    return first if first.startswith(b"#!") else b""
 
 
 def _show(tree, ref: str, path: str) -> bytes | None:
