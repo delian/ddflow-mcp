@@ -26,7 +26,10 @@ For every fact the descriptor says one of:
 Per-fact provenance goes in an optional `[facts."section.key"]` overlay with the shared
 record's fields: `s` (verified, documented, unverified, none), `src`, `d` (ISO date), and
 optional `ver` (tool version) and `note`. A value with no overlay reads as `unverified`.
-`ddflow harness facts [--agent X] [--unverified]` renders the table.
+`ddflow harness facts [--agent X] [--unverified]` renders the table. Control planes and ACP
+adapters have no descriptor: their rows come from `ddflow/templates/control_plane_facts.toml` and join
+the same table, `--agent paseo` included. A project overrides a fact, or records one it probed
+itself, in `.ddflow/control_plane_facts.toml` (see `docs/ddflow/research/control-planes.md`).
 
 Cite where each value came from in `[verified]`: `sources` (at least one URL), `date`, and
 `unverified = [...]` for the facts you could not check. A key the loader does not know is an
