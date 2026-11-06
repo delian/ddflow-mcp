@@ -190,11 +190,21 @@ def run_piped(
 ) -> PipedEnd:
     """Run ``argv`` in a session of its own with its binary pipes given to ``work``, the whole
     cut at ``timeout`` seconds. A ``work`` that returns a value ends the run there and then;
-    None lets it go on to its exit status. Never signals a pid already reaped."""
+    None lets it go on to its exit status. stderr is drained alongside, so a chatty child
+    cannot stall, and a descendant that keeps the pipe open cannot hold the answer back.
+    Never signals a pid already reaped."""
     try:
         p = spawn_stdio(argv)
     except OSError as exc:
         return PipedEnd(error=exc)
+    head = bytearray()
+
+    def drain() -> None:
+        while chunk := p.stderr.read1(65536):  # type: ignore[union-attr]
+            head.extend(chunk[: stderr_bytes - len(head)])
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
     clock = threading.Timer(timeout, kill_group, (p,))
     clock.start()
     try:
@@ -202,7 +212,8 @@ def run_piped(
         if answer is not None:
             return PipedEnd(answer=answer)
         code = p.wait()
-        return PipedEnd(code=code, stderr=p.stderr.read(stderr_bytes) if p.stderr else b"")
+        reader.join(1)
+        return PipedEnd(code=code, stderr=bytes(head))
     finally:
         clock.cancel()
         if p.poll() is None:

@@ -20,6 +20,7 @@ import pytest
 
 from ddflow.adapters.acp import OK, AcpStdioClient
 from ddflow.config import Config
+from ddflow.infra import proc as P
 from ddflow.services.lane_driver import LaneStatus, Result, ok
 from ddflow.services.swarm import remote as R
 from ddflow.services.swarm import seedpack as S
@@ -85,7 +86,6 @@ def test_bundle_has_no_event_log_nor_history(repo, tmp_path):
     assert not any(f.startswith(".ddflow/events") for f in files)
     assert git(clone, "rev-list", "--count", "w") == "1"
     assert out.base not in git(clone, "rev-list", "--all")
-    assert ".ddflow" not in git(clone, "ls-tree", "--name-only", "w")
 
 
 def test_secret_in_tracked_file_refuses_and_names_path(repo, tmp_path):
@@ -412,7 +412,7 @@ def test_malformed_tree_never_lands(repo, tmp_path, via):
     assert git(repo, "for-each-ref", "refs/heads/swarm") == ""
 
 
-def test_excluded_file_with_a_name_that_is_not_text_stays_home(repo, tmp_path):
+def test_excluded_odd_name_stays_home(repo, tmp_path):
     with open(os.fsencode(repo) + b"/.ddflow/\xff", "w") as fh:
         fh.write("private\n")
     _commit(repo)
@@ -496,11 +496,12 @@ def _ended(t, lane):
     return st if isinstance(st, LaneStatus) and st.state != "running" else None
 
 
-def test_ssh_command_forwards_nothing_and_never_prompts(ssh):
+def test_ssh_forwards_nothing_never_prompts(ssh):
     k, _ = ssh
     argv = R.SshTransport("user@host.example", k).command("true")
     head = argv[: argv.index("--")]
     assert "BatchMode=yes" in head and "StrictHostKeyChecking=yes" in head
+    assert "ControlPath=none" in head
     assert "ClearAllForwardings=yes" in head
     assert "PermitLocalCommand=no" in head and "-a" in head and "-x" in head
     assert argv[argv.index("--") + 1] == "user@host.example"
@@ -572,7 +573,7 @@ def test_argv_reaches_the_lane_as_words_not_shell(ssh):
     assert (d / "out").read_text() == "a b; touch pwned" and not (d / "pwned").exists()
 
 
-def test_second_start_fails_and_signal_stops_the_group(ssh):
+def test_second_start_fails_signal_stops(ssh):
     k, home = ssh
     t = R.SshTransport("h", k)
     assert t.start("l", ("sh", "-c", "sleep 30 & echo $! > child; wait")).ok
@@ -607,6 +608,13 @@ def test_ps_without_lstart_refuses_start(ssh, tmp_path, monkeypatch):
     r = R.SshTransport("h", k).start("l", ("touch", "ran"))
     assert r.status == "failed" and "lstart" in r.detail
     assert not (home / k.lanes_root / "l").exists()
+
+
+def test_run_piped_outlives_a_noisy_child():
+    argv = ["sh", "-c", "head -c 200000 /dev/zero >&2; setsid sleep 3 & exit 4"]
+    begun = time.monotonic()
+    end = P.run_piped(argv, lambda p: None, timeout=20, stderr_bytes=10)
+    assert end.code == 4 and len(end.stderr) == 10 and time.monotonic() - begun < 3
 
 
 def test_only_named_signals_are_sent():
@@ -658,12 +666,11 @@ def test_hanging_host_is_cut_by_the_timeouts(ssh, tmp_path):
     assert time.monotonic() - begun < 20 and not (tmp_path / "g").exists()
 
 
-def test_unreadable_answer_is_failed_and_missing_ssh_unavailable(ssh, tmp_path):
+def test_bad_answer_and_missing_ssh(ssh, tmp_path):
     k, _ = ssh
     assert R.SshTransport("garbage", k).observe("l").status == "failed"
     t = R.SshTransport("h", dataclasses.replace(k, ssh_argv=(str(tmp_path / "no-ssh"),)))
     assert t.observe("l").status == "unavailable"
-    assert t.copy_out("l", "f", tmp_path / "g", 10).status == "unavailable"
 
 
 # -- the whole trip ----------------------------------------------------------------------

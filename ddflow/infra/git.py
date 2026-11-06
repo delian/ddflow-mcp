@@ -442,7 +442,7 @@ def bundle_create(
 
 
 def bundle_heads(bundle: Path, *, timeout: float | None = GIT_TIMEOUT) -> list[str]:
-    """The branch refs a bundle file carries, without its HEAD line. Raises `GitError`."""
+    """The refs a bundle file carries, tags too, without its HEAD line. Raises `GitError`."""
     out = run(bundle.parent, "bundle", "list-heads", str(bundle), timeout=timeout, check=True).out
     refs = [line.split()[1] for line in out.splitlines() if len(line.split()) > 1]
     return [r for r in refs if r != "HEAD"]

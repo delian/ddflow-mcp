@@ -491,7 +491,7 @@ class SshTransport:
         k = self._k
         opts = ("BatchMode=yes", "StrictHostKeyChecking=yes")
         opts += (f"ConnectTimeout={k.ssh_connect_timeout_s}", "ClearAllForwardings=yes")
-        opts += ("PermitLocalCommand=no",)
+        opts += ("PermitLocalCommand=no", "ControlPath=none")
         flags = [x for o in opts for x in ("-o", o)]
         line = f"sh -c {shlex.quote(shell_line)}"
         return (*k.ssh_argv, "-T", "-a", "-x", *flags, "--", self.target, line)
@@ -525,9 +525,11 @@ class SshTransport:
     def _call(self, line: str) -> tuple[Result, str]:
         got: list[bytes] = []
 
-        def read(p: P.Popen) -> None:
+        def read(p: P.Popen) -> None:  # every answer is a line: keep a chunk, drain the rest
             p.stdin.close()  # type: ignore[union-attr]
             got.append(p.stdout.read(_CHUNK))  # type: ignore[union-attr]
+            while p.stdout.read(_CHUNK):  # type: ignore[union-attr]
+                pass
 
         t = self._k.ssh_timeout_s
         r = self._ended(self._piped(line, read, t), t)
