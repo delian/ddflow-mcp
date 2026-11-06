@@ -170,6 +170,45 @@ def spawn_stdio(
     )
 
 
+@dataclass
+class PipedEnd:
+    """How `run_piped` ended: ``answer`` when ``work`` ended it, else ``code`` and the head of
+    ``stderr``. ``error`` is what kept it from starting; ``code`` below 0 is a kill."""
+
+    answer: Any = None
+    code: int | None = None
+    stderr: bytes = b""
+    error: OSError | None = None
+
+
+def run_piped(
+    argv: list[str],
+    work: Callable[[subprocess.Popen], Any],
+    *,
+    timeout: float,
+    stderr_bytes: int = 4096,
+) -> PipedEnd:
+    """Run ``argv`` in a session of its own with its binary pipes given to ``work``, the whole
+    cut at ``timeout`` seconds. A ``work`` that returns a value ends the run there and then;
+    None lets it go on to its exit status. Never signals a pid already reaped."""
+    try:
+        p = spawn_stdio(argv)
+    except OSError as exc:
+        return PipedEnd(error=exc)
+    clock = threading.Timer(timeout, kill_group, (p,))
+    clock.start()
+    try:
+        answer = work(p)
+        if answer is not None:
+            return PipedEnd(answer=answer)
+        code = p.wait()
+        return PipedEnd(code=code, stderr=p.stderr.read(stderr_bytes) if p.stderr else b"")
+    finally:
+        clock.cancel()
+        if p.poll() is None:
+            stop_group(p)
+
+
 def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:
     """Kill ``p`` and everything it started, then reap it (waiting at most ``reap_s``)."""
     kill_group(p)

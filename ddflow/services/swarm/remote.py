@@ -22,11 +22,10 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import functools
 import json
-import os
 import re
 import shlex
-import threading
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -126,11 +125,17 @@ class Returned:
     unscanned: tuple[str, ...] = ()  # changed files too big to scan: refused too
 
 
-def _git(repo: Path, k: Knobs, *args: str, **kw) -> G.GitResult:
-    r = G.run(repo, *args, timeout=k.git_timeout_s, **kw)
-    if not r.ok:
-        raise RemoteError(f"git {args[0]} failed: {r.err or r.out}")
-    return r
+def _refuses(fn: Callable) -> Callable:
+    """A git that fails or will not run is a refusal: nothing is half done on the host."""
+
+    @functools.wraps(fn)
+    def guarded(*args, **kw):
+        try:
+            return fn(*args, **kw)
+        except G.GitError as exc:
+            raise RemoteError(str(exc)) from exc
+
+    return guarded
 
 
 def _safe(s: str) -> str:
@@ -143,34 +148,6 @@ def _safe(s: str) -> str:
 
 def _excluded(path: str, k: Knobs) -> bool:
     return any(inside(path, e) for e in k.exclude)
-
-
-def _tree_entries(repo: Path, k: Knobs, rev: str) -> list[tuple[str, str, str, int]]:
-    """(mode, sha, path, size) of every file of ``rev``."""
-    raw = _git(repo, k, "ls-tree", "-r", "-l", "-z", rev, z=True).out_bytes or b""
-    out = []
-    for rec in raw.split(b"\0"):
-        if not rec:
-            continue
-        meta, _, path = rec.partition(b"\t")
-        mode, kind, sha, size = meta.split()
-        count = int(size) if kind == b"blob" else 0
-        out.append((mode.decode(), sha.decode(), os.fsdecode(path), count))
-    return out
-
-
-def _blobs(repo: Path, k: Knobs, shas: list[str]) -> dict[str, bytes]:
-    """Content of each blob by one ``cat-file --batch`` call."""
-    if not shas:
-        return {}
-    raw = _git(repo, k, "cat-file", "--batch", input="\n".join(shas) + "\n", binary=True)
-    data, got, i = raw.out_bytes or b"", {}, 0
-    while i < len(data):
-        nl = data.index(b"\n", i)
-        sha, _kind, size = data[i:nl].decode().split()
-        got[sha] = data[nl + 1 : nl + 1 + int(size)]
-        i = nl + 1 + int(size) + 1
-    return got
 
 
 def _secret(text: str, cfg: Config | None) -> bool:
@@ -193,7 +170,7 @@ def _scan(
     """(paths with a secret, paths too big to read) of ``rev``; binary files are read too."""
     by_sha: dict[str, list[str]] = {}
     unscanned = []
-    for mode, sha, path, size in _tree_entries(repo, k, rev):
+    for mode, sha, path, size in G.tree_entries(repo, rev, timeout=k.git_timeout_s):
         if mode not in _BLOB or (only is not None and path not in only):
             continue
         if size > k.scan_max_blob_bytes:
@@ -202,17 +179,10 @@ def _scan(
         by_sha.setdefault(sha, []).append(path)
     hits, shas, step = [], sorted(by_sha), max(1, k.scan_batch_files)
     for i in range(0, len(shas), step):
-        for sha, blob in _blobs(repo, k, shas[i : i + step]).items():
+        for sha, blob in G.read_blobs(repo, shas[i : i + step], timeout=k.git_timeout_s).items():
             if _secret(blob.decode("utf-8", "replace"), cfg):
                 hits += by_sha[sha]
     return sorted(hits), sorted(unscanned)
-
-
-def _commit_tree(repo: Path, k: Knobs, tree: str, msg: str, parent: str, env: dict[str, str]):
-    args = ["commit-tree", tree, "-m", msg]
-    if parent:
-        args[2:2] = ["-p", parent]
-    return _git(repo, k, *args, env=env).out
 
 
 def _who(name: str) -> dict[str, str]:
@@ -223,15 +193,11 @@ def _who(name: str) -> dict[str, str]:
     }
 
 
-def _with_index(repo: Path, k: Knobs, fn: Callable[[dict[str, str]], str]) -> str:
-    with fsio.scratch_dir("ddflow-idx-") as d:
-        return fn({"GIT_INDEX_FILE": str(d / "index")})
-
-
 def _seed_text(seed: object, redact: Callable[[str], str]) -> str:
     return redact(S.render(seed) if isinstance(seed, S.Seed) else str(seed))  # type: ignore[arg-type]
 
 
+@_refuses
 def build_outbound(
     repo: Path,
     base: str,
@@ -246,20 +212,13 @@ def build_outbound(
     """The directory a remote lane is sent: bundle, seed pack, manifest."""
     k = knobs
     repo = Path(repo)
-    base_sha = G.run(repo, "rev-parse", "--verify", f"{base}^{{commit}}", timeout=k.git_timeout_s)
-    if not base_sha.ok:
+    t = k.git_timeout_s
+    base_sha_s = G.commit_of(repo, base, timeout=t)
+    if not base_sha_s:
         raise RemoteError(f"base {base!r} is not a commit of {repo}")
-    base_sha_s = base_sha.out
-
-    def tree(env: dict[str, str]) -> str:
-        _git(repo, k, "read-tree", base_sha_s, env=env)
-        drop = [p for _, _, p, _ in _tree_entries(repo, k, base_sha_s) if _excluded(p, k)]
-        if drop:
-            raw = b"".join(os.fsencode(p) + b"\0" for p in drop)
-            _git(repo, k, "update-index", "--force-remove", "-z", "--stdin", env=env, input=raw)
-        return _git(repo, k, "write-tree", env=env).out
-
-    tree_sha = _with_index(repo, k, tree)
+    entries = G.tree_entries(repo, base_sha_s, timeout=t)
+    drop = [p for _, _, p, _ in entries if _excluded(p, k)]
+    tree_sha = G.rewrite_tree(repo, base_sha_s, drop=drop, timeout=t)
     hits, unscanned = _scan(repo, k, tree_sha, cfg)
     if hits:
         raise RemoteError(
@@ -268,21 +227,21 @@ def build_outbound(
             + " (fix them, or add the path to [swarm] remote_exclude)"
         )
     env = {**_who("ddflow-host"), "GIT_AUTHOR_DATE": _DATE, "GIT_COMMITTER_DATE": _DATE}
-    root = _commit_tree(repo, k, tree_sha, f"ddflow remote seed for {item_id}", "", env)
+    root = G.commit_tree(repo, tree_sha, f"ddflow remote seed for {item_id}", env=env, timeout=t)
     ref = _ref("remote-base", item_id, lane)
     # the ref stays until `forget`: a return bundle needs the root, and gc would prune it
-    _git(repo, k, "update-ref", ref, root)
+    G.set_ref(repo, ref, root, timeout=t)
     dest = Path(dest).resolve()  # git runs in the repository, this code in the caller's cwd
     bundle = dest / BUNDLE
     try:
         dest.mkdir(parents=True, exist_ok=True)
-        _git(repo, k, "bundle", "create", "-q", str(bundle), ref)
+        G.bundle_create(repo, bundle, ref, timeout=t)
         size = bundle.stat().st_size
         if size > k.bundle_max_bytes:
             bundle.unlink()
             raise RemoteError(f"bundle is {size} bytes, over [swarm] remote_bundle_max_bytes")
-    except (RemoteError, OSError):
-        G.run(repo, "update-ref", "-d", ref, timeout=k.git_timeout_s)
+    except (RemoteError, G.GitError, OSError):
+        G.delete_ref(repo, ref, timeout=t)
         raise
     digest = content_digest(bundle.read_bytes())
     seed_path = dest / k.seed_name
@@ -318,9 +277,9 @@ def _ref(family: str, item: str, lane: str) -> str:
     return f"refs/ddflow/{family}/{_safe(item)}/{_safe(lane)}"
 
 
-def forget(repo: Path, out: Outbound, knobs: Knobs = DEFAULT) -> None:
-    """Drop the seed ref of one lane, once its branch is settled."""
-    G.run(Path(repo), "update-ref", "-d", out.ref, timeout=knobs.git_timeout_s)
+def forget(repo: Path, out: Outbound, knobs: Knobs = DEFAULT) -> bool:
+    """Drop the seed ref of one lane, once its branch is settled; False if it stayed."""
+    return G.delete_ref(Path(repo), out.ref, timeout=knobs.git_timeout_s)
 
 
 def _source(source: object, k: Knobs, branch: str | None) -> tuple[Path, str]:
@@ -336,8 +295,7 @@ def _source(source: object, k: Knobs, branch: str | None) -> tuple[Path, str]:
                 f"returned bundle is {size} bytes, over [swarm] remote_return_max_bytes"
             )
         if branch is None:
-            heads = _git(p.parent, k, "bundle", "list-heads", str(p)).out.splitlines()
-            refs = [h.split()[1] for h in heads if len(h.split()) > 1 and h.split()[1] != "HEAD"]
+            refs = G.bundle_heads(p, timeout=k.git_timeout_s)
             if len(refs) != 1:
                 raise RemoteError(f"bundle carries {len(refs)} branches; name one")
             if not _REF.fullmatch(refs[0]):
@@ -350,26 +308,21 @@ def _source(source: object, k: Knobs, branch: str | None) -> tuple[Path, str]:
 
 def _land(repo: Path, k: Knobs, out: Outbound, tip: str, lane: str) -> tuple[str, str]:
     branch = f"{k.branch_prefix}{_safe(out.item)}/{_safe(lane)}"
-
-    def tree(env: dict[str, str]) -> str:
-        _git(repo, k, "read-tree", tip, env=env)
-        back = b"".join(
-            f"{m} {sha}\t".encode() + os.fsencode(path) + b"\0"
-            for m, sha, path, _ in _tree_entries(repo, k, out.base)
-            if _excluded(path, k)
-        )
-        if back:
-            _git(repo, k, "update-index", "--add", "-z", "--index-info", env=env, input=back)
-        return _git(repo, k, "write-tree", env=env).out
-
-    t = _with_index(repo, k, tree)
+    t = k.git_timeout_s
+    back = [
+        (m, sha, path)
+        for m, sha, path, _ in G.tree_entries(repo, out.base, timeout=t)
+        if _excluded(path, k)
+    ]
+    tree = G.rewrite_tree(repo, tip, add=back, timeout=t)
     name = _safe(lane)
     msg = f"remote lane {name} for {_safe(out.item)}"
-    sha = _commit_tree(repo, k, t, msg, out.base, _who(name))
-    _git(repo, k, "update-ref", f"refs/heads/{branch}", sha)
+    sha = G.commit_tree(repo, tree, msg, parent=out.base, env=_who(name), timeout=t)
+    G.set_ref(repo, f"refs/heads/{branch}", sha, timeout=t)
     return branch, sha
 
 
+@_refuses
 def import_return(
     repo: Path,
     source: object,
@@ -389,23 +342,9 @@ def import_return(
     k, repo = knobs, Path(repo)
     src, srcref = _source(source, k, branch)
     dest = _ref("remote", out.item, out.lane)
-    f = G.run(
-        repo,
-        "-c",
-        "transfer.fsckObjects=true",
-        "fetch",
-        "--no-tags",
-        "--no-write-fetch-head",
-        "--no-recurse-submodules",
-        "-q",
-        str(src),
-        f"+{srcref}:{dest}",
-        timeout=k.git_timeout_s,
-        env={"GIT_ALLOW_PROTOCOL": "file"},
-    )
-    if not f.ok:
-        raise RemoteError(f"could not read {srcref} from {src}: {f.err or f.out}")
-    tip = _git(repo, k, "rev-parse", "--verify", dest).out
+    t = k.git_timeout_s
+    G.fetch_untrusted(repo, src, srcref, dest, timeout=t)
+    tip = G.commit_of(repo, dest, timeout=t)
     try:
         got = _inspect(repo, k, out, tip, tuple(globs), cfg)
         if not got.ok:
@@ -413,28 +352,33 @@ def import_return(
         name, sha = _land(repo, k, out, tip, out.lane)
         return dataclasses.replace(got, branch=name, sha=sha)
     finally:
-        G.run(repo, "update-ref", "-d", dest, timeout=k.git_timeout_s)
+        G.delete_ref(repo, dest, timeout=t)
 
 
 def _inspect(
     repo: Path, k: Knobs, out: Outbound, tip: str, globs: tuple[str, ...], cfg: Config | None
 ) -> Returned:
     """What the host checks of a fetched tip."""
-    if not G.run(repo, "merge-base", "--is-ancestor", out.root, tip, timeout=k.git_timeout_s).ok:
+    t = k.git_timeout_s
+    descends = G.is_ancestor(repo, out.root, tip, timeout=t)
+    if descends is None:
+        raise RemoteError("git could not tell whether the return descends from the seed commit")
+    if not descends:
         raise RemoteError("the returned branch does not descend from the seed commit")
-    span = f"{out.root}..{tip}"
-    commits = int(_git(repo, k, "rev-list", "--count", span).out)
+    commits = G.commits_ahead(repo, out.root, tip, timeout=t)
+    if commits < 0:
+        raise RemoteError("git could not count the returned commits")
     if commits > k.return_max_commits:
         raise RemoteError(f"{commits} commits is over [swarm] remote_return_max_commits")
-    size = int(_git(repo, k, "rev-list", "--objects", "--disk-usage", span).out)
+    size = G.span_bytes(repo, f"{out.root}..{tip}", timeout=t)
     if size > k.return_max_bytes:
         raise RemoteError(f"{size} bytes is over [swarm] remote_return_max_bytes")
-    names = _git(repo, k, "diff", "--name-only", "--no-renames", out.root, tip, z=True)
-    changed = tuple(sorted(names.paths() or []))
+    changed = tuple(sorted(G.changed_paths(repo, out.root, tip, timeout=t)))
     if not changed:
         raise RemoteError("the returned branch makes no change to the seed commit")
     touched = set(changed)
-    links = {p for m, _, p, _ in _tree_entries(repo, k, tip) if p in touched and m in _LINKS}
+    entries = G.tree_entries(repo, tip, timeout=t)
+    links = {p for m, _, p, _ in entries if p in touched and m in _LINKS}
     bad = tuple(sorted(links | {p for p in changed if _excluded(p, k)}))
     outside = tuple(p for p in changed if not any(inside(p, g) for g in globs))
     hits, unscanned = _scan(repo, k, tip, cfg, touched)
@@ -564,14 +508,30 @@ class SshTransport:
             return ok()
         return (unavailable if code == _SSH_LOST else failed)(clip or f"exit code {code}")
 
+    def _piped(self, line: str, work: Callable[[P.Popen], object], timeout: int) -> P.PipedEnd:
+        return P.run_piped(
+            list(self.command(line)), work, timeout=timeout, stderr_bytes=self._k.detail_chars
+        )
+
+    def _ended(self, end: P.PipedEnd, timeout: int) -> Result:
+        if end.error is not None:
+            return unavailable(f"ssh could not run: {end.error}")
+        if end.answer is not None:
+            return end.answer
+        if end.code is None or end.code < 0:
+            return unavailable(f"{self.target} did not finish in {timeout}s")
+        return self._judge(end.code, end.stderr.decode("utf-8", "replace"))
+
     def _call(self, line: str) -> tuple[Result, str]:
+        got: list[bytes] = []
+
+        def read(p: P.Popen) -> None:
+            p.stdin.close()  # type: ignore[union-attr]
+            got.append(p.stdout.read(_CHUNK))  # type: ignore[union-attr]
+
         t = self._k.ssh_timeout_s
-        c = P.capture(list(self.command(line)), timeout=t, encoding="utf-8", errors="replace")
-        if c.timed_out:
-            return unavailable(f"{self.target} did not answer in {t}s"), ""
-        if not c.ran:
-            return unavailable(f"ssh could not run: {c.error}"), ""
-        return self._judge(c.returncode or 0, c.stderr), c.stdout
+        r = self._ended(self._piped(line, read, t), t)
+        return r, b"".join(got).decode("utf-8", "replace")
 
     def start(self, lane: str, argv: Sequence[str]) -> Result:
         d = self._dir(lane)
@@ -611,29 +571,6 @@ class SshTransport:
             return LaneStatus("failed", detail="the process is gone and left no exit code")
         return failed("no such lane" if word == "absent" else "an unreadable answer")
 
-    def _piped(self, line: str, work: Callable[[P.Popen], Result | None]) -> Result:
-        """``line`` with its pipes given to ``work``, cut at ``copy_timeout_s``; a ``work``
-        that answers ends it early."""
-        try:
-            p = P.spawn_stdio(list(self.command(line)))
-        except OSError as exc:
-            return unavailable(f"ssh could not run: {exc}")
-        clock = threading.Timer(self._k.copy_timeout_s, P.kill_group, (p,))
-        clock.start()
-        try:
-            early = work(p)
-            if early is not None:
-                return early
-            code = p.wait()
-            if code < 0:
-                return unavailable(f"{self.target} did not finish in {self._k.copy_timeout_s}s")
-            err = p.stderr.read(self._k.detail_chars)  # type: ignore[union-attr]
-            return self._judge(code, err.decode("utf-8", "replace"))
-        finally:
-            clock.cancel()
-            if p.poll() is None:  # ended early: never signal a reaped pid
-                P.stop_group(p)
-
     def copy_in(self, lane: str, local: Path, name: str) -> Result:
         line = f"mkdir -p {self._dir(lane)} && cat > {self._file(lane, name)}"
 
@@ -643,7 +580,8 @@ class SshTransport:
                     p.stdin.write(chunk)  # type: ignore[union-attr]
                 p.stdin.close()  # type: ignore[union-attr]
 
-        return self._piped(line, feed)
+        t = self._k.copy_timeout_s
+        return self._ended(self._piped(line, feed, t), t)
 
     def copy_out(self, lane: str, name: str, local: Path, max_bytes: int) -> Result:
         """Stream a file back, cut at ``max_bytes``: the remote's word on size is not believed.
@@ -662,7 +600,8 @@ class SshTransport:
                     fh.write(chunk)
             return None
 
-        r = self._piped(f"cat {self._file(lane, name)}", drain)
+        t = self._k.copy_timeout_s
+        r = self._ended(self._piped(f"cat {self._file(lane, name)}", drain, t), t)
         if r.ok:
             part.replace(local)
         else:
