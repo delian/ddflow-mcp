@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=ede9a1895679 -->
+<!-- ddflow:begin README/toc sha=63419feb4897 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -295,6 +295,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [The check every add runs](#the-check-every-add-runs)
 - [Operational memory](#operational-memory)
 - [Resources and long-running jobs](#resources-and-long-running-jobs)
+- [Usage meters](#usage-meters)
 - [Dependencies on another repository](#dependencies-on-another-repository)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
@@ -1106,7 +1107,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 550 knobs.
+cadences, and the rest of the 563 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -2696,6 +2697,43 @@ another host (they may be running) up to the newest five; their exited or killed
 collapse to one count line (a brief about an item -- named, held or suggested -- lists none
 of them; one about no item at all, the newest five). So a backlog of uncollected jobs never
 pushes the item's own section out of the token budget. `ddflow job list` shows them all.
+
+## Usage meters
+
+Before ddflow can respect a quota it has to know how much of it is gone. The meters answer that from
+what is already on this machine, and they never call a vendor's usage endpoint with your credentials.
+`ddflow.services.meters` keeps a registry of readers; `read_all` runs them and `best` picks the figure
+to act on, preferring a fresh one and marking a stale one as stale.
+
+| Reader | Reads | Gives |
+|---|---|---|
+| `claude-snapshot` | The last statusline or stream-json `rate_limit_event`, kept in a snapshot file | Vendor percent and reset, 5h and week |
+| `claude-cache` | `cachedUsageUtilization` in `~/.claude.json` | Vendor percent and reset, 5h and week |
+| `claude-tokens` | Claude Code transcripts, subagents included, once per (message.id, requestId) | Tokens per window |
+| `kilo` | Kilo's message rows, opened read-only | Tokens and USD per window |
+| `ddflow-sessions` | `session.started` in this project's log | Sessions per window, this project only |
+
+Each reading carries its `source`, `observed_at` and a `stale` flag. A percent is stale after
+`quota.stale_after_s`, or once its window has reset. **A reading that cannot be taken is `unavailable`
+with a reason, never zero**, and the type refuses anything else. A measured zero is still a zero: the
+source was read and nothing happened in the window. Three cases read as zero at a glance and are not:
+
+- a turn with no usable figure counts as `unmetered`, and the total is then a lower bound;
+- Kilo stores a missing figure as 0, so an all-zero turn is `unmetered`, and a window of nothing else
+  is `unavailable`. A zero kind beside real figures counts as missing too: a model that never reports
+  cache tokens leaves every total a lower bound until `quota.token_fields` drops those kinds;
+- a Kilo cost of 0 means nobody recorded a cost, so USD is `unavailable` until a real cost appears.
+
+An unreadable transcript, or more bytes than `quota.transcript_max_bytes`, makes the reading
+`unavailable` rather than a partial sum, because a partial sum would understate what was used. Kilo's
+session totals are not used: they hold a session's whole life, not one window.
+
+`claude-snapshot` has nothing to read yet: the command that writes its file comes with the quota surfaces.
+Until then that reader reports `unavailable` and `claude-cache` carries the percent.
+
+The snapshot and the sample log are per user (`$XDG_STATE_HOME/ddflow`, or `quota.snapshot_path` and
+`quota.samples_path`), because several projects share one account. They hold figures only, with an
+account as a short digest, never a raw id. The `[quota]` knobs are in the [configuration table](#configuration).
 
 ## Dependencies on another repository
 
@@ -5338,7 +5376,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 550): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 563): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5918,7 +5956,7 @@ declared once and persists — see
 
 ## Configuration
 
-550 knobs across 50 sections, every one documented in place and listed, with its default
+563 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -5985,8 +6023,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=60adae163e49 -->
-<details><summary>All 550 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=7c0b52ff0170 -->
+<details><summary>All 563 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6364,6 +6402,19 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `quota.stale_after_s` | `900` |  |
+| `quota.claude_state` | `""` |  |
+| `quota.claude_projects` | `""` |  |
+| `quota.kilo_db` | `""` |  |
+| `quota.snapshot_path` | `""` |  |
+| `quota.samples_path` | `""` |  |
+| `quota.samples_max_bytes` | `4194304` |  |
+| `quota.sample_interval_s` | `300` |  |
+| `quota.sample_tail_bytes` | `8192` |  |
+| `quota.token_windows` | `["5h", "day", "week"]` |  |
+| `quota.token_fields` | (long: see `ddflow config --explain`) |  |
+| `quota.transcript_max_bytes` | `1073741824` |  |
+| `quota.kilo_timeout_s` | `10.0` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `200000` |  |
 | `log.redact_builtin_shapes` | `true` |  |

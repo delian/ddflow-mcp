@@ -1,0 +1,15 @@
+# Which harness each usage meter reads, and where that harness keeps it (B-quota-meters).
+# A harness fact lives here, not in the meters' code: ddflow/services/meters_base.py reads it,
+# and the [quota] path knobs override a path when set. ~ is the user's home.
+
+[vendor]        # the vendor's own percent, cached by the harness
+harness = "claude-code"
+state = "~/.claude.json"
+
+[transcripts]   # one .jsonl per session, subagents included
+harness = "claude-code"
+root = "~/.claude/projects"
+
+[store]         # token and cost figures per message, in SQLite
+harness = "kilo"
+path = "~/.local/share/kilo/kilo.db"

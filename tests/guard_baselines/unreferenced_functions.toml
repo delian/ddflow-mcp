@@ -31,6 +31,9 @@ baseline = 0
 "ddflow/api/quota.py:quota_show" = "BL-quotas"
 "ddflow/api/quota.py:quota_list" = "BL-quotas"
 "ddflow/api/quota.py:quota_forget" = "BL-quotas"
+# Usage meters: `ddflow quota snapshot` is their caller, in the command surface.
+"ddflow/services/meters_vendor.py:snapshot_statusline" = "B-quota-surfaces"
+"ddflow/services/meters_vendor.py:snapshot_stream_line" = "B-quota-surfaces"
 # One DAG module (B-uni-graph): the transitively reduced phase graph is its first caller.
 "ddflow/core/graph.py:transitive_reduction" = "B-rm-graph"
 # The upgrade manifest (B-upgrade.2-changes.1-manifest): the upgrade plan reads what changed
