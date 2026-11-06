@@ -180,6 +180,8 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
     out = api.review(repo, gate="rubber_duck", item="T1", branch="feat")
     assert out.data["outcome"] == "passed", out.data["text"]
     assert "marked degraded" in out.data["text"], out.data["text"]
+    st = fold(EventLog(repo).read_all(), strict=False)
+    critic_before = list(st.items["T1"].gates.get("critic").evidence.get("review_degraded") or [])
 
     before = (tmp_path / "exhausted.seen").read_text()
     out2 = api.review(repo, gate="critic", item="T1", branch="feat")
@@ -188,13 +190,11 @@ def test_an_expired_degraded_reviewer_is_reprobed_not_shed_forever(repo, tmp_pat
     assert after.count("----") == before.count("----") + 1, (
         "the expired reviewer was not re-probed: it is still shed forever" + "\n" + after
     )
-    # It re-hit the wall on the re-probe and was marked degraded again, so it stays shed
-    # for the NEXT gate (the mark is fresh), not dropped permanently. The re-mark is a NEW
-    # review_degraded row strictly newer than the first run's mark: a run that never
-    # re-probes, or re-probes but drops the re-mark, leaves no such newer row and fails.
-    st = fold(EventLog(repo).read_all(), strict=False)
-    first = st.items["T1"].gates["rubber_duck"].evidence["review_degraded"]
-    second = st.items["T1"].gates["critic"].evidence.get("review_degraded")
-    assert first and first[-1]["reviewer"] == "exhausted", first
-    assert second and second[-1]["reviewer"] == "exhausted", second
-    assert second[-1]["at"] > first[-1]["at"], (first, second)
+    # It re-hit the wall on the re-probe and was marked degraded again in critic's own
+    # evidence, so it stays shed for the NEXT gate (the mark is fresh), not dropped
+    # permanently. A run that never re-probes, or re-probes but drops the re-mark, leaves
+    # critic's review_degraded ungrown and the revision mark's `at` unchanged.
+    st_after = fold(EventLog(repo).read_all(), strict=False)
+    critic_after = list(st_after.items["T1"].gates["critic"].evidence.get("review_degraded") or [])
+    assert len(critic_after) == len(critic_before) + 1, critic_after
+    assert critic_after[-1]["reviewer"] == "exhausted", critic_after
