@@ -30,10 +30,9 @@ from ...services.approvals import view as V
 from ...services.review import engine as RVE
 from ...services.review import model as RVM
 from .._base import _load
-from ..pin_files import pins_regenerate
-from ..knowledge.bug_list import BUG_SEVERITIES
 from ..knowledge.bug_list import BUG_SEVERITIES
 from ..lifecycle.planning import plan_for
+from ..pin_files import pins_regenerate
 
 #: How far back a bug fixed still counts as "fixed in the window" for the snapshot.
 VIGIL_FIXED_WINDOW_S = 7 * 24 * 3600
@@ -44,7 +43,7 @@ def _open_by_severity(bugs: dict[str, Any]) -> dict[str, int]:
 
     Every key is always present, so both surfaces carry the same shape whether or not an
     open bug sits in that bucket (no null-padded lead)."""
-    out: dict[str, int] = {sev: 0 for sev in BUG_SEVERITIES}
+    out: dict[str, int] = dict.fromkeys(BUG_SEVERITIES, 0)
     out["unspecified"] = 0
     for b in bugs.values():
         if not b.open:
