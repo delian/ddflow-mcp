@@ -109,6 +109,12 @@ def cmd_approvals_ask(a, c: Ctx) -> int:
 
 
 def cmd_approvals_attest(a, c: Ctx) -> int:
+    if a.all and a.id:
+        out = O.refused(
+            "approvals.attest",
+            "--all is every pending request with an answer: give it no id",
+        )
+        return _finish(c, out, "attest")
     if a.all:
         return _finish(c, AH.approvals_attest_all(c.repo, agent=c.requested_agent), "attest")
     if not a.id:

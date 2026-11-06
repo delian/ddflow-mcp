@@ -524,4 +524,5 @@ def test_attest_all_reports_a_refused_request_beside_an_attested_one(log, cfg, r
     code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
     assert code == 3, (out, err)  # attested one, refused one: not a clean success
     assert "refused" in err
-    assert asks_of(fold(EventLog(repo, "bot").read_all(), strict=False))[row["id"]]["state"] == "answered"
+    got = asks_of(fold(EventLog(repo, "bot").read_all(), strict=False))[row["id"]]
+    assert got["outcome"] == "approved" and got["via"] == "harness"
