@@ -243,7 +243,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=e9977e53ecea -->
+<!-- ddflow:begin README/toc sha=8e8631b33231 -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -296,6 +296,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
   - [The check every add runs](#the-check-every-add-runs)
 - [Operational memory](#operational-memory)
 - [Resources and long-running jobs](#resources-and-long-running-jobs)
+- [Usage meters](#usage-meters)
 - [Dependencies on another repository](#dependencies-on-another-repository)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
@@ -1107,7 +1108,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 552 knobs.
+cadences, and the rest of the 568 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5391,7 +5392,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 552): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 568): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5971,7 +5972,7 @@ declared once and persists — see
 
 ## Configuration
 
-552 knobs across 50 sections, every one documented in place and listed, with its default
+568 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6038,8 +6039,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=c5f152ba454b -->
-<details><summary>All 552 knobs across 50 sections</summary>
+<!-- ddflow:begin README/knobs sha=ed15cf1bb4b3 -->
+<details><summary>All 568 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6065,6 +6066,8 @@ long default is left to `ddflow config --explain`.
 | `lease.shared_globs` | `[]` |  |
 | `lease.new_file_globs` | (long: see `ddflow config --explain`) |  |
 | `lease.append_only_globs` | `[]` |  |
+| `lease.scan_view_trees_max` | `16` |  |
+| `lease.scan_view_verdicts_max` | `0` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |
 | `worktree.branch_prefix` | `"ddflow/"` |  |
@@ -6073,6 +6076,7 @@ long default is left to `ddflow config --explain`.
 | `worktree.remove_on_merge` | `true` |  |
 | `worktree.dispose_finished` | `true` |  |
 | `worktree.sweep_min_age_s` | `3600` |  |
+| `worktree.sweep_interval_s` | `900` |  |
 | `worktree.max_parallel` | `0` |  |
 | `worktree.sync_before_start` | `true` |  |
 | `worktree.adopt_existing` | `true` |  |
@@ -6419,6 +6423,19 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `quota.stale_after_s` | `900` |  |
+| `quota.claude_state` | `""` |  |
+| `quota.claude_projects` | `""` |  |
+| `quota.kilo_db` | `""` |  |
+| `quota.snapshot_path` | `""` |  |
+| `quota.samples_path` | `""` |  |
+| `quota.samples_max_bytes` | `4194304` |  |
+| `quota.sample_interval_s` | `300` |  |
+| `quota.sample_tail_bytes` | `8192` |  |
+| `quota.token_windows` | `["5h", "day", "week"]` |  |
+| `quota.token_fields` | (long: see `ddflow config --explain`) |  |
+| `quota.transcript_max_bytes` | `1073741824` |  |
+| `quota.kilo_timeout_s` | `10.0` |  |
 | `log.reuse_parsed` | `true` |  |
 | `log.max_cached_events` | `200000` |  |
 | `log.redact_builtin_shapes` | `true` |  |
