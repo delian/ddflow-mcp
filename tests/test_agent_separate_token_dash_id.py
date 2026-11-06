@@ -27,8 +27,8 @@ def _parsed_agent(argv: list[str]) -> str:
 
 def test_opencode_mcp_entry_binds_a_leading_dash_identity(tmp_path: Path) -> None:
     """`:ddflow/services/lanes/opencode.py` builds ``--agent=<name>``, never two tokens."""
-    args = opencode.mcp_entry(tmp_path, "-dry-run")["args"]
-    assert "--agent=-dry-run" in args, "the identity is one token, not two"
+    argv = opencode.mcp_entry(tmp_path, "-dry-run")["command"]
+    assert "--agent=-dry-run" in argv, "the identity is one token, not two"
     assert _parsed_agent(["--repo", str(tmp_path), "--agent=-dry-run", "mcp"]) == "-dry-run"
 
 

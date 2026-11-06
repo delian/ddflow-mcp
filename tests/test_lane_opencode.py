@@ -134,7 +134,7 @@ def test_prepare_writes_only_lane_private_files(tmp_path, tree):
     assert (
         m["type"] == "local"
         and m["enabled"] is True
-        and m["command"][-3:] == ["--agent", "lane-7", "mcp"]
+        and m["command"][-2:] == ["--agent=lane-7", "mcp"]
     )
     assert m["environment"] == {"DDFLOW_AGENT": "lane-7"}
     instr = Path(doc["instructions"][0])
