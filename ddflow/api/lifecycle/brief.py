@@ -39,6 +39,7 @@ from ...services.guidance.kinds import unreconciled_with
 from ...views import markdown as render_md
 from .._base import _load
 from ..reporting import new_reports
+from ..reporting.waitcycles import wait_findings, wait_report
 from .heartbeat import _waiters
 from .planning import plan_for
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
@@ -69,14 +70,17 @@ def _queue_block(repo: Path, st, cfg) -> str:
     return f"\n\n## Merge queue\n\n{warn}" if warn else ""
 
 
-def _waits_block(st, cfg) -> str:
-    """The standing `lease.waiting` records (who waits for whom), "" when none."""
+def _waits_block(log, st, cfg) -> str:
+    """The standing `lease.waiting` records (who waits for whom), any deadlock or wait alarm
+    among them first, "" when none."""
     waits = WG.rows(st, cfg, time.time())
     if not waits:
         return ""
+    cycles, alarms = wait_report(log, st, cfg)
+    stuck = wait_findings(cycles, cfg, alarms)
     return (
         "\n\n## Waiting for files\n\n"
-        + "\n".join(f"- {WG.line(w)}" for w in waits)
+        + "\n".join(f"- {line}" for line in [*stuck, *map(WG.line, waits)])
         + (
             "\n\nDo not poll and do not hold files you do not need: a waiter that cannot get "
             "its files releases the globs others wait for, or reports a cycle."
@@ -395,7 +399,7 @@ def brief(
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
-    text += _waits_block(st, cfg)
+    text += _waits_block(log, st, cfg)
     text += _queue_block(repo, st, cfg)
     text += _progress_block(log, cfg, st, held_ids)
 

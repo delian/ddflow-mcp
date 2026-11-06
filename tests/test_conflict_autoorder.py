@@ -74,7 +74,8 @@ def test_two_agent_cycle_resolves_in_apply_mode(repo):
     out = _doctor(repo)
     assert len(out["auto_order"]["applied"]) == 1
     needs = _needs(repo)
-    assert needs["T2"] == ["T1"] and not needs["T1"]  # the victim waits for the other
+    # T1 was claimed first and neither shows work since, so its holder has the least progress
+    assert needs["T1"] == ["T2"] and not needs["T2"]  # the victim waits for the other
     assert find_cycles(_state(repo).items) == []
 
 
@@ -106,7 +107,7 @@ def test_apply_is_idempotent_and_the_edge_is_marked_auto(repo):
     events = EventLog(repo, "reader").read_all()
     assert all(e.kind != "task.updated" for e in events[n:])
     (edge,) = AOS.auto_edges(events, _state(repo))
-    assert edge["later"] == "T2" and edge["earlier"] == "T1" and "T2 now waits" in edge["reason"]
+    assert edge["later"] == "T1" and edge["earlier"] == "T2" and "T1 now waits" in edge["reason"]
 
 
 def test_off_mode_does_nothing(repo):
@@ -120,8 +121,8 @@ def test_edge_is_reversible_by_update_needs(repo):
     _ring(repo, 2)
     _mode(repo, "apply")
     _doctor(repo)
-    assert run_cli(repo, "update", "T2", "--needs", "", agent=AGENTS[1])[0] == 0
-    assert _needs(repo)["T2"] == []
+    assert run_cli(repo, "update", "T1", "--needs", "", agent=AGENTS[0])[0] == 0
+    assert _needs(repo)["T1"] == []
     assert AOS.auto_edges(EventLog(repo, "reader").read_all(), _state(repo)) == []
 
 

@@ -24,7 +24,7 @@ from ...services.leaseclock import localize
 from ...views.markdown import may_hold_work
 from .._base import _load
 from ..lifecycle.planning import plan_for
-from .waitcycles import health_lines, wait_cycles
+from .waitcycles import health_lines, wait_findings, wait_report, wait_rows
 
 
 def loops(repo: Path) -> O.Outcome:
@@ -230,7 +230,9 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
             }
             for v in yield_vs
         ]
-    health = health_lines(log, st, cfg, repo, wait_cycles(st, cfg), recoveries=rec)
+    cycles, alarms = wait_report(log, st, cfg, events)
+    data.update(wait_rows(cycles, alarms))  # the structured form of the lines under Health
+    health = health_lines(log, st, cfg, repo, cycles, recoveries=rec)
     if health:
         data["health"] = health  # stalled / locked / runaway lanes (`ddflow health`)
     if taken:
@@ -293,7 +295,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
         "waiting": [WG.line(w) for w in waits],
         "yields": [LBR.yield_text(v) for v in yield_vs],
         "stranded": [x["text"] for x in stranded],
-        "health": health,
+        "health": [*wait_findings(cycles, cfg, alarms), *health],
         "recoverable": rec,
         "findings": findings,
         "hours": hours,
@@ -472,6 +474,10 @@ def _bound(data: dict[str, Any]) -> None:
     # The by-tag view is a list too: a namespace with thousands of distinct values (an
     # `assignee:` label space) is exactly the unbounded answer Bd6aa9ffde9 is about, so
     # the bounded MCP path cuts it the same way (the first values, lowest tag first).
+    for key in ("wait_cycles", "wait_alarms"):  # present only when there are any
+        if len(data.get(key, ())) > STATUS_LIST_LIMIT:
+            cut[key] = len(data[key])
+            data[key] = data[key][:STATUS_LIST_LIMIT]
     if "by_tag" in data:
         values = data["by_tag"]["values"]
         if len(values) > STATUS_LIST_LIMIT:

@@ -433,6 +433,15 @@ overwritten by accident: `release` and `gate run|record|skip` on it exit 3 namin
 unless you pass `--force --reason "<why>"` (CLI only; recorded as `forced` on the event).
 Agents of the same clone, an expired lease and a lease with no recorded clone are unaffected.
 
+**Stuck waits.** A refused claim leaves a recorded wait, so `doctor`, `status`, `brief` and
+`lanes advise` can say when waiting will not end. Agents waiting on each other are a **lease
+deadlock**: the report names the loop, the victim (the holder with the least progress) and
+the commands that free the contested files. A wait older than `[loops].wait_alarm_s` (default
+1200 seconds, 0 turns it off) with nothing running on the leases in its way (no live gate, no
+running job, no progress for as long) raises a **lease wait alarm** with the same commands.
+`ddflow --json status` carries both as `wait_cycles` and `wait_alarms`. Nothing is taken from
+anyone: the holder acts on it.
+
 **The task pipeline.** Ten gates, in order. Heavy borders are the gates
 `gates.required` names by default (`implement`, `unit_tests`, `merge`); the rest still
 need *some* outcome — passed, failed, unavailable, partial, or an explicit skip with a
@@ -1108,7 +1117,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 568 knobs.
+cadences, and the rest of the 569 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5392,7 +5401,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 568): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 569): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5972,7 +5981,7 @@ declared once and persists — see
 
 ## Configuration
 
-568 knobs across 51 sections, every one documented in place and listed, with its default
+569 knobs across 51 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6039,8 +6048,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=ed15cf1bb4b3 -->
-<details><summary>All 568 knobs across 51 sections</summary>
+<!-- ddflow:begin README/knobs sha=663edc6c40d1 -->
+<details><summary>All 569 knobs across 51 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6292,6 +6301,7 @@ long default is left to `ddflow config --explain`.
 | `loops.no_progress_window` | `60` |  |
 | `loops.wait_cycle` | `true` |  |
 | `loops.wait_cycle_shown` | `5` |  |
+| `loops.wait_alarm_s` | `1200` |  |
 | `loops.on_detect` | `"warn"` | `warn` \| `block` |
 | `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
 | `locks.suggest_globs` | `true` |  |
