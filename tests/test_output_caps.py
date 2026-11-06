@@ -404,3 +404,20 @@ def test_a_page_past_the_end_still_says_so_in_prose():
     )
     text = render_recover(OC.apply(None, out, "recover", cursor=999, cfg=_cfg()), None)
     assert text.startswith("3 recoverable situation(s)") and "ddflow recover --full" in text
+
+
+def test_next_lane_answer_goes_through_the_cap_like_the_queue(repo, monkeypatch):
+    """`next --lane` takes the same --full/--cursor flags, so its answer is capped too."""
+    from ddflow.surfaces.declared.lifecycle import navigate
+
+    note = "reason " * 3000
+    fake = SimpleNamespace(
+        DEFAULT_NEXT_KIND="task",
+        next_lane=lambda *a, **k: O.ok("next", lane="L", item="I1", note=note),
+    )
+    monkeypatch.setattr(navigate, "_api", lambda: fake)
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", "1000")
+    out = navigate._next(repo, {"lane": "L"}, "agent")
+    assert len(json.dumps(out.data, default=str)) < len(note) and "truncated" in out.data
+    full = navigate._next(repo, {"lane": "L", "full": True}, "agent")
+    assert full.data["note"] == note
