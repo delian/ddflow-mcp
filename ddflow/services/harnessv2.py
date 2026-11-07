@@ -219,16 +219,8 @@ def check_table(table: Any, name: str, where: str) -> None:
     )
     if name == "orchestration" and keys and table.get("loop") is None:
         raise DescriptorError(f"{where}: orchestration.loop names the wave loop primitive")
-    if (
-        name == "orchestration"
-        and table.get("loop") in BACKGROUND_LOOPS
-        and not table.get("keepalive")
-    ):
-        raise DescriptorError(
-            f"{where}: orchestration.keepalive names how its {table.get('loop')!r} loop "
-            "keeps the lane's own session alive across waits; without one the lane can "
-            "complete and its self-scheduled resume is dropped, lapsed its claim (Bbc611c0165)"
-        )
+    if name == "orchestration":
+        _require_orchestration_keepalive(table, where)
     if name == "headless" and table.get("autonomy") == "":
         raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
     if "none" in table and table["none"] is True and keys:
@@ -239,6 +231,20 @@ def check_table(table: Any, name: str, where: str) -> None:
                 f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
                 " other than none"
             )
+
+
+def _require_orchestration_keepalive(table: dict, where: str) -> None:
+    """A BACKGROUND ``[orchestration]`` loop runs a lane that can complete (return a final
+    result); a resume that lane schedules for after its turn is dropped at completion, so it
+    must name a keepalive that keeps its own session alive across waits -- or its claim
+    lapses to INTERRUPTED (Bbc611c0165)."""
+    loop = table.get("loop")
+    if loop in BACKGROUND_LOOPS and not table.get("keepalive"):
+        raise DescriptorError(
+            f"{where}: orchestration.keepalive names how its {loop!r} loop keeps the "
+            "lane's own session alive across waits; without one the lane can complete and "
+            "its self-scheduled resume is dropped, lapsed its claim (Bbc611c0165)"
+        )
 
 
 def _membership(name: str, value: Any, field: str, vocab: frozenset, where: str) -> None:
