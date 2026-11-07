@@ -43,10 +43,7 @@ def _finished(t, mine: bool) -> bool:
     it back to OPEN, so the first two miss it. A finished task is kept, not removed."""
 
     return (
-        t.terminal
-        or (t.state != OPEN and not mine)
-        or bool(t.merged_sha)
-        or bool(t.landed_after)
+        t.terminal or (t.state != OPEN and not mine) or bool(t.merged_sha) or bool(t.landed_after)
     )
 
 
