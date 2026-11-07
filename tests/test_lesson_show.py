@@ -13,7 +13,7 @@ import json
 from conftest import run_cli
 
 
-def _lesson(repo, lid, title, *, rule="", why="", how=""):
+def _lesson(repo, lid, title, *, rule="", why="", how="", supersedes=""):
     args = ["lesson", "add", "--id", lid, "--title", title, "--summary", title]
     if rule:
         args += ["--rule", rule]
@@ -21,6 +21,8 @@ def _lesson(repo, lid, title, *, rule="", why="", how=""):
         args += ["--why", why]
     if how:
         args += ["--how", how]
+    if supersedes:
+        args += ["--supersedes", supersedes]
     code, _, err = run_cli(repo, *args)
     assert code == 0, err
 
@@ -48,6 +50,24 @@ def test_lesson_show_refuses_an_unknown_id(repo):
     run_cli(repo, "init")
     code, _, err = run_cli(repo, "lesson", "show", "L-nope")
     assert code != 0 and "no such lesson" in err
+
+
+def test_lesson_show_reports_a_superseded_lesson(repo):
+    run_cli(repo, "init")
+    _lesson(repo, "L1", "the old rule")
+    _lesson(repo, "L2", "the new rule", supersedes="L1")
+    code, out, _ = run_cli(repo, "lesson", "show", "L1")
+    assert code == 0 and "(superseded by L2)" in out
+
+
+def test_lesson_show_reports_a_contested_definition(repo):
+    run_cli(repo, "init")
+    from ddflow import api as A
+
+    A.lesson_add(repo, A.LessonDraft(title="rival a", rule="rule a", id="L1"), agent="alice")
+    A.lesson_add(repo, A.LessonDraft(title="rival b", rule="rule b", id="L1"), agent="bob")
+    code, out, _ = run_cli(repo, "lesson", "show", "L1")
+    assert code == 0 and "CONTESTED" in out
 
 
 def test_lesson_help_lists_show(repo):

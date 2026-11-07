@@ -302,7 +302,7 @@ COMMANDS: tuple[Command, ...] = (
         family="ddflow_memory",
         action="lesson_show",
         tier="standard",
-        description="Read ONE lesson in full by its id — its rule, why and how. `ddflow_lesson_list` "
+        description="Read ONE lesson in full by its id — its rule, why and how. `ddflow lesson list` "
         "gives you the titles; this is a lesson a recall hit or a link cited by id. "
         "Read it before re-learning it.",
         call=lambda repo, a, agent: _api().lesson_show(repo, a["id"]),
