@@ -109,17 +109,27 @@ def require_known_schema(text: str, supported: int = CURRENT_SCHEMA) -> None:
 
 
 def operator_only_violations(raw: Any) -> list[str]:
-    """The process-running keys ``raw`` sets, in the order they would be refused. Empty when
-    the table is not a descriptor table or sets none."""
-    if not isinstance(raw, dict):
-        return []
+    """The process-running keys ``raw`` sets, found at any depth (a pack can name several
+    descriptors), in the order they would be refused. ``[verified].probe`` is a fact
+    string, not a process key, so only a ``probe`` table/list is operator-only."""
     out: list[str] = []
-    headless = raw.get("headless")
-    if isinstance(headless, dict) and "argv" in headless:
-        out.append("headless.argv")
-    if "probe" in raw:
-        out.append("probe")
-    return out
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            headless = node.get("headless")
+            if isinstance(headless, dict) and "argv" in headless:
+                out.append("headless.argv")
+            probe = node.get("probe")
+            if probe is not None and not isinstance(probe, str):
+                out.append("probe")
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(raw)
+    return list(dict.fromkeys(out))
 
 
 def _read_bytes_bounded(path: Path) -> bytes:
@@ -144,6 +154,8 @@ def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
         return []
     out: list[Harness] = []
     for p in sorted(directory.glob("*.toml")):
+        if not p.is_file():
+            continue
         text = _read_bounded(p)
         require_known_schema(text)
         if layer == "project":

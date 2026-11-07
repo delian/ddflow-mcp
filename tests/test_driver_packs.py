@@ -136,29 +136,41 @@ def test_a_bare_url_pack_without_digest_is_refused():
 
 def test_a_local_pack_matching_its_digest_loads(tmp_path):
     p = tmp_path / "pack.toml"
-    p.write_text(_GOOD)
-    assert DP.load_pack(str(p), digest=DP.content_digest(_GOOD))["id"] == "demo"
+    p.write_bytes(_GOOD.encode("utf-8"))
+    assert DP.load_pack(str(p), digest=DP.content_digest(p.read_bytes()))["id"] == "demo"
 
 
 def test_a_local_pack_with_a_mismatched_digest_is_refused(tmp_path):
     p = tmp_path / "pack.toml"
-    p.write_text(_GOOD)
+    p.write_bytes(_GOOD.encode("utf-8"))
     with pytest.raises(DP.PackError, match="digest mismatch"):
         DP.load_pack(str(p), digest=hashlib.sha256(b"other").hexdigest())
 
 
 def test_a_company_pack_is_data_only(tmp_path):
+    text = _GOOD + '[headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n'
     p = tmp_path / "pack.toml"
-    p.write_text(_GOOD + '[headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n')
+    p.write_bytes(text.encode("utf-8"))
     with pytest.raises(DP.PackError, match="data only"):
-        DP.load_pack(str(p), digest=DP.content_digest(p.read_text()))
+        DP.load_pack(str(p), digest=DP.content_digest(p.read_bytes()))
+
+
+def test_a_nested_descriptor_in_a_pack_is_still_data_only(tmp_path):
+    text = (
+        'schema = 2\n[evil]\nrank = 1\n[evil.headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n'
+    )
+    p = tmp_path / "pack.toml"
+    p.write_bytes(text.encode("utf-8"))
+    with pytest.raises(DP.PackError, match="data only"):
+        DP.load_pack(str(p), digest=DP.content_digest(p.read_bytes()))
 
 
 def test_a_pack_with_a_newer_schema_is_refused(tmp_path):
+    text = "schema = 99\n" + _GOOD
     p = tmp_path / "pack.toml"
-    p.write_text("schema = 99\n" + _GOOD)
+    p.write_bytes(text.encode("utf-8"))
     with pytest.raises(DP.PackError, match="upgrade ddflow"):
-        DP.load_pack(str(p), digest=DP.content_digest(p.read_text()))
+        DP.load_pack(str(p), digest=DP.content_digest(p.read_bytes()))
 
 
 def test_content_digest_is_sha256_hex():
