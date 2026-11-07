@@ -58,11 +58,32 @@ class FakeFs:
         pre = self._prefix(root)
         return sorted(x for x in self.dirs if x.startswith(pre))
 
+    def _require_parent(self, p: str) -> None:
+        """Raise `FileNotFoundError` when the parent of `p` does not exist."""
+        parent = p.rsplit("/", 1)[0] if "/" in p else ""
+        if parent and not self.is_dir(parent):
+            raise FileNotFoundError(parent)
+
+    def _relocate_dir(self, s: str, d: str) -> None:
+        """Move a whole directory `s` (files + subdirs) to `d`, like a rename."""
+        for f in self._under(s):
+            self.files[d + f[len(s) :]] = self.files.pop(f)
+        for x in self._dirs_under(s):
+            self.dirs.discard(x)
+            self.dirs.add(d + x[len(s) :])
+        self.dirs.discard(s)
+        self.dirs.add(d)
+
     def copy_file(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
         self.calls.append(("copy_file", s, d))
         if s not in self.files:
             raise FileNotFoundError(s)
+        if self.is_dir(d):  # shutil.copy2 copies INTO an existing directory
+            d = self._prefix(d) + s.rsplit("/", 1)[-1]
+        if d == s:  # shutil raises SameFileError (an OSError) for a file onto itself
+            raise OSError(f"cannot copy {s!r} onto itself")
+        self._require_parent(d)
         self.files[d] = self.files[s]
 
     def copy_tree(self, src: Path | str, dst: Path | str, *, dirs_exist_ok: bool = False) -> None:
@@ -88,23 +109,22 @@ class FakeFs:
             raise FileNotFoundError(s)
         _no_root(s, d)
         if self.is_dir(d):  # like shutil.move: into an existing directory
+            if d == s:
+                return  # moving a path onto itself is a no-op
             d = self._prefix(d) + s.rsplit("/", 1)[-1]
             if _exists(self, d):
                 raise FileExistsError(d)
+        elif d == s:
+            return  # shutil.move of a path onto itself is a no-op
         elif d in self.files and s not in self.files:
             raise FileExistsError(d)  # a directory over a file
-        if d == s or d.startswith(s + "/"):
+        if d.startswith(s + "/"):
             raise ValueError(f"cannot move {s} into itself ({d})")
+        self._require_parent(d)
         if s in self.files:
             self.files[d] = self.files.pop(s)
             return
-        for f in self._under(s):
-            self.files[d + f[len(s) :]] = self.files.pop(f)
-        for x in self._dirs_under(s):
-            self.dirs.discard(x)
-            self.dirs.add(d + x[len(s) :])
-        self.dirs.discard(s)
-        self.dirs.add(d)
+        self._relocate_dir(s, d)
 
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
         d = _p(path)
@@ -121,6 +141,19 @@ class FakeFs:
     def replace_path(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
         self.calls.append(("replace_path", s, d))
-        if s not in self.files:
+        if not (s in self.files or self.is_dir(s)):
             raise FileNotFoundError(s)
-        self.files[d] = self.files.pop(s)
+        if d == s:  # os.replace of a path onto itself is a no-op
+            return
+        if s in self.files:
+            if self.is_dir(d):  # a file over an existing directory
+                raise IsADirectoryError(d)
+            self._require_parent(d)
+            self.files[d] = self.files.pop(s)
+            return
+        # a directory: os.replace renames it over a new name or an empty one
+        if self._under(d) or self._dirs_under(d):
+            raise OSError(f"cannot replace the non-empty directory {d!r}")
+        self._require_parent(d)
+        self.dirs.discard(d)
+        self._relocate_dir(s, d)

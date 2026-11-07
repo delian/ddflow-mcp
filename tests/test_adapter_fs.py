@@ -141,6 +141,43 @@ def test_fsio_real_roundtrip(tmp_path):
     assert not (tmp_path / "g").exists()
 
 
+def test_fake_copy_file_mirrors_local_on_directories_and_parents():
+    # copy_file onto an existing directory copies INTO it (shutil.copy2), not at the path
+    f = FakeFs({"/src/f": b"1"})
+    f.mkdir("/dst")
+    f.copy_file("/src/f", "/dst")
+    assert "/dst" not in f.files and f.files["/dst/f"] == b"1"
+    # copying a file onto itself is not silent: shutil raises SameFileError (an OSError)
+    with pytest.raises(OSError):
+        FakeFs({"/f": b"1"}).copy_file("/f", "/f")
+    # a missing parent is refused, not invented
+    with pytest.raises(FileNotFoundError):
+        FakeFs({"/src/f": b"1"}).copy_file("/src/f", "/no/parent/f")
+
+
+def test_fake_move_mirrors_local_on_parents_and_self():
+    # a missing parent is refused
+    with pytest.raises(FileNotFoundError):
+        FakeFs({"/src/f": b"1"}).move("/src/f", "/no/parent/f")
+    # move(x, x) is a no-op, like shutil.move
+    f = FakeFs({"/f": b"1"})
+    f.move("/f", "/f")
+    assert f.files == {"/f": b"1"}
+
+
+def test_fake_replace_path_mirrors_local_on_directories():
+    # replacing (renaming) a directory works
+    f = FakeFs({"/dir/f": b"1"})
+    f.replace_path("/dir", "/renamed")
+    assert f.files == {"/renamed/f": b"1"} and not f.is_dir("/dir")
+    # a file over an existing directory is refused, like os.replace
+    f2 = FakeFs({"/f": b"1"})
+    f2.mkdir("/d")
+    f2.files["/d/keep"] = b"k"
+    with pytest.raises(IsADirectoryError):
+        f2.replace_path("/f", "/d")
+
+
 def test_fake_mirrors_shutil_on_directories():
     f = FakeFs({"/a/f": b"1", "/file": b"x", "/dst": b"old"})
     f.mkdir("/a/empty")
