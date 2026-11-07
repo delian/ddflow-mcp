@@ -23,6 +23,12 @@ def update_message(item: str, data: dict) -> str:
                 f"agent's live lease; re-run with them AND the globs above once that "
                 f"holder is done, since --globs replaces the list)"
             )
+        if data.get("globs_overtook"):
+            overtook = ", ".join(f"{w['holder']} ({w['item']})" for w in data["globs_overtook"])
+            msg += (
+                f"\n  overtook:  {overtook}  (a standing wait now waits on you for a glob "
+                f"this just granted; finish and merge, or `ddflow release` it)"
+            )
     for name in ("needs", "tags"):
         if data.get(f"{name}_dropped"):
             msg += (
