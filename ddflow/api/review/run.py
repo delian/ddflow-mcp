@@ -639,11 +639,11 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
     outcome, extra_evidence = _gate_outcome(
         identifying, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )
-    best = _failing_reviewer(results, it, gate, _converges(kind, fix), cfg, identifying)
+    named = _failing_reviewer(results, it, gate, _converges(kind, fix), cfg, identifying)
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            called_from=called_from, gates=gates, say=say, best=identifying, named=named, results=results, keeps=keeps, extra_evidence=extra_evidence,
             scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
@@ -652,9 +652,9 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         "gate": gate,
         "outcome": outcome,
         "how": how,
-        "reviewer": best.reviewer,
-        "family": best.family,
-        "findings": _finding_rows(best),
+        "reviewer": named.reviewer,
+        "family": named.family,
+        "findings": _finding_rows(named),
         "text": "\n".join(transcript),
     }
     exit_code = {
@@ -669,5 +669,5 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         kind="review",
         data=data,
         exit=exit_code,
-        reason=best.reason or f"{len(best.findings)} finding(s)",
+        reason=identifying.reason or f"{len(identifying.findings)} finding(s)",
     )

@@ -75,3 +75,22 @@ def test_a_failed_review_names_the_reviewer_that_found_the_blocking_defect(repo,
     ev = _ev(repo)
     assert ev["reviewer"] == "failing", ev
     assert ev["family"] == "xai", ev
+
+
+def test_naming_a_partial_failing_reviewer_keeps_the_clean_identifying_pass():
+    """A PARTIAL reviewer that found the blocking defect is the named reviewer, but the
+    identifying pass (whose completion drives the exit code) stays the clean REVIEWED peer:
+    naming the failing reviewer must not flip a completed run's exit to REFUSED."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.api.review.run import _failing_reviewer
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    finding = RV.Finding(severity="HIGH", title="bad")
+    clean = NS(reviewer="clean", status=RV.REVIEWED, findings=[])
+    partial = NS(reviewer="partial", status=RV.PARTIAL, findings=[finding])
+    cfg = Config.load(None, env={})
+    named = _failing_reviewer([clean, partial], None, "critic", False, cfg, clean)
+    assert named is partial, named
+    assert clean.status == RV.REVIEWED

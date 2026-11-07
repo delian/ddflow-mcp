@@ -241,10 +241,16 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
 
 def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     repo, log, cfg, st, it, item: str, gate: str, outcome: str,
-    *, called_from, gates, say, best, results, keeps, extra_evidence, scope,
+    *, called_from, gates, say, best, results, keeps, extra_evidence, scope, named=None,
 ) -> str:  # fmt: skip
     """Write the review's outcome against ``it`` and say so; the outcome recorded (a pass
-    over untriaged findings of an earlier round is held, see `_hold`)."""
+    over untriaged findings of an earlier round is held, see `_hold`).
+
+    ``best`` is the identifying pass -- its status/coverage/kept reply -- while ``named`` is
+    the reviewer the record NAMES: for a failed gate, the one whose finding blocked it (bug
+    B3113b1f522), else ``best``. Naming the failing reviewer must not re-purpose a PARTIAL
+    reviewer as the identifying pass (which would misstate the round's coverage)."""
+    named = best if named is None else named
     taken, kind, done, forced, how, diff_chars, snapshot = scope
     evidence = {
         **best.evidence(),
@@ -256,6 +262,11 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **(extra_evidence or {}),
         **snapshot,
     }
+    if named is not best:
+        # Attribution only: the identifying pass's status/coverage stay `best`'s.
+        evidence["reviewer"] = named.reviewer
+        evidence["model"] = named.model
+        evidence["family"] = named.family
     reviewed = (
         _reviewed_findings(results) if results is not None else best.evidence()["chunk_findings"]
     )
@@ -283,7 +294,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         evidence["held_pass"] = True
     _record(
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
-        reason=reason, evidence=evidence, by=best.model,
+        reason=reason, evidence=evidence, by=named.model,
     )  # fmt: skip
     if linked:
         say(
@@ -291,8 +302,8 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
             f"refuted triage (bug B74d5c39e6e): the claim was already refuted, its probe "
             "stands on this gate too"
         )
-    say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})")
-    _say_triage_scope(say, results, best)
+    say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {named.reviewer}, family {named.family})")
+    _say_triage_scope(say, results, named)
     return outcome
 
 
