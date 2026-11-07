@@ -189,8 +189,8 @@ def test_the_knob_reads_refuse_from_config_and_agent_force_still_refuses(repo):
     run_cli(repo, "config", "merge.require_gates", "refuse")
     out = _merge(repo, force=True)
     assert out.exit == 3
-    assert "require_gates = refuse" in out.reason
     assert "--approval request" in out.reason
+    assert not _events(repo, "worktree.merged")
 
 
 def test_authorise_needs_nothing_when_nothing_refuses():
