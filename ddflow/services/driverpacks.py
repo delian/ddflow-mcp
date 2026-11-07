@@ -117,8 +117,9 @@ def operator_only_violations(raw: Any) -> list[str]:
     def walk(node: Any) -> None:
         if isinstance(node, dict):
             headless = node.get("headless")
-            if isinstance(headless, dict) and "argv" in headless:
-                out.append("headless.argv")
+            for table in headless if isinstance(headless, list) else [headless]:
+                if isinstance(table, dict) and "argv" in table:
+                    out.append("headless.argv")
             probe = node.get("probe")
             if probe is not None and not isinstance(probe, str):
                 out.append("probe")
@@ -143,7 +144,10 @@ def _read_bytes_bounded(path: Path) -> bytes:
 
 def _read_bounded(path: Path) -> str:
     """``_read_bytes_bounded`` decoded: the text of one descriptor file."""
-    return _read_bytes_bounded(path).decode("utf-8")
+    try:
+        return _read_bytes_bounded(path).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PackError(f"{path.name}: not UTF-8") from exc
 
 
 def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
