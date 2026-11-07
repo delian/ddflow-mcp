@@ -142,8 +142,10 @@ def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
             if item_id == waiter:
                 continue
             it = st.items.get(item_id)
-            if it is not None and it.lease is not None and not conflicts(
-                wanted, it.lease.globs, shared
+            if (
+                it is not None
+                and it.lease is not None
+                and not conflicts(wanted, it.lease.globs, shared)
             ):
                 # None of the waiter's CURRENT globs overlaps the holder's lease (an
                 # empty ``wanted`` overlaps nothing): the recorded edge is stale, so the

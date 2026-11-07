@@ -77,7 +77,9 @@ def test_a_waiter_whose_globs_still_overlap_is_still_named(repo):
     _two_holders(repo)
     # T1 and T2 both declare src/a.py; B's claim is refused, so T2 still wants src/a.py
     # which T1 holds -- a real contention T2 must be named for.
-    assert run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/a.py", agent=A)[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/a.py", agent=A)[0] == 0
+    )
     assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 3
     st = _state(repo)
     assert "T3" in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
