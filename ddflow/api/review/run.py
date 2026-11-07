@@ -411,15 +411,22 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     # unknown no choice provably names the cross-family reviewer, and `reviewer_families`
     # still carries every family so `complete` reads the cross-family panel either way
     # (bug B1a30dc3303).
-    first = (tied[0].family or "").strip().lower() or GD.family_of(tied[0].model, cfg).strip().lower()
-    fams = {(r.family or "").strip().lower() or GD.family_of(r.model, cfg).strip().lower() for r in tied}
+    first = _fam(tied[0]) or GD.family_of(tied[0].model, cfg).strip().lower()
+    fams = {_fam(r) or GD.family_of(r.model, cfg).strip().lower() for r in tied}
     fams.discard("")
     if len(fams) > 1:
         for r in tied:
-            fam = (r.family or "").strip().lower() or GD.family_of(r.model, cfg).strip().lower()
+            fam = _fam(r) or GD.family_of(r.model, cfg).strip().lower()
             if fam and fam != first:
                 return r
     return best
+
+
+def _fam(r) -> str:
+    """A reviewer's family as `review_tier` resolves it: a declared family, `unknown`
+    normalised to ``""`` so the model's family is consulted, stripped and lowercased."""
+    fam = (getattr(r, "family", "") or "").strip().lower()
+    return "" if fam == "unknown" else fam
 
 
 def _failing_reviewer(results, it, gate, converging, cfg, identifying):
