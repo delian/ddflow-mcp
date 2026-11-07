@@ -159,9 +159,13 @@ def configure(
         )
         decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
         if not decision.ok:
+            # `approval` is truthy and `auto` defaults True, so `operator_gate` never returns
+            # the unprefixed "to ask the operator" steering message: every refusal is already
+            # prefixed here -- adding "refusing: " stacked it
+            # (B-config-phase-doubled-refusing-prefix).
             return O.refused(
                 "config",
-                "refusing: " + decision.message,
+                decision.message,
                 key=edit.set,
                 value=edit.value,
                 rows=[],
