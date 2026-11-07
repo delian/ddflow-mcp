@@ -255,7 +255,8 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
     mine = (getattr(it, "triage", None) or {}).get(gate, {})
     runs = it.runs_of(gate)
     unreadable = False
-    origin: dict[str, str] = {}
+    explicit: dict[str, str] = {}
+    fallback: dict[str, str] = {}
     unconfirmed: set[str] = set()
     for run in runs:
         run_fam = _normalise_family((run.evidence or {}).get("family"))
@@ -267,18 +268,22 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             digest = f.get("digest")
             if not digest:
                 continue
-            # A digest's origin family is the first non-empty attribution across its rows:
-            # the per-finding stamp when present, else the run's identifying family. The
-            # guard never stores an empty value (dict.setdefault would keep "" as a real
-            # value), so a later row still fills a digest that was only ever stampless.
-            fam = _normalise_family(f.get("family")) or run_fam
+            stamp = _normalise_family(f.get("family"))
+            # An explicit per-finding stamp is the finding's true raiser and always outranks
+            # a run-level fallback (the run's identifying family is only a guess); the first
+            # explicit stamp is its origin. The fallback fills a digest nobody stamped, and
+            # the guards keep an empty value out of both maps.
+            if stamp:
+                explicit.setdefault(digest, stamp)
+            fam = stamp or run_fam
             if fam:
-                origin.setdefault(digest, fam)
+                fallback.setdefault(digest, fam)
             if mine.get(digest, {}).get("verdict") == "confirmed" and not _cleared_after_delta(
                 runs, digest
             ):
                 unconfirmed.add(digest)
-    return [(d, origin.get(d, "")) for d in unconfirmed], unreadable
+    fam_by_digest = {d: explicit.get(d) or fallback.get(d, "") for d in unconfirmed}
+    return [(d, fam_by_digest.get(d, "")) for d in unconfirmed], unreadable
 
 
 def _normalise_family(value) -> str:
