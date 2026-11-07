@@ -174,13 +174,12 @@ def test_fake_move_mirrors_local_on_parents_and_self():
     f.move("/f", "/f")
     assert f.files == {"/f": b"1"}
     # moving a directory into its own subtree is refused, like shutil.move
-    with pytest.raises(OSError):
+    with pytest.raises(shutil.Error):
         FakeFs({"/a/f": b"1"}).move("/a", "/a/b")
     # into a deeper descendant is refused even if the middle component is missing
-    # (a bare OSError: shutil.Error has no narrower subclass to catch)
-    with pytest.raises(OSError) as _exc3:
+    # (shutil.Error, which shutil.move raises for a directory into itself)
+    with pytest.raises(shutil.Error):
         FakeFs({"/a/f": b"1"}).move("/a", "/a/missing/new")
-    assert type(_exc3.value) is OSError
     # to a missing NON-descendant parent a directory relocates (shutil.move copytree)
     m = FakeFs({"/a/f": b"1"})
     m.move("/a", "/missing/a")

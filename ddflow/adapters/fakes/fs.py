@@ -10,7 +10,7 @@ unless `ignore_errors` (the port's default). The filesystem root is refused (`Va
 from __future__ import annotations
 
 from pathlib import Path
-from shutil import SameFileError
+from shutil import Error, SameFileError
 
 from . import fake
 
@@ -155,7 +155,7 @@ class FakeFs:
             self.files[d] = self.files.pop(s)
             return
         if d.startswith(s + "/"):  # a directory cannot move into its own subtree
-            raise OSError(f"cannot move a directory into itself ({d})")
+            raise Error(f"cannot move a directory into itself ({d})")
         # like shutil.move: a directory move falls back to copytree, so a missing
         # parent is created; an ancestor that is a file is refused.
         self._refuse_file_ancestor(d)
