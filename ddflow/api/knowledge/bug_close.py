@@ -292,7 +292,7 @@ def _unlanded_fix_source(rec) -> dict[str, str]:
         "unmerged, so the regression test runs against a worktree, not the base",
         "remedy": (
             f"merge {named} first, then close with `ddflow complete {named} "
-            "--regression-test`; or name the commit that holds the fix with `--landed <sha>`"
+            "--regression-test <test>`; or name the commit that holds the fix with `--landed <sha>`"
         ),
     }
 
