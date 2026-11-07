@@ -264,7 +264,7 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
         if isinstance(found, B.Unavailable):
             unreadable = True  # "cannot be read back" is not "no confirmed finding"
             continue
-        for f in found if is_triageable(found) else []:
+        for f in found if GD.is_triageable(found) else []:
             digest = f.get("digest")
             if not digest:
                 continue
