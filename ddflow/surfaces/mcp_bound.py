@@ -52,6 +52,10 @@ ITEM_PLUMBING = ("landed_before", "landed_after")
 #: reviewers wrote what they did and found; the long ones run to 700+ characters, and
 #: `ddflow --json show` has them whole.
 TEXT_SHOWN = 160
+#: Findings one gate's evidence `chunk_findings` list and one gate's triage keep in
+#: `ddflow_show`; the rest are counted. Cutting every STRING was not enough: one round
+#: that found hundreds still overflowed the surface budget (B-show-mcp-result-over-ceiling).
+FINDINGS_SHOWN = 10
 #: What a cut string ends in.
 CUT_MARK = " [...]"
 
@@ -163,11 +167,45 @@ def _drop_repeated_locations(out: dict[str, Any]) -> bool:
     return stripped
 
 
+def _cap_findings(out: dict[str, Any]) -> int:
+    """Cap the repeatable evidence `ddflow_show` keeps. Every LIST inside a gate record
+    (the per-finding lists -- `chunk_findings`, `baseline`, `failed_tests`, `failure_tails`,
+    `failed_reasons`, `titles`, ...) and each gate's triage keep the first `FINDINGS_SHOWN`;
+    the rest are counted, not echoed. Cutting every STRING was not enough: `unit_tests`
+    baseline and failed-test lists, and a review's per-finding lists, still overflowed the
+    surface budget on their own."""
+    dropped = [0]
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, list):
+            if len(value) > FINDINGS_SHOWN:
+                dropped[0] += len(value) - FINDINGS_SHOWN
+                value = value[:FINDINGS_SHOWN]
+            return [walk(v) for v in value]
+        if isinstance(value, dict):
+            return {k: walk(v) for k, v in value.items()}
+        return value
+
+    gates = out.get("gates")
+    if isinstance(gates, dict):
+        out["gates"] = walk(gates)
+    triage = out.get("triage")
+    if isinstance(triage, dict):
+        for gate, recs in list(triage.items()):
+            kept = recs
+            if isinstance(recs, dict) and len(recs) > FINDINGS_SHOWN:
+                dropped[0] += len(recs) - FINDINGS_SHOWN
+                kept = dict(list(recs.items())[:FINDINGS_SHOWN])
+            triage[gate] = walk(kept)
+    return dropped[0]
+
+
 def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_show`: the item without its empty fields; each gate record without the
     tree-identity boilerplate (`GATE_BOILERPLATE`); the gate and triage records' long
-    strings cut (see `_clip`). The outcome, who, when, the reason and the evidence's
-    own words stay, and `truncated` names what was left out."""
+    strings cut (see `_clip`) and their findings capped (see `_cap_findings`). The outcome,
+    who, when, the reason and the evidence's own words stay, and `truncated` names what
+    was left out."""
     if not isinstance(body, dict) or ("state" not in body and "gates" not in body):
         return body, None
     lean = _lean(body)
@@ -179,10 +217,12 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     for key in ("gates", "triage"):
         if key in out:
             out[key] = _clip(out[key], cut)
-    if stripped or cut[0]:
+    findings_cut = _cap_findings(out)
+    if stripped or cut[0] or findings_cut:
         out["truncated"] = {
             "strings_cut": cut[0],
-            "left_out": "tree ids, gate names, sub-second times, landed_before/after",
+            "findings_cut": findings_cut,
+            "left_out": "tree ids, gate names, sub-second times, landed_before/after, findings beyond the first",
             "all": "ddflow --json show <id>",
         }
     return out, None

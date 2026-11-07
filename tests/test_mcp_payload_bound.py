@@ -259,6 +259,30 @@ def test_a_triage_record_without_location_or_title_is_not_reported_as_cut():
         assert B.bound_show(body, {})[0] == body, rec
 
 
+def test_show_caps_gate_findings_and_triage_and_counts_what_it_left_out():
+    """A review that found hundreds still stays under the surface budget: one gate's
+    evidence `chunk_findings` list and each gate's triage keep the first findings and the
+    rest are counted, never echoed (B-show-mcp-result-over-ceiling)."""
+    finding = {"chunk": 1, "title": "t" * 200, "detail": "d" * 200, "location": "l" * 200}
+    body = {
+        "state": "open",
+        "gates": {
+            "critic": {
+                "outcome": "passed",
+                "evidence": {"chunk_findings": [dict(finding) for _ in range(150)]},
+            }
+        },
+        "triage": {"critic": {f"f{i}": dict(finding) for i in range(150)}},
+    }
+    out, _ = B.bound_show(body, {})
+    assert len(out["gates"]["critic"]["evidence"]["chunk_findings"]) == B.FINDINGS_SHOWN
+    assert len(out["triage"]["critic"]) == B.FINDINGS_SHOWN
+    cut = out["truncated"]
+    assert cut["findings_cut"] == (150 - B.FINDINGS_SHOWN) * 2
+    assert "--json show" in cut["all"]
+    assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
+
+
 def test_a_string_just_over_the_cut_is_left_whole_because_cutting_would_not_shrink_it():
     edge = "w" * (B.TEXT_SHOWN + len(B.CUT_MARK))
     out, _ = B.bound_show({"state": "open", "gates": {"g": {"evidence": {"note": edge}}}}, {})
