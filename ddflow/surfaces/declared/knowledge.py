@@ -30,7 +30,7 @@ _DECISION_FIELDS = (
 )
 
 
-def _contested_decision_text(d) -> str:
+def _contested_record_text(d, fields, globs_label="") -> str:
     """Every rival definition whole, each from its own event: never one merged record."""
     lines = [
         f"{d['id']} — CONTESTED: {len(d['contested'])} definitions from different agents; "
@@ -40,12 +40,16 @@ def _contested_decision_text(d) -> str:
         x = r["data"]
         lines.append(f"\n  definition {r['event']} by {r['agent']} (lamport {r['lamport']})")
         lines.append(f"    title {x.get('title', '')!r}")
-        for label, key in _DECISION_FIELDS:
+        for label, key in fields:
             if x.get(key):
                 lines.append(f"    {label}: {x[key]}")
-        if x.get("globs"):
-            lines.append(f"    Governs: {', '.join(x['globs'])}")
+        if globs_label and x.get("globs"):
+            lines.append(f"    {globs_label}: {', '.join(x['globs'])}")
     return "\n".join(lines)
+
+
+def _contested_decision_text(d) -> str:
+    return _contested_record_text(d, _DECISION_FIELDS, globs_label="Governs")
 
 
 def _decision_text(out, a) -> str:
@@ -89,6 +93,39 @@ def _applicable_text(out, a) -> str:
 def _lesson_hits(out, a) -> str:
     cut = out.data["snippet_chars"]
     return "\n".join(f"- {h['title']}\n    {(h.get('rule') or '')[:cut]}" for h in out.data["hits"])
+
+
+_LESSON_FIELDS = (
+    ("Rule", "rule"),
+    ("Why", "why"),
+    ("How", "how"),
+)
+
+
+def _lesson_text(out, a) -> str:
+    lesson = out.data["lesson"]
+    if lesson.get("contested"):
+        return _contested_record_text(lesson, _LESSON_FIELDS)
+    head = f"{lesson['id']} — {lesson['title']}"
+    if lesson.get("superseded_by"):
+        head += f" (superseded by {lesson['superseded_by']})"
+    lines = [head]
+    for label, key in _LESSON_FIELDS:
+        if lesson.get(key):
+            lines.append(f"\n{label}:\n  {lesson[key]}")
+    if lesson.get("summary"):
+        lines.append(f"\nSummary:\n  {lesson['summary']}")
+    if lesson.get("tags"):
+        lines.append(f"\nTags: {', '.join(lesson['tags'])}")
+    if lesson.get("seen_in"):
+        lines.append(f"\nSeen in: {', '.join(lesson['seen_in'])}")
+    if lesson.get("pattern"):
+        lines.append(f"\nPattern: {lesson['pattern']}")
+    if lesson.get("globs"):
+        lines.append(f"\nGlobs: {', '.join(lesson['globs'])}")
+    if lesson.get("sites"):
+        lines.append(f"\nSites: {', '.join(lesson['sites'])}")
+    return "\n".join(lines)
 
 
 def _dupe_pairs(out, a) -> str:
@@ -250,6 +287,20 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="default: [lessons].max_results",
             ),
         ),
+    ),
+    Command(
+        path=("lesson", "show"),
+        render=_lesson_text,
+        tool="ddflow_lesson_show",
+        family="ddflow_memory",
+        action="lesson_show",
+        tier="standard",
+        description="Read ONE lesson in full by its id — its rule, why and how. `ddflow lesson list` "
+        "gives you the titles; this is a lesson a recall hit or a link cited by id. "
+        "Read it before re-learning it.",
+        call=lambda repo, a, agent: _api().lesson_show(repo, a["id"]),
+        payload="lesson",
+        params=(Param("id", help="Lesson id.", cli_help="", positional=True),),
     ),
     Command(
         path=("recall",),

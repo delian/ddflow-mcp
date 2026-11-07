@@ -1,0 +1,10 @@
+id = "r-surface-budget"
+title = "The advertised tool surface and every result carry recorded byte ceilings"
+tags = ["architecture", "tokens", "mode-parity"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:20:19.135940+00:00"
+updated = "2026-11-03T16:20:19.135948+00:00"
+
+R-mode-parity 5. RULE: tools/list and each result have a byte ceiling recorded per profile; a new tool or action justifies its bytes against the recorded budget; annotations are paid for by trimming descriptions. CHECK: the startcost meter plus a result-size ceiling test on the fixture (MCPP-result-bounds, 20 KB). VERIFY: what does this add to tools/list and to the largest result?

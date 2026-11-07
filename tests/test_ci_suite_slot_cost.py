@@ -245,6 +245,66 @@ def test_a_measured_decision_reaches_the_run(monkeypatch):
     assert calls and calls[0][-1] == [5.0]
 
 
+def test_a_queued_suite_run_charges_the_wait_against_its_own_budget(monkeypatch):
+    """B-ci-timeout-doubles-with-queue-wait: `--timeout N` bounded the queue wait to N and gave
+    the run behind the slot the SAME N again, so a queued run could take 2N seconds (a --full run
+    queued two hours and was then killed at the harness limit having run no test). The time the
+    slot cost comes off the run's own timeout: wait plus run is one deadline."""
+
+    reads = iter([0.0, 20.0]).__next__  # the two monotonic() calls in _run_locked
+
+    class Hold:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    got: list = []
+
+    def fake_execute(*a, **k):
+        got.append(a[4])
+        return NS(), ""
+
+    monkeypatch.setattr(runner.time, "monotonic", reads)
+    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
+    monkeypatch.setattr(runner, "_execute", fake_execute)
+
+    # a full-suite run with a 7200 s per-run override whose slot cost it 20 s of queue
+    runner._run_locked(
+        Config(), "h", runner.Path("."), "c", None, 7200, None, {}, True, lock_wait=7200.0
+    )
+    assert got == [7180]
+
+
+def test_a_wait_that_used_the_whole_budget_leaves_the_run_a_floor(monkeypatch):
+    """The wait can consume the whole timeout; the run keeps 1 s, never zero or negative."""
+
+    reads = iter([0.0, 7300.0]).__next__
+
+    class Hold:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    got: list = []
+
+    def fake_execute(*a, **k):
+        got.append(a[4])
+        return NS(), ""
+
+    monkeypatch.setattr(runner.time, "monotonic", reads)
+    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
+    monkeypatch.setattr(runner, "_execute", fake_execute)
+
+    runner._run_locked(
+        Config(), "h", runner.Path("."), "c", None, 7200, None, {}, True, lock_wait=7200.0
+    )
+    assert got == [1]
+
+
 def test_the_item_run_reads_the_log_and_a_named_or_full_run_does_not(monkeypatch, tmp_path):
     got: list = []
     log = NS(read_all=lambda: [_run()] * 3)

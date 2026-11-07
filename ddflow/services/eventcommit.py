@@ -7,7 +7,8 @@ incomplete history. `commit_at` is called at the merge, complete, release and st
 (`[log].commit_events_at`).
 
 It commits ONLY `.ddflow/events/*.jsonl`, with a pathspec so anything else staged in the
-primary stays staged and untouched, never bypasses the repository's hooks, and never
+primary stays staged and untouched. The log holds no code, so its commit skips the
+repository's hooks (they only delay it and let another lane's commit race in), and never
 fails the operation that called it: a refusal is returned as text for the caller to
 report.
 """
@@ -143,15 +144,16 @@ def commit_shards(
     ``hold`` is a context manager factory (the log's `transaction`). Under it the shards are
     read ONCE, each checked to hold whole lines. Then, outside it, a private index is built on
     HEAD as it is at that moment with exactly those bytes, and committed -- with the project's
-    hooks, which can take minutes (a pre-commit suite). The commit is therefore of the bytes
-    that were checked, whatever a writer appends meanwhile (that line waits for the next
-    door), and no other ddflow command waits for the hooks: holding the append lock that long
-    made every one of them time out with a "wedged agent" message
-    (merge-holds-event-lock-during-ci). A commit that lands while the hooks run cannot be
-    reverted by this one: git takes the parent when the commit begins and refuses to move HEAD
-    if it is no longer there ("cannot lock ref"), which is reported as a refusal; the short span
-    before the commit begins (a `rev-parse`, a `read-tree` and an `update-index`) is checked
-    afterwards, and a commit that landed in it is remade on top of that commit.
+    hooks SKIPPED (`--no-verify`): the event log holds no code, so a pre-commit suite or a
+    commit-msg hook only delays the commit (a commit-msg hook alone ran over 2 minutes) and
+    lets another lane's commit race in (bug B-events-commit-races-shared-main). The commit is
+    therefore of the bytes that were checked, whatever a writer appends meanwhile (that line
+    waits for the next door), and no other ddflow command waits for a hook. A commit that
+    lands before this one begins cannot be reverted by it: git takes the parent when the
+    commit begins and refuses to move HEAD if it is no longer there ("cannot lock ref"), which
+    is reported as a refusal; the short span before the commit begins (a `rev-parse`, a
+    `read-tree` and an `update-index`) is checked afterwards, and a commit that landed in it
+    is remade on top of that commit.
 
     Two doors would still move HEAD together, so the commit and the resetting of the shared
     index sit under a lock of their own (in the git directory) that only event-log commits
@@ -187,9 +189,11 @@ def commit_shards(
             if built:
                 return "", f"event log not committed: {built}"
             env = {"GIT_INDEX_FILE": str(private)}
-            # the tree is read before the hooks run: a hook that stages something would change it
             built_tree = W.git(repo, "write-tree", env=env)
-            done = W.git(repo, "commit", "-m", message, env=env)
+            # The event log holds no code, so the project's hooks only delay it (a commit-msg
+            # hook alone ran over 2 minutes) and let another lane's commit race in -- skip them
+            # (bug B-events-commit-races-shared-main). The serialized lock above is the one path.
+            done = W.git(repo, "commit", "--no-verify", "-m", message, env=env)
             if not done.ok:
                 return "", f"event log not committed: {(done.err or done.out).strip()[-300:]}"
             # The shared index still holds these paths as they were before the commit.
