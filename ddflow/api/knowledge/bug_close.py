@@ -400,10 +400,17 @@ def _fixing_item(st, cfg, bug_id: str) -> Any:
     if rec is None:
         return None
     fix_task = CM.fix_task_for(st, bug_id, cfg)
-    # The bug's own fix task names the source only while it actually works somewhere; an
-    # unclaimed one is not the source, and the item the bug was found on (working in its
-    # own worktree, or landed) is looked up next.
-    if fix_task is not None and (fix_task.worktree or _has_landing_pair(fix_task)):
+    # The bug's own fix task names the source only while it actually works somewhere, or
+    # has already landed (by any path -- a PR keeps only `merged_sha`, no before/after
+    # pair, yet still landed: mirroring the found-item guard just below, so it does not
+    # fall through to a stale found item). An unclaimed one is not the source, and the
+    # item the bug was found on (working in its own worktree, or landed) is looked up next.
+    if fix_task is not None and (
+        fix_task.worktree
+        or _has_landing_pair(fix_task)
+        or fix_task.landed_after
+        or fix_task.merged_sha
+    ):
         return fix_task
     found_on = st.items.get(rec.item) if rec.item else None
     if _has_landing_pair(found_on):
