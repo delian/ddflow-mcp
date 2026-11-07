@@ -13,8 +13,9 @@ import importlib
 
 from conftest import run_cli
 
-# The seam-patching tests reach internals: import the MODULE, not the re-exported `vigil`
-# function (`ddflow.api.reporting.vigil` re-exports the function over the submodule name).
+# The seam-patching tests reach internals: import the MODULE, not the re-exported
+# `vigil_snapshot` function (the area module is `reporting.vigil`; the function is named
+# `vigil_snapshot` so it never shadows the module).
 VV = importlib.import_module("ddflow.api.reporting.vigil")
 
 
@@ -45,7 +46,7 @@ def test_vigil_reports_severities_lanes_and_a_reviewer_line(repo, monkeypatch):
     monkeypatch.setattr(VV.RVM, "load_reviewers", lambda repo: [_Rev()])
     monkeypatch.setattr(VV, "_reviewer_up", lambda url: True)
 
-    out = VV.vigil(repo)
+    out = VV.vigil_snapshot(repo)
 
     assert out.exit == 0, out.reason
     bugs = out.data["bugs"]

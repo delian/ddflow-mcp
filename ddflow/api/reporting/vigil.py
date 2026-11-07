@@ -164,11 +164,14 @@ def _render(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def vigil(repo: Path, *, agent: str = "") -> O.Outcome:
+def vigil_snapshot(repo: Path, *, agent: str = "") -> O.Outcome:
     """The compact health snapshot, one fold, one answer.
 
     Both surfaces share this one body; the prose is ``data["text"]``, built here so the
-    CLI and the MCP tool can never disagree (the same B37 shape `status` is built to)."""
+    CLI and the MCP tool can never disagree (the same B37 shape `status` is built to).
+
+    Named ``vigil_snapshot``, not ``vigil``: the area module is ``reporting.vigil`` and a
+    same-named function would shadow it, breaking `test_an_area_is_reachable_as_its_module`."""
     log, cfg, st = _load(repo, agent)
     events = log.read_all()
     now = time.time()

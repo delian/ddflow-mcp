@@ -31,7 +31,7 @@ COMMANDS: tuple[Command, ...] = (
             "field. Reuses the other verbs (bug list, pins --check, lanes, approvals pending, "
             "reviewers test) rather than reimplementing them. Read-only."
         ),
-        call=lambda repo, a, agent: _api().reporting.vigil(repo, agent=agent),
+        call=lambda repo, a, agent: _api().reporting.vigil_snapshot(repo, agent=agent),
         payload=(
             "bugs",
             "stale_pins",
