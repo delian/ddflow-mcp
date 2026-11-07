@@ -84,3 +84,14 @@ def test_an_unknown_key_is_refused_not_silently_dropped(tmp_path: Path):
     )
     with pytest.raises(DP.PluginError):
         DP.discover_plugins(tmp_path / "home")
+
+
+def test_an_unknown_top_level_key_is_refused(tmp_path: Path):
+    # A stray top-level key (anything but ``plugin``) was silently dropped: a mis-indented
+    # ``name = "..."`` sat beside the ``[[plugin]]`` tables and read as "no plugins". Refused.
+    _write_plugin(
+        tmp_path / "home",
+        'name = "oops"\n[[plugin]]\nname = "x"\nkind = "executable"\nprotocol = 1\nargv = ["/bin/true"]\n',
+    )
+    with pytest.raises(DP.PluginError):
+        DP.discover_plugins(tmp_path / "home")
