@@ -59,9 +59,11 @@ def test_research_and_rules_are_stale_when_the_branch_was_rebuilt(adopted):
     # from main, which is the ANCESTOR of the lost branch's commit, so the recorded
     # commit does not descend from the tree being checked.
     main = _git(adopted, "rev-parse", "HEAD~1").strip()
-    marked = {n.gate for n in _stale(adopted, main)}
+    notes = _stale(adopted, main)
+    marked = {n.gate for n in notes}
     assert "research" in marked, "research survived the rebuilt branch as a bare pass"
     assert "rules" in marked, "rules survived the rebuilt branch as a bare pass"
+    assert all("rebuilt" in n.why for n in notes), "the note names the branch being rebuilt"
 
 
 def test_research_and_rules_stay_fresh_within_the_same_branch(adopted):
