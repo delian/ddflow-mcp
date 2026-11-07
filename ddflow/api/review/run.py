@@ -654,7 +654,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         "how": how,
         "reviewer": named.reviewer,
         "family": named.family,
-        "findings": _finding_rows(named),
+        "findings": _finding_rows(results),
         "text": "\n".join(transcript),
     }
     exit_code = {
