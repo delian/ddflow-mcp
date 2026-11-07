@@ -173,6 +173,9 @@ def test_fake_move_mirrors_local_on_parents_and_self():
     f = FakeFs({"/f": b"1"})
     f.move("/f", "/f")
     assert f.files == {"/f": b"1"}
+    # moving a directory into its own subtree is refused, like shutil.move
+    with pytest.raises(OSError):
+        FakeFs({"/a/f": b"1"}).move("/a", "/a/b")
 
 
 def test_fake_replace_path_mirrors_local_on_directories():
