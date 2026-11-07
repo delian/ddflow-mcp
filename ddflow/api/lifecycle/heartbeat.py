@@ -249,7 +249,11 @@ def _inbox(repo: Path, cfg, agent: str, *, consume: bool) -> dict[str, Any]:
     at a release or completion. Advisory, like `_waiters`."""
     try:
         got = IB.wake(
-            repo, agent, ttl_s=cfg.lease.inbox_ttl_s, consume=consume, retain_s=cfg.lease.inbox_retain_s
+            repo,
+            agent,
+            ttl_s=cfg.lease.inbox_ttl_s,
+            consume=consume,
+            retain_s=cfg.lease.inbox_retain_s,
         )
         return {"wake": got} if got else {}
     except (OSError, ValueError, TypeError, AttributeError):

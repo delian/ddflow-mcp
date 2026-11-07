@@ -639,8 +639,9 @@ COMMANDS: tuple[Command, ...] = (
         "be shown whole here, fenced as untrusted data. Local to this machine.",
         call=lambda repo, a, agent: _api().session_inbox(repo, agent=agent),
         payload=("messages", "count"),
-        render=lambda out, a: "\n\n".join(m["fenced"] for m in out.data["messages"])
-        or "no retained inbox messages",
+        render=lambda out, a: (
+            "\n\n".join(m["fenced"] for m in out.data["messages"]) or "no retained inbox messages"
+        ),
         params=(),
     ),
     Command(

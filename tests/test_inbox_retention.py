@@ -43,4 +43,3 @@ def test_delivery_is_once_even_when_retention_cannot_write(repo):
     got = IB.take(repo, "lane")
     assert [m.text for m in got] == ["hi"]
     assert IB.pending(repo, "lane") == []  # delivered once, never pending twice
-

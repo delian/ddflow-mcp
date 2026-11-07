@@ -135,7 +135,9 @@ def _load(path: Path) -> Message | None:
         ok = all(isinstance(getattr(m, f), str) for f in ("to", "reason", "text", "sender"))
         ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
         ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
-        ok = ok and isinstance(m.delivered_at, (int, float)) and not isinstance(m.delivered_at, bool)
+        ok = (
+            ok and isinstance(m.delivered_at, (int, float)) and not isinstance(m.delivered_at, bool)
+        )
         ok = ok and math.isfinite(m.sent_at) and math.isfinite(m.delivered_at)
         m.file = path.name  # the file is the identity: a forged id cannot hide a message
         m.id = clean(path.stem, 120)[0]
