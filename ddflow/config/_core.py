@@ -90,8 +90,13 @@ class _SectionFields:
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
-        for name in sorted(SECTION_CLASSES):
-            cls.__annotations__[name] = SECTION_CLASSES[name]
+        # Prepend the section fields so they stay BEFORE the bookkeeping fields declared in
+        # the class body (a section was the first `fields(Config)` entry, never `sources`:
+        # `__init_subclass__` runs after the body, so appending would move `sources` first
+        # and reorder the positional `__init__`).
+        sections = dict(sorted(SECTION_CLASSES.items()))
+        cls.__annotations__ = {**sections, **cls.__annotations__}
+        for name in sections:
             setattr(cls, name, field(default_factory=SECTION_CLASSES[name]))
 
 
