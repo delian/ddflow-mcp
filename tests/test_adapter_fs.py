@@ -275,6 +275,16 @@ def test_fake_mirrors_shutil_on_directories():
         f.move("/z", "/dst")  # a directory over a file
     f.copy_tree("/z", "/z/sub", dirs_exist_ok=True)  # its own subtree: shutil returns
     assert f.files["/z/sub/f"] == b"1" and f.is_dir("/z/sub/empty")
+    # a directory onto itself is a no-op (no file to copy onto itself), like
+    # shutil.copytree(s, s, dirs_exist_ok=True)
+    e2 = FakeFs()
+    e2.mkdir("/z")
+    e2.mkdir("/z/empty")
+    e2.copy_tree("/z", "/z", dirs_exist_ok=True)
+    assert e2.is_dir("/z") and e2.is_dir("/z/empty")
+    # ... but a file under it would copy onto itself, refused like shutil.Error
+    with pytest.raises(shutil.Error):
+        FakeFs({"/w/f": b"1"}).copy_tree("/w", "/w", dirs_exist_ok=True)
     for call in (lambda: f.rmtree("/"), lambda: f.copy_tree("/", "/x"), lambda: f.move("/", "/x")):
         with pytest.raises(ValueError):
             call()

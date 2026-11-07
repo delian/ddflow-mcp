@@ -127,11 +127,12 @@ class FakeFs:
             raise FileNotFoundError(s)
         if d == s:
             # `shutil.copytree` on the source itself: `makedirs(dst, exist_ok=False)`
-            # refuses the existing directory, and with `dirs_exist_ok` a file copies
-            # onto itself (`shutil.Error`); an empty one is a no-op (falls through).
+            # refuses the existing directory; with `dirs_exist_ok` a FILE copies onto
+            # itself (`shutil.Error`) while empty directories do not, so a
+            # directory-only tree falls through as a no-op below.
             if not dirs_exist_ok:
                 raise FileExistsError(d)
-            if self._under(s) or self._dirs_under(s):
+            if self._under(s):
                 raise Error(f"cannot copy a directory {s!r} into itself")
         # A directory into its own subtree is NOT refused above: with `dirs_exist_ok`
         # shutil's snapshot copy lands one level deep (the loop below maps s onto d in
