@@ -439,7 +439,7 @@ def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_mo
     same ``author_model`` as `_gate_outcome` decides the discount (bug B7dbf432caa): a
     same-family finding discounted over a clean cross-family verdict must not make the
     same-family reviewer the named failing one on a passed gate."""
-    blocking, _ = _blocking_findings(results, it, gate, converging, cfg, author_model)
+    blocking = _blocking_findings(results, it, gate, converging, cfg, author_model)[0]
     for r in results:
         if any(b is f for b in blocking for f in r.findings):
             return r

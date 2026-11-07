@@ -227,12 +227,14 @@ def _author_single_family(cfg, author_model: str) -> str | None:
 
 
 def _rev_family(r, cfg) -> str:
-    """A reviewer result's resolved family, lowercased, ``unknown`` normalised to ""."""
+    """A reviewer result's resolved family, lowercased, ``unknown`` normalised to "" --
+    after the fallback too, so a family that the map itself names ``unknown`` is still
+    "cannot be told", never an independent cross family."""
     fam = (getattr(r, "family", "") or "").strip().lower()
-    if fam == "unknown":
-        fam = ""
+    fam = "" if fam == "unknown" else fam
     if not fam:
         fam = (GD.family_of(getattr(r, "model", "") or "", cfg) or "").strip().lower()
+        fam = "" if fam == "unknown" else fam
     return fam
 
 
@@ -322,6 +324,13 @@ def _gate_outcome(
     )
     if blocking:
         return "failed", extra_evidence
+    # A full re-review must not converge (pass on below-floor findings) while a confirmed
+    # finding the gate has ever recorded still awaits a later delta round (bug
+    # B-push-failed-review-delta). Checked BEFORE the same-family discount: a PRIOR
+    # confirmed finding is a real defect that still blocks, and the discount below is only
+    # about THIS round's same-family findings.
+    if converged_round and _confirmed_unrechecked(it, gate):
+        return "failed", extra_evidence
     # A same-family reviewer's finding does not hold the pass open when a cross-family
     # reviewer came back clean: cross-family clean is authoritative (bug B7dbf432caa). The
     # discounted findings stay on the record, just not blocking -- so the author's own
@@ -339,11 +348,6 @@ def _gate_outcome(
             "recorded but not blocking: a cross-family reviewer passed clean"
         )
         return "passed", extra
-    # A full re-review must not converge (pass on below-floor findings) while a confirmed
-    # finding the gate has ever recorded still awaits a later delta round (bug
-    # B-push-failed-review-delta).
-    if converged_round and _confirmed_unrechecked(it, gate):
-        return "failed", extra_evidence
     converged = {
         "findings_below_floor": len(found),
         "floor": cfg.review.converge_floor,

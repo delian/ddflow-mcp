@@ -236,7 +236,12 @@ def test_a_same_family_finding_does_not_block_when_cross_family_is_clean(repo, t
     """The regression for bug B7dbf432caa: a same-family (deepseek) reviewer's finding is
     recorded but does not keep the gate failed when cross-family reviewers (grok, gemini)
     both passed clean -- cross-family clean is authoritative, and the author's own family
-    must not veto it by never converging to a clean delta round."""
+    must not veto it by never converging to a clean delta round.
+
+    On the UNFIXED aggregation the single same-family finding here made `_gate_outcome`
+    return "failed" (every heard reviewer's finding blocked, whatever its family), so the
+    `outcome == "passed"` assertion below fails: that failure is the regression this test
+    guards -- the merge refusal across rounds is only the symptom of that aggregation."""
     _setup_same_family_finding_cross_family_clean(repo, tmp_path)
     out = api.review(repo, gate="critic", item="T1", branch="feat")
     assert out.exit == 0, out.reason
