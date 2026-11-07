@@ -117,14 +117,16 @@ def _patched_reexport(
         # A variable attribute name on the package re-spells any re-export and cannot be
         # resolved statically: flag it so the author spells the submodule patch out.
         return "<dynamic>" if _is_log_package(target, log_names, parent_names) else None
-    # Two-arg form. ``setattr("ddflow.infra.log.<name>", value)`` gives the target path as a
-    # dotted string; ``setattr(L, "APPEND_HOOKS")`` deletes the package attribute.
+    # Two-arg form. ``setattr(L, "APPEND_HOOKS")`` / ``setattr("ddflow.infra.log",
+    # "APPEND_HOOKS")`` deletes the package attribute; ``setattr("ddflow.infra.log.NAME",
+    # value)`` names the attribute as the last part of the dotted target string.
+    if isinstance(name, ast.Constant) and isinstance(name.value, str):
+        on_log = name.value in reexports and _is_log_package(target, log_names, parent_names)
+        if on_log:
+            return name.value
     if isinstance(target, ast.Constant) and isinstance(target.value, str):
         path_str, attr = _dotted_string_name(target.value)
         return attr if attr in reexports and path_str == "ddflow.infra.log" else None
-    if isinstance(name, ast.Constant) and isinstance(name.value, str):
-        on_log = name.value in reexports and _is_log_package(target, log_names, parent_names)
-        return name.value if on_log else None
     return None
 
 
@@ -165,6 +167,7 @@ _PACKAGE_PATCH_FORMS = [
     'monkeypatch.setattr(target="ddflow.infra.log", name="APPEND_HOOKS", value=[])',
     # deletion form: omitting ``value`` deletes the package attribute only
     'import ddflow.infra.log as L\nmonkeypatch.setattr(L, "APPEND_HOOKS")',
+    'monkeypatch.setattr("ddflow.infra.log", "APPEND_HOOKS")',
     # parent-import spelling: ``from ddflow import infra`` reaches the package as ``infra.log``
     'from ddflow import infra\nmonkeypatch.setattr(infra.log, "APPEND_HOOKS", [])',
 ]
