@@ -112,7 +112,11 @@ def _mode(tree, ref: str, path: str) -> str | None:
     when git cannot read it. A mode-only change (``chmod +x``) changes executability, which the
     blob-comparing ``_show`` cannot see, so it is compared here: a mode that moved is a
     behavior change, never a format-only claim."""
-    r = W.git(tree, "ls-tree", ref, "--", path)
+    # `:(literal)` pathspec magic: `git ls-tree` treats its path arguments as glob
+    # PATTERNS, so a tracked file whose name contains a glob metacharacter (``a*.py``)
+    # would match several entries and read back the first match's mode. Literal match a
+    # path so a metachar in the name stays part of the name, never a pattern.
+    r = W.git(tree, "ls-tree", ref, "--", f":(literal){path}")
     if not r.ok or not r.out:
         return None
     return r.out.split(" ", 1)[0]

@@ -120,6 +120,29 @@ def test_a_mode_only_change_is_not_trivial(repo):
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
 
 
+def test_a_mode_change_on_a_glob_named_file_is_not_trivial(repo):
+    """critic: `git ls-tree` path args are glob PATTERNS, so a tracked file literally named
+    ``a*.py`` would match every ``src/a*.py`` entry and read back the first match's mode. A
+    `chmod +x` on the ``*``-named file must then still read as a mode change (not trivial),
+    so ``_mode`` matches the path literally."""
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    _commit(repo, "src/a!.py", "y = 1\n")
+    _commit(repo, "src/a*.py", "x = 1\n")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    subprocess.run(
+        ["git", "-C", str(tree), "add", "--chmod=+x", ":(literal)src/a*.py"], check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(tree), "commit", "-qm", "chmod +x the *-named file"], check=True
+    )
+    assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
+
+
 def test_docs_only_is_trivial_too(cfg):
     from ddflow.services.docsonly import diff_is_docs_only
 
