@@ -306,6 +306,11 @@ def _file_fix_task(
     parent, phase_made = _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
+    # needs is always empty here, so the file-it tag carries `no-deps`: a task with no
+    # prerequisite is tagged no-deps, not left to guess (r-task-phase-needs-wave). The bug's
+    # own fix task lives under the standing bugs phase (a bug blocks no feature phase), so it
+    # never takes the found item's phase: `bug found --item X` says where to look, not which
+    # phase holds the fix (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
     first = summary.strip().splitlines()[0] if summary.strip() else ""
     headline = " ".join((title or first).split())
     full_title = f"Fix bug {bug_id}: {headline}" if headline else f"Fix bug {bug_id}"
@@ -335,7 +340,7 @@ def _file_fix_task(
         needs=[],
         globs=kept,
         body=body,
-        tags=[tag],
+        tags=[tag, "no-deps"],
         # the item's own priority when it set one; the bug band when it sits at the generic default
         priority=src.priority
         if src and src.priority != DEFAULT_PRIORITY
