@@ -83,17 +83,12 @@ def _dotted_string_name(dotted: str) -> tuple[str, str]:
     return parent, attr
 
 
-def _patched_on_package(path: Path, reexports: dict[str, set[str]]) -> list[str]:
-    """``path:line: name`` for each monkeypatch rebinding a re-export on the log package
-    itself rather than the sibling submodule that actually reads the name.
-
-    pytest's ``monkeypatch.setattr`` takes ``(target, name, value)``, the dotted-string
-    short form ``setattr("ddflow.infra.log.APPEND_HOOKS", value)`` (the last ``.part`` is
-    the name), and keyword arguments; all three rebind the name on the package and must be
-    refused alike."""
-    tree = ast.parse(path.read_text(), filename=str(path))
+def _offenders(src: str, reexports: dict[str, set[str]]) -> list[tuple[int, str]]:
+    """``(line, name)`` for each monkeypatch in ``src`` rebinding a re-export on the log
+    package itself rather than the sibling submodule that actually reads the name."""
+    tree = ast.parse(src)
     log_names = _log_package_bindings(tree)
-    bad: list[str] = []
+    bad: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -121,8 +116,13 @@ def _patched_on_package(path: Path, reexports: dict[str, set[str]]) -> list[str]
             path_str, attr = _dotted_string_name(target.value)
             if attr not in reexports or path_str != "ddflow.infra.log":
                 continue
-        bad.append(f"{path.name}:{node.lineno}: {attr}")
+        bad.append((node.lineno, attr))
     return bad
+
+
+def _patched_on_package(path: Path, reexports: dict[str, set[str]]) -> list[str]:
+    """``path:line: name`` for each offender in one test file."""
+    return [f"{path.name}:{line}: {name}" for line, name in _offenders(path.read_text(), reexports)]
 
 
 def test_no_test_patches_an_infra_log_reexport_on_the_package():
@@ -131,3 +131,29 @@ def test_no_test_patches_an_infra_log_reexport_on_the_package():
     for p in sorted(_TESTS.glob("test_*.py")):
         offenders.extend(_patched_on_package(p, reexports))
     assert not offenders, offenders
+
+
+_PACKAGE_PATCH_FORMS = [
+    'from ddflow.infra import log as L\nmonkeypatch.setattr(L, "APPEND_HOOKS", [])',
+    'import ddflow.infra.log as L\nmonkeypatch.setattr(L, "APPEND_HOOKS", [])',
+    'import ddflow.infra.log\nmonkeypatch.setattr(ddflow.infra.log, "APPEND_HOOKS", [])',
+    'monkeypatch.setattr("ddflow.infra.log.APPEND_HOOKS", [])',
+    'monkeypatch.setattr("ddflow.infra.log", "APPEND_HOOKS", [])',
+    'monkeypatch.setattr(target="ddflow.infra.log", name="APPEND_HOOKS", value=[])',
+]
+
+
+def test_guard_flags_every_package_patch_form():
+    """Each way pytest lets a test rebind a re-export on the PACKAGE is refused, so the
+    guard cannot be bypassed by re-spelling the same call."""
+    reexports = _by_value_reexports()
+    for src in _PACKAGE_PATCH_FORMS:
+        names = [name for _, name in _offenders(src, reexports)]
+        assert names == ["APPEND_HOOKS"], (src, names)
+
+
+def test_guard_allows_patching_the_submodule_that_reads_the_name():
+    """The submodule is where the name is read: patching it fires and is not refused."""
+    reexports = _by_value_reexports()
+    src = 'from ddflow.infra import log as L\nmonkeypatch.setattr(L._eventlog, "APPEND_HOOKS", [])'
+    assert _offenders(src, reexports) == []
