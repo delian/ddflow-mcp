@@ -1,0 +1,10 @@
+id = "r-replay-compat"
+title = "The event log is never rewritten; old logs always replay; new event kinds are additive"
+tags = ["architecture", "data"]
+scope = "project"
+priority = 100
+globs = ["ddflow/core/**"]
+created = "2026-11-03T14:12:34.719828+00:00"
+updated = "2026-11-03T14:12:34.719843+00:00"
+
+WHY: the event log is the source of truth and is committed. RULE: never edit or delete committed events to fix a bug (append a correcting event); a new event kind or field is additive with an upcaster for old shapes; unknown kinds are ignored and reported, never a crash; a change to a fold handler must keep the replay of the project's own log identical unless a decision says otherwise; migrations are tested on a copy. CHECK: replay tests (replay equals live), event-kind fixtures. VERIFY: replay the current log before and after and compare.

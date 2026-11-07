@@ -1,0 +1,10 @@
+id = "r-docs-with-the-change"
+title = "A user-visible change ships with its help, docs, knob docs, upgrade note and tests"
+tags = ["process", "docs"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:13:41.951703+00:00"
+updated = "2026-11-03T14:13:41.951715+00:00"
+
+RULE: a new or changed command, knob, record kind, gate or message ships in the same change with: generated help (one declaration), a docs page or section, the knob register entry and README table regeneration, an upgrade-manifest fragment, golden pins regenerated through the recipe, and tests; a bug fix ships a regression test that failed before the fix. CHECK: version lint, docs check, knob-table test, B-evidence-contract, QA-f2p-task. VERIFY: could a new user find and use this change from the docs alone?
