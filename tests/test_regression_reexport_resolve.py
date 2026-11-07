@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import pass_pipeline, run_cli
 from test_bug_regression_verified import _commit, _fixed_events, _worktree
 from test_regression_testfix import BROKEN
 
@@ -39,6 +39,9 @@ def _case(repo: Path) -> Path:
 
 def test_a_re_exported_test_is_resolved_and_the_bug_closes(repo):
     _case(repo)
+    pass_pipeline(repo, "fix-B1")
+    code, _out, err = run_cli(repo, "merge", "fix-B1")
+    assert code == OK, err
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_v.py::test_v")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "verified", out.data
