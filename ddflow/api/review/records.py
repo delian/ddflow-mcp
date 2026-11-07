@@ -57,21 +57,24 @@ def _say_result(say: Callable[[str], None], res, kept=None) -> None:
 def _record_numbers(res, kept):
     """(record number, finding) pairs: a round's findings numbered #1..#K as a full round
     numbers them, or each delta finding numbered where its digest stands in ``kept`` (the
-    earlier findings a byte-identical one stays bound to; a new one is the next place)."""
+    earlier findings a byte-identical one stays bound to; a new one is the next place).
+
+    ``kept`` is the caller's growing list of the findings seen before, extended here as
+    each finding is emitted, so a second reviewer's delta finding is numbered after the
+    first's (bug B32ce00713b, raised two reviewers a delta round numbers the same)."""
     if kept is None:
         return list(enumerate(res.findings, 1))
     have = {str(f.get("digest") or ""): n for n, f in enumerate(kept, 1)}
-    horizon = len(kept)
     numbered: list[tuple[int, Any]] = []
     for f in res.findings:
         digest = str(getattr(f, "digest", "") or "")
         if digest and digest in have:
             n = have[digest]
         else:
-            horizon += 1
+            kept.append({"digest": digest})
+            n = len(kept)
             if digest:
-                have[digest] = horizon
-            n = horizon
+                have[digest] = n
         numbered.append((n, f))
     return numbered
 
