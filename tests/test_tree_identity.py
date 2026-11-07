@@ -23,6 +23,7 @@ from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import gates as G
+from ddflow.services.gates import evidence as EV
 from ddflow.services.gates import outcomes
 
 
@@ -216,6 +217,27 @@ def test_is_tree_reads_both_spellings_and_nothing(adopted):
     _git(adopted, "commit", "-qm", "a")
     legacy_clean = _git(adopted, "rev-parse", "HEAD")[:12] + "+" + G.LEGACY_CLEAN
     assert G.is_tree(legacy_clean, adopted), "the pre-fix spelling of a clean tree"
+
+
+def test_a_failed_status_or_diff_reads_as_failed_not_clean(adopted, monkeypatch):
+    """B-dirt-parts-failed-diff-empty: a failed `git status` / `git diff` was folded into
+    "" — indistinguishable from no changes — so a damaged object store let a dirty tree
+    read as ``head+clean`` and a re-edit went unnoticed ("moved fp False id False"). A part
+    git could not produce must digest a marker, exactly as ``_untracked_digest`` returns
+    ``UNLISTED`` when the untracked listing cannot be read."""
+    assert G.tree_identity(adopted).endswith("+clean")
+    real = EV.GIT.run
+
+    def bad_part(cwd: Path, *args: str):
+        if args and args[0] in ("status", "diff"):
+            return EV.GIT.GitResult(1, "", "corrupt object store")
+        return real(cwd, *args)
+
+    monkeypatch.setattr(EV.W, "git", bad_part)
+    assert not G.tree_identity(adopted).endswith("+clean"), "a failed status/diff read as clean"
+    assert not G.tree_fingerprint(adopted).endswith("+clean")
+    _, parts = EV._dirt_parts(adopted)
+    assert EV.FAILED in parts, "a failed status/diff fell back to 'no changes' (clean)"
 
 
 def test_a_re_edit_of_an_already_dirty_BINARY_moves_the_fingerprint(repo):
