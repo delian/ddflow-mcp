@@ -65,13 +65,15 @@
 # ---
 # name: test_help[ddflow approvals attest]
   '''
-  usage: ddflow approvals attest [-h] id
+  usage: ddflow approvals attest [-h] [--all] [id]
   
   positional arguments:
     id          the request id
   
   options:
     -h, --help  show this help message and exit
+    --all       auto-attest every pending request whose canonical question is answered (a chat
+                answer alone approves each)
   
   '''
 # ---
