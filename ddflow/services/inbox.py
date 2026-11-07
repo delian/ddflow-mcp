@@ -52,6 +52,7 @@ class Message:
     sender: str = ""
     item: str = ""  #: the item it concerns, if any
     sent_at: float = 0.0
+    delivered_at: float = 0.0  #: when it was delivered (retained); 0 while pending
     id: str = ""
     file: str = ""  #: the on-disk name, set on read; never shown
 
@@ -64,6 +65,13 @@ def _dir(repo: Path, agent: str) -> Path:
     if not name.strip("."):  # "." and ".." name a directory, not an agent
         name = "_" + name
     return Path(repo) / INBOX_DIR / name
+
+
+def _delivered_dir(repo: Path, agent: str) -> Path:
+    """Delivered messages live here, beside the pending ones, so a delivery never deletes
+    (bug B-inbox-message-gone-after-heartbeat): ``take`` moves a read message there instead
+    of unlinking it, and it stays readable through ``delivered`` until retention is past."""
+    return _dir(repo, agent) / "delivered"
 
 
 def clean(text: str, max_chars: int) -> tuple[str, bool]:
@@ -117,36 +125,45 @@ def send(
     return msg, ""
 
 
+def _load(path: Path) -> Message | None:
+    """One message file as a `Message`, or None when it is torn, foreign or corrupt. The
+    file is the identity: a forged ``id`` cannot hide a message, and whatever the file
+    holds is read as untrusted however it got there."""
+    try:
+        raw = json.loads(path.read_text("utf-8"))
+        m = Message(**{k: v for k, v in raw.items() if k in Message.__dataclass_fields__})
+        ok = all(isinstance(getattr(m, f), str) for f in ("to", "reason", "text", "sender"))
+        ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
+        ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
+        ok = ok and isinstance(m.delivered_at, (int, float)) and not isinstance(m.delivered_at, bool)
+        ok = ok and math.isfinite(m.sent_at) and math.isfinite(m.delivered_at)
+        m.file = path.name  # the file is the identity: a forged id cannot hide a message
+        m.id = clean(path.stem, 120)[0]
+        # Whatever the file holds is read as untrusted, however it got there.
+        if ok:
+            m.to, m.sender, m.item = (
+                clean(m.to, 80)[0],
+                clean(m.sender, 80)[0],
+                clean(m.item, 120)[0],
+            )
+            m.text = clean(m.text, READ_CAP)[0]
+    except (OSError, ValueError, TypeError, AttributeError, RecursionError, OverflowError):
+        return None
+    return m if ok else None
+
+
 def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
     """``agent``'s undelivered messages, oldest first. Torn or foreign files are skipped;
     one older than ``ttl_s`` (0 = never) is dropped, so a lane that never reads cannot hold
-    an inbox forever."""
+    an inbox forever. A delivered message is not here: it is retained under ``delivered``."""
     d = _dir(repo, agent)
     if not d.is_dir():
         return []
     out: list[tuple[Path, Message]] = []
     now = time.time()
     for path in sorted(d.glob("*.json")):
-        try:
-            raw = json.loads(path.read_text("utf-8"))
-            m = Message(**{k: v for k, v in raw.items() if k in Message.__dataclass_fields__})
-            ok = all(isinstance(getattr(m, f), str) for f in ("to", "reason", "text", "sender"))
-            ok = ok and isinstance(m.sent_at, (int, float)) and m.reason in REASONS
-            ok = ok and isinstance(m.item, str) and not isinstance(m.sent_at, bool)
-            ok = ok and math.isfinite(m.sent_at)
-            m.file = path.name  # the file is the identity: a forged id cannot hide a message
-            m.id = clean(path.stem, 120)[0]
-            # Whatever the file holds is read as untrusted, however it got there.
-            if ok:
-                m.to, m.sender, m.item = (
-                    clean(m.to, 80)[0],
-                    clean(m.sender, 80)[0],
-                    clean(m.item, 120)[0],
-                )
-                m.text = clean(m.text, READ_CAP)[0]
-        except (OSError, ValueError, TypeError, AttributeError, RecursionError, OverflowError):
-            continue
-        if not ok:
+        m = _load(path)
+        if m is None or m.delivered_at > 0:
             continue
         if ttl_s > 0 and now - m.sent_at > ttl_s:
             with contextlib.suppress(OSError):
@@ -157,12 +174,42 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
 
 
 def take(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
-    """Deliver: the pending messages, each removed as it is returned."""
+    """Deliver: the pending messages, each RETAINED rather than deleted, so an agent can
+    read it again after a piped heartbeat lost it (bug B-inbox-message-gone-after-heartbeat).
+    ``delivered`` shows them until ``[lease].inbox_retain_s`` is past."""
     got = pending(repo, agent, ttl_s=ttl_s)
+    dst_dir = _delivered_dir(repo, agent)
     for m in got:
+        m.delivered_at = time.time()
+        try:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            atomic_write(dst_dir / m.file, json.dumps(asdict(m)))
+        except OSError:
+            continue
         with contextlib.suppress(OSError):
             (_dir(repo, agent) / m.file).unlink()
     return got
+
+
+def delivered(repo: Path, agent: str, *, retain_s: float = 0.0) -> list[Message]:
+    """The delivered messages still retained, oldest first, so a delivery can be read again
+    (bug B-inbox-message-gone-after-heartbeat). One delivered longer ago than ``retain_s``
+    (0 = keep; a project passes ``[lease].inbox_retain_s``) is pruned as it goes."""
+    d = _delivered_dir(repo, agent)
+    if not d.is_dir():
+        return []
+    out: list[tuple[Path, Message]] = []
+    now = time.time()
+    for path in sorted(d.glob("*.json")):
+        m = _load(path)
+        if m is None:
+            continue
+        if retain_s > 0 and now - m.delivered_at > retain_s:
+            with contextlib.suppress(OSError):
+                path.unlink()
+            continue
+        out.append((path, m))
+    return [m for _p, m in sorted(out, key=lambda pm: (pm[1].delivered_at, pm[0].name))]
 
 
 def fenced(m: Message) -> str:
