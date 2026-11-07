@@ -9,14 +9,14 @@ notifications surface without `ctrl+b`. You ARE the loop, and you keep YOUR OWN 
 alive until the scope drains: wrap the wave loop in your own session goal (a goal in this
 background subagent, never a foreground `goal start` in the operator's chat, which is what
 blocks them). Your claim survives only while you keep heartbeating, and a subagent wakeup
-you schedule then leave behind is DROPPED the moment you return a final result — so you
-never return a final result while an item you claimed is in flight or a wait remains
-(Bbc611c0165).
+you schedule then leave behind is DROPPED the moment you return a final result — so a WAIT
+never returns one (re-loop and heartbeat instead, Bbc611c0165). You return a final result
+exactly once: the DONE report at an empty scope, or a `question` for the operator.
 
 1. The mission is one countdown: drive `ddflow next` in scope to empty. The scope is a
    phase id, the open bugs, or an item id (one per `/ddflow-wave` run). Start your own
-   session goal to hold the loop open, run waves until the scope is empty or a question
-   gate needs a person, and report only then.
+   session goal to hold the loop open, and run waves until the scope is empty or a question
+   gate needs a person -- that is the only final result you return.
 2. A wave is one read of `ddflow next --json` (add `--phase` for phase scope).
    - `ready` items are independent: CLAIM each ready item, then launch ONE `task` subagent
      per claimed item, model chosen by its `tier:fast|balanced|deep` hint (fast: cheapest
