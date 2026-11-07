@@ -30,19 +30,43 @@ def test_an_unregistered_plugin_never_loads(tmp_path: Path):
 
 def test_a_project_layer_cannot_register_a_plugin(tmp_path: Path):
     # The project layer (.ddflow/driver_plugins.toml, a clone) may never register a program.
+    # The fixture is a VALID executable (protocol 1) so the assertion is not met by a buggy
+    # reader rejecting it as malformed: it must be absent because that layer is not read.
     project = tmp_path / ".ddflow" / "driver_plugins.toml"
     project.parent.mkdir(parents=True, exist_ok=True)
     project.write_text(
-        '[[plugin]]\nname = "sneaky"\nkind = "executable"\nargv = ["/bin/sh"]\n'
+        '[[plugin]]\nname = "sneaky"\nkind = "executable"\nprotocol = 1\nargv = ["/bin/true"]\n'
     )
     assert "sneaky" not in DP.discover_plugins(root=tmp_path, user_home=tmp_path / "home")
     assert not any(
-        p.name == "driver_plugins.toml"
-        and str(p.parent) == str(tmp_path / ".ddflow")
+        str(p) == str(tmp_path / ".ddflow" / "driver_plugins.toml")
         for p in DP.registration_files(tmp_path, tmp_path / "home")
     )
     with pytest.raises(DP.PluginError):
         DP.load("sneaky", root=tmp_path, user_home=tmp_path / "home")
+
+
+def test_a_third_party_plugin_is_external_not_in_process(tmp_path: Path):
+    # An in-process entry point runs in this process where os.environ is visible, so it is
+    # operator-only: a third-party plugin must be an executable for its sandbox to hold.
+    _write_plugin(
+        tmp_path,
+        tmp_path / "home",
+        '[[plugin]]\nname = "p"\nkind = "entry_point"\ntrust = "third-party"\nentry_point = "ddflow.adapters.fakes.lanes:FakeLane"\n',
+    )
+    with pytest.raises(DP.PluginError):
+        DP.discover_plugins(tmp_path, tmp_path / "home")
+
+
+def test_an_unknown_key_is_refused_not_silently_dropped(tmp_path: Path):
+    # A typo like `sandox` would silently drop the env allowlist; an unknown key is refused.
+    _write_plugin(
+        tmp_path,
+        tmp_path / "home",
+        '[[plugin]]\nname = "x"\nkind = "executable"\nsandox = ["GEMINI_API_KEY"]\nargv = ["/bin/true"]\n',
+    )
+    with pytest.raises(DP.PluginError):
+        DP.discover_plugins(tmp_path, tmp_path / "home")
 
 
 def test_a_plugin_failing_conformance_is_refused(tmp_path: Path):
@@ -70,7 +94,7 @@ def test_a_conforming_entry_point_builds_a_lane(tmp_path: Path):
     _write_plugin(
         tmp_path,
         tmp_path / "home",
-        '[[plugin]]\nname = "fake"\nkind = "entry_point"\nentry_point = "ddflow.adapters.fakes.lanes:FakeLane"\n',
+        '[[plugin]]\nname = "fake"\nkind = "entry_point"\ntrust = "operator"\nentry_point = "ddflow.adapters.fakes.lanes:FakeLane"\n',
     )
     lane = DP.load("fake", root=tmp_path, user_home=tmp_path / "home")
     assert isinstance(lane, Lane)

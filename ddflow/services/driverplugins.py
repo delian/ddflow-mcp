@@ -15,16 +15,22 @@ layer (``.ddflow/driver_plugins.toml``) is deliberately absent: a cloned project
 drivers, never register a program ddflow will run, so ``registration_files`` reads the operator
 layers and not the project's.
 
-Trust and sandbox: each plugin carries ``trust`` (``operator`` or ``third-party``) and a
-``sandbox`` -- the exact env NAMES it may read, the same rule as a ``LaunchSpec``: secrets
-travel by env NAME and their values stay out of every repr, and an unlisted ambient name never
-reaches the plugin. A ``third-party`` plugin is pinned to its declared sandbox.
+Trust and sandbox: each plugin carries ``trust`` (``operator`` or ``third-party``). An
+``operator`` plugin runs in-process (a ``Lane`` built by its entry point, like the in-tree
+transports) with the operator's trust. A ``third-party`` plugin is external: it must be an
+``executable`` (out-of-process) so its ``sandbox`` holds -- the exact env NAMES it may read,
+the same rule as a ``LaunchSpec``: secrets travel by env NAME and their values stay out of
+every repr, and an unlisted ambient name never reaches it. In-process code cannot be sandboxed
+(in-process, ``os.environ`` is visible), which is why an in-process ``entry_point`` is
+operator-only and a ``third-party`` plugin is refused unless it is an executable.
 
-Nothing is enabled before conformance: an entry point that does not build a ``Lane`` (or whose
-capabilities are not all known), or an executable that declares a protocol version this ddflow
-does not speak, is refused (``PluginError``), never run half-read. Major versions define
-compatibility (the Terraform plugin protocol, research driver-architecture 4.5); a byte this
-code does not know is "unavailable: upgrade ddflow".
+Nothing is enabled before conformance: the SDK checks the structure an entry point must honour
+(it builds a ``Lane`` whose capabilities are all known), and the version an executable must
+speak; a plugin that does not, or that declares a protocol version this ddflow does not speak,
+is refused (``PluginError``), never run half-read. Full behavioural conformance is the offline
+DRV-conformance suite's job; this module runs the registration-time checks. Major versions
+define compatibility (the Terraform plugin protocol, research driver-architecture 4.5); a byte
+this code does not know is "unavailable: upgrade ddflow".
 """
 
 from __future__ import annotations
@@ -49,6 +55,10 @@ ENTRY_POINT_GROUP = "ddflow.driver_plugins"
 #: Trust labels. ``operator`` runs with the operator's trust; ``third-party`` is pinned to its
 #: declared sandbox and is not enabled until it conforms.
 TRUST_LABELS = ("operator", "third-party")
+
+#: The keys a ``[[plugin]]`` table may carry. Any other key is refused so a typo never reads
+#: as "not provided" (an ``operator`` typo'd ``sandox`` would silently drop the env allowlist).
+_PLUGIN_KEYS = frozenset({"name", "kind", "trust", "sandbox", "protocol", "entry_point", "argv"})
 
 
 class PluginError(ValueError):
@@ -88,7 +98,11 @@ def registration_files(
 
 
 def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
-    """One ``[[plugin]]`` table into a ``Plugin``; a wrong key or shape is a ``PluginError``."""
+    """One ``[[plugin]]`` table into a ``Plugin``; a wrong key, shape, trust or version is a
+    ``PluginError``. An unknown key is refused so a typo never silently reads as "not provided"."""
+    unknown = sorted(set(table) - _PLUGIN_KEYS)
+    if unknown:
+        raise PluginError(f"{source}: unknown key(s) {', '.join(unknown)} on a [[plugin]] table")
     name = table.get("name")
     if type(name) is not str or not name:
         raise PluginError(f"{source}: a plugin entry needs a string name")
@@ -98,9 +112,6 @@ def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
     trust = table.get("trust", "third-party")
     if trust not in TRUST_LABELS:
         raise PluginError(f"{source}: {name}: trust is {trust!r}, one of {TRUST_LABELS}")
-    sandbox = table.get("sandbox", [])
-    if not isinstance(sandbox, list) or not all(type(v) is str for v in sandbox):
-        raise PluginError(f"{source}: {name}: sandbox is a list of env names")
     protocol = table.get("protocol", 1)
     if type(protocol) is not int:
         raise PluginError(f"{source}: {name}: protocol is the int the executable declares")
@@ -109,10 +120,20 @@ def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
             f"{source}: {name}: protocol {protocol} is not one this ddflow speaks "
             f"({sorted(KNOWN_PROTOCOL_VERSIONS)}): unavailable: upgrade ddflow"
         )
+    if kind == "entry_point" and trust == "third-party":
+        raise PluginError(
+            f"{source}: {name}: a third-party plugin is external: kind must be 'executable' so "
+            "its sandbox holds, because in-process entry points are operator-only"
+        )
+    sandbox = table.get("sandbox", [])
+    if not isinstance(sandbox, list) or not all(type(v) is str for v in sandbox):
+        raise PluginError(f"{source}: {name}: sandbox is a list of env names")
+    entry_point = table.get("entry_point", "")
+    if type(entry_point) is not str:
+        raise PluginError(f"{source}: {name}: entry_point is a 'package.module:attr' string")
     argv = table.get("argv", [])
     if not isinstance(argv, list) or not all(type(v) is str for v in argv):
         raise PluginError(f"{source}: {name}: argv is a list of strings, never a shell line")
-    entry_point = table.get("entry_point", "")
     if kind == "executable" and not argv:
         raise PluginError(f"{source}: {name}: an executable plugin needs argv")
     if kind == "entry_point" and not entry_point:
@@ -197,9 +218,11 @@ def load(
         known = ", ".join(sorted(plugins)) or "(none)"
         raise PluginError(f"no driver plugin {name!r}; registered: {known}")
     if plugin.kind == "executable":
+        names = ", ".join(plugin.sandbox) or "none"
         raise PluginError(
-            f"{name}: an external executable is registered (protocol {plugin.protocol}); "
-            "it runs through the JSON-stdio Lane transport, not in-process"
+            f"{name}: an external executable is registered (protocol {plugin.protocol}, sandbox "
+            f"env names: {names}); it runs through the JSON-stdio Lane transport, which passes "
+            "only those names — an in-process Lane is refused for it"
         )
     lane = _build_lane(plugin.entry_point)
     caps = getattr(lane, "capabilities", frozenset())
