@@ -101,8 +101,9 @@ def test_a_project_descriptor_may_not_add_probe_argv(tmp_path):
 def test_layers_merge_with_later_winning(tmp_path):
     user = tmp_path / "user"
     (user / "harnesses.d").mkdir(parents=True)
-    (user / "harnesses.d" / "demo.toml").write_text(_GOOD.replace("family = ", "xfamily = ").replace(
-        'family = "demo"', 'family = "userfam"'))
+    (user / "harnesses.d" / "demo.toml").write_text(
+        _GOOD.replace('family = "demo"', 'family = "userfam"')
+    )
     _project(tmp_path, ("demo.toml", _GOOD.replace('family = "demo"', 'family = "projfam"')))
     by_id = {h.id: h for h in DP.load_descriptors(tmp_path, user_home=user)}
     assert by_id["demo"].family == "projfam", "project wins over user"
