@@ -49,8 +49,11 @@ def _render_ask(queue: DQ.Queue, ask: str) -> tuple[str, list[dict]]:
     if entry is None:
         return "", []
     fields = (
-        ("why", entry.why), ("default", entry.default), ("answer", entry.answer),
-        ("command", entry.command), ("chat", entry.chat),
+        ("why", entry.why),
+        ("default", entry.default),
+        ("answer", entry.answer),
+        ("command", entry.command),
+        ("chat", entry.chat),
     )
     lines = ["# ask: " + ask, entry.what]
     lines.extend(f"{k}: {v}" for k, v in fields if v)
