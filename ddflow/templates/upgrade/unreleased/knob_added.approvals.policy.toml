@@ -4,4 +4,4 @@
 kind = "knob_added"
 key = "approvals.policy"
 new = '[]'
-why = "Standing auto-approval rules switched ON, each recorded as an approval answered by policy:<id>."
+why = "Standing auto-approval rules (default none): each id names a registered rule, and every auto-approval it fires is recorded as answered by policy:<id>, never by a person."
