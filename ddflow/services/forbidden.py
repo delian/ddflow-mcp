@@ -211,6 +211,12 @@ def _case_end(text: str, n: int, k: int, bodies: list[str]) -> int:
     return k
 
 
+def _comment(text: str, k: int, j: int) -> bool:
+    """`text[k]` is the `#` of a comment that starts right there: the body that opened at `j`
+    begins with it, or the char before it is in `_COMMENT_BOUNDARY`."""
+    return text[k] == "#" and (k == j or text[k - 1] in _COMMENT_BOUNDARY)
+
+
 def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int:
     """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
     substitutions inside are navigated but mark no newline. An escaped closer is not the end."""
@@ -219,7 +225,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
         c = text[k]
         if c == closer:
             return k
-        if c == "#" and (k == j or text[k - 1] in _COMMENT_BOUNDARY):
+        if _comment(text, k, j):
             k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
             k = k2 if k2 >= 0 else n
         elif closer == ")" and _bare_word(text, n, k, "case"):
