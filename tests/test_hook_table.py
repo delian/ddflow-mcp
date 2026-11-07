@@ -79,9 +79,7 @@ def _expected_files() -> dict[str, dict]:
                 ],
                 "PreCompact": [{"hooks": [cmd(old["pre-compact"])]}],
                 "UserPromptSubmit": [{"hooks": [cmd(old["prompt-claude"])]}],
-                "PreToolUse": [
-                    {"matcher": CH.PRETOOL_MATCHER, "hooks": [cmd(old["pre-tool"])]}
-                ],
+                "PreToolUse": [{"matcher": CH.PRETOOL_MATCHER, "hooks": [cmd(old["pre-tool"])]}],
             }
         },
         GEMINI: {"hooks": {"BeforeAgent": [{"hooks": [cmd(old["prompt-gemini"])]}]}},

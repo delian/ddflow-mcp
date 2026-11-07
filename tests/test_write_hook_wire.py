@@ -35,16 +35,18 @@ def test_verdict_names_the_holder_and_the_options(repo, monkeypatch):
 
 
 def _write_stdin(repo, path="src/b.py"):
-    return json.dumps(
-        {"tool_name": "Edit", "tool_input": {"file_path": path}, "cwd": str(repo)}
-    )
+    return json.dumps({"tool_name": "Edit", "tool_input": {"file_path": path}, "cwd": str(repo)})
 
 
 def test_mode_enforce_refuses_a_write_outside_the_lease(repo, monkeypatch):
     monkeypatch.setenv("DDFLOW_LOCKS_MODE", "enforce")
     monkeypatch.setattr(CK, "_mine", lambda repo, agent: (["src/a.py"], []))
     out = AS.hooks(
-        repo, action="run", event="pre_tool", harness="claude", agent="lane-1",
+        repo,
+        action="run",
+        event="pre_tool",
+        harness="claude",
+        agent="lane-1",
         stdin=_write_stdin(repo),
     )
     assert out.data["result"] == "denied"
@@ -55,7 +57,11 @@ def test_mode_log_allows_but_notes_the_refusal(repo, monkeypatch):
     monkeypatch.setenv("DDFLOW_LOCKS_MODE", "log")
     monkeypatch.setattr(CK, "_mine", lambda repo, agent: (["src/a.py"], []))
     out = AS.hooks(
-        repo, action="run", event="pre_tool", harness="claude", agent="lane-1",
+        repo,
+        action="run",
+        event="pre_tool",
+        harness="claude",
+        agent="lane-1",
         stdin=_write_stdin(repo),
     )
     assert out.data["result"] == "logged"
@@ -67,7 +73,11 @@ def test_mode_off_skips_the_lease_check(repo, monkeypatch):
     monkeypatch.setenv("DDFLOW_LOCKS_MODE", "off")
     monkeypatch.setattr(CK, "_mine", lambda repo, agent: (["src/a.py"], []))
     out = AS.hooks(
-        repo, action="run", event="pre_tool", harness="claude", agent="lane-1",
+        repo,
+        action="run",
+        event="pre_tool",
+        harness="claude",
+        agent="lane-1",
         stdin=_write_stdin(repo),
     )
     assert out.data["result"] == "allowed"
