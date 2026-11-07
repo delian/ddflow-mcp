@@ -36,6 +36,20 @@ def _drop_fix_task(
     return removed, why
 
 
+def _finished(t, mine: bool) -> bool:
+    """The fix task has nothing for a bug close to remove: done or abandoned; not open
+    and not the closer's own (it ran under someone else); or already landed through
+    ddflow's own merge (B-bug-fixed-removes-merged-fix-task) -- releasing at merge puts
+    it back to OPEN, so the first two miss it. A finished task is kept, not removed."""
+
+    return (
+        t.terminal
+        or (t.state != OPEN and not mine)
+        or bool(t.merged_sha)
+        or bool(t.landed_after)
+    )
+
+
 def _drop_fix_task_unchecked(
     log, st, rec, *, reason: str = "", closed: str = "as invalid"
 ) -> tuple[str, str]:
@@ -60,13 +74,7 @@ def _drop_fix_task_unchecked(
     mine = bool(t.lease) and t.lease.holder == log.agent_id
     if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
         return "", "held"
-    if t.terminal or (t.state != OPEN and not mine):
-        return "", "finished"
-    if t.merged_sha or t.landed_after:
-        # Its work already landed through ddflow's own merge (B-bug-fixed-removes-merged-fix-task):
-        # the release at merge puts it back to OPEN, so the check above misses it, and the
-        # unlanded paths below would DELETE a task whose gates passed and whose work is on
-        # the base -- that is finished, not still queued. Keep it for `ddflow complete`.
+    if _finished(t, mine):
         return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"
