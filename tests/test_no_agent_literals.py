@@ -92,6 +92,18 @@ BASELINE: dict[str, tuple[int, str]] = {
     "ddflow/services/harness.py": (1, "Claude-only onboarding, replaced by B-hx-onboard-generic"),
     "ddflow/services/legacy.py": (1, "the legacy command-file glob an import reads"),
     "ddflow/surfaces/parsers/workflow.py": (1, "the default of `hooks run --harness` (compat)"),
+    "ddflow/surfaces/declared/capflags.py": (
+        1,
+        "the `cursor` field name of capped reads (the paging cursor), not the Cursor harness",
+    ),
+    "ddflow/views/output_caps.py": (
+        2,
+        "the `cursor` key/flag of capped reads (the paging cursor), not the Cursor harness",
+    ),
+    "ddflow/services/export/kind_security.py": (
+        1,
+        "the `.github/SECURITY.md` path the security export names, not a descriptor read",
+    ),
 }
 
 
