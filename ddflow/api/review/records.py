@@ -271,11 +271,12 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             fam = (str(f.get("family") or "") or "").strip().lower()
             fam = "" if fam == "unknown" else fam
             fam = fam or run_fam
-            # A later row's family stamp supersedes an earlier stampless row of the same
-            # digest, and a stampless row falls back to the run's identifying family -- the
-            # same-family reviewer for the failed round B7dbf432caa names.
+            # Keep the FIRST known family (the finding's origin) -- a later row of the same
+            # digest does not downgrade a cross-family finding to the author's family, and
+            # the fallback above names a stampless historical row by its run's identifying
+            # family (the same-family reviewer the failed round B7dbf432caa names).
             if fam:
-                fam_by_digest[digest] = fam
+                fam_by_digest.setdefault(digest, fam)
             if mine.get(digest, {}).get("verdict") == "confirmed" and not _cleared_after_delta(
                 runs, digest
             ):
