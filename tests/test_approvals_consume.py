@@ -320,3 +320,25 @@ def test_a_row_without_a_recorded_level_still_counts_as_a_terminals_word():
     assert E.verified_level({"level": 0, "via": "cli"}) == 1
     assert E.verified_level({"level": -1, "via": ""}) == 1
     assert E.verified_level({}) == 1
+
+
+def test_complete_approval_request_reason_names_one_refusal(log):
+    """B-approval-refusal-doubled-prefix: `complete --approval request` once read
+    'refusing: refusing: ...' -- `consume.operator_gate` already prefixes its refusal and
+    `api/lifecycle/complete/approval._approved_force` prefixed it again. The refusal an
+    operator acts on carries exactly one prefix, on BOTH refusal paths `_approved_force`
+    hands back: a filed request (`--approval request`) and a refused spend (a real id), and
+    it names the conditions the approval would override (they live only in ``blockers``)."""
+    from ddflow.api.lifecycle.complete.approval import _approved_force
+
+    cfg = Config()
+    blockers = ["a required gate is not passed"]
+    # "request" files a request (`operator_gate` -> `R.file` -> "refusing: " + route);
+    # "Qnope" is a real id the spend refuses (`spend` -> "refusing: {why}."). The old caller
+    # prepended "refusing: " to either, stacking the prefix.
+    for approval in ("request", "Qnope"):
+        ok, _stamp, why = _approved_force(log, cfg, "fix-X", blockers, approval, "bot")
+        assert not ok, approval
+        assert why.startswith("refusing: "), (approval, why)
+        assert not why.startswith("refusing: refusing: "), (approval, why)
+        assert blockers[0] in why, (approval, why)
