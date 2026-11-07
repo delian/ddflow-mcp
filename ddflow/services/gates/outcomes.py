@@ -458,7 +458,7 @@ def stale_evidence_detail(
         else:
             continue
         stale += _differing_note(StaleNote, gid, cwd, base, dirt, now, label, own)
-    stale += _lost_branch_notes(it, cfg, cwd, landed, label)
+    stale += _lost_branch_notes(it, cfg, cwd, landed)
     return sorted(stale)
 
 
@@ -467,7 +467,6 @@ def _lost_branch_notes(
     cfg: Config,
     cwd: Path,
     landed: str,
-    label: str,
 ) -> list[StaleNote]:
     """Notes for passed gates that outlived the branch they were recorded on.
 
@@ -496,12 +495,12 @@ def _lost_branch_notes(
             continue
         was_sha = normal_fingerprint((rec.evidence or {}).get("tree_sha", "") or "")
         head = head_of(was_sha)
-        if head and lost_branch(was_sha, cwd, landed):
+        if head and lost_branch(head, cwd, landed):
             out.append(
                 StaleNote(
                     gid,
-                    f"it was recorded on {head}, a commit {label} no longer descends from "
-                    f"(the branch was rebuilt, so this is not this claim's pass)",
+                    f"it was recorded on {head}, a commit this branch no longer descends "
+                    f"from (the branch was rebuilt, so this is not this claim's pass)",
                 )
             )
     return out

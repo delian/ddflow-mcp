@@ -339,10 +339,10 @@ def moved_past(started_on: str, recorded: str, cwd: Path) -> bool:
     return _is_ancestor(cwd, b, a) is False  # could not tell: the run keeps its record
 
 
-def lost_branch(tree_sha: str, cwd: Path, checked: str = "") -> bool:
-    """Does ``tree_sha`` name a commit that is no longer in the branch being checked --
-    neither itself nor an ancestor of it -- because that branch was deleted and rebuilt
-    (a re-claim on a new tree; bug B-gates-survive-lost-branch)?
+def lost_branch(head: str, cwd: Path, checked: str = "") -> bool:
+    """Is commit ``head`` (a `tree_identity`/fingerprint's `head_of`) no longer in the
+    branch being checked -- neither itself nor an ancestor of it -- because that branch was
+    deleted and rebuilt (a re-claim on a new tree; bug B-gates-survive-lost-branch)?
 
     The one gate-staleness test content drift cannot make. Content is compared only for
     `gates.evidence_required`, because the others legitimately record before the work
@@ -350,7 +350,6 @@ def lost_branch(tree_sha: str, cwd: Path, checked: str = "") -> bool:
     on the SAME branch. An ancestor commit is exactly that -- earlier work, not another
     generation of it -- so an ancestry miss is the signature of the branch having been
     rebuilt. False when git cannot tell: "could not tell" must not read as "lost"."""
-    head = head_of(tree_sha)
     if not head:
         return False
     return _is_ancestor(cwd, head, checked or "HEAD") is False
