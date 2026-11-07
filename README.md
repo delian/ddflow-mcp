@@ -5695,7 +5695,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=fa187096ea7f -->
+<!-- ddflow:begin README/tools sha=2a81e2fa2665 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5856,10 +5856,10 @@ drift. The groups are the ones `ddflow help` prints.
 | When something is wrong | `ddflow_recover` | standard | Find work left behind by a crashed agent: expired leases, orphaned worktrees, items stuck running. |
 | When something is wrong | `ddflow_replay` | all | Reconstruct the project's whole decision history from the log: every operator prompt in order, every… |
 | When something is wrong | `ddflow_upgrade` | all | What upgrading to the running ddflow would change, by category; operator-set values need `confirm`. |
+| Reading the queue | `ddflow_digest` | all | The operator queue in one fold: every thing waiting on a person to act — pending approval requests… |
+| Reading the queue | `ddflow_waves` | all | Dependency waves of the open queue: wave 0 = no open prerequisite (task-level or inherited from a phase)… |
 | Help | `ddflow_help` | core | What ddflow IS, what it can do, and what the workflow is. |
 | view | `ddflow_archdeps` | standard | The external-dependency census as a read-only report: every dependency family (third-party packages and the… |
-| Reading the queue | `ddflow_waves` | all | Dependency waves of the open queue: wave 0 = no open prerequisite (task-level or inherited from a phase)… |
-| Unmapped — add a prefix to `_GROUPS` | `ddflow_digest` | all | The operator queue in one fold: every thing waiting on a person to act — pending approval requests… |
 
 </details>
 <!-- ddflow:end README/tools -->
