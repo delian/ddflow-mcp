@@ -34,7 +34,7 @@ class LocksConfig:
 
     mode: str = knob(
         "enforce",
-        doc="How the write-time lease check (the pre-tool hook) treats a file write outside the agent's own live lease (D-lock-lifecycle-answers): 'enforce' refuses the write before it runs, naming the holder and the options (wait, send a suggestion, open a task) in CLI and MCP form; 'log' records the same refusal on stderr and ALLOWS the write (the commit-time check is then the only enforcement); 'off' skips the pre-tool lease check. The commit-time check still runs in every mode. Change it for the project (`ddflow config locks.mode ...`), for this machine (add --local), per run (DDFLOW_LOCKS_MODE), or over MCP with `ddflow_configure`; an organisation locks it in its shared config.",
+        doc="The write-time lease check (the pre-tool hook) on a write outside the agent's live lease (D-lock-lifecycle-answers): 'enforce' refuses it first, naming the holder and how to wait, send a suggestion or open a task; 'log' notes it and allows; 'off' skips it (the commit-time check still runs). Settable by file, --local, env (DDFLOW_LOCKS_MODE) and MCP; an organisation locks it.",
         choices=("enforce", "log", "off"),
         strictest=(
             "enforce",

@@ -2598,6 +2598,17 @@
           flagged as run under load: a slow test can miss its own timeout there, so
           the refusal says to re-run when the machine is quieter before reading it as
           a verdict.
+      locks.mode = 'enforce'   [default]
+          The write-time lease check (the pre-tool hook) on a write outside the
+          agent's live lease (D-lock-lifecycle-answers): 'enforce' refuses it first,
+          naming the holder and how to wait, send a suggestion or open a task; 'log'
+          notes it and allows; 'off' skips it (the commit-time check still runs).
+          Settable by file, --local, env (DDFLOW_LOCKS_MODE) and MCP; an organisation
+          locks it. An unrecognised value in a config file is warned about, reported
+          by `doctor` and falls back to 'enforce', the strictest (a write to a file
+          another agent's lease covers is refused, not logged); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       locks.undeclared_write = 'warn'   [default]
           What `gate status`, `brief` and `complete` do about a task whose diff has
           files in none of its lease globs (measured: 45% of the files tasks touch are
