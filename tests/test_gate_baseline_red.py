@@ -490,7 +490,16 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     text = "assert 1 == 2"
     from ddflow.api import gate_baseline as GB
 
-    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
     ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: text}}
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
     it = SimpleNamespace(id="T1", base="main")
