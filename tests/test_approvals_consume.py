@@ -320,3 +320,19 @@ def test_a_row_without_a_recorded_level_still_counts_as_a_terminals_word():
     assert E.verified_level({"level": 0, "via": "cli"}) == 1
     assert E.verified_level({"level": -1, "via": ""}) == 1
     assert E.verified_level({}) == 1
+
+
+def test_complete_approval_request_reason_names_one_refusal(log):
+    """B-approval-refusal-doubled-prefix: `complete --approval request` once read
+    'refusing: refusing: ...' -- `consume.operator_gate` already prefixes its refusal and
+    `api/lifecycle/complete/approval._approved_force` prefixed it again. The refusal an
+    operator acts on carries exactly one prefix."""
+    from ddflow.api.lifecycle.complete.approval import _approved_force
+
+    cfg = Config()
+    ok, _stamp, why = _approved_force(
+        log, cfg, "fix-X", ["a required gate is not passed"], "request", "bot"
+    )
+    assert not ok
+    assert why.startswith("refusing: "), why
+    assert not why.startswith("refusing: refusing: "), why

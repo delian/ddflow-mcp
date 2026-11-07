@@ -68,8 +68,10 @@ def _approved_force(
         state=content_digest("\n".join(sorted(blockers))),
     )  # fmt: skip
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
+    # `operator_gate` already prefixes its refusal; adding "refusing: " here stacked it
+    # (B-approval-refusal-doubled-prefix).
     return (
-        (True, decision.stamp, "") if decision.ok else (False, {}, "refusing: " + decision.message)
+        (True, decision.stamp, "") if decision.ok else (False, {}, decision.message)
     )
 
 
