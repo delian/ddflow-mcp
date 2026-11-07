@@ -143,17 +143,24 @@ def _reason_of(best, found=None) -> str:
 
 def _finding_rows(results) -> list[dict[str, str]]:
     """The review's returned findings: every reviewer the run heard, not only the one it
-    names. The gate record already keeps every heard reviewer's findings
-    (`_reviewed_findings`, bug B0419c114ef), but the caller's ``data["findings"]`` named
-    a single reviewer's alone, so a clean identifying reviewer hid a finding a secondary
-    reviewer raised -- the review reported no finding while the record blocked on one
-    (bug B-review-drops-a-reviewers-finding)."""
+    names, each row attributed to the reviewer that raised it. The gate record already
+    keeps every heard reviewer's findings (`_reviewed_findings`, bug B0419c114ef), but the
+    caller's ``data["findings"]`` named a single reviewer's alone, so a clean identifying
+    reviewer hid a finding a secondary reviewer raised -- the review reported no finding
+    while the record blocked on one (bug B-review-drops-a-reviewers-finding)."""
     rows: list[dict[str, str]] = []
     for r in results or []:
         if r.status not in _HEARD:
             continue
         rows.extend(
-            {"severity": f.severity, "title": f.title, "location": f.location, "detail": f.detail}
+            {
+                "severity": f.severity,
+                "title": f.title,
+                "location": f.location,
+                "detail": f.detail,
+                "reviewer": r.reviewer,
+                "family": r.family,
+            }
             for f in r.findings
         )
     return rows
