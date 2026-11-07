@@ -395,30 +395,16 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
     `complete` resolves it (`[agent].family`, else the session model). When it is
-    resolveable here `review_tier` ranks a reviewer from another family, and the first
-    such reviewer is named.
+    resolvable here `review_tier` ranks a reviewer from another family, and the first
+    such reviewer is named. When the author cannot be named at review time its family is
+    genuinely unknown, so counting every reviewer that came back clean -- the panel the
+    author resolves at `complete` -- is what records the cross-family review; that is in
+    `reviewer_families` (bug B1a30dc3303).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    if cross:
-        return cross[0]
-    # The author has no resolvable family here (`[agent].family` and the session model
-    # are both empty), so `review_tier` returned `none` for every reviewer and could not
-    # rank a cross-family reviewer. An unknown author still has exactly ONE family, and a
-    # lane that also serves its own model as a reviewer keeps that model FIRST in config
-    # order (so it is `best`); name a reviewer from a DIFFERENT family instead, so the
-    # clean cross-family review is the identifying pass (bug B2e5ca93520). The panel's
-    # other families are still carried in `reviewer_families` (bug B1a30dc3303), which is
-    # what `complete` reads to prove independence, so this is a preference and never
-    # hides a cross-family reviewer that reported.
-    fams = {(r.family or "").strip().lower() for r in tied}
-    fams.discard("")
-    if len(fams) >= 2:
-        for r in tied:
-            if (r.family or "").strip().lower() not in ("", (best.family or "").strip().lower()):
-                return r
-    return best
+    return cross[0] if cross else best
 
 
 def _failing_reviewer(results, it, gate, converging, cfg, identifying):
