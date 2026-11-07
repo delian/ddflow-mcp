@@ -138,34 +138,48 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     base, refused = _merge_base(repo, cfg, base, cmd, sha)
     if refused is not None:
         return refused
+    return _settle(
+        cfg, repo, sha, base, cmd,
+        command=command, ref=ref, timeout_s=timeout_s, tick=tick,
+        changed_from=changed_from, full=full, for_item=for_item, rates=rates,
+    )
+
+
+def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
+    cfg,
+    repo,
+    sha,
+    base,
+    cmd,
+    *,
+    command,
+    ref,
+    timeout_s,
+    tick,
+    changed_from,
+    full,
+    for_item,
+    rates,
+) -> Result:
+    """Once ``sha`` and ``base`` are resolved: plan the scope, decide the host suite slot, merge
+    the tree when the checks RUN -- under the slot for a full-suite run, so a base that moved
+    while the run queued does not leave it stale (B-ci-merge-tree-stale-after-queue-wait) -- then
+    run the checks and build the Result."""
     budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
     holder = _holder(repo, ref)
     override = bool(command.strip())
     used: dict[str, dict] = {}
 
     def plan(tree):
-        """The check command scoped to ``tree``'s diff, and the scope an item's run plans there."""
         return _plan(
             cfg, repo, cmd, tree, sha, base, changed_from,
             full=full, override=override, for_item=for_item,
         )
 
     def merged(tree):
-        """``plan(tree)``, or the Result refusing ``tree`` when its pinned outputs are stale:
-        that precheck belongs on the tree the checks run in, not a tree thrown away deciding the
-        slot."""
         if stale := _stale_pins(tree, cfg, base, custom=override):
             return Result("failed", command=cmd, sha=sha, reason=stale)
         return plan(tree)
-
-    # The run may wait for the one host-wide suite slot, and the merge tree is built when the
-    # checks RUN, not when the run starts waiting: it used to be merged before the queue wait, so
-    # a base that moved while the run queued left it testing the OLD base, and the baseline then
-    # found "new" failures (B-ci-merge-tree-stale-after-queue-wait). Only a selected run merges a
-    # tree to plan its scope before it knows whether it slots; a full-suite run has no scope to
-    # plan and merges afresh INSIDE the slot, so its conflict (if any) is decided there, not
-    # before the wait; a named command merges once and takes no slot.
-    scope = None
 
     def finish(p, out_prefix, waited, cmd, scope):
         if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
@@ -178,8 +192,6 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
         return res
 
     def without_slot(tree, cmd, scope):
-        """Settle in the merged ``tree``, which takes no suite slot: the pins precheck, then the
-        check."""
         if stale := _stale_pins(tree, cfg, base, custom=override):
             return Result("failed", command=cmd, sha=sha, reason=stale)
         return finish(
@@ -190,6 +202,10 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
             cmd, scope,
         )
 
+    # Only a selected run merges a tree to plan its scope before it knows whether it slots; a
+    # full-suite run has no scope to plan and merges afresh INSIDE the slot, so its conflict (if
+    # any) is decided there, not before the wait; a named command merges once and takes no slot.
+    scope = None
     if for_item and not override:
         try:
             with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
@@ -203,7 +219,6 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
                 "unavailable", command=cmd, sha=sha, reason=str(busy),
                 waited_s=round(busy.waited_s, 6),
             )  # fmt: skip
-        has_slot = True
 
     elif override:
         try:
@@ -218,34 +233,31 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
                 waited_s=round(busy.waited_s, 6),
             )  # fmt: skip
 
-    else:
-        has_slot = _needs_suite_slot(cfg, cmd, None, rates)
-        if not has_slot:
-            try:
-                with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                    if tree is None:
-                        return _merge_refused(cmd, sha, failure)
-                    return without_slot(tree, *plan(tree))
-            except SL.SuiteBusy as busy:
-                return Result(
-                    "unavailable", command=cmd, sha=sha, reason=str(busy),
-                    waited_s=round(busy.waited_s, 6),
-                )  # fmt: skip
-
-    if has_slot:
+    elif not _needs_suite_slot(cfg, cmd, None, rates):
         try:
-            p, out_prefix, waited, cmd, scope = _run_under_slot(
-                cfg, holder, repo, sha, base, cmd, budget, tick, used,
-                lock_wait=_lock_wait(timeout_s), plan=merged,
-            )
+            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+                if tree is None:
+                    return _merge_refused(cmd, sha, failure)
+                return without_slot(tree, *plan(tree))
         except SL.SuiteBusy as busy:
             return Result(
                 "unavailable", command=cmd, sha=sha, reason=str(busy),
                 waited_s=round(busy.waited_s, 6),
             )  # fmt: skip
-        if p is None:  # the fresh merge refused the run: a conflict, or stale pins
-            out_prefix.waited_s = waited
-            return out_prefix
+
+    try:
+        p, out_prefix, waited, cmd, scope = _run_under_slot(
+            cfg, holder, repo, sha, base, cmd, budget, tick, used,
+            lock_wait=_lock_wait(timeout_s), plan=merged,
+        )
+    except SL.SuiteBusy as busy:
+        return Result(
+            "unavailable", command=cmd, sha=sha, reason=str(busy),
+            waited_s=round(busy.waited_s, 6),
+        )  # fmt: skip
+    if p is None:  # the fresh merge refused the run: a conflict, or stale pins
+        out_prefix.waited_s = waited
+        return out_prefix
     return finish(p, out_prefix, waited, cmd, scope)
 
 
