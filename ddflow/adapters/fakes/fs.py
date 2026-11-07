@@ -60,9 +60,12 @@ class FakeFs:
         return sorted(x for x in self.dirs if x.startswith(pre))
 
     def _require_parent(self, p: str) -> None:
-        """Raise `FileNotFoundError` when the parent of `p` does not exist."""
+        """Raise when the parent of `p` is missing (`FileNotFoundError`) or is
+        itself a file rather than a directory (`NotADirectoryError`)."""
         parent = p.rsplit("/", 1)[0] if "/" in p else ""
         if parent and not self.is_dir(parent):
+            if parent in self.files:
+                raise NotADirectoryError(parent)
             raise FileNotFoundError(parent)
 
     def _relocate_dir(self, s: str, d: str) -> None:

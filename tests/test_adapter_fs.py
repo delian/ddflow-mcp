@@ -154,6 +154,9 @@ def test_fake_copy_file_mirrors_local_on_directories_and_parents():
     # a missing parent is refused, not invented
     with pytest.raises(FileNotFoundError):
         FakeFs({"/src/f": b"1"}).copy_file("/src/f", "/no/parent/f")
+    # a parent that is a file, not a directory, is refused like the real adapters
+    with pytest.raises(NotADirectoryError):
+        FakeFs({"/src/f": b"1", "/p": b"x"}).copy_file("/src/f", "/p/child")
     # a destination directory that already holds that name as a sub-directory is refused
     f2 = FakeFs({"/f": b"1"})
     f2.mkdir("/dst")
@@ -189,9 +192,11 @@ def test_fake_replace_path_mirrors_local_on_directories():
     f3.files["/dir/inner"] = b"i"
     with pytest.raises(NotADirectoryError):
         f3.replace_path("/dir", "/file")
-    # a directory into its own descendant is refused, like os.replace
-    with pytest.raises(OSError):
+    # a directory into its own descendant is refused, like os.replace (a bare
+    # OSError: Python has no subclass for EINVAL)
+    with pytest.raises(OSError) as _exc:
         FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/child")
+    assert type(_exc.value) is OSError
 
 
 def test_fake_mirrors_shutil_on_directories():
