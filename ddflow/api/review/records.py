@@ -229,28 +229,38 @@ def _confirmed_unrechecked(it, gate: str, results, cfg, author_model: str = "") 
         return False
     if it.gate_outcome(gate) != "failed":
         return False
-    unresolved = _unrechecked_confirmed(it, gate)
+    unresolved, unreadable = _unrechecked_confirmed(it, gate)
+    if unreadable:
+        return True  # fail closed: a confirmed finding that cannot be read back still blocks
     if not unresolved:
         return False
     author_fam = _author_single_family(cfg, author_model)
     heard = [r for r in (results or []) if getattr(r, "status", None) in _HEARD]
     if author_fam and _cross_family_clean(heard, cfg, author_fam):
-        # A same-family confirmed finding is discounted over a clean cross-family verdict.
-        return any(fam and fam != author_fam for _d, fam in unresolved)
+        # Discount ONLY a same-family confirmed finding over a clean cross-family verdict.
+        # An empty family is not the author family: it cannot be told, and it may well be a
+        # cross-family reviewer recorded before the finding carried a family, so it still
+        # blocks (lan-deepseek/grok re-review of bug B7dbf432caa).
+        return any(fam != author_fam for _d, fam in unresolved)
     return True
 
 
-def _unrechecked_confirmed(it, gate: str) -> list[tuple[str, str]]:
-    """(digest, family) of every CONFIRMED finding of ``gate`` no later delta round
-    cleared, read from the recorded findings (each carries the raising reviewer's
-    ``family`` since bug B7dbf432caa)."""
+def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
+    """((digest, family) of every CONFIRMED finding of ``gate`` no later delta round
+    cleared, read from the recorded findings, and whether any could not be read back).
+
+    Each finding carries the raising reviewer's ``family`` (since bug B7dbf432caa); a
+    finding read from a run recorded before that stamp has no ``family`` key and yields an
+    empty family, so its family really is unknown."""
     mine = (getattr(it, "triage", None) or {}).get(gate, {})
     runs = it.runs_of(gate)
     out: list[tuple[str, str]] = []
+    unreadable = False
     seen: set[str] = set()
     for run in runs:
         found = LB.full(run.evidence or {}).get("chunk_findings")
         if isinstance(found, B.Unavailable):
+            unreadable = True  # "cannot be read back" is not "no confirmed finding"
             continue
         for f in found if is_triageable(found) else []:
             digest = f.get("digest")
@@ -261,8 +271,9 @@ def _unrechecked_confirmed(it, gate: str) -> list[tuple[str, str]]:
                 runs, digest
             ):
                 fam = (str(f.get("family") or "") or "").strip().lower()
+                fam = "" if fam == "unknown" else fam
                 out.append((digest, fam))
-    return out
+    return out, unreadable
 
 
 def _author_single_family(cfg, author_model: str) -> str | None:
