@@ -388,9 +388,11 @@ def _has_landing_pair(item: Any) -> bool:
 
 
 def _fixing_item(st, cfg, bug_id: str) -> Any:
-    """The item whose source is the fix: the bug's fix task, else -- for `bug found
-    --item X --no-task`, fixed in the commit that found it -- X while it works in a
-    worktree, or X landed through ddflow's own merge (a landed_before/landed_after
+    """The item whose source is the fix: the bug's fix task while it works somewhere --
+    in its worktree, or landed with a before/after pair; else -- for `bug found
+    --item X --no-task`, or a fix made in the item that found the bug while its own
+    fix task stayed unclaimed (B-bug-fixed-other-item-unverified) -- X while it works
+    in a worktree, or X landed through ddflow's own merge (a landed_before/landed_after
     pair) named as the pre-fix source (Bb49d834e90). Only then: a landed X recorded
     through a pull request, which keeps only `merged_sha` and no before/after pair,
     may have been merely where an older bug was seen."""
@@ -398,7 +400,10 @@ def _fixing_item(st, cfg, bug_id: str) -> Any:
     if rec is None:
         return None
     fix_task = CM.fix_task_for(st, bug_id, cfg)
-    if fix_task is not None:
+    # The bug's own fix task names the source only while it actually works somewhere; an
+    # unclaimed one is not the source, and the item the bug was found on (working in its
+    # own worktree, or landed) is looked up next.
+    if fix_task is not None and (fix_task.worktree or _has_landing_pair(fix_task)):
         return fix_task
     found_on = st.items.get(rec.item) if rec.item else None
     if _has_landing_pair(found_on):
@@ -409,7 +414,10 @@ def _fixing_item(st, cfg, bug_id: str) -> Any:
         and not (found_on.landed_after or found_on.merged_sha)
     ):
         return found_on
-    return None
+    # No working source: the unclaimed fix task (so `_verify_regression` records the
+    # could-not-run gap with its remedy -- claiming the fix task is the fix), or nothing
+    # (the close is refused demanding one, Bb49d834e90).
+    return fix_task
 
 
 def _verify_regression(
