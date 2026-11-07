@@ -1,0 +1,10 @@
+id = "r-operator-attention"
+title = "Ask the operator once, with a recommended default, the exact approval text, and record the answer as a decision"
+tags = ["process", "operator"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:13:24.984936+00:00"
+updated = "2026-11-03T14:13:24.984948+00:00"
+
+RULE: never ask what ddflow can derive or what an existing decision answers; batch related questions; give each option a recommended default and its consequence; relay approvals as ddflow approvals ask prints them, unaltered; record every answer as a decision with its context and alternatives; person-only acts (acceptance, go/no-go, risk acceptance, release, config of approvals) are never decided by an agent. CHECK: decide tasks end with a D- record; the approvals engine. VERIFY: is the answer recorded where the next session will find it?

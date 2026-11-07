@@ -1,0 +1,10 @@
+id = "r-no-eager-heavy-import"
+title = "Optional-extra and heavy modules (numpy, embed models) are imported only at the point of use"
+tags = ["performance", "startup"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:30:28.896115+00:00"
+updated = "2026-11-03T16:30:28.896122+00:00"
+
+Bug B4c7b7e8d5b. RULE: nothing outside a function body imports numpy, joblib, tokenizers or an embedding model; BLAS threads are capped before the first heavy import; --version and hooks stay light. CHECK: an import-hygiene test (sys.modules after importing the CLI) pinned in PS-lazy-embed and B-perf-lazy-cli. VERIFY: python -X importtime for the command.

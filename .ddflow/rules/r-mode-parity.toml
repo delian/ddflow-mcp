@@ -1,0 +1,10 @@
+id = "r-mode-parity"
+title = "Every declared command declares its needs; a mode gap needs a reason and a fallback"
+tags = ["architecture", "mode-parity"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:20:01.705677+00:00"
+updated = "2026-11-03T16:20:01.705687+00:00"
+
+R-mode-parity 5, D-mode-parity-answers; adds to r-no-shell and r-external-frontends. RULE: every declared command declares its needs (log, tree, shell, secret, person); a command may be unavailable in a mode only with a recorded reason and a fallback (a run-yourself envelope or a chat route). CHECK: the generated feature x mode matrix test (MP-matrix) fails on an undeclared command or an empty fallback. VERIFY: in which modes does this command work and what does it say where it cannot?

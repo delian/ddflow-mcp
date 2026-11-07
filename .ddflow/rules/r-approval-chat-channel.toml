@@ -1,0 +1,10 @@
+id = "r-approval-chat-channel"
+title = "Approvals surface only through the operator's chat, never over SSH"
+tags = ["approvals", "harness", "chat"]
+scope = "project"
+priority = 50
+globs = ["ddflow/services/approvals/harness.py"]
+created = "2026-11-03T16:42:10.291040+00:00"
+updated = "2026-11-03T16:42:10.291054+00:00"
+
+Every approval request is couriered through the harness chat channel: run `ddflow approvals ask` (the returned AskUserQuestion always offers the timed standing-window choice for generic T2 verbs), surface it via the Kilo question tool, then run `ddflow approvals attest` after the operator answers (the answer is read back from the Kilo SQLite store or the configured transcript_dirs). The SSH `ddflow approvals approve` command is a fallback of last resort, never the primary path: the operator may have no ssh or terminal access and interacts only through the agent chat. A subagent that cannot reach the question tool runs `ask` and bubbles the payload to its coordinator, which surfaces it and attests.

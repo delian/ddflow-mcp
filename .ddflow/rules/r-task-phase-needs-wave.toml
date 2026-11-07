@@ -1,0 +1,11 @@
+id = "r-task-phase-needs-wave"
+title = "Every task has a phase, stated dependencies and a wave tag"
+tags = ["task-hygiene", "queue"]
+scope = "project"
+priority = 100
+created = "2026-11-05T12:28:21.892209+00:00"
+updated = "2026-11-05T12:28:21.892214+00:00"
+
+RULE: every task names the phase whose progress it counts towards, states its dependencies in needs, and carries a wave:N tag (ddflow waves --stamp derives it). A task with no prerequisite carries the tag no-deps, so that none is a decision and not an omission. Work that blocks a phase belongs in that phase; a catch-all such as bugs-2 is only for work no phase serves. This covers tasks ddflow files itself, including bug fix tasks.
+CHECK: a task inherits the needs of its phase, so read the phase needs before placing a task; a wrong phase silently blocks it. ddflow waves --check reports stale stamps.
+VERIFY: which phase counts this task, what must land first, and is its wave current?
