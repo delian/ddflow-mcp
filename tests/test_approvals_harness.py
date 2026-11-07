@@ -561,7 +561,8 @@ def test_harness_imports_no_http_roots_and_holds_no_http_home_entry():
         (here / "tests" / "guard_baselines" / "importlinter-http-home.toml").read_text("utf-8")
     )
     stale = [
-        e for e in baseline["ignore_imports"]
+        e
+        for e in baseline["ignore_imports"]
         if e.split(" -> ")[0] == "ddflow.services.approvals.harness"
     ]
     assert not stale, f"stale http-home entry for a module that imports none of it: {stale}"
