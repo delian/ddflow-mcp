@@ -70,9 +70,7 @@ def _approved_force(
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
     # `operator_gate` already prefixes its refusal; adding "refusing: " here stacked it
     # (B-approval-refusal-doubled-prefix).
-    return (
-        (True, decision.stamp, "") if decision.ok else (False, {}, decision.message)
-    )
+    return (True, decision.stamp, "") if decision.ok else (False, {}, decision.message)
 
 
 def _person_force(force: bool, agent: str) -> bool:
