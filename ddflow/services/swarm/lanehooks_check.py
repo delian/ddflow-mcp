@@ -101,6 +101,16 @@ def _holder(repo: Path, agent: str, rel: str) -> str:
     return ""
 
 
+def _first_holder(repo: Path, agent: str, bad: list[str]) -> str:
+    """The holder of the first refused path that has one, or "" (a multi-file write may name
+    files held by different agents; the first held one is enough for the refusal)."""
+    for rel in bad:
+        holder = _holder(repo, agent, rel)
+        if holder:
+            return holder
+    return ""
+
+
 #: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
 OPTIONS = (
     "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), send a suggestion "
@@ -134,11 +144,7 @@ def verdict(
         else:
             bad.append(rel)
     if bad:
-        holder = ""
-        for rel in bad:
-            holder = _holder(repo, agent, rel)
-            if holder:
-                break
+        holder = _first_holder(repo, agent, bad)
         held = f" and {holder} holds it" if holder else ""
         return REFUSE, (
             f"lane {agent}: {', '.join(bad)} is outside the item's lease globs "
