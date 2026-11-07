@@ -173,13 +173,15 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
     return [m for _p, m in sorted(out, key=lambda pm: (pm[1].sent_at, pm[0].name))]
 
 
-def take(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
+def take(repo: Path, agent: str, *, ttl_s: float = 0.0, retain_s: float = 0.0) -> list[Message]:
     """Deliver: the pending messages, each RETAINED rather than deleted, so an agent can
     read it again after a piped heartbeat lost it (bug B-inbox-message-gone-after-heartbeat).
     ``delivered`` shows them until ``[lease].inbox_retain_s`` is past. Retention is best
     effort: if the retained copy cannot be written the message is still delivered once
     (the pending file is removed here), never re-delivered."""
     got = pending(repo, agent, ttl_s=ttl_s)
+    if retain_s > 0:
+        delivered(repo, agent, retain_s=retain_s)  # prune stale retained copies here too
     dst_dir = _delivered_dir(repo, agent)
     for m in got:
         m.delivered_at = time.time()
@@ -246,13 +248,17 @@ def view(msgs: list[Message]) -> list[dict[str, Any]]:
 
 
 def wake(
-    repo: Path, agent: str, *, ttl_s: float = 0.0, consume: bool = True
+    repo: Path, agent: str, *, ttl_s: float = 0.0, consume: bool = True, retain_s: float = 0.0
 ) -> dict[str, Any] | None:
     """``agent``'s inbox as a wake: {"reason", "messages"} (messages fenced), or None when it
     is empty. The one door `wait`, `watch` and `heartbeat` all use. ``consume=False`` only
     shows what is pending (release and complete: the agent is leaving, and the offer stays
     for the lane's next wait)."""
-    msgs = take(repo, agent, ttl_s=ttl_s) if consume else pending(repo, agent, ttl_s=ttl_s)
+    msgs = (
+        take(repo, agent, ttl_s=ttl_s, retain_s=retain_s)
+        if consume
+        else pending(repo, agent, ttl_s=ttl_s)
+    )
     if not msgs:
         return None
     return {"reason": wake_reason(msgs), "messages": view(msgs)}
