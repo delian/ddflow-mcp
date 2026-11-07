@@ -1720,6 +1720,18 @@
   
   '''
 # ---
+# name: test_help[ddflow lesson show]
+  '''
+  usage: ddflow lesson show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lesson verify]
   '''
   usage: ddflow lesson verify [-h]
@@ -1731,10 +1743,10 @@
 # ---
 # name: test_help[ddflow lesson]
   '''
-  usage: ddflow lesson [-h] {add,verify,search,list} ...
+  usage: ddflow lesson [-h] {add,verify,search,show,list} ...
   
   positional arguments:
-    {add,verify,search,list}
+    {add,verify,search,show,list}
       verify              re-scan every lesson's pattern and name the sites that reappeared
       list                list lessons, newest first: the live ones unless --all or --state
   
@@ -3878,6 +3890,7 @@
     'ddflow lesson add',
     'ddflow lesson list',
     'ddflow lesson search',
+    'ddflow lesson show',
     'ddflow lesson verify',
     'ddflow link',
     'ddflow list',

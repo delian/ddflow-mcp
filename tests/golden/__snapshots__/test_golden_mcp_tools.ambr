@@ -480,7 +480,7 @@
     'ddflow_memory': '''
       {
        "name": "ddflow_memory",
-       "description": "Lessons, memories, recall and record links. Set `action`; required arguments in brackets: lesson_verify, lesson_add(title), lesson_search(query), recall(query), similar(text), dupes, link(subject,relation,target), add(text), list, forget(id,reason).",
+       "description": "Lessons, memories, recall and record links. Set `action`; required arguments in brackets: lesson_verify, lesson_add(title), lesson_search(query), recall(query), similar(text), dupes, link(subject,relation,target), add(text), list, forget(id,reason), lesson_show(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -604,7 +604,8 @@
            "link",
            "add",
            "list",
-           "forget"
+           "forget",
+           "lesson_show"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }

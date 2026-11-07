@@ -2929,6 +2929,14 @@
   },
   "array_schema": null
  },
+ "ddflow_lesson_show": {
+  "command": "lesson_show",
+  "schema": "lesson_show@1",
+  "shape": "nested",
+  "payload": "lesson",
+  "output_schema": null,
+  "array_schema": null
+ },
  "ddflow_phase_complete": {
   "command": "phase_complete",
   "schema": "phase_complete@1",
