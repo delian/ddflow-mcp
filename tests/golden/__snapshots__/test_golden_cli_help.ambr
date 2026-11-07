@@ -2924,6 +2924,15 @@
   
   '''
 # ---
+# name: test_help[ddflow session inbox]
+  '''
+  usage: ddflow session inbox [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow session list]
   '''
   usage: ddflow session list [-h] [--state STATE] [--owner OWNER] [--since SINCE] [--limit LIMIT]
@@ -3008,12 +3017,13 @@
 # ---
 # name: test_help[ddflow session]
   '''
-  usage: ddflow session [-h] {start,prompt,message,note,adopt-orphans,end,list,show} ...
+  usage: ddflow session [-h] {start,prompt,message,inbox,note,adopt-orphans,end,list,show} ...
   
   positional arguments:
-    {start,prompt,message,note,adopt-orphans,end,list,show}
+    {start,prompt,message,inbox,note,adopt-orphans,end,list,show}
       message             put a message in another lane's inbox (delivered at its next wait, watch
                           or heartbeat)
+      inbox               read this lane's delivered inbox messages again
       adopt-orphans       attach prompts/notes recorded with no session id to a session
       list                sessions, newest first: agent, span, items, prompts, state
       show                one session: every prompt and note in order, redacted
@@ -3944,6 +3954,7 @@
     'ddflow session',
     'ddflow session adopt-orphans',
     'ddflow session end',
+    'ddflow session inbox',
     'ddflow session list',
     'ddflow session message',
     'ddflow session note',

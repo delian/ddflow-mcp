@@ -826,7 +826,7 @@
     'ddflow_session': '''
       {
        "name": "ddflow_session",
-       "description": "The session log. Set `action`; required arguments in brackets: note(text), end(session), prompt(text), start, ask(verb), asks, withdraw(id), message(to,text).",
+       "description": "The session log. Set `action`; required arguments in brackets: note(text), end(session), prompt(text), start, ask(verb), asks, withdraw(id), message(to,text), inbox.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -896,7 +896,8 @@
            "ask",
            "asks",
            "withdraw",
-           "message"
+           "message",
+           "inbox"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
