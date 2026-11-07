@@ -62,9 +62,7 @@ def apply(  # noqa: PLR0913, PLR0917
     if unran := _guards_unran(gate, ev):
         ev["reason"] = unran
         return result, unran
-    bug, unnamed = _dedup(repo, agent, ids)
-    if not bug and unnamed:
-        bug = _file(repo, agent, it.id, gate, unnamed, found)
+    bug = _linked(repo, agent, ids) or _file(repo, agent, it.id, gate, ids, found)
     found["bug"] = bug
     found["auto"] = BL.auto_decision(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
     reason = BR.reason_text(ids, bug)
@@ -173,22 +171,22 @@ def _file(
     return ""
 
 
-def _dedup(repo: Path, agent: str, ids: list[str]) -> tuple[str, list[str]]:
-    """``(link, unnamed)`` from ONE snapshot of the open bugs: the bug linking the whole set ("" when
-    some id no open bug names), and the ids no open bug names.
+def _linked(repo: Path, agent: str, ids: list[str]) -> str:
+    """The open bug to link the whole failing set to, or "" when some id no open bug names.
 
     Dedup is per id, not per set (B-baseline-red-filer-piles-up): an id already named by ANY
     open bug is that bug's, so a run whose ids are each owned by (possibly different) open
-    bugs files nothing new (``unnamed`` is empty)."""
+    bugs files nothing new. A bug naming the whole set is returned when there is one, else
+    the open bug owning the first id; each id was already linked when its own bug was filed."""
     _log, _cfg, st = _load(repo, agent)
     open_bugs = [b for b in st.bugs.values() if not (b.fixed_at or b.invalid_at)]
-    unnamed = [i for i in ids if not any(_names(b.summary, i) for b in open_bugs)]
-    if not open_bugs or unnamed:
-        return "", unnamed
+    for i in ids:
+        if not any(_names(b.summary, i) for b in open_bugs):
+            return ""
     for b in open_bugs:
         if all(_names(b.summary, i) for i in ids):
-            return b.id, unnamed
-    return next(b.id for b in open_bugs if _names(b.summary, ids[0])), unnamed
+            return b.id
+    return next(b.id for b in open_bugs if _names(b.summary, ids[0]))
 
 
 def _names(text: str, test_id: str) -> bool:
