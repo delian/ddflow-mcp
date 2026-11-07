@@ -305,7 +305,7 @@ def test_violations_are_importers_outside_the_home():
     assert reports["subprocess"].home == ("ddflow.infra.proc", "ddflow.infra.git")
     assert reports["subprocess"].violations == ()
     assert reports["fsio"].home == ("ddflow.infra.fsio",)
-    assert reports["hashlib"].home == ("ddflow.core.digest",)
+    assert reports["hashlib"].home == ("ddflow.adapters.digest",)
     assert reports["tomlkit"].home == ("ddflow.infra.tomlcfg",)
     assert reports["http"].home == ("ddflow.adapters.http",)
     assert "ddflow.adapters.http" in reports["http"].importers
