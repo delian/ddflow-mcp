@@ -13,7 +13,6 @@ from ...core import outcome as O
 from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
-from ...core.schedule import inherited_deps
 from ...services import reprobundle as RB
 from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
@@ -284,8 +283,8 @@ def _file_fix_task(
     """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
-    `bugs_first` and gitflow both see it), under the phase an open found item serves (work
-    that blocks a phase belongs in that phase) or, with no item, the standing `[bugs] phase`
+    `bugs_first` and gitflow both see it) and `no-deps` (no needs of its own, so none is a
+    decision and not an omission, r-task-phase-needs-wave), under the standing `[bugs] phase`
     (made on first use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first
     open or absent one, by id convention only) -- carrying ``globs`` (verbatim) or the bug's
     own found scope (the files its text
@@ -302,20 +301,15 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": ""}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the phase the found item
-    # serves (work that blocks a phase belongs in that phase, r-task-phase-needs-wave); only
-    # with no item -- and so no phase serving its work -- the standing bugs phase, else its
-    # follow-up, is the catch-all (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
+    # globs are what makes a feature on them wait. The parent is the standing bugs phase,
+    # else its follow-up -- never the item's own phase, which the fix would hold open
+    # (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb); `--item` says where the bug was
+    # found, not which phase carries the fix. That is the rule's "say why not": a bug blocks
+    # no feature phase.
     src = st.items.get(item) if item else None
-    phase = _open_phase_of(st, item) if src is not None else ""
-    parent, phase_made = (phase, "") if phase else _bugs_parent(log, cfg, st)
-    # The task has no needs of its own, but it inherits its phase's: `no-deps` only when the
-    # phase binds it to nothing (r-task-phase-needs-wave: a task inherits its phase's needs).
-    no_deps = not inherited_deps(st, st.items[parent], cfg)
+    parent, phase_made = _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
-    # needs is always empty here: the task with no prerequisite is tagged no-deps, not left
-    # to guess (r-task-phase-needs-wave).
     first = summary.strip().splitlines()[0] if summary.strip() else ""
     headline = " ".join((title or first).split())
     full_title = f"Fix bug {bug_id}: {headline}" if headline else f"Fix bug {bug_id}"
@@ -345,7 +339,7 @@ def _file_fix_task(
         needs=[],
         globs=kept,
         body=body,
-        tags=[tag] + (["no-deps"] if no_deps else []),
+        tags=[tag, "no-deps"],
         # the item's own priority when it set one; the bug band when it sits at the generic default
         priority=src.priority
         if src and src.priority != DEFAULT_PRIORITY

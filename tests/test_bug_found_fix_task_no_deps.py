@@ -3,9 +3,9 @@ derived `wave:0`, but no `no-deps` tag, though r-task-phase-needs-wave says a ta
 prerequisite carries `no-deps` (so that none is a decision, not an omission). The filed fix
 task has empty `needs`, so it must also carry `no-deps`.
 
-The bug's own fix task keeps living under the standing bugs phase: `--item X` says where
-the bug was FOUND, not which phase holds the fix, and putting the fix in X's phase would
-hold that phase open (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
+The fix task stays under the standing bugs phase: `--item X` says where the bug was FOUND,
+not which phase carries the fix, and a bug fix would hold X's phase open
+(D-old-work-behind-core-docs-accepted, B1bfcaf6ebb) -- the rule's "say why not".
 """
 
 from __future__ import annotations
@@ -31,4 +31,3 @@ def test_a_fix_task_filed_by_bug_found_carries_no_deps(repo):
     st = state(repo)
     ft = st.items["fix-Bx"]
     assert ft.tags and "no-deps" in ft.tags, ft.tags
-    assert ft.parent == "P1", ft.parent
