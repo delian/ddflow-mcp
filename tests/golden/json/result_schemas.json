@@ -2880,6 +2880,49 @@
   },
   "array_schema": null
  },
+ "ddflow_vigil": {
+  "command": "vigil",
+  "schema": "vigil@1",
+  "shape": "object",
+  "payload": [
+   "bugs",
+   "stale_pins",
+   "lanes",
+   "lanes_total",
+   "interrupted",
+   "approvals_pending",
+   "pending_approval_ids",
+   "reviewers",
+   "reviewer_latency_ratio",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "vigil@1"
+    },
+    "bugs": {},
+    "stale_pins": {},
+    "lanes": {},
+    "lanes_total": {},
+    "interrupted": {},
+    "approvals_pending": {},
+    "pending_approval_ids": {},
+    "reviewers": {},
+    "reviewer_latency_ratio": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_phase_complete": {
   "command": "phase_complete",
   "schema": "phase_complete@1",
