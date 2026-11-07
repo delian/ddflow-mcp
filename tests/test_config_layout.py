@@ -14,6 +14,7 @@ import ast
 import dataclasses
 import importlib
 import pkgutil
+import re
 from pathlib import Path
 
 import ddflow.config as C
@@ -111,6 +112,15 @@ def test_a_section_is_wired_from_declare_not_a_kept_list():
     assert _section_types() == dict(SECTION_CLASSES)
     for cls in SECTION_CLASSES.values():
         assert getattr(C, cls.__name__) is cls
+    # The mechanism, not just the mapping it yields: `_core.py` must not hand-list a field
+    # per section (the hub edit this bug removes). Its bookkeeping fields read
+    # `field(default_factory=list/dict/...)`; a hand-kept section field would read
+    # `<name>: <Something>Config = field(`.
+    core_src = (CONFIG_DIR / "_core.py").read_text("utf-8")
+    assert not re.search(r":\s*\w+Config\s*=\s*field\(", core_src), (
+        "_core.py hand-lists a section field again; Config must assemble its fields from "
+        "SECTION_CLASSES"
+    )
 
 
 def test_the_knob_docs_are_one_registry():
