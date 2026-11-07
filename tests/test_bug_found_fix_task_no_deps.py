@@ -31,3 +31,4 @@ def test_a_fix_task_filed_by_bug_found_carries_no_deps(repo):
     st = state(repo)
     ft = st.items["fix-Bx"]
     assert ft.tags and "no-deps" in ft.tags, ft.tags
+    assert ft.parent == "P1", ft.parent

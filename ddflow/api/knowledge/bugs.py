@@ -283,9 +283,11 @@ def _file_fix_task(
     """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
 
     The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
-    `bugs_first` and gitflow both see it), under the standing `[bugs] phase` (made on first
-    use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first open or absent one,
-    by id convention only; never the item's own phase, which it would hold open) -- carrying ``globs`` (verbatim) or the bug's own found scope (the files its text
+    `bugs_first` and gitflow both see it), under the phase an open found item serves (work
+    that blocks a phase belongs in that phase) or, with no item, the standing `[bugs] phase`
+    (made on first use; once it is done, its follow-up `<phase>-2`, `-3`, ... -- the first
+    open or absent one, by id convention only) -- carrying ``globs`` (verbatim) or the bug's
+    own found scope (the files its text
     names plus the tests pinning them; past `[bugs].named_scope_at` named files, the item's
     that exist in the tree; a ddflow-scoped bug never takes the found scope), the item's
     priority and release line, and `fixes = [bug]`. Appends inside the caller's
@@ -299,18 +301,17 @@ def _file_fix_task(
         return {"fix_task": tid, "filed": False, "phase_made": ""}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
-    # globs are what makes a feature on them wait. The parent is the standing bugs phase, else its follow-up.
+    # globs are what makes a feature on them wait. The parent is the phase the found item
+    # serves (work that blocks a phase belongs in that phase, r-task-phase-needs-wave); only
+    # with no item -- and so no phase serving its work -- the standing bugs phase, else its
+    # follow-up, is the catch-all (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
     src = st.items.get(item) if item else None
-    # Never the item's own phase: a fix task there would hold that phase open and block its
-    # dependents; bugs carry no hold (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
-    parent, phase_made = _bugs_parent(log, cfg, st)
+    phase = _open_phase_of(st, item) if src is not None else ""
+    parent, phase_made = (phase, "") if phase else _bugs_parent(log, cfg, st)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
-    # needs is always empty here, so the file-it tag carries `no-deps`: a task with no
-    # prerequisite is tagged no-deps, not left to guess (r-task-phase-needs-wave). The bug's
-    # own fix task lives under the standing bugs phase (a bug blocks no feature phase), so it
-    # never takes the found item's phase: `bug found --item X` says where to look, not which
-    # phase holds the fix (D-old-work-behind-core-docs-accepted, B1bfcaf6ebb).
+    # needs is always empty here: the task with no prerequisite is tagged no-deps, not left
+    # to guess (r-task-phase-needs-wave).
     first = summary.strip().splitlines()[0] if summary.strip() else ""
     headline = " ".join((title or first).split())
     full_title = f"Fix bug {bug_id}: {headline}" if headline else f"Fix bug {bug_id}"
