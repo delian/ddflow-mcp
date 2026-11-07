@@ -13,6 +13,7 @@ from ...core import outcome as O
 from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
+from ...core.schedule import inherited_deps
 from ...services import reprobundle as RB
 from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
@@ -308,6 +309,9 @@ def _file_fix_task(
     src = st.items.get(item) if item else None
     phase = _open_phase_of(st, item) if src is not None else ""
     parent, phase_made = (phase, "") if phase else _bugs_parent(log, cfg, st)
+    # The task has no needs of its own, but it inherits its phase's: `no-deps` only when the
+    # phase binds it to nothing (r-task-phase-needs-wave: a task inherits its phase's needs).
+    no_deps = not inherited_deps(st, st.items[parent], cfg)
     tags = list(cfg.flow.bugfix_tags)
     tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
     # needs is always empty here: the task with no prerequisite is tagged no-deps, not left
@@ -341,7 +345,7 @@ def _file_fix_task(
         needs=[],
         globs=kept,
         body=body,
-        tags=[tag, "no-deps"],
+        tags=[tag] + (["no-deps"] if no_deps else []),
         # the item's own priority when it set one; the bug band when it sits at the generic default
         priority=src.priority
         if src and src.priority != DEFAULT_PRIORITY
