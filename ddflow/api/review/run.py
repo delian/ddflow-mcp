@@ -291,12 +291,18 @@ def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
 def _delta_kept(it, gate: str, kind: str) -> list | None:
     """The gate's earlier recorded findings a delta round merges into, so the round's
     output numbers its own findings by their place in that record (bug B32ce00713b);
-    None for a full round or chunk re-run, whose numbering is already the record's."""
+    None for a full round or chunk re-run, whose own numbering is already the record's.
+
+    A delta with no earlier record numbers from an EMPTY list, not None: an empty input
+    to ``_record_numbers`` still seeds the growing list, where None re-numbers each
+    reviewer from #1 (a delta round with two reviewers printed the second's finding #1)."""
     if kind != "delta" or it is None:
         return None
     prior = _prior_evidence(it.gates.get(gate))
     kept = prior.get("chunk_findings")
-    return list(kept) if isinstance(kept, list) else None
+    if isinstance(kept, list):
+        return list(kept)
+    return [] if kept is None else None
 
 
 def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
