@@ -62,6 +62,12 @@ def _drop_fix_task_unchecked(
         return "", "held"
     if t.terminal or (t.state != OPEN and not mine):
         return "", "finished"
+    if t.merged_sha or t.landed_after:
+        # Its work already landed through ddflow's own merge (B-bug-fixed-removes-merged-fix-task):
+        # the release at merge puts it back to OPEN, so the check above misses it, and the
+        # unlanded paths below would DELETE a task whose gates passed and whose work is on
+        # the base -- that is finished, not still queued. Keep it for `ddflow complete`.
+        return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"
     if st.open_descendants(t.id) or any(

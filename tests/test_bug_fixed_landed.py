@@ -9,6 +9,7 @@ now-pointless fix task is ended with the commit named as the reason.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -161,3 +162,40 @@ def test_a_mixed_list_with_one_unchecked_entry_is_refused(repo):
     assert res.exit == REFUSED, res
     assert "tests/test_f.py could not be checked" in res.reason
     assert not _item(repo, "fix-B1").removed
+
+
+def test_a_merged_fix_task_is_kept_not_removed(repo):
+    """B-bug-fixed-removes-merged-fix-task: a fix task whose fix lands through ddflow's
+    OWN merge already reached the base, so `bug fixed --landed <sha>` must not REMOVE it
+    (the release at merge puts it back to OPEN, and the unlanded path deletes it). Its
+    merged work is a done task waiting on `ddflow complete`, not a false finding to drop.
+    Removing it destroyed the record of done gates and made it 'no such item'."""
+    run_cli(repo, "init")
+    (repo / "src.py").write_text("def f():\n    return 1\n")
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_f.py").write_text(FAILS_FIRST)
+    _commit(repo, "src and the regression test")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "f returns 1")
+    # The fix lands through ddflow's own merge, exactly the red-b sequence.
+    code, out, err = run_cli(repo, "--json", "claim", "fix-B1")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "src.py").write_text("def f():\n    return 2\n")
+    _commit(tree, "fix f in the fix task's worktree")
+    assert run_cli(repo, "merge", "fix-B1")[0] == 0
+    merged = _item(repo, "fix-B1").merged_sha
+    assert merged, "the fix must have actually landed through ddflow's merge"
+    res = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test="tests/test_f.py::test_f",
+        landed=merged,
+        verify_regression=False,
+        verify_reason="the merged work's own check is the regression test",
+    )
+    assert res.exit == OK, res.reason
+    assert res.data["fix_task_kept"] == "finished", res.data
+    assert res.data["fix_task_removed"] == "", res.data
+    task = _item(repo, "fix-B1")
+    assert not task.removed
+    assert task.merged_sha == merged
