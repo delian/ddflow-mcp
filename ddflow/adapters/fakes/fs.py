@@ -60,13 +60,17 @@ class FakeFs:
         return sorted(x for x in self.dirs if x.startswith(pre))
 
     def _require_parent(self, p: str) -> None:
-        """Raise when the parent of `p` is missing (`FileNotFoundError`) or is
-        itself a file rather than a directory (`NotADirectoryError`)."""
-        parent = p.rsplit("/", 1)[0] if "/" in p else ""
-        if parent and not self.is_dir(parent):
-            if parent in self.files:
-                raise NotADirectoryError(parent)
-            raise FileNotFoundError(parent)
+        """Refuse when a parent component of `p` is a file or missing, like the
+        OS: the first component that is a file raises `NotADirectoryError`; a
+        missing one raises `FileNotFoundError` naming that component."""
+        prefix, _slash, _rest = p.rpartition("/")
+        acc = ""
+        for step in prefix.lstrip("/").split("/"):
+            acc = f"{acc}/{step}"
+            if acc in self.files:
+                raise NotADirectoryError(acc)
+            if not self.is_dir(acc):
+                raise FileNotFoundError(acc)
 
     def _relocate_dir(self, s: str, d: str) -> None:
         """Move a whole directory `s` (files + subdirs) to `d`, like a rename."""
@@ -147,6 +151,7 @@ class FakeFs:
     def replace_path(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
         self.calls.append(("replace_path", s, d))
+        _no_root(s, d)
         if not (s in self.files or self.is_dir(s)):
             raise FileNotFoundError(s)
         if d == s:  # os.replace of a path onto itself is a no-op
