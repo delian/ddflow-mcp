@@ -69,7 +69,7 @@ def conflicts(
 def queued_globs(mine: list[str], theirs: list[str], cfg: Any) -> list[str]:
     """The ``mine`` globs that ``theirs`` overlaps (shared globs excluded): one name per
     queued-behind clause, so the refusal names it instead of the whole ``theirs`` list."""
-    return [m for m, _t in conflicts(mine, theirs, shared_globs(cfg))]
+    return list(dict.fromkeys(m for m, _t in conflicts(mine, theirs, shared_globs(cfg))))
 
 
 @dataclass(frozen=True)
