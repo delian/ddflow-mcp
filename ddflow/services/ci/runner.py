@@ -124,7 +124,10 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
         if stale := _stale_pins(tree, cfg, base, custom=bool(command.strip())):
             return Result("failed", command=cmd, sha=sha, reason=stale)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
-        cmd = _default_on_the_diff(repo, cfg, cmd, tree, sha, base, changed_from)
+        cmd = _default_on_the_diff(
+            repo, cfg, cmd, tree, sha, base, changed_from,
+            full=full, explicit=bool(command.strip()) and not changed_from,
+        )
         scope = None
         if for_item and not command.strip():
             asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
@@ -233,13 +236,23 @@ def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> 
 
 
 def _default_on_the_diff(
-    repo: Path, cfg: Config, cmd: str, tree: Path, sha: str, base: str, changed_from: str
+    repo: Path,
+    cfg: Config,
+    cmd: str,
+    tree: Path,
+    sha: str,
+    base: str,
+    changed_from: str,
+    *,
+    full: bool = False,
+    explicit: bool = False,
 ) -> str:
-    """``cmd`` scoped to the diff the check is about, when it is the default command (an
-    operator's own `[ci].command` is run as written). The diff is the one the check is about:
-    on the base itself (the after-merge check) there is no branch to compare with, so the
-    commit just made against its first parent."""
-    if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
+    """``cmd`` scoped to the diff the check is about, when it is the default command (a command
+    the operator wrote themselves -- ``[ci].command`` or the ``--command`` flag -- is run as
+    written, as is a ``--full`` run, which always takes the whole suite). The diff is the one the
+    check is about: on the base itself (the after-merge check) there is no branch to compare with,
+    so the commit just made against its first parent."""
+    if explicit or full or cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
         return cmd
     # (`merge` always says where its range began; this is for a caller that does not.)
     since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)

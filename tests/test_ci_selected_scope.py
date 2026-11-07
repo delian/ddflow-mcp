@@ -114,6 +114,29 @@ def test_the_knob_full_and_a_call_not_for_an_item_run_the_whole_suite(project, s
     assert not _calls(stubs, "pytest")
 
 
+def test_full_on_the_base_itself_runs_the_whole_suite_not_the_last_commit(project, stubs):
+    """B-ci-full-skips-tests-on-events-head: `ci run --full --ref main` narrowed the default
+    pre-push command to ``sha^..sha`` when the ref was the base itself, so the sole (events:)
+    commit's diff skipped the `tests` hook and --full ran no test yet exited 0. ``full`` means
+    the whole suite: the default command keeps ``--all-files``."""
+
+    res = CI.run(project, Config.load(project), ref="HEAD", base="main", for_item=True, full=True)
+    assert res.ok, res.reason
+    assert res.scope["scope"] == "full"
+    assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
+    assert _calls(stubs, "precommit") == ["SKIP="]
+
+
+def test_an_explicit_default_command_is_run_as_written_not_narrowed(project, stubs):
+    """B-ci-full-skips-tests-on-events-head: `--command` written as the default phrase was
+    silently rewritten to ``--from-ref ... --to-ref HEAD`` with no notice. A named command is
+    the operator's own: it runs as written, ``--all-files`` intact."""
+
+    res = CI.run(project, Config.load(project), ref="HEAD", base="main", command=CI.DEFAULT_COMMAND)
+    assert res.ok, res.reason
+    assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
+
+
 def test_a_comment_only_change_to_a_hub_is_scoped_selected_not_the_whole_suite(project, stubs):
     """Bug B0bdd3b9a39: a format/comment-only change to a hub scoped the whole suite, so a
     trivial fix cleared its ci gate only after a ~12-minute run over a red main. The change
