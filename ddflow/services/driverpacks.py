@@ -121,24 +121,32 @@ def operator_only_violations(raw: Any) -> list[str]:
     return out
 
 
+def _read_bounded(path: Path) -> str:
+    """One descriptor file, bounded (a layer directory is untrusted: a symlink to /dev/zero
+    would hang an unbounded read). The cap is the same one a fetched pack has."""
+    with path.open("rb") as f:
+        data = f.read(MAX_PACK_BYTES + 1)
+    if len(data) > MAX_PACK_BYTES:
+        raise PackError(f"{path.name}: larger than {MAX_PACK_BYTES} bytes, not a descriptor file")
+    return data.decode("utf-8")
+
+
 def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
-    """Parse one layer's descriptors. A per-repo layer (``project`` or ``local``) may not
-    set an operator-only key: both live under the repo, so a project could ``git add -f``
-    either, and a key that runs a process must reach a descriptor only from the shipped set
-    or the operator's own user layer. The check reads the raw table so an explicit empty
-    ``argv`` is a refusal, not a default."""
+    """Parse one layer's descriptors. The project layer (a clone) may not set an
+    operator-only key; the check reads the raw table so an explicit empty ``argv`` is a
+    refusal, not a default. ``local`` and ``user`` are operator layers and may set one."""
     if not directory.is_dir():
         return []
     out: list[Harness] = []
     for p in sorted(directory.glob("*.toml")):
-        text = p.read_text(encoding="utf-8")
+        text = _read_bounded(p)
         require_known_schema(text)
-        if layer in ("project", "local"):
+        if layer == "project":
             bad = operator_only_violations(tomllib.loads(text))
             if bad:
                 raise PackError(
-                    f"{p.name}: a per-repo descriptor may add detection, paths and facts, "
-                    f"never a key that runs a process; operator-only {', '.join(bad)}"
+                    f"{p.name}: a cloned project may add detection, paths and facts, never a "
+                    f"key that runs a process; operator-only {', '.join(bad)}"
                 )
         out.append(harnessreg.parse(text, p.stem))
     return out

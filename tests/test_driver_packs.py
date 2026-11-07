@@ -95,11 +95,9 @@ def test_a_project_descriptor_may_not_add_probe_argv(tmp_path):
         DP.load_descriptors(tmp_path, user_home=tmp_path / "user")
 
 
-def test_a_machine_local_descriptor_may_not_add_launch_argv(tmp_path):
-    d = tmp_path / ".ddflow" / "local" / "harnesses.d"
-    d.mkdir(parents=True)
-    (d / "demo.toml").write_text(_GOOD + '[headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n')
-    with pytest.raises(DP.PackError, match=r"headless\.argv"):
+def test_an_oversized_descriptor_file_is_refused(tmp_path):
+    _project(tmp_path, ("demo.toml", "x" * (DP.MAX_PACK_BYTES + 1) + "\n"))
+    with pytest.raises(DP.PackError, match="not a descriptor file"):
         DP.load_descriptors(tmp_path, user_home=tmp_path / "user")
 
 
