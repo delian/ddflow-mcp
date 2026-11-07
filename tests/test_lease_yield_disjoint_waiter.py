@@ -55,3 +55,29 @@ def test_a_waiter_that_narrowed_away_is_not_held_contended(repo):
     # ...but it must no longer mark T1 as contended by T2: T2 gave src/a.py up, so T1 has
     # nobody to yield to and must not be told to.
     assert "T2" not in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
+
+
+def test_a_waiter_narrowed_down_to_no_globs_is_not_held_contended(repo):
+    _two_holders(repo)  # T1 holds src/a.py (A); T2 holds src/b.py (B)
+
+    # Same refused widening, then B empties T2's globs entirely: an empty want overlaps no
+    # holder, so a stale edge from it is just as false (review finding: the drop must fire
+    # for an empty current-glob set too, not only a disjoint non-empty one).
+    assert run_cli(repo, "update", "T2", "--globs", "src/b.py,src/a.py", agent=B)[0] == 3
+    code, _out, err = run_cli(repo, "update", "T2", "--globs", "", agent=B)
+    assert code == 0, err
+    st = _state(repo)
+    assert st.items["T2"].globs == []
+    assert "T2" not in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
+
+
+def test_a_waiter_whose_globs_still_overlap_is_still_named(repo):
+    """The positive control: the filter drops a stale edge, not every edge. T2 that is
+    NOT narrowed (its current glob is still src/a.py) must stay named for T1."""
+    _two_holders(repo)
+    # T1 and T2 both declare src/a.py; B's claim is refused, so T2 still wants src/a.py
+    # which T1 holds -- a real contention T2 must be named for.
+    assert run_cli(repo, "task", "add", "T3", "--title", "t", "--globs", "src/a.py", agent=A)[0] == 0
+    assert run_cli(repo, "claim", "T3", "--no-worktree", agent="agent-c")[0] == 3
+    st = _state(repo)
+    assert "T3" in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
