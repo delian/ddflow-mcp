@@ -39,12 +39,8 @@ FINGERPRINT_EXCLUDE: tuple[str, ...] = STATE_EXCLUDE
 UNLISTED = "unlisted"
 
 
-#: What a fingerprint digests for a tracked-change part (`git status` / `git diff`) git
-#: could not produce: a tree whose tracked changes are UNKNOWN is not the tree with none.
-#: `_dirt_parts` used to fold a failed command into "", the same empty pair a clean tree
-#: produces, so a damaged object store let a re-edited tree read as clean (it used to read
-#: as none). The string cannot collide with real output: porcelain and diff lines are never
-#: the bare word "failed".
+#: A tracked-change part (`git status`/`git diff`) git could not produce digs this, never
+#: "", so a damaged store cannot make a dirty tree read as clean. Mirrors `UNLISTED`.
 FAILED = "failed"
 
 
@@ -251,8 +247,6 @@ def _dirt_parts(cwd: Path) -> tuple[str, list[str]]:
     # `HEAD` and not `--cached`: staged and unstaged changes are equally "not what is
     # committed", and a gate cares about the files on disk it just ran against.
     diff = W.git(cwd, "diff", "HEAD", "--", ".", *FINGERPRINT_EXCLUDE)
-    # A part git could not produce is NOT "no changes": it digests `FAILED`, so a damaged
-    # object store cannot make a dirty tree read as clean (B-dirt-parts-failed-diff-empty).
     parts = [status.out if status.ok else FAILED, diff.out if diff.ok else FAILED]
     parts.append(_untracked_digest(cwd))
     return head.out.strip()[:12], parts
