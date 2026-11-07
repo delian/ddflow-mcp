@@ -20,6 +20,12 @@ from ..tools._common import _api
 from .capflags import capped
 
 
+def _text(out, a) -> str:
+    # `digest --ask <id>` with no such entry is `nothing`: its data carries no `text`, so
+    # fall back to the reason that names the miss (a `KeyError` here would mask it).
+    return out.data.get("text") or out.reason
+
+
 def _status_handler(a, c):
     """`cmd_status` with the `--by-tag` mode: the same sections plus the per-value one.
 
@@ -394,6 +400,38 @@ COMMANDS: tuple[Command, ...] = (
             tail=int(a.get("tail") or 0),
         ),
         payload=("total", "shown", "events"),
+    ),
+    Command(
+        path=("digest",),
+        tool="ddflow_digest",
+        tier="all",
+        family="ddflow_view",
+        action="digest",
+        summary="the operator queue: what waits on a person, as askable entries",
+        description=(
+            "The operator queue in one fold: every thing waiting on a person to act — "
+            "pending approval requests, questions, DECIDE tasks, proposed plans and "
+            "decisions, gate spot-checks, red main, missing credentials, stalled leases — "
+            "ranked by severity, impact and age, each with the command that answers it and "
+            "the chat route that puts it to the person. `ask=<id>` renders the one entry "
+            "alone (kind:key) as the ask to put to the person. Read-only."
+        ),
+        params=(
+            Param(
+                "ask",
+                help="One entry id (kind:key) to render alone, as the ask to put to the person.",
+                default="",
+                cli_help="one entry id (kind:key): render that entry alone",
+            ),
+        ),
+        call=lambda repo, a, agent: _api().reporting.digest_queue(
+            repo, ask=a.get("ask", "") or "", agent=agent
+        ),
+        payload="text",
+        render=_text,
+        prose=True,
+        prose_reason="a rendered queue meant to be put to a person as-is",
+        kind="digest",
     ),
 )
 
