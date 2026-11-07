@@ -259,8 +259,7 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
     fallback: dict[str, str] = {}
     unconfirmed: set[str] = set()
     for run in runs:
-        run_fam = (str((run.evidence or {}).get("family") or "") or "").strip().lower()
-        run_fam = "" if run_fam == "unknown" else run_fam
+        run_fam = _normalise_family((run.evidence or {}).get("family"))
         found = LB.full(run.evidence or {}).get("chunk_findings")
         if isinstance(found, B.Unavailable):
             unreadable = True  # "cannot be read back" is not "no confirmed finding"
@@ -269,8 +268,7 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             digest = f.get("digest")
             if not digest:
                 continue
-            stamp = (str(f.get("family") or "") or "").strip().lower()
-            stamp = "" if stamp == "unknown" else stamp
+            stamp = _normalise_family(f.get("family"))
             # An explicit per-finding stamp is the finding's true raiser and wins; a
             # run-level fallback is only a guess at that raiser, so it never outranks an
             # explicit stamp that appears in any round.
@@ -283,6 +281,13 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
                 unconfirmed.add(digest)
     fam_by_digest = {d: explicit.get(d) or fallback.get(d, "") for d in unconfirmed}
     return [(d, fam_by_digest.get(d, "")) for d in unconfirmed], unreadable
+
+
+def _normalise_family(value) -> str:
+    """A family value from a finding or a run, lowercased, with the literal ``unknown``
+    (and an empty/None value) normalised to "". A name the map cannot tell returns ""."""
+    fam = (str(value or "") or "").strip().lower()
+    return "" if fam == "unknown" else fam
 
 
 def _author_single_family(cfg, author_model: str) -> str | None:
