@@ -26,9 +26,14 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from ..adapters.http import UrllibHttpClient
 from ..core.digest import content_digest
 from . import harnessreg
 from .harnessreg import Harness
+
+#: A pack is a small set of TOML files; a larger body than this is not a descriptor pack
+#: (bounded, never an unbounded fetch).
+MAX_PACK_BYTES = 2_000_000
 
 #: The schema this code reads. A file that says a newer one is "unavailable: upgrade
 #: ddflow", never half-read.
@@ -154,10 +159,9 @@ def _is_url(source: str) -> bool:
 
 
 def _fetch(url: str) -> bytes:
-    import urllib.request
-
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        return resp.read()
+    return UrllibHttpClient().request(
+        "GET", url, timeout=30.0, max_bytes=MAX_PACK_BYTES
+    ).body
 
 
 def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any]:
