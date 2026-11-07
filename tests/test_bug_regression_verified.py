@@ -97,6 +97,7 @@ def _fixed_events(repo: Path) -> list[dict]:
 
 
 def test_a_test_that_fails_without_the_fix_and_passes_with_it_is_verified(repo):
+    _case(repo)
     _merge(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
     assert out.exit == OK, out.reason
@@ -225,7 +226,8 @@ def test_a_test_that_fails_on_the_fixed_tree_is_refused(repo):
 def test_an_unrecognized_verification_status_is_recorded_not_verified(repo, monkeypatch):
     """The dispatch names ONE success status; anything else must not fall through to
     `verified` (rubber_duck #1)."""
-    _merge(repo)  # B1's fix IS landed, so the close reaches the patch
+    _case(repo)  # set up B1 + fix-B1, then land it so the close reaches the patch
+    _merge(repo)
     monkeypatch.setattr(
         "ddflow.services.gates.verify_regression_test",
         lambda *a, **k: ("some-future-status", {}),
