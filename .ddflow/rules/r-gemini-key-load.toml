@@ -1,0 +1,9 @@
+id = "r-gemini-key-load"
+title = "Load the gemini reviewer key into the environment before reviews"
+tags = ["reviewers", "gemini", "key", "env"]
+scope = "project"
+priority = 50
+created = "2026-11-04T08:18:23.534956+00:00"
+updated = "2026-11-04T08:18:23.534964+00:00"
+
+Before running any review that depends on the gemini/google reviewer, an agent must load the key into its own environment: export GEMINI_API_KEY="$(cat ~/.config/ddflow-secrets/gemini.key)". The key lives in the git-ignored ~/.config/ddflow-secrets/gemini.key and is referenced by the reviewer config api_key_env; it is never written into a tracked file or committed. The variable is not exported by the default shell, so each agent (and each spawned subagent) must export it itself before ddflow review, or the gemini reviewer sends no key and every request returns 403.

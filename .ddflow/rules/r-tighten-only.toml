@@ -1,0 +1,10 @@
+id = "r-tighten-only"
+title = "Profiles, packs, plugins and policy layers may tighten but never silently loosen"
+tags = ["architecture", "policy"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:12:01.757477+00:00"
+updated = "2026-11-03T14:12:01.757486+00:00"
+
+Decisions D-config-layer-order, D-lifecycle-answers, D-extension-contract-answers. RULE: a lifecycle profile, pack, plugin, approval row, join policy or lower config layer may add requirements, gates, approvals or restrictions; it may not remove or weaken one set by a higher layer (company enforced > project > local); the strictest value wins; loosening needs a recorded person approval. A knob that can loosen declares its strictest value. CHECK: layering tests plus a per-registry tighten-only test (EX-approval-rows, EX-join-policies). VERIFY: could this change make any gate or approval easier to pass than before?
