@@ -31,6 +31,6 @@ def _mins(seconds) -> str:
 
 
 def _why_notes(it, rows) -> dict[str, str]:
-    """gate -> the note `gate status` shows beside it: its reason when unavailable or partial,
-    else how long it queued (a reason wins: it is why the gate has no verdict)."""
+    """gate -> the note `gate status` shows beside it: its reason when unavailable, partial or
+    failed, else how long it queued (a reason wins: it is why the gate has no passing verdict)."""
     return {**_queued_notes(it, rows), **_unavailable_reasons(it, rows)}
