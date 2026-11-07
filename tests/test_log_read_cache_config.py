@@ -147,8 +147,7 @@ def event_log_calls_without_config(src: str) -> list[int]:
         # the `[log]` knobs too. `EventLog.__init__` uses `log_cfg or LogConfig()`, so ANY
         # falsy literal keyed `log_cfg` is an offender, not a pass.
         if any(
-            k.arg == "log_cfg"
-            and not (isinstance(k.value, ast.Constant) and not k.value.value)
+            k.arg == "log_cfg" and not (isinstance(k.value, ast.Constant) and not k.value.value)
             for k in node.keywords
         ):
             continue
