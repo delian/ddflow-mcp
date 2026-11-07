@@ -90,7 +90,19 @@ class FakeFs:
             self.dirs.discard(x)
             self.dirs.add(d + x[len(s) :])
         self.dirs.discard(s)
-        self.dirs.add(d)
+        self.dirs.discard(d)  # a replaced empty directory gives way to the move
+        for acc in self._dir_path(d):
+            self.dirs.add(acc)
+
+    @staticmethod
+    def _dir_path(d: str) -> list[str]:
+        """`d` and every ancestor of `d` (never the root), outer to inner."""
+        acc = []
+        cur = ""
+        for step in d.lstrip("/").split("/"):
+            cur = f"{cur}/{step}"
+            acc.append(cur)
+        return acc
 
     def copy_file(self, src: Path | str, dst: Path | str) -> None:
         s, d = _p(src), _p(dst)
@@ -176,12 +188,11 @@ class FakeFs:
             self.files[d] = self.files.pop(s)
             return
         # a directory: os.replace renames it over a new name or an empty one
+        self._require_parent(d)  # a missing parent is ENOENT, a file ancestor ENOTDIR
         if d.startswith(s + "/"):  # an ancestor cannot replace a path inside itself (EINVAL)
             raise OSError(f"cannot replace a directory into itself ({d})")
         if d in self.files:  # a directory over an existing file
             raise NotADirectoryError(d)
-        self._require_parent(d)
         if self._under(d) or self._dirs_under(d):
             raise OSError(f"cannot replace the non-empty directory {d!r}")
-        self.dirs.discard(d)
         self._relocate_dir(s, d)
