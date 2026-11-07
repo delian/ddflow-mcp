@@ -14,6 +14,7 @@ from .overview import STATUS_LIST_LIMIT, loops, progress, status  # noqa: F401
 from .records import addenda, new_reports, record_summary, show  # noqa: F401
 from .recovery import recover  # noqa: F401
 from .views import DEFAULT_RENDER_DIR, board, rebuild, render, replay  # noqa: F401
+from .vigil import vigil_snapshot  # noqa: F401
 from .waitcycles import (  # noqa: F401
     Progress,
     WaitReport,

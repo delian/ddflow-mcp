@@ -212,6 +212,11 @@ from .upcasters import NewerPayload, upcast
 # ---------------------------------------------------------------------------------
 
 
+def _h_merge_forced(st: State, ev: Event) -> None:
+    """`merge.forced`: the record of a merge landed over unsettled required gates. It changes no
+    state: `worktree.merged` is what moved the item; this names the gates and the approval."""
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
@@ -243,6 +248,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     # distinction the projection cannot act on.
     "worktree.adopted": _h_worktree_adopted,
     "worktree.merged": _h_worktree_merged,
+    "merge.forced": _h_merge_forced,
     "worktree.removed": _h_worktree_removed,
     "pr.opened": _h_pr_opened,
     "pr.synced": _h_pr_synced,

@@ -46,7 +46,16 @@ def apply(  # noqa: PLR0913, PLR0917
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
-    found = BR.on_base(repo, base, probe, ids, rerun, cfg.gates.baseline_cache_ttl_s, cwd or repo)
+    found = BR.on_base(
+        repo,
+        base,
+        probe,
+        ids,
+        rerun,
+        cfg.gates.baseline_cache_ttl_s,
+        cwd or repo,
+        BR._failure_sigs(seen),
+    )
     ev["baseline"] = found
     if not found["red"]:
         return _not_red(ev, found, base, ids, result, why)
@@ -75,16 +84,12 @@ def _not_red(
     if found.get("compared") is False:
         return result, why
     blind = set(found.get("unmeasured") or ())
-    known = blind | set(found.get("still_failing") or ())
-    fresh = [i for i in ids if i not in known]
-    if fresh:
-        found["new_failures"] = fresh[: BR.SHOWN * 4]
-        more = f"; {len(blind)} more could not be measured there" if blind else ""
-        return result, (why + "; " if why else "") + (
-            f"new failure(s) not failing on {base}: {', '.join(fresh[: BR.SHOWN])}"
-            f"{' ...' if len(fresh) > BR.SHOWN else ''} (a timing flake counts as new unless "
-            f"it also fails on the base){more}"
-        )
+    still = set(found.get("still_failing") or ())
+    changed = list(found.get("different") or ())
+    plain = [i for i in ids if i not in blind and i not in still and i not in set(changed)]
+    if plain or changed:
+        found["new_failures"] = (plain + changed)[: BR.SHOWN * 4]
+        return result, (why + "; " if why else "") + _new_reason(base, plain, changed, blind)
     if not blind:
         return result, why
     shown = ", ".join(sorted(blind)[: BR.SHOWN]) + (" ..." if len(blind) > BR.SHOWN else "")
@@ -93,6 +98,26 @@ def _not_red(
     if why:
         ev["reason"] = reason
     return "unavailable", reason
+
+
+def _new_reason(base: str, plain: list[str], changed: list[str], blind: set[str]) -> str:
+    """The reason text for ids the base does not fail as it does here: ``plain`` are not failing
+    there, ``changed`` fail there too but differently (a new offender in an already-red test)."""
+    parts: list[str] = []
+    if plain:
+        parts.append(
+            f"new failure(s) not failing on {base}: {', '.join(plain[: BR.SHOWN])}"
+            f"{' ...' if len(plain) > BR.SHOWN else ''}"
+        )
+    if changed:
+        parts.append(
+            f"new offender(s) in an already-red test (fails on {base} too, but "
+            f"differently): {', '.join(changed[: BR.SHOWN])}"
+            f"{' ...' if len(changed) > BR.SHOWN else ''}"
+        )
+    if blind:
+        parts.append(f"{len(blind)} more could not be measured there")
+    return "; ".join(parts) + " (a timing flake counts as new unless it also fails on the base)"
 
 
 def _guards_unran(gate: str, ev: dict[str, Any]) -> str:

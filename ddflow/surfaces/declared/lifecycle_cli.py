@@ -520,6 +520,10 @@ MERGE_PAYLOAD = (
     "merge_gate_human",
     "worktree",
     "worktree_removed",
+    # [merge].require_gates: the gates a landing left unsettled, each gate's real state
+    "awaiting_gates",
+    "gate_states",
+    "forced",
     # `--queue`: the entry `queue add` made, instead of a landing.
     "queued",
     "state",
@@ -528,7 +532,16 @@ MERGE_PAYLOAD = (
 )
 
 #: What a landing flag means nothing for once the item is only being enqueued.
-_NOT_WITH_QUEUE = ("message", "keep", "allow_dirty", "allow_empty", "branch", "model")
+_NOT_WITH_QUEUE = (
+    "message",
+    "keep",
+    "allow_dirty",
+    "allow_empty",
+    "branch",
+    "model",
+    "force",
+    "approval",
+)
 
 
 def merge_call(repo, a, agent, called_from=None, shell_cwd=None, on_progress=None):
@@ -549,6 +562,8 @@ def merge_call(repo, a, agent, called_from=None, shell_cwd=None, on_progress=Non
         message=a.get("message", "") or "",
         allow_dirty=bool(a.get("allow_dirty")),
         allow_empty=bool(a.get("allow_empty")),
+        force=bool(a.get("force")),
+        approval=a.get("approval", "") or "",
         keep=bool(a.get("keep")),
         model=a.get("model", "") or "",
         branch=a.get("branch", "") or "",
@@ -606,7 +621,9 @@ def merge_body(out, a) -> Any:
     if "queued" in out.data:
         return out.body(MERGE_PAYLOAD)
     local = (
-        () if out.data.get("pr") else tuple(k for k in ("export_refresh", "ci") if k in out.data)
+        ()
+        if out.data.get("pr")
+        else tuple(k for k in ("export_refresh", "post_merge_check") if k in out.data)
     )
     return out.body(MERGE_PAYLOAD + local)
 
@@ -626,6 +643,8 @@ def merge_notes(out, a, ctx) -> Iterator[str]:
             f"  the merge gate is a human checkpoint: it is not recorded by merge -- ask the "
             f"operator to run `ddflow approve {a['id']} merge`"
         )
+    if d.get("awaiting_gates"):
+        yield f"  merged, awaiting gates: {', '.join(d['awaiting_gates'])}"
     outside = d.get("outside_globs") or []
     if d.get("outside_globs_unknown"):
         yield (
@@ -643,7 +662,7 @@ def merge_notes(out, a, ctx) -> Iterator[str]:
         yield f"  back-merged into {extra}"
     if d.get("export_refresh"):
         yield f"  {d['export_refresh']['summary']}"
-    if ci := d.get("ci"):  # the base's health after the landing ([ci].on_merge)
+    if ci := d.get("post_merge_check"):  # the base's health after the landing ([ci].on_merge)
         said = {"passed": "passed", "failed": "FAILED", "unavailable": "could not run"}.get(
             ci["status"], ci["status"]
         )
