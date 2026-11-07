@@ -134,7 +134,8 @@ class FakeFs:
             return
         if d.startswith(s + "/"):  # a directory cannot move into its own subtree
             raise OSError(f"cannot move a directory into itself ({d})")
-        self._require_parent(d)
+        # like shutil.move: a directory move falls back to copytree, so a missing
+        # parent is created rather than refused.
         self._relocate_dir(s, d)
 
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
@@ -164,11 +165,11 @@ class FakeFs:
             self.files[d] = self.files.pop(s)
             return
         # a directory: os.replace renames it over a new name or an empty one
+        if d.startswith(s + "/"):  # an ancestor cannot replace a path inside itself (EINVAL)
+            raise OSError(f"cannot replace a directory into itself ({d})")
         if d in self.files:  # a directory over an existing file
             raise NotADirectoryError(d)
         self._require_parent(d)
-        if d.startswith(s + "/"):  # into its own descendant (EINVAL)
-            raise OSError(f"cannot replace a directory into itself ({d})")
         if self._under(d) or self._dirs_under(d):
             raise OSError(f"cannot replace the non-empty directory {d!r}")
         self.dirs.discard(d)
