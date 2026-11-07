@@ -115,9 +115,7 @@ def _literal_prefix(pat: str) -> str:
     """``pat`` up to its first wildcard (``*``, ``?``, or `[`).
 
     `regex` reads `[` as a character class, so the literal prefix stops there too; reading
-    `[` as literal let `src/[ab]x.py` and `src/ax*` read as disjoint (Bebc6fe14a1). A
-    shorter prefix than the truth can only over-report overlap, never hide one, which is
-    the safe direction for a conflict detector.
+    `[` as literal let `src/[ab]x.py` and `src/ax*` read as disjoint (Bebc6fe14a1).
     """
     cut = min((i for i in (pat.find(w) for w in "*?[") if i != -1), default=len(pat))
     return pat[:cut]
@@ -138,6 +136,11 @@ def overlap(a: str, b: str) -> bool:
         return True
     pa = _literal_prefix(a)
     pb = _literal_prefix(b)
-    if not pa or not pb:
-        return True  # a bare "*" covers everything
-    return pa.startswith(pb) or pb.startswith(pa)
+    if pa and pb:
+        return pa.startswith(pb) or pb.startswith(pa)
+    # One prefix is empty: its first wildcard sits at the root. A leading `*` is unanchored
+    # (any leading run), so it overlaps whatever the other prefix reaches; a leading `?`
+    # and `[...]` is specific (one char from a set), not universal, and a shared file there
+    # was already answered by the fnmatch check above -- so an empty prefix must not read
+    # as "overlaps everything" (that would make `[ab].py` claim to overlap `zzz.py`).
+    return (not pa and a.startswith("*")) or (not pb and b.startswith("*"))
