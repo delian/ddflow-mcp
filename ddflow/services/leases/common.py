@@ -9,7 +9,8 @@ from __future__ import annotations
 from ...config import Config
 from ...core import clock
 from ...core import globs as GL
-from ...core.admission import conflicts, glob_conflict, glob_clashes as _glob_clashes, is_shared
+from ...core.admission import conflicts, glob_conflict, is_shared
+from ...core.admission import glob_clashes as _glob_clashes
 from ...core.flow import line_key
 from ...core.model import Item, Lease, State, fold
 from ...infra import worktree as W

@@ -266,7 +266,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
         # --force for the expiry alone. It must not also waive the overlap check: expiry
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
         if clash and (not force or existing is not None):
-            other_id, lease, pair = clash
+            other_id, lease, _pair = clash
             named, _ids = clash_report(glob_clashes(state, cfg, it, holder, mine, now))
             raise LeaseError(
                 f"{item_id} writes {named}"
