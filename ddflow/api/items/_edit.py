@@ -432,14 +432,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, accepted, resources)
-    overtook = (
-        [
-            {"item": w["item"], "holder": w["holder"], "globs": list(w["globs"])}
-            for w in WG.waiting_for(L._fold(log), cfg, it.id, time.time())
-        ]
-        if globs is not None and lease is not None
-        else []
-    )
+    overtook = _overtaken_waiters(log, cfg, it.id) if globs is not None and lease is not None else []
     return O.ok(
         "item.updated",
         id=it.id,
@@ -454,6 +447,16 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         else [],
         tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
+
+
+def _overtaken_waiters(log, cfg, item_id: str) -> list[dict[str, Any]]:
+    """The standing waiters a just-applied widening now holds files for, so the reply can
+    name who it overtook (B-widen-over-standing-wait-silent). Called after the lease was
+    retargeted, so `waiting_for` sees the new globs and names each waiter's item and holder."""
+    return [
+        {"item": w["item"], "holder": w["holder"], "globs": list(w["globs"])}
+        for w in WG.waiting_for(L._fold(log), cfg, item_id, time.time())
+    ]
 
 
 def _waiting(log, cfg, it, lease, globs: list[str] | None, queue: bool) -> str:
