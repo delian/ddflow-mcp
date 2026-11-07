@@ -104,7 +104,7 @@ def _holder(repo: Path, agent: str, rel: str) -> str:
 #: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
 OPTIONS = (
     "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), send a suggestion "
-    "(`ddflow suggestions` / MCP `ddflow_suggestions`), or open a task "
+    "(`ddflow suggest ...` / MCP `ddflow_suggest`), or open a task "
     "(`ddflow task add ...` / MCP `ddflow_task action=add`)"
 )
 
@@ -134,7 +134,11 @@ def verdict(
         else:
             bad.append(rel)
     if bad:
-        holder = _holder(repo, agent, bad[0])
+        holder = ""
+        for rel in bad:
+            holder = _holder(repo, agent, rel)
+            if holder:
+                break
         held = f" and {holder} holds it" if holder else ""
         return REFUSE, (
             f"lane {agent}: {', '.join(bad)} is outside the item's lease globs "

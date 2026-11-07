@@ -30,7 +30,7 @@ def test_verdict_names_the_holder_and_the_options(repo, monkeypatch):
     assert code == CK.REFUSE
     assert "agent-2" in msg
     assert "ddflow wait" in msg
-    assert "ddflow suggestions" in msg
+    assert "ddflow suggest" in msg
     assert "ddflow task add" in msg
 
 
@@ -70,3 +70,21 @@ def test_mode_off_skips_the_lease_check(repo, monkeypatch):
         stdin=_write_stdin(repo),
     )
     assert out.data["result"] == "allowed"
+
+
+def test_mode_log_still_refuses_a_forbidden_bash_command(repo, monkeypatch):
+    """`[locks].mode` only tempers the lease-glob check: the independent
+    `[hooks].forbidden_commands` refusal must still hold in `log` mode."""
+    monkeypatch.setenv("DDFLOW_LOCKS_MODE", "log")
+    out = AS.hooks(
+        repo,
+        action="run",
+        event="pre_tool",
+        harness="claude",
+        agent="lane-1",
+        stdin=json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "git stash"}, "cwd": str(repo)}
+        ),
+    )
+    assert out.data["result"] == "denied"
+    assert out.data["stdout"] != ""
