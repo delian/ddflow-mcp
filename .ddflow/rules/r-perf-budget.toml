@@ -1,0 +1,10 @@
+id = "r-perf-budget"
+title = "Every top-level verb has a budget knob and a test; a slower verb fails CI"
+tags = ["performance", "architecture"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:09:22.037138+00:00"
+updated = "2026-11-03T16:09:22.037146+00:00"
+
+Decision D-scale-answers, research R-scalability. RULE: every top-level CLI/MCP verb has a [perf] budget (p95 at the reference log size) as a knob and a test on the generated fixture; deterministic counters (folds, git subprocesses, bytes read, modules imported, appended events) gate hard, wall time is informational; new enforcement starts as warn for 2 weeks, then block; baselines are shrink-only. CHECK: PS-budget-ratchet. VERIFY: what are the counters and the budget of the verb this change adds or touches?

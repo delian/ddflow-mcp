@@ -66,7 +66,7 @@ from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
-from .waitcycles import wait_cycles, wait_findings, wait_order
+from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
@@ -429,8 +429,9 @@ def doctor(
         urls = []
     notes.extend(CT.warnings(repo, cfg, urls))
     # Reviewers a quota/exhaustion wall marked degraded and shed (B8efd3d1bc4): surfaced
-    # here rather than as a run of silently `unavailable` rubber_duck/critic gates.
-    notes.extend(degraded_notes(st))
+    # here rather than as a run of silently `unavailable` rubber_duck/critic gates. Only a
+    # mark still within [review].degraded_cooldown_s is still a shed (bug B066719c493).
+    notes.extend(degraded_notes(st, cfg.review.degraded_cooldown_s))
 
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
@@ -462,8 +463,10 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
-    ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    problems += wait_findings(
+        (waits := wait_report(log, st, cfg, events)).cycles, cfg, waits.alarms
+    )
+    ordered = wait_order(log, st, cfg, waits.cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
@@ -479,7 +482,9 @@ def doctor(
         "repo": str(repo),
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
-        "wait_cycles": [c.as_dict() for c in cycles],
+        "wait_cycles": [],
+        "wait_alarms": [],
+        **wait_rows(*waits),
         "auto_order": ordered,
         **cost.data(),
     }

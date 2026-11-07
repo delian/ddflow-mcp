@@ -452,3 +452,117 @@ def test_the_newest_answer_across_both_channels_wins(log, cfg):
         "\n".join(json.dumps(r) for r in [_asked(row["text"]), _answered(row["text"], yes)]) + "\n"
     )
     assert H.find(cfg, row).tool_use_id == "U1"  # 2026-10-23 > 1970: the newer Claude answer
+
+
+def test_an_answer_in_kilo_to_the_canonical_ask_is_auto_attested_to_approved(log, cfg):
+    """The auto-attest loop (B3068414423): after the operator answers the surfaced CANONICAL
+    question in Kilo, `attest_pending` attests it without the agent naming the id -- a chat
+    answer alone flips the request to approved, no terminal, no `--all` approve."""
+    row = _file(log, _kilo_cfg(cfg))
+    yes, _ = H.labels(row["id"])
+    _kilo_db(cfg, [_kilo_question(row["text"], yes)])
+    results = H.attest_pending(log, cfg)
+    assert any(r["id"] == row["id"] and r["ok"] for r in results)
+    got = asks_of(_state(log))[row["id"]]
+    assert got["outcome"] == "approved" and got["via"] == "harness" and got["proof"] == "kilo:prt_1"
+    spent = C.operator_gate(log, cfg, _canon(), approval_id=row["id"])
+    assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2
+
+
+def test_auto_attest_leaves_a_request_without_an_answer_pending(log, cfg):
+    """Auto-attest waits, never invents: a pending request with no transcript answer is not
+    attested, and the run reports it still waiting."""
+    row = _file(log, _kilo_cfg(cfg))
+    results = H.attest_pending(log, cfg)
+    assert any(r["id"] == row["id"] and not r["ok"] for r in results)
+    assert asks_of(_state(log))[row["id"]]["state"] == "pending"
+
+
+def test_attest_all_over_the_cli_auto_attests(log, cfg, repo):
+    """`ddflow approvals attest --all`: one agent-run call after the operator answers attests
+    every pending request whose canonical question is answered, no id named."""
+    run_cli(repo, "init")
+    projects = Path(cfg.approvals.transcript_dirs[0])
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
+    log = EventLog(repo, "bot")
+    row = _file(log, Config())
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
+    assert code == 2, (out, err)  # nothing answered yet
+    d = projects / "slug"
+    d.mkdir(parents=True)
+    (d / "s.jsonl").write_text("\n".join(json.dumps(r) for r in _approved_row(row)))
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
+    assert code == 0, (out, err)
+    here = Config()
+    here.approvals.transcript_dirs = [str(projects)]
+    spent = C.operator_gate(log, here, _canon(), approval_id=row["id"])
+    assert spent.ok and spent.stamp["via"] == "harness" and spent.stamp["level"] == 2
+
+
+def test_attest_with_no_id_and_no_all_is_refused_not_a_misdispatch(log, cfg, repo):
+    """`ddflow approvals attest` with no id and no --all returns a usage refusal, never a parse
+    error that silently attests an empty id (review finding)."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "approvals", "attest", agent="bot")
+    assert code == 3 and "request id" in err, (out, err)
+
+
+def test_attest_all_with_a_positional_id_is_refused(log, cfg, repo):
+    """`ddflow approvals attest --all <id>` is refused, not silently ignoring the id (the guard
+    mirrors `approve --all` with ids; roborev/round-3 finding)."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", "Qwhatever", agent="bot")
+    assert code == 3 and "--all" in err, (out, err)
+
+
+def test_attest_all_reports_a_refused_request_beside_an_attested_one(log, cfg, repo):
+    """`attest --all` is not an overall success when one answered request attests and another
+    is refused: the refusal is reported, never dropped behind the ok (review finding)."""
+    run_cli(repo, "init")
+    projects = Path(cfg.approvals.transcript_dirs[0])
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
+    log = EventLog(repo, "bot")
+    row = _file(log, Config())  # T2, answerable over chat
+    _file(log, Config(), _canon(verb="config.reviewer_command", item="", target=""))  # T3: refused
+    d = projects / "slug"
+    d.mkdir(parents=True)
+    (d / "s.jsonl").write_text("\n".join(json.dumps(r) for r in _approved_row(row)))
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", agent="bot")
+    assert code == 3, (out, err)  # attested one, refused one: not a clean success
+    assert "refused" in err
+    got = asks_of(fold(EventLog(repo, "bot").read_all(), strict=False))[row["id"]]
+    assert got["outcome"] == "approved" and got["via"] == "harness"
+
+
+def test_harness_imports_no_http_roots_and_holds_no_http_home_entry():
+    """Regression for Baf66b3bd2b: the harness channel reads Kilo's transcript store through
+    ``infra.docindex``, not ``sqlite3``/``urllib``, so ``harness.py`` imports no
+    ``urllib``/``http``/``socket`` and the http-home ratchet holds no entry for it. A stale
+    entry (listed but no matching import) reds ``test_import_contracts``; a re-added import
+    belongs in ``ddflow.adapters.http``, never here."""
+    import ast
+    import tomllib
+
+    here = Path(__file__).resolve().parents[1]
+    harness = here / "ddflow" / "services" / "approvals" / "harness.py"
+    roots = set()
+    for node in ast.walk(ast.parse(harness.read_text("utf-8"))):
+        if isinstance(node, ast.Import):
+            roots.update(n.name.split(".")[0] for n in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+    assert not roots & {"urllib", "http", "socket"}, (
+        f"{harness.name} imports {sorted(roots & {'urllib', 'http', 'socket'})}; "
+        "the harness channel reads the transcript through infra.docindex, not the network"
+    )
+    baseline = tomllib.loads(
+        (here / "tests" / "guard_baselines" / "importlinter-http-home.toml").read_text("utf-8")
+    )
+    stale = [
+        e
+        for e in baseline["ignore_imports"]
+        if e.split(" -> ")[0] == "ddflow.services.approvals.harness"
+    ]
+    assert not stale, f"stale http-home entry for a module that imports none of it: {stale}"

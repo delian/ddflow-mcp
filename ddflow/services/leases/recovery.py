@@ -7,12 +7,14 @@ records expiry for the un-salvageable ones only.
 from __future__ import annotations
 
 import importlib
+from dataclasses import replace
 from pathlib import Path
 
 from ...config import Config
 from ...core import schedule
 from ...core.model import REVIEW, Item, State
 from ...infra import worktree as W
+from ...infra.gitbatch import RepoFacts
 from ...infra.log import EventLog
 from .. import leases as _leases
 from ..leaseclock import foreign
@@ -28,6 +30,7 @@ def scan(
     *,
     now: float | None = None,
     state: State | None = None,
+    view: bool = False,
 ) -> list[Recovery]:
     """Find everything a crash could have left behind, and say what to do with each.
 
@@ -41,6 +44,13 @@ def scan(
     Each carries the measured state of the tree (dirty files, unmerged commits), because
     "is there work in here?" is the only question that decides the remedy, and guessing
     it from the item's status is exactly how real work gets deleted.
+
+    The repository-wide git answers (base branch, commits ahead, which merged commits the
+    base holds) are asked once per scan (`RepoFacts`), not once per tree. ``view`` is a
+    read-only report (`status`, `brief`): it measures at most ``lease.scan_view_trees_max``
+    trees and weighs at most ``lease.scan_view_verdicts_max`` completions, because each is
+    a process (or dozens) per tree; a tree left unmeasured is ``salvageable = None`` --
+    treated as holding work -- and says so. ``recover`` and ``sweep`` are never capped.
     """
     now = _leases.time.time() if now is None else now
     if (
@@ -51,6 +61,12 @@ def scan(
     # answering about the same moment `next` would.
     live = state.active_leases(now, cfg.lease.grace_s)
     out: list[Recovery] = []
+    facts = RepoFacts(repo)
+    budget = _Budget(
+        cfg.lease.scan_view_trees_max if view else None,
+        cfg.lease.scan_view_verdicts_max if view else None,
+    )
+    _prefetch_landed(state, cfg, facts)
 
     for it in state.items.values():
         if it.removed:
@@ -79,8 +95,8 @@ def scan(
                     f"{lease.clone}); ask its owner"
                 )
             else:
-                _measure(rec, repo, cfg)
-                _note_landed(rec, it, state, cfg, repo)
+                _measure(rec, repo, cfg, facts, budget)
+                _note_landed(rec, it, state, cfg, repo, facts, budget)
             out.append(rec)
         elif not lease and it.worktree and it.state != REVIEW:
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
@@ -100,8 +116,8 @@ def scan(
                 worktree=it.worktree,
                 branch=it.branch,
             )
-            _measure(rec, repo, cfg)
-            _note_landed(rec, it, state, cfg, repo)
+            _measure(rec, repo, cfg, facts, budget)
+            _note_landed(rec, it, state, cfg, repo, facts, budget)
             out.append(rec)
         elif schedule.interrupted(state, it, live):
             # Same predicate the scheduler uses, so `recover` and `next` cannot
@@ -114,6 +130,46 @@ def scan(
             )
             out.append(rec)
     return sorted(out, key=lambda r: (r.kind, r.item))
+
+
+class _Budget:
+    """What a read-only view may spend: trees measured, completions weighed (None: no cap)."""
+
+    def __init__(self, trees: int | None, verdicts: int | None):
+        self.trees = trees
+        self.verdicts = verdicts
+
+    def take_tree(self) -> bool:
+        return self._take("trees")
+
+    def take_verdict(self) -> bool:
+        return self._take("verdicts")
+
+    def _take(self, name: str) -> bool:
+        left = getattr(self, name)
+        if left is None:
+            return True
+        if left <= 0:
+            return False
+        setattr(self, name, left - 1)
+        return True
+
+
+def _prefetch_landed(state: State, cfg: Config, facts: RepoFacts) -> None:
+    """One query for which merged commits the base holds, before the per-item checks: asked
+    only about the items a recovery can be reported for (an unfinished item with a lapsed
+    lease or a leftover tree), so a state with none needs no git answer at all."""
+    shas = [
+        it.merged_sha
+        for it in state.items.values()
+        if not it.removed
+        and not it.terminal
+        and it.merged_sha
+        and (it.lease is not None or it.worktree)
+        and it.gate_outcome("merge") == "passed"
+    ]
+    if shas:
+        facts.prefetch_on_base(shas, facts.base(cfg.worktree.base_ref))
 
 
 def _tree_is_gone(repo: Path, recorded: str) -> bool:
@@ -140,25 +196,42 @@ def open_session_model(st: State, agent: str) -> str:
 _SHOWN_BLOCKERS = 3
 
 
-def _landed_on_base(repo: Path, cfg: Config, it: Item) -> str:
+def _landed_on_base(repo: Path, cfg: Config, it: Item, facts: RepoFacts | None = None) -> str:
     """The commit `merge` recorded when it is reachable from the base branch, else "".
     Checked against git, not the log: a recorded merge on a branch since rewound is not
     "on main"."""
     sha = it.merged_sha
     if it.gate_outcome("merge") != "passed" or not sha:
         return ""
-    base = cfg.worktree.base_ref or W.default_branch(repo)
-    return sha if W.git(repo, "merge-base", "--is-ancestor", sha, base).ok else ""
+    facts = facts or RepoFacts(repo)
+    return sha if facts.on_base(sha, facts.base(cfg.worktree.base_ref)) else ""
 
 
-def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path) -> None:
+def _note_landed(
+    rec: Recovery,
+    it: Item,
+    state: State,
+    cfg: Config,
+    repo: Path,
+    facts: RepoFacts | None = None,
+    budget: _Budget | None = None,
+) -> None:
     """An item whose merge gate is done and whose commit is on the base, with nothing left in
     its tree, needs COMPLETING, not releasing (Ba2eff5726b): `release` only returned it to the
     queue to be claimed and merged again. Says what `complete` still wants, if anything."""
     if rec.salvageable is not False or rec.adopted or it.terminal:
         return  # a finished item is owed nothing: `complete` would record it twice
-    sha = _landed_on_base(repo, cfg, it)
+    sha = _landed_on_base(repo, cfg, it, facts)
     if not sha:
+        return
+    if budget is not None and not budget.take_verdict():
+        # A read-only view does not weigh the completion (dozens of git calls per item):
+        # it says the item is merged and where the full answer is.
+        rec.advice = (
+            f"merged to the base ({sha[:9]}, merge gate passed); nothing left to salvage. "
+            f"Finish it: `ddflow complete {it.id} --model <author model>`; "
+            "`ddflow recover` says what `complete` still wants."
+        )
         return
     # Resolved at call time: completion imports the gate stack, which imports this module
     # (a module-level import is a cycle; a deferred `import` statement is a ratchet breach).
@@ -192,7 +265,13 @@ def _note_landed(rec: Recovery, it: Item, state: State, cfg: Config, repo: Path)
         )
 
 
-def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
+def _measure(
+    rec: Recovery,
+    repo: Path,
+    cfg: Config,
+    facts: RepoFacts | None = None,
+    budget: _Budget | None = None,
+) -> None:
     """Measure the worktree rather than trusting the item's recorded state.
 
     'Dirty' alone is NOT evidence of unshipped work — a dirty tree is just as often a
@@ -217,8 +296,19 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
             else ", and no lease is held on it."
         )
         return
-    base = cfg.worktree.base_ref or W.default_branch(repo)
-    tw = W.tree_work(wt, base)
+    facts = facts or RepoFacts(repo)
+    if budget is not None and not budget.take_tree():
+        rec.salvageable = None  # not measured: unknown is never clean
+        rec.advice = (
+            "NOT MEASURED in this view (it measures at most "
+            f"{cfg.lease.scan_view_trees_max} trees, `lease.scan_view_trees_max`). Treat it as "
+            f"containing work until `ddflow recover` has measured it: `git -C {wt} status`."
+        )
+        return
+    base = facts.base(cfg.worktree.base_ref)
+    tw = W.tree_work(wt, base, ahead=False)
+    if tw.readable:
+        tw = replace(tw, ahead=facts.ahead(wt, base))
     rec.dirty_files = len(tw.dirty) if tw.readable else -1
     rec.unmerged_commits = tw.ahead
     if rec.dirty_files < 0 or rec.unmerged_commits < 0:

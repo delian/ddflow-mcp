@@ -1,0 +1,10 @@
+id = "r-evidence-over-assertion"
+title = "Every finding, claim, skip request and completion cites evidence: a probe, test id, file:line or exact counts"
+tags = ["process", "reviews"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:12:51.043889+00:00"
+updated = "2026-11-03T14:12:51.043898+00:00"
+
+Lessons of 2026-11-02/03. RULE: a review finding is confirmed or refuted with a probe or test id and the verdict is RECORDED per finding; a gate skip or override request states exact counts (found, fixed, filed as follow-up, refuted, untriaged = 0) and the bug id of any known tool defect; time pressure, load or the coordinator's wish is never a reason; a claim of 'fixed' needs a test that failed before; a number in a report names its method. CHECK: gate status shows untriaged findings; the approval request text is machine-checked for counts (QA-agent, RU-check). VERIFY: could a reader reproduce the claim from the record alone?

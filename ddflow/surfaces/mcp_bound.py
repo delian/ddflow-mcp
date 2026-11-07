@@ -19,11 +19,13 @@ the body carries its own `truncated` field.
 from __future__ import annotations
 
 import copy
+import json
 import re
 from typing import Any
 
 from ..core import limits as L
 from ..core.textcut import clip
+from ..views.output_caps import take_note
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
 NEXT_BLOCKED_SHOWN = 10
@@ -51,6 +53,14 @@ ITEM_PLUMBING = ("landed_before", "landed_after")
 #: reviewers wrote what they did and found; the long ones run to 700+ characters, and
 #: `ddflow --json show` has them whole.
 TEXT_SHOWN = 160
+#: Findings one gate's evidence `chunk_findings` list and one gate's triage keep in
+#: `ddflow_show`; the rest are counted. Cutting every STRING was not enough: one round
+#: that found hundreds still overflowed the surface budget (B-show-mcp-result-over-ceiling).
+FINDINGS_SHOWN = 10
+#: `ddflow_show`'s projected body is kept under this many characters once serialised. The
+#: structural caps above bound the real evidence shapes; this is the guarantee no nested
+#: shape slips past them (r-surface-budget: 20 KB -- the margin covers the note).
+SHOW_MAX_CHARS = 16_000
 #: What a cut string ends in.
 CUT_MARK = " [...]"
 
@@ -77,6 +87,9 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_next`: the ready items, whole; the blocked list cut, its reasons counted."""
     if not isinstance(body, dict) or not isinstance(body.get("blocked"), list):
         return body, None
+    if args.get("full") or "truncated" in body:
+        # `full=true` lifts the cut; a body `output_caps` already cut names its own footer.
+        return {**body, "ready": [_lean(i) for i in body.get("ready") or []]}, None
     out = dict(body)
     blocked = body["blocked"]
     out["ready"] = [_lean(i) for i in body.get("ready") or []]
@@ -159,11 +172,73 @@ def _drop_repeated_locations(out: dict[str, Any]) -> bool:
     return stripped
 
 
+def _homogeneous(value: dict) -> bool:
+    """Whether every value is the same SHAPE (all scalars, all lists, or all dicts): the
+    mark of a series keyed by test/finding id, not a field struct whose value kinds mix."""
+    kinds = {
+        "list" if isinstance(v, list) else "dict" if isinstance(v, dict) else "scalar"
+        for v in value.values()
+    }
+    return len(kinds) == 1
+
+
+def _cap_findings(out: dict[str, Any], cap: int = FINDINGS_SHOWN) -> int:
+    """Cap the repeatable evidence `ddflow_show` keeps. Every LIST inside a gate record
+    (the per-finding lists -- `chunk_findings`, `baseline`, `failed_tests`, `failure_tails`,
+    `failed_reasons`, `titles`, ...), every homogeneous series map (the `baseline` /
+    `failed_reasons` maps keyed by test id, or a pathological evidence dict) and each gate's
+    triage keep the first `cap`; the rest are counted, not echoed. A field STRUCT mixes
+    value kinds and stays whole."""
+    dropped = [0]
+
+    def walk(value: Any, root: bool = False) -> Any:
+        if isinstance(value, list):
+            if len(value) > cap:
+                dropped[0] += len(value) - cap
+                value = value[:cap]
+            return [walk(v) for v in value]
+        if isinstance(value, dict):
+            # The root `gates` map names the gates themselves and is not a series; a
+            # homogeneous map keyed by test/finding id is, and is capped like a list.
+            if not root and len(value) > cap and _homogeneous(value):
+                dropped[0] += len(value) - cap
+                value = dict(list(value.items())[:cap])
+            return {k: walk(v) for k, v in value.items()}
+        return value
+
+    gates = out.get("gates")
+    if isinstance(gates, dict):
+        out["gates"] = walk(gates, root=True)
+    triage = out.get("triage")
+    if isinstance(triage, dict):
+        for gate, recs in list(triage.items()):
+            kept = recs
+            if isinstance(recs, dict) and len(recs) > cap:
+                dropped[0] += len(recs) - cap
+                kept = dict(list(recs.items())[:cap])
+            triage[gate] = walk(kept)
+    return dropped[0]
+
+
+def _shrink_to_budget(out: dict[str, Any]) -> int:
+    """The `_cap_findings` caps are a contract, not a guarantee: a nested dict-of-dicts
+    (each inner map just under `FINDINGS_SHOWN`) is indistinguishable from an evidence
+    record and can still overflow. Re-cap `gates` and `triage` to a shrinking cap until
+    the serialised body is under `SHOW_MAX_CHARS`, counting what goes."""
+    dropped = 0
+    cap = FINDINGS_SHOWN
+    while len(json.dumps(out)) > SHOW_MAX_CHARS and cap > 0:
+        cap //= 2
+        dropped += _cap_findings(out, cap)
+    return dropped
+
+
 def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_show`: the item without its empty fields; each gate record without the
     tree-identity boilerplate (`GATE_BOILERPLATE`); the gate and triage records' long
-    strings cut (see `_clip`). The outcome, who, when, the reason and the evidence's
-    own words stay, and `truncated` names what was left out."""
+    strings cut (see `_clip`) and their findings capped (see `_cap_findings`). The outcome,
+    who, when, the reason and the evidence's own words stay, and `truncated` names what
+    was left out."""
     if not isinstance(body, dict) or ("state" not in body and "gates" not in body):
         return body, None
     lean = _lean(body)
@@ -175,10 +250,14 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     for key in ("gates", "triage"):
         if key in out:
             out[key] = _clip(out[key], cut)
-    if stripped or cut[0]:
+    findings_cut = _cap_findings(out)
+    if len(json.dumps(out)) > SHOW_MAX_CHARS:
+        findings_cut += _shrink_to_budget(out)
+    if stripped or cut[0] or findings_cut:
         out["truncated"] = {
             "strings_cut": cut[0],
-            "left_out": "tree ids, gate names, sub-second times, landed_before/after",
+            "findings_cut": findings_cut,
+            "left_out": "tree ids, gate names, sub-second times, landed_before/after, findings beyond the first",
             "all": "ddflow --json show <id>",
         }
     return out, None
@@ -276,9 +355,16 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     return body, None
 
 
+def bound_recover(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
+    """`ddflow_recover`: the body is a bare array, so a cut (`output_caps`) is told in a
+    second content block, never by changing the array's shape."""
+    return body, take_note() or None
+
+
 #: tool name -> the projection its MCP body goes through.
 BOUNDS = {
     "ddflow_next": bound_next,
+    "ddflow_recover": bound_recover,
     "ddflow_show": bound_show,
     "ddflow_recall": bound_recall,
     "ddflow_decision_list": bound_decisions,

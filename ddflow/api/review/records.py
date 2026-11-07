@@ -141,11 +141,29 @@ def _reason_of(best, found=None) -> str:
     return f"{len(found)} finding(s)" if found else ""
 
 
-def _finding_rows(best) -> list[dict[str, str]]:
-    return [
-        {"severity": f.severity, "title": f.title, "location": f.location, "detail": f.detail}
-        for f in best.findings
-    ]
+def _finding_rows(results) -> list[dict[str, str]]:
+    """The review's returned findings: every reviewer the run heard, not only the one it
+    names, each row attributed to the reviewer that raised it. The gate record already
+    keeps every heard reviewer's findings (`_reviewed_findings`, bug B0419c114ef), but the
+    caller's ``data["findings"]`` named a single reviewer's alone, so a clean identifying
+    reviewer hid a finding a secondary reviewer raised -- the review reported no finding
+    while the record blocked on one (bug B-review-drops-a-reviewers-finding)."""
+    rows: list[dict[str, str]] = []
+    for r in results or []:
+        if r.status not in _HEARD:
+            continue
+        rows.extend(
+            {
+                "severity": f.severity,
+                "title": f.title,
+                "location": f.location,
+                "detail": f.detail,
+                "reviewer": r.reviewer,
+                "family": r.family,
+            }
+            for f in r.findings
+        )
+    return rows
 
 
 def _item_intent(it) -> str:
@@ -194,6 +212,26 @@ def _confirmed_unrechecked(it, gate: str) -> bool:
     return bool(GD.unresolved_review_failure(it, gate, confirmed_only=True))
 
 
+def _blocking_findings(results, it, gate: str, converging: bool, cfg) -> tuple[list, bool]:
+    """(blocking, converged_round) for this round -- the findings that keep the gate open and
+    whether this is a converged full re-review, computed in ONE place so the caller can name
+    the reviewer that found a blocking finding and `_gate_outcome` shares this round's
+    ``converged_round`` with it (bug B3113b1f522: one prior/converged value, not two drifted
+    copies). ``converged_round`` is False when this round raised no finding."""
+    found = [f for r in results if r.status in _HEARD for f in r.findings]
+    if not found:
+        return [], False
+    prior = _last_review(it, gate) if it is not None else {}
+    converged_round = converging and bool(prior.get("chunk_findings"))
+    blocking = RV.blocking_findings(
+        found,
+        converged=converged_round,
+        floor=cfg.review.converge_floor,
+        known=_still_standing(it, gate, prior.get("chunk_findings")),
+    )
+    return blocking, converged_round
+
+
 def _gate_outcome(
     best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
 ) -> tuple[str, dict | None]:
@@ -212,21 +250,12 @@ def _gate_outcome(
             ],
             extra_evidence,
         )
-    # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
-    # earlier round (which still spends a round) is not a previous review.
-    prior = _last_review(it, gate) if it is not None and bool(item) else {}
-    converged_round = converging and bool(prior.get("chunk_findings"))
     # Every heard reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status in _HEARD for f in r.findings]
     if not found:
         return "passed", extra_evidence
-    blocking = RV.blocking_findings(
-        found,
-        converged=converged_round,
-        floor=cfg.review.converge_floor,
-        known=_still_standing(it, gate, prior.get("chunk_findings")),
-    )
+    blocking, converged_round = _blocking_findings(results, it, gate, converging, cfg)
     if blocking:
         return "failed", extra_evidence
     # A full re-review must not converge (pass on below-floor findings) while a confirmed

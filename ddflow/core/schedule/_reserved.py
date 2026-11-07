@@ -13,6 +13,8 @@ whole limit, which the adaptive limit can reach on its own, would strand every f
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any
 
 from ...adapters.optimizer import Slots
 from ...config import Config
@@ -24,6 +26,40 @@ def tree_cap(cfg: Config, limit: int) -> int:
     """How many worktrees may exist: 0 (the default) FOLLOWS the schedule limit; it is not
     unlimited (B-af-config)."""
     return cfg.worktree.max_parallel or limit
+
+
+@dataclass(frozen=True)
+class Caps:
+    """The two caps in force, counted across the whole queue: what `plan` cuts its offer by
+    and `next --lane` answers by, from one count."""
+
+    limit: int
+    paused: bool
+    live_items: list[str]
+    in_flight: int
+    with_trees: int
+    tree_limit: int
+    flight_slots: int
+    tree_slots: int
+
+
+def caps(state: State, cfg: Config, live: dict[str, Lease], parallel: Any = None) -> Caps:
+    """``parallel`` is the `flowcontrol.Decision` in force; None is `max_parallel_tasks`."""
+    live_items = [i for i in live if i in state.items and not state.items[i].removed]
+    in_flight = len(live_items)
+    with_trees = len([i for i in live_items if live[i].worktree])
+    # The limit in force: the caller's Decision (adaptive or fixed, `services/flowstate`),
+    # else `max_parallel_tasks` as it always was. A shrink never touches a running lease:
+    # in flight above the limit simply leaves no slot. Floor 1.
+    limit = max(1, parallel.limit) if parallel is not None else cfg.schedule.max_parallel_tasks
+    paused = parallel is not None and parallel.admit_paused
+    flight_slots = 0 if paused else max(0, limit - in_flight)
+    trees = tree_cap(cfg, limit)
+    if cfg.worktree.enabled:
+        tree_slots = max(0, trees - with_trees)
+    else:
+        tree_slots = flight_slots  # no trees are made, so no tree cap applies
+    return Caps(limit, paused, live_items, in_flight, with_trees, trees, flight_slots, tree_slots)
 
 
 def reserved_items(state: State, cfg: Config) -> frozenset[str]:

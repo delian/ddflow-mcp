@@ -39,6 +39,7 @@ _SUBMODULE_OF = {
     "_SEVERITY_RANK": "model",
     "blocking_findings": "model",
     "classify_exhaustion": "model",
+    "active_degraded_marks": "model",
     "degraded_notes": "model",
     "degraded_marks": "model",
     "family_of": "model",

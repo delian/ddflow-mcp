@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 #: A string field is redacted whole; a dict or list field is redacted leaf by leaf, whatever
 #: its keys. These are the fields that are text even where their name is a known lookup name.
 LOG_TEXT_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "merge.forced": ("unmet_gates",),
+    "token.revoked": ("reason",),
     "probe.recorded": ("why",),
     "suggestion.expired": ("reason",),
     "suggestion.superseded": ("reason",),
@@ -130,6 +132,16 @@ LOG_VERBATIM_NAMES = frozenset(
 LOG_TEXT_NAMES = frozenset({"dedupe"})
 
 LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
+    ("merge.forced", "agent"): "an agent id compared",
+    ("merge.forced", "sha"): "a sha",
+    ("merge.forced", "approval"): "an approval stamp compared",
+    ("token.revoked", "name"): "the client name, its identity, compared",
+    ("token.revoked", "by"): "an actor id, the audit trail's who",
+    ("token.issued", "name"): "the client name, its identity, compared",
+    ("token.issued", "role"): "a role word",
+    ("token.issued", "expires_at"): "a time that is compared",
+    ("token.issued", "by"): "an actor id, the audit trail's who",
+    ("token.issued", "rotated_from"): "a token id that is compared",
     ("probe.recorded", "against"): "the ref the item was probed against",
     ("probe.recorded", "result"): "clean, conflict or unavailable",
     ("probe.recorded", "method"): "merge-tree, scratch-merge or none",
@@ -200,6 +212,7 @@ LOG_VERBATIM_FIELDS: Mapping[tuple[str, str], str] = {
     ("ask.expired", "by"): "an actor id, the audit trail's who",
     ("worktree.merged", "branch_head"): "a sha",
     ("worktree.merged", "outside_globs"): "globs",
+    ("worktree.merged", "gates"): "gate names and their recorded outcomes",
     ("schedule.defined", "scope_globs"): "globs",
     ("pr.synced", "head_sha"): "a sha",
     ("pr.synced", "merge_sha"): "a sha",

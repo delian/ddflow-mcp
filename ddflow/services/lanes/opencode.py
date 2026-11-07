@@ -149,7 +149,15 @@ def instructions(agent: str, item: str, worktree: Path) -> str:
 
 def mcp_entry(repo: Path, agent: str, command: list[str] | None = None) -> dict[str, Any]:
     """The lane's ddflow MCP server in the opencode shape, with the lane's own identity."""
-    argv = command or [sys.executable, "-m", "ddflow", "--repo", str(repo), "--agent", agent, "mcp"]
+    argv = command or [
+        sys.executable,
+        "-m",
+        "ddflow",
+        "--repo",
+        str(repo),
+        f"--agent={agent}",
+        "mcp",
+    ]
     return mcpconfig.server_entry_for(
         mcpconfig.SHAPE_OPENCODE,
         {"command": argv[0], "args": argv[1:], "env": {"DDFLOW_AGENT": agent}},

@@ -1,0 +1,10 @@
+id = "r-extension-contract"
+title = "A new feature is a feature manifest plus a registry entry; it edits no shared hub file"
+tags = ["architecture", "extensibility"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:11:43.610175+00:00"
+updated = "2026-11-03T14:11:43.610185+00:00"
+
+Decision D-extension-contract-answers. WHY: shared hub files (defs.py, inbox.py, policy.py, flowsignals.py, health.py, README, config.py, mcp.py, model.py) serialise parallel agents and rot. RULE: a new gate, join rule, optimizer signal or constraint, proposal kind, notice, predicate or class, report or doctor section, record kind, event kind, knob or approval class is added as ddflow/features/NAME.toml plus the module it references through a registry (sorted discovery, duplicate-name error, lazy loading); never by editing a hub file. The event fold stays closed. CHECK: tests/test_feature_modularity.py (EX-meta-test) and the shrink-only hub-file list. VERIFY by hand: does the diff touch a hub file that has a registry?

@@ -136,6 +136,7 @@ from .lifecycle import (
     claim,
     complete,
     heartbeat,
+    next_lane,
     unblock,
 )
 from .lifecycle import merge as merge_item
@@ -215,6 +216,7 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
+from .threads import cap_blas_threads
 from .verify import refuse_sweep_args, verify_sweep, verify_tool
 from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
@@ -258,6 +260,7 @@ __all__ = [
     "bug_invalid",
     "bug_tag",
     "cadence",
+    "cap_blas_threads",
     "ci_tool",
     "claim",
     "cleanup",
@@ -322,6 +325,7 @@ __all__ = [
     "merge_item",
     "model_show",
     "next_item",
+    "next_lane",
     "onboard_run",
     "phase_add",
     "phase_close",

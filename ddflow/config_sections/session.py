@@ -75,6 +75,8 @@ class SessionConfig:
             r"(?i)\b(sk-[A-Za-z0-9_-]{16,})\b",
             r"(?i)\b(xox[abprs]-[A-Za-z0-9-]{10,})\b",
             r"\bAKIA[0-9A-Z]{16}\b",
+            # A paired ddflow token (services/auth), anywhere: it has no key to match on.
+            r"\bddft_[0-9a-f]{12}_[0-9a-f]{64}\b",
             # The WHOLE PEM block, not just its header. Matching the header alone left
             # the base64 key body — the actual secret — in the log.
             r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",

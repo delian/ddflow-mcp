@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin, `ddflow harness record`, scrubbed",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05"
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "00000000-0000-0000-0000-000000000001",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "stop_hook_active": false,
+    "last_assistant_message": "PONG\n\nI called `ddflow_brief` once. Nothing is ready to start. It lists two open workflow choices nobody has decided yet: branching model (`trunk` by default, or `gitflow`) and landing method (`merge` by default, or `pr`). Per the brief, I'd ask you before choosing, or the defaults apply the first time they matter.\n\nDONE",
+    "background_tasks": [],
+    "session_crons": []
+  },
+  "expect": {
+    "session_id": "s-1",
+    "cwd": "/w"
+  }
+}

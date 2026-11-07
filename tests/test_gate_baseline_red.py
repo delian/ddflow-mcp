@@ -65,6 +65,53 @@ def test_a_failure_the_base_shows_too_is_recorded_partial_baseline_red(repo) -> 
     assert bug in fold(EventLog(repo).read_all(), strict=False).bugs
 
 
+def test_a_refused_baseline_bug_says_why_no_bug_is_filed(repo, monkeypatch) -> None:
+    """B-baseline-bug-not-filed-silently: `bug_found` refuses (a near-duplicate is not filed),
+    and the reason must reach the evidence and the reason text instead of a silent 'bug not
+    filed'."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.core import outcome as O
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    monkeypatch.setattr(
+        GB,
+        "bug_found",
+        lambda *a, **k: O.refused("bug.found", "reads like an existing record B-baseline-red"),
+    )
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    ev: dict = {"failed_tests": [ID]}
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    outcome, why = GB.apply(
+        repo,
+        cfg,
+        "worker",
+        it,
+        "unit_tests",
+        gdef,
+        "failed",
+        ev,
+        lambda g, where=None: (
+            "failed",
+            {"exit": 1, "failed_tests": [ID], "summary": ["1 failed in 0.1s"]},
+        ),
+        False,
+    )
+    assert outcome == "partial", why
+    assert "reads like an existing record" in why, why
+    assert "reads like an existing record" in ev["baseline"]["not_filed"], ev["baseline"]
+
+
 def test_a_failure_the_base_does_not_show_stays_failed(repo) -> None:
     _project(repo, base_healthy=True)
     (repo / "healthy").unlink()  # the item's tree breaks what the base has
@@ -393,6 +440,133 @@ def test_a_run_that_reached_fewer_ids_than_asked_says_nothing_of_the_rest(repo, 
     outcome, why, ev = _measure(repo, [ID, two], lambda g, where=None: result)
     assert outcome == "unavailable" and "new failure" not in why
     assert ev["baseline"]["unmeasured"] == [ID, two]
+
+
+def test_a_new_offender_in_an_already_red_test_is_new_not_baseline_red(repo) -> None:
+    """B-baseline-red-hides-new-offender-in-red-ratchet: baseline-red compared failing test
+    ids only, so a branch that added a NEW offender to a test already red on the base read as
+    baseline-red (still_failing) and the new offender went unseen. The comparison must look
+    at the failure text too: a test the base also fails, but differently, is a new failure."""
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # test_a fails on the base too
+    from ddflow.api import gate_baseline as GB
+
+    base_text = "assert 1 == 2"
+    branch_text = (
+        base_text + "\nNEW or grown interface call site(s): program git in ddflow/infra/gitbatch.py"
+    )
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: branch_text}}
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: base_text},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ID in why
+    found = ev["baseline"]
+    assert found["red"] is False
+    assert found["still_failing"] == [] and ID in found["different"]
+    assert ID in found["new_failures"]
+
+
+def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
+    """The counterpart: a test whose failure text is byte-identical on the base stays
+    baseline-red -- the text comparison must not turn a timing flake into a new offender."""
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    text = "assert 1 == 2"
+    from ddflow.api import gate_baseline as GB
+
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: text}}
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: text},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "partial", why
+    assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
+
+
+def test_a_cached_base_signature_still_spots_a_new_offender(repo) -> None:
+    """A base id already cached WITH its failure text is compared on later runs too: the cache
+    stores the signature beside the bool, so a new offender on the same base sha is not hidden
+    behind the cached hit (B-baseline-red-hides-new-offender-in-red-ratchet)."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    base_text = "assert 1 == 2"
+    branch_text = (
+        base_text + "\nNEW or grown interface call site(s): program git in ddflow/infra/gitbatch.py"
+    )
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=3600,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: base_text},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    # First run: the branch shows the SAME text, so it is baseline-red and the base text is cached.
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: base_text}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "partial", why
+    assert ev["baseline"]["red"] is True
+
+    # Second run, same base sha (cache hit): the branch CHANGED the failure text.
+    ev = {"failed_tests": [ID], "failed_reasons": {ID: branch_text}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ev["baseline"]["red"] is False and ID in ev["baseline"]["different"]
 
 
 def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -> None:

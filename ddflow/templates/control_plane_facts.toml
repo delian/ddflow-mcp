@@ -1,0 +1,101 @@
+# Control-plane facts probed by CP-verify-facts; rendered by `ddflow harness facts`.
+# One row per plane or ACP adapter, each fact the shared record of services/facts.py.
+# Status here: `verified` = seen running on this machine, and only then (it needs `probe`
+# and `ver`); `documented` = read in the project's docs or source at the pinned commit in
+# [sources], never run; `unverified` = an open question, its `v` a lead that is never read
+# as true; `none` = looked for and absent at that commit, no `v`.
+# A project overrides any fact, or records its own, in .ddflow/control_plane_facts.toml.
+# How it was probed, and what each fact means for the queue:
+# docs/ddflow/research/control-planes.md
+
+[meta]
+schema = 1
+
+[sources]
+paseo-src = { url = "https://github.com/getpaseo/paseo", ref = "59be8975a463" }
+paseo-npm = { url = "https://registry.npmjs.org/@getpaseo/client" }
+hr-src = { url = "https://github.com/giuliastro/harness-remote", ref = "05f86a71230a" }
+hr-fork = { url = "https://github.com/monperrus/harness-remote", ref = "f1b005f931e1", note = "fork; last commit 2026-09-10" }
+agentos-src = { url = "https://github.com/saadnvd1/agent-os", ref = "bee0df613af2" }
+orca-src = { url = "https://github.com/stablyai/orca", ref = "87788aeae5f3" }
+emdash-src = { url = "https://github.com/generalaction/emdash", ref = "592281113a9d" }
+acp-spec = { url = "https://agentclientprotocol.com/protocol/session-setup" }
+claude-sdk = { url = "https://code.claude.com/docs/en/agent-sdk/mcp" }
+claude-acp-src = { url = "https://github.com/agentclientprotocol/claude-agent-acp", ref = "a79d07324dc1" }
+codex-acp-src = { url = "https://github.com/agentclientprotocol/codex-acp", ref = "519c2671bfe8" }
+codex-acp-old = { url = "https://github.com/zed-industries/codex-acp", ref = "296069e84163", note = "archived" }
+opencode-src = { url = "https://github.com/anomalyco/opencode", ref = "893e8dc43f05" }
+gemini-src = { url = "https://github.com/google-gemini/gemini-cli", ref = "1fe22af5f800" }
+live-kilo = { path = "probes/probe_acp_mcp_inject.py", note = "run on this machine 2026-11-05" }
+
+[plane.paseo]
+hooks = { v = ["workspace.create.before", "workspace.create.after", "workspace.archive.after", "worktree.create.before", "worktree.create.after", "agent.create.before", "agent.create.after", "agent.open.before", "agent.close.after", "agent.archive.after", "agent.turn.before", "agent.turn.after", "agent.permission.before", "agent.permission.after"], s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "public-docs/plugins/hooks.md; plugin API `server.addHook`, so it needs pluginsEnabled and unsandboxed code; a waiting hook has 30 s; the old server.before/on names go after 2027-04-30" }
+project_config = { v = "paseo.json: worktree.setup, worktree.teardown, scripts; env PASEO_SOURCE_CHECKOUT_PATH, PASEO_WORKTREE_PATH, PASEO_BRANCH_NAME", s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "public-docs/worktrees/index.md; shell commands, no plugin needed" }
+mcp_json_reader = { s = "none", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "Paseo itself reads no project .mcp.json: the only mcp.json in its source is Pi's own file" }
+mcp_json_claude = { v = "inherited: the Claude provider passes settingSources user, project, local", s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "providers/claude/agent.ts; with `project` the SDK picks up .mcp.json (claude-sdk). Other providers read their own config" }
+mcp_json_live = { v = "a Claude agent under Paseo loads .mcp.json from an opened worktree", s = "unverified", src = "paseo-src", d = "2026-11-05", note = "not run: no daemon here; needs Paseo installed" }
+mcp_inject = { v = "agent config mcpServers (saved or session-scoped); plugin agent.open.before mcpServers (launch only)", s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "public-docs/sdk/reference.md, plugins/hooks.md; a name that collides fails the open; a provider without MCP fails with `does not support MCP servers`" }
+adopt_worktree = { v = "as a plain directory only: client.workspaces.open(dir) or `paseo workspace create --isolation local --path DIR`", s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "worktree isolation cannot take one: worktree.create.before refuses an existing path, so `--isolation worktree` is the wrong door" }
+delete_foreign = { v = "archive leaves it: only a worktree with ownership proof is removed (under the worktrees root, paseo/worktree.json marker, registry record)", s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "server/workspace-archive-service.ts, utils/worktree.ts. docs/data-model.md: teardown runs from cwd on archive; whether that reaches a non-owned directory was not traced" }
+adopt_live = { v = "archiving an opened ddflow worktree leaves it on disk", s = "unverified", src = "paseo-src", d = "2026-11-05", note = "not run: needs Paseo installed" }
+acp_provider = { v = "custom provider `extends: acp` with `command`, stdio", s = "documented", src = "paseo-src", d = "2026-11-05", ver = "0.15.2", note = "public-docs/custom-providers.md" }
+sdk = { v = "@getpaseo/client 0.15.2 (npm latest)", s = "documented", src = "paseo-npm", d = "2026-11-05", ver = "0.15.2" }
+
+[plane.harness-remote]
+upstream = { v = "github.com/giuliastro/harness-remote", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "package.json repository field. R-control-planes cited monperrus/harness-remote (hr-fork): the GitHub API names it a fork of this one, its last commit 2026-09-10; kits should target upstream" }
+api = { v = "bridge: /v1/health, /v1/capabilities, /v1/events, /v1/sessions, /session, /session/:id/{message,prompt_async,abort,todo,diff,action,command,queue}; daemon: /v1/agents/:id/, /v1/tasks/:id/{launch,continue,context,worktree,worktree/cleanup}", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "bridge/src/server.js, task-launch-server.js, REFERENCE.md; the OpenCode path shape, a harness answers a subset named by /v1/capabilities" }
+auth = { v = "HTTP Basic, optional on loopback, required beyond it; bridge default 127.0.0.1:4097", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "bridge/src/config.js, http-policy.js; no per-item or per-lane scope, the credentials are the whole user account" }
+root_limit = { v = "--root (repeatable) limits file browsing and a new session's directory, nothing else", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "REFERENCE.md: not a sandbox; existing sessions and the API a daemon forwards are outside it" }
+mcp_inject = { s = "none", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "every session/new and session/load sends mcpServers: [] (acp-service.js, task-launcher.js); ddflow must come from the agent's native config" }
+adopt_worktree = { v = "POST /session?directory=DIR inside --root runs a session there", s = "documented", src = "hr-src", d = "2026-11-05", ver = "3.8.0", note = "bridge/src/server.js allowedDirectory; a task's own worktree comes from worktree-manager.js and is the only kind it removes" }
+live = { v = "the Basic Auth and /session route set answer as read", s = "unverified", src = "hr-src", d = "2026-11-05", note = "not run: needs Harness Remote installed" }
+
+[plane.agent-os]
+adopt_worktree = { v = "POST /api/sessions with workingDirectory and useWorktree false", s = "documented", src = "agentos-src", d = "2026-11-05", ver = "0.3.1", note = "app/api/sessions/route.ts; a plain session in the directory, no adopt verb" }
+delete_foreign = { v = "only paths under ~/.agent-os/worktrees are ever removed", s = "documented", src = "agentos-src", d = "2026-11-05", ver = "0.3.1", note = "lib/worktrees.ts isAgentOSWorktree guards the session, sweep and done paths" }
+project_config = { v = "agentos.json: ports, env, copy, clone, setup, dev, ready, test, notes, merge, deploy", s = "documented", src = "agentos-src", d = "2026-11-05", ver = "0.3.1", note = "docs/reference/project-config.md; `setup` runs in its own worktrees" }
+mcp_config = { v = "a Claude terminal session keeps Claude's own config; a routed provider gets --strict-mcp-config; the orchestrator runs with --setting-sources '' --strict-mcp-config", s = "documented", src = "agentos-src", d = "2026-11-05", ver = "0.3.1", note = "lib/agents/launch.ts, lib/orchestrator/claude-cli.ts; so .mcp.json is ignored by those two; an orchestrator allows a server by name in Settings, Workspaces" }
+live = { v = "a session started in a ddflow worktree keeps ddflow's MCP server", s = "unverified", src = "agentos-src", d = "2026-11-05", note = "not run: needs AgentOS installed" }
+
+[plane.orca]
+adopt_worktree = { v = "a worktree made with `git worktree add` stays external until Show in the Non-Orca worktrees dialog", s = "documented", src = "orca-src", d = "2026-11-05", ver = "1.4.214", note = "docs/site/content/docs/model/worktrees.mdx; external default is hide; no CLI verb for it in cli/reference.mdx, `orca repo add --path` registers the repo" }
+delete_foreign = { v = "deleting a shown external worktree removes the folder and branch", s = "unverified", src = "orca-src", d = "2026-11-05", ver = "1.4.214", note = "a lead: the docs say delete and bulk delete remove on-disk folders, and no external guard was found in src/main/runtime/workspaces/workspace-removal.ts; not traced or run" }
+project_config = { v = "orca.yaml: scripts.setup, scripts.archive, setupAgentStartupPolicy, defaultTabs, worktree.sharedDirectories; .worktreeinclude", s = "documented", src = "orca-src", d = "2026-11-05", ver = "1.4.214", note = "docs/site/content/docs/model/orca-yaml.mdx" }
+cli = { v = "orca worktree create|list|ps|current|set|rm, orca agent hooks on|off|status, --json", s = "documented", src = "orca-src", d = "2026-11-05", ver = "1.4.214", note = "docs/site/content/docs/cli/reference.mdx" }
+mcp_config = { v = "Settings, Integrations, MCP; its own ACP session params carry mcpServers: []", s = "documented", src = "orca-src", d = "2026-11-05", ver = "1.4.214", note = "cli/skills.mdx, src/main/acp/acp-session-runtime.ts" }
+live = { v = "Show on a ddflow worktree works and leaves ddflow's lease alone", s = "unverified", src = "orca-src", d = "2026-11-05", note = "not run: needs Orca installed" }
+
+[plane.emdash]
+adopt_worktree = { v = "automatic: the host scan adopts every worktree of a registered repository, unconfirmed", s = "documented", src = "emdash-src", d = "2026-11-05", ver = "1.2.10", note = "CONTEXT.md, packages/core/src/runtimes/workspace-registry/node/scan/scanner.ts (origin adopted); ddflow's worktrees will appear with no step" }
+delete_foreign = { v = "deleteWorkspace never removes files; deleteWorktree force-removes with no dirty or unpushed refusal", s = "documented", src = "emdash-src", d = "2026-11-05", ver = "1.2.10", note = "workspace-registry/api/contract.ts, node/delete-worktree.ts: the host does what it is told, the warning is the desktop's; path safety only asks that the parent repository owns it, which a ddflow worktree meets" }
+project_config = { v = ".emdash.json: preservePatterns, scripts.prepare, scripts.setup, scripts.run, scripts.teardown, shellSetup", s = "documented", src = "emdash-src", d = "2026-11-05", ver = "1.2.10", note = "agents/workflows/worktrees.md" }
+mcp_config = { v = "reads, adapts and writes each agent's MCP config; ACP sessions pass the resolved servers", s = "documented", src = "emdash-src", d = "2026-11-05", ver = "1.2.10", note = "agents/integrations/mcp.md, acp/node/runtime/session-materializer.ts" }
+agent_hooks = { v = "marker-tagged entries in the agent's user-level config", s = "documented", src = "emdash-src", d = "2026-11-05", ver = "1.2.10", note = "README.md; silent outside an Emdash session" }
+live = { v = "a scan lists a ddflow worktree and a delete from the desktop removes it", s = "unverified", src = "emdash-src", d = "2026-11-05", note = "not run: needs Emdash installed" }
+
+[plane.acp-claude]
+adapter = { v = "@agentclientprotocol/claude-agent-acp", s = "documented", src = "claude-acp-src", d = "2026-11-05", ver = "0.100.0", note = "zed-industries/claude-code-acp now redirects here" }
+inject_mcp = { v = "stdio, http, sse handed to the SDK's mcpServers", s = "documented", src = "claude-acp-src", d = "2026-11-05", ver = "0.100.0", note = "src/acp-agent.ts; _meta options merge with them" }
+cwd = { v = "session/new cwd is the SDK cwd; settingSources user, project, local", s = "documented", src = "claude-acp-src", d = "2026-11-05", ver = "0.100.0", note = "src/acp-agent.ts; so a .mcp.json in cwd loads too, by claude-sdk" }
+live = { v = "the injected server starts in the session cwd", s = "unverified", src = "claude-acp-src", d = "2026-11-05", note = "not run: adapter not installed; probes/probe_acp_mcp_inject.py answers it once it is" }
+
+[plane.acp-codex]
+adapter = { v = "@agentclientprotocol/codex-acp", s = "documented", src = "codex-acp-src", d = "2026-11-05", ver = "2.5.0", note = "package.json. zed-industries/codex-acp (codex-acp-old) is archived and its README points here; this one runs on the Codex App Server" }
+inject_mcp = { v = "stdio, http; no sse; a server whose name the Codex config already has is skipped", s = "documented", src = "codex-acp-src", d = "2026-11-05", ver = "2.5.0", note = "src/CodexAcpClient.ts, src/McpServerConfig.ts; so a user's own `ddflow` server wins silently, unless DISABLE_MCP_CONFIG_FILTERING=true" }
+cwd = { v = "session/new cwd is the thread cwd, marked trusted for the session", s = "documented", src = "codex-acp-src", d = "2026-11-05", ver = "2.5.0", note = "src/CodexAcpClient.ts createSessionConfig" }
+live = { v = "the injected server starts in the session cwd", s = "unverified", src = "codex-acp-src", d = "2026-11-05", note = "not run: adapter not installed; probes/probe_acp_mcp_inject.py answers it once it is" }
+
+[plane.acp-opencode]
+inject_mcp = { v = "stdio, http; an sse server refuses the whole request", s = "documented", src = "opencode-src", d = "2026-11-05", ver = "2.2.5", note = "packages/cli/src/acp/service.ts supportedMcpServers" }
+cwd = { v = "session/new honours cwd; load, resume and fork use the session's stored directory", s = "documented", src = "opencode-src", d = "2026-11-05", ver = "2.2.5", note = "packages/cli/src/acp/service.ts; a resumed session cannot be moved to another worktree" }
+live = { v = "the injected server starts in the session cwd", s = "unverified", src = "opencode-src", d = "2026-11-05", note = "not run: opencode not installed; acp-kilo is a separate build, not evidence for this one" }
+
+[plane.acp-gemini]
+inject_mcp = { v = "merged over settings mcpServers; stdio, http, sse", s = "documented", src = "gemini-src", d = "2026-11-05", note = "packages/cli/src/acp/acpSessionManager.ts, acpRpcDispatcher.ts; two files read at the pinned commit, not the whole tree; version not read" }
+cwd = { v = "session cwd loads the settings and the CLI config", s = "documented", src = "gemini-src", d = "2026-11-05", note = "packages/cli/src/acp/acpSessionManager.ts" }
+live = { v = "the injected server starts in the session cwd", s = "unverified", src = "gemini-src", d = "2026-11-05", note = "not run: gemini not installed" }
+
+[plane.acp-kilo]
+inject_mcp = { v = "stdio: started, env passed, initialize then tools/list", s = "verified", src = "live-kilo", d = "2026-11-05", ver = "7.8.18", probe = "python3 -I probes/probe_acp_mcp_inject.py 'kilo acp'", note = "stub server logged all three; http and sse advertised true in initialize, not exercised" }
+cwd = { v = "the injected server's working directory is the session cwd, not the spawn directory", s = "verified", src = "live-kilo", d = "2026-11-05", ver = "7.8.18", probe = "python3 -I probes/probe_acp_mcp_inject.py 'kilo acp'", note = "spawned in one directory, session in another; no prompt was sent, so this covers the MCP child only" }
+agent_tools_cwd = { v = "the agent's own tools run in the session cwd", s = "unverified", src = "live-kilo", d = "2026-11-05", ver = "7.8.18", note = "needs a model call; not attempted" }

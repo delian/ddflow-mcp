@@ -9,10 +9,21 @@ commands (`declared/setup.py`); `identify` has no command line and stays a hand-
 from __future__ import annotations
 
 from ...core.defaults import DEFAULT_RENDER_DIR
+from ...views.output_caps import cut_text as _cut_text
+from ...views.output_caps import footer_of as _footer_of
+from ...views.output_caps import from_args as _cap
+from ...views.output_caps import status_args as _status_args
 from ..argtypes import _positive_int
 from ..registry import Command, Param, by_tool
 from ..render import emit_json
 from ..tools._common import _api
+from .capflags import capped
+
+
+def _text(out, a) -> str:
+    # `digest --ask <id>` with no such entry is `nothing`: its data carries no `text`, so
+    # fall back to the reason that names the miss (a `KeyError` here would mask it).
+    return out.data.get("text") or out.reason
 
 
 def _status_handler(a, c):
@@ -28,14 +39,15 @@ def _status_handler(a, c):
     by = getattr(a, "by_tag", "") or ""
     if not by:
         return cmd_status(a, c)
-    out = _api().status(c.repo, agent=c.requested_agent, full=True, by_tag=by)
+    out = _api().status(c.repo, agent=c.requested_agent, by_tag=by, **_status_args(c.repo, a))
+    out = _cap(c.repo, out, "status", a, wire=c.json)
     if c.json:
         emit_json(out.body())
         return out.exit
     d = out.data
     r = d["_render"]
     lines = _status_body(d, r, by_tag_lines=tuple(r.get("by_tag_lines") or ()))
-    print("\n".join(lines))
+    print(_cut_text(c.repo, "\n".join(lines), "status", a, footer=_footer_of(out)))
     return out.exit
 
 
@@ -104,14 +116,20 @@ COMMANDS: tuple[Command, ...] = (
                 help="The triage, dry run: per item the class (SAFE_AUTO/PROPOSE/OPERATOR), the evidence, the exact command and the recovery attempt count. --json emits it as rows.",
                 cli_help="",
             ),
+            *capped(True),
         ),
-        call=lambda repo, a, agent: _api().recover(
+        call=lambda repo, a, agent: _cap(
             repo,
-            item=a.get("item", "") or "",
-            apply=bool(a.get("apply")),
-            all=bool(a.get("all")),
-            plan=bool(a.get("plan")),
-            agent=agent,
+            _api().recover(
+                repo,
+                item=a.get("item", "") or "",
+                apply=bool(a.get("apply")),
+                all=bool(a.get("all")),
+                plan=bool(a.get("plan")),
+                agent=agent,
+            ),
+            "recover",
+            a,
         ),
         payload="found",
     ),
@@ -226,8 +244,13 @@ COMMANDS: tuple[Command, ...] = (
         path=("board",),
         tool="ddflow_board",
         description="The whole work queue as a readable board, with the critical path.",
-        params=(Param("phase", help="Restrict to one phase.", default="", cli_help=""),),
-        call=lambda repo, a, agent: _api().board(repo, phase=a.get("phase", "") or "", agent=agent),
+        params=(
+            Param("phase", help="Restrict to one phase.", default="", cli_help=""),
+            *capped(False),
+        ),
+        call=lambda repo, a, agent: _cap(
+            repo, _api().board(repo, phase=a.get("phase", "") or "", agent=agent), "board", a
+        ),
         payload="text",
         prose=True,
         prose_reason="a rendered markdown board, meant to be shown or committed as-is",
@@ -280,20 +303,16 @@ COMMANDS: tuple[Command, ...] = (
             "which, what is in flight and who holds it, what is ready to start, what is "
             "blocked, how many agent-hours and commits went in, and whether anything is "
             "looping or waiting to be recovered. This is the tool for 'what is the "
-            "status of this project?' and 'what has been completed?'. With ``by_tag`` "
-            "(the ``--by-tag KEY`` flag): per-value counts for the KEY label namespace "
-            "too — done/running/ready/review/blocked/abandoned per ``wave:N`` or "
-            "``track:fix`` value, and per value what blocks it."
+            "status of this project?' and 'what has been completed?'. ``by_tag`` "
+            "(``--by-tag KEY``) adds per-value counts for a label namespace."
         ),
         handler=_status_handler,
         params=(
             Param(
                 "by_tag",
                 help=(
-                    "Also group the live items by this label namespace (KEY or KEY:*): per "
-                    "value the done/running/ready/review/blocked/abandoned/open counts, the "
-                    "buckets the plan puts them in, and the open dependencies blocking the "
-                    "most items (e.g. 'wave' or 'track')."
+                    "Group the live items by this label namespace (e.g. 'wave' or 'track'): "
+                    "per value the state counts and the dependencies blocking most items."
                 ),
                 default="",
                 cli_help=(
@@ -301,9 +320,15 @@ COMMANDS: tuple[Command, ...] = (
                     "track, with the top blockers per value"
                 ),
             ),
+            *capped(False),
         ),
-        call=lambda repo, a, agent: _api().status(
-            repo, agent=agent, by_tag=a.get("by_tag", "") or ""
+        call=lambda repo, a, agent: _cap(
+            repo,
+            _api().status(
+                repo, agent=agent, by_tag=a.get("by_tag", "") or "", **_status_args(repo, a)
+            ),
+            "status",
+            a,
         ),
         # The whole object. `_render` is stripped by `Outcome.body`.
         payload="",
@@ -375,6 +400,38 @@ COMMANDS: tuple[Command, ...] = (
             tail=int(a.get("tail") or 0),
         ),
         payload=("total", "shown", "events"),
+    ),
+    Command(
+        path=("digest",),
+        tool="ddflow_digest",
+        tier="all",
+        family="ddflow_view",
+        action="digest",
+        summary="the operator queue: what waits on a person, as askable entries",
+        description=(
+            "The operator queue in one fold: every thing waiting on a person to act — "
+            "pending approval requests, questions, DECIDE tasks, proposed plans and "
+            "decisions, gate spot-checks, red main, missing credentials, stalled leases — "
+            "ranked by severity, impact and age, each with the command that answers it and "
+            "the chat route that puts it to the person. `ask=<id>` renders the one entry "
+            "alone (kind:key) as the ask to put to the person. Read-only."
+        ),
+        params=(
+            Param(
+                "ask",
+                help="One entry id (kind:key) to render alone, as the ask to put to the person.",
+                default="",
+                cli_help="one entry id (kind:key): render that entry alone",
+            ),
+        ),
+        call=lambda repo, a, agent: _api().reporting.digest_queue(
+            repo, ask=a.get("ask", "") or "", agent=agent
+        ),
+        payload="text",
+        render=_text,
+        prose=True,
+        prose_reason="a rendered queue meant to be put to a person as-is",
+        kind="digest",
     ),
 )
 

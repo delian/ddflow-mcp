@@ -28,7 +28,7 @@ DEFINED = {
         _driver_drift_notes _dupe_note _epoch _export_target_notes _finished_phase_remedy
         _launcher_findings _loose_shards _only_ids _orphan_notes _primary_mid_merge _show_bug
         _unknown_author_notes _untitled addenda board doctor loops new_reports progress rebuild
-        record_summary recover render replay show status
+        record_summary recover render replay show status vigil_snapshot
     """.split(),
     "ddflow.services.gates": """
         DEFAULT_GATES FINGERPRINT_EXCLUDE GateDef GateStatus KEEP_RUN_LOGS LEGACY_CLEAN

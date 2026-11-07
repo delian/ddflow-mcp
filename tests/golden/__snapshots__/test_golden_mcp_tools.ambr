@@ -651,6 +651,14 @@
           "type": "boolean",
           "description": "Land a branch with no commits ahead of its target (refused by default: usually the wrong tree; rebind with ddflow_update worktree)."
          },
+         "force": {
+          "type": "boolean",
+          "description": "With [merge].require_gates = refuse: land although required gates are unsettled; recorded as a merge.forced event naming them. An agent also needs `approval`."
+         },
+         "approval": {
+          "type": "string",
+          "description": "An agent's way past [merge].require_gates = refuse with `force`: 'request' asks the operator, then the approval id they answered (bound to this exact merge, single-use, not spent by a refused call)."
+         },
          "branch": {
           "type": "string",
           "description": "no_worktree items: the branch to land (default: the one checked out where this runs). Changes outside the item's globs come back as outside_globs."
@@ -670,7 +678,7 @@
     'ddflow_next': '''
       {
        "name": "ddflow_next",
-       "description": "What may be started RIGHT NOW, and for everything that may not, the reason. Independent items in the ready set can be run in parallel worktrees by separate agents. Returns ready=[] when nothing is actionable — that is a result, not an error, and it never means 'pick something anyway'.",
+       "description": "What may be started RIGHT NOW, and why the rest may not. Independent ready items can run in parallel worktrees. ready=[] is a result, not an error: it never means 'pick something anyway'.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -681,6 +689,18 @@
          "kind": {
           "type": "string",
           "description": "'task' (default) or 'phase'."
+         },
+         "lane": {
+          "type": "string",
+          "description": "Answer this idle lane."
+         },
+         "full": {
+          "type": "boolean",
+          "description": "Lift the output caps."
+         },
+         "cursor": {
+          "type": "integer",
+          "description": "Row to resume at."
          },
          "as_agent": {
           "type": "string",
@@ -1139,7 +1159,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, digest, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1175,13 +1195,17 @@
           "type": "string",
           "description": "Limit to one phase (and, for forecast, its critical path)."
          },
+         "full": {
+          "type": "boolean",
+          "description": "Lift the output caps."
+         },
          "limit": {
           "type": "integer",
           "description": "Items listed per wave in the text view (default 10; 0 = all)."
          },
          "by_tag": {
           "type": "string",
-          "description": "Also group the live items by this label namespace (KEY or KEY:*): per value the ..."
+          "description": "Group the live items by this label namespace (e.g. ..."
          },
          "out": {
           "type": "string",
@@ -1327,6 +1351,10 @@
           "type": "boolean",
           "description": "With interfaces: print the ratchet baseline text instead of the report."
          },
+         "ask": {
+          "type": "string",
+          "description": "One entry id (kind:key) to render alone, as the ask to put to the person."
+         },
          "stamp": {
           "type": "boolean",
           "description": "Write the derived wave:N tags."
@@ -1349,6 +1377,8 @@
            "health",
            "docs",
            "archdeps",
+           "vigil",
+           "digest",
            "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."

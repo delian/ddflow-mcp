@@ -84,7 +84,9 @@ def test_a_failing_hook_does_not_fail_the_operation(repo):
     hook.write_text("#!/bin/sh\nexit 1\n")
     hook.chmod(0o755)
     out = LC.complete(repo, "T1", force=True)
-    assert out.exit == 0 and out.data["events_note"]
+    # the events-only commit skips the hook (--no-verify), so the shards commit and the
+    # operation succeeds either way (bug B-events-commit-races-shared-main).
+    assert out.exit == 0 and out.data["events_committed"]
 
 
 def _hook(repo, tmp_path, mode):
@@ -357,11 +359,10 @@ def test_a_message_git_folds_is_still_recognised_as_ours(repo, monkeypatch):
     assert _git(repo, "show", "HEAD:other.txt") == "v2"
 
 
-def test_a_commit_msg_hook_that_rewrites_the_subject_still_leaves_our_commit_known(
-    repo, monkeypatch
-):
-    """The commit is identified by the sha git prints, not by its message: a hook that prefixes
-    the subject must not make the remake after a just-landed commit silently not happen."""
+def test_a_commit_msg_hook_that_rewrites_the_subject_is_skipped_now(repo, monkeypatch):
+    """`--no-verify` skips the commit-msg hook (bug B-events-commit-races-shared-main): no
+    subject rewrite, and a foreign commit that lands before ours is still kept (`_rebuild_on`
+    reads our commit by its sha, so the remake still happens)."""
     from ddflow.services import eventcommit
 
     _project(repo)
@@ -387,7 +388,7 @@ def test_a_commit_msg_hook_that_rewrites_the_subject_still_leaves_our_commit_kno
     sha, note = eventcommit.commit_shards(repo, "mine")
     assert sha and "made again" in note, (sha, note)
     assert _git(repo, "show", "HEAD:other.txt") == "v2", "the commit that landed was undone"
-    assert _git(repo, "log", "-1", "--format=%s").startswith("JIRA-1: events:"), "hook did not run"
+    assert _git(repo, "log", "-1", "--format=%s") == "events: mine", "the hook was not skipped"
 
 
 def test_a_post_commit_hook_printing_a_bracketed_hex_is_not_taken_for_our_commit(repo):

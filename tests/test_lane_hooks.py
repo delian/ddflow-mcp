@@ -87,7 +87,7 @@ def test_claude_hook_is_private_and_carries_the_lane_identity(tree):
     assert p.args == ("--settings", str(home / LH.DIR_NAME / "claude-settings.json"))
     assert all(home in f.parents for f in p.files)
     cmd = json.loads(p.files[0].read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    assert "--agent lane-7" in cmd and str(repo) in cmd
+    assert "--agent=lane-7" in cmd and str(repo) in cmd
     assert not (wt / ".claude").exists() and not (repo / ".claude").exists()
     assert sh(wt, "git", "status", "--porcelain").stdout == ""
     assert (p.files[0].stat().st_mode & 0o777) == 0o600

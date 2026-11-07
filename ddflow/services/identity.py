@@ -42,9 +42,11 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from ..adapters.env import DEFAULT as ENV
 from ..config import Config
 from ..core.model import Lease, State, fold
 from ..infra import worktree as W
@@ -61,10 +63,61 @@ class AgentId(NamedTuple):
     source: str
 
 
+#: The environment variable a client presents its token in: an argument would sit in `ps`.
+TOKEN_ENV = "DDFLOW_TOKEN"
+
+
+@dataclass(frozen=True)
+class Credential:
+    """What a verified token proved (`services/auth.verify`): the caller's name and role, and
+    whether that role is the operator's, decided against the role table at verification."""
+
+    name: str
+    role: str
+    token_id: str
+    operator: bool = False
+
+
+_CREDENTIAL: ContextVar[Credential | None] = ContextVar("ddflow_credential", default=None)
+_PROOF_REQUIRED: ContextVar[bool] = ContextVar("ddflow_proof_required", default=False)
+
+
+def token_presented() -> bool:
+    """Whether this process was handed a token to prove, read through the Env port."""
+    return bool(ENV.get(TOKEN_ENV))
+
+
+def credential() -> Credential | None:
+    """The token this call proved, if it did."""
+    return _CREDENTIAL.get()
+
+
+def bind_credential(proof: Credential) -> None:
+    """Hold ``proof`` for the rest of this CLI call (a server uses `with_credential`)."""
+    _CREDENTIAL.set(proof)
+
+
+def require_proof() -> None:
+    """`[agent].require_operator_token` for this call: no marker is no longer a person."""
+    _PROOF_REQUIRED.set(True)
+
+
+@contextmanager
+def with_credential(proof: Credential) -> Iterator[None]:
+    """Hold ``proof`` for the calls made inside: one request of a server."""
+    token, demand = _CREDENTIAL.set(proof), _PROOF_REQUIRED.set(False)
+    try:
+        yield
+    finally:
+        _CREDENTIAL.reset(token)
+        _PROOF_REQUIRED.reset(demand)
+
+
 def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> AgentId:
     """The identity a write will carry, and WHICH LAYER produced it.
 
-    Four layers: an explicit declaration (`declared`: `--agent`, `as_agent`, a harness's
+    A verified token comes first and answers its own name: it is proof, the rest are claims.
+    Then four layers: an explicit declaration (`declared`: `--agent`, `as_agent`, a harness's
     `ddflow_identify`) first; then `[agent].id` when a config layer sets it, which `DDFLOW_AGENT`
     does not override (the environment applies only while no config layer sets the key, by
     PROVENANCE: a file that sets it to "" still counts as setting it); then `DDFLOW_AGENT`; then
@@ -84,6 +137,8 @@ def resolve(root: Path | str, cfg: Config | None = None, declared: str = "") -> 
     and `ddflow_update` wrote into different shards (B88). One encoding, asked by every
     surface, is the fix.
     """
+    if (proof := _CREDENTIAL.get()) is not None:
+        return AgentId(proof.name, "token")  # a proof outranks every declaration, `as_agent` too
     if declared:
         return AgentId(declared, "explicit")
     env = os.environ.get("DDFLOW_AGENT", "")
@@ -119,13 +174,7 @@ def via_mcp() -> Iterator[None]:
         _MCP_CALL.reset(token)
 
 
-def agent_marker(requested_agent: str = "") -> str:
-    """Why this invocation is an agent's, or ``""`` when nothing says it is.
-
-    An explicit `--agent`, `DDFLOW_AGENT`, or a harness's own marker. A person at their
-    own terminal sets none of them; an agent that unsets all three is the shell edit the
-    decision accepts it cannot stop.
-    """
+def _marker(requested_agent: str) -> str:
     if requested_agent:
         return f"--agent {requested_agent}"
     if os.environ.get("DDFLOW_AGENT"):
@@ -137,11 +186,35 @@ def agent_marker(requested_agent: str = "") -> str:
     return "the MCP surface" if _MCP_CALL.get() else ""
 
 
+def agent_marker(requested_agent: str = "") -> str:
+    """Why this invocation is not the operator's, or ``""`` when nothing says so.
+
+    A verified token decides first, whatever else is set: its role is the operator's or it is
+    not. Without one: an explicit `--agent`, `DDFLOW_AGENT`, or a harness's own marker. A person
+    at their own terminal sets none of them; an agent that unsets all three is the shell edit
+    the decision accepts it cannot stop, unless `[agent].require_operator_token` asks for proof.
+    """
+    if (proof := _CREDENTIAL.get()) is not None:
+        return "" if proof.operator else f"token {proof.name}, role {proof.role}"
+    if why := _marker(requested_agent):
+        return why
+    return "no operator token presented" if _PROOF_REQUIRED.get() else ""
+
+
+def lacks_only_proof(requested_agent: str = "") -> bool:
+    """`agent_marker` refuses this call for the missing operator token alone: no marker says
+    it is an agent's, so it may mint the first operator token."""
+    return _CREDENTIAL.get() is None and _PROOF_REQUIRED.get() and not _marker(requested_agent)
+
+
 def is_agent(requested_agent: str = "", via_mcp: bool = False) -> str:
     """Why this call is an agent's, or "" for a person at a terminal. The MCP surface is
-    always an agent; a CLI call is one under `--agent`, `DDFLOW_AGENT` or a harness's
-    marker (the rule ``reviewers approve`` and the export enable use)."""
-    return "the MCP surface" if via_mcp else agent_marker(requested_agent)  # marker: MCP call too
+    always an agent unless a token says otherwise; a CLI call is one under `--agent`,
+    `DDFLOW_AGENT` or a harness's marker (the rule ``reviewers approve`` and the export
+    enable use)."""
+    if via_mcp and _CREDENTIAL.get() is None:
+        return "the MCP surface"
+    return agent_marker(requested_agent)  # marker: MCP call too
 
 
 def bind(cfg: Config, who: AgentId) -> None:

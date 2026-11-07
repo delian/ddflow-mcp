@@ -115,6 +115,8 @@ def test_config_changes_operator_with_a_confirm_applies_it(old: Path) -> None:
         "worktree.root",
         "--confirm",
         "worktree.max_parallel",
+        "--confirm",
+        "session.redact_patterns",
         # `operator` refuses every default change of a knob the old project already had:
         # log.snapshot is not here because the fixture predates it, so it nets to an addition
         "--confirm",

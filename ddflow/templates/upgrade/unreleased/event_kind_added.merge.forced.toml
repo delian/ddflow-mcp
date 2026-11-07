@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "merge.forced"
+why = "A merge landed over unsettled required gates under [merge].require_gates = refuse: names the gates and the approval."
+impact = "additive"

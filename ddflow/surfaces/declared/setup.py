@@ -10,10 +10,12 @@ declared here.
 
 from __future__ import annotations
 
+from ...views.output_caps import from_args as _cap
 from ..registry import Command, Param, by_tool
 from ..startcost_texts import start_texts
 from ..tools._common import _AGENT_KEYS, _api, _configure_reported
 from ..vocabulary import sources
+from .capflags import capped
 
 
 def doctor_history_kwargs(a):
@@ -70,10 +72,15 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "value",
-                help="the value, when --set is used; or `KEY VALUE` with no --set (ddflow config review.max_rounds 0 --local)",
+                help="the value, when --set is used; or `KEY VALUE` with no --set (ddflow config review.max_rounds 0 --local); or `defaults`, to print the packaged default.toml",
                 positional=True,
                 nargs="*",
                 default=[],
+            ),
+            Param(
+                "write",
+                type="boolean",
+                help="with `defaults`: regenerate the packaged default.toml in ddflow's own source tree",
             ),
             Param(
                 "append_toml",
@@ -337,19 +344,25 @@ COMMANDS: tuple[Command, ...] = (
         "unknown dependencies, orphaned worktrees, stale index.",
         kind="doctor",
         prose=True,
-        call=lambda repo, a, agent: _api().doctor(
+        call=lambda repo, a, agent: _cap(
             repo,
-            agent=agent,
-            parser=sources()[0],
-            tools=sources()[1],
-            start_texts=start_texts,
-            **doctor_history_kwargs(a),
+            _api().doctor(
+                repo,
+                agent=agent,
+                parser=sources()[0],
+                tools=sources()[1],
+                start_texts=start_texts,
+                **doctor_history_kwargs(a),
+            ),
+            "doctor",
+            a,
         ),
         # PROSE, as it has always been: a list of problems with advice attached is
         # what an operator and an agent both want, and `views/human.py` renders it once
         # for both.
         payload="text",
         params=(
+            *capped(False),
             Param(
                 "upgrade",
                 type="boolean",

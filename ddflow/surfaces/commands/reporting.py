@@ -13,6 +13,7 @@ import time
 
 from ...api import reporting as A
 from ...api import surf_reporting as R
+from ...views import output_caps as OC
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ...views.progress import status_tasks_note
 from ..context import FAIL, OK, REFUSED, Ctx
@@ -219,16 +220,16 @@ def cmd_status(a, c: Ctx) -> int:
     exemption — written for `build_parser` — had been covering this function's 16
     branches too.
     """
-    # Everything: a terminal or a `--json` pipe is where the full lists are asked for. The
-    # bounded answer is the MCP tool's (Bd6aa9ffde9).
-    out = A.status(c.repo, agent=c.requested_agent, full=True)
+    # Bounded by default on every surface (`[output]`, UX-output-caps); `--full` lifts it.
+    out = A.status(c.repo, agent=c.requested_agent, **OC.status_args(c.repo, a))
+    out = OC.from_args(c.repo, out, "status", a, wire=c.json)
     if c.json:
         emit_json(out.body())
         return out.exit
     d = out.data
     r = d["_render"]
     lines = _status_body(d, r)
-    print("\n".join(lines))
+    print(OC.cut_text(c.repo, "\n".join(lines), "status", a, footer=OC.footer_of(out)))
     return out.exit
 
 
@@ -412,9 +413,12 @@ def render_recover(out, a) -> str:
     """`recover`'s prose: every situation, flagged `!!` when it may hold work, and what to do
     with the flagged ones. Empty when there is nothing (the outcome's reason says so)."""
     found, salvageable = out.data["_render"]["found"], out.data["_render"]["salvageable"]
-    if not found:
+    if not found and not OC.footer_of(out):
         return ""
-    lines = [f"{len(found)} recoverable situation(s); {len(salvageable)} may contain work:\n"]
+    # The counts are the whole sweep's: `found` may be one page of it (`output_caps`).
+    total = out.data.get("count", len(found))
+    may = out.data.get("salvageable", len(salvageable))
+    lines = [f"{total} recoverable situation(s); {may} may contain work:\n"]
     for r in found:
         flag = "!! " if may_hold_work(r) else "   "
         lines.append(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
@@ -426,6 +430,8 @@ def render_recover(out, a) -> str:
             "Entries marked !! are NOT touched automatically. Inspect, salvage (or resume), "
             "then release."
         )
+    if note := OC.footer_of(out):
+        lines.append(note)
     return "\n".join(lines)
 
 
@@ -455,8 +461,20 @@ def cmd_doctor(a, c: Ctx) -> int:
         start_texts=start_texts,
         **doctor_history_kwargs(a),
     )
+    out = OC.from_args(c.repo, out, "doctor", a, wire=c.json)
     if c.json:
-        body = out.body(("problems", "notes", "events", "items", "wait_cycles", "auto_order"))
+        capped = ("truncated", "next") if "truncated" in out.data else ()
+        keys = (
+            "problems",
+            "notes",
+            "events",
+            "items",
+            "wait_cycles",
+            "wait_alarms",
+            "auto_order",
+            *capped,
+        )
+        body = out.body(keys)
         if out.exit == REFUSED:
             # The agent route needs the refusal (its approval id) from the JSON, not stderr.
             body = {**body, "reason": out.reason}
@@ -473,6 +491,7 @@ def cmd_board(a, c: Ctx) -> int:
     out = A.board(c.repo, phase=a.phase or "", agent=c.requested_agent)
     if out.exit == FAIL:  # an unknown --phase (Bc2acd426f4): said as `next` says it
         return _next_without_plan(out, c)
+    out = OC.from_args(c.repo, out, "board", a, wire=c.json)
     c.out(out.data["text"], out.body())
     return OK
 

@@ -32,3 +32,11 @@ class HooksConfig:
         factory=lambda: ["ddflow review --force --reason"],
         doc='Commands exempt from forbidden_commands, in the same word-sequence form: the one `--force` ddflow itself documents, `ddflow review --force --reason "..."` for an extra review round. A command matching an entry here is allowed even when it also matches a forbidden one.',
     )
+    fixture_max_age_months: int = knob(
+        default=6,
+        doc="A recorded payload fixture or a walked tier-2 checklist older than this many whole months is flagged for re-recording: by `ddflow harness record <id>`, and in the fixture gap report. A flag, never a failure.",
+    )
+    fixture_max_reply_bytes: int = knob(
+        default=65536,
+        doc="`ddflow harness record` keeps an MCP reply in session/mcp.json up to this many bytes, after redaction. A longer reply is replaced by `_truncated` with its size and this cap, so a fixture never reads as complete when it is not.",
+    )

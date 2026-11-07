@@ -1,0 +1,10 @@
+id = "r-derived-cache-bounded"
+title = "Every derived store has a fingerprint, a size cap, a GC policy and an env kill switch"
+tags = ["performance", "data"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:09:47.201444+00:00"
+updated = "2026-11-03T16:09:47.201452+00:00"
+
+Bug Bece55b8a77, D-scale-answers. RULE: a snapshot, checkpoint, index or sidecar is derived, local and rebuildable from the log; it carries an explicit schema/fold-revision fingerprint (not a source hash), a size or count cap, a GC policy, a kill switch and a documented rollback (delete the file); an unknown format is ignored, never trusted. Extends r-derive-dont-store. CHECK: PS-index-cap, PS-state-checkpoint equivalence test. VERIFY: what bounds its disk size and how do I turn it off?

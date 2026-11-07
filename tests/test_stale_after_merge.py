@@ -337,7 +337,9 @@ def test_work_committed_in_a_kept_tree_after_the_merge_is_never_credited_to_the_
 
     A kept tree moved off the merged work is not the item's tree (B430dae3a68 holefix), so
     a gate recorded after the merge is stored UNMEASURED rather than fingerprinted at the
-    unlanded commit: the new work is never what a later pass vouches for."""
+    unlanded commit: the new work is never what a later pass vouches for. And, because that
+    move committed NEW work past the landing, the unmerged-commit guard refuses `complete`
+    rather than drop it without notice (Bd59dded6a4)."""
     assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == OK
     tree = _claimed(repo)
     (tree / "a.py").write_text("a = 1\n")
@@ -350,7 +352,8 @@ def test_work_committed_in_a_kept_tree_after_the_merge_is_never_credited_to_the_
     _git(tree, "commit", "-qam", "after the merge")
     pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
-    assert code == OK, out + err
+    assert code == 3, out + err
+    assert "not merged" in out + err and "T1" in out + err, out + err
     gates = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates
     assert gates["implement"].evidence.get("unmeasured") == ["tree_sha"], gates["implement"]
     assert "tree_sha" not in gates["implement"].evidence

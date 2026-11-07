@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "swarm.dispatch_note_chars"
+new = "500"
+why = "SW-pull: the dispatch note `next --lane` returns is bounded."
+impact = "additive"

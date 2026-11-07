@@ -109,6 +109,21 @@ def cmd_approvals_ask(a, c: Ctx) -> int:
 
 
 def cmd_approvals_attest(a, c: Ctx) -> int:
+    if a.all and a.id:
+        out = O.refused(
+            "approvals.attest",
+            "--all is every pending request with an answer: give it no id",
+        )
+        return _finish(c, out, "attest")
+    if a.all:
+        return _finish(c, AH.approvals_attest_all(c.repo, agent=c.requested_agent), "attest")
+    if not a.id:
+        out = O.refused(
+            "approvals.attest",
+            "no request id: give one to attest it, or --all for every pending one with an "
+            "answer (a chat answer alone approves each, no terminal)",
+        )
+        return _finish(c, out, "attest")
     return _finish(c, AH.approvals_attest(c.repo, a.id, agent=c.requested_agent), "attest")
 
 
