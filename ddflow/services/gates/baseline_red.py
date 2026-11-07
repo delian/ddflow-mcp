@@ -60,17 +60,6 @@ def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) 
     return list(ev.get("failed_tests") or [])
 
 
-def _pinned_base(sha: str) -> str:
-    """The base to measure against: the exact ``base`` commit the candidate merged, which the
-    caller already resolved as ``sha`` (the same ``base`` the ci merge just used), not the
-    candidate's own merge-base with ``base`` -- the fork point is older, so a test ``base``
-    broke since the fork reads as a new failure there (B-ci-baseline-older-than-candidate;
-    B48c70b6773's earlier merge-base pin had this wrong). The ci runs the branch MERGED with
-    ``base``'s tip, so a test red on that tip but green at the fork is the base's own failure.
-    When git cannot resolve ``base`` the caller's ``sha`` stands."""
-    return sha
-
-
 def on_base(
     repo: Path,
     base: str,
@@ -94,7 +83,10 @@ def on_base(
     if not sha:
         why = f"base {base} does not resolve"
         return {"red": False, "why": why, "unmeasured": ids, "still_failing": []}
-    sha = _pinned_base(sha)
+    # The commit to measure against IS ``base``'s tip -- what the ci merge just used --
+    # not the candidate's own merge-base with ``base`` (the fork point is older, so a test
+    # ``base`` broke since the fork reads as a new failure there: B-ci-baseline-older-than-
+    # candidate; B48c70b6773's earlier merge-base pin had this wrong).
     known = cache_load(repo, sha, ttl_s, None, gdef.command)
     cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
