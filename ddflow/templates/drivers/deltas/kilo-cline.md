@@ -12,8 +12,8 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
    claimed item through every wait — a self-scheduled wakeup a subagent leaves behind is
    dropped at turn completion, and a claim that stops heartbeating lapses to INTERRUPTED
    (Bbc611c0165), so the lane returns its one final result only when the scope drains (the
-   DONE report at an empty scope) — never while a wait, a parked merge, or a suspended
-   question keeps the loop alive. The
+   DONE report at an empty scope) — a WAIT never returns one, and a question for the
+   operator comes only after the lane releases or parks its claims. The
    orchestrator subagent is the loop and runs it as data-driven waves:
    one read of `ddflow next --json`, claim each ready item, then fan the claimed items to
    `task` subagents — one claimed item each — mapping the `tier:fast|balanced|deep` hints

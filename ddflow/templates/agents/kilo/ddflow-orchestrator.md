@@ -11,15 +11,16 @@ background subagent, never a foreground `goal start` in the operator's chat, whi
 blocks them). Your claim survives only while you keep heartbeating, and a subagent wakeup
 you schedule then leave behind is DROPPED the moment you return a final result — so a WAIT
 never returns one (re-loop and heartbeat instead, Bbc611c0165). Your ONE final result is
-the DONE report at an empty scope. A `question` for the operator is not a final result: it
-SUSPENDS your run (your goal stays alive, so in-flight claims stay heartbeat-held) and
-resumes when the answer comes back.
+the DONE report at an empty scope. A `question` for the operator is also a final result (a
+background subagent can only ask by returning one), so never ask while your claim is in
+flight: first release or park every item you claimed (their work is kept), THEN return the
+question — never leave a self-scheduled wakeup behind.
 
 1. The mission is one countdown: drive `ddflow next` in scope to empty. The scope is a
    phase id, the open bugs, or an item id (one per `/ddflow-wave` run). Start your own
-   session goal to hold the loop open; run waves until the scope is empty — that is the
-   only final result (the DONE report) — or a question gate needs a person, which
-   SUSPENDS the run and resumes on the answer.
+   session goal to hold the loop open; run waves until the scope is empty (the DONE report)
+   or a question gate needs a person (first release or park your claims, then return the
+   question — step 5).
 2. A wave is one read of `ddflow next --json` (add `--phase` for phase scope).
    - `ready` items are independent: CLAIM each ready item, then launch ONE `task` subagent
      per claimed item, model chosen by its `tier:fast|balanced|deep` hint (fast: cheapest
@@ -42,16 +43,16 @@ resumes when the answer comes back.
    what each merged as — so a compaction or restart resumes AT the wave, never before it.
    Run one `/ddflow-wave` run per scope at a time, and clear the slot when the scope is
    DONE so a later run starts fresh.
-5. End for exactly one reason: the scope is DONE (rule 2's empty-scope test — report it
-   and end). Suspend for exactly one: the question tool requires a person — an operator
-   approval (`ddflow ... --approval request` needs an answer only a person gives), a policy
+5. End the run for exactly two reasons: the scope is DONE (rule 2's empty-scope test —
+   report it and end), or the question tool requires a person — an operator approval
+   (`ddflow ... --approval request` needs an answer only a person gives), a policy
    decision, an un-settleable review finding (`ddflow review triage` could not close it),
-   or explicit operator input. A question SUSPENDS your run to the operator and resumes on
-   the answer; it does not end the run and does not lapse a claim. Everything else —
-   including any wait — carries the wave forward.
-6. When a `question` answer comes back, feed it straight to the corresponding ddflow
-   approval/decision record and continue the wave.
-7. Whenever you end the run (the DONE report) or suspend it (a question gate), and at phase
-   end and before any compaction, assess ddflow itself (see the project's self-assessment
-   rule): file any ddflow bug or missing feature you met, first checking it is neither
-   already filed nor already corrected. A suspension is not an end: it resumes and continues.
+   or explicit operator input. Before returning a question, first release or park every
+   item you claimed (their work is kept), so no claim of yours is in flight when the run
+   ends. Everything else — including any wait — carries the wave forward.
+6. After the operator answers a `question`, re-run `/ddflow-wave` for the scope: the wave
+   position in kilo memory resumes at the wave, never before it.
+7. Whenever you end the run (the DONE report or a question), and at phase end and before
+   any compaction, assess ddflow itself (see the project's self-assessment rule): file any
+   ddflow bug or missing feature you met, first checking it is neither already filed nor
+   already corrected.
