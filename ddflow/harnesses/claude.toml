@@ -53,6 +53,7 @@ dir = ".claude/worktrees"
 
 [orchestration]
 loop = "self-paced-command"
+keepalive = "self-paced-command"
 dispatch = "Agent (worktree isolation, model explicit)"
 wait = "Bash run_in_background + ScheduleWakeup"
 persist = "ddflow event log + leases"
