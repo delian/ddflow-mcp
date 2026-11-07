@@ -394,15 +394,39 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     case -- a reviewer from a DIFFERENT family than the author is the one named, so a
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
-    `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, but the panel's other families are
-    carried in `reviewer_families` so a clean cross-family round is still seen (bug
-    B1a30dc3303).
+    `complete` resolves it (`[agent].family`, else the session model). The reviewer's
+    family is resolved as `review_tier` resolves it (declared family, else its model).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    return cross[0] if cross else best
+    if cross:
+        return cross[0]
+    # When the author cannot be named here (`[agent].family` and the session model are
+    # both empty) `review_tier` returns `none` for every reviewer, so `cross` is empty
+    # and the first tied reviewer would be the author's own family when the lane also
+    # serves its model (bug B2e5ca93520). The author then has exactly ONE family, so
+    # when the clean reviewers span two or more distinct families, name a reviewer whose
+    # family differs from the tied-first one. This is a heuristic: with the author
+    # unknown no choice provably names the cross-family reviewer, and `reviewer_families`
+    # still carries every family so `complete` reads the cross-family panel either way
+    # (bug B1a30dc3303).
+    first = _fam(tied[0]) or GD.family_of(tied[0].model, cfg).strip().lower()
+    fams = {_fam(r) or GD.family_of(r.model, cfg).strip().lower() for r in tied}
+    fams.discard("")
+    if len(fams) > 1:
+        for r in tied:
+            fam = _fam(r) or GD.family_of(r.model, cfg).strip().lower()
+            if fam and fam != first:
+                return r
+    return best
+
+
+def _fam(r) -> str:
+    """A reviewer's family as `review_tier` resolves it: a declared family, `unknown`
+    normalised to ``""`` so the model's family is consulted, stripped and lowercased."""
+    fam = (getattr(r, "family", "") or "").strip().lower()
+    return "" if fam == "unknown" else fam
 
 
 def _failing_reviewer(results, it, gate, converging, cfg, identifying):
