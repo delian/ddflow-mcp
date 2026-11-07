@@ -6,7 +6,8 @@ the real adapters (`shutil.Error` where `shutil.move` refuses a taken name or a 
 moved into itself, `shutil.SameFileError` for a file copied onto itself, `FileExistsError`
 for a directory over an existing file: callers catch `OSError`); a missing source raises
 `FileNotFoundError`; `rmtree` of a missing path raises unless `ignore_errors` (the port's
-default). The filesystem root is refused (`ValueError`).
+default). Operations on the filesystem root are refused (`ValueError`) except `copy_file`,
+which treats a directory destination as copy-into, like `shutil.copy2`.
 """
 
 from __future__ import annotations
