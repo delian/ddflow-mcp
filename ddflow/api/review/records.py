@@ -334,7 +334,9 @@ def _cross_family_clean(results, cfg, author_fam: str | None) -> bool:
     )
 
 
-def _blocking_findings(results, it, gate: str, converging: bool, cfg, author_model: str = "") -> tuple[list, list, bool]:
+def _blocking_findings(
+    results, it, gate: str, converging: bool, cfg, author_model: str = ""
+) -> tuple[list, list, bool]:
     """(blocking, discounted, converged_round) for this round -- the findings that keep the
     gate open, the findings a same-family/unrecognized reviewer raised that do NOT, and
     whether this is a converged full re-review; computed in ONE place so the caller can name
@@ -376,7 +378,15 @@ def _blocking_findings(results, it, gate: str, converging: bool, cfg, author_mod
 
 
 def _gate_outcome(
-    best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say,
+    best,
+    results,
+    it,
+    item: str,
+    gate: str,
+    converging: bool,
+    cfg,
+    extra_evidence,
+    say,
     author_model: str = "",
 ) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra

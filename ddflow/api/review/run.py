@@ -664,7 +664,15 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
 
     identifying = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
-        identifying, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say,
+        identifying,
+        results,
+        it,
+        item,
+        gate,
+        _converges(kind, fix),
+        cfg,
+        extra_evidence,
+        say,
         author_model,
     )
     named = _failing_reviewer(
