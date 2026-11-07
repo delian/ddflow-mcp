@@ -56,9 +56,9 @@ forbidden_modules =
     ddflow.infra
 allow_indirect_imports = True
 
-# Processes start in ddflow.infra.proc (and git in ddflow.infra.git, when it exists).
+# Processes start in ddflow.adapters.proc (and git in ddflow.adapters.git, when it exists).
 [importlinter:contract:subprocess-home]
-name = subprocess is imported only by ddflow.infra.proc and ddflow.infra.git
+name = subprocess is imported only by ddflow.adapters.proc and ddflow.adapters.git
 type = forbidden
 source_modules =
     ddflow
