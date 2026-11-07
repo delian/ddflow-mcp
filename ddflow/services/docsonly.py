@@ -133,7 +133,11 @@ def _is_format_or_comment(tree, base: str, paths: list[str]) -> bool:
     """True when the item's own committed change to ``paths`` is format-only or comment-only.
     Uncommitted edits fail closed (only the committed change is judged), and so does a new
     file among ``paths`` (a file absent at ``base`` has no readable base side)."""
-    tracked = W.git(tree, "diff", "HEAD", "--", *paths)
+    # `:(literal)` on each path: `git diff` path args are glob patterns too, so a tracked
+    # file that does not glob-match its own name (``[a].py`` as a char class) would read as
+    # an empty diff and skip the dirty fail-close. Literal-match the dirty check the same
+    # way `_mode` matches the mode check.
+    tracked = W.git(tree, "diff", "HEAD", "--", *(f":(literal){p}" for p in paths))
     if not tracked.ok or tracked.out.strip():
         return False
     return _ast_unchanged(tree, base, paths)
