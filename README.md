@@ -3215,6 +3215,11 @@ the base lacks needs no run and stays a new failure, and one id measured passing
 the gate `failed`. The standing `complete_unavailable` rule does not answer such a gate, since
 its tests did fail: re-run it, or have a person decide.
 
+**A test the base also fails, but with different failure text, is a new failure**, not
+baseline-red: the comparison uses the failure text, not just the test id, so a branch that adds
+a new offender to a test already red on the base `fails` the gate (`baseline.different`, named
+in `new_failures`) instead of hiding it behind `still_failing`.
+
 ---
 
 ## Parallelism and coordination
