@@ -22,6 +22,7 @@ collect_approval = _asks.collect_approval
 collect_gate_skip = _asks.collect_gate_skip
 collect_gate_partial = _asks.collect_gate_partial
 collect_force_completion = _asks.collect_force_completion
+collect_force_merge = _asks.collect_force_merge
 collect_phase_complete = _asks.collect_phase_complete
 collect_chore = _asks.collect_chore
 collect_reviewer = _asks.collect_reviewer
