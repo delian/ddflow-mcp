@@ -22,6 +22,7 @@ import argparse
 import os
 import sys
 
+from ..api import cap_blas_threads
 from ..api import items as A_ITEMS
 from ..api import loops as _loops
 from ..api import progress as _progress
@@ -33,7 +34,6 @@ from ..core import clock
 from ..core import progress as PR
 from ..core.model import fold
 from ..core.outcome import EXIT_NAMES, INTERRUPTED, exit_for
-from ..infra import threads
 from .cli_pipe import PIPE_CLOSED, run_quietly  # noqa: F401
 from .context import (
     FAIL,
@@ -333,7 +333,7 @@ CONFLICT_SAFE = {("doctor",), ("help",)}
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI. A reader that stops reading (`ddflow list task | head -1`) is normal
     shell use: it ends quietly with `PIPE_CLOSED`, not with a traceback (B9834dabc40)."""
-    threads.cap_blas_threads()
+    cap_blas_threads()
     return run_quietly(_main, argv)
 
 
