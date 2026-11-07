@@ -83,52 +83,47 @@ def _dotted_string_name(dotted: str) -> tuple[str, str]:
     return parent, attr
 
 
+def _patched_reexport(
+    node: ast.Call, log_names: set[str], reexports: dict[str, set[str]]
+) -> str | None:
+    """The re-export name a ``monkeypatch.setattr`` rebinds on the log PACKAGE, or ``None``
+    when the call is not such a patch. The name is the string it sets (``"APPEND_HOOKS"``)
+    or ``"<dynamic>"`` for a variable attribute the guard cannot resolve statically."""
+    pos = list(node.args)
+    kw = {k.arg: k.value for k in node.keywords}
+    target = pos[0] if len(pos) >= 1 else kw.get("target")
+    name = pos[1] if len(pos) >= 2 else kw.get("name")
+    value = pos[2] if len(pos) >= 3 else kw.get("value")
+    if value is not None:
+        # ``setattr(obj, "name", value)`` / ``setattr(target=…, name=…, value=…)``: ``name``
+        # is the attribute being set.
+        if isinstance(name, ast.Constant) and isinstance(name.value, str):
+            return name.value if name.value in reexports and _is_log_package(target, log_names) else None
+        # A variable attribute name on the package re-spells any re-export and cannot be
+        # resolved statically: flag it so the author spells the submodule patch out.
+        return "<dynamic>" if _is_log_package(target, log_names) else None
+    # Two-arg form. ``setattr("ddflow.infra.log.<name>", value)`` gives the target path as a
+    # dotted string; ``setattr(L, "APPEND_HOOKS")`` deletes the package attribute.
+    if isinstance(target, ast.Constant) and isinstance(target.value, str):
+        path_str, attr = _dotted_string_name(target.value)
+        return attr if attr in reexports and path_str == "ddflow.infra.log" else None
+    if isinstance(name, ast.Constant) and isinstance(name.value, str):
+        return name.value if name.value in reexports and _is_log_package(target, log_names) else None
+    return None
+
+
 def _offenders(src: str, reexports: dict[str, set[str]]) -> list[tuple[int, str]]:
     """``(line, name)`` for each monkeypatch in ``src`` rebinding a re-export on the log
     package itself rather than the sibling submodule that actually reads the name."""
     tree = ast.parse(src)
     log_names = _log_package_bindings(tree)
-    bad: list[tuple[int, str]] = []
+    bad = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "setattr"):
             continue
-        func = node.func
-        if not (isinstance(func, ast.Attribute) and func.attr == "setattr"):
-            continue
-        pos = list(node.args)
-        kw = {k.arg: k.value for k in node.keywords}
-        target = pos[0] if len(pos) >= 1 else kw.get("target")
-        name = pos[1] if len(pos) >= 2 else kw.get("name")
-        value = pos[2] if len(pos) >= 3 else kw.get("value")
-        if value is not None:
-            # ``setattr(obj, "name", value)`` or ``setattr(target=..., name=..., value=...)``:
-            # ``name`` is the attribute being set.
-            if isinstance(name, ast.Constant) and isinstance(name.value, str):
-                attr = name.value
-                if attr not in reexports or not _is_log_package(target, log_names):
-                    continue
-            elif _is_log_package(target, log_names):
-                # A variable attribute name on the package re-spells any re-export and the
-                # guard cannot resolve it statically: flag it so the author spells the
-                # submodule patch out instead of a package patch that proves nothing.
-                attr = "<dynamic>"
-            else:
-                continue
-        else:
-            # Two-arg form. ``setattr("ddflow.infra.log.<name>", value)`` gives the target
-            # path as a dotted string; ``setattr(L, "APPEND_HOOKS")`` deletes the package
-            # attribute. Both rebind the PACKAGE copy only.
-            if isinstance(target, ast.Constant) and isinstance(target.value, str):
-                path_str, attr = _dotted_string_name(target.value)
-                if attr not in reexports or path_str != "ddflow.infra.log":
-                    continue
-            elif isinstance(name, ast.Constant) and isinstance(name.value, str):
-                attr = name.value
-                if attr not in reexports or not _is_log_package(target, log_names):
-                    continue
-            else:
-                continue
-        bad.append((node.lineno, attr))
+        attr = _patched_reexport(node, log_names, reexports)
+        if attr is not None:
+            bad.append((node.lineno, attr))
     return bad
 
 
