@@ -55,7 +55,9 @@ def user_dir() -> Path:
     return Path(base) / "ddflow"
 
 
-def descriptor_dirs(root: Path | str, user_home: Path | str | None = None) -> tuple[tuple[str, Path], ...]:
+def descriptor_dirs(
+    root: Path | str, user_home: Path | str | None = None
+) -> tuple[tuple[str, Path], ...]:
     """Each descriptor layer's directory, weakest first: packaged, user, project, local."""
     ud = Path(user_home) if user_home is not None else user_dir()
     root = Path(root)
@@ -76,7 +78,11 @@ def model_overlay_paths(root: Path | str, user_home: Path | str | None = None) -
     """
     ud = Path(user_home) if user_home is not None else user_dir()
     root = Path(root)
-    return (ud / "models.toml", root / ".ddflow" / "models.toml", root / ".ddflow" / "local" / "models.toml")
+    return (
+        ud / "models.toml",
+        root / ".ddflow" / "models.toml",
+        root / ".ddflow" / "local" / "models.toml",
+    )
 
 
 def schema_of(text: str) -> int | None:
@@ -95,8 +101,9 @@ def require_known_schema(text: str, supported: int = CURRENT_SCHEMA) -> None:
     """Refuse a file newer than this code: "unavailable: upgrade ddflow", never half-read."""
     s = schema_of(text)
     if s is not None and s > supported:
-        raise PackError(f"schema {s} is newer than this ddflow reads ({supported}): "
-                        "unavailable: upgrade ddflow")
+        raise PackError(
+            f"schema {s} is newer than this ddflow reads ({supported}): unavailable: upgrade ddflow"
+        )
 
 
 def operator_only_violations(raw: Any) -> list[str]:
@@ -159,9 +166,7 @@ def _is_url(source: str) -> bool:
 
 
 def _fetch(url: str) -> bytes:
-    return UrllibHttpClient().request(
-        "GET", url, timeout=30.0, max_bytes=MAX_PACK_BYTES
-    ).body
+    return UrllibHttpClient().request("GET", url, timeout=30.0, max_bytes=MAX_PACK_BYTES).body
 
 
 def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any]:

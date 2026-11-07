@@ -42,7 +42,7 @@ def _project(root, *files: tuple[str, str]) -> None:
 
 
 def test_schema_of_reads_the_declared_version():
-    assert DP.schema_of('schema = 2\n' + _GOOD) == 2
+    assert DP.schema_of("schema = 2\n" + _GOOD) == 2
 
 
 def test_schema_of_is_none_when_absent():
@@ -50,12 +50,12 @@ def test_schema_of_is_none_when_absent():
 
 
 def test_require_known_schema_allows_the_current_schema():
-    DP.require_known_schema('schema = 2\n' + _GOOD)
+    DP.require_known_schema("schema = 2\n" + _GOOD)
 
 
 def test_require_known_schema_refuses_a_newer_schema():
     with pytest.raises(DP.PackError, match="unavailable: upgrade ddflow"):
-        DP.require_known_schema('schema = 99\n' + _GOOD)
+        DP.require_known_schema("schema = 99\n" + _GOOD)
 
 
 # -- operator-only split ---------------------------------------------------
