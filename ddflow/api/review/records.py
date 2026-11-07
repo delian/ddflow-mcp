@@ -255,7 +255,8 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
     mine = (getattr(it, "triage", None) or {}).get(gate, {})
     runs = it.runs_of(gate)
     unreadable = False
-    fam_by_digest: dict[str, str] = {}
+    explicit: dict[str, str] = {}
+    fallback: dict[str, str] = {}
     unconfirmed: set[str] = set()
     for run in runs:
         run_fam = (str((run.evidence or {}).get("family") or "") or "").strip().lower()
@@ -268,19 +269,19 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             digest = f.get("digest")
             if not digest:
                 continue
-            fam = (str(f.get("family") or "") or "").strip().lower()
-            fam = "" if fam == "unknown" else fam
-            fam = fam or run_fam
-            # Keep the FIRST known family (the finding's origin) -- a later row of the same
-            # digest does not downgrade a cross-family finding to the author's family, and
-            # the fallback above names a stampless historical row by its run's identifying
-            # family (the same-family reviewer the failed round B7dbf432caa names).
-            if fam:
-                fam_by_digest.setdefault(digest, fam)
+            stamp = (str(f.get("family") or "") or "").strip().lower()
+            stamp = "" if stamp == "unknown" else stamp
+            # An explicit per-finding stamp is the finding's true raiser and wins; a
+            # run-level fallback is only a guess at that raiser, so it never outranks an
+            # explicit stamp that appears in any round.
+            if stamp:
+                explicit.setdefault(digest, stamp)
+            fallback.setdefault(digest, stamp or run_fam)
             if mine.get(digest, {}).get("verdict") == "confirmed" and not _cleared_after_delta(
                 runs, digest
             ):
                 unconfirmed.add(digest)
+    fam_by_digest = {d: explicit.get(d) or fallback.get(d, "") for d in unconfirmed}
     return [(d, fam_by_digest.get(d, "")) for d in unconfirmed], unreadable
 
 
