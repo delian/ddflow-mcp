@@ -548,7 +548,7 @@ def test_harness_imports_no_http_roots_and_holds_no_http_home_entry():
     here = Path(__file__).resolve().parents[1]
     harness = here / "ddflow" / "services" / "approvals" / "harness.py"
     roots = set()
-    for node in ast.parse(harness.read_text("utf-8")).body:
+    for node in ast.walk(ast.parse(harness.read_text("utf-8"))):
         if isinstance(node, ast.Import):
             roots.update(n.name.split(".")[0] for n in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
