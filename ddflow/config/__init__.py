@@ -116,3 +116,11 @@ def __getattr__(name: str):
     if cls is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     return cls
+
+
+#: A star-import reads the module `__dict__` or `__all__`, never `__getattr__`: name every
+#: public name (real globals plus the section classes) so `from ddflow.config import *`
+#: binds the section classes, as the eager re-export it replaced did (review finding).
+__all__ = sorted(
+    {n for n in globals() if not n.startswith("_")} | set(_SECTION_CLASS_BY_NAME)
+)
