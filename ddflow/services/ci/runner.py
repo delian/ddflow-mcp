@@ -255,6 +255,9 @@ def _default_on_the_diff(
     default that scopes: on the base itself there is no branch to compare with, so the commit just
     made is its first parent."""
     whole_suite = full or (not override and cfg.ci.tests_scope == "full")
+    # This mirrors the `asked` below (`"selected" if not full and tests_scope == "selected" else
+    # "full"`): both read "whole suite" as the SAME two cases only because `[ci].tests_scope` is a
+    # binary {selected, full} choice. Keep them in step if the choice ever gains a third value.
     if (
         whole_suite
         or (override and not changed_from)
