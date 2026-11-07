@@ -192,6 +192,8 @@ def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *
     with SL.hold(cfg, holder, wait_s=lock_wait) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
+            if lock_wait is not None:  # the per-run timeout also bounds the run BEHIND the wait
+                budget = max(1, int(lock_wait) - int(waited))
         p, out_prefix = _execute(
             cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
         )
