@@ -1,0 +1,2 @@
+{"agent":"recover-5b","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e7d94e51f042950ed3eb6f496","kind":"ddflow.seen","lamport":149797,"schema":1,"subject":"ddflow","ts":"2026-11-07T17:04:52.403234Z"}
+{"agent":"recover-5b","data":{"by":"recover-5b","event":"ed369c32daf545978745f8ab9","holder":"recover-2","note":"salvaged"},"id":"e378e4ed6d9bc9ce2f0bc5282","kind":"lease.released","lamport":149798,"schema":1,"subject":"fix-B-widen-over-standing-wait-silent","ts":"2026-11-07T17:04:52.447999Z"}
