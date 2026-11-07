@@ -111,6 +111,18 @@ def inside(path: str, glob: str) -> bool:
     return match(path, glob, bare_any_depth=True)
 
 
+def _literal_prefix(pat: str) -> str:
+    """``pat`` up to its first wildcard (``*``, ``?``, or `[`).
+
+    `regex` reads `[` as a character class, so the literal prefix stops there too; reading
+    `[` as literal let `src/[ab]x.py` and `src/ax*` read as disjoint (Bebc6fe14a1). A
+    shorter prefix than the truth can only over-report overlap, never hide one, which is
+    the safe direction for a conflict detector.
+    """
+    cut = min((i for i in (pat.find(w) for w in "*?[") if i != -1), default=len(pat))
+    return pat[:cut]
+
+
 def overlap(a: str, b: str) -> bool:
     """Do two path patterns plausibly cover a common file?
 
@@ -124,8 +136,8 @@ def overlap(a: str, b: str) -> bool:
         return True
     if fnmatch(a, b) or fnmatch(b, a):
         return True
-    pa = a.split("*", maxsplit=1)[0].split("?", maxsplit=1)[0]
-    pb = b.split("*", maxsplit=1)[0].split("?", maxsplit=1)[0]
+    pa = _literal_prefix(a)
+    pb = _literal_prefix(b)
     if not pa or not pb:
         return True  # a bare "*" covers everything
     return pa.startswith(pb) or pb.startswith(pa)

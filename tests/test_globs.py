@@ -155,3 +155,15 @@ def test_a_leading_slash_does_not_make_two_claims_disjoint():
     assert globs.overlap("/src/a.md", "src/a.md")
     assert globs.overlap("/src/a.md", "src/*.md")
     assert not globs.overlap("/src/a.md", "docs/a.md")
+
+
+def test_overlap_cuts_the_prefix_at_a_character_class():
+    """Bebc6fe14a1: `[ab]` is a wildcard, so the shared literal prefix stops at `[`;
+    reading it as literal let `src/[ab]x.py` and `src/ax*` read as disjoint though
+    `src/ax.py` matches both, granting two claims on one file."""
+    assert globs.overlap("src/[ab]x.py", "src/ax*")
+    assert globs.overlap("src/ax*", "src/[ab]x.py")
+    assert globs.overlap("src/[ab]x.py", "src/bx*")
+    assert globs.overlap("src/a[0-9].md", "src/a5*")
+    assert globs.overlap("docs/[ab]/x.md", "docs/a/**")
+    assert globs.overlap("a[!0-9].md", "ax*")
