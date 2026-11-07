@@ -170,10 +170,11 @@ def _drop_repeated_locations(out: dict[str, Any]) -> bool:
 def _cap_findings(out: dict[str, Any]) -> int:
     """Cap the repeatable evidence `ddflow_show` keeps. Every LIST inside a gate record
     (the per-finding lists -- `chunk_findings`, `baseline`, `failed_tests`, `failure_tails`,
-    `failed_reasons`, `titles`, ...) and each gate's triage keep the first `FINDINGS_SHOWN`;
-    the rest are counted, not echoed. Cutting every STRING was not enough: `unit_tests`
-    baseline and failed-test lists, and a review's per-finding lists, still overflowed the
-    surface budget on their own."""
+    `failed_reasons`, `titles`, ...), every leaf-map of scalars (the `baseline` / `failed_reasons`
+    maps keyed by test id) and each gate's triage keep the first `FINDINGS_SHOWN`; the rest
+    are counted, not echoed. Cutting every STRING was not enough: `unit_tests` baseline and
+    failed-test lists, and a review's per-finding lists, still overflowed the surface budget
+    on their own."""
     dropped = [0]
 
     def walk(value: Any) -> Any:
@@ -183,6 +184,15 @@ def _cap_findings(out: dict[str, Any]) -> int:
                 value = value[:FINDINGS_SHOWN]
             return [walk(v) for v in value]
         if isinstance(value, dict):
+            # A leaf map (every value a scalar) is a series keyed by test/finding id -- the
+            # `unit_tests` `baseline` and `failed_reasons` maps, or a pathological evidence
+            # dict -- and is capped like a list. A field STRUCT holds nested dict/list
+            # values and stays whole.
+            if len(value) > FINDINGS_SHOWN and all(
+                not isinstance(v, (dict, list)) for v in value.values()
+            ):
+                dropped[0] += len(value) - FINDINGS_SHOWN
+                value = dict(list(value.items())[:FINDINGS_SHOWN])
             return {k: walk(v) for k, v in value.items()}
         return value
 

@@ -263,23 +263,41 @@ def test_show_caps_gate_findings_and_triage_and_counts_what_it_left_out():
     """A review that found hundreds still stays under the surface budget: one gate's
     evidence `chunk_findings` list and each gate's triage keep the first findings and the
     rest are counted, never echoed (B-show-mcp-result-over-ceiling)."""
-    finding = {"chunk": 1, "title": "t" * 200, "detail": "d" * 200, "location": "l" * 200}
+    findings = [
+        {"chunk": i, "title": f"t{i:03d}", "detail": "d" * 200, "location": f"l{i:03d}"}
+        for i in range(150)
+    ]
     body = {
         "state": "open",
         "gates": {
             "critic": {
                 "outcome": "passed",
-                "evidence": {"chunk_findings": [dict(finding) for _ in range(150)]},
+                "evidence": {"chunk_findings": [dict(f) for f in findings]},
             }
         },
-        "triage": {"critic": {f"f{i}": dict(finding) for i in range(150)}},
+        "triage": {"critic": {f"f{i:03d}": dict(f) for i, f in enumerate(findings)}},
     }
     out, _ = B.bound_show(body, {})
-    assert len(out["gates"]["critic"]["evidence"]["chunk_findings"]) == B.FINDINGS_SHOWN
-    assert len(out["triage"]["critic"]) == B.FINDINGS_SHOWN
+    kept_ev = out["gates"]["critic"]["evidence"]["chunk_findings"]
+    assert [f["title"] for f in kept_ev] == [f"t{i:03d}" for i in range(B.FINDINGS_SHOWN)]
+    assert set(out["triage"]["critic"]) == {f"f{i:03d}" for i in range(B.FINDINGS_SHOWN)}
     cut = out["truncated"]
     assert cut["findings_cut"] == (150 - B.FINDINGS_SHOWN) * 2
     assert "--json show" in cut["all"]
+    assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
+
+
+def test_show_caps_a_leaf_map_the_string_clip_leaves_under_the_threshold():
+    """A leaf-map of scalars (a `unit_tests` `baseline`/`failed_reasons` map, or a
+    pathological evidence dict) is capped too: its strings sit under `TEXT_SHOWN`, so the
+    string clip alone would not shrink it (B-show-mcp-result-over-ceiling)."""
+    body = {
+        "state": "open",
+        "gates": {"critic": {"outcome": "passed", "evidence": {f"k{i}": "x" * 160 for i in range(200)}}},
+    }
+    out, _ = B.bound_show(body, {})
+    assert len(out["gates"]["critic"]["evidence"]) == B.FINDINGS_SHOWN
+    assert out["truncated"]["findings_cut"] == 200 - B.FINDINGS_SHOWN
     assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
 
 
