@@ -57,3 +57,18 @@ def test_the_brief_names_the_overtaken_waiter(repo):
     assert "## Waiting on you" in out, out
     waiting_on_you = out.split("## Waiting on you")[1].split("##")[0]
     assert "bhy" in waiting_on_you and "BHY" in waiting_on_you, waiting_on_you
+
+
+def test_a_later_unrelated_widening_does_not_name_the_waiter_again(repo):
+    _overtake(repo)
+    assert (
+        run_cli(repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx")[0]
+        == 0
+    )
+    code, out, _ = run_cli(
+        repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py,ddflow/tools/extra.py", agent="dx"
+    )
+    assert code == 0
+    # extra.py is new but overlaps nothing BHY asked for: it was not overtaken by THIS widen.
+    assert "overtook" not in out, out
+

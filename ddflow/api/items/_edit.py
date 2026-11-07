@@ -20,6 +20,7 @@ from ...core import globspec as GS
 from ...core import outcome as O
 from ...core import schedule as SCH
 from ...core.flow import line_order
+from ...core.globs import overlap as globs_overlap
 from ...infra import worktree as W
 from ...services import items as IT
 from ...services import landed as LD
@@ -432,7 +433,11 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, accepted, resources)
-    overtook = _overtaken_waiters(log, cfg, it.id) if globs is not None and lease is not None else []
+    overtook = (
+        _overtaken_waiters(log, cfg, it.id, _held_globs(it), accepted)
+        if globs is not None and lease is not None
+        else []
+    )
     return O.ok(
         "item.updated",
         id=it.id,
@@ -449,13 +454,21 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
     )
 
 
-def _overtaken_waiters(log, cfg, item_id: str) -> list[dict[str, Any]]:
-    """The standing waiters a just-applied widening now holds files for, so the reply can
-    name who it overtook (B-widen-over-standing-wait-silent). Called after the lease was
-    retargeted, so `waiting_for` sees the new globs and names each waiter's item and holder."""
+def _overtaken_waiters(log, cfg, item_id: str, old_globs: list[str], accepted: list[str] | None) -> list[dict[str, Any]]:
+    """The standing waiters a just-applied widening overtook (B-widen-over-standing-wait-silent).
+
+    Only a waiter whose ASKED-FOR globs overlap a glob THIS edit newly granted (``accepted``
+    minus what the item already held) is "overtaken"; a waiter already waiting on a glob it
+    held before is not, so a later unrelated widening does not name it again."""
+    if accepted is None:
+        return []
+    new_globs = [g for g in accepted if g not in old_globs]
+    if not new_globs:
+        return []
     return [
-        {"item": w["item"], "holder": w["holder"], "globs": list(w["globs"])}
-        for w in WG.waiting_for(L._fold(log), cfg, item_id, time.time())
+        {"item": w.item, "holder": w.holder, "globs": list(w.globs)}
+        for w in WG.waiters(L._fold(log), cfg, time.time())
+        if any(globs_overlap(g, x) for g in new_globs for x in w.globs)
     ]
 
 
