@@ -53,7 +53,7 @@ def test_digest_is_in_a_help_group_and_a_tier():
     `tier="all"` and `family="ddflow_view"` but no help group, so `grouped_tools`
     filed it under "Unmapped" and the guard above stayed red. It reads the operator
     queue, so it belongs in the "Reading the queue" group beside `ddflow_waves`."""
-    by_group = {title: members for title, members in grouped_tools(TOOLS)}
+    by_group = dict(grouped_tools(TOOLS))
     assert "ddflow_digest" in by_group["Reading the queue"], by_group
     assert TT.tier_of("ddflow_digest") == "all"
 
