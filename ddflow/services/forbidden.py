@@ -46,9 +46,10 @@ _WRAPPERS = frozenset(
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
 #: What may come right before a `#` that begins a comment: a blank, or an operator
-#: (`)`, `}`, `(`, `{`, `<`, `>`, `;`, `&`, `|`) -- bash starts a comment after any of
-#: these, not only after a blank (B-forbidden-guard-multiline-quote-bypass `)`/`}` finding).
-_COMMENT_BOUNDARY = " \t\r\n;|&(){}<>"
+#: (`)`, `(`, `<`, `>`, `;`, `&`, `|`) -- bash starts a comment after any of these, not
+#: only after a blank. `{` and `}` are reserved words that need a blank, not operators:
+#: a `#` glued to them is a literal `#` inside a word (B-forbidden-guard-multiline-quote-bypass `)` finding).
+_COMMENT_BOUNDARY = " \t\r\n;|&()<>"
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
