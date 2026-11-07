@@ -70,6 +70,7 @@ def _ev(repo: Path) -> dict:
 def test_a_failed_review_names_the_reviewer_that_found_the_blocking_defect(repo, tmp_path):
     _setup(repo, tmp_path)
     out = api.review(repo, gate="critic", item="T1", branch="feat")
+    assert out.exit == 0, out.data  # REVIEWED (completed), the verdict is `failed` in outcome
     assert out.data["outcome"] == "failed", out.data
     ev = _ev(repo)
     assert ev["reviewer"] == "failing", ev

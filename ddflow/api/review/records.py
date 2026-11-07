@@ -194,22 +194,24 @@ def _confirmed_unrechecked(it, gate: str) -> bool:
     return bool(GD.unresolved_review_failure(it, gate, confirmed_only=True))
 
 
-def _blocking_findings(results, it, gate: str, converging: bool, cfg):
-    """The findings of this round that keep the gate open -- the same set `_gate_outcome`
-    consults, computed once so the caller can name the REVIEWER that found one (bug
-    B3113b1f522). Empty when nothing this round blocks (no finding, or every finding is
-    below a converged full re-review's floor)."""
+def _blocking_findings(results, it, gate: str, converging: bool, cfg) -> tuple[list, bool]:
+    """(blocking, converged_round) for this round -- the findings that keep the gate open and
+    whether this is a converged full re-review, computed in ONE place so the caller can name
+    the reviewer that found a blocking finding and `_gate_outcome` shares this round's
+    ``converged_round`` with it (bug B3113b1f522: one prior/converged value, not two drifted
+    copies). ``converged_round`` is False when this round raised no finding."""
     found = [f for r in results if r.status in _HEARD for f in r.findings]
     if not found:
-        return []
+        return [], False
     prior = _last_review(it, gate) if it is not None else {}
     converged_round = converging and bool(prior.get("chunk_findings"))
-    return RV.blocking_findings(
+    blocking = RV.blocking_findings(
         found,
         converged=converged_round,
         floor=cfg.review.converge_floor,
         known=_still_standing(it, gate, prior.get("chunk_findings")),
     )
+    return blocking, converged_round
 
 
 def _gate_outcome(
@@ -230,16 +232,12 @@ def _gate_outcome(
             ],
             extra_evidence,
         )
-    # Only after a REVIEWED round left findings to converge from: an unavailable or findingless
-    # earlier round (which still spends a round) is not a previous review.
-    prior = _last_review(it, gate) if it is not None and bool(item) else {}
-    converged_round = converging and bool(prior.get("chunk_findings"))
     # Every heard reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status in _HEARD for f in r.findings]
     if not found:
         return "passed", extra_evidence
-    blocking = _blocking_findings(results, it, gate, converging, cfg)
+    blocking, converged_round = _blocking_findings(results, it, gate, converging, cfg)
     if blocking:
         return "failed", extra_evidence
     # A full re-review must not converge (pass on below-floor findings) while a confirmed

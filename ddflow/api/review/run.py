@@ -405,19 +405,18 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     return cross[0] if cross else best
 
 
-def _failing_reviewer(best, results, it, gate, converging, cfg, outcome):
-    """For a failed outcome, the reviewer whose finding blocked the gate (bug B3113b1f522);
-    else ``best``. A failed review must name the reviewer that found the blocking defect,
-    not a clean peer that ranked first (or the author's own family, listed first). The
+def _failing_reviewer(results, it, gate, converging, cfg, identifying):
+    """The reviewer whose finding blocked the gate (bug B3113b1f522), else ``identifying``.
+    A failed review must name the reviewer that found the blocking defect, not a clean peer
+    that ranked first (or the author's own family, listed first), and must not re-purpose a
+    PARTIAL reviewer as the identifying pass (which would flip the run's exit code). The
     findings `_blocking_findings` returns are the SAME objects each reviewer's ``findings``
-    held (matched by identity), so the return is one of ``results`` or ``best``."""
-    if outcome != "failed":
-        return best
-    blocking = _blocking_findings(results, it, gate, converging, cfg)
+    held (matched by identity), so the return is one of ``results`` or ``identifying``."""
+    blocking, _ = _blocking_findings(results, it, gate, converging, cfg)
     for r in results:
         if any(b is f for b in blocking for f in r.findings):
             return r
-    return best
+    return identifying
 
 
 def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
@@ -636,11 +635,11 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         _say_result(say, res)
         _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
-    best = _identifying_reviewer(results, author_model, cfg)
+    identifying = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
-        best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        identifying, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )
-    best = _failing_reviewer(best, results, it, gate, _converges(kind, fix), cfg, outcome)
+    best = _failing_reviewer(results, it, gate, _converges(kind, fix), cfg, identifying)
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
@@ -663,7 +662,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         RV.PARTIAL: O.REFUSED,
         RV.UNAVAILABLE: O.NOTHING,
         RV.ERROR: O.FAIL,
-    }[best.status]
+    }[identifying.status]
     if exit_code == O.OK:
         return O.ok("review", **data)
     return O.Outcome(
