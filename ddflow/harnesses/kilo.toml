@@ -57,6 +57,7 @@ dir = ".kilo/worktrees"
 
 [orchestration]
 loop = "background-subagents"
+keepalive = "session-goal"
 dispatch = "task (one claimed item each, model chosen by tier)"
 wait = "background process + ddflow wait"
 persist = "kilo memory (orchestrator_wave:<scope>)"

@@ -1720,6 +1720,18 @@
   
   '''
 # ---
+# name: test_help[ddflow lesson show]
+  '''
+  usage: ddflow lesson show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lesson verify]
   '''
   usage: ddflow lesson verify [-h]
@@ -1731,10 +1743,10 @@
 # ---
 # name: test_help[ddflow lesson]
   '''
-  usage: ddflow lesson [-h] {add,verify,search,list} ...
+  usage: ddflow lesson [-h] {add,verify,search,show,list} ...
   
   positional arguments:
-    {add,verify,search,list}
+    {add,verify,search,show,list}
       verify              re-scan every lesson's pattern and name the sites that reappeared
       list                list lessons, newest first: the live ones unless --all or --state
   
@@ -2924,6 +2936,15 @@
   
   '''
 # ---
+# name: test_help[ddflow session inbox]
+  '''
+  usage: ddflow session inbox [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow session list]
   '''
   usage: ddflow session list [-h] [--state STATE] [--owner OWNER] [--since SINCE] [--limit LIMIT]
@@ -3008,12 +3029,13 @@
 # ---
 # name: test_help[ddflow session]
   '''
-  usage: ddflow session [-h] {start,prompt,message,note,adopt-orphans,end,list,show} ...
+  usage: ddflow session [-h] {start,prompt,message,inbox,note,adopt-orphans,end,list,show} ...
   
   positional arguments:
-    {start,prompt,message,note,adopt-orphans,end,list,show}
+    {start,prompt,message,inbox,note,adopt-orphans,end,list,show}
       message             put a message in another lane's inbox (delivered at its next wait, watch
                           or heartbeat)
+      inbox               read this lane's delivered inbox messages again
       adopt-orphans       attach prompts/notes recorded with no session id to a session
       list                sessions, newest first: agent, span, items, prompts, state
       show                one session: every prompt and note in order, redacted
@@ -3868,6 +3890,7 @@
     'ddflow lesson add',
     'ddflow lesson list',
     'ddflow lesson search',
+    'ddflow lesson show',
     'ddflow lesson verify',
     'ddflow link',
     'ddflow list',
@@ -3944,6 +3967,7 @@
     'ddflow session',
     'ddflow session adopt-orphans',
     'ddflow session end',
+    'ddflow session inbox',
     'ddflow session list',
     'ddflow session message',
     'ddflow session note',

@@ -48,6 +48,16 @@ def test_every_tool_is_in_a_help_group_and_a_tier():
     assert {t for t in TOOLS if TT.tier_of(t) == "all"} == FULL_ONLY_TOOLS
 
 
+def test_digest_is_in_a_help_group_and_a_tier():
+    """`ddflow_digest` (added by fix-B-digest-route-names-missing-command) declared
+    `tier="all"` and `family="ddflow_view"` but no help group, so `grouped_tools`
+    filed it under "Unmapped" and the guard above stayed red. It reads the operator
+    queue, so it belongs in the "Reading the queue" group beside `ddflow_waves`."""
+    by_group = dict(grouped_tools(TOOLS))
+    assert "ddflow_digest" in by_group["Reading the queue"], by_group
+    assert TT.tier_of("ddflow_digest") == "all"
+
+
 def test_summary_is_the_first_sentence_cut_at_a_word_and_pipe_safe():
     assert RT.summary("One thing. Another thing.") == "One thing."
     assert RT.summary("a | b") == "a \\| b"

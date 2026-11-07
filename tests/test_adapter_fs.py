@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -83,6 +84,18 @@ def fs_conformance(adapter) -> None:
         h.rmtree(h.path("b"), ignore_errors=False)
     with pytest.raises(FileNotFoundError):
         h.copy_file(h.path("nope"), h.path("x"))
+    # ADP-fs-fake-parity: a same-path move is a no-op for a file and for a directory,
+    # and copy_tree into its own subtree with dirs_exist_ok=True returns rather than
+    # raising — shutil's snapshot copy lands one level deep, so both adapters must
+    # agree on a NESTED source, not one small tree.
+    h.put("self/one.txt", b"1")
+    h.put("self/sub/two.txt", b"2")
+    h.move(h.path("self"), h.path("self"))  # move(dir, same dir) -> no-op
+    h.move(h.path("self/one.txt"), h.path("self/one.txt"))  # move(file, same file) -> no-op
+    assert h.read("self/one.txt") == b"1" and h.read("self/sub/two.txt") == b"2"
+    h.copy_tree(h.path("self"), h.path("self/sub"), dirs_exist_ok=True)
+    assert h.read("self/one.txt") == b"1" and h.read("self/sub/two.txt") == b"2"
+    assert h.read("self/sub/one.txt") == b"1" and h.read("self/sub/sub/two.txt") == b"2"
 
 
 def _real(monkeypatch) -> _Disk:
@@ -117,6 +130,8 @@ def test_fake_records_calls_and_moves_directories():
 def test_fsio_path_operations_go_through_the_one_adapter(monkeypatch, tmp_path):
     fake = FakeFs({"/s/f": b"1", "/s/d/g": b"2"})
     monkeypatch.setattr(F, "DEFAULT", fake)
+    fake.mkdir("/t")  # copy_file now requires an existing parent, like shutil.copy2
+    fake.calls.clear()  # the mkdir is setup, not an fsio-port call
     fsio.copy_file("/s/f", "/t/f")
     fsio.copy_tree("/s/d", "/t/d")
     fsio.move("/s/f", "/t/m")
@@ -141,6 +156,103 @@ def test_fsio_real_roundtrip(tmp_path):
     assert not (tmp_path / "g").exists()
 
 
+def test_fake_copy_file_mirrors_local_on_directories_and_parents():
+    # copy_file onto an existing directory copies INTO it (shutil.copy2), not at the path
+    f = FakeFs({"/src/f": b"1"})
+    f.mkdir("/dst")
+    f.copy_file("/src/f", "/dst")
+    assert "/dst" not in f.files and f.files["/dst/f"] == b"1"
+    # copying a file onto itself is not silent: shutil raises SameFileError
+    with pytest.raises(shutil.SameFileError):
+        FakeFs({"/f": b"1"}).copy_file("/f", "/f")
+    # a missing parent is refused, not invented
+    with pytest.raises(FileNotFoundError):
+        FakeFs({"/src/f": b"1"}).copy_file("/src/f", "/no/parent/f")
+    # a parent that is a file, not a directory, is refused like the real adapters
+    with pytest.raises(NotADirectoryError):
+        FakeFs({"/src/f": b"1", "/p": b"x"}).copy_file("/src/f", "/p/child")
+    # a destination directory that already holds that name as a sub-directory is refused
+    f2 = FakeFs({"/f": b"1"})
+    f2.mkdir("/dst")
+    f2.mkdir("/dst/f")
+    with pytest.raises(IsADirectoryError):
+        f2.copy_file("/f", "/dst")
+
+
+def test_fake_move_mirrors_local_on_parents_and_self():
+    # a missing parent is refused
+    with pytest.raises(FileNotFoundError):
+        FakeFs({"/src/f": b"1"}).move("/src/f", "/no/parent/f")
+    # move(x, x) is a no-op, like shutil.move
+    f = FakeFs({"/f": b"1"})
+    f.move("/f", "/f")
+    assert f.files == {"/f": b"1"}
+    # a directory onto itself is a no-op too, like shutil.move's os.rename shortcut
+    d2d = FakeFs({"/a/f": b"1"})
+    d2d.move("/a", "/a")
+    assert d2d.files == {"/a/f": b"1"}
+    # moving a directory into its own subtree is refused, like shutil.move
+    with pytest.raises(shutil.Error):
+        FakeFs({"/a/f": b"1"}).move("/a", "/a/b")
+    # a descendant that is also an existing file is the ancestor guard, not the
+    # directory-over-file refusal, so it is shutil.Error, not FileExistsError
+    with pytest.raises(shutil.Error):
+        FakeFs({"/a/f": b"1"}).move("/a", "/a/f")
+    # into a deeper descendant is refused even if the middle component is missing
+    # (shutil.Error, which shutil.move raises for a directory into itself)
+    with pytest.raises(shutil.Error):
+        FakeFs({"/a/f": b"1"}).move("/a", "/a/missing/new")
+    # to a missing NON-descendant parent a directory relocates (shutil.move copytree)
+    m = FakeFs({"/a/f": b"1"})
+    m.move("/a", "/missing/a")
+    assert m.files == {"/missing/a/f": b"1"}
+    # an empty directory's missing ancestors are recorded, like copytree's makedirs
+    e = FakeFs()
+    e.mkdir("/a")
+    e.move("/a", "/missing/a")
+    assert e.is_dir("/missing") and e.is_dir("/missing/a")
+
+
+def test_fake_replace_path_mirrors_local_on_directories():
+    # replacing (renaming) a directory works
+    f = FakeFs({"/dir/f": b"1"})
+    f.replace_path("/dir", "/renamed")
+    assert f.files == {"/renamed/f": b"1"} and not f.is_dir("/dir") and f.is_dir("/renamed")
+    # renaming an empty top-level directory is not refused as a "missing root parent"
+    e = FakeFs()
+    e.mkdir("/a")
+    e.replace_path("/a", "/b")
+    assert e.is_dir("/b") and not e.is_dir("/a")
+    # a file over an existing directory is refused, like os.replace
+    f2 = FakeFs({"/f": b"1"})
+    f2.mkdir("/d")
+    f2.files["/d/keep"] = b"k"
+    with pytest.raises(IsADirectoryError):
+        f2.replace_path("/f", "/d")
+    # a directory over an existing file is refused, like os.replace
+    f3 = FakeFs({"/file": b"x"})
+    f3.mkdir("/dir")
+    f3.files["/dir/inner"] = b"i"
+    with pytest.raises(NotADirectoryError):
+        f3.replace_path("/dir", "/file")
+    # a directory into its own descendant is refused, like os.replace (a bare
+    # OSError: Python has no subclass for EINVAL)
+    with pytest.raises(OSError) as _exc:
+        FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/child")
+    assert type(_exc.value) is OSError
+    # a descendant that is also an existing file is the ancestor guard (EINVAL),
+    # not the file-over-directory guard, so it is OSError, not NotADirectoryError
+    with pytest.raises(OSError) as _exc2:
+        FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/f")
+    assert type(_exc2.value) is OSError
+    # a missing middle component under the source is ENOENT, not EINVAL
+    with pytest.raises(FileNotFoundError):
+        FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/missing/child")
+    # the filesystem root is refused, like move/copy_tree/rmtree
+    with pytest.raises(ValueError):
+        FakeFs({"/f": b"1"}).replace_path("/", "/new")
+
+
 def test_fake_mirrors_shutil_on_directories():
     f = FakeFs({"/a/f": b"1", "/file": b"x", "/dst": b"old"})
     f.mkdir("/a/empty")
@@ -155,14 +267,24 @@ def test_fake_mirrors_shutil_on_directories():
     f.files["/c/g"] = b"g"
     f.mkdir("/dd")
     f.files["/dd/g"] = b"old"
-    with pytest.raises(FileExistsError):
+    with pytest.raises(shutil.Error):
         f.move("/dd/g", "/dd")  # shutil.move refuses: the target name exists
-    with pytest.raises(FileExistsError):
+    with pytest.raises(shutil.Error):
         f.move("/c/g", "/dd")  # the name is taken inside the directory
     with pytest.raises(FileExistsError):
         f.move("/z", "/dst")  # a directory over a file
-    with pytest.raises(ValueError):
-        f.copy_tree("/z", "/z/sub", dirs_exist_ok=True)
+    f.copy_tree("/z", "/z/sub", dirs_exist_ok=True)  # its own subtree: shutil returns
+    assert f.files["/z/sub/f"] == b"1" and f.is_dir("/z/sub/empty")
+    # a directory onto itself is a no-op (no file to copy onto itself), like
+    # shutil.copytree(s, s, dirs_exist_ok=True)
+    e2 = FakeFs()
+    e2.mkdir("/z")
+    e2.mkdir("/z/empty")
+    e2.copy_tree("/z", "/z", dirs_exist_ok=True)
+    assert e2.is_dir("/z") and e2.is_dir("/z/empty")
+    # ... but a file under it would copy onto itself, refused like shutil.Error
+    with pytest.raises(shutil.Error):
+        FakeFs({"/w/f": b"1"}).copy_tree("/w", "/w", dirs_exist_ok=True)
     for call in (lambda: f.rmtree("/"), lambda: f.copy_tree("/", "/x"), lambda: f.move("/", "/x")):
         with pytest.raises(ValueError):
             call()

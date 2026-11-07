@@ -123,7 +123,7 @@ def _reviewer_up(url: str) -> bool:
     return RVE._url_ok(url)
 
 
-def _render(data: dict[str, Any]) -> str:
+def _render_report(data: dict[str, Any]) -> str:
     bugs = data["bugs"]
     by_sev = bugs["open_by_severity"]
     sev_line = ", ".join(f"{by_sev.get(sev, 0)} {sev}" for sev in (*BUG_SEVERITIES, "unspecified"))
@@ -207,5 +207,5 @@ def vigil_snapshot(repo: Path, *, agent: str = "") -> O.Outcome:
         "reviewer_latency_ratio": reviewer_latency_ratio,
     }
     out = O.ok("vigil", **data)
-    out.data["text"] = _render(data)
+    out.data["text"] = _render_report(data)
     return out

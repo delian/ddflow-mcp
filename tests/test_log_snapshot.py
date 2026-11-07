@@ -329,7 +329,7 @@ def test_a_valid_saved_order_is_adopted_so_the_cold_read_does_not_sort(repo, mon
     _build(repo)
     sorts = []
     real = L._sorted_unique
-    monkeypatch.setattr(L, "_sorted_unique", lambda ev: sorts.append(1) or real(ev))
+    monkeypatch.setattr(L._read, "_sorted_unique", lambda ev: sorts.append(1) or real(ev))
     _check(repo)
     assert not sorts, "a valid snapshot order was not adopted"
     # control: with the order poisoned the same read must fall back to sorting
