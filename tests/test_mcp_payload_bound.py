@@ -301,6 +301,27 @@ def test_show_caps_a_leaf_map_the_string_clip_leaves_under_the_threshold():
     assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
 
 
+def test_show_stays_under_the_budget_for_a_nested_shape_the_caps_miss():
+    """A nested dict-of-dicts (each inner map just under `FINDINGS_SHOWN`) is
+    indistinguishable from an evidence record, so the structural caps alone would not
+    catch it; the size guard does (B-show-mcp-result-over-ceiling)."""
+    body = {
+        "state": "open",
+        "gates": {
+            "critic": {
+                "outcome": "passed",
+                "evidence": {
+                    f"g{i}": {f"k{j}": "x" * 160 for j in range(B.FINDINGS_SHOWN)}
+                    for i in range(40)
+                },
+            }
+        },
+    }
+    out, _ = B.bound_show(body, {})
+    assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
+    assert out["truncated"]["findings_cut"] > 0
+
+
 def test_a_string_just_over_the_cut_is_left_whole_because_cutting_would_not_shrink_it():
     edge = "w" * (B.TEXT_SHOWN + len(B.CUT_MARK))
     out, _ = B.bound_show({"state": "open", "gates": {"g": {"evidence": {"note": edge}}}}, {})

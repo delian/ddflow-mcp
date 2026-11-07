@@ -19,6 +19,7 @@ the body carries its own `truncated` field.
 from __future__ import annotations
 
 import copy
+import json
 import re
 from typing import Any
 
@@ -56,6 +57,10 @@ TEXT_SHOWN = 160
 #: `ddflow_show`; the rest are counted. Cutting every STRING was not enough: one round
 #: that found hundreds still overflowed the surface budget (B-show-mcp-result-over-ceiling).
 FINDINGS_SHOWN = 10
+#: `ddflow_show`'s projected body is kept under this many characters once serialised. The
+#: structural caps above bound the real evidence shapes; this is the guarantee no nested
+#: shape slips past them (r-surface-budget: 20 KB -- the margin covers the note).
+SHOW_MAX_CHARS = 16_000
 #: What a cut string ends in.
 CUT_MARK = " [...]"
 
@@ -167,32 +172,28 @@ def _drop_repeated_locations(out: dict[str, Any]) -> bool:
     return stripped
 
 
-def _cap_findings(out: dict[str, Any]) -> int:
+def _cap_findings(out: dict[str, Any], cap: int = FINDINGS_SHOWN) -> int:
     """Cap the repeatable evidence `ddflow_show` keeps. Every LIST inside a gate record
     (the per-finding lists -- `chunk_findings`, `baseline`, `failed_tests`, `failure_tails`,
     `failed_reasons`, `titles`, ...), every leaf-map of scalars (the `baseline` / `failed_reasons`
-    maps keyed by test id) and each gate's triage keep the first `FINDINGS_SHOWN`; the rest
-    are counted, not echoed. Cutting every STRING was not enough: `unit_tests` baseline and
-    failed-test lists, and a review's per-finding lists, still overflowed the surface budget
-    on their own."""
+    maps keyed by test id) and each gate's triage keep the first `cap`; the rest are
+    counted, not echoed."""
     dropped = [0]
 
     def walk(value: Any) -> Any:
         if isinstance(value, list):
-            if len(value) > FINDINGS_SHOWN:
-                dropped[0] += len(value) - FINDINGS_SHOWN
-                value = value[:FINDINGS_SHOWN]
+            if len(value) > cap:
+                dropped[0] += len(value) - cap
+                value = value[:cap]
             return [walk(v) for v in value]
         if isinstance(value, dict):
             # A leaf map (every value a scalar) is a series keyed by test/finding id -- the
             # `unit_tests` `baseline` and `failed_reasons` maps, or a pathological evidence
             # dict -- and is capped like a list. A field STRUCT holds nested dict/list
             # values and stays whole.
-            if len(value) > FINDINGS_SHOWN and all(
-                not isinstance(v, (dict, list)) for v in value.values()
-            ):
-                dropped[0] += len(value) - FINDINGS_SHOWN
-                value = dict(list(value.items())[:FINDINGS_SHOWN])
+            if len(value) > cap and all(not isinstance(v, (dict, list)) for v in value.values()):
+                dropped[0] += len(value) - cap
+                value = dict(list(value.items())[:cap])
             return {k: walk(v) for k, v in value.items()}
         return value
 
@@ -203,11 +204,24 @@ def _cap_findings(out: dict[str, Any]) -> int:
     if isinstance(triage, dict):
         for gate, recs in list(triage.items()):
             kept = recs
-            if isinstance(recs, dict) and len(recs) > FINDINGS_SHOWN:
-                dropped[0] += len(recs) - FINDINGS_SHOWN
-                kept = dict(list(recs.items())[:FINDINGS_SHOWN])
+            if isinstance(recs, dict) and len(recs) > cap:
+                dropped[0] += len(recs) - cap
+                kept = dict(list(recs.items())[:cap])
             triage[gate] = walk(kept)
     return dropped[0]
+
+
+def _shrink_to_budget(out: dict[str, Any]) -> int:
+    """The `_cap_findings` caps are a contract, not a guarantee: a nested dict-of-dicts
+    (each inner map just under `FINDINGS_SHOWN`) is indistinguishable from an evidence
+    record and can still overflow. Re-cap `gates` and `triage` to a shrinking cap until
+    the serialised body is under `SHOW_MAX_CHARS`, counting what goes."""
+    dropped = 0
+    cap = FINDINGS_SHOWN
+    while len(json.dumps(out)) > SHOW_MAX_CHARS and cap > 0:
+        cap //= 2
+        dropped += _cap_findings(out, cap)
+    return dropped
 
 
 def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
@@ -228,6 +242,8 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         if key in out:
             out[key] = _clip(out[key], cut)
     findings_cut = _cap_findings(out)
+    if len(json.dumps(out)) > SHOW_MAX_CHARS:
+        findings_cut += _shrink_to_budget(out)
     if stripped or cut[0] or findings_cut:
         out["truncated"] = {
             "strings_cut": cut[0],
