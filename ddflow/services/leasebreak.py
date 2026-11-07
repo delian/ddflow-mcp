@@ -124,14 +124,15 @@ def judge(
 
 def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
     """Leased item -> the items whose recorded waits name it (the wait-for graph, inverted),
-    limited to waiters whose CURRENT globs still overlap the item's lease.
+    limited to waiters whose CURRENT globs still overlap the item's LIVE lease.
 
     The wait-for graph recomputes its edges from the globs a waiter asked for when its
     widening was refused, and those go stale: when the waiter later narrows its globs back
     down (gives up the file it could not get), naming it here becomes a false YIELD
     REQUESTED -- the waiter no longer needs the holder's files (B38ebc3e392). The edge
-    survives (a recorded wait lives with its lease), so drop it when no CURRENT glob of
-    the waiter still overlaps the holder's lease."""
+    survives (a recorded wait lives with its lease), so drop it when the holder still
+    holds a lease and no CURRENT glob of the waiter overlaps that lease (an empty want
+    overlaps nothing, so it is dropped too)."""
     shared = shared_globs(cfg)
     out: dict[str, list[str]] = {}
     for waiter, held in WG.wait_for_graph(st, cfg, now).items():
