@@ -4,8 +4,8 @@ A park deletes the item's worktree and branch; a fresh claim then builds a new t
 main. research and rules passes from the lost branch kept showing green ``[x]``: gate
 staleness compared content only, and only for gates that must attach evidence, so a pass
 that had merely outlived its branch read as a pass about the new one. Such a pass is not
-older work on the same branch -- its commit is a DESCENDANT of the new tree, not its
-ancestor -- so it is stale, not green.
+older work on the same branch -- its commit descends from the new tree, it does not precede
+it -- so it is stale, not green.
 """
 
 from __future__ import annotations
@@ -49,17 +49,17 @@ def adopted(repo: Path) -> Path:
     return repo
 
 
-def _stale(repo: Path, head: str):
+def _stale(repo: Path, landed: str):
     st = fold(EventLog(repo).read_all(), strict=False)
-    return outcomes.stale_evidence_detail(st, Config.load(repo), "T1", repo, landed=head)
+    return outcomes.stale_evidence_detail(st, Config.load(repo), "T1", repo, landed=landed)
 
 
 def test_research_and_rules_are_stale_when_the_branch_was_rebuilt(adopted):
-    # The item branch (and the passes it holds) is gone; a fresh claim builds the tree
-    # from main, which is the ANCESTOR of the lost branch's commit, so the recorded
-    # commit does not descend from the tree being checked.
-    main = _git(adopted, "rev-parse", "HEAD~1").strip()
-    notes = _stale(adopted, main)
+    # A fresh claim rebuilds the tree from main, the pass's own branch is gone, and the
+    # worktree's HEAD is the rebuilt tip (main, the ANCESTOR the lost commit descended
+    # from). `gate status` compares against that HEAD.
+    _git(adopted, "checkout", "-q", "--detach", "HEAD~1")  # the fresh tree from main
+    notes = _stale(adopted, "HEAD")
     marked = {n.gate for n in notes}
     assert "research" in marked, "research survived the rebuilt branch as a bare pass"
     assert "rules" in marked, "rules survived the rebuilt branch as a bare pass"
@@ -72,14 +72,13 @@ def test_research_and_rules_stay_fresh_within_the_same_branch(adopted):
     (adopted / "a.py").write_text("a = 2\n")
     _git(adopted, "add", "-A")
     _git(adopted, "commit", "-qm", "more work")
-    head = _git(adopted, "rev-parse", "HEAD").strip()
-    assert _stale(adopted, head) == []
+    assert _stale(adopted, "HEAD") == []
 
 
 def test_a_squashed_landing_is_not_a_lost_branch(adopted):
     # A squash merge lands the SAME work in a commit whose parent is main, not the item's
-    # branch: the recorded commit is not an ancestor of what landed, but the branch was not
-    # rebuilt. The landed-after commit must not read as a lost branch.
+    # branch: the recorded commit is not an ancestor of the landed commit, but the branch
+    # was not rebuilt. `complete` compares against that landed-after sha, not the branch.
     _git(adopted, "checkout", "-q", "--detach", "HEAD~1")
     _git(adopted, "commit", "-qm", "squash the item into main", "--allow-empty")
     squash = _git(adopted, "rev-parse", "HEAD").strip()
