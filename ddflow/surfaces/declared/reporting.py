@@ -21,7 +21,9 @@ from .capflags import capped
 
 
 def _text(out, a) -> str:
-    return out.data["text"]
+    # `digest --ask <id>` with no such entry is `nothing`: its data carries no `text`, so
+    # fall back to the reason that names the miss (a `KeyError` here would mask it).
+    return out.data.get("text") or out.reason
 
 
 def _status_handler(a, c):
@@ -402,6 +404,9 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("digest",),
         tool="ddflow_digest",
+        tier="all",
+        family="ddflow_view",
+        action="digest",
         summary="the operator queue: what waits on a person, as askable entries",
         description=(
             "The operator queue in one fold: every thing waiting on a person to act — "

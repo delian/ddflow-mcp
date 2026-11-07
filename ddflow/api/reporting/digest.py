@@ -91,9 +91,6 @@ def digest_queue(repo: Path, *, ask: str = "", agent: str = "") -> O.Outcome:
     queue = DQ.build(st, cfg, time.time())
     text, rows = _render(queue, ask if ask else "")
     if ask and not rows:
-        return O.nothing(
-            "digest",
-            f"no queue entry {ask!r}; run `ddflow digest` for the queue",
-            id=ask,
-        )
+        msg = f"no queue entry {ask!r}"
+        return O.nothing("digest", f"{msg}; run `ddflow digest` for the queue", id=ask, text=msg)
     return O.ok("digest", entries=rows, gaps=list(queue.gaps), notes=list(queue.notes), text=text)
