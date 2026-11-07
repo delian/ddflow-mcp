@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import replace
 
-from ..commands.harness import cmd_harness, cmd_model
+from ..commands.harness import cmd_harness, cmd_harness_record, cmd_model
 from ..commands.knowledge import cmd_history
 from ..commands.operations import cmd_import
 from ..commands.setup import cmd_companions, cmd_help, cmd_hooks, cmd_prompts, help_topics
@@ -70,6 +70,31 @@ def _harness_parsers(s: argparse._SubParsersAction) -> None:
         "--run", action="store_true", help="the operator consents: run `<binary> --version`"
     )
     hxp.set_defaults(fn=cmd_harness)
+    hxr = hx_s.add_parser(
+        "record",
+        help="live payload fixtures: what is recorded, --prepare a scratch project, or take --from",
+    )
+    hxr.add_argument("id", help="a descriptor id")
+    hxr.add_argument(
+        "--prepare", default="", metavar="DIR", help="a new scratch project with capture taps"
+    )
+    hxr.add_argument(
+        "--from",
+        dest="source",
+        default="",
+        metavar="DIR",
+        help="a prepared project after a session",
+    )
+    hxr.add_argument("--write", action="store_true", help="write the fixtures (default: report)")
+    hxr.add_argument(
+        "--dest", default="", metavar="DIR", help="default: tests/fixtures/harness in this tree"
+    )
+    hxr.add_argument(
+        "--agent-version",
+        default="",
+        help="what `<agent> --version` says; --from needs it, a fixture always carries it",
+    )
+    hxr.set_defaults(fn=cmd_harness_record)
 
     mo = s.add_parser("model", help="the model catalog: a row with its provenance")
     mo_s = mo.add_subparsers(dest="model_cmd", required=True)

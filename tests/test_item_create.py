@@ -68,6 +68,7 @@ def test_add_task_appends_the_event_and_tells_the_state(repo):
     ("draft", "says"),
     [
         (IT.TaskDraft("a:b"), "colon"),
+        (IT.TaskDraft("-x"), "hyphen"),
         (IT.TaskDraft("X", globs=['"src/**"']), "cannot be paths"),
         (IT.TaskDraft("X", parent="NOPE"), "no such parent"),
     ],
@@ -106,6 +107,7 @@ def test_the_checks_fields_join_the_event(repo):
 
 def test_task_add_writes_its_shape_and_a_sub_task_releases_the_parents_lease(repo):
     A.phase_add(repo, "P", title="phase")
+    A.phase_add(repo, "N", title="need")
     A.task_add(repo, "T", title="parent", parent="P", globs="a/**", needs="N", priority=7)
     [ev] = _data(EventLog(repo), "T")
     assert ev == {

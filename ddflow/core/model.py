@@ -156,6 +156,7 @@ from .handlers.sessions import (  # noqa: F401
     _session,
 )
 from .handlers.suggestions import SUGGESTION_HANDLERS
+from .handlers.tokens import TOKEN_HANDLERS
 from .handlers.waiting import WAITING_HANDLERS
 
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
@@ -304,6 +305,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **LANERELEASE_HANDLERS,
     # first writer: api/probe.py (`ddflow probe`)
     **PROBE_HANDLERS,
+    # first writer: services/auth.py (a redeemed pairing, a revocation)
+    **TOKEN_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

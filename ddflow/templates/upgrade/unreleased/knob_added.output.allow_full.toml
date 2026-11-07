@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "output.allow_full"
+new = "true"
+why = "Whether --full / full=true may lift the default output caps (UX-output-caps)."
+effect = "board, doctor, recover, next and status print a bounded default and end in a footer naming the next call; `--json` and scripts reading those lists get the cut list plus `truncated` and `next` until they pass --full"
+impact = "additive"

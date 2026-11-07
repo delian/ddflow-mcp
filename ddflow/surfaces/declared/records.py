@@ -176,7 +176,7 @@ COMMANDS: tuple[Command, ...] = (
         },
         description="Report a bug the moment you find it, BEFORE fixing it. Recording it first "
         "makes the fix accountable: `ddflow_bug_fixed` refuses to close one without "
-        "a regression test. A hunt that records nothing looks like one that found nothing.",
+        "a regression test.",
         call=lambda repo, a, agent: _api().bug_found(
             repo,
             summary=a.get("summary", "") or "",
@@ -557,8 +557,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("session", "prompt"),
         tool="ddflow_session_prompt",
-        description="Record the operator's prompt verbatim. This is what makes the project "
-        "reconstructible from the log alone if everything else is lost. Secrets are "
+        description="Record the operator's prompt verbatim. Secrets are "
         "redacted before anything touches disk. Call it once per operator turn.",
         call=lambda repo, a, agent: _api().session_prompt(
             repo,
@@ -635,8 +634,7 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_session_note",
         description="Record something that happened during a session which is neither an "
         "operator prompt nor a decision — a surprise, a dead end, why you changed "
-        "approach. It goes into the reconstruction alongside the prompts, and a "
-        "dead end recorded is a dead end nobody walks down twice.",
+        "approach. It goes into the reconstruction alongside the prompts.",
         call=lambda repo, a, agent: _api().session_note(
             repo,
             a.get("session", "") or "",

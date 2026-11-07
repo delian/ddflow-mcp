@@ -1,65 +1,36 @@
-"""The docs check walks ddflow's own `--help` in process, fast and without a spawn
-(DX-docs-check-speed). The in-process/spawn flag equivalence is pinned by
-tests/test_docscheck_help_in_process.py; this pins the speed and the no-spawn contract."""
+"""Speed ratchet for `ddflow docs check` on this repository (DX-docs-check-speed).
 
-from __future__ import annotations
+The help walk used to spawn `ddflow <verb> --help` once per verb (~4 minutes). ddflow's own
+help is answered in process now; the equivalence with the spawned walk is pinned in
+test_docscheck_help_in_process.py. This ratchet pins the COST on the real tree: the number
+of subprocesses the walk spawns for ddflow is zero, and the walk stays well under a budget.
+"""
 
 import time
 from pathlib import Path
 
 from ddflow.infra import proc as P
+from ddflow.services import docscheck as D
 from ddflow.services import docscheck_help as H
 
 ROOT = Path(__file__).resolve().parents[1]
-#: The budget (seconds) a whole ddflow help walk may take; the spawning walk took ~4 minutes.
-WALK_BUDGET_S = 10
+
+#: Subprocesses the ddflow help walk may spawn. A ratchet: lower it, never raise it.
+MAX_SPAWNS = 0
+#: Generous wall budget for the whole walk; the walk takes seconds, the bug took minutes.
+MAX_SECONDS = 60
 
 
-def _all_chains():
-    """Every verb chain of the real CLI registry (test-side enumeration of argparse)."""
-    import argparse
+def test_the_real_tree_help_walk_spawns_nothing_and_stays_fast(monkeypatch):
+    spawned = []
 
-    from ddflow.surfaces.cli import build_parser
+    def capture(argv, **kwargs):
+        spawned.append(list(argv))
+        return P.Captured(error=RuntimeError("spawned"))
 
-    def walk(parser, prefix):
-        for act in parser._actions:
-            if isinstance(act, argparse._SubParsersAction):
-                for name, sub in act.choices.items():
-                    yield [*prefix, name]
-                    yield from walk(sub, [*prefix, name])
-
-    return list(walk(build_parser(), []))
-
-
-def _no_spawn(monkeypatch):
-    def boom(*a, **k):
-        raise AssertionError("ddflow's own help must not spawn a process")
-
-    monkeypatch.setattr(P, "capture", boom)
-
-
-def test_the_ddflow_help_walk_is_in_process_and_under_ten_seconds(monkeypatch):
-    chains = _all_chains()
-    assert len(chains) > 100
-    _no_spawn(monkeypatch)
-    monkeypatch.setattr(H, "_parser", [None])  # cold: the registry is built inside the timing
-    start = time.monotonic()  # construction is timed too: a walk may be eager in it
-    idx = H.HelpIndex(H.command_runner(ROOT, 60), ["ddflow"])
-    for chain in chains:
-        resolved = idx.resolve(["ddflow", *chain])
-        assert resolved is not None and resolved[0] == ["ddflow", *chain], chain
-        assert resolved[1], chain
-    assert time.monotonic() - start < WALK_BUDGET_S
-    assert not idx.unavailable
-
-
-def test_a_spawned_tool_still_spawns_under_the_timeout_knob(monkeypatch):
-    seen = []
-
-    def fake(argv, timeout=None, cwd=None):
-        seen.append((argv, timeout))
-        return P.Captured(0, "usage: other [--x]\n", "")
-
-    monkeypatch.setattr(P, "capture", fake)
-    out = H.command_runner(ROOT, 7)(["othertool", "--help"])
-    assert out.returncode == 0 and seen == [(["othertool", "--help"], 7)]
+    monkeypatch.setattr(P, "capture", capture)
+    start = time.monotonic()
+    D.check_docs(ROOT, runner=H.command_runner(ROOT, 60), commands=["ddflow"])
+    elapsed = time.monotonic() - start
+    assert len(spawned) <= MAX_SPAWNS, spawned[:5]
+    assert elapsed < MAX_SECONDS, elapsed

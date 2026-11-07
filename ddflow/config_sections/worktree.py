@@ -29,6 +29,11 @@ class WorktreeConfig:
     base_ref: str = knob(
         "",
         doc="Branch new worktrees fork from. Empty means auto-detect the default branch (origin/HEAD, else main, else master) — hardcoding 'main' breaks every 'master' repo.",
+        check=lambda v: (
+            ""
+            if isinstance(v, str) and not v.startswith("-")
+            else "must be a branch name; a value starting with '-' is a CLI flag, not a ref"
+        ),
     )
     merge_strategy: str = knob(
         "no-ff",
@@ -51,6 +56,15 @@ class WorktreeConfig:
             ""
             if isinstance(v, int) and not isinstance(v, bool) and v >= 0
             else "must be an integer >= 0"
+        ),
+    )
+    sweep_interval_s: int = knob(
+        900,
+        doc="The most often the `brief` sweeps finished items' leftover worktrees (`dispose_finished`): the sweep drops a git branch per tree and took 17 s on a project with 96 of them, which no session start should pay on every call. The time of the last sweep is a local stamp (`.ddflow/local/sweep-finished.last`); losing it only brings the next sweep forward. 0 sweeps on every brief, as before.",
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+            else "must be an integer >= 0 (0 = sweep on every brief)"
         ),
     )
     max_parallel: int = knob(

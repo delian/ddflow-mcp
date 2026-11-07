@@ -27,6 +27,8 @@ from .. import testselect as TS
 
 CACHE_DIR = Path(".ddflow") / "local" / "baseline"
 KNOB = "baseline_red_auto"
+#: Index of a cache entry's failure text (``[failed, measured_at, text]``; older entries omit it).
+SIG_AT = 2
 
 
 def _path(repo: Path, sha: str, command: str = "") -> Path:
@@ -49,6 +51,27 @@ def cache_load(
         return {}
 
 
+def cache_signatures(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> dict[str, str]:
+    """``{test id: failure text on this base}`` for ids measured after text was kept (an id
+    without text -- an old entry -- is absent); {} when none. The text is what the branch's
+    shown later compares against to spot a new offender (B-baseline-red-hides-new-offender-
+    in-red-ratchet)."""
+    if ttl_s <= 0:
+        return {}
+    clock_now = CLOCK.wall() if now is None else now
+    try:
+        seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
+        out: dict[str, str] = {}
+        for k, v in seen.items():
+            if _fresh(v, clock_now, ttl_s) and len(v) > SIG_AT and v[SIG_AT]:
+                out[str(k)] = str(v[SIG_AT])
+        return out
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return {}
+
+
 def _fresh(entry, now: float, ttl_s: int) -> bool:
     """Is a held ``[failed, measured_at]`` entry well formed and still within the ttl?"""
     try:
@@ -58,10 +81,16 @@ def _fresh(entry, now: float, ttl_s: int) -> bool:
 
 
 def cache_store(
-    repo: Path, sha: str, results: dict[str, bool], ttl_s: int, command: str = ""
+    repo: Path,
+    sha: str,
+    results: dict[str, bool],
+    ttl_s: int,
+    command: str = "",
+    sigs: dict[str, str] | None = None,
 ) -> None:
     """Merge ``results`` into the cache of ``sha`` and ``command``, each id stamped with the
-    time it was measured (best effort: a failed write costs a rerun)."""
+    time it was measured (best effort: a failed write costs a rerun). ``sigs`` (id -> failure
+    text) is stored beside the bool, so a later change keeps comparing against the text."""
     if ttl_s <= 0 or not results:
         return
     try:
@@ -75,7 +104,7 @@ def cache_store(
         now = CLOCK.wall()
         merged = {
             **{k: v for k, v in held.items() if _fresh(v, now, ttl_s)},
-            **{i: [f, now] for i, f in results.items()},
+            **{i: [f, now, (sigs or {}).get(i, "")] for i, f in results.items()},
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)

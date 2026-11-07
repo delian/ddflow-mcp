@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ...config import ReviewConfig
+from ...config import ReviewConfig, is_source_tree
 from ...core import outcome as O
 from ...infra import tomlcfg as TC
 from ...services import approval as AP
@@ -20,6 +20,7 @@ from ...services.approvals import class_states as APCS
 from ...services.approvals import consume as CN
 from ...services.approvals.canon import Canon
 from ...services.config_shadow import shadow_report
+from ...views import default_toml as D
 from ...views import human
 from .._base import _load
 from ..knowledge import session_note
@@ -32,6 +33,9 @@ class ConfigEdit:
     `local` sends the change to the git-ignored `.ddflow/local/config.toml`: this
     machine's endpoints, hosts, keys' variable names and sizing. Without it the change
     goes to the committed `.ddflow/config.toml`, which every clone receives.
+
+    `defaults` reads the packaged `default.toml` instead of any project file, and `write`
+    with it regenerates that file in ddflow's own source tree.
     """
 
     set: str = ""
@@ -40,6 +44,38 @@ class ConfigEdit:
     filter: str = ""
     explain: bool = False
     local: bool = False
+    defaults: bool = False
+    write: bool = False
+
+
+def _packaged_defaults(repo: Path, write: bool) -> O.Outcome:
+    """`config defaults`: the packaged file, or with ``write`` the file regenerated.
+
+    Only a source tree inside ``repo``: a worktree's `ddflow` on PATH is the primary's code,
+    so its templates are another tree's, and an installed ddflow's are not a checkout at all,
+    even in a `.venv` under the repository.
+    """
+    path = D.PACKAGED_DEFAULTS
+    if not write:
+        text = D.current()
+        if not text:
+            return O.failed("config", f"{path} is missing: this ddflow is damaged", text="")
+        return O.ok("config", path=str(path), text=text)
+    if not (is_source_tree(path) and path.resolve().is_relative_to(Path(repo).resolve())):
+        return O.refused(
+            "config",
+            f"{path} is not this repository's source: run `python -m ddflow.views.default_toml` "
+            "from the source tree it belongs to",
+            path=str(path),
+            text="",
+        )
+    changed = D.write()
+    return O.ok(
+        "config",
+        path=str(path),
+        changed=changed,
+        text=f"{path}: {'rewritten' if changed else 'current'}",
+    )
 
 
 def _said(added: list[str]) -> str:
@@ -94,6 +130,8 @@ def configure(
     """
 
     edit = edit or ConfigEdit()
+    if edit.defaults:
+        return _packaged_defaults(repo, edit.write)
     log, cfg, _st = _load(repo, agent)
     layer = _default_layer(cfg, edit)
     # Machine-local keys (parallelism, reviewers, companions) default to the local layer:
@@ -121,9 +159,13 @@ def configure(
         )
         decision = CN.operator_gate(log, cfg, canon, approval_id=approval)
         if not decision.ok:
+            # `approval` is truthy and `auto` defaults True, so `operator_gate` never returns
+            # the unprefixed "to ask the operator" steering message: every refusal is already
+            # prefixed here -- adding "refusing: " stacked it
+            # (B-config-phase-doubled-refusing-prefix).
             return O.refused(
                 "config",
-                "refusing: " + decision.message,
+                decision.message,
                 key=edit.set,
                 value=edit.value,
                 rows=[],

@@ -35,6 +35,7 @@ from .complete import abandon, block, complete, fold, remove, unblock  # noqa: F
 from .heartbeat import heartbeat, release
 from .merge import dispose_tree, merge, record_item_removed  # noqa: F401
 from .planning import PURPOSES, alternatives_offer, plan_for  # noqa: F401
+from .pull import next_lane
 from .ready import DEFAULT_CHECK_RECOVERY, DEFAULT_NEXT_KIND, next_
 from .reservations import WAITABLE
 from .sync import sync
@@ -55,6 +56,7 @@ __all__ = [
     "heartbeat",
     "merge",
     "next_",
+    "next_lane",
     "release",
     "remove",
     "sync",

@@ -123,7 +123,7 @@ class Rehearsal(_RehearsalSteps):
     def ddflow(
         self, cmd: Cmd, repo: Path, *args: str, agent: str = "", stdin: str | None = None
     ) -> P.Captured:
-        flags = ["--repo", str(repo), *(["--agent", agent] if agent else [])]
+        flags = ["--repo", str(repo), *([f"--agent={agent}"] if agent else [])]
         return self.capture(
             [*cmd.argv, *flags, *args],
             timeout=TIMEOUT_S,

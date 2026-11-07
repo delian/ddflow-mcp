@@ -29,6 +29,7 @@ def cmd_phase_add(a, c: Ctx) -> int:
             readd=a.readd,
             answer=answer,
             agent=c.requested_agent,
+            allow_unknown_needs=a.allow_unknown_needs,
         ),
     )
     done = D.finish(a, c, out)
@@ -61,6 +62,7 @@ def cmd_task_add(a, c: Ctx) -> int:
             readd=a.readd,
             answer=answer,
             agent=c.requested_agent,
+            allow_unknown_needs=a.allow_unknown_needs,
         ),
     )
     done = D.finish(a, c, out)

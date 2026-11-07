@@ -14,6 +14,7 @@ what only one caller has (``fixes``, ``promote_to``, ``source`` ...).
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -47,7 +48,14 @@ _FIELDS = (
 def bad_id(item: str) -> str:
     """Why ``item`` cannot be a local id, or "". A colon is how a dependency names an item
     in ANOTHER repository (`repo:ID`); a local `foo:bar` was taken for one, looked up
-    in the sibling observations, and blocked everything that needed it (rubber-duck)."""
+    in the sibling observations, and blocked everything that needed it (rubber-duck). A
+    leading hyphen is refused too: every command that then names the item (``show``,
+    ``claim``, ``update``, ...) parses the id as an option, which no quoting can fix."""
+    if item.startswith("-"):
+        return (
+            f"{item!r}: an item id may not start with a hyphen -- every command that "
+            f"names it then parses the id as an option, which quoting cannot fix"
+        )
     if ":" in item:
         return (
             f"{item!r}: a colon marks a dependency in another repository (`repo:ID`, "
@@ -178,6 +186,19 @@ def missing_parent(st: State, parent: str | None) -> str:
     """Why ``parent`` cannot hold a new task, or ""."""
     if parent and parent not in st.items:
         return f"no such parent {parent!r}. Add the phase or task first."
+    return ""
+
+
+def unknown_needs(st: State, needs: list[str] | None) -> str:
+    """Why any of ``needs`` names no id in the queue -- a typo that would wait on an id
+    that never exists -- with a 'did you mean', or "". Checked on `task add` and on
+    `update --needs`/`--add-needs`, where an unknown id was accepted silently and the
+    dependent then waited forever (B4d23497469)."""
+    for need in needs or []:
+        if need not in st.items:
+            near = difflib.get_close_matches(need, sorted(st.items), n=1, cutoff=0.6)
+            hint = f" Did you mean '{near[0]}'?" if near else ""
+            return f"no such id {need!r}. Add it first, or fix the typo.{hint}"
     return ""
 
 

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
@@ -52,7 +55,7 @@ from ...services.export import select as export_select
 from ...services.export.query import ExportError
 from ...services.gates import load_gates
 from ...services.guidance import ruleview as RULEVIEW
-from ...services.review import load_reviewers
+from ...services.review import degraded_notes, load_reviewers
 from ...views import human
 from ...views.markdown import render_views
 from .._base import _load
@@ -63,7 +66,7 @@ from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
-from .waitcycles import wait_cycles, wait_findings, wait_order
+from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
@@ -246,6 +249,35 @@ def _loose_shards(repo: Path) -> list[str]:
     ]
 
 
+@contextmanager
+def _check(timings: list[tuple[str, float]], name: str) -> Iterator[None]:
+    """Time one named doctor check, appending ``(name, elapsed_seconds)`` to `timings`.
+
+    FOC-doctor-slow: doctor ran over 14 minutes on a 116 MB log with nothing saying
+    WHERE. Timing every check makes the slow one a named row instead of a silent wait,
+    and an over-budget row is reported as a note below.
+    """
+    started = CLOCK.monotonic()
+    try:
+        yield
+    finally:
+        timings.append((name, CLOCK.monotonic() - started))
+
+
+def _over_budget_notes(
+    timings: list[tuple[str, float]], budget: float
+) -> tuple[dict[str, float], list[str]]:
+    """A note per check that exceeded its budget (FOC-doctor-slow); the timing table always."""
+    table = {name: round(secs, 2) for name, secs in timings}
+    if budget <= 0:
+        return table, []
+    return table, [
+        f"doctor check {name} took {secs:.1f}s — over the {budget:g}s per-check budget"
+        for name, secs in timings
+        if secs > budget
+    ]
+
+
 def doctor(
     repo: Path,
     *,
@@ -267,14 +299,17 @@ def doctor(
 
     The body is PROSE on both surfaces (problems with advice attached), rendered by `views/human.py`.
     """
-    log, cfg, st = _load(repo, agent)
+    timings: list[tuple[str, float]] = []
+    with _check(timings, "load"):
+        log, cfg, st = _load(repo, agent)
     # `--accept-lost-events` is the operator's explicit word that a shard's loss is known
     # (Ba24a8d32ee): the marks take the present counts. Nothing in the log is touched.
     accepted = SM.accept(repo, log) if accept_lost_events else []
     # One read of the whole log serves the data repairs and every pass below (the warm
     # parse cache makes it a digest rather than a re-parse, see infra/log.py), and saves
     # the gate-rate pass from folding again.
-    repair_ctx = RP.context(repo, log, cfg)
+    with _check(timings, "repairs.context"):
+        repair_ctx = RP.context(repo, log, cfg)
     if accept_history:  # recorded as `repair.applied`; the report below reads it back
         reason, note, only, approval = history  # (reason, note, only ids, approval)
         why, stamp = RP.accepted.gate(repair_ctx, agent, reason, only, approval)
@@ -312,7 +347,8 @@ def doctor(
     notes.extend(RULEVIEW.notes(repo, cfg, st))
     notes.extend(OVR.notes(events, st, cfg))  # forced completions, skips, typed-chat T3 uses ...
     notes.extend(AUD.findings(st, cfg))  # an approved answer without proof, an expiring approval
-    notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
+    with _check(timings, "embed"):
+        notes.extend(EMB.doctor_notes(cfg))  # the [rag] extra: present or not, never silent
 
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
@@ -349,7 +385,8 @@ def doctor(
         notes.append(release)
     notes.extend(fold_problem_notes(st))
 
-    p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
+    with _check(timings, "plan"):
+        p = plan_for(repo, log, cfg, st, purpose="structure", agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
     problems += _contest_problems(st)
 
@@ -391,6 +428,10 @@ def doctor(
     except Exception:
         urls = []
     notes.extend(CT.warnings(repo, cfg, urls))
+    # Reviewers a quota/exhaustion wall marked degraded and shed (B8efd3d1bc4): surfaced
+    # here rather than as a run of silently `unavailable` rubber_duck/critic gates. Only a
+    # mark still within [review].degraded_cooldown_s is still a shed (bug B066719c493).
+    notes.extend(degraded_notes(st, cfg.review.degraded_cooldown_s))
 
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
@@ -406,8 +447,9 @@ def doctor(
     notes += _unknown_author_notes(repo, log, repair_ctx)
     notes += RP.doctor_notes(repair_ctx, skip=RP.DOCTOR_WORDED)
 
-    for f in PR.detect(log.read_all(), st, cfg):
-        (problems if f.severity == "block" else notes).append(f.render())
+    with _check(timings, "progress"):
+        for f in PR.detect(log.read_all(), st, cfg):
+            (problems if f.severity == "block" else notes).append(f.render())
     found, held = _recovery_findings(L.scan(log, cfg, repo))
     problems += found
     notes += held
@@ -421,20 +463,28 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
-    ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    problems += wait_findings(
+        (waits := wait_report(log, st, cfg, events)).cycles, cfg, waits.alarms
+    )
+    ordered = wait_order(log, st, cfg, waits.cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
+    table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
+    notes += over
     data: dict[str, Any] = {
         "problems": problems,
         "notes": notes,
+        "check_timings": table,
+        "over_budget": over,
         "events": st.event_count,
         "items": len(st.items),
         "agent": log.agent_id,
         "repo": str(repo),
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
-        "wait_cycles": [c.as_dict() for c in cycles],
+        "wait_cycles": [],
+        "wait_alarms": [],
+        **wait_rows(*waits),
         "auto_order": ordered,
         **cost.data(),
     }

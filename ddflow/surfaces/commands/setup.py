@@ -267,7 +267,41 @@ def cmd_upgrade(a, c: Ctx) -> int:
     return out.exit
 
 
+def _names_defaults(a) -> bool:
+    """Is this `config defaults`, or a `--write` that only that form takes?"""
+    word = not a.set and list(getattr(a, "value", None) or []) == ["defaults"]
+    return word or bool(getattr(a, "write", False))
+
+
+def _config_defaults(a, c: Ctx) -> int:
+    """`ddflow config defaults [--write]`: the packaged file, or the file regenerated."""
+    write = bool(getattr(a, "write", False))
+    if a.set:  # only `--set K V --write` reaches here: `--set K defaults` is a plain write
+        print("`config defaults` takes no --set: ddflow config defaults [--write]", file=sys.stderr)
+        return FAIL
+    if list(getattr(a, "value", None) or []) != ["defaults"]:
+        print("--write goes with `defaults`: ddflow config defaults --write", file=sys.stderr)
+        return FAIL
+    flags = (
+        ("--append-toml", a.append_toml),
+        ("--filter", a.filter),
+        ("--explain", a.explain),
+        ("--local", getattr(a, "local", False)),
+    )
+    if stray := [name for name, given in flags if given]:
+        print(f"`config defaults` takes only --write, not {', '.join(stray)}", file=sys.stderr)
+        return FAIL
+    out = A.configure(c.repo, A.ConfigEdit(defaults=True, write=write), agent=c.requested_agent)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    c.out(out.data["text"].rstrip("\n"), out.body(("path", "text", "changed")))
+    return OK
+
+
 def cmd_config(a, c: Ctx) -> int:
+    if _names_defaults(a):
+        return _config_defaults(a, c)
     key, value = _config_key_value(a)
     if getattr(a, "value", None) and not key:
         print("a value alone sets nothing: ddflow config KEY VALUE [--local]", file=sys.stderr)

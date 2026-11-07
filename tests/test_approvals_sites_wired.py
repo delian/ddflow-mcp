@@ -203,3 +203,35 @@ def test_an_agents_claim_force_is_not_a_bypass(proj, monkeypatch):
     out = C.claim(proj, "T1", no_worktree=True, agent="bot", force=True, approval="request")
     assert out.exit == 3 and "approval Q" in out.reason
     assert calls and not any(calls)
+
+
+def test_config_and_phase_approval_refusals_name_one_refusal(proj):
+    """B-config-phase-doubled-refusing-prefix: `config --approval request` and
+    `phase complete --approval request` each stacked a second 'refusing: ' onto
+    `consume.operator_gate`'s already-prefixed message (the stack fixed for the
+    complete.force path)."""
+    code, _o, err = run_cli(
+        proj, "config", "ci.pins_precheck", "false", "--approval", "request", agent="bot"
+    )
+    assert code == 3, err
+    assert "refusing: " in err and "refusing: refusing: " not in err, err
+    # A real id the spend refuses is another already-prefixed path the old caller doubled.
+    code, _o, err = run_cli(
+        proj, "config", "ci.pins_precheck", "false", "--approval", "Qnope", agent="bot"
+    )
+    assert code == 3, err
+    assert "refusing: " in err and "refusing: refusing: " not in err, err
+
+    log = EventLog(proj, "operator")
+    log.append("phase.added", "P9", {"title": "planned"})
+    log.append("task.added", "P9.T1", {"parent": "P9", "title": "one"})
+    log.append("item.completed", "P9.T1", {"kind": "task", "evidence": "done"})
+    code, _o, err = run_cli(proj, "phase", "complete", "P9", "--approval", "request", agent="bot")
+    assert code == 3, err
+    assert "refusing: " in err and "refusing: refusing: " not in err, err
+
+    # The no-`--approval` steering refusal is the one `operator_gate` path it does NOT
+    # prefix, so it must still carry exactly one 'refusing: ' (added here, never doubled).
+    code, _o, err = run_cli(proj, "phase", "complete", "P9", agent="bot")
+    assert code == 3, err
+    assert "refusing: " in err and "refusing: refusing: " not in err, err

@@ -95,15 +95,18 @@ def file(
     reason: str = "",
     now: float | None = None,
     auto: bool = False,
+    dedupe: bool = True,
 ) -> Filed | None:
     """Request an approval for ``canon`` (or return the identical one still waiting).
 
     ``auto`` marks a filing the REFUSAL SITE makes on the agent's behalf: it honours
-    `[approvals].auto_request` (D-RA-Q12) and returns None when that is off."""
+    `[approvals].auto_request` (D-RA-Q12) and returns None when that is off. ``dedupe``
+    False files a NEW ask even when an identical one is still waiting: the retry-threshold
+    rule refiles on purpose, so `refusals` counts each unanswered filing (Bf7c4b174ae)."""
     if auto and not cfg.approvals.auto_request:
         return None
     digest = canon.digest()
-    if (row := pending_for(state, canon, now)) is not None:
+    if dedupe and (row := pending_for(state, canon, now)) is not None:
         return Filed(row["id"], False, digest)
     ask_id = E.new_ask_id()  # in the text: no two requests share a question, whatever their digest
     asked = E.request(

@@ -1,10 +1,11 @@
-"""`ddflow harness list | show | doctor | facts | add | lint | test | probe`: the human surface for `api.harness`."""
+"""`ddflow harness list | show | doctor | facts | add | lint | test | probe | record`: the human surface for `api.harness`."""
 
 from __future__ import annotations
 
 import sys
 
 from ...api.harness import harness_view
+from ...api.harness_record import harness_record
 from ...api.model_cmds import model_show
 from ..context import FAIL, OK, Ctx
 
@@ -25,6 +26,25 @@ def cmd_harness(a, c: Ctx) -> int:
         return FAIL
     c.out(out.data["message"], out.body(tuple(k for k in out.data if k != "message")))
     return out.exit if out.exit != OK else OK
+
+
+def cmd_harness_record(a, c: Ctx) -> int:
+    out = harness_record(
+        c.repo,
+        a.id,
+        prepare=a.prepare,
+        source=a.source,
+        write=a.write,
+        dest=a.dest,
+        version=a.agent_version,
+        agent=c.requested_agent,
+        called_from=c.called_from,
+    )
+    if "message" not in out.data:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    c.out(out.data["message"], out.body(tuple(k for k in out.data if k != "message")))
+    return out.exit
 
 
 def cmd_model(a, c: Ctx) -> int:

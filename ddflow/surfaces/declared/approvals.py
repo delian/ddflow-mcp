@@ -165,7 +165,15 @@ COMMANDS: tuple[Command, ...] = (
         summary="record the person's answer from the harness transcript (never from your word)",
         tool="",
         reason="CLI-only with the rest of `approvals`",
-        params=(Param("id", required=True, positional=True, cli_help="the request id"),),
+        params=(
+            Param("id", positional=True, nargs="?", default="", cli_help="the request id"),
+            Param(
+                "all",
+                type="boolean",
+                default=False,
+                cli_help="auto-attest every pending request whose canonical question is answered (a chat answer alone approves each)",
+            ),
+        ),
     ),
     Command(
         path=("approvals", "approve"),

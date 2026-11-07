@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ...core import blobref as B
+from ...services.gates.failed_review import _cleared_after_delta
 from ...services.guidance import inject as GI
 from .records import _last_review
 
@@ -87,6 +88,7 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
     if not found or isinstance(found, B.Unavailable):
         return context
     mine = it.triage.get(gate, {})
+    cleared = _cleared_confirmed(it, gate) if kind == "delta" else set()
     lines = [
         "## Previous findings on this change, and the author's triage",
         "",
@@ -102,13 +104,32 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         "",
         *_floor_lines(floor),
     ]
-    for n, f in enumerate(found, 1):
-        lines.extend(_finding_lines(n, f, mine, supers))
+    shown = 0
+    for f in found:
+        if str(f.get("digest") or "") in cleared:
+            continue
+        shown += 1
+        lines.extend(_finding_lines(shown, f, mine, supers))
+    if shown == 0:
+        return context
     say(
-        f"re-review: the whole diff of {item}, with {len(found)} previous {gate} finding(s) "
+        f"re-review: the whole diff of {item}, with {shown} previous {gate} finding(s) "
         "and their triage (D-gate-economy)"
     )
     return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)
+
+
+def _cleared_confirmed(it, gate: str) -> set[str]:
+    """Digests of ``gate``'s CONFIRMED findings a later delta round already re-checked and
+    did not raise again. Their fix sits before the next delta's base, so that delta cannot
+    see it and must not re-send the finding (bug B2e1f4aedb5: the reviewer reported one
+    again as unfixed because the named probe was not in the diff)."""
+    runs = it.runs_of(gate)
+    return {
+        str(d)
+        for d, t in (it.triage.get(gate, {})).items()
+        if t.get("verdict") == "confirmed" and _cleared_after_delta(runs, str(d))
+    }
 
 
 def _finding_lines(n: int, f: dict, mine: dict, supers) -> list[str]:

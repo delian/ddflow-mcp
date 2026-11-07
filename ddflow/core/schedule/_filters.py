@@ -18,7 +18,7 @@ from ...config import Config
 from ..admission import glob_conflict
 from ..model import Item, Lease, State
 from ._readiness import Blocked, plan_blocker
-from ._resources import capacities, resource_shortfall
+from ._resources import capacities, interrupted, resource_shortfall
 
 
 @dataclass
@@ -48,7 +48,10 @@ LEASE_FILTERS: set[str] = set()
 #: `ORDER`, left to right; `register_key` adds one at a position.
 Key = Callable[[PlanCtx, Item], object]
 KEYS: dict[str, Key] = {}
-ORDER: list[str] = ["bugs_first", "priority", "id"]
+#: The fill order of the orchestrator's next-task selection (B4e2a112a97): recover an
+#: interrupted item first, then bugs, then a task under no phase, then the rest. Each
+#: name maps to a key registered below; `register_key` inserts at a position.
+ORDER: list[str] = ["recover_first", "bugs_first", "unphased_first", "priority", "id"]
 
 
 def register_filter(name: str, fn: Filter, *, lease: bool = False) -> None:
@@ -125,7 +128,21 @@ register_filter("deps", _f_deps)
 register_filter("lease", _f_lease, lease=True)
 register_filter("globs", _f_globs, lease=True)
 register_filter("resources", _f_resources, lease=True)
+
+
+def _interrupted(ctx: PlanCtx, it: Item) -> bool:
+    """True for an item mid-flight with nobody on it: recover it before anything new."""
+    return interrupted(ctx.state, it, ctx.live) != ""
+
+
+def _unphased(ctx: PlanCtx, it: Item) -> bool:
+    """True for a task under no phase (a sub-task whose root was removed, or filed none)."""
+    return it.kind == "task" and not any(a.kind == "phase" for a in ctx.state.ancestors(it.id))
+
+
+register_key("recover_first", lambda ctx, it: not _interrupted(ctx, it))
 register_key("bugs_first", lambda ctx, it: it.id not in ctx.bugs)
+register_key("unphased_first", lambda ctx, it: not _unphased(ctx, it))
 register_key("priority", lambda ctx, it: it.priority)
 register_key("id", lambda ctx, it: it.id)
 

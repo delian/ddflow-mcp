@@ -1,0 +1,31 @@
+{
+  "_meta": {
+    "recorded": true,
+    "synthetic": false,
+    "source": "live hook stdin, `ddflow harness record`, scrubbed",
+    "version": "2.1.318 (Claude Code)",
+    "date": "2026-11-05"
+  },
+  "stdin": {
+    "session_id": "s-1",
+    "transcript_path": "~/.claude/projects/-w/s-1.jsonl",
+    "cwd": "/w",
+    "prompt_id": "00000000-0000-0000-0000-000000000001",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo PONG",
+      "description": "Echo PONG"
+    },
+    "tool_use_id": "toolu_017egLL1amFvGJYwcFvowjb5"
+  },
+  "expect": {
+    "session_id": "s-1",
+    "cwd": "/w",
+    "tool": "Bash"
+  }
+}

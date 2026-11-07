@@ -20,17 +20,16 @@ from __future__ import annotations
 import json
 import os
 import re
-import sqlite3
 import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from ...config import Config
 from ...config_sections._layers import LAYERS, layer_path, read_toml
 from ...core import clock
 from ...core.model import fold
+from ...infra.docindex import read_only_rows
 from .. import configwrite as CW
 from ..actors import resolve_actor
 from ..ask import engine as E
@@ -351,21 +350,13 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
     the agent wrote is not such a part, and a T3 act never counts (its filter wants a typed
     answer, which this is not)."""
     found: list[Attested] = []
-    try:
-        con = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=2)
-    except sqlite3.Error:
-        return found
-    try:
-        rows = con.execute(
-            "SELECT id, time_created, data FROM part "
-            "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
-            "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
-            (KILO_TOOL, since * 1000, marker),
-        ).fetchall()
-    except sqlite3.Error:
-        return found  # not a readable Kilo store (wrong schema, locked, missing): nothing there
-    finally:
-        con.close()
+    rows = read_only_rows(
+        path,
+        "SELECT id, time_created, data FROM part "
+        "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
+        "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
+        (KILO_TOOL, since * 1000, marker),
+    )  # no rows when this is not a readable Kilo store (wrong schema, locked, missing)
     for pid, created, raw in rows:
         try:
             data = json.loads(raw)
@@ -478,6 +469,24 @@ def attest(
             else:
                 tail = f"; enabled the standing window for {WINDOW_CHOICE_HOURS}h (generic policy rules on)"
     return True, f"{ask_id} {outcome} by the person who answered in {hit.file} ({hit.at}){tail}"
+
+
+def attest_pending(
+    log, cfg: Config, *, repo: Path | None = None, now: float | None = None
+) -> list[dict[str, Any]]:
+    """Auto-attest every pending request whose canonical question already has an accepted
+    answer in a transcript (B3068414423). The agent couriers the canonical `ask` payload to
+    the person, the person answers in chat, and ONE call here attests each answered request
+    from the harness-written transcript -- a chat answer alone flips it to answered, with no
+    terminal and no `approve --all`. Each result is ``{"id", "ok", "message"}`` for one
+    request that `attest` considered (nothing is invented: unanswered requests come back
+    ``ok: False`` with `attest`'s waiting message)."""
+    state = fold(log.read_all(), strict=False)
+    done: list[dict[str, Any]] = []
+    for row in E.pending(state, now):
+        ok, message = attest(log, cfg, row["id"], repo=repo, now=now)
+        done.append({"id": row["id"], "ok": ok, "message": message})
+    return done
 
 
 E.LEVEL_VERIFIERS[VIA] = verify

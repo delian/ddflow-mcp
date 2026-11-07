@@ -123,6 +123,14 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+def _commit_shards_before_merge(log, cfg, item: str) -> None:
+    """Commit the primary's uncommitted event shards before the git merge, unless the
+    strategy is a fast-forward: landing them on the target drifts it past the branch's fork
+    and makes ``git merge --ff-only`` report diverged branches instead of landing
+    (B83b4102c08). For ff-only the shards are committed after the landing, on the
+    fast-forwarded target, by the post-merge `commit_at` in `merge`."""
+    if cfg.worktree.merge_strategy != "ff-only":
+        EC.commit_at(log, cfg, "merge", f"merge {item}")
 
 
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
@@ -259,10 +267,12 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     # also moves the base by landing the event shards (B6b7e47955e); the range a caller saw
     # must not skip that commit and start from a base the caller never held (Be40e9c84d5).
     merge_since = W.rev(repo, wt.base)
-    EC.commit_at(log, cfg, "merge", f"merge {item}")
-    # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
-    # (it lands the event shards on the primary), so a landing check against a rev read
-    # before it would misread a refused git merge the shard commit caused as "landed anyway".
+    _commit_shards_before_merge(log, cfg, item)
+    # Capture the pre-merge base AFTER the shard commit above, when one was made: that
+    # commit moves the base (it lands the event shards on the primary), so a landing check
+    # against a rev read before it would misread a refused git merge the shard commit caused
+    # as "landed anyway". Under ff-only the helper commits nothing, so `landed_before` equals
+    # `merge_since`: still the right read for `_landed_anyway`, just with no shard commit stepped.
     landed_before = W.rev(repo, wt.base)
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")

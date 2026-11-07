@@ -70,7 +70,7 @@ def test_a_long_selection_queues_for_the_suite_slot_a_short_one_does_not():
     assert cfg.ci.selected_lock_tests == 20
     hooks = "SKIP=tests pre-commit run --hook-stage pre-push --all-files"
     assert CI._needs_suite_slot(cfg, hooks, _scope(5, always=3)) is False
-    assert CI._needs_suite_slot(cfg, hooks, _scope(18, always=3)) is True
+    assert CI._needs_suite_slot(cfg, hooks, _scope(21, always=3)) is True
 
 
 def test_the_knob_zero_never_queues_a_selection_and_the_whole_suite_always_does():
@@ -86,8 +86,9 @@ def test_the_boundary_is_more_than_the_limit_not_the_limit():
     hooks = "SKIP=tests pre-commit run --hook-stage pre-push --all-files"
     assert CI._needs_suite_slot(cfg, hooks, _scope(20)) is False
     assert CI._needs_suite_slot(cfg, hooks, _scope(21)) is True
-    assert CI._needs_suite_slot(cfg, hooks, _scope(15, always=5)) is False
-    assert CI._needs_suite_slot(cfg, hooks, _scope(15, always=6)) is True
+    # the always-run guards are not the change's load (Bc07bf8feb4): only the selection counts
+    assert CI._needs_suite_slot(cfg, hooks, _scope(15, always=6)) is False
+    assert CI._needs_suite_slot(cfg, hooks, _scope(20, always=22)) is False
 
 
 def test_a_placeholder_beside_n_auto_leaves_no_n_auto(monkeypatch):

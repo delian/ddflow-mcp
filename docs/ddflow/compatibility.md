@@ -83,7 +83,9 @@ release, is checked by name only).
 | `infra.store._fingerprint.SCHEMA` | 11 | the derived SQLite index (search, recall) | any release that changes its tables | none to run: the index is disposable, and a different SCHEMA, similarity version or code fingerprint rebuilds it from the log on the next read |
 | `core.textsim.VERSION` | 2 | the similarity tokens, weights and record digest | any release that changes how text is compared | the index stores it and rebuilds when it differs; nothing outside the index keeps it |
 | `services.ticks.FORMAT` | 1 | `.ddflow/local/ticks.json`, machine-local schedule state | rarely | written beside the data but not checked by readers yet: a shape change must stay readable by the old reader or be recomputed (an unreadable file reads as empty) |
+| `services.auth.STORE_VERSION` | 1 | the user-level token store (`auth/<project>.json`, hashes only, never in the project) | rarely | a store of another version verifies nothing: every token is refused until the operator pairs again |
 | `services.quota.STORE_VERSION` | 1 | the user-level `quotas.json` (usage quotas) | when the file shape changes | a newer file is read for the fields this version knows and kept whole when this one writes; an older or missing version is refused |
+| `services.meters_vendor.SNAPSHOT_VERSION` | 1 | the user-level `vendor-usage.json`, the vendor percent taken from a statusline or stream-json event | when the file shape changes | derived data: a file of another version reads as unavailable, and the next event replaces it |
 | `services.swarm.lanehooks_plugin.VERSION` | 1 | the lane-private pre-tool hook plugin template the swarm lanehooks write into a lane's home (`ddflow-lane-hook.js`, SW-lane-hooks) | when the template text changes: its digest is what the operator approves once per template | none to run: the plugin is written per lane from the template and removed with the lane; a lane keeps its own copy until it is next (re)rendered |
 
 The local state files that carry NO version are the markers and caches under `.ddflow/local/`
@@ -149,3 +151,15 @@ What checks this contract, and which tasks complete it:
 | every `--json` and MCP result names its schema version | B-uni-compat-json |
 | surface snapshots (help tree, `tools/list`, JSON schemas, `config --explain`, event kinds) compared with the previous release | B-uni-compat-tests |
 | the release's bump level comes from the declared impact in the upgrade manifest (`scripts/release_impact.py`, read by `publish.yml`), and an undeclared surface change or a too-small version step refuses the release (`scripts/release.sh`) | B-uni-compat-release-gate: `tests/test_release_gate.py` |
+
+## Upgrade note: BLAS thread cap (B4c7b7e8d5b)
+
+The `ddflow` and `ddflow-mcp` commands (not a library `import ddflow`) now set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` to `1`
+when the process has not set them (numpy's thread pool cost seconds of CPU per command on a
+many-core host), and `model2vec` is imported only when an embedding is requested. Nothing on
+disk changes and old logs replay identically. To keep the old behaviour, export the variable
+yourself before running ddflow; a value you set is never overridden.
+
+`embed.extra_installed()` (used by `ddflow doctor`) no longer imports the `[rag]` extra: before the
+first embedding it answers "the package is findable", so `ddflow doctor` may say installed for a
+findable but broken install; the first embedding request reports that as unavailable, with the reason.
