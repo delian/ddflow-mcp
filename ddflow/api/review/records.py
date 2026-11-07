@@ -254,9 +254,9 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
     empty family, so its family really is unknown."""
     mine = (getattr(it, "triage", None) or {}).get(gate, {})
     runs = it.runs_of(gate)
-    out: list[tuple[str, str]] = []
     unreadable = False
-    seen: set[str] = set()
+    fam_by_digest: dict[str, str] = {}
+    unconfirmed: set[str] = set()
     for run in runs:
         found = LB.full(run.evidence or {}).get("chunk_findings")
         if isinstance(found, B.Unavailable):
@@ -264,16 +264,19 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             continue
         for f in found if is_triageable(found) else []:
             digest = f.get("digest")
-            if not digest or digest in seen:
+            if not digest:
                 continue
-            seen.add(digest)
+            fam = (str(f.get("family") or "") or "").strip().lower()
+            if fam != "unknown" and fam:
+                # A later row's family stamp supersedes an earlier stampless row of the
+                # same digest (grok re-review of B7dbf432caa): once a re-review stamps the
+                # finding's family, that family -- not the earlier unknown -- is honoured.
+                fam_by_digest[digest] = fam
             if mine.get(digest, {}).get("verdict") == "confirmed" and not _cleared_after_delta(
                 runs, digest
             ):
-                fam = (str(f.get("family") or "") or "").strip().lower()
-                fam = "" if fam == "unknown" else fam
-                out.append((digest, fam))
-    return out, unreadable
+                unconfirmed.add(digest)
+    return [(d, fam_by_digest.get(d, "")) for d in unconfirmed], unreadable
 
 
 def _author_single_family(cfg, author_model: str) -> str | None:
