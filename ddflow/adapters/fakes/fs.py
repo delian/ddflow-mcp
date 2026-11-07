@@ -10,7 +10,8 @@ unless `ignore_errors` (the port's default). The filesystem root is refused (`Va
 from __future__ import annotations
 
 from pathlib import Path
-from shutil import Error, SameFileError
+
+from ddflow.adapters.fs import Error, SameFileError
 
 from . import fake
 

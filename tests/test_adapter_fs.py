@@ -118,6 +118,7 @@ def test_fake_records_calls_and_moves_directories():
 def test_fsio_path_operations_go_through_the_one_adapter(monkeypatch, tmp_path):
     fake = FakeFs({"/s/f": b"1", "/s/d/g": b"2"})
     monkeypatch.setattr(F, "DEFAULT", fake)
+    fake.mkdir("/t")  # copy_file now requires an existing parent, like shutil.copy2
     fsio.copy_file("/s/f", "/t/f")
     fsio.copy_tree("/s/d", "/t/d")
     fsio.move("/s/f", "/t/m")
