@@ -22,7 +22,15 @@ from .fix_task_drop import (  # noqa: F401 -- re-exported by the package
     _drop_fix_task,
     _ended_by_abandon,
 )
-from .regression import _half_node_id_why, _missing_tests, _named_tests, _unresolved_tests
+from .regression import (
+    _half_node_id_why,
+    _missing_tests,
+    _named_tests,
+    _owns_unlanded_fix,
+    _unlanded_fix_refusal,
+    _unlanded_fix_source,
+    _unresolved_tests,
+)
 
 
 def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
@@ -271,41 +279,6 @@ def _needs_fix_task_refusal(item: str, verify_ev: dict[str, Any]) -> str:
         f"cannot close {item}: the test cannot be shown to fail without the fix -- "
         f"{verify_ev.get('reason', '')}. To fix it: {verify_ev.get('remedy', '')}"
     )
-
-
-def _unlanded_fix_refusal(item: str, verify_ev: dict[str, Any]) -> str:
-    """The `bug fixed` refusal for a bug whose fix is claimed but not landed: the close is
-    held until the fix reaches the base, naming what still has to happen."""
-    return (
-        f"cannot close {item}: the fix has not landed -- {verify_ev.get('reason', '')}. "
-        f"To fix it: {verify_ev.get('remedy', '')}"
-    )
-
-
-def _unlanded_fix_source(rec) -> dict[str, str]:
-    """Why a bug whose fix task is claimed but whose branch is NOT merged cannot be closed
-    (B-bug-fixed-before-fix-lands): the regression test would run against a worktree, not
-    the base, so the bug would read fixed while the work has not landed."""
-    named = rec.fix_task or rec.item or "it"
-    return {
-        "reason": f"its fix ({named}) is still working in a worktree and its branch is "
-        "unmerged, so the regression test runs against a worktree, not the base",
-        "remedy": (
-            f"merge {named} first, then close with `ddflow complete {named} "
-            "--regression-test <test>`; or name the commit that holds the fix with `--landed <sha>`"
-        ),
-    }
-
-
-def _owns_unlanded_fix(fx, rec) -> bool:
-    """Whether ``fx`` is the BUG'S OWN fix task and its branch has not landed yet.
-
-    Only this is the premature close B-bug-fixed-before-fix-lands reports: the fix task is
-    still working in its worktree, so `bug fixed` would read fixed while that branch is not
-    on the base. A fix made in the ITEM the bug was FOUND on -- its own fix task left
-    unclaimed -- still verifies against that item's worktree, which is not landed either
-    but IS the only source of the fix (B-bug-fixed-other-item-unverified)."""
-    return bool(fx is not None and rec.fix_task and fx.id == rec.fix_task and not fx.merged_sha)
 
 
 def _record_fixed(
