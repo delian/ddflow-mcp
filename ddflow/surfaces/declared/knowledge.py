@@ -91,6 +91,50 @@ def _lesson_hits(out, a) -> str:
     return "\n".join(f"- {h['title']}\n    {(h.get('rule') or '')[:cut]}" for h in out.data["hits"])
 
 
+_LESSON_FIELDS = (
+    ("Rule", "rule"),
+    ("Why", "why"),
+    ("How", "how"),
+)
+
+
+def _lesson_text(out, a) -> str:
+    l = out.data["lesson"]
+    if l.get("contested"):
+        lines = [
+            f"{l['id']} — CONTESTED: {len(l['contested'])} definitions from different agents; "
+            f"none is in force. `ddflow resolve {l['id']} --keep <event-id|agent>` settles it"
+        ]
+        for r in l["contested"]:
+            x = r["data"]
+            lines.append(f"\n  definition {r['event']} by {r['agent']} (lamport {r['lamport']})")
+            lines.append(f"    title {x.get('title', '')!r}")
+            for label, key in _LESSON_FIELDS:
+                if x.get(key):
+                    lines.append(f"    {label}: {x[key]}")
+        return "\n".join(lines)
+    head = f"{l['id']} — {l['title']}"
+    if l.get("superseded_by"):
+        head += f" (superseded by {l['superseded_by']})"
+    lines = [head]
+    for label, key in _LESSON_FIELDS:
+        if l.get(key):
+            lines.append(f"\n{label}:\n  {l[key]}")
+    if l.get("summary"):
+        lines.append(f"\nSummary:\n  {l['summary']}")
+    if l.get("tags"):
+        lines.append(f"\nTags: {', '.join(l['tags'])}")
+    if l.get("seen_in"):
+        lines.append(f"\nSeen in: {', '.join(l['seen_in'])}")
+    if l.get("pattern"):
+        lines.append(f"\nPattern: {l['pattern']}")
+    if l.get("globs"):
+        lines.append(f"\nGlobs: {', '.join(l['globs'])}")
+    if l.get("sites"):
+        lines.append(f"\nSites: {', '.join(l['sites'])}")
+    return "\n".join(lines)
+
+
 def _dupe_pairs(out, a) -> str:
     d = out.data
     if not d["pairs"]:
@@ -250,6 +294,20 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="default: [lessons].max_results",
             ),
         ),
+    ),
+    Command(
+        path=("lesson", "show"),
+        render=_lesson_text,
+        tool="ddflow_lesson_show",
+        family="ddflow_memory",
+        action="lesson_show",
+        tier="standard",
+        description="Read ONE lesson in full by its id — its rule, why and how. `ddflow_lesson_list` "
+        "gives you the titles; this is a lesson a recall hit or a link cited by id. "
+        "Read it before re-learning it.",
+        call=lambda repo, a, agent: _api().lesson_show(repo, a["id"]),
+        payload="lesson",
+        params=(Param("id", help="Lesson id.", cli_help="", positional=True),),
     ),
     Command(
         path=("recall",),

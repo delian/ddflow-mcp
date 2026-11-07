@@ -865,6 +865,16 @@
   
   '''
 # ---
+# name: test_help[ddflow digest]
+  '''
+  usage: ddflow digest [-h] [--ask ASK]
+  
+  options:
+    -h, --help  show this help message and exit
+    --ask ASK   one entry id (kind:key): render that entry alone
+  
+  '''
+# ---
 # name: test_help[ddflow docs]
   '''
   usage: ddflow docs [-h] [--diff BASE] [{check}]
@@ -1710,6 +1720,18 @@
   
   '''
 # ---
+# name: test_help[ddflow lesson show]
+  '''
+  usage: ddflow lesson show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lesson verify]
   '''
   usage: ddflow lesson verify [-h]
@@ -1721,10 +1743,10 @@
 # ---
 # name: test_help[ddflow lesson]
   '''
-  usage: ddflow lesson [-h] {add,verify,search,list} ...
+  usage: ddflow lesson [-h] {add,verify,search,show,list} ...
   
   positional arguments:
-    {add,verify,search,list}
+    {add,verify,search,show,list}
       verify              re-scan every lesson's pattern and name the sites that reappeared
       list                list lessons, newest first: the live ones unless --all or --state
   
@@ -3598,13 +3620,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3722,6 +3744,7 @@
                           violations
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
+      digest              the operator queue: what waits on a person, as askable entries
       pair                a PERSON mints a one-time code for a named client with a role (`tokens
                           redeem` spends it)
       sync                merge the item's recorded base into its branch when that is safe; --check
@@ -3800,6 +3823,7 @@
     'ddflow decision search',
     'ddflow decision show',
     'ddflow decision supersede',
+    'ddflow digest',
     'ddflow docs',
     'ddflow doctor',
     'ddflow dupes',
@@ -3856,6 +3880,7 @@
     'ddflow lesson add',
     'ddflow lesson list',
     'ddflow lesson search',
+    'ddflow lesson show',
     'ddflow lesson verify',
     'ddflow link',
     'ddflow list',

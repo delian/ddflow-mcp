@@ -42,7 +42,13 @@ from .bugs import (  # noqa: F401
     severity_rank,
     upstream_offer,
 )
-from .lessons import LessonDraft, lesson_add, lesson_search, lessons_verify  # noqa: F401
+from .lessons import (  # noqa: F401
+    LessonDraft,
+    lesson_add,
+    lesson_search,
+    lesson_show,
+    lessons_verify,
+)
 from .memory import memory_add, memory_forget, memory_list  # noqa: F401
 from .pairs import dupes, link_record, pair_records, pairs_from  # noqa: F401
 from .regression import regression_arg_refusal  # noqa: F401
