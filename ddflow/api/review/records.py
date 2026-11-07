@@ -268,8 +268,9 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             digest = f.get("digest")
             if not digest:
                 continue
-            fam = (str(f.get("family") or "") or run_fam).strip().lower()
+            fam = (str(f.get("family") or "") or "").strip().lower()
             fam = "" if fam == "unknown" else fam
+            fam = fam or run_fam
             # A later row's family stamp supersedes an earlier stampless row of the same
             # digest, and a stampless row falls back to the run's identifying family -- the
             # same-family reviewer for the failed round B7dbf432caa names.
