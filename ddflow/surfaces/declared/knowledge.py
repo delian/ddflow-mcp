@@ -103,28 +103,28 @@ _LESSON_FIELDS = (
 
 
 def _lesson_text(out, a) -> str:
-    l = out.data["lesson"]
-    if l.get("contested"):
-        return _contested_record_text(l, _LESSON_FIELDS)
-    head = f"{l['id']} — {l['title']}"
-    if l.get("superseded_by"):
-        head += f" (superseded by {l['superseded_by']})"
+    lesson = out.data["lesson"]
+    if lesson.get("contested"):
+        return _contested_record_text(lesson, _LESSON_FIELDS)
+    head = f"{lesson['id']} — {lesson['title']}"
+    if lesson.get("superseded_by"):
+        head += f" (superseded by {lesson['superseded_by']})"
     lines = [head]
     for label, key in _LESSON_FIELDS:
-        if l.get(key):
-            lines.append(f"\n{label}:\n  {l[key]}")
-    if l.get("summary"):
-        lines.append(f"\nSummary:\n  {l['summary']}")
-    if l.get("tags"):
-        lines.append(f"\nTags: {', '.join(l['tags'])}")
-    if l.get("seen_in"):
-        lines.append(f"\nSeen in: {', '.join(l['seen_in'])}")
-    if l.get("pattern"):
-        lines.append(f"\nPattern: {l['pattern']}")
-    if l.get("globs"):
-        lines.append(f"\nGlobs: {', '.join(l['globs'])}")
-    if l.get("sites"):
-        lines.append(f"\nSites: {', '.join(l['sites'])}")
+        if lesson.get(key):
+            lines.append(f"\n{label}:\n  {lesson[key]}")
+    if lesson.get("summary"):
+        lines.append(f"\nSummary:\n  {lesson['summary']}")
+    if lesson.get("tags"):
+        lines.append(f"\nTags: {', '.join(lesson['tags'])}")
+    if lesson.get("seen_in"):
+        lines.append(f"\nSeen in: {', '.join(lesson['seen_in'])}")
+    if lesson.get("pattern"):
+        lines.append(f"\nPattern: {lesson['pattern']}")
+    if lesson.get("globs"):
+        lines.append(f"\nGlobs: {', '.join(lesson['globs'])}")
+    if lesson.get("sites"):
+        lines.append(f"\nSites: {', '.join(lesson['sites'])}")
     return "\n".join(lines)
 
 
