@@ -1860,24 +1860,28 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--force] [--approval APPROVAL] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
   
   options:
-    -h, --help         show this help message and exit
+    -h, --help           show this help message and exit
     --message MESSAGE
-    --queue            enqueue the item in the merge queue instead of landing it (`ddflow queue
-                       add`)
+    --queue              enqueue the item in the merge queue instead of landing it (`ddflow queue
+                         add`)
     --keep
     --allow-dirty
-    --allow-empty      land a branch with no commits ahead of its target (refused by default: it
-                       would record the item merged with nothing landed)
-    --branch BRANCH    for an item claimed without a worktree: the branch to land (default: the one
-                       checked out in the worktree you are standing in)
-    --model MODEL      the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and
-                       the reviewer-independence check needs it then
+    --allow-empty        land a branch with no commits ahead of its target (refused by default: it
+                         would record the item merged with nothing landed)
+    --force              with [merge].require_gates = refuse: land although required gates are
+                         unsettled (recorded as merge.forced). An agent also passes --approval
+    --approval APPROVAL  an agent: 'request' files an approval request for forcing this merge (the
+                         operator answers in chat), then the approval id
+    --branch BRANCH      for an item claimed without a worktree: the branch to land (default: the
+                         one checked out in the worktree you are standing in)
+    --model MODEL        the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and
+                         the reviewer-independence check needs it then
   
   '''
 # ---

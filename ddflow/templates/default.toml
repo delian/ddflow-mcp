@@ -504,6 +504,9 @@ max_file_bytes = 30000
 [waves]
 auto_stamp = true
 
+[merge]
+require_gates = "warn"
+
 [merge_queue]
 max_batch = 5
 run_unit_tests = false

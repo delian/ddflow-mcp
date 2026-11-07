@@ -41,6 +41,7 @@ from ..config_sections.log import LogConfig
 from ..config_sections.loops import LoopsConfig
 from ..config_sections.mcp import McpConfig
 from ..config_sections.memory import MemoryConfig
+from ..config_sections.merge import MergeConfig
 from ..config_sections.merge_queue import MergeQueueConfig
 from ..config_sections.metrics import MetricsConfig
 from ..config_sections.output import OutputConfig
@@ -163,6 +164,7 @@ class Config:
     plan: PlanConfig = field(default_factory=PlanConfig)
     quality: QualityConfig = field(default_factory=QualityConfig)
     waves: WavesConfig = field(default_factory=WavesConfig)
+    merge: MergeConfig = field(default_factory=MergeConfig)
     merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
     chore: ChoreConfig = field(default_factory=ChoreConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)

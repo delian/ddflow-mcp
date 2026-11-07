@@ -597,6 +597,15 @@
    },
    "v": 1
   },
+  "merge.forced": {
+   "fields": {
+    "agent": ["str"],
+    "approval": ["dict"],
+    "sha": ["str"],
+    "unmet_gates": ["list"]
+   },
+   "v": 1
+  },
   "phase.added": {
    "fields": {
     "body": ["str"],
@@ -1027,6 +1036,7 @@
     "borrowed": ["bool"],
     "branch": ["str"],
     "branch_head": ["str"],
+    "gates": ["dict"],
     "landed_after": ["str"],
     "landed_before": ["str"],
     "outside_globs": ["list"],

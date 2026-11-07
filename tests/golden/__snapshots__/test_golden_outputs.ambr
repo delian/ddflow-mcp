@@ -3224,6 +3224,23 @@
           never the whole queue per event. A hand edit of `wave:*` is overwritten on
           the next restamp. `false`: nothing is stamped on its own; `ddflow waves
           --stamp` still does it on request and `--check` reports what is stale.
+      merge.require_gates = 'warn'   [default]
+          What `ddflow merge` does when the item still has required gates without a
+          settled outcome (silent, unavailable, partial, failed review). 'warn'
+          (default, D-scope-focus-2026-11): the branch lands, the result and a
+          progress line list the exact unmet gates and the board reads 'merged,
+          awaiting gates'; `complete` is where they bind. 'refuse': the merge is
+          refused and names the unmet gates; a person passes `--force`, an agent
+          passes `--force --approval ID` (an operator approval bound to that exact
+          command, single-use, not spent by a refused call) and the landing is
+          recorded as a `merge.forced` event naming the gates it overrode. A failed
+          review or failed ci gate refuses in both modes. An agent's edit of this knob
+          is a `config.set`, which needs a person's approval. An unrecognised value in
+          a config file is warned about, reported by `doctor` and falls back to
+          'refuse', the strictest (a merge with unsettled required gates needs --force
+          and an approval); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
       merge_queue.max_batch = 5   [default]
           How many queue entries one `ddflow queue run` integrates before it returns
           (each merges main into its branch, regenerates the pins, runs the ci gate
