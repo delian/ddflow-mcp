@@ -66,9 +66,9 @@ forbidden_modules =
     subprocess
 allow_indirect_imports = True
 
-# Atomic writes, temporary files and locks belong in ddflow.infra.fsio.
+# Atomic writes, temporary files and locks belong in ddflow.adapters.fsio.
 [importlinter:contract:fsio-home]
-name = tempfile and fcntl are imported only by ddflow.infra.fsio, shutil only by ddflow.adapters.fs
+name = tempfile and fcntl are imported only by ddflow.adapters.fsio, shutil only by ddflow.adapters.fs
 type = forbidden
 source_modules =
     ddflow

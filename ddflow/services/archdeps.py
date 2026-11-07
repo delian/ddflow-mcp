@@ -49,8 +49,8 @@ STDLIB_FAMILIES: dict[str, tuple[str, ...]] = {
 # members. A family absent here has no home contract yet -- every current importer is the
 # baseline, and the ADP-* task that moves the family behind a port declares a home here.
 STDLIB_HOMES: dict[str, tuple[str, ...]] = {
-    "subprocess": ("ddflow.infra.proc", "ddflow.infra.git"),
-    "fsio": ("ddflow.infra.fsio",),
+    "subprocess": ("ddflow.adapters.proc", "ddflow.adapters.proc_server"),
+    "fsio": ("ddflow.adapters.fsio",),
     "shutil": ("ddflow.infra.fsio",),
     "hashlib": ("ddflow.adapters.digest",),
     "http": ("ddflow.adapters.http",),
