@@ -3069,6 +3069,14 @@
   },
   "array_schema": null
  },
+ "ddflow_digest": {
+  "command": "digest",
+  "schema": "digest@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
  "ddflow_sync": {
   "command": "sync",
   "schema": "sync@1",

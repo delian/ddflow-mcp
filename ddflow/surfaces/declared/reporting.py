@@ -407,6 +407,7 @@ COMMANDS: tuple[Command, ...] = (
         tier="all",
         family="ddflow_view",
         action="digest",
+        help_group="Reading the queue",
         summary="the operator queue: what waits on a person, as askable entries",
         description=(
             "The operator queue in one fold: every thing waiting on a person to act — "
