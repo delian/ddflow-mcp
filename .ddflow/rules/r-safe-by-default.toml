@@ -1,0 +1,10 @@
+id = "r-safe-by-default"
+title = "New enforcement ships warn or off unless a decision says otherwise; new standing rules ship off; writes dry-run first"
+tags = ["safety", "policy"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:14:57.529440+00:00"
+updated = "2026-11-03T14:14:57.529449+00:00"
+
+Decisions D-qa-evidence-answers, D-change-answers, D-baseline-red-auto-accept. RULE: every new check, gate, auto-approval, auto-apply or enforcement mode names its default in a decision: warn, advisory or off unless the operator chose enforce; standing rules and auto-apply ship off; every automatic action is logged, reversible with one call and has a kill-switch knob lockable by org policy; destructive and external actions are dry-run by default. CHECK: knob-register review and RU-check. VERIFY: what is the default, who decided it, and how is it switched off?

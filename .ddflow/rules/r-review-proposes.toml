@@ -1,0 +1,10 @@
+id = "r-review-proposes"
+title = "Periodic reviews propose; they do not change"
+tags = ["agent-parity", "schedule"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:24:29.159768+00:00"
+updated = "2026-11-03T16:24:29.159780+00:00"
+
+R-agent-parity-ops 5. RULE: a cadence or scheduled review's output is a proposal in the inbox, deduped against open items; applying it is a separate claimed task. CHECK: a test that a review job's write set is only proposal records (SCH-review-catalog). VERIFY: could this review job modify the tree or the queue directly?

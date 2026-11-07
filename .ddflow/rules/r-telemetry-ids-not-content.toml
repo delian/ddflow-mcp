@@ -1,0 +1,10 @@
+id = "r-telemetry-ids-not-content"
+title = "Telemetry carries ids, durations, counts, sizes and hashes, never content"
+tags = ["observability", "safety"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:14:45.323000+00:00"
+updated = "2026-11-03T16:14:45.323011+00:00"
+
+Decision D-observability-answers, R-observability 7. RULE: a telemetry record (event field, ring row, export) carries ids, durations, counts, sizes and hashes; prompt text, command arguments, outputs and paths are excluded by an allowlist (builds on r-secrets and PM-retention). CHECK: an allowlist schema test per telemetry record (OBS-cmd-log, PM-store). VERIFY: could this field contain text a user or file wrote?
