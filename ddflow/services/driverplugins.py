@@ -8,29 +8,28 @@ Operator decision D-DRV-Q1 (option C now): a third-party driver registers in one
 * ``executable`` -- an external program speaking the versioned JSON-over-stdio protocol
   ``KNOWN_PROTOCOL_VERSIONS`` defines; it declares the version it speaks and the argv to run it.
 
-Registration is operator-only (D-DRV-5, D-DRV-Q5): a plugin is declared in the operator's
-own layers -- the user dir (``~/.config/ddflow/driver_plugins.toml``, or under
-``$XDG_CONFIG_HOME``) and machine-local (``.ddflow/local/driver_plugins.toml``). The project
-layer (``.ddflow/driver_plugins.toml``) is deliberately absent: a cloned project can describe
-drivers, never register a program ddflow will run, so ``registration_files`` reads the operator
-layers and not the project's.
+Registration is operator-only (D-DRV-5, D-DRV-Q5): a plugin is declared in the operator's own
+directory -- the user dir (``~/.config/ddflow/driver_plugins.toml``, or under ``$XDG_CONFIG_HOME``)
+-- which lives outside the repository. A project layer file (``.ddflow/driver_plugins.toml``)
+and the machine-local directory inside the checkout are not read at all, so a cloned project can
+describe drivers, never register a program ddflow runs.
 
-Trust and sandbox: each plugin carries ``trust`` (``operator`` or ``third-party``). An
-``operator`` plugin runs in-process (a ``Lane`` built by its entry point, like the in-tree
-transports) with the operator's trust. A ``third-party`` plugin is external: it must be an
-``executable`` (out-of-process) so its ``sandbox`` holds -- the exact env NAMES it may read,
-the same rule as a ``LaunchSpec``: secrets travel by env NAME and their values stay out of
-every repr, and an unlisted ambient name never reaches it. In-process code cannot be sandboxed
-(in-process, ``os.environ`` is visible), which is why an in-process ``entry_point`` is
-operator-only and a ``third-party`` plugin is refused unless it is an executable.
+Trust and sandbox: each plugin carries ``trust`` (``operator`` or ``third-party``) and a
+``sandbox`` -- the exact env NAMES its agent may read, the same rule as a ``LaunchSpec``:
+secrets travel by env NAME, their values stay out of every repr, and an unlisted ambient name
+never reaches the agent. The sandbox is applied at launch (``Lane.start`` reads ``LaunchSpec.env``
+name-by-name); registration in the operator directory is what lets an in-process entry point run
+unimpeded (the operator vouched for that code when they wrote the file). An operator entry point
+is registered and built in-process; a third-party plugin declares its trust and sandbox on the
+registration and the same ``Plugin`` record carries both to the launch path.
 
 Nothing is enabled before conformance: the SDK checks the structure an entry point must honour
 (it builds a ``Lane`` whose capabilities are all known), and the version an executable must
 speak; a plugin that does not, or that declares a protocol version this ddflow does not speak,
 is refused (``PluginError``), never run half-read. Full behavioural conformance is the offline
-DRV-conformance suite's job; this module runs the registration-time checks. Major versions
-define compatibility (the Terraform plugin protocol, research driver-architecture 4.5); a byte
-this code does not know is "unavailable: upgrade ddflow".
+DRV-conformance suite's job (a package module this SDK does not import); this module runs the
+registration-time checks. Major versions define compatibility (the Terraform plugin protocol,
+research driver-architecture 4.5); a byte this code does not know is "unavailable: upgrade ddflow".
 """
 
 from __future__ import annotations
@@ -84,17 +83,16 @@ def user_dir() -> Path:
     return Path(base) / "ddflow"
 
 
-def registration_files(
-    root: Path | str, user_home: Path | str | None = None
-) -> tuple[Path, ...]:
-    """The operator-only layers a plugin may be declared in, weakest first: user, local.
+def registration_files(user_home: Path | str | None = None) -> tuple[Path, ...]:
+    """The operator-only layer a plugin may be declared in: the user ddflow directory.
 
-    The project layer (``.ddflow/driver_plugins.toml``) is not here: D-DRV-Q5 keeps keys that
-    run a process operator-only, so a cloned project can never register a program ddflow runs.
+    It lives outside the repository, so a cloned project can never register a program ddflow runs
+    (D-DRV-Q5 keeps keys that run a process operator-only). A project file
+    (``.ddflow/driver_plugins.toml``) and the machine-local directory inside the checkout are
+    not read at all.
     """
     ud = Path(user_home) if user_home is not None else user_dir()
-    root = Path(root)
-    return (ud / "driver_plugins.toml", root / ".ddflow" / "local" / "driver_plugins.toml")
+    return (ud / "driver_plugins.toml",)
 
 
 def _is_str_list(value: Any) -> bool:
@@ -130,11 +128,6 @@ def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
             f"{source}: {name}: protocol {protocol} is not one this ddflow speaks "
             f"({sorted(KNOWN_PROTOCOL_VERSIONS)}): unavailable: upgrade ddflow"
         )
-    if kind == "entry_point" and trust == "third-party":
-        raise PluginError(
-            f"{source}: {name}: a third-party plugin is external: kind must be 'executable' so "
-            "its sandbox holds, because in-process entry points are operator-only"
-        )
     sandbox = table.get("sandbox", [])
     if not _is_str_list(sandbox):
         raise PluginError(f"{source}: {name}: sandbox is a list of env names")
@@ -159,17 +152,15 @@ def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
     )
 
 
-def discover_plugins(
-    root: Path | str, user_home: Path | str | None = None
-) -> dict[str, Plugin]:
-    """Every plugin the operator has registered, keyed by name, later layers winning.
+def discover_plugins(user_home: Path | str | None = None) -> dict[str, Plugin]:
+    """Every plugin the operator has registered, keyed by name.
 
-    A declaration an operator layer makes with an unknown key, kind, trust label or protocol
-    version is refused (a typo must not silently read as "not provided"), and an unknown
-    protocol version is "unavailable: upgrade ddflow", never half-read.
+    A declaration with an unknown key, kind, trust label or protocol version is refused (a typo
+    must not silently read as "not provided"), and an unknown protocol version is "unavailable:
+    upgrade ddflow", never half-read.
     """
     out: dict[str, Plugin] = {}
-    for path in registration_files(root, user_home):
+    for path in registration_files(user_home):
         if not path.is_file():
             continue
         try:
@@ -192,7 +183,10 @@ def _import_entry_point(spec: str) -> Any:
     module, sep, attr = spec.partition(":")
     if not sep or not module or not attr:
         raise PluginError(f"an entry point is 'package.module:attr'; got {spec!r}")
-    obj: Any = import_module(module)
+    try:
+        obj: Any = import_module(module)
+    except Exception as exc:
+        raise PluginError(f"entry point {spec!r} cannot be imported: {exc}") from exc
     for part in attr.split("."):
         try:
             obj = getattr(obj, part)
@@ -204,25 +198,23 @@ def _import_entry_point(spec: str) -> Any:
 def _build_lane(spec: str) -> Lane:
     """The ``Lane`` a conforming entry point names: the object itself, or what calling it gives."""
     obj = _import_entry_point(spec)
-    lane = obj() if callable(obj) else obj
+    try:
+        lane = obj() if callable(obj) else obj
+    except Exception as exc:
+        raise PluginError(f"entry point {spec!r} failed to build a Lane: {exc}") from exc
     if isinstance(lane, Lane):
         return lane
     raise PluginError(f"{spec!r} does not build a Lane (start/events/steer/stop/status)")
 
 
-def load(
-    name: str,
-    root: Path | str | None = None,
-    user_home: Path | str | None = None,
-) -> Lane:
+def load(name: str, user_home: Path | str | None = None) -> Lane:
     """Enable ``name``: discover it, run conformance, then build its in-process ``Lane``.
 
     Raises ``PluginError`` when ``name`` is not registered, when it is an external executable
     (run through the JSON-stdio transport, not in-process), or when it does not build a Lane
-    with only known capabilities. ``root`` defaults to the current directory.
+    with only known capabilities.
     """
-    root = Path(root) if root is not None else Path.cwd()
-    plugins = discover_plugins(root, user_home)
+    plugins = discover_plugins(user_home)
     plugin = plugins.get(name)
     if plugin is None:
         known = ", ".join(sorted(plugins)) or "(none)"
