@@ -141,7 +141,8 @@ def operator_only_violations(raw: Any) -> list[str]:
 def _read_bytes_bounded(path: Path) -> bytes:
     """One pack or descriptor file, bounded: ``read(max+1)`` ends a /dev/zero or growing
     file instead of reading until OOM. The cap is the same one a fetched pack has."""
-    data = path.open("rb").read(MAX_PACK_BYTES + 1)
+    with path.open("rb") as f:
+        data = f.read(MAX_PACK_BYTES + 1)
     if len(data) > MAX_PACK_BYTES:
         raise PackError(f"{path.name}: larger than {MAX_PACK_BYTES} bytes, not a descriptor file")
     return data
@@ -226,7 +227,10 @@ def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any
         got = content_digest(data)
         if got != digest:
             raise PackError(f"pack digest mismatch: pinned {digest[:12]}…, content {got[:12]}…")
-    text = data if isinstance(data, str) else data.decode("utf-8")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PackError("not UTF-8") from exc
     require_known_schema(text)
     raw = tomllib.loads(text)
     bad = operator_only_violations(raw)

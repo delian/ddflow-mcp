@@ -145,6 +145,13 @@ def test_a_bare_url_pack_without_digest_is_refused():
         DP.load_pack("https://example.test/pack.toml")
 
 
+def test_a_local_pack_of_non_utf8_bytes_is_refused(tmp_path):
+    p = tmp_path / "pack.toml"
+    p.write_bytes(b"\xff")
+    with pytest.raises(DP.PackError, match="not UTF-8"):
+        DP.load_pack(str(p))
+
+
 def test_a_local_pack_matching_its_digest_loads(tmp_path):
     p = tmp_path / "pack.toml"
     p.write_bytes(_GOOD.encode("utf-8"))
