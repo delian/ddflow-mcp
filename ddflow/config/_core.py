@@ -81,15 +81,22 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
 
 
 class _SectionFields:
-    """Mixes every `[section]` dataclass into `Config` as a field, in the registry's order.
-
-    `declare()` is the ONE place a section name maps to a class (r-extension-contract,
-    B-config-section-needs-hub-edit), so `SECTION_CLASSES` is complete by the time `Config`
-    is declared from it, and a new section edits only its own file -- never this field
-    list (there is none) and never `ddflow/config/__init__.py`'s re-exports."""
+    """Mixes every `[section]` dataclass into `Config` as a field, alphabetically by
+    section name (sorted discovery, r-extension-contract). `declare()` is the ONE place a
+    section name maps to a class (r-extension-contract, B-config-section-needs-hub-edit), so
+    `SECTION_CLASSES` is complete by the time `Config` is declared from it, and a new
+    section edits only its own file -- never this field list (there is none) and never
+    `ddflow/config/__init__.py`'s re-exports. `Config` is only ever built as `Config()`, so
+    the alphabetical field order has no positional caller."""
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
+        if hasattr(cls, "_section_fields_injected"):
+            # A subclass of `Config` inherits the section fields; this hook runs for it
+            # too (it is inherited), and re-adding the fields would make `@dataclass`
+            # treat them as shadowing and raise.
+            return
+        cls._section_fields_injected = True
         # Prepend the section fields so they stay BEFORE the bookkeeping fields declared in
         # the class body (a section was the first `fields(Config)` entry, never `sources`:
         # `__init_subclass__` runs after the body, so appending would move `sources` first
