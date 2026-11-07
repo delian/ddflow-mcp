@@ -165,9 +165,11 @@ def auto_decision(
     test in a file the item changed or whose import reaches a changed file. A test selected
     only because it DECLARES it governs the changed path (a whole-tree guard such as
     `tests/test_architecture_guards.py` with ``GOVERNS = ("ddflow/**", ...)``) is reached
-    trivially -- it governs the whole tree, so its presence in the selection is not evidence
-    this change caused its failure -- and blocks only when the guard file itself changed
-    (B-baseline-reach-blocks-red-main-fix)."""
+    trivially -- it governs the whole tree, so its presence in the selection is not itself
+    evidence this change caused its failure. Such a guard blocks only when the guard file
+    itself changed; the guard's own violation sites are compared against the base separately
+    in `baseline_red` (a new offender is already not ``red``), so the reach check never has to
+    look inside its output (B-baseline-reach-blocks-red-main-fix)."""
     out: dict[str, Any] = {"accepted": False, "ids": list(ids)}
     if getattr(cfg.gates, KNOB) != "on":
         return {**out, "why": f"[gates].{KNOB} is off: a person accepts it"}
@@ -180,8 +182,6 @@ def auto_decision(
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
-    # A test file blocks when the item changed it, or when the selection reaches it because it
-    # imports the changed code (a governed whole-tree guard is exempt -- see the docstring).
     reached = {t.path for t in (*sel.tests, *sel.cut)}
     inside = [f for f in test_files_of(ids) if f in changed or (f in reached and f not in governs)]
     if inside:
