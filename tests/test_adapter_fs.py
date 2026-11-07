@@ -197,6 +197,9 @@ def test_fake_replace_path_mirrors_local_on_directories():
     with pytest.raises(OSError) as _exc:
         FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/child")
     assert type(_exc.value) is OSError
+    # the filesystem root is refused, like move/copy_tree/rmtree
+    with pytest.raises(ValueError):
+        FakeFs({"/f": b"1"}).replace_path("/", "/new")
 
 
 def test_fake_mirrors_shutil_on_directories():

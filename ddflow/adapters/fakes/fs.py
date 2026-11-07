@@ -128,12 +128,12 @@ class FakeFs:
             return  # shutil.move of a path onto itself is a no-op
         elif d in self.files and s not in self.files:
             raise FileExistsError(d)  # a directory over a file
-        if d.startswith(s + "/"):
-            raise ValueError(f"cannot move {s} into itself ({d})")
         self._require_parent(d)
         if s in self.files:
             self.files[d] = self.files.pop(s)
             return
+        if d.startswith(s + "/"):  # only a directory moves into its own subtree
+            raise ValueError(f"cannot move {s} into itself ({d})")
         self._relocate_dir(s, d)
 
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
@@ -163,12 +163,12 @@ class FakeFs:
             self.files[d] = self.files.pop(s)
             return
         # a directory: os.replace renames it over a new name or an empty one
-        if d.startswith(s + "/"):  # replacing a directory into its own descendant
-            raise OSError(f"cannot replace a directory into itself ({d})")
         if d in self.files:  # a directory over an existing file
             raise NotADirectoryError(d)
+        self._require_parent(d)
+        if d.startswith(s + "/"):  # into its own descendant (EINVAL)
+            raise OSError(f"cannot replace a directory into itself ({d})")
         if self._under(d) or self._dirs_under(d):
             raise OSError(f"cannot replace the non-empty directory {d!r}")
-        self._require_parent(d)
         self.dirs.discard(d)
         self._relocate_dir(s, d)
