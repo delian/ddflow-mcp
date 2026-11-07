@@ -130,7 +130,9 @@ def test_the_base_is_run_once_per_sha_and_shared(repo) -> None:
 
     def run(gdef, cwd):
         calls.append(gdef.command)
-        return "failed", {"failed_tests": [ID]}
+        # The failure text is what the cache hangs the round-trip on: an entry with no text
+        # is re-run to spot a new offender, so without it the 2nd call would not hit "cached".
+        return "failed", {"failed_tests": [ID], "failed_reasons": {ID: "assert 1 == 2"}}
 
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
     a = BR.on_base(repo, "main", gdef, [ID], run, 3600)
