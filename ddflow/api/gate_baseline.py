@@ -46,7 +46,9 @@ def apply(  # noqa: PLR0913, PLR0917
     if not ids:
         return result, why
     base = it.base or W.default_branch(repo)
-    found = BR.on_base(repo, base, probe, ids, rerun, cfg.gates.baseline_cache_ttl_s, cwd or repo)
+    found = BR.on_base(
+        repo, base, probe, ids, rerun, cfg.gates.baseline_cache_ttl_s, cwd or repo, BR.failure_sigs(seen)
+    )
     ev["baseline"] = found
     if not found["red"]:
         return _not_red(ev, found, base, ids, result, why)
@@ -76,14 +78,21 @@ def _not_red(
         return result, why
     blind = set(found.get("unmeasured") or ())
     known = blind | set(found.get("still_failing") or ())
+    changed = [i for i in found.get("different") or (())]
     fresh = [i for i in ids if i not in known]
     if fresh:
         found["new_failures"] = fresh[: BR.SHOWN * 4]
         more = f"; {len(blind)} more could not be measured there" if blind else ""
+        note = ""
+        if changed:
+            note = (
+                f"; {', '.join(changed[: BR.SHOWN])} failed on {base} too, but differently "
+                f"(new offender in an already-red test)"
+            )
         return result, (why + "; " if why else "") + (
             f"new failure(s) not failing on {base}: {', '.join(fresh[: BR.SHOWN])}"
             f"{' ...' if len(fresh) > BR.SHOWN else ''} (a timing flake counts as new unless "
-            f"it also fails on the base){more}"
+            f"it also fails on the base){note}{more}"
         )
     if not blind:
         return result, why
