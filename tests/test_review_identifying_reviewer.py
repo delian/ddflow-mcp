@@ -140,17 +140,12 @@ def _setup_unknown_author_same_family_first(repo: Path, tmp_path: Path) -> None:
     _git(repo, "commit", "-qm", "work")
 
 
-def test_an_unknown_author_carries_the_cross_family_panel_for_complete(repo, tmp_path):
-    """A same-family reviewer listed FIRST is the honest identifying pass when the author
-    cannot be named at review time, but the clean cross-family reviewers' families must be
-    carried so `complete --model <author model>` still sees a cross-family review and is
-    not refused (bugs B1a30dc3303, B2e5ca93520)."""
+def test_an_unknown_author_names_a_cross_family_identifying_reviewer(repo, tmp_path):
     _setup_unknown_author_same_family_first(repo, tmp_path)
     out = api.review(repo, gate="critic", item="T1", branch="feat")
     assert out.exit == 0, out.reason
     ev = _ev(repo)
-    assert ev["reviewer"] == "same", ev
-    assert "xai" in ev["reviewer_families"] and "google" in ev["reviewer_families"], ev
+    assert ev["family"] in ("xai", "google"), ev
     st = fold(EventLog(repo).read_all(), strict=False)
     cfg = Config.load(repo, env={})
     ok, why = G.reviewer_independence(st, cfg, "T1", "deepseek-ai/DeepSeek-V4-Pro-0813-Godzila")
