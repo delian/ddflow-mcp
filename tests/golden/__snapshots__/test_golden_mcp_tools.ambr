@@ -873,7 +873,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "Why (shown to the person as untrusted)."
+          "description": "ask: Why (shown to the person as untrusted). message: Why it wakes the receiver."
          },
          "all": {
           "type": "boolean",
