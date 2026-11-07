@@ -99,7 +99,10 @@ def on_base(
     known = cache_load(repo, sha, ttl_s, None, gdef.command)
     cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
-    todo = [i for i in ids if i not in known]
+    # A cache entry measured before failure text was kept (old format, no text) has nothing to
+    # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
+    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet).
+    todo = [i for i in ids if i not in known or (known.get(i) and i not in cached_sigs)]
     if not todo:
         return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
     ran = _run_chunks(repo, sha, gdef, todo, run, ttl_s, tree or repo)
