@@ -520,6 +520,55 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
+def test_a_cached_base_signature_still_spots_a_new_offender(repo) -> None:
+    """A base id already cached WITH its failure text is compared on later runs too: the cache
+    stores the signature beside the bool, so a new offender on the same base sha is not hidden
+    behind the cached hit (B-baseline-red-hides-new-offender-in-red-ratchet)."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    base_text = "assert 1 == 2"
+    branch_text = (
+        base_text + "\nNEW or grown interface call site(s): program git in ddflow/infra/gitbatch.py"
+    )
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=3600,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: base_text},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    # First run: the branch shows the SAME text, so it is baseline-red and the base text is cached.
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: base_text}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "partial", why
+    assert ev["baseline"]["red"] is True
+
+    # Second run, same base sha (cache hit): the branch CHANGED the failure text.
+    ev = {"failed_tests": [ID], "failed_reasons": {ID: branch_text}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ev["baseline"]["red"] is False and ID in ev["baseline"]["different"]
+
+
 def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -> None:
     """No probe exists for it, so there is no measurement to lose: the failure stands as it was."""
     from ddflow.api import gate_baseline as GB

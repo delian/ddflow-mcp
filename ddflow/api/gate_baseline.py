@@ -84,22 +84,27 @@ def _not_red(
     if found.get("compared") is False:
         return result, why
     blind = set(found.get("unmeasured") or ())
-    known = blind | set(found.get("still_failing") or ())
-    changed = list(found.get("different") or (()))
-    fresh = [i for i in ids if i not in known]
-    if fresh:
-        found["new_failures"] = fresh[: BR.SHOWN * 4]
-        more = f"; {len(blind)} more could not be measured there" if blind else ""
-        note = ""
-        if changed:
-            note = (
-                f"; {', '.join(changed[: BR.SHOWN])} failed on {base} too, but differently "
-                f"(new offender in an already-red test)"
+    still = set(found.get("still_failing") or ())
+    changed = list(found.get("different") or ())
+    plain = [i for i in ids if i not in blind and i not in still and i not in set(changed)]
+    if plain or changed:
+        found["new_failures"] = (plain + changed)[: BR.SHOWN * 4]
+        parts: list[str] = []
+        if plain:
+            parts.append(
+                f"new failure(s) not failing on {base}: {', '.join(plain[: BR.SHOWN])}"
+                f"{' ...' if len(plain) > BR.SHOWN else ''}"
             )
-        return result, (why + "; " if why else "") + (
-            f"new failure(s) not failing on {base}: {', '.join(fresh[: BR.SHOWN])}"
-            f"{' ...' if len(fresh) > BR.SHOWN else ''} (a timing flake counts as new unless "
-            f"it also fails on the base){note}{more}"
+        if changed:
+            parts.append(
+                f"new offender(s) in an already-red test (fails on {base} too, but "
+                f"differently): {', '.join(changed[: BR.SHOWN])}"
+                f"{' ...' if len(changed) > BR.SHOWN else ''}"
+            )
+        if blind:
+            parts.append(f"{len(blind)} more could not be measured there")
+        return result, (why + "; " if why else "") + "; ".join(parts) + (
+            " (a timing flake counts as new unless it also fails on the base)"
         )
     if not blind:
         return result, why

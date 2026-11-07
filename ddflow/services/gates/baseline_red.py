@@ -25,7 +25,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
-from .baseline import cache_load, cache_store
+from .baseline import cache_load, cache_signatures, cache_store
 from .testcmd import counts_of
 
 GATES = ("ci", "unit_tests")
@@ -97,15 +97,16 @@ def on_base(
         return {"red": False, "why": why, "unmeasured": ids, "still_failing": []}
     sha = _pinned_base(repo, base, sha, tree or repo)
     known = cache_load(repo, sha, ttl_s, None, gdef.command)
+    cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
     todo = [i for i in ids if i not in known]
     if not todo:
-        return {**_tally(ids, known, before), **where, "cached": True, "ids": ids}
+        return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
     ran = _run_chunks(repo, sha, gdef, todo, run, ttl_s, tree or repo)
     if isinstance(ran, str):  # why nothing could be measured
-        return _not_run(ran, _tally(ids, known, before), where)
+        return _not_run(ran, _tally(ids, known, before, cached_sigs), where)
     outcomes, cmds, seen, base_sigs = ran
-    found = _tally(ids, {**known, **seen}, before, base_sigs)
+    found = _tally(ids, {**known, **seen}, before, {**cached_sigs, **base_sigs})
     last = outcomes[-1] if outcomes else ""
     return {**found, **where, "isolation": ISOLATION, "command": "; ".join(cmds), "ids": ids,
             "outcome": "failed" if found["red"] or "failed" in outcomes else last}  # fmt: skip
@@ -176,7 +177,7 @@ def _run_chunks(repo: Path, sha: str, gdef, todo: list[str], run, ttl_s: int, br
             cmds += tried
             known.update(seen)
             base_sigs.update(sigs)
-            cache_store(repo, sha, seen, ttl_s, gdef.command)
+            cache_store(repo, sha, seen, ttl_s, gdef.command, sigs)
     return outcomes, cmds, known, base_sigs
 
 
