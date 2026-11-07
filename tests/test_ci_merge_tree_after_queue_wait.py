@@ -55,5 +55,8 @@ def test_the_fresh_merge_happens_inside_the_suite_slot(monkeypatch):
     runner.run("/repo", Config(), command="", base="main")
 
     hold = events.index("hold_enter")
-    fresh_merge_under_the_slot = [e for e in events[hold:] if e == "merge_enter"]
-    assert fresh_merge_under_the_slot, f"no merge happened while the suite slot was held: {events}"
+    released = events.index("hold_exit")
+    merged_held = [
+        i for i, e in enumerate(events) if e == "merge_enter" and hold < i < released
+    ]
+    assert merged_held, f"no merge happened while the suite slot was held: {events}"
