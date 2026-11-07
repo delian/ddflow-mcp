@@ -101,14 +101,15 @@ def _holder(repo: Path, agent: str, rel: str) -> str:
     return ""
 
 
-def _first_holder(repo: Path, agent: str, bad: list[str]) -> str:
-    """The holder of the first refused path that has one, or "" (a multi-file write may name
-    files held by different agents; the first held one is enough for the refusal)."""
+def _first_holder(repo: Path, agent: str, bad: list[str]) -> tuple[str, str]:
+    """(the held path, its holder) of the first refused path another agent's live lease covers,
+    or ("", "") -- enough for a refusal to say whom to wait for. A multi-file write may name
+    files held by different agents; the first held one is enough."""
     for rel in bad:
         holder = _holder(repo, agent, rel)
         if holder:
-            return holder
-    return ""
+            return rel, holder
+    return "", ""
 
 
 #: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
@@ -144,11 +145,11 @@ def verdict(
         else:
             bad.append(rel)
     if bad:
-        holder = _first_holder(repo, agent, bad)
-        held = f" and {holder} holds it" if holder else ""
+        held, holder = _first_holder(repo, agent, bad)
+        held_clause = f" and {holder} holds {held}" if holder else ""
         return REFUSE, (
             f"lane {agent}: {', '.join(bad)} is outside the item's lease globs "
-            f"({', '.join(mine)}){held}; {OPTIONS}"
+            f"({', '.join(mine)}){held_clause}; {OPTIONS}"
         )
     return 0, ""
 
