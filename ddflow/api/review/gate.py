@@ -175,9 +175,13 @@ def _terminated_gate(
             f"the review was terminated by {signame} before a reviewer finished: "
             f"{_NOTHING_REVIEWED}"
         )
+        # The record carries WHAT killed it (bug B-ddflow-review-force-duplicate-round): a
+        # later run over the same record must be able to say "this repeats an attempt whose
+        # reviewers were paid and their findings lost", not re-run it as a fresh round.
         _record(
             repo, log, cfg, st, item, gate, "unavailable", called_from, gates,
-            reason=reason, evidence={"review_kind": "delta"},
+            reason=reason,
+            evidence={"review_kind": "delta", "status": "UNAVAILABLE", "terminated_by": signame},
         )  # fmt: skip
         return reason
     evidence: dict[str, Any] = {
