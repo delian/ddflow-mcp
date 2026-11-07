@@ -24,8 +24,12 @@ def _call(repo, name, args):
 def test_mcp_complete_carries_the_progress_block(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")
-    body = _call(repo, "ddflow_complete", {"id": "T1", "force": True})
-    assert body["progress"].startswith("Progress: tasks 1/1 (100%)")
+    # `--force` over MCP is refused (`--force` is a person's; every MCP call is an agent's,
+    # B49fa10bbb1), so a bare task cannot complete there. The CLI `complete --force` is the
+    # person-at-terminal path that honours it and prints the block the MCP reply carries on
+    # the same `finish.complete` path.
+    _code, out, _err = run_cli(repo, "complete", "T1", "--force", "--model", "x")
+    assert "Progress: tasks 1/1 (100%)" in out
 
 
 def test_mcp_complete_has_no_progress_key_when_it_is_off(repo):

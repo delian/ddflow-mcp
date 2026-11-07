@@ -54,6 +54,36 @@ PROSE = {
         "worktree and branch",
         "ddflow_cleanup     — every ddflow worktree and branch, classified",
     ),
+    (
+        "services/handoff/events.py",
+        "suggestions",
+        "no suggestion <x>: `ddflow suggestions` lists them",
+    ),
+    (
+        "services/handoff/events.py",
+        "suggestions",
+        "`ddflow suggestions <x> <x> --reason ...`",
+    ),
+    (
+        "services/handoff/events.py",
+        "ddflow_suggestions",
+        "MCP `ddflow_suggestions action=<x> id=<x> reason=...`",
+    ),
+    (
+        "surfaces/declared/lifecycle/_shared.py",
+        "approvals",
+        "(see `ddflow approvals --help`).",
+    ),
+    (
+        "templates/agents/kilo/ddflow-orchestrator.md",
+        "itself",
+        "assess ddflow itself",
+    ),
+    (
+        "templates/agents/kilo/ddflow-orchestrator.md",
+        "bug or missing",
+        "ddflow bug or missing feature",
+    ),
 }
 
 ALLOWED = {**dict.fromkeys(PROSE, "prose"), **KNOWN_OPEN}
