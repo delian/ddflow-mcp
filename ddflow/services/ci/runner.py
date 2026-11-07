@@ -125,8 +125,15 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
             return Result("failed", command=cmd, sha=sha, reason=stale)
         budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
         cmd = _default_on_the_diff(
-            repo, cfg, cmd, tree, sha, base, changed_from,
-            full=full, override=bool(command.strip()),
+            repo,
+            cfg,
+            cmd,
+            tree,
+            sha,
+            base,
+            changed_from,
+            full=full,
+            override=bool(command.strip()),
         )
         scope = None
         if for_item and not command.strip():
