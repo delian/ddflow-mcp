@@ -2,11 +2,11 @@
 
 Paths are normalised to POSIX strings; a directory exists when a file lies under it or it
 was made with `mkdir`. `calls` records every operation as `(name, *paths)`. Errors are `OSError` subclasses like
-the real ones (`FileExistsError` where `shutil.move` refuses a taken name; `shutil.Error`
-for a directory moved into itself and `shutil.SameFileError` for a file copied onto
-itself, so callers catch `OSError`); a missing source raises `FileNotFoundError`; `rmtree`
-of a missing path raises unless `ignore_errors` (the port's default). The filesystem root
-is refused (`ValueError`).
+the real adapters (`shutil.Error` where `shutil.move` refuses a taken name or a directory
+moved into itself, `shutil.SameFileError` for a file copied onto itself, `FileExistsError`
+for a directory over an existing file: callers catch `OSError`); a missing source raises
+`FileNotFoundError`; `rmtree` of a missing path raises unless `ignore_errors` (the port's
+default). The filesystem root is refused (`ValueError`).
 """
 
 from __future__ import annotations
@@ -62,28 +62,23 @@ class FakeFs:
         pre = self._prefix(root)
         return sorted(x for x in self.dirs if x.startswith(pre))
 
-    def _require_parent(self, p: str) -> None:
-        """Refuse when a parent component of `p` is a file or missing, like the
-        OS: the first component that is a file raises `NotADirectoryError`; a
-        missing one raises `FileNotFoundError` naming that component."""
+    def _require_parent(self, p: str, *, allow_missing: bool = False) -> None:
+        """Refuse when a parent component of `p` is a file, like the OS, and (unless
+        `allow_missing`) when one is missing: the first component that is a file raises
+        `NotADirectoryError`; a missing one raises `FileNotFoundError` naming it."""
         prefix, _slash, _rest = p.rpartition("/")
         acc = ""
         for step in prefix.lstrip("/").split("/"):
             acc = f"{acc}/{step}"
             if acc in self.files:
                 raise NotADirectoryError(acc)
-            if not self.is_dir(acc):
+            if not allow_missing and not self.is_dir(acc):
                 raise FileNotFoundError(acc)
 
     def _refuse_file_ancestor(self, p: str) -> None:
         """Refuse when an ancestor of `p` is a file (`NotADirectoryError`); a
         missing ancestor is fine (its directory is made implicitly)."""
-        prefix, _slash, _rest = p.rpartition("/")
-        acc = ""
-        for step in prefix.lstrip("/").split("/"):
-            acc = f"{acc}/{step}"
-            if acc in self.files:
-                raise NotADirectoryError(acc)
+        self._require_parent(p, allow_missing=True)
 
     def _relocate_dir(self, s: str, d: str) -> None:
         """Move a whole directory `s` (files + subdirs) to `d`, like a rename."""
@@ -148,7 +143,7 @@ class FakeFs:
                 return  # moving a path onto itself is a no-op
             d = self._prefix(d) + s.rsplit("/", 1)[-1]
             if _exists(self, d):
-                raise FileExistsError(d)
+                raise Error(f"Destination path {d!r} already exists")
         elif d == s:
             return  # shutil.move of a path onto itself is a no-op
         if s in self.files:
