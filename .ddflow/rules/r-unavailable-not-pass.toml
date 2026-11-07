@@ -1,0 +1,10 @@
+id = "r-unavailable-not-pass"
+title = "A check, tool or reviewer that could not run is recorded unavailable, never passed, clean or no-break"
+tags = ["safety", "gates"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:13:58.327347+00:00"
+updated = "2026-11-03T14:13:58.327354+00:00"
+
+Enforced in the gate engine; this rule extends it to every new check. RULE: a scanner, probe, contract diff, reviewer, mutation run, drift check or baseline measurement that did not run (missing tool, timeout, no network, empty range) reports unavailable with the reason; a skip or xfail or not-collected test is not a pass; absence of findings from a tool that did not run is not 'no findings'. CHECK: every new check ships an unavailable-path test. VERIFY: what does this report when the tool is missing?
