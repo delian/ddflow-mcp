@@ -167,6 +167,5 @@ def test_overlap_cuts_the_prefix_at_a_character_class():
     assert globs.overlap("src/a[0-9].md", "src/a5*")
     assert globs.overlap("docs/[ab]/x.md", "docs/a/**")
     assert globs.overlap("a[!0-9].md", "ax*")
-    # a leading class is specific, not universal: it must not make the empty prefix read
-    # as "overlaps everything".
-    assert not globs.overlap("[ab].py", "zzz.py")
+    # two disjoint-leading classes that nonetheless share a member still overlap
+    assert globs.overlap("[abc].py", "[cde].py")  # both match c.py

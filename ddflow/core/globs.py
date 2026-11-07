@@ -136,11 +136,6 @@ def overlap(a: str, b: str) -> bool:
         return True
     pa = _literal_prefix(a)
     pb = _literal_prefix(b)
-    if pa and pb:
-        return pa.startswith(pb) or pb.startswith(pa)
-    # One prefix is empty: its first wildcard sits at the root. A leading `*` is unanchored
-    # (any leading run), so it overlaps whatever the other prefix reaches; a leading `?`
-    # and `[...]` is specific (one char from a set), not universal, and a shared file there
-    # was already answered by the fnmatch check above -- so an empty prefix must not read
-    # as "overlaps everything" (that would make `[ab].py` claim to overlap `zzz.py`).
-    return (not pa and a.startswith("*")) or (not pb and b.startswith("*"))
+    if not pa or not pb:
+        return True  # a leading wildcard (`*`, `?`, or `[`) has no literal anchor: assume overlap
+    return pa.startswith(pb) or pb.startswith(pa)
