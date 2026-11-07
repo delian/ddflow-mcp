@@ -26,13 +26,13 @@ import re
 from pathlib import Path
 
 import pytest
-
 from lanes_fixture import T0, build_inputs, multi_lane
+
 from ddflow.services import fleet as FL
-from ddflow.services import lanes as LN
 from ddflow.services import harnessreg
-from ddflow.services.lanes import states as S
+from ddflow.services import lanes as LN
 from ddflow.services.harnessreg import DescriptorError, parse
+from ddflow.services.lanes import states as S
 
 BASE = """
 id = "acme"
@@ -125,7 +125,7 @@ class TestHeartbeatHeldClaimIsNotInterrupted:
         now = T0 + 800  # lane-work beat at T0+600: age 200 < ttl 1800 -> working
         st, cfg, plan = build_inputs(g.events, now)
         ledger = LN.build(g.events, st, cfg, now, plan)
-        lane = next(l for l in ledger if l.name == "lane-work")
+        lane = next(ln for ln in ledger if ln.name == "lane-work")
         assert lane.state == S.WORKING
         assert lane.state not in S.UNFINISHED
 
@@ -144,6 +144,6 @@ class TestHeartbeatHeldClaimIsNotInterrupted:
         now = T0 + 1901  # lane-gone has had no beat in >> ttl: lapsed
         st, cfg, plan = build_inputs(g.events, now)
         ledger = LN.build(g.events, st, cfg, now, plan)
-        gone = next(l for l in ledger if l.name == "lane-gone")
+        gone = next(ln for ln in ledger if ln.name == "lane-gone")
         assert gone.state == S.STOPPED_UNKNOWN
         assert gone.state in S.UNFINISHED
