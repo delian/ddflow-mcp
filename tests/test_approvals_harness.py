@@ -508,6 +508,14 @@ def test_attest_with_no_id_and_no_all_is_refused_not_a_misdispatch(log, cfg, rep
     assert code == 3 and "request id" in err, (out, err)
 
 
+def test_attest_all_with_a_positional_id_is_refused(log, cfg, repo):
+    """`ddflow approvals attest --all <id>` is refused, not silently ignoring the id (the guard
+    mirrors `approve --all` with ids; roborev/round-3 finding)."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "approvals", "attest", "--all", "Qwhatever", agent="bot")
+    assert code == 3 and "--all" in err, (out, err)
+
+
 def test_attest_all_reports_a_refused_request_beside_an_attested_one(log, cfg, repo):
     """`attest --all` is not an overall success when one answered request attests and another
     is refused: the refusal is reported, never dropped behind the ok (review finding)."""
