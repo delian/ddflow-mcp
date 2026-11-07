@@ -97,6 +97,16 @@ def registration_files(
     return (ud / "driver_plugins.toml", root / ".ddflow" / "local" / "driver_plugins.toml")
 
 
+def _is_str_list(value: Any) -> bool:
+    """``value`` is a list of ``str`` (a shell line is never accepted)."""
+    return isinstance(value, list) and all(type(v) is str for v in value)
+
+
+def _is_nonempty_str(value: Any) -> bool:
+    """``value`` is a non-empty ``str``."""
+    return type(value) is str and value != ""
+
+
 def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
     """One ``[[plugin]]`` table into a ``Plugin``; a wrong key, shape, trust or version is a
     ``PluginError``. An unknown key is refused so a typo never silently reads as "not provided"."""
@@ -104,7 +114,7 @@ def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
     if unknown:
         raise PluginError(f"{source}: unknown key(s) {', '.join(unknown)} on a [[plugin]] table")
     name = table.get("name")
-    if type(name) is not str or not name:
+    if not _is_nonempty_str(name):
         raise PluginError(f"{source}: a plugin entry needs a string name")
     kind = table.get("kind")
     if kind not in ("entry_point", "executable"):
@@ -126,13 +136,13 @@ def _parse_plugin(source: str, table: dict[str, Any]) -> Plugin:
             "its sandbox holds, because in-process entry points are operator-only"
         )
     sandbox = table.get("sandbox", [])
-    if not isinstance(sandbox, list) or not all(type(v) is str for v in sandbox):
+    if not _is_str_list(sandbox):
         raise PluginError(f"{source}: {name}: sandbox is a list of env names")
     entry_point = table.get("entry_point", "")
     if type(entry_point) is not str:
         raise PluginError(f"{source}: {name}: entry_point is a 'package.module:attr' string")
     argv = table.get("argv", [])
-    if not isinstance(argv, list) or not all(type(v) is str for v in argv):
+    if not _is_str_list(argv):
         raise PluginError(f"{source}: {name}: argv is a list of strings, never a shell line")
     if kind == "executable" and not argv:
         raise PluginError(f"{source}: {name}: an executable plugin needs argv")
