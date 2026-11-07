@@ -14,8 +14,9 @@ that call. This module is the dialect, nothing else:
 What happens BETWEEN them -- the handler for each canonical event -- lives with the
 operations it calls (`api.setup`), because a service may not import the API above it.
 
-The names a descriptor gives (`[hooks] normalizer`, `emitter`) are the keys of `NORMALIZERS`
-and `EMITTERS`; `tests/test_hook_core.py` pins that every command-hook descriptor resolves.
+The names a descriptor gives (`[hooks] fields`, `emitter`) are the stdin field map and the
+emit variant the hook core resolves; `tests/test_hook_core.py` pins that every command-hook
+descriptor resolves.
 
 Two properties are load-bearing:
 
@@ -69,58 +70,52 @@ class FieldMap:
     tool: tuple[str, ...] = ()
 
 
+#: The ``[hooks.fields]`` fact names the field map covers (one definition, cheap import).
+FIELDS = harnessreg.HOOK_FIELDS
+
 #: Claude's dialect, which Codex, VS Code and Goose share. Session id falls back to
 #: `conversation_id` because that is what the first prompt hook accepted (Cursor sends it).
-_CLAUDE = FieldMap(
+#: This is the fallback for any style that declares no `[hooks.fields]` table.
+_DEFAULT = FieldMap(
     session=("session_id", "conversation_id"),
     prompt=("prompt",),
     model=("model",),
     tool=("tool_name",),
 )
 
-NORMALIZERS: dict[str, FieldMap] = {
-    "claude": _CLAUDE,
-    "codex": _CLAUDE,
-    "vscode": _CLAUDE,
-    "goose": FieldMap(
-        session=("session_id",), prompt=("prompt", "message"), model=("model",), tool=("tool_name",)
-    ),
-    "gemini": FieldMap(prompt=("prompt",), tool=("tool_name",)),
-    # Copilot's camelCase form and its PascalCase (Claude-compatible) form both arrive here.
-    "copilot": FieldMap(
-        session=("sessionId", "session_id"),
-        prompt=("prompt", "initialPrompt"),
-        tool=("toolName", "tool_name"),
-    ),
-    "cursor": FieldMap(
-        session=("conversation_id", "session_id"),
-        prompt=("prompt",),
-        source=(),
-        model=("model",),
-        cwd=("workspace_roots.0",),
-    ),
-    "antigravity": FieldMap(
-        session=("conversationId",),
-        source=(),
-        model=("modelName",),
-        cwd=("workspacePaths.0",),
-        tool=("toolCall.name",),
-    ),
-    "cline": FieldMap(
-        session=("taskId",),
-        prompt=("userPromptSubmit.prompt", "prompt"),
-        source=(),
-        cwd=("workspaceRoots.0",),
-        tool=("preToolUse.toolName",),
-    ),
-    "cascade": FieldMap(
-        session=("trajectory_id",),
-        prompt=("tool_info.user_prompt",),
-        source=(),
-        model=("model_name",),
-        cwd=("tool_info.cwd",),
-    ),
-}
+
+def fieldmap(fields: dict[str, tuple[str, ...]] | None) -> FieldMap:
+    """The ``FieldMap`` for a ``[hooks.fields]`` table; the default dialect when there is none.
+
+    A fact the table leaves out keeps ``FieldMap``'s own default, exactly as the emitted
+    data declares it; an empty or absent table is the common Claude-shaped fallback.
+    """
+    if not fields:
+        return _DEFAULT
+    return FieldMap(**{name: fields.get(name, getattr(_DEFAULT, name)) for name in FIELDS})
+
+
+def normalize(normalizer: FieldMap, event: str, harness: str, stdin: str) -> HookPayload:
+    """Read ``stdin`` in the ``normalizer`` dialect. An empty field map reads the default
+    (Claude's), which is the most common shape; the registry test keeps that unreachable
+    for a shipped descriptor."""
+    raw = parse_stdin(stdin)
+    malformed = bool(stdin.strip()) and not raw and not _is_empty_object(stdin)
+    fm = normalizer
+    prompt = _first_text(raw, fm.prompt)
+    # A `prompt` that is present but not text (a malformed hook) is "no prompt", as before.
+    return HookPayload(
+        event=event,
+        harness=harness,
+        session_id=_first_text(raw, fm.session) or "",
+        prompt=prompt,
+        source=_first_text(raw, fm.source) or "",
+        model=_first_text(raw, fm.model) or "",
+        cwd=_first_text(raw, fm.cwd) or "",
+        tool=_first_text(raw, fm.tool) or "",
+        raw=raw,
+        malformed=malformed,
+    )
 
 
 def _dig(raw: Any, path: str) -> Any:
@@ -158,29 +153,6 @@ def _is_empty_object(stdin: str) -> bool:
         return json.loads(stdin) == {}
     except (ValueError, RecursionError):
         return False
-
-
-def normalize(normalizer: str, event: str, harness: str, stdin: str) -> HookPayload:
-    """Read ``stdin`` in the ``normalizer`` dialect. An unknown dialect falls back to the
-    Claude one, which is the most common shape; the registry test keeps that unreachable
-    for a shipped descriptor."""
-    raw = parse_stdin(stdin)
-    malformed = bool(stdin.strip()) and not raw and not _is_empty_object(stdin)
-    fm = NORMALIZERS.get(normalizer, _CLAUDE)
-    prompt = _first_text(raw, fm.prompt)
-    # A `prompt` that is present but not text (a malformed hook) is "no prompt", as before.
-    return HookPayload(
-        event=event,
-        harness=harness,
-        session_id=_first_text(raw, fm.session) or "",
-        prompt=prompt,
-        source=_first_text(raw, fm.source) or "",
-        model=_first_text(raw, fm.model) or "",
-        cwd=_first_text(raw, fm.cwd) or "",
-        tool=_first_text(raw, fm.tool) or "",
-        raw=raw,
-        malformed=malformed,
-    )
 
 
 # --- emitters --------------------------------------------------------------------------
@@ -230,17 +202,16 @@ def _silent(event: str, text: str, inject: bool, native: str) -> str:
     return ""
 
 
-EMITTERS: dict[str, Emitter] = {
-    "claude": _plain,
-    "codex": _plain,
-    "gemini": _json_context,
-    "vscode": _json_context,
-    "copilot": _copilot,
-    "cursor": _cursor,
-    "cline": _cline,
-    "antigravity": _antigravity,
-    "cascade": _silent,
-    "goose": _silent,
+#: The emit variants: what a hook prints, one name per shape, with the function that prints it.
+#: A descriptor says ``[hooks] emitter = "plain"``; ``services/engines/emit`` re-exports this.
+EMIT_VARIANTS: dict[str, Emitter] = {
+    "plain": _plain,
+    "json_context": _json_context,
+    "additional_context": _copilot,
+    "additional_context_snake": _cursor,
+    "context_modification": _cline,
+    "empty_json": _antigravity,
+    "silent": _silent,
 }
 
 
@@ -249,35 +220,35 @@ class Plan:
     """What `hooks run` needs to know about a harness before it does anything."""
 
     harness: str
-    normalizer: str
-    emitter: str
+    normalizer: FieldMap  #: the stdin field map (`[hooks.fields]`, resolved by the hook core)
+    emitter: str  #: the emit VARIANT this harness prints (`[hooks] emitter`)
     inject: tuple[str, ...]
     events: dict[str, str] = field(default_factory=dict)  #: canonical event -> the agent's name
 
 
 def plan_for(harness: str) -> Plan | None:
-    """The normalizer, emitter and injection events for ``harness``; None when ddflow has no
+    """The field map, emit variant and injection events for ``harness``; None when ddflow has no
     descriptor for it (an unknown id, no hooks section) or its hooks declare no payload
-    dialect (``none``). A plugin-style hook declares a normalizer and emitter too, so its
-    ``pre_tool`` door reaches the same entry point as a command-hook's."""
+    dialect (``none``). A plugin-style hook declares an emitter too, so its ``pre_tool`` door
+    reaches the same entry point as a command-hook's."""
     h = harnessreg.get(harness)
     if h is None or h.hooks is None:
         return None
     if h.hooks.style not in harnessreg.COMMAND_HOOK_STYLES and h.hooks.style != "plugin":
         return None
-    if not (h.hooks.normalizer and h.hooks.emitter):
+    if not h.hooks.emitter:
         return None
-    return Plan(harness, h.hooks.normalizer, h.hooks.emitter, h.hooks.inject, dict(h.hooks.events))
+    return Plan(harness, fieldmap(h.hooks.fields), h.hooks.emitter, h.hooks.inject, dict(h.hooks.events))
 
 
 def emit(plan: Plan, event: str, text: str) -> str:
     """The stdout for ``event`` under ``plan``: ``text`` shaped for the agent, or its neutral reply."""
-    fn = EMITTERS.get(plan.emitter, _silent)
+    fn = EMIT_VARIANTS.get(plan.emitter, _silent)
     return fn(event, text, event in plan.inject, plan.events.get(event, ""))
 
 
-#: The dialects whose PreToolUse hook takes `permissionDecision: deny` as JSON on stdout (exit 0).
-DENY_EMITTERS = frozenset({"claude", "codex"})
+#: The variants whose PreToolUse hook takes `permissionDecision: deny` as JSON on stdout (exit 0).
+DENY_EMITTERS = frozenset({"plain"})
 
 
 def emit_deny(plan: Plan, event: str, reason: str) -> str | None:

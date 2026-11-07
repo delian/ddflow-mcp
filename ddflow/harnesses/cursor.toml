@@ -20,11 +20,17 @@ native_why = "Cursor ranks project rules ABOVE AGENTS.md, so AGENTS.md alone is 
 [hooks]
 style = "cursor"
 file = ".cursor/hooks.json"
-normalizer = "cursor"
-emitter = "cursor"
+emitter = "additional_context_snake"
 block = "exit2"
 session_id = "conversation_id"
 inject = ["session_start"]
+
+[hooks.fields]
+session = ["conversation_id", "session_id"]
+prompt = ["prompt"]
+source = []
+model = ["model"]
+cwd = ["workspace_roots.0"]
 
 [hooks.events]
 session_start = "sessionStart"
@@ -57,3 +63,4 @@ date = "2026-10-09"
 sources = ["https://cursor.com/docs/hooks"]
 record = "R-hx-cursor"
 unverified = ["CLI hook coverage", "MCP instructions"]
+

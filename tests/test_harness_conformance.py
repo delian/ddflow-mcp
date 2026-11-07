@@ -44,11 +44,10 @@ def test_every_mapped_event_is_canonical_and_the_ladder_is_total(hid):
 
 
 @pytest.mark.parametrize("hid", C.COMMAND_HOOKED)
-def test_the_normalizer_and_emitter_named_resolve(hid):
+def test_the_field_map_and_emit_variant_resolve(hid):
     plan = hookio.plan_for(hid)
     assert plan is not None
-    assert plan.normalizer in hookio.NORMALIZERS
-    assert plan.emitter in hookio.EMITTERS
+    assert plan.emitter in hookio.EMIT_VARIANTS
 
 
 @pytest.mark.parametrize(("hid", "event", "fx"), C.all_fixtures())

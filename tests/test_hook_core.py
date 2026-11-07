@@ -61,14 +61,13 @@ def test_the_run_help_names_exactly_the_canonical_events(repo):
     assert tuple(n.strip() for n in listed.split(",")) == harnessreg.CANONICAL_EVENTS
 
 
-def test_every_command_hook_descriptor_resolves_to_a_normalizer_and_an_emitter():
+def test_every_command_hook_descriptor_resolves_to_a_field_map_and_an_emit_variant():
     seen = 0
     for h in harnessreg.load():
         if h.hooks is None or h.hooks.style not in harnessreg.COMMAND_HOOK_STYLES:
             continue
         seen += 1
-        assert h.hooks.normalizer in hookio.NORMALIZERS, h.id
-        assert h.hooks.emitter in hookio.EMITTERS, h.id
+        assert h.hooks.emitter in hookio.EMIT_VARIANTS, h.id
         assert hookio.plan_for(h.id) is not None, h.id
     assert seen >= 10
 
@@ -83,7 +82,7 @@ def test_no_plan_for_an_agent_without_command_hooks():
 
 
 @pytest.mark.parametrize(
-    ("normalizer", "stdin", "want"),
+    ("harness", "stdin", "want"),
     [
         (
             "claude",
@@ -114,35 +113,39 @@ def test_no_plan_for_an_agent_without_command_hooks():
             ("t1", "do", "", "", "/c"),
         ),
         (
-            "cascade",
+            "windsurf",
             {"trajectory_id": "z1", "tool_info": {"user_prompt": "w", "cwd": "/z"}},
             ("z1", "w", "", "", "/z"),
         ),
         ("goose", {"session_id": "o1", "message": "m1"}, ("o1", "m1", "", "", "")),
     ],
 )
-def test_each_dialect_normalizes_to_the_same_payload(normalizer, stdin, want):
-    p = hookio.normalize(normalizer, "prompt", "h", json.dumps(stdin))
+def test_each_dialect_normalizes_to_the_same_payload(harness, stdin, want):
+    plan = hookio.plan_for(harness)
+    assert plan is not None
+    p = hookio.normalize(plan.normalizer, "prompt", harness, json.dumps(stdin))
     assert (p.session_id, p.prompt, p.source, p.model, p.cwd) == want
-    assert p.event == "prompt" and p.harness == "h" and p.raw == stdin
+    assert p.event == "prompt" and p.harness == harness and p.raw == stdin
 
 
 @pytest.mark.parametrize("raw", ["", "not json", "[1, 2]", "null", '"text"', "{"])
 def test_a_payload_that_is_not_an_object_normalizes_to_an_empty_one(raw):
-    p = hookio.normalize("claude", "prompt", "claude", raw)
+    p = hookio.normalize(hookio.plan_for("claude").normalizer, "prompt", "claude", raw)
     assert p.prompt is None and p.session_id == "" and p.raw == {}
 
 
 def test_only_a_non_object_is_malformed_not_an_empty_one():
-    assert hookio.normalize("claude", "stop", "c", "{}").malformed is False
-    assert hookio.normalize("claude", "stop", "c", "").malformed is False
-    assert hookio.normalize("claude", "stop", "c", "[1]").malformed is True
-    assert hookio.normalize("claude", "stop", "c", "{").malformed is True
+    fm = hookio.plan_for("claude").normalizer
+    assert hookio.normalize(fm, "stop", "c", "{}").malformed is False
+    assert hookio.normalize(fm, "stop", "c", "").malformed is False
+    assert hookio.normalize(fm, "stop", "c", "[1]").malformed is True
+    assert hookio.normalize(fm, "stop", "c", "{").malformed is True
 
 
 def test_a_prompt_that_is_not_text_is_no_prompt():
-    assert hookio.normalize("claude", "prompt", "c", '{"prompt": 5}').prompt is None
-    assert hookio.normalize("claude", "prompt", "c", '{"prompt": ""}').prompt is None
+    fm = hookio.plan_for("claude").normalizer
+    assert hookio.normalize(fm, "prompt", "c", '{"prompt": 5}').prompt is None
+    assert hookio.normalize(fm, "prompt", "c", '{"prompt": ""}').prompt is None
 
 
 # --- emitters: each agent's reply ----------------------------------------------------------
@@ -311,7 +314,7 @@ def test_a_failing_emitter_still_exits_zero(repo, monkeypatch):
     def boom(*_a, **_k):
         raise RuntimeError("emitter exploded")
 
-    monkeypatch.setitem(hookio.EMITTERS, "claude", boom)
+    monkeypatch.setitem(hookio.EMIT_VARIANTS, "plain", boom)
     out = api.hooks(repo, action="run", event="stop", harness="claude", stdin="{}")
     assert out.data["stdout"] == "" and "emitter exploded" in out.data["note"]
 
@@ -347,6 +350,15 @@ def test_install_harness_for_an_agent_without_a_writer_fails_and_says_so(repo):
     assert not (repo / ".cline").exists()
 
 
+def test_the_dialect_is_descriptor_data_not_a_code_table():
+    # DRV-migrate: the dialect's field map and emit variant are the descriptor's own
+    # [hooks.fields]/[hooks] emitter, never a code table keyed by agent name.
+    assert not hasattr(hookio, "NORMALIZERS") and not hasattr(hookio, "EMITTERS")
+    plan = hookio.plan_for("copilot")
+    assert plan.normalizer.session == ("sessionId", "session_id")
+    assert plan.emitter == "additional_context"
+
+
 def test_deeply_nested_input_is_malformed_not_a_crash():
-    p = hookio.normalize("claude", "prompt", "claude", "[" * 200_000)
+    p = hookio.normalize(hookio.plan_for("claude").normalizer, "prompt", "claude", "[" * 200_000)
     assert p.malformed and p.raw == {} and p.prompt is None

@@ -17,8 +17,7 @@ claude_md = "yes"
 [hooks]
 style = "claude"
 file = ".devin/hooks.v1.json"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -46,3 +45,4 @@ date = "2026-10-09"
 sources = ["https://docs.devin.ai/cli/extensibility/hooks/overview"]
 record = "R-hx-windsurf"
 unverified = ["CLI worktree dir"]
+

@@ -20,9 +20,10 @@ The loader is strict. An unknown key, a wrong type, an id that differs from its 
 name, a duplicate rank or an MCP shape ddflow cannot write is an error at load time,
 because a typo in a descriptor is otherwise valid TOML that is silently ignored.
 
-``hooks.normalizer`` and ``hooks.emitter`` are NAMES resolved by the hook core
-(B-hx-hook-core); the registry only checks they are present when the hook style is a
-command-hook style.
+``hooks.emitter`` names the emit VARIANT (a closed list from ``services/engines/emit``) and
+``hooks.fields`` is the stdin field map (a table of dotted paths, one list per fact); the
+hook core resolves both (B-hx-hook-core). The registry only checks ``emitter`` is present
+when the hook style is a command-hook style.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import Any, get_args, get_origin, get_type_hints
 
 from ..core.registry import Registry
 from . import harnessfacts, harnessv2
@@ -112,12 +113,16 @@ class Instructions:
     native_why: str = ""  #: why AGENTS.md alone does not reach this agent
 
 
+#: A ``[hooks.fields]`` table maps each of these fact names to a list of dotted stdin paths.
+HOOK_FIELDS = frozenset({"session", "prompt", "source", "model", "cwd", "tool"})
+
+
 @dataclass(frozen=True)
 class Hooks:
     style: str
     file: str = ""  #: where the hook config lives, relative to the repo (or `~/`)
-    normalizer: str = ""  #: name of the stdin normalizer (resolved by the hook core)
-    emitter: str = ""  #: name of the stdout emitter (resolved by the hook core)
+    fields: dict[str, tuple[str, ...]] = field(default_factory=dict)  #: [hooks.fields], stdin field paths by fact
+    emitter: str = ""  #: the stdout emit VARIANT (resolved by the hook core's closed list)
     inject: tuple[str, ...] = ()  #: canonical events at which a hook's output reaches the model
     block: str = "none"  #: how a hook blocks: one of BLOCK_MODES
     session_id: str = ""  #: stdin field that carries the session id
@@ -164,6 +169,11 @@ class Worktrees:
 
 
 @dataclass(frozen=True)
+class Transcripts:
+    root: tuple[str, ...] = ()  #: session transcript root dir(s) the harness writes, e.g. ~/.claude/projects
+
+
+@dataclass(frozen=True)
 class Verified:
     date: str
     sources: tuple[str, ...]
@@ -191,6 +201,7 @@ class Harness:
     subagents: Subagents | None = None
     env: Env | None = None
     worktrees: Worktrees | None = None
+    transcripts: Transcripts | None = None
     #: Descriptor v2 (harnessv2): None = NOT VERIFIED, ``none = true`` = documented absent.
     detect: harnessv2.Detect | None = None
     headless: harnessv2.Headless | None = None
@@ -212,9 +223,20 @@ def _check_type(value: Any, hint: Any, where: str) -> Any:
             raise DescriptorError(f"{where}: expected a list of strings")
         return tuple(value)
     if origin is dict:
-        if not isinstance(value, dict) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in value.items()
-        ):
+        if not isinstance(value, dict):
+            raise DescriptorError(f"{where}: expected a table")
+        args = get_args(hint)
+        value_type = args[1] if len(args) == 2 else str
+        if value_type is tuple or get_origin(value_type) is tuple:
+            out: dict[str, tuple[str, ...]] = {}
+            for k, v in value.items():
+                if not isinstance(k, str):
+                    raise DescriptorError(f"{where}: expected string keys")
+                if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                    raise DescriptorError(f"{where}.{k}: expected a list of strings")
+                out[k] = tuple(v)
+            return out
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
             raise DescriptorError(f"{where}: expected a table of strings")
         return dict(value)
     if hint is bool or hint is int or hint is str:
@@ -249,6 +271,7 @@ _SECTIONS: dict[str, type] = {
     "subagents": Subagents,
     "env": Env,
     "worktrees": Worktrees,
+    "transcripts": Transcripts,
     **V2_SECTIONS,
 }
 
@@ -273,13 +296,16 @@ def _validate_hooks(hk: Hooks, where: str) -> None:
     bad = sorted(set(hk.events) - set(CANONICAL_EVENTS))
     if bad:
         raise DescriptorError(f"{where}: hooks.events has non-canonical key(s) {', '.join(bad)}")
+    bad = sorted(set(hk.fields) - HOOK_FIELDS)
+    if bad:
+        raise DescriptorError(f"{where}: hooks.fields has unknown fact(s) {', '.join(bad)}")
     bad = sorted(set(hk.inject) - set(hk.events))
     if bad:
         raise DescriptorError(f"{where}: hooks.inject names event(s) with no mapping: {bad}")
     if hk.style == "none" and (hk.events or hk.inject or hk.file):
         raise DescriptorError(f"{where}: hooks.style 'none' takes no file, events or inject")
-    if hk.style in COMMAND_HOOK_STYLES and not (hk.normalizer and hk.emitter and hk.file):
-        raise DescriptorError(f"{where}: a {hk.style!r} hook style needs file, normalizer, emitter")
+    if hk.style in COMMAND_HOOK_STYLES and not (hk.emitter and hk.file):
+        raise DescriptorError(f"{where}: a {hk.style!r} hook style needs file, emitter")
 
 
 def _validate_surfaces(h: Harness, where: str) -> None:
