@@ -218,6 +218,9 @@ def test_fake_replace_path_mirrors_local_on_directories():
     with pytest.raises(OSError) as _exc2:
         FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/f")
     assert type(_exc2.value) is OSError
+    # a missing middle component under the source is ENOENT, not EINVAL
+    with pytest.raises(FileNotFoundError):
+        FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/missing/child")
     # the filesystem root is refused, like move/copy_tree/rmtree
     with pytest.raises(ValueError):
         FakeFs({"/f": b"1"}).replace_path("/", "/new")
