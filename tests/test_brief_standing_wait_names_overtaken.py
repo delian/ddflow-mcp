@@ -72,3 +72,20 @@ def test_a_later_unrelated_widening_does_not_name_the_waiter_again(repo):
     # extra.py is new but overlaps nothing BHY asked for: it was not overtaken by THIS widen.
     assert "overtook" not in out, out
 
+
+def test_a_wider_glob_that_only_subsume_a_held_file_is_not_an_overtake(repo):
+    # DX already holds brief.py when BHY comes to wait on it; widening DX to lifecycle/
+    # only re-states that held file, so the waiter was not newly overtaken.
+    assert run_cli(repo, "task", "add", "DX", "--title", "DX", "--globs", "ddflow/api/lifecycle/brief.py", agent="dx")[0] == 0
+    assert run_cli(repo, "task", "add", "BHY", "--title", "BHY", "--globs", "ddflow/tools/stop.py", agent="bhy")[0] == 0
+    assert run_cli(repo, "claim", "DX", "--no-worktree", agent="dx")[0] == 0
+    assert run_cli(repo, "claim", "BHY", "--no-worktree", agent="bhy")[0] == 0
+    assert (
+        run_cli(repo, "update", "BHY", "--globs", "ddflow/tools/stop.py,ddflow/api/lifecycle/brief.py", agent="bhy")[0]
+        == 3
+    )
+    code, out, _ = run_cli(repo, "update", "DX", "--globs", "ddflow/api/lifecycle/", agent="dx")
+    assert code == 0
+    assert "overtook" not in out, out
+
+

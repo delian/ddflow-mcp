@@ -457,18 +457,24 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
 def _overtaken_waiters(log, cfg, item_id: str, old_globs: list[str], accepted: list[str] | None) -> list[dict[str, Any]]:
     """The standing waiters a just-applied widening overtook (B-widen-over-standing-wait-silent).
 
-    Only a waiter whose ASKED-FOR globs overlap a glob THIS edit newly granted (``accepted``
-    minus what the item already held) is "overtaken"; a waiter already waiting on a glob it
-    held before is not, so a later unrelated widening does not name it again."""
+    Only a waiter is "overtaken" that a NEWLY-granted glob now blocks and that the item's
+    OLD globs did not already block for that same ask: a waiter already waiting on a held
+    glob, or one a wider glob would only re-state, is not. ``new_globs`` is ``accepted``
+    minus the exact held strings; the overlap test below then drops a "new" directory that
+    merely subsumes a held file the waiter had already asked for."""
     if accepted is None:
         return []
     new_globs = [g for g in accepted if g not in old_globs]
     if not new_globs:
         return []
+    state = L._fold(log)
+    blocked_before = {w.item for w in WG.waiters(state, cfg, time.time())
+                     if any(globs_overlap(g, x) for g in old_globs for x in w.globs)}
     return [
         {"item": w.item, "holder": w.holder, "globs": list(w.globs)}
-        for w in WG.waiters(L._fold(log), cfg, time.time())
-        if any(globs_overlap(g, x) for g in new_globs for x in w.globs)
+        for w in WG.waiters(state, cfg, time.time())
+        if w.item not in blocked_before
+        and any(globs_overlap(g, x) for g in new_globs for x in w.globs)
     ]
 
 
