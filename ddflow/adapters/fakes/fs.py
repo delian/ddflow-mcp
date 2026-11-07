@@ -69,6 +69,8 @@ class FakeFs:
         prefix, _slash, _rest = p.rpartition("/")
         acc = ""
         for step in prefix.lstrip("/").split("/"):
+            if not step:  # a bare single component has no parent to check (root always exists)
+                continue
             acc = f"{acc}/{step}"
             if acc in self.files:
                 raise NotADirectoryError(acc)

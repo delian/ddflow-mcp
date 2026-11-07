@@ -206,6 +206,11 @@ def test_fake_replace_path_mirrors_local_on_directories():
     f = FakeFs({"/dir/f": b"1"})
     f.replace_path("/dir", "/renamed")
     assert f.files == {"/renamed/f": b"1"} and not f.is_dir("/dir") and f.is_dir("/renamed")
+    # renaming an empty top-level directory is not refused as a "missing root parent"
+    e = FakeFs()
+    e.mkdir("/a")
+    e.replace_path("/a", "/b")
+    assert e.is_dir("/b") and not e.is_dir("/a")
     # a file over an existing directory is refused, like os.replace
     f2 = FakeFs({"/f": b"1"})
     f2.mkdir("/d")
