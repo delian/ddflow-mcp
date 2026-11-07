@@ -299,13 +299,13 @@ def test_the_merge_refusal_does_not_promise_a_free_fix_round_when_the_knob_is_of
     blocks = failed_review_blockers(st, Config.load(repo), "T1", None)
     assert blocks, "a confirmed finding with no clearing delta must still block"
     assert not any("free of max_rounds" in b for b in blocks), blocks
-    assert any("re-run past the cap is refused" in b for b in blocks), blocks
+    assert any("--force --reason" in b for b in blocks), blocks
 
 
 def test_the_merge_refusal_names_a_fix_round_free_when_the_knob_is_on(repo, tmp_path):
-    """The default `review.fix_round_free = true` keeps the fix-round hint, qualified: a fix
-    round that addresses every finding is free of max_rounds, and a plain re-run past the cap
-    is refused."""
+    """The default `review.fix_round_free = true` keeps the fix-round hint, and the re-run it
+    names is the forced one (`--force --reason`), never the plain re-run review refuses past
+    the cap."""
     from ddflow.config import Config
     from ddflow.services.gates import failed_review_blockers
 
@@ -313,8 +313,10 @@ def test_the_merge_refusal_names_a_fix_round_free_when_the_knob_is_on(repo, tmp_
     _failed_and_confirmed(repo)
     st = fold(EventLog(repo).read_all(), strict=False)
     blocks = failed_review_blockers(st, Config.load(repo), "T1", None)
-    assert any("free of max_rounds" in b for b in blocks), blocks
-    assert any("plain re-run past the cap is refused" in b for b in blocks), blocks
+    assert any(
+        "a fix round that addresses every finding is free of max_rounds" in b for b in blocks
+    ), blocks
+    assert any("--force --reason" in b for b in blocks), blocks
 
 
 def test_a_request_merged_by_a_person_over_a_failed_review_gate_is_not_completed(

@@ -111,25 +111,21 @@ def failed_review_blockers(
             continue
         if why := unresolved_review_failure(it, g):
             rows.append(f"{g} ({why})")
-    if not rows:
-        return []
     # The re-run a refusal names must be one that actually works (B-merge-refusal-says-delta-
     # is-free-of-max-rounds): `review triage` is always allowed, a true fix round is free of
     # max_rounds only when [review].fix_round_free allows it AND it addresses every finding,
-    # and a plain re-run past the cap is refused -- so name those honestly instead of a
-    # "free" round that review then refuses.
+    # and a plain re-run past the cap is refused -- so name the forced re-run, never a plain
+    # one review will then refuse.
     fix_hint = (
-        " (a fix round that addresses every finding is free of max_rounds; a plain re-run "
-        'past the cap is refused -- use `--force --reason "..."` for one recorded round)'
+        " (a fix round that addresses every finding is free of max_rounds)"
         if cfg.review.fix_round_free
-        else ' (a re-run past the cap is refused -- use `--force --reason "..."` for one '
-        "recorded round)"
+        else ""
     )
     return [
         FAILED_REVIEW_BLOCKER
         + "; ".join(rows)
         + f". Fix, then settle each finding with `ddflow review triage {item_id} --gate <gate>` "
-        f"(always allowed) and re-run `ddflow review {item_id} --gate <gate>`{fix_hint}, or the "
-        f"OPERATOR records the reason with "
-        f"`ddflow gate skip {item_id} <gate> --reason ...` -- `--force` does not lift this."
+        f"(always allowed) and, if the code changed, re-review with `ddflow review {item_id} "
+        f'--gate <gate> --force --reason "..."`{fix_hint}, or the OPERATOR records the reason '
+        f"with `ddflow gate skip {item_id} <gate> --reason ...` -- `--force` does not lift this."
     ]
