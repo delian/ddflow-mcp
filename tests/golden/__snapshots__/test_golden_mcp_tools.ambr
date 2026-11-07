@@ -873,7 +873,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "Why (shown to the person as untrusted)."
+          "description": "ask: Why (shown to the person as untrusted). message: Why it wakes the receiver."
          },
          "all": {
           "type": "boolean",
@@ -1323,7 +1323,7 @@
          },
          "view": {
           "type": "string",
-          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
+          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks or swarm."
          },
          "lane": {
           "type": "string",
