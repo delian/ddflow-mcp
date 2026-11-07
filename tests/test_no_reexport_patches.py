@@ -42,13 +42,36 @@ def _log_package_bindings(tree: ast.Module) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "ddflow.infra.log" and alias.asname:
-                    names.add(alias.asname)
+                if alias.name == "ddflow.infra.log":
+                    # bare ``import ddflow.infra.log`` binds ``ddflow``; the package is
+                    # then reached as ``ddflow.infra.log`` (an attribute chain), handled by
+                    # ``_is_log_package`` -- not a name we can key off here.
+                    if alias.asname:
+                        names.add(alias.asname)
         elif isinstance(node, ast.ImportFrom) and node.module == "ddflow.infra":
             for alias in node.names:
                 if alias.name == "log":
                     names.add(alias.asname or "log")
     return names
+
+
+def _dotted_path(node: ast.expr) -> str | None:
+    """``"ddflow.infra.log"`` for an attribute chain, the bare name for a ``Name``, else
+    ``None``."""
+    if isinstance(node, ast.Attribute):
+        base = _dotted_path(node.value)
+        return f"{base}.{node.attr}" if base else node.attr
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
+
+
+def _is_log_package(target: ast.expr, log_names: set[str]) -> bool:
+    """Whether ``target`` is ``ddflow.infra.log`` (spelled out, or bound to a local alias)
+    rather than one of its submodules or an unrelated module."""
+    if isinstance(target, ast.Name) and target.id in log_names:
+        return True
+    return _dotted_path(target) == "ddflow.infra.log"
 
 
 def _patched_on_package(path: Path, reexports: dict[str, set[str]]) -> list[str]:
@@ -73,7 +96,7 @@ def _patched_on_package(path: Path, reexports: dict[str, set[str]]) -> list[str]
         target = node.args[0]
         # A patch of a name the file bound to the log PACKAGE is the no-op; patching an
         # unrelated module, or ``L._eventlog``, rebinds that module's own binding and fires.
-        if not (isinstance(target, ast.Name) and target.id in log_names):
+        if not _is_log_package(target, log_names):
             continue
         bad.append(f"{path.name}:{node.lineno}: {name.value}")
     return bad
