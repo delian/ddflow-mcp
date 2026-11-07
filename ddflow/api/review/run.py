@@ -395,14 +395,29 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
     `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, but the panel's other families are
-    carried in `reviewer_families` so a clean cross-family round is still seen (bug
-    B1a30dc3303).
+    unknown here `review_tier` names no reviewer as cross-family, so a reviewer from a
+    family OTHER than the tied-first (config order) one is named -- the author's own
+    family on a lane that also serves its model -- and the panel's other families are
+    still carried in `reviewer_families` (bugs B1a30dc3303, B2e5ca93520).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    return cross[0] if cross else best
+    if cross:
+        return cross[0]
+    # `review_tier` returns `none` for every reviewer when the author cannot be named
+    # here (`[agent].family` and the session model are both empty), so the first tied
+    # reviewer would be named even when it is the author's own family (bug B2e5ca93520).
+    # An unknown author still has exactly ONE family; on a lane that also serves its own
+    # model as a reviewer the tied-first (config order) family IS the author's, so name a
+    # reviewer from a DIFFERENT family -- the clean cross-family one -- instead.
+    fams = {(r.family or "").strip().lower() for r in tied}
+    fams.discard("")
+    if len(fams) >= 2:
+        for r in tied:
+            if (r.family or "").strip().lower() not in ("", (best.family or "").strip().lower()):
+                return r
+    return best
 
 
 def _failing_reviewer(results, it, gate, converging, cfg, identifying):
