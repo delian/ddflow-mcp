@@ -9,11 +9,12 @@ way (``models.toml`` under the user, project and local layers).
 
 Security split (D-DRV-Q5): a descriptor from a cloned project may add detection, paths
 and facts, but never a key that runs a process. ``[headless] argv`` and ``[probe]`` are
-operator-only: they are read only from the shipped set and the operator's user layer
-(``~/.config/ddflow/harnesses.d``), never from a per-repo descriptor (project or local),
-so a cloned -- or force-added -- repo file that smuggles a launch command is refused at
-load, not run. A company pack is data only and pinned by digest (the CM-packs pattern): a
-bare URL without a digest is refused, a mismatched digest keeps the content out.
+operator-only: a project-layer descriptor (``.ddflow/harnesses.d``) may never set one; the
+operator's own layers -- the shipped set, the user layer (``~/.config/ddflow/harnesses.d``)
+and machine-local (``.ddflow/local/harnesses.d``, layer 5) -- may. So a merged-in cloned
+file that smuggles a launch command is refused at load, not run. A company pack is data only
+and pinned by digest (the CM-packs pattern): a bare URL without a digest is refused, a
+mismatched digest keeps the content out.
 
 Schema versioned (D-DRV-5): each file carries ``schema = N``. A newer schema is
 "unavailable: upgrade ddflow", never half-read; upgrade is the existing upgrade manifest's
