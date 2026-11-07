@@ -193,6 +193,25 @@ def test_the_knob_reads_refuse_from_config_and_agent_force_still_refuses(repo):
     assert not _events(repo, "worktree.merged")
 
 
+def test_a_failed_git_landing_does_not_spend_the_approval(repo, refuse, monkeypatch):
+    """B527b0a518c: an agent's single-use approval is spent only when the landing lands. A
+    git landing that fails (a conflict) must leave the approval unspent, so the agent can
+    retry once the conflict is resolved, instead of the `merge --force --approval` spending
+    it before git ran."""
+    from ddflow.infra import git as G
+    from ddflow.infra import worktree as W
+
+    _claimed(repo)
+    ask = _approved_ask(repo)
+    monkeypatch.setattr(
+        W, "merge", lambda *_a, **_kw: G.GitResult(W.GIT_REFUSED, "", "conflict: a.py", attempted=True)
+    )
+    out = _merge(repo, force=True, approval=ask)
+    assert out.exit != 0, out.reason
+    assert not _events(repo, "worktree.merged")
+    assert _asks(repo)[ask]["used"] == 0
+
+
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
     assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "")
