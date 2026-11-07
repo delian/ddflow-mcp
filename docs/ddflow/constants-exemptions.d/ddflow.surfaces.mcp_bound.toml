@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/surfaces/mcp_bound.py:SHOW_MAX_CHARS" = "the serialised `ddflow show` MCP body's size ceiling (r-surface-budget 20 KB minus the note margin); not a preference"
