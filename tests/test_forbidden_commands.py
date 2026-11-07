@@ -51,6 +51,9 @@ def _check(cmd: str, env: dict | None = None, **kw):
         'git commit -m "a<<b"\npkill foo',
         'grep x <<< "$y"\npkill foo',
         "ddflow review X --force",
+        # a `\r` is not a shell blank: `push\r#` is one word, so the `#` is not a comment
+        # and the `;` still separates a forbidden `git push` (B-...-critic #1, `\r` boundary)
+        "git push\r#; git push origin main",
     ],
 )
 def test_refused(cmd):
@@ -165,6 +168,9 @@ def test_refused_comment_quote_spans_lines(cmd):
         "echo $(case x in x) git push origin main;; esac); echo done",
         # an esac inside a # comment in a case body is text, not the case's end
         'echo "$(case x in\nx) echo start # esac )\ngit push origin main;;\nesac)"',
+        # an esac inside a nested $() (or a double-quoted word with a blank before it) in a
+        # case body is not the case's end, so `git push` after the `;;` is still seen
+        'echo "$(case x in x) $(echo esac); git push origin main;; esac)"',
     ],
 )
 def test_refused_substitution_body_edge_cases(cmd):

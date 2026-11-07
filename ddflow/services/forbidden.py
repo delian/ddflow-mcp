@@ -48,8 +48,10 @@ _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
 #: What may come right before a `#` that begins a comment: a blank, or an operator
 #: (`)`, `(`, `<`, `>`, `;`, `&`, `|`) -- bash starts a comment after any of these, not
 #: only after a blank. `{` and `}` are reserved words that need a blank, not operators:
-#: a `#` glued to them is a literal `#` inside a word (B-forbidden-guard-multiline-quote-bypass `)` finding).
-_COMMENT_BOUNDARY = " \t\r\n;|&()<>"
+#: a `#` glued to them is a literal `#` inside a word. `\r` is not a blank to the shell:
+#: a `#` glued to it stays inside the word, so a `;` after it is a separator, not a comment
+#: (B-forbidden-guard-multiline-quote-bypass critic #1).
+_COMMENT_BOUNDARY = " \t\n;|&()<>"
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
@@ -176,9 +178,11 @@ def _bare_word(text: str, n: int, k: int, word: str) -> bool:
     return end >= n or not (text[end].isalnum() or text[end] == "_")
 
 
-def _case_end(text: str, n: int, k: int) -> int:
+def _case_end(text: str, n: int, k: int, bodies: list[str]) -> int:
     """Index after the `esac` that closes the `case` at `k`; a quoted, commented or escaped
-    span is text, so an `esac` inside it is not the keyword that ends the case."""
+    span is text, so an `esac` inside it is not the keyword that ends the case (a double
+    quote, `$(` body or backtick body a case arm holds is skipped too, so an `esac` a quote
+    swallows does not drop the depth -- B-forbidden-guard-multiline-quote-bypass critic #2)."""
     depth = 1
     k += 4
     while k < n and depth:
@@ -190,6 +194,16 @@ def _case_end(text: str, n: int, k: int) -> int:
             k = k + 1 if k2 < 0 else k2 + 1
         elif text[k] == "$" and k + 1 < n and text[k + 1] == "'":
             k = _ansi_c_end(text, n, k)
+        elif text[k] == '"':
+            k = _dquote_end(text, n, bodies, k)
+        elif text[k] == "`":
+            k2 = _find_body(text, n, bodies, k + 1, "`")
+            bodies.append(text[k + 1 : k2])
+            k = k2 + 1
+        elif text[k] == "$" and k + 1 < n and text[k + 1] == "(":
+            k2 = _find_body(text, n, bodies, k + 2, ")")
+            bodies.append(text[k + 2 : k2])
+            k = k2 + 1
         elif text[k] == "\\":
             k += 2 if k + 1 < n else 1
         elif _bare_word(text, n, k, "case"):
@@ -215,7 +229,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
             k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
             k = k2 if k2 >= 0 else n
         elif closer == ")" and _bare_word(text, n, k, "case"):
-            k = _case_end(text, n, k)  # a case's `)` separators end patterns, not this `$(` body
+            k = _case_end(text, n, k, bodies)  # a case's `)` separators end patterns, not this `$(` body
         elif c == "'":
             k2 = text.find("'", k + 1)
             k = k + 1 if k2 < 0 else k2 + 1
@@ -343,11 +357,12 @@ def _split(text: str) -> list[list[str]]:
 
 def _commands(text: str) -> list[list[str]]:
     """Each command of `text` as its words, of the strings given to `sh -c`, and of the
-    `$(` ... `)` / backquoted command substitutions (three nested levels of each)."""
+    `$(` ... `)` / backquoted command substitutions, descended to the cap (a deeper
+    `sh -c` chain is not flattened by the guard's fixed three levels)."""
     cmds = _split(text)
     todo = cmds
     bodies = _substitutions(text)
-    for _ in range(3):
+    for _ in range(16):  # bounded: deeper than the doc'd three levels, still capped
         found: list[list[str]] = []
         for c in todo:
             head = _head(c)
@@ -361,6 +376,8 @@ def _commands(text: str) -> list[list[str]]:
         cmds.extend(found)
         todo = found
         bodies = [s for b in bodies for s in _substitutions(b)]
+        if not todo and not bodies:
+            break
     return cmds
 
 
