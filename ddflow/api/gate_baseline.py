@@ -173,16 +173,6 @@ def _file(
     return ""
 
 
-def _linked(repo: Path, agent: str, ids: list[str]) -> str:
-    """The open bug to link the whole failing set to, or "" when some id no open bug names."""
-    return _dedup(repo, agent, ids)[0]
-
-
-def _unnamed(repo: Path, agent: str, ids: list[str]) -> list[str]:
-    """The failing ids no open bug names: the genuinely new failures ``_file`` files."""
-    return _dedup(repo, agent, ids)[1]
-
-
 def _dedup(repo: Path, agent: str, ids: list[str]) -> tuple[str, list[str]]:
     """``(link, unnamed)`` from ONE snapshot of the open bugs: the bug linking the whole set ("" when
     some id no open bug names), and the ids no open bug names.

@@ -178,11 +178,11 @@ def test_an_open_bug_naming_the_ids_is_linked_not_refiled(repo) -> None:
     _project(repo)
     run_cli(repo, "bug", "found", "--summary", f"{ID} fails on main", agent="worker")
     bug = next(iter(_state(repo).bugs))
-    assert GB._linked(repo, "worker", [ID]) == bug
-    assert GB._linked(repo, "worker", ["tests/other.py::t"]) == ""
+    assert GB._dedup(repo, "worker", [ID])[0] == bug
+    assert GB._dedup(repo, "worker", ["tests/other.py::t"])[0] == ""
     assert GB._names(f"see {ID}: fails.", ID) and GB._names(f"[{ID}] red", ID)
     assert not GB._names(f"{ID}_b is red", ID) and not GB._names(f"{ID}/helpers.py", ID)
-    assert GB._linked(repo, "worker", [ID[:-1]]) == ""  # the start of a longer id is not the id
+    assert GB._dedup(repo, "worker", [ID[:-1]])[0] == ""  # the start of a longer id is not the id
 
 
 def test_a_run_whose_ids_are_each_owned_by_a_bug_is_linked_not_refiled(repo) -> None:
@@ -200,15 +200,15 @@ def test_a_run_whose_ids_are_each_owned_by_a_bug_is_linked_not_refiled(repo) -> 
     st = _state(repo)
     assert len(st.bugs) == 2
     # A single bug naming the single id (the old case) still links.
-    assert GB._linked(repo, "worker", [a]) in st.bugs
+    assert GB._dedup(repo, "worker", [a])[0] in st.bugs
     # Each id owned by a DIFFERENT open bug: the set is still fully owned -- nothing new.
-    got = GB._linked(repo, "worker", [a, b])
+    got = GB._dedup(repo, "worker", [a, b])[0]
     assert got, "a set whose ids each already have an open bug must not read as unlinked"
     assert got in st.bugs
     # An id no open bug names is the only new one.
     c = "tests/test_z.py::test_c"
-    assert GB._linked(repo, "worker", [a, c]) == ""
-    assert GB._unnamed(repo, "worker", [a, b, c]) == [c]
+    assert GB._dedup(repo, "worker", [a, c])[0] == ""
+    assert GB._dedup(repo, "worker", [a, b, c])[1] == [c]
 
 
 def _ci_project(repo, n: int, *, extra_fail: str = "") -> None:
