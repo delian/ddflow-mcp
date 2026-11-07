@@ -62,7 +62,10 @@ def apply(  # noqa: PLR0913, PLR0917
     if unran := _guards_unran(gate, ev):
         ev["reason"] = unran
         return result, unran
-    bug = _linked(repo, agent, ids) or _file(repo, agent, it.id, gate, ids, found)
+    unnamed = _unnamed(repo, agent, ids)
+    bug = _linked(repo, agent, ids)
+    if not bug and unnamed:
+        bug = _file(repo, agent, it.id, gate, unnamed, found)
     found["bug"] = bug
     found["auto"] = BL.auto_decision(cfg, cwd or repo, base, ids, found, TSC.limits(cfg))
     reason = BR.reason_text(ids, bug)
@@ -172,12 +175,27 @@ def _file(
 
 
 def _linked(repo: Path, agent: str, ids: list[str]) -> str:
-    """The open bug whose text already names every one of ``ids`` (dedup by test id), or ""."""
+    """The open bug to link the whole failing set to, or "" when some id no open bug names.
+
+    Dedup is per id, not per set (B-baseline-red-filer-piles-up): an id already named by
+    ANY open bug is that bug's, so a run whose ids are each owned by (possibly different)
+    open bugs files nothing new. When every id is owned, the bug naming the whole set is
+    returned if there is one, else the open bug owning the first id."""
     _log, _cfg, st = _load(repo, agent)
-    for b in st.bugs.values():
-        if not (b.fixed_at or b.invalid_at) and all(_names(b.summary, i) for i in ids):
+    open_bugs = [b for b in st.bugs.values() if not (b.fixed_at or b.invalid_at)]
+    if any(not any(_names(b.summary, i) for b in open_bugs) for i in ids):
+        return ""
+    for b in open_bugs:
+        if all(_names(b.summary, i) for i in ids):
             return b.id
-    return ""
+    return next(b.id for b in open_bugs if _names(b.summary, ids[0]))
+
+
+def _unnamed(repo: Path, agent: str, ids: list[str]) -> list[str]:
+    """The failing ids no open bug names: the genuinely new failures ``_file`` files."""
+    _log, _cfg, st = _load(repo, agent)
+    open_bugs = [b for b in st.bugs.values() if not (b.fixed_at or b.invalid_at)]
+    return [i for i in ids if not any(_names(b.summary, i) for b in open_bugs)]
 
 
 def _names(text: str, test_id: str) -> bool:
