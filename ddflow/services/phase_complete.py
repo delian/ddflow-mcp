@@ -72,8 +72,16 @@ def complete_phase(
         )
         decided = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
         if not decided.ok:
+            # `operator_gate` prefixes its refusal where one is refused (a request or a
+            # refused spend); the "to ask the operator" steering message (no id, `auto` False)
+            # is NOT prefixed, so add the prefix only when it is not already there.
             return O.refused(
-                KIND, "refusing: " + decided.message, id=phase_id, approval=decided.ask_id
+                KIND,
+                decided.message
+                if decided.message.startswith("refusing: ")
+                else "refusing: " + decided.message,
+                id=phase_id,
+                approval=decided.ask_id,
             )
         stamp = {"approval": decided.stamp}
     by = agent or "operator"
