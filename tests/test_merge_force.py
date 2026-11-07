@@ -212,6 +212,23 @@ def test_a_failed_git_landing_does_not_spend_the_approval(repo, refuse, monkeypa
     assert _asks(repo)[ask]["used"] == 0
 
 
+def test_authorise_checks_but_spend_records_the_use(repo, refuse):
+    """B527b0a518c: `authorise` validates the approval without recording a use; the landing's
+    `spend` records the one use. Between the two a landing may still fail, which is the whole
+    point -- a spent-then-failed is what this bug forbids."""
+    from ddflow.api._base import _load
+
+    _claimed(repo)
+    ask = _approved_ask(repo)
+    log, cfg, st = _load(repo, "bot")
+    a = MF.assess(repo, cfg, st, "T1")
+    proof, why = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    assert proof and not why
+    assert _asks(repo)[ask]["used"] == 0  # validation alone does not spend
+    assert MF.spend(log, cfg, "T1", a, ask).ok
+    assert _asks(repo)[ask]["used"] == 1  # the landing's spend records the single use
+
+
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
     assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "")
