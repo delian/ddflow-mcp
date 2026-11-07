@@ -31,7 +31,8 @@ CLAUDE = ".claude/settings.json"
 GEMINI = ".gemini/settings.json"
 GUARD = (
     "commands an agent is told never to run (pkill, git stash, git push, force flags) are "
-    "refused before they run ([hooks].forbidden_commands)"
+    "refused before they run, and a file write outside its lease ([hooks].forbidden_commands "
+    "and [locks].mode)"
 )
 
 
@@ -78,7 +79,9 @@ def _expected_files() -> dict[str, dict]:
                 ],
                 "PreCompact": [{"hooks": [cmd(old["pre-compact"])]}],
                 "UserPromptSubmit": [{"hooks": [cmd(old["prompt-claude"])]}],
-                "PreToolUse": [{"matcher": "Bash", "hooks": [cmd(old["pre-tool"])]}],
+                "PreToolUse": [
+                    {"matcher": CH.PRETOOL_MATCHER, "hooks": [cmd(old["pre-tool"])]}
+                ],
             }
         },
         GEMINI: {"hooks": {"BeforeAgent": [{"hooks": [cmd(old["prompt-gemini"])]}]}},

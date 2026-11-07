@@ -34,7 +34,11 @@ JSON_GROUPS = frozenset({"claude", "gemini"})
 #: Descriptor styles written as ``flat-list``.
 FLAT_LIST = frozenset(flatlist.LAYOUTS)
 #: The canonical events ddflow installs a hook for; the others have no work to do yet.
-INSTALLED = ("session_start", "prompt", "pre_compact")
+#: ``pre_tool`` carries the write-tool matcher for the claude hook style so a write outside
+#: the agent's lease is refused before it runs (LK-write-hook-wire); flat-list layouts have
+#: no matcher (the hook fires for every tool), and gemini's BeforeTool cannot deny, so it is
+#: registered without a matcher and the write check falls back to the commit-time check there.
+INSTALLED = ("session_start", "prompt", "pre_compact", "pre_tool")
 
 
 def unsupported(h: Harness) -> str:
@@ -75,7 +79,7 @@ def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
             f"{event.replace('_', '-')}-{h.id}",
             hk.events[event],
             hk.file,
-            None,
+            CH.PRETOOL_MATCHER if event == "pre_tool" and hk.style == "claude" else None,
             f"the {event.replace('_', ' ')} event reaches ddflow",
             run=f"run {event} --harness {h.id}",
         )

@@ -80,6 +80,35 @@ def _self_managed(rel: str) -> bool:
     return any(rel.startswith(m) if m.endswith("/") else rel == m for m in SELF_MANAGED)
 
 
+def _holder(repo: Path, agent: str, rel: str) -> str:
+    """The agent whose live lease covers ``rel`` (never ``agent`` itself), or "" when none is
+    in the snapshot or it cannot be read. Cheap: it reads only the snapshot. Fails open: a
+    holder it cannot name drops that clause, never the whole refusal."""
+    try:
+        snap = hooksnap.read(repo)
+        if snap.status != hooksnap.OK:
+            return ""
+        now = time.time()
+        for lz in snap.leases.values():
+            if lz.get("holder") == agent:
+                continue
+            if now - float(lz.get("renewed_at", 0)) > int(lz.get("ttl_s", 0)) + snap.grace_s:
+                continue
+            if any(inside(rel, g) for g in lz.get("globs", [])):
+                return str(lz.get("holder", ""))
+    except Exception:  # a holder hint is never worth stopping the refusal over
+        return ""
+    return ""
+
+
+#: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
+OPTIONS = (
+    "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), send a suggestion "
+    "(`ddflow suggestions` / MCP `ddflow_suggestions`), or open a task "
+    "(`ddflow task add ...` / MCP `ddflow_task action=add`)"
+)
+
+
 def verdict(
     repo: Path, agent: str, paths: list[str], cwd: Path, root: Path | None = None
 ) -> tuple[int, str]:
@@ -105,9 +134,11 @@ def verdict(
         else:
             bad.append(rel)
     if bad:
+        holder = _holder(repo, agent, bad[0])
+        held = f" and {holder} holds it" if holder else ""
         return REFUSE, (
             f"lane {agent}: {', '.join(bad)} is outside the item's lease globs "
-            f"({', '.join(mine)}); do not edit it, or ask the lead to widen the globs"
+            f"({', '.join(mine)}){held}; {OPTIONS}"
         )
     return 0, ""
 

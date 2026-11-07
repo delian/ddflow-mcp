@@ -269,9 +269,13 @@ def _on_pre_tool(repo: Path, agent: str, p, plan, *, dry_run: bool = False) -> _
     # roots the lease globs.
     paths = CK.paths_of(p.raw)
     if paths:
-        code, denial = CK.verdict(repo, agent, paths, Path(p.cwd or Path.cwd()), root=repo)
-        if code == CK.REFUSE:
-            return _HookResult(result="denied", deny=denial, note=denial)
+        cfg = Config.load(repo)
+        if cfg.locks.mode != "off":
+            code, denial = CK.verdict(repo, agent, paths, Path(p.cwd or Path.cwd()), root=repo)
+            if code == CK.REFUSE:
+                if cfg.locks.mode == "log":
+                    return _HookResult(result="logged", note=denial)
+                return _HookResult(result="denied", deny=denial, note=denial)
     tool_input = p.raw.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if p.tool.lower() not in ("bash", "run_shell_command", "shell") or not isinstance(command, str):
