@@ -77,20 +77,47 @@ def test_a_failed_review_names_the_reviewer_that_found_the_blocking_defect(repo,
     assert ev["family"] == "xai", ev
 
 
-def test_naming_a_partial_failing_reviewer_keeps_the_clean_identifying_pass():
-    """A PARTIAL reviewer that found the blocking defect is the named reviewer, but the
-    identifying pass (whose completion drives the exit code) stays the clean REVIEWED peer:
-    naming the failing reviewer must not flip a completed run's exit to REFUSED."""
-    from types import SimpleNamespace as NS
+def _partial_failing(path: Path) -> str:
+    """A reviewer that answers the chunk carrying FINDME with a HIGH finding and any other
+    chunk off-contract (no STATUS: block), so it is PARTIAL with a blocking finding."""
+    path.write_text(
+        "#!/bin/sh\nin=$(cat)\n"
+        "case \"$in\" in *FINDME*) printf 'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
+        "*) echo thinking;; esac\n"
+    )
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return str(path)
 
-    from ddflow.api.review.run import _failing_reviewer
-    from ddflow.config import Config
-    from ddflow.services import review as RV
 
-    finding = RV.Finding(severity="HIGH", title="bad")
-    clean = NS(reviewer="clean", status=RV.REVIEWED, findings=[])
-    partial = NS(reviewer="partial", status=RV.PARTIAL, findings=[finding])
-    cfg = Config.load(None, env={})
-    named = _failing_reviewer([clean, partial], None, "critic", False, cfg, clean)
-    assert named is partial, named
-    assert clean.status == RV.REVIEWED
+def _setup_partial(repo: Path, tmp_path: Path) -> None:
+    """A deepseek author whose critic gate goes to a clean REVIEWED peer (google) and a
+    PARTIAL failing peer (xai). The gate fails on the xai finding; the run must still exit
+    OK (a clean REVIEWED pass identifies it), and the record must name xai."""
+    clean = _clean(tmp_path / "clean")
+    failing = _partial_failing(tmp_path / "failing")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        '[agent]\nfamily = "deepseek"\n'
+        f'[[reviewer]]\nname = "clean"\nkind = "command"\ncommand = "{clean}"\n'
+        'model = "gemini-2.5-pro"\nfamily = "google"\ngates = ["critic"]\nmax_chunk_chars = 100\n'
+        f'[[reviewer]]\nname = "failing"\nkind = "command"\ncommand = "{failing}"\n'
+        'model = "grok-4.7"\nfamily = "xai"\ngates = ["critic"]\nmax_chunk_chars = 100\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1  # FINDME\n" + "p" * 80 + "\n")
+    (repo / "y.py").write_text("y = 2\n" + "p" * 80 + "\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+
+
+def test_a_partial_failing_reviewer_keeps_the_run_exit_ok(repo, tmp_path):
+    _setup_partial(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="T1", branch="feat")
+    assert out.exit == 0, out.data  # the run completed (a clean REVIEWED peer identifies it)
+    assert out.data["outcome"] == "failed", out.data
+    ev = _ev(repo)
+    assert ev["reviewer"] == "failing", ev
