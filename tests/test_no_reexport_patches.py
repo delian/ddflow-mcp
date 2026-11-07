@@ -103,18 +103,30 @@ def _offenders(src: str, reexports: dict[str, set[str]]) -> list[tuple[int, str]
         if value is not None:
             # ``setattr(obj, "name", value)`` or ``setattr(target=..., name=..., value=...)``:
             # ``name`` is the attribute being set.
-            if not (isinstance(name, ast.Constant) and isinstance(name.value, str)):
-                continue
-            attr = name.value
-            if attr not in reexports or not _is_log_package(target, log_names):
+            if isinstance(name, ast.Constant) and isinstance(name.value, str):
+                attr = name.value
+                if attr not in reexports or not _is_log_package(target, log_names):
+                    continue
+            elif _is_log_package(target, log_names):
+                # A variable attribute name on the package re-spells any re-export and the
+                # guard cannot resolve it statically: flag it so the author spells the
+                # submodule patch out instead of a package patch that proves nothing.
+                attr = "<dynamic>"
+            else:
                 continue
         else:
-            # ``setattr("ddflow.infra.log.<name>", value)``: the dotted string names the
-            # target path, its last part the attribute.
-            if not (isinstance(target, ast.Constant) and isinstance(target.value, str)):
-                continue
-            path_str, attr = _dotted_string_name(target.value)
-            if attr not in reexports or path_str != "ddflow.infra.log":
+            # Two-arg form. ``setattr("ddflow.infra.log.<name>", value)`` gives the target
+            # path as a dotted string; ``setattr(L, "APPEND_HOOKS")`` deletes the package
+            # attribute. Both rebind the PACKAGE copy only.
+            if isinstance(target, ast.Constant) and isinstance(target.value, str):
+                path_str, attr = _dotted_string_name(target.value)
+                if attr not in reexports or path_str != "ddflow.infra.log":
+                    continue
+            elif isinstance(name, ast.Constant) and isinstance(name.value, str):
+                attr = name.value
+                if attr not in reexports or not _is_log_package(target, log_names):
+                    continue
+            else:
                 continue
         bad.append((node.lineno, attr))
     return bad
@@ -128,7 +140,7 @@ def _patched_on_package(path: Path, reexports: dict[str, set[str]]) -> list[str]
 def test_no_test_patches_an_infra_log_reexport_on_the_package():
     reexports = _by_value_reexports()
     offenders = []
-    for p in sorted(_TESTS.glob("test_*.py")):
+    for p in sorted(_TESTS.rglob("test_*.py")):
         offenders.extend(_patched_on_package(p, reexports))
     assert not offenders, offenders
 
@@ -140,6 +152,8 @@ _PACKAGE_PATCH_FORMS = [
     'monkeypatch.setattr("ddflow.infra.log.APPEND_HOOKS", [])',
     'monkeypatch.setattr("ddflow.infra.log", "APPEND_HOOKS", [])',
     'monkeypatch.setattr(target="ddflow.infra.log", name="APPEND_HOOKS", value=[])',
+    # deletion form: omitting ``value`` deletes the package attribute only
+    'import ddflow.infra.log as L\nmonkeypatch.setattr(L, "APPEND_HOOKS")',
 ]
 
 
@@ -150,6 +164,19 @@ def test_guard_flags_every_package_patch_form():
     for src in _PACKAGE_PATCH_FORMS:
         names = [name for _, name in _offenders(src, reexports)]
         assert names == ["APPEND_HOOKS"], (src, names)
+
+
+def test_guard_flags_a_dynamic_attribute_name_on_the_package():
+    """An attribute spelled as a local variable on the package re-spells any re-export and
+    the guard cannot resolve it statically, so it is refused rather than silently missed."""
+    reexports = _by_value_reexports()
+    src = (
+        'from ddflow.infra import log as L\n'
+        'attr = "APPEND_HOOKS"\n'
+        'monkeypatch.setattr(L, attr, [])'
+    )
+    names = [name for _, name in _offenders(src, reexports)]
+    assert names == ["<dynamic>"], names
 
 
 def test_guard_allows_patching_the_submodule_that_reads_the_name():
