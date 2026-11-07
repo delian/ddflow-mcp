@@ -176,6 +176,13 @@ def test_fake_move_mirrors_local_on_parents_and_self():
     # moving a directory into its own subtree is refused, like shutil.move
     with pytest.raises(OSError):
         FakeFs({"/a/f": b"1"}).move("/a", "/a/b")
+    # into a deeper descendant is refused even if the middle component is missing
+    with pytest.raises(OSError):
+        FakeFs({"/a/f": b"1"}).move("/a", "/a/missing/new")
+    # to a missing NON-descendant parent a directory relocates (shutil.move copytree)
+    m = FakeFs({"/a/f": b"1"})
+    m.move("/a", "/missing/a")
+    assert m.files == {"/missing/a/f": b"1"}
 
 
 def test_fake_replace_path_mirrors_local_on_directories():
@@ -200,6 +207,11 @@ def test_fake_replace_path_mirrors_local_on_directories():
     with pytest.raises(OSError) as _exc:
         FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/child")
     assert type(_exc.value) is OSError
+    # a descendant that is also an existing file is the ancestor guard (EINVAL),
+    # not the file-over-directory guard, so it is OSError, not NotADirectoryError
+    with pytest.raises(OSError) as _exc2:
+        FakeFs({"/a/f": b"1"}).replace_path("/a", "/a/f")
+    assert type(_exc2.value) is OSError
     # the filesystem root is refused, like move/copy_tree/rmtree
     with pytest.raises(ValueError):
         FakeFs({"/f": b"1"}).replace_path("/", "/new")

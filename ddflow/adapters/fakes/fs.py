@@ -72,6 +72,16 @@ class FakeFs:
             if not self.is_dir(acc):
                 raise FileNotFoundError(acc)
 
+    def _refuse_file_ancestor(self, p: str) -> None:
+        """Refuse when an ancestor of `p` is a file (`NotADirectoryError`); a
+        missing ancestor is fine (its directory is made implicitly)."""
+        prefix, _slash, _rest = p.rpartition("/")
+        acc = ""
+        for step in prefix.lstrip("/").split("/"):
+            acc = f"{acc}/{step}"
+            if acc in self.files:
+                raise NotADirectoryError(acc)
+
     def _relocate_dir(self, s: str, d: str) -> None:
         """Move a whole directory `s` (files + subdirs) to `d`, like a rename."""
         for f in self._under(s):
@@ -135,7 +145,8 @@ class FakeFs:
         if d.startswith(s + "/"):  # a directory cannot move into its own subtree
             raise OSError(f"cannot move a directory into itself ({d})")
         # like shutil.move: a directory move falls back to copytree, so a missing
-        # parent is created rather than refused.
+        # parent is created; an ancestor that is a file is refused.
+        self._refuse_file_ancestor(d)
         self._relocate_dir(s, d)
 
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
