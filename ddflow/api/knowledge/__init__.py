@@ -27,7 +27,6 @@ from .bug_close import (  # noqa: F401
     STILL_QUEUED,
     bug_fixed,
     could_not_run_text,
-    regression_arg_refusal,
 )
 from .bug_dedupe import bug_dedupe  # noqa: F401
 from .bug_repro import repro_lead  # noqa: F401
