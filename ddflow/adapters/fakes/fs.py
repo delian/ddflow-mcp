@@ -10,6 +10,7 @@ unless `ignore_errors` (the port's default). The filesystem root is refused (`Va
 from __future__ import annotations
 
 from pathlib import Path
+from shutil import SameFileError
 
 from . import fake
 
@@ -81,8 +82,10 @@ class FakeFs:
             raise FileNotFoundError(s)
         if self.is_dir(d):  # shutil.copy2 copies INTO an existing directory
             d = self._prefix(d) + s.rsplit("/", 1)[-1]
-        if d == s:  # shutil raises SameFileError (an OSError) for a file onto itself
-            raise OSError(f"cannot copy {s!r} onto itself")
+        if d == s:  # shutil raises SameFileError for a file onto itself
+            raise SameFileError(f"{s!r} and {d!r} are the same file")
+        if self.is_dir(d):  # the resolved destination is itself a directory
+            raise IsADirectoryError(d)
         self._require_parent(d)
         self.files[d] = self.files[s]
 
@@ -152,6 +155,10 @@ class FakeFs:
             self.files[d] = self.files.pop(s)
             return
         # a directory: os.replace renames it over a new name or an empty one
+        if d.startswith(s + "/"):  # replacing a directory into its own descendant
+            raise OSError(f"cannot replace a directory into itself ({d})")
+        if d in self.files:  # a directory over an existing file
+            raise NotADirectoryError(d)
         if self._under(d) or self._dirs_under(d):
             raise OSError(f"cannot replace the non-empty directory {d!r}")
         self._require_parent(d)
