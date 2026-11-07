@@ -41,8 +41,10 @@ def _finished(t, mine: bool) -> bool:
     and not the closer's own (it ran under someone else); or already landed through
     ddflow's own merge (B-bug-fixed-removes-merged-fix-task) -- releasing at merge puts
     it back to OPEN, so the first two miss it. `merged_sha` is the one marker merge (and
-    PR sync) sets, so it alone names a landed task; `landed_after` is NOT one (a task
-    definition may carry one without a merge). A finished task is kept, not removed."""
+    PR sync) sets, so it alone names a landed task; `landed_after` is NOT such a marker
+    for THIS "should a bug close remove it" question (a task definition may carry one
+    without a merge -- `_fixing_item` answers a different question and may still read it).
+    A finished task is kept, not removed."""
 
     return t.terminal or (t.state != OPEN and not mine) or bool(t.merged_sha)
 

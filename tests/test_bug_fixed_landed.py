@@ -199,3 +199,19 @@ def test_a_merged_fix_task_is_kept_not_removed(repo):
     task = _item(repo, "fix-B1")
     assert not task.removed
     assert task.merged_sha == merged
+
+
+def test_a_fix_task_with_only_landed_after_is_still_removed_not_kept(repo):
+    """The critic's landed_after concern, guarded: a landing pair WITHOUT ddflow's own
+    merge leaves merged_sha empty, so `landed_after` alone must NOT mark the task
+    finished -- a false finding's fix task is still removed by `bug invalid`."""
+    sha = _landed_elsewhere(repo)
+    # A landing pair on the fix task with no ddflow merge (no worktree.merged -> no merged_sha).
+    run_cli(repo, "update", "fix-B1", "--globs", "src.py")
+    code, out, err = run_cli(repo, "update", "fix-B1", "--landed", sha)
+    assert code == 0, out + err
+    assert not _item(repo, "fix-B1").merged_sha
+    res = api.bug_invalid(repo, "B1", reason="not a real bug")
+    assert res.exit == OK, res.reason
+    assert res.data["fix_task_removed"] == "fix-B1", res.data
+    assert _item(repo, "fix-B1").removed
