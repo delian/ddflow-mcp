@@ -131,6 +131,18 @@ def test_a_section_is_wired_from_declare_not_a_kept_list():
     )
 
 
+def test_a_star_import_binds_the_section_classes():
+    """B-config-section-needs-hub-edit: `from ddflow.config import *` binds the section
+    classes, which lazy `__getattr__` alone would not (a star-import reads `__dict__` or
+    `__all__`, never `__getattr__`; `__all__` must name them)."""
+    from ddflow.config_sections._docs import SECTION_CLASSES
+
+    namespace: dict[str, object] = {}
+    exec("from ddflow.config import *", namespace)
+    assert namespace["AgentConfig"] is SECTION_CLASSES["agent"]
+    assert namespace["LeaseConfig"] is SECTION_CLASSES["lease"]
+
+
 def test_the_knob_docs_are_one_registry():
     assert C.KNOB_DOCS is KNOB_DOCS
     explained = [k for k, *_ in C.Config().explain()]
