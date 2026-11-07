@@ -276,7 +276,8 @@ def _author_single_family(cfg, author_model: str) -> str | None:
     routed = None if bare else GD.router_set(author_model, cfg.agent.routers)
     if routed is not None:
         return None
-    return (bare or GD.family_of(author_model, cfg)).strip().lower() or None
+    fam = (bare or GD.family_of(author_model, cfg) or "").strip().lower()
+    return None if fam in ("", "unknown") else fam
 
 
 def _rev_family(r, cfg) -> str:
