@@ -148,14 +148,14 @@ class FakeFs:
                 raise FileExistsError(d)
         elif d == s:
             return  # shutil.move of a path onto itself is a no-op
-        elif d in self.files and s not in self.files:
-            raise FileExistsError(d)  # a directory over a file
         if s in self.files:
             self._require_parent(d)
             self.files[d] = self.files.pop(s)
             return
         if d.startswith(s + "/"):  # a directory cannot move into its own subtree
             raise Error(f"cannot move a directory into itself ({d})")
+        if d in self.files:
+            raise FileExistsError(d)  # a directory over an existing file
         # like shutil.move: a directory move falls back to copytree, so a missing
         # parent is created; an ancestor that is a file is refused.
         self._refuse_file_ancestor(d)
