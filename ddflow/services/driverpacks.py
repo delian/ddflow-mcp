@@ -21,11 +21,11 @@ job, not a reader guessing at an unknown shape. Unknown keys stay an error.
 
 from __future__ import annotations
 
-import os
 import tomllib
 from pathlib import Path
 from typing import Any
 
+from ..adapters.env import DEFAULT as ENV
 from ..adapters.http import UrllibHttpClient
 from ..core.digest import content_digest
 from . import harnessreg
@@ -51,7 +51,7 @@ class PackError(ValueError):
 
 def user_dir() -> Path:
     """The user ddflow directory: ``$XDG_CONFIG_HOME/ddflow``, else ``~/.config/ddflow``."""
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    base = ENV.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "ddflow"
 
 
@@ -129,6 +129,7 @@ def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
     out: list[Harness] = []
     for p in sorted(directory.glob("*.toml")):
         text = p.read_text(encoding="utf-8")
+        require_known_schema(text)
         if layer == "project":
             bad = operator_only_violations(tomllib.loads(text))
             if bad:
