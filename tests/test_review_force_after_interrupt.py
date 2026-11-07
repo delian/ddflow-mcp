@@ -20,16 +20,27 @@ from conftest import run_cli
 from helpers import git as _git
 
 import ddflow.api.review as api
-from ddflow.api.review.gate import _terminated_gate
+from ddflow.api.review.gate import _begin_run, _terminated_gate
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import gates as GD
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
+# `active_files` matches reply files by item NAME alone (not repo), so a `T1` review left
+# in the process-global `_ACTIVE` list by another test's repo would make the "nothing
+# reviewed" case read a phantom chunk and record `partial` instead of `unavailable`.
+# A name no other test reuses makes both cases deterministic under the full suite.
+ITEM = "T1-force-dedup"
+
 
 def _setup(repo: Path, tmp_path: Path) -> Path:
-    """A command reviewer that flags FINDME; item T1 with an uncommitted change holding it."""
+    """A command reviewer that flags FINDME; an item with an uncommitted change holding it."""
+    # `_terminated_gate` reads the process-global `_ACTIVE` reply-file list (this process's
+    # running review), so a prior test that reviewed ITEM/critic leaves a checkpoint there
+    # and this suite's "nothing reviewed" case would see it. Clear it, exactly as a real
+    # review run does before its guard can checkpoint (bug B-ddflow-review-force-duplicate-round).
+    _begin_run()
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
@@ -46,13 +57,13 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
-    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    run_cli(repo, "task", "add", ITEM, "--title", "add files", "--globs", "*.py")
     (repo / "x.py").write_text("x = 1  # FINDME\n")
     return cli
 
 
 def _last_run(repo: Path, gate: str):
-    item = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    item = fold(EventLog(repo).read_all(), strict=False).items[ITEM]
     return item.runs_of(gate)[-1]
 
 
@@ -63,7 +74,7 @@ def test_a_terminated_review_with_nothing_reviewed_marks_its_signal(repo, tmp_pa
     _setup(repo, tmp_path)
     log, cfg, st = api._load(repo, "")
     gates = GD.load_gates(repo, cfg)
-    _terminated_gate(repo, log, cfg, st, "T1", "critic", "SIGTERM", None, gates)
+    _terminated_gate(repo, log, cfg, st, ITEM, "critic", "SIGTERM", None, gates)
     last = _last_run(repo, "critic")
     assert last.outcome == "unavailable"
     assert last.evidence.get("terminated_by") == "SIGTERM", last.evidence
@@ -76,9 +87,9 @@ def test_a_forced_rereview_after_a_terminated_one_names_the_repeat(repo, tmp_pat
     _setup(repo, tmp_path)
     log, cfg, st = api._load(repo, "")
     gates = GD.load_gates(repo, cfg)
-    _terminated_gate(repo, log, cfg, st, "T1", "critic", "SIGTERM", None, gates)
+    _terminated_gate(repo, log, cfg, st, ITEM, "critic", "SIGTERM", None, gates)
 
-    out = api.review(repo, gate="critic", item="T1", force=True, reason="finish the review")
+    out = api.review(repo, gate="critic", item=ITEM, force=True, reason="finish the review")
 
     assert out.exit == OK, out.reason
     assert "repeats the review terminated by SIGTERM" in out.data["text"], out.data["text"]
