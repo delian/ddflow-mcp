@@ -16,7 +16,7 @@ import re
 from typing import Any, NamedTuple
 
 from ..registry import AS_AGENT, AS_AGENT_SPEC, Param, params_schema
-from . import TOOLS
+from . import DECLARED, TOOLS
 from .families import FAMILIES, Family
 
 __all__ = (
@@ -78,7 +78,11 @@ def _union(family: Family) -> dict[str, tuple[set[str], str]]:
     """``{argument: (types, description)}`` over the members, the longest description kept.
 
     A member's own ``action`` argument is ``op`` here, its description naming the action it
-    belongs to (the members' meanings differ, so they are joined, not picked between)."""
+    belongs to (the members' meanings differ, so they are joined, not picked between). A
+    parameter whose bounded values differ per action (`_joined_params`) is joined the same
+    way, so each action is told its own values instead of the union keeping one (`view` in
+    `metrics` versus `lanes`: bug B-family-view-param-one-help)."""
+    joined = _joined_params(family)
     union: dict[str, tuple[set[str], str]] = {}
     for act, tool in family.members.items():
         for arg, (kind, text, _req) in member_props(tool).items():
@@ -87,8 +91,25 @@ def _union(family: Family) -> dict[str, tuple[set[str], str]]:
                 union[OP] = (types | {kind}, f"{said} {act}: {text}".strip())
                 continue
             types, best = union.get(arg, (set(), ""))
-            union[arg] = (types | {kind}, text if len(text) > len(best) else best)
+            if arg in joined:
+                union[arg] = (types | {kind}, f"{best} {act}: {text}".strip())
+            else:
+                union[arg] = (types | {kind}, text if len(text) > len(best) else best)
     return union
+
+
+def _joined_params(family: Family) -> set[str]:
+    """Parameters whose bounded ``choices`` differ between members, joined per action in the
+    union rather than 'the longest description wins' (bug B-family-view-param-one-help)."""
+    sets: dict[str, set[tuple[str, ...]]] = {}
+    for tool in family.members.values():
+        cmd = DECLARED.get(tool)
+        if cmd is None:
+            continue
+        for p in cmd.params:
+            if p.choices:
+                sets.setdefault(p.name, set()).add(tuple(p.choices))
+    return {n for n, seen in sets.items() if len(seen) > 1}
 
 
 def _listed(text: str) -> str:
@@ -139,11 +160,12 @@ def family_entry(name: str) -> dict[str, Any]:
     """The ``tools/list`` entry of family ``name``."""
     family = FAMILIES[name]
     union = _union(family)
+    joined = _joined_params(family)
     params = tuple(
         Param(
             n,
             type="string" if len(types) > 1 else next(iter(types)),
-            help=text if n == OP else _listed(text),
+            help=_listed(text) if n not in (OP, *joined) else text,
         )
         for n, (types, text) in union.items()
     )

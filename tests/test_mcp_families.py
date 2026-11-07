@@ -27,6 +27,17 @@ def test_one_listing_per_family_and_none_for_singles():
     assert len(names) == 15
 
 
+def test_a_shared_choice_parameter_lists_every_actions_values():
+    """`view` belongs to `metrics` and `lanes` with different values; the union must say
+    each action's, not drop one for the longer (bug B-family-view-param-one-help)."""
+    view = FS.family_entry("ddflow_view")["inputSchema"]["properties"]["view"]["description"]
+    for value in ("summary", "forecast", "retro", "skips", "stages", "locks", "swarm"):
+        assert value in view  # metrics' values
+    for value in ("state", "brief", "advise", "fleet", "resume"):
+        assert value in view  # lanes' values
+    assert "metrics" in view and "lanes" in view
+
+
 @pytest.mark.parametrize("family", FAMILY_NAMES)
 def test_schema_has_the_action_enum_and_the_union_of_the_members_arguments(family):
     entry = FS.family_entry(family)
@@ -122,7 +133,9 @@ def test_a_listed_argument_text_stays_short_and_says_when_it_was_cut():
     that loads the family. The member keeps it whole; only the listing is cut."""
     for family in FAMILY_NAMES:
         for name, prop in FS.family_entry(family)["inputSchema"]["properties"].items():
-            if name != FS.OP:  # `op` joins one clause per member, each one needed
+            if name != FS.OP and name not in FS._joined_params(F.FAMILIES[family]):
+                # `op` and a joined per-action parameter list one clause per member, each
+                # one needed
                 assert len(prop.get("description", "")) <= FS.LISTED_TEXT_MAX, (family, name)
     full = FS.member_props("ddflow_lesson_add")["pattern"][1]
     listed = FS.family_entry("ddflow_memory")["inputSchema"]["properties"]["pattern"]["description"]
@@ -146,7 +159,9 @@ def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
     fams = sum(len(json.dumps(e, separators=(",", ":")).encode()) for e in FS.family_listing())
     singles = sum(len(json.dumps(_flat(t), separators=(",", ":")).encode()) for t in F.HOT_SINGLES)
     assert fams + singles < 0.6 * flat
-    assert fams + singles < 55_000  # measured 54,456 (the research estimated 53,312)
+    # measured 55,498 (the research estimated 53,312); the per-action `view` join grew the
+    # bounded tail, not the flat surface.
+    assert fams + singles < 56_000
 
 
 def _flat(tool):
