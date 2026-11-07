@@ -89,8 +89,13 @@ def model_overlay_paths(root: Path | str, user_home: Path | str | None = None) -
 
 def schema_of(text: str) -> int | None:
     """The ``schema`` a file declares, or ``None`` when it carries none (the shipped,
-    schema-less shape this code reads as its own)."""
-    data = tomllib.loads(text)
+    schema-less shape this code reads as its own). Bytes that are not valid TOML are
+    refused as a ``PackError`` here, so one malformed descriptor never surfaces a raw
+    ``TOMLDecodeError``."""
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PackError("not valid TOML") from exc
     s = data.get("schema")
     if s is None:
         return None
