@@ -67,10 +67,13 @@ def _dotted_path(node: ast.expr) -> str | None:
 
 
 def _is_log_package(target: ast.expr, log_names: set[str]) -> bool:
-    """Whether ``target`` is ``ddflow.infra.log`` (spelled out, or bound to a local alias)
-    rather than one of its submodules or an unrelated module."""
+    """Whether ``target`` is ``ddflow.infra.log`` (spelled out, bound to a local alias, or
+    passed as the module-path string pytest imports) rather than one of its submodules or an
+    unrelated module."""
     if isinstance(target, ast.Name) and target.id in log_names:
         return True
+    if isinstance(target, ast.Constant) and isinstance(target.value, str):
+        return target.value == "ddflow.infra.log"
     return _dotted_path(target) == "ddflow.infra.log"
 
 
