@@ -212,15 +212,74 @@ def _confirmed_unrechecked(it, gate: str) -> bool:
     return bool(GD.unresolved_review_failure(it, gate, confirmed_only=True))
 
 
-def _blocking_findings(results, it, gate: str, converging: bool, cfg) -> tuple[list, bool]:
-    """(blocking, converged_round) for this round -- the findings that keep the gate open and
-    whether this is a converged full re-review, computed in ONE place so the caller can name
+def _author_single_family(cfg, author_model: str) -> str | None:
+    """The AUTHOR's one family for the same-family discount, or None when none can be
+    named: an empty author model, a name no map recognises, or a router author (a SET of
+    families has no single line a reviewer can be shown on or off). Mirrors
+    `gates._author_identity` over its exported pieces."""
+    if not author_model:
+        return None
+    bare = GD.family_name_of(author_model, cfg.agent.families)
+    routed = None if bare else GD.router_set(author_model, cfg.agent.routers)
+    if routed is not None:
+        return None
+    return (bare or GD.family_of(author_model, cfg)).strip().lower() or None
+
+
+def _rev_family(r, cfg) -> str:
+    """A reviewer result's resolved family, lowercased, ``unknown`` normalised to ""."""
+    fam = (getattr(r, "family", "") or "").strip().lower()
+    if fam == "unknown":
+        fam = ""
+    if not fam:
+        fam = (GD.family_of(getattr(r, "model", "") or "", cfg) or "").strip().lower()
+    return fam
+
+
+def _cross_family_clean(results, cfg, author_fam: str | None) -> bool:
+    """Is there a cross-family clean verdict: a reviewer whose family lies outside the
+    author's that came back REVIEWED (a full round) with no findings?"""
+    if not author_fam:
+        return False
+    return any(
+        getattr(r, "status", None) == RV.REVIEWED
+        and not getattr(r, "findings", None)
+        and _rev_family(r, cfg) != author_fam
+        and _rev_family(r, cfg) != ""
+        for r in (results or [])
+    )
+
+
+def _blocking_findings(results, it, gate: str, converging: bool, cfg, author_model: str = "") -> tuple[list, list, bool]:
+    """(blocking, discounted, converged_round) for this round -- the findings that keep the
+    gate open, the findings a same-family/unrecognized reviewer raised that do NOT, and
+    whether this is a converged full re-review; computed in ONE place so the caller can name
     the reviewer that found a blocking finding and `_gate_outcome` shares this round's
     ``converged_round`` with it (bug B3113b1f522: one prior/converged value, not two drifted
-    copies). ``converged_round`` is False when this round raised no finding."""
-    found = [f for r in results if r.status in _HEARD for f in r.findings]
-    if not found:
-        return [], False
+    copies). ``converged_round`` is False when this round raised no finding.
+
+    ``discounted`` is the rubric of bug B7dbf432caa: a finding raised only by a reviewer of
+    the author's OWN family (or one whose family cannot be told, which ``review_tier`` calls
+    "establishes nothing") is not independent evidence, so when a cross-family reviewer came
+    back clean (``_cross_family_clean``) those findings are recorded but do not hold the
+    pass open -- otherwise the author's own family would veto a clean cross-family review
+    forever by never converging to a clean delta round."""
+    heard = [r for r in results if getattr(r, "status", None) in _HEARD]
+    author_fam = _author_single_family(cfg, author_model)
+    cross_clean = _cross_family_clean(heard, cfg, author_fam)
+    found: list = []
+    discounted: list = []
+    for r in heard:
+        fs = list(getattr(r, "findings", []) or [])
+        if not fs:
+            continue
+        is_cross = bool(_rev_family(r, cfg)) and _rev_family(r, cfg) != author_fam
+        if cross_clean and not is_cross:
+            discounted.extend(fs)
+        else:
+            found.extend(fs)
+    if not found and not discounted:
+        return [], [], False
     prior = _last_review(it, gate) if it is not None else {}
     converged_round = converging and bool(prior.get("chunk_findings"))
     blocking = RV.blocking_findings(
@@ -229,14 +288,17 @@ def _blocking_findings(results, it, gate: str, converging: bool, cfg) -> tuple[l
         floor=cfg.review.converge_floor,
         known=_still_standing(it, gate, prior.get("chunk_findings")),
     )
-    return blocking, converged_round
+    return blocking, discounted, converged_round
 
 
 def _gate_outcome(
-    best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
+    best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say,
+    author_model: str = "",
 ) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
-    evidence; a converged full re-review passes with a `converged` flag on the evidence.
+    evidence; a converged full re-review passes with a `converged` flag on the evidence, and
+    a round whose only findings are a same-family reviewer's (over a clean cross-family
+    verdict) passes with a `same_family_discounted` flag (bug B7dbf432caa).
 
     The convergence floor (bug Bf797745b5a) applies to a FULL re-review only: a delta or
     fix round shows only NEW code, so its own finding is a real defect of the change and
@@ -255,9 +317,28 @@ def _gate_outcome(
     found = [f for r in results if r.status in _HEARD for f in r.findings]
     if not found:
         return "passed", extra_evidence
-    blocking, converged_round = _blocking_findings(results, it, gate, converging, cfg)
+    blocking, discounted, converged_round = _blocking_findings(
+        results, it, gate, converging, cfg, author_model
+    )
     if blocking:
         return "failed", extra_evidence
+    # A same-family reviewer's finding does not hold the pass open when a cross-family
+    # reviewer came back clean: cross-family clean is authoritative (bug B7dbf432caa). The
+    # discounted findings stay on the record, just not blocking -- so the author's own
+    # family cannot veto a clean independent review by never converging.
+    if discounted:
+        extra = {
+            **(extra_evidence or {}),
+            "same_family_discounted": {
+                "findings": len(discounted),
+                "note": "a cross-family reviewer passed clean",
+            },
+        }
+        say(
+            f"→ {len(discounted)} finding(s) from a same-family/unrecognized reviewer "
+            "recorded but not blocking: a cross-family reviewer passed clean"
+        )
+        return "passed", extra
     # A full re-review must not converge (pass on below-floor findings) while a confirmed
     # finding the gate has ever recorded still awaits a later delta round (bug
     # B-push-failed-review-delta).

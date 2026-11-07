@@ -202,3 +202,48 @@ def test_a_secondary_reviewers_finding_is_in_the_review_result(repo, tmp_path):
     assert len(rows) == 2, rows
     assert any(row["severity"] == "MEDIUM" for row in rows), rows
     assert any(row["severity"] == "HIGH" for row in rows), rows
+
+
+def _setup_same_family_finding_cross_family_clean(repo: Path, tmp_path: Path) -> None:
+    """The author is a deepseek family. The same-family reviewer (deepseek) raises a finding
+    (it never converges to a clean delta round), while two cross-family reviewers -- grok
+    (xai) and gemini (google) -- review clean. The gate must close on the cross-family clean
+    verdict, not stay blocked on the same-family finding (bug B7dbf432caa)."""
+    same = _reviewer_with_finding(tmp_path / "rsame", "MEDIUM", "x.py:1")
+    xai = _reviewer(tmp_path / "rxai")
+    google = _reviewer(tmp_path / "rgoogle")
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        '[agent]\nfamily = "deepseek"\n'
+        f'[[reviewer]]\nname = "same"\nkind = "command"\ncommand = "{same}"\n'
+        'model = "deepseek-chat"\nfamily = "deepseek"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "grok"\nkind = "command"\ncommand = "{xai}"\n'
+        'model = "grok-4.7"\nfamily = "xai"\ngates = ["critic"]\n'
+        f'[[reviewer]]\nname = "gemini"\nkind = "command"\ncommand = "{google}"\n'
+        'model = "gemini-2.5-pro"\nfamily = "google"\ngates = ["critic"]\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "work")
+
+
+def test_a_same_family_finding_does_not_block_when_cross_family_is_clean(repo, tmp_path):
+    """The regression for bug B7dbf432caa: a same-family (deepseek) reviewer's finding is
+    recorded but does not keep the gate failed when cross-family reviewers (grok, gemini)
+    both passed clean -- cross-family clean is authoritative, and the author's own family
+    must not veto it by never converging to a clean delta round."""
+    _setup_same_family_finding_cross_family_clean(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="T1", branch="feat")
+    assert out.exit == 0, out.reason
+    assert out.data["outcome"] == "passed", out.data
+    ev = _ev(repo)
+    assert ev["family"] in ("xai", "google"), ev  # the clean cross-family review identifies
+    assert ev["same_family_discounted"] == {
+        "findings": 1,
+        "note": "a cross-family reviewer passed clean",
+    }, ev

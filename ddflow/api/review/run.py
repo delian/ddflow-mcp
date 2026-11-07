@@ -429,14 +429,17 @@ def _fam(r) -> str:
     return "" if fam == "unknown" else fam
 
 
-def _failing_reviewer(results, it, gate, converging, cfg, identifying):
+def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_model: str = ""):
     """The reviewer whose finding blocked the gate (bug B3113b1f522), else ``identifying``.
     A failed review must name the reviewer that found the blocking defect, not a clean peer
     that ranked first (or the author's own family, listed first), and must not re-purpose a
     PARTIAL reviewer as the identifying pass (which would flip the run's exit code). The
     findings `_blocking_findings` returns are the SAME objects each reviewer's ``findings``
-    held (matched by identity), so the return is one of ``results`` or ``identifying``."""
-    blocking, _ = _blocking_findings(results, it, gate, converging, cfg)
+    held (matched by identity), so the return is one of ``results`` or ``identifying``. The
+    same ``author_model`` as `_gate_outcome` decides the discount (bug B7dbf432caa): a
+    same-family finding discounted over a clean cross-family verdict must not make the
+    same-family reviewer the named failing one on a passed gate."""
+    blocking, _ = _blocking_findings(results, it, gate, converging, cfg, author_model)
     for r in results:
         if any(b is f for b in blocking for f in r.findings):
             return r
@@ -661,9 +664,12 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
 
     identifying = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
-        identifying, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        identifying, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say,
+        author_model,
     )
-    named = _failing_reviewer(results, it, gate, _converges(kind, fix), cfg, identifying)
+    named = _failing_reviewer(
+        results, it, gate, _converges(kind, fix), cfg, identifying, author_model
+    )
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
