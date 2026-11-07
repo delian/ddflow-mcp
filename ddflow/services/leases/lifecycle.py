@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ...config import Config
-from ...core.admission import conflicts, shared_globs
+from ...core.admission import queued_globs
 from ...core.model import Item, Lease, State
 from ...core.schedule import capacities, resource_shortfall
 from ...infra.log import EventLog
@@ -187,7 +187,7 @@ def plan_retarget(
     if globs is not None and accepted:
         ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, accepted, now)
         if ahead is not None:
-            queued = [m for m, _t in conflicts(accepted, ahead.globs, shared_globs(cfg))]
+            queued = queued_globs(accepted, ahead.globs, cfg)
             return (
                 lz,
                 (

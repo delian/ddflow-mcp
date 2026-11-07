@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from ...core import clock
-from ...core.admission import conflicts, glob_conflict, shared_globs
+from ...core.admission import glob_conflict, queued_globs
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.schedule import (
     Blocked,
@@ -195,7 +195,7 @@ def _claim_blocker(
         want = list(it.globs if globs is None else globs)
         ahead = WG.queue_ahead(st, cfg, it.id, me, want, now)
         if ahead is not None:
-            queued = [m for m, _t in conflicts(want, ahead.globs, shared_globs(cfg))]
+            queued = queued_globs(want, ahead.globs, cfg)
             return Blocked(
                 it.id,
                 "conflict",

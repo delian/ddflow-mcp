@@ -66,6 +66,12 @@ def conflicts(
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
 
 
+def queued_globs(mine: list[str], theirs: list[str], cfg: Any) -> list[str]:
+    """The ``mine`` globs that ``theirs`` overlaps (shared globs excluded): one name per
+    queued-behind clause, so the refusal names it instead of the whole ``theirs`` list."""
+    return [m for m, _t in conflicts(mine, theirs, shared_globs(cfg))]
+
+
 @dataclass(frozen=True)
 class Clash:
     """One overlapping pair with another item ``globs`` would collide on, and whose."""
