@@ -68,6 +68,9 @@ def test_a_waiter_narrowed_down_to_no_globs_is_not_held_contended(repo):
     assert code == 0, err
     st = _state(repo)
     assert st.items["T2"].globs == []
+    # Pin the stale wait edge STILL STANDS before asserting the contended edge for it is
+    # gone -- otherwise the emptiness would pass even against the unfixed short-circuit.
+    assert "T2" in WG.standing(st, _cfg(repo), time.time())
     assert "T2" not in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
 
 

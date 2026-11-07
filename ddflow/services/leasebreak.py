@@ -130,9 +130,9 @@ def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
     widening was refused, and those go stale: when the waiter later narrows its globs back
     down (gives up the file it could not get), naming it here becomes a false YIELD
     REQUESTED -- the waiter no longer needs the holder's files (B38ebc3e392). The edge
-    survives (a recorded wait lives with its lease), so drop it when the holder still
-    holds a lease and no CURRENT glob of the waiter overlaps that lease (an empty want
-    overlaps nothing, so it is dropped too)."""
+    survives (a recorded wait lives with its lease); a named holder that has since released
+    its lease is not leased at all and is dropped too. A waiter is named only while its
+    CURRENT globs still overlap the holder's LIVE lease (an empty want overlaps nothing)."""
     shared = shared_globs(cfg)
     out: dict[str, list[str]] = {}
     for waiter, held in WG.wait_for_graph(st, cfg, now).items():
@@ -142,11 +142,13 @@ def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
             if item_id == waiter:
                 continue
             it = st.items.get(item_id)
-            if (
-                it is not None
-                and it.lease is not None
-                and not conflicts(wanted, it.lease.globs, shared)
-            ):
+            if it is None or it.lease is None:
+                # The named holder is gone or no longer holds a live lease: it is not a
+                # "Leased item" and has nothing to yield, so a stale wait edge that still
+                # names it must not name it here either (a drop that fires only for a
+                # disjoint-overlap holder would let a released holder stay falsely named).
+                continue
+            if not conflicts(wanted, it.lease.globs, shared):
                 # None of the waiter's CURRENT globs overlaps the holder's lease (an
                 # empty ``wanted`` overlaps nothing): the recorded edge is stale, so the
                 # waiter no longer needs this holder's files and it is not named.
