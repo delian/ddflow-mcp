@@ -280,6 +280,40 @@ def test_findings_that_cannot_be_read_back_are_not_no_findings(repo, tmp_path, m
     assert "cannot be read back" in FR.unresolved_review_failure(it, "critic", confirmed_only=True)
 
 
+def test_the_merge_refusal_does_not_promise_a_free_fix_round_when_the_knob_is_off(repo, tmp_path):
+    """B-merge-refusal-says-delta-is-free-of-max-rounds: `review.fix_round_free = false`
+    counts a fix round like any round, so the refusal must not call a fix round
+    "free of max_rounds"."""
+    from ddflow.config import Config
+    from ddflow.services.gates import failed_review_blockers
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(
+        cfg_path.read_text().replace(
+            "delta_default = true", "fix_round_free = false\ndelta_default = true", 1
+        )
+    )
+    st = fold(EventLog(repo).read_all(), strict=False)
+    blocks = failed_review_blockers(st, Config.load(repo), "T1", None)
+    assert blocks, "a confirmed finding with no clearing delta must still block"
+    assert not any("free of max_rounds" in b for b in blocks), blocks
+
+
+def test_the_merge_refusal_names_a_fix_round_free_when_the_knob_is_on(repo, tmp_path):
+    """The default `review.fix_round_free = true` keeps the accurate wording: a fix round
+    is free of max_rounds (a plain delta past the cap is not, but is not what this says)."""
+    from ddflow.config import Config
+    from ddflow.services.gates import failed_review_blockers
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)
+    st = fold(EventLog(repo).read_all(), strict=False)
+    blocks = failed_review_blockers(st, Config.load(repo), "T1", None)
+    assert any("a fix round is free of max_rounds" in b for b in blocks), blocks
+
+
 def test_a_request_merged_by_a_person_over_a_failed_review_gate_is_not_completed(
     pr_repo,  # noqa: F811
 ):

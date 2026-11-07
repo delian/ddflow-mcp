@@ -113,10 +113,15 @@ def failed_review_blockers(
             rows.append(f"{g} ({why})")
     if not rows:
         return []
+    # A fix round is free of max_rounds only when [review].fix_round_free allows it
+    # (B-merge-refusal-says-delta-is-free-of-max-rounds): with the knob off a re-run is
+    # counted like any round and is refused past the cap, so the refusal must not promise
+    # a free round that does not exist.
+    fix_free = " (a fix round is free of max_rounds)" if cfg.review.fix_round_free else ""
     return [
         FAILED_REVIEW_BLOCKER
         + "; ".join(rows)
-        + f". Fix and re-run `ddflow review {item_id} --gate <gate>` (a delta round; a fix "
-        f"round is free of max_rounds), or the OPERATOR records the reason with "
+        + f". Fix and re-run `ddflow review {item_id} --gate <gate>`{fix_free}, or the "
+        f"OPERATOR records the reason with "
         f"`ddflow gate skip {item_id} <gate> --reason ...` -- `--force` does not lift this."
     ]
