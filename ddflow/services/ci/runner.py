@@ -247,13 +247,16 @@ def _default_on_the_diff(
     full: bool = False,
     override: bool = False,
 ) -> str:
-    """``cmd`` scoped to the diff the check is about, when it is the default command (a command
-    the operator wrote themselves -- ``[ci].command`` or the ``--command`` flag -- is run as
-    written, as is a ``--full`` run, which always takes the whole suite). The diff is the one the
-    check is about: on the base itself (the after-merge check) there is no branch to compare with,
-    so the commit just made against its first parent."""
+    """``cmd`` scoped to the diff the check is about, when it is the default command. A
+    whole-suite run -- ``--full``, or `[ci].tests_scope = "full"` on a run with no named
+    ``--command`` -- keeps ``--all-files``; a command the operator wrote themselves (`[ci].command`,
+    or a ``--command`` carrying the default phrase, with no merge range) runs as written. The
+    after-merge check's resolved default (``changed_from`` names the range it added) is the one
+    default that scopes: on the base itself there is no branch to compare with, so the commit just
+    made is its first parent."""
+    whole_suite = full or (not override and cfg.ci.tests_scope == "full")
     if (
-        full
+        whole_suite
         or (override and not changed_from)
         or cfg.ci.command.strip()
         or DEFAULT_COMMAND not in cmd

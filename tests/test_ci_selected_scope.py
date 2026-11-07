@@ -137,6 +137,19 @@ def test_an_explicit_default_command_is_run_as_written_not_narrowed(project, stu
     assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
 
 
+def test_a_configured_full_scope_on_the_base_runs_the_whole_suite(project, stubs):
+    """B-ci-full-skips-tests-on-events-head: `[ci].tests_scope = "full"` is a whole-suite run too,
+    so on a ref equal to its base the default command keeps ``--all-files`` instead of narrowing to
+    the last commit -- otherwise an events-only head skips the tests hook and 'full' runs nothing."""
+
+    cfg = Config.load(project)
+    cfg.ci.tests_scope = "full"
+    res = CI.run(project, cfg, ref="HEAD", base="main", for_item=True)
+    assert res.ok, res.reason
+    assert res.scope["scope"] == "full"
+    assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
+
+
 def test_a_comment_only_change_to_a_hub_is_scoped_selected_not_the_whole_suite(project, stubs):
     """Bug B0bdd3b9a39: a format/comment-only change to a hub scoped the whole suite, so a
     trivial fix cleared its ci gate only after a ~12-minute run over a red main. The change
