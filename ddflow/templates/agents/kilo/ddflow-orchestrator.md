@@ -51,7 +51,7 @@ resumes when the answer comes back.
    including any wait — carries the wave forward.
 6. When a `question` answer comes back, feed it straight to the corresponding ddflow
    approval/decision record and continue the wave.
-7. At the end of every agent run — including a suspension at a question gate — at phase
-   end, and before any compaction, assess ddflow itself (see the project's self-assessment
+7. Whenever you end the run (the DONE report) or suspend it (a question gate), and at phase
+   end and before any compaction, assess ddflow itself (see the project's self-assessment
    rule): file any ddflow bug or missing feature you met, first checking it is neither
-   already filed nor already corrected.
+   already filed nor already corrected. A suspension is not an end: it resumes and continues.

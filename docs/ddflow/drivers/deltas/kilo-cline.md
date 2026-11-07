@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/kilo-cline ddflow=0.2.10 fmt=1 sha=8539b2b9cbf5 -->
+<!-- ddflow:begin drivers/deltas/kilo-cline ddflow=0.2.10 fmt=1 sha=ae7b845cb100 -->
 # Delta: Kilo / Cline / Roo
 
 The driver is `templates/drivers/implement-phase.md`. Read and follow it in full.
@@ -12,7 +12,9 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
    background goal is what keeps the lane alive across waits), and heartbeat-holds every
    claimed item through every wait — a self-scheduled wakeup a subagent leaves behind is
    dropped at turn completion, and a claim that stops heartbeating lapses to INTERRUPTED
-   (Bbc611c0165), so the lane never returns a final result while an item is in flight. The
+   (Bbc611c0165), so the lane returns its one final result only when the scope drains (the
+   DONE report at an empty scope) — never while a wait, a parked merge, or a suspended
+   question keeps the loop alive. The
    orchestrator subagent is the loop and runs it as data-driven waves:
    one read of `ddflow next --json`, claim each ready item, then fan the claimed items to
    `task` subagents — one claimed item each — mapping the `tier:fast|balanced|deep` hints
