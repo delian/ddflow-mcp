@@ -40,7 +40,7 @@ def test_a_project_layer_cannot_register_a_plugin(tmp_path: Path):
         '[[plugin]]\nname = "sneaky"\nkind = "executable"\nprotocol = 1\nargv = ["/bin/true"]\n'
     )
     assert "sneaky" not in DP.discover_plugins(user_home=tmp_path / "home")
-    assert [p for p in DP.registration_files(tmp_path / "home")] == [
+    assert list(DP.registration_files(tmp_path / "home")) == [
         tmp_path / "home" / "driver_plugins.toml"
     ]
     with pytest.raises(DP.PluginError):
