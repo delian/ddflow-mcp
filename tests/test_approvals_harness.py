@@ -534,3 +534,35 @@ def test_attest_all_reports_a_refused_request_beside_an_attested_one(log, cfg, r
     assert "refused" in err
     got = asks_of(fold(EventLog(repo, "bot").read_all(), strict=False))[row["id"]]
     assert got["outcome"] == "approved" and got["via"] == "harness"
+
+
+def test_harness_imports_no_http_roots_and_holds_no_http_home_entry():
+    """Regression for Baf66b3bd2b: the harness channel reads Kilo's transcript store through
+    ``infra.docindex``, not ``sqlite3``/``urllib``, so ``harness.py`` imports no
+    ``urllib``/``http``/``socket`` and the http-home ratchet holds no entry for it. A stale
+    entry (listed but no matching import) reds ``test_import_contracts``; a re-added import
+    belongs in ``ddflow.adapters.http``, never here."""
+    import ast
+    import tomllib
+
+    here = Path(__file__).resolve().parents[1]
+    harness = here / "ddflow" / "services" / "approvals" / "harness.py"
+    roots = set()
+    for node in ast.walk(ast.parse(harness.read_text("utf-8"))):
+        if isinstance(node, ast.Import):
+            roots.update(n.name.split(".")[0] for n in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+    assert not roots & {"urllib", "http", "socket"}, (
+        f"{harness.name} imports {sorted(roots & {'urllib', 'http', 'socket'})}; "
+        "the harness channel reads the transcript through infra.docindex, not the network"
+    )
+    baseline = tomllib.loads(
+        (here / "tests" / "guard_baselines" / "importlinter-http-home.toml").read_text("utf-8")
+    )
+    stale = [
+        e
+        for e in baseline["ignore_imports"]
+        if e.split(" -> ")[0] == "ddflow.services.approvals.harness"
+    ]
+    assert not stale, f"stale http-home entry for a module that imports none of it: {stale}"
