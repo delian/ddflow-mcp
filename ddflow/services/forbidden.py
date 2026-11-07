@@ -306,6 +306,10 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
             k2 = _find_body(text, n, bodies, i + 2, ")")
             bodies.append(text[i + 2 : k2])
             i = k2 + 1
+        elif c in "<>" and i + 1 < n and text[i + 1] == "(":
+            k2 = _find_body(text, n, bodies, i + 2, ")")
+            bodies.append(text[i + 2 : k2])
+            i = k2 + 1
         else:
             i += 1
 
