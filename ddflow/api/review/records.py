@@ -5,11 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from ...core import blobref as B
 from ...services import gates as GD
 from ...services import leasekeep as LK
 from ...services import logblobs as LB
 from ...services import review as RV
 from ...services.gates import measured as GR
+from ...services.gates.failed_review import _cleared_after_delta
 from ..gates import item_tree
 
 PROGRESS_EVERY_S = 60
@@ -121,10 +123,19 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
     did not show (bug B0419c114ef). A PARTIAL reviewer was heard too: what its finished
     chunks raised is real, and leaving it out let the `--chunk` re-run of the lost chunk
     pass over it (bug B-main-red-review-records). Each reviewer's `evidence()` builds the
-    dicts with the detail truncation `_merge_delta` and triage already read."""
-    return [
-        fd for r in (results or []) if r.status in _HEARD for fd in r.evidence()["chunk_findings"]
-    ]
+    dicts with the detail truncation `_merge_delta` and triage already read.
+
+    Each finding carries its reviewer's ``reviewer`` and ``family``: the same-family
+    discount of bug B7dbf432caa reads a confirmed finding's family from the record."""
+    out: list[dict[str, Any]] = []
+    for r in results or []:
+        if r.status not in _HEARD:
+            continue
+        who = getattr(r, "reviewer", "")
+        fam = (getattr(r, "family", "") or "").strip().lower()
+        for fd in r.evidence()["chunk_findings"]:
+            out.append({**fd, "reviewer": who, "family": fam})
+    return out
 
 
 def _reason_of(best, found=None) -> str:
@@ -198,18 +209,60 @@ def _still_standing(it, gate: str, findings) -> set[str]:
     }
 
 
-def _confirmed_unrechecked(it, gate: str) -> bool:
-    """Is there a CONFIRMED finding of ``gate`` that no later delta round re-checked?
+def _confirmed_unrechecked(it, gate: str, results, cfg, author_model: str = "") -> bool:
+    """Is there a CONFIRMED finding of ``gate`` that no later delta round re-checked, that
+    still blocks?
 
     A full round that merely does not raise one has not re-checked the fix, so a converged
     full re-review must not pass while one stands (bug B-push-failed-review-delta). Read from
     the recorded gate (whose latest outcome is still the previous round's `failed`) so the
     exact "confirmed and not cleared after a delta" rule lives in one place. Returns False
     for a non-item `it` (the `_gate_outcome` unit tests pass a bare object and mock
-    `_last_review` instead)."""
+    `_last_review` instead).
+
+    A confirmed finding raised by a reviewer of the AUTHOR's own family does not block when
+    a cross-family reviewer came back clean: it is not independent evidence, so it is
+    discounted the same way this round's same-family findings are (bug B7dbf432caa). A
+    confirmed finding from another family still blocks.
+    """
     if it is None or not callable(getattr(it, "gate_outcome", None)):
         return False
-    return bool(GD.unresolved_review_failure(it, gate, confirmed_only=True))
+    if it.gate_outcome(gate) != "failed":
+        return False
+    unresolved = _unrechecked_confirmed(it, gate)
+    if not unresolved:
+        return False
+    author_fam = _author_single_family(cfg, author_model)
+    heard = [r for r in (results or []) if getattr(r, "status", None) in _HEARD]
+    if author_fam and _cross_family_clean(heard, cfg, author_fam):
+        # A same-family confirmed finding is discounted over a clean cross-family verdict.
+        return any(fam and fam != author_fam for _d, fam in unresolved)
+    return True
+
+
+def _unrechecked_confirmed(it, gate: str) -> list[tuple[str, str]]:
+    """(digest, family) of every CONFIRMED finding of ``gate`` no later delta round
+    cleared, read from the recorded findings (each carries the raising reviewer's
+    ``family`` since bug B7dbf432caa)."""
+    mine = (getattr(it, "triage", None) or {}).get(gate, {})
+    runs = it.runs_of(gate)
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for run in runs:
+        found = LB.full(run.evidence or {}).get("chunk_findings")
+        if isinstance(found, B.Unavailable):
+            continue
+        for f in found if is_triageable(found) else []:
+            digest = f.get("digest")
+            if not digest or digest in seen:
+                continue
+            seen.add(digest)
+            if mine.get(digest, {}).get("verdict") == "confirmed" and not _cleared_after_delta(
+                runs, digest
+            ):
+                fam = (str(f.get("family") or "") or "").strip().lower()
+                out.append((digest, fam))
+    return out
 
 
 def _author_single_family(cfg, author_model: str) -> str | None:
@@ -326,10 +379,9 @@ def _gate_outcome(
         return "failed", extra_evidence
     # A full re-review must not converge (pass on below-floor findings) while a confirmed
     # finding the gate has ever recorded still awaits a later delta round (bug
-    # B-push-failed-review-delta). Checked BEFORE the same-family discount: a PRIOR
-    # confirmed finding is a real defect that still blocks, and the discount below is only
-    # about THIS round's same-family findings.
-    if converged_round and _confirmed_unrechecked(it, gate):
+    # B-push-failed-review-delta). A same-family confirmed finding is discounted over a
+    # clean cross-family verdict inside `_confirmed_unrechecked` (bug B7dbf432caa).
+    if converged_round and _confirmed_unrechecked(it, gate, results, cfg, author_model):
         return "failed", extra_evidence
     # A same-family reviewer's finding does not hold the pass open when a cross-family
     # reviewer came back clean: cross-family clean is authoritative (bug B7dbf432caa). The
