@@ -258,6 +258,8 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
     fam_by_digest: dict[str, str] = {}
     unconfirmed: set[str] = set()
     for run in runs:
+        run_fam = (str((run.evidence or {}).get("family") or "") or "").strip().lower()
+        run_fam = "" if run_fam == "unknown" else run_fam
         found = LB.full(run.evidence or {}).get("chunk_findings")
         if isinstance(found, B.Unavailable):
             unreadable = True  # "cannot be read back" is not "no confirmed finding"
@@ -266,11 +268,12 @@ def _unrechecked_confirmed(it, gate: str) -> tuple[list[tuple[str, str]], bool]:
             digest = f.get("digest")
             if not digest:
                 continue
-            fam = (str(f.get("family") or "") or "").strip().lower()
-            if fam != "unknown" and fam:
-                # A later row's family stamp supersedes an earlier stampless row of the
-                # same digest (grok re-review of B7dbf432caa): once a re-review stamps the
-                # finding's family, that family -- not the earlier unknown -- is honoured.
+            fam = (str(f.get("family") or "") or run_fam).strip().lower()
+            fam = "" if fam == "unknown" else fam
+            # A later row's family stamp supersedes an earlier stampless row of the same
+            # digest, and a stampless row falls back to the run's identifying family -- the
+            # same-family reviewer for the failed round B7dbf432caa names.
+            if fam:
                 fam_by_digest[digest] = fam
             if mine.get(digest, {}).get("verdict") == "confirmed" and not _cleared_after_delta(
                 runs, digest
