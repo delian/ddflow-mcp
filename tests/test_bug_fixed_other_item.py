@@ -46,7 +46,9 @@ def _fix_made_in_the_found_item(repo: Path) -> Path:
     return wt
 
 
-def test_a_fix_in_the_items_worktree_verifies_even_when_the_bug_has_its_own_unclaimed_fix_task(repo):
+def test_a_fix_in_the_items_worktree_verifies_even_when_the_bug_has_its_own_unclaimed_fix_task(
+    repo,
+):
     _fix_made_in_the_found_item(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
     assert out.exit == OK, out.reason
