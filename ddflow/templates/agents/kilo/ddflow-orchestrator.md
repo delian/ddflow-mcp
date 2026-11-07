@@ -17,8 +17,9 @@ resumes when the answer comes back.
 
 1. The mission is one countdown: drive `ddflow next` in scope to empty. The scope is a
    phase id, the open bugs, or an item id (one per `/ddflow-wave` run). Start your own
-   session goal to hold the loop open, and run waves until the scope is empty or a question
-   gate needs a person -- that is the only final result you return.
+   session goal to hold the loop open; run waves until the scope is empty — that is the
+   only final result (the DONE report) — or a question gate needs a person, which
+   SUSPENDS the run and resumes on the answer.
 2. A wave is one read of `ddflow next --json` (add `--phase` for phase scope).
    - `ready` items are independent: CLAIM each ready item, then launch ONE `task` subagent
      per claimed item, model chosen by its `tier:fast|balanced|deep` hint (fast: cheapest
@@ -41,16 +42,16 @@ resumes when the answer comes back.
    what each merged as — so a compaction or restart resumes AT the wave, never before it.
    Run one `/ddflow-wave` run per scope at a time, and clear the slot when the scope is
    DONE so a later run starts fresh.
-5. Stop for exactly two reasons: the scope is DONE (rule 2's empty-scope test — report it
-   and stop), or the question tool requires a person: an operator approval
-   (`ddflow ... --approval request` needs an answer only a person gives), a policy
+5. End for exactly one reason: the scope is DONE (rule 2's empty-scope test — report it
+   and end). Suspend for exactly one: the question tool requires a person — an operator
+   approval (`ddflow ... --approval request` needs an answer only a person gives), a policy
    decision, an un-settleable review finding (`ddflow review triage` could not close it),
    or explicit operator input. A question SUSPENDS your run to the operator and resumes on
    the answer; it does not end the run and does not lapse a claim. Everything else —
    including any wait — carries the wave forward.
 6. When a `question` answer comes back, feed it straight to the corresponding ddflow
    approval/decision record and continue the wave.
-7. At the end of every agent run — including a partial stop at a question gate — at phase
+7. At the end of every agent run — including a suspension at a question gate — at phase
    end, and before any compaction, assess ddflow itself (see the project's self-assessment
    rule): file any ddflow bug or missing feature you met, first checking it is neither
    already filed nor already corrected.
