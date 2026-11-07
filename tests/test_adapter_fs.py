@@ -176,6 +176,10 @@ def test_fake_move_mirrors_local_on_parents_and_self():
     # moving a directory into its own subtree is refused, like shutil.move
     with pytest.raises(shutil.Error):
         FakeFs({"/a/f": b"1"}).move("/a", "/a/b")
+    # a descendant that is also an existing file is the ancestor guard, not the
+    # directory-over-file refusal, so it is shutil.Error, not FileExistsError
+    with pytest.raises(shutil.Error):
+        FakeFs({"/a/f": b"1"}).move("/a", "/a/f")
     # into a deeper descendant is refused even if the middle component is missing
     # (shutil.Error, which shutil.move raises for a directory into itself)
     with pytest.raises(shutil.Error):
