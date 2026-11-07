@@ -89,23 +89,7 @@ def _not_red(
     plain = [i for i in ids if i not in blind and i not in still and i not in set(changed)]
     if plain or changed:
         found["new_failures"] = (plain + changed)[: BR.SHOWN * 4]
-        parts: list[str] = []
-        if plain:
-            parts.append(
-                f"new failure(s) not failing on {base}: {', '.join(plain[: BR.SHOWN])}"
-                f"{' ...' if len(plain) > BR.SHOWN else ''}"
-            )
-        if changed:
-            parts.append(
-                f"new offender(s) in an already-red test (fails on {base} too, but "
-                f"differently): {', '.join(changed[: BR.SHOWN])}"
-                f"{' ...' if len(changed) > BR.SHOWN else ''}"
-            )
-        if blind:
-            parts.append(f"{len(blind)} more could not be measured there")
-        return result, (why + "; " if why else "") + "; ".join(parts) + (
-            " (a timing flake counts as new unless it also fails on the base)"
-        )
+        return result, (why + "; " if why else "") + _new_reason(base, plain, changed, blind)
     if not blind:
         return result, why
     shown = ", ".join(sorted(blind)[: BR.SHOWN]) + (" ..." if len(blind) > BR.SHOWN else "")
@@ -114,6 +98,26 @@ def _not_red(
     if why:
         ev["reason"] = reason
     return "unavailable", reason
+
+
+def _new_reason(base: str, plain: list[str], changed: list[str], blind: set[str]) -> str:
+    """The reason text for ids the base does not fail as it does here: ``plain`` are not failing
+    there, ``changed`` fail there too but differently (a new offender in an already-red test)."""
+    parts: list[str] = []
+    if plain:
+        parts.append(
+            f"new failure(s) not failing on {base}: {', '.join(plain[: BR.SHOWN])}"
+            f"{' ...' if len(plain) > BR.SHOWN else ''}"
+        )
+    if changed:
+        parts.append(
+            f"new offender(s) in an already-red test (fails on {base} too, but "
+            f"differently): {', '.join(changed[: BR.SHOWN])}"
+            f"{' ...' if len(changed) > BR.SHOWN else ''}"
+        )
+    if blind:
+        parts.append(f"{len(blind)} more could not be measured there")
+    return "; ".join(parts) + " (a timing flake counts as new unless it also fails on the base)"
 
 
 def _guards_unran(gate: str, ev: dict[str, Any]) -> str:
