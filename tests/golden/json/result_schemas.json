@@ -3069,6 +3069,41 @@
   },
   "array_schema": null
  },
+ "ddflow_session_inbox": {
+  "command": "session_inbox",
+  "schema": "session_inbox@1",
+  "shape": "object",
+  "payload": [
+   "messages",
+   "count"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_inbox@1"
+    },
+    "messages": {},
+    "count": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_digest": {
+  "command": "digest",
+  "schema": "digest@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
+  "array_schema": null
+ },
  "ddflow_sync": {
   "command": "sync",
   "schema": "sync@1",
