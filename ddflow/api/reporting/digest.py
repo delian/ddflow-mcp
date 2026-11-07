@@ -43,23 +43,21 @@ def _render_entry(e) -> list[str]:
     return lines
 
 
-def _render(queue: DQ.Queue, ask: str) -> tuple[str, list[dict]]:
-    """Return ``(text, entry_dicts)``: the shared rendering so both surfaces agree.
+def _render_ask(queue: DQ.Queue, ask: str) -> tuple[str, list[dict]]:
+    """``(text, entry_dict)`` for the one entry to put to the person."""
+    entry = next((e for e in queue.entries if e.id == ask), None)
+    if entry is None:
+        return "", []
+    fields = (
+        ("why", entry.why), ("default", entry.default), ("answer", entry.answer),
+        ("command", entry.command), ("chat", entry.chat),
+    )
+    lines = ["# ask: " + ask, entry.what]
+    lines.extend(f"{k}: {v}" for k, v in fields if v)
+    return "\n".join(lines) + "\n", [entry.as_dict()]
 
-    The entry dicts are the machine view (the ``entries`` payload); ``text`` is the human
-    view built from the same objects (the B37 shape ``vigil`` and ``board`` are built to).
-    """
-    if ask:
-        entry = next((e for e in queue.entries if e.id == ask), None)
-        if entry is None:
-            return "", []
-        return (
-            "\n".join(["# ask: " + ask, entry.what, *(f"{k}: {v}" for k, v in (
-                ("why", entry.why), ("default", entry.default), ("answer", entry.answer),
-                ("command", entry.command), ("chat", entry.chat),
-            ) if v)]) + "\n",
-            [entry.as_dict()],
-        )
+
+def _render_queue(queue: DQ.Queue) -> tuple[str, list[dict]]:
     rows = [e.as_dict() for e in queue.entries]
     lines = ["# operator queue", ""]
     if not rows:
@@ -69,16 +67,22 @@ def _render(queue: DQ.Queue, ask: str) -> tuple[str, list[dict]]:
         if not owned:
             continue
         lines.append(f"## {owner} ({len(owned)})")
-        for e in owned:
-            lines.extend(_render_entry(e))
+        lines.extend(line for e in owned for line in _render_entry(e))
         lines.append("")
-    if queue.gaps:
-        lines.append("gaps:")
-        lines.extend(f"  {g}" for g in queue.gaps)
-    if queue.notes:
-        lines.append("notes:")
-        lines.extend(f"  {n}" for n in queue.notes)
+    for label, items in (("gaps", queue.gaps), ("notes", queue.notes)):
+        if items:
+            lines.append(label + ":")
+            lines.extend(f"  {i}" for i in items)
     return "\n".join(lines) + "\n", rows
+
+
+def _render(queue: DQ.Queue, ask: str) -> tuple[str, list[dict]]:
+    """Return ``(text, entry_dicts)``: the shared rendering so both surfaces agree.
+
+    The entry dicts are the machine view (the ``entries`` payload); ``text`` is the human
+    view built from the same objects (the B37 shape ``vigil`` and ``board`` are built to).
+    """
+    return _render_ask(queue, ask) if ask else _render_queue(queue)
 
 
 def digest_queue(repo: Path, *, ask: str = "", agent: str = "") -> O.Outcome:
