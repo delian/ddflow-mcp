@@ -453,7 +453,9 @@ def test_a_new_offender_in_an_already_red_test_is_new_not_baseline_red(repo) -> 
     from ddflow.api import gate_baseline as GB
 
     base_text = "assert 1 == 2"
-    branch_text = base_text + "\nNEW or grown interface call site(s): program git in ddflow/infra/gitbatch.py"
+    branch_text = (
+        base_text + "\nNEW or grown interface call site(s): program git in ddflow/infra/gitbatch.py"
+    )
     cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
     ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: branch_text}}
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
@@ -496,8 +498,12 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     def run(g, where=None):
         return (
             "failed",
-            {"exit": 1, "failed_tests": [ID], "failed_reasons": {ID: text},
-             "summary": ["1 failed in 0.1s"]},
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: text},
+                "summary": ["1 failed in 0.1s"],
+            },
         )
 
     outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)

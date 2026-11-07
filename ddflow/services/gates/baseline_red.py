@@ -86,8 +86,8 @@ def on_base(
     command gate and returns (outcome, evidence). With ``ttl_s`` > 0 what was measured on this
     base sha is kept (`services.gates.baseline`): ids already measured are not run again.
     ``tree`` is the checkout that failed them (default ``repo``): what it has and the base has
-    not is the branch's own. ``before`` is the branch's own failure text per id
-    (`failure_sigs(ev)`): a test the base also fails, but differently, is a new offender, not
+    not is the branch's own.     ``before`` is the branch's own failure text per id
+    (`_failure_sigs(ev)`): a test the base also fails, but differently, is a new offender, not
     baseline-red (B-baseline-red-hides-new-offender-in-red-ratchet)."""
     if not ids:  # all() of nothing is True: no named test is no attribution
         return {"red": False, "why": "no failing test id to run on the base"}
@@ -112,7 +112,9 @@ def on_base(
 
 
 def _tally(
-    ids: list[str], known: dict[str, bool], before: dict[str, str] | None = None,
+    ids: list[str],
+    known: dict[str, bool],
+    before: dict[str, str] | None = None,
     onbase: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """What ``known`` says of ``ids``: red only when every one of them failed on the base with
@@ -137,7 +139,7 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     return bool(branch) and branch != base
 
 
-def failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
+def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
     """The branch's own failure text per id ({} when the evidence kept none): what
     ``on_base`` compares against the base's text to spot a new offender in an already-red test."""
     return dict(ev.get("failed_reasons") or {})
@@ -201,10 +203,15 @@ def _probe(gdef, root: Path, part: list[str], run):
         probe = replace(gdef, command=cmd)
         outcome, ev = run(probe, root)
         if not _no_verdict(outcome, ev, len(part)):
-            return outcome, cmds, {**seen, **_verdicts(probe, part, outcome, ev)}, {
-                **sigs,
-                **_base_signatures(ev, part),
-            }
+            return (
+                outcome,
+                cmds,
+                {**seen, **_verdicts(probe, part, outcome, ev)},
+                {
+                    **sigs,
+                    **_base_signatures(ev, part),
+                },
+            )
         lacking, unsure = _lacking(probe, root, part, ev, run)
         seen.update(dict.fromkeys(lacking, False))
         for test_id in unsure:  # alone, what pytest names can only be this id

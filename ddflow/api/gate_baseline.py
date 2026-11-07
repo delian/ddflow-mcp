@@ -47,7 +47,14 @@ def apply(  # noqa: PLR0913, PLR0917
         return result, why
     base = it.base or W.default_branch(repo)
     found = BR.on_base(
-        repo, base, probe, ids, rerun, cfg.gates.baseline_cache_ttl_s, cwd or repo, BR.failure_sigs(seen)
+        repo,
+        base,
+        probe,
+        ids,
+        rerun,
+        cfg.gates.baseline_cache_ttl_s,
+        cwd or repo,
+        BR._failure_sigs(seen),
     )
     ev["baseline"] = found
     if not found["red"]:
@@ -78,7 +85,7 @@ def _not_red(
         return result, why
     blind = set(found.get("unmeasured") or ())
     known = blind | set(found.get("still_failing") or ())
-    changed = [i for i in found.get("different") or (())]
+    changed = list(found.get("different") or (()))
     fresh = [i for i in ids if i not in known]
     if fresh:
         found["new_failures"] = fresh[: BR.SHOWN * 4]
