@@ -216,6 +216,24 @@ class Harness:
     given: tuple[str, ...] = ()  #: `section.key` of every key the file wrote, even a zero
 
 
+def _check_table(value: Any, hint: Any, where: str) -> dict:
+    """A ``dict[str, str]`` (a table of strings) or ``dict[str, list[str]]`` (a fact table)."""
+    if not isinstance(value, dict):
+        raise DescriptorError(f"{where}: expected a table")
+    args = get_args(hint)
+    value_type = args[1] if len(args) == 2 else str
+    if get_origin(value_type) is not tuple:
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+            raise DescriptorError(f"{where}: expected a table of strings")
+        return dict(value)
+    out: dict[str, tuple[str, ...]] = {}
+    for k, v in value.items():
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            raise DescriptorError(f"{where}.{k}: expected a list of strings")
+        out[k] = tuple(v)
+    return out
+
+
 def _check_type(value: Any, hint: Any, where: str) -> Any:
     origin = getattr(hint, "__origin__", None)
     if origin is tuple:
@@ -223,22 +241,7 @@ def _check_type(value: Any, hint: Any, where: str) -> Any:
             raise DescriptorError(f"{where}: expected a list of strings")
         return tuple(value)
     if origin is dict:
-        if not isinstance(value, dict):
-            raise DescriptorError(f"{where}: expected a table")
-        args = get_args(hint)
-        value_type = args[1] if len(args) == 2 else str
-        if value_type is tuple or get_origin(value_type) is tuple:
-            out: dict[str, tuple[str, ...]] = {}
-            for k, v in value.items():
-                if not isinstance(k, str):
-                    raise DescriptorError(f"{where}: expected string keys")
-                if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
-                    raise DescriptorError(f"{where}.{k}: expected a list of strings")
-                out[k] = tuple(v)
-            return out
-        if not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
-            raise DescriptorError(f"{where}: expected a table of strings")
-        return dict(value)
+        return _check_table(value, hint, where)
     if hint is bool or hint is int or hint is str:
         # bool is an int in Python; a TOML `1` for a flag is a typo, not a flag.
         if type(value) is not hint:
