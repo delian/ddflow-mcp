@@ -176,7 +176,9 @@ def pending(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
 def take(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
     """Deliver: the pending messages, each RETAINED rather than deleted, so an agent can
     read it again after a piped heartbeat lost it (bug B-inbox-message-gone-after-heartbeat).
-    ``delivered`` shows them until ``[lease].inbox_retain_s`` is past."""
+    ``delivered`` shows them until ``[lease].inbox_retain_s`` is past. Retention is best
+    effort: if the retained copy cannot be written the message is still delivered once
+    (the pending file is removed here), never re-delivered."""
     got = pending(repo, agent, ttl_s=ttl_s)
     dst_dir = _delivered_dir(repo, agent)
     for m in got:
@@ -185,7 +187,7 @@ def take(repo: Path, agent: str, *, ttl_s: float = 0.0) -> list[Message]:
             dst_dir.mkdir(parents=True, exist_ok=True)
             atomic_write(dst_dir / m.file, json.dumps(asdict(m)))
         except OSError:
-            continue
+            pass  # cannot retain: still deliver below rather than leave it pending twice
         with contextlib.suppress(OSError):
             (_dir(repo, agent) / m.file).unlink()
     return got

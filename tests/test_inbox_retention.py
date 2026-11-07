@@ -32,3 +32,15 @@ def test_delivered_prunes_a_message_once_retention_has_passed(repo):
 
     assert IB.delivered(repo, "lane", retain_s=60) == []
     assert not path.exists()
+
+
+def test_delivery_is_once_even_when_retention_cannot_write(repo):
+    assert IB.send(repo, "lane", "hi", sender="coordinator")[0] is not None
+    # A foreign regular file where the delivered/ dir would go: retention cannot write there.
+    IB._delivered_dir(repo, "lane").parent.mkdir(parents=True, exist_ok=True)
+    IB._delivered_dir(repo, "lane").write_text("foreign")
+
+    got = IB.take(repo, "lane")
+    assert [m.text for m in got] == ["hi"]
+    assert IB.pending(repo, "lane") == []  # delivered once, never pending twice
+
