@@ -23,18 +23,44 @@ def _proj(repo, *tasks):
 
 
 def test_claim_refusal_lists_every_conflicting_holder(repo):
-    # B-glob-refusal-names-one-conflict: one refusal must name every holder, not just the
-    # first, so a caller does not re-claim once per held glob to discover them all.
+    # B-glob-refusal-names-one-conflict: one refusal must name every conflicting glob
+    # WITH its holder, not just the first, so a caller does not re-claim once per held
+    # glob to discover them all.
     _proj(repo, ("A", "src/a.py"), ("B", "src/b.py"), ("Y", "src/a.py,src/b.py"))
     assert A.claim(repo, "A", no_worktree=True, agent=HOLDER).ok
     assert A.claim(repo, "B", no_worktree=True, agent="agent-holder2").ok
     out = A.claim(repo, "Y", no_worktree=True, agent=WAITER)
     assert not out.ok
-    # The refusal itself must name every conflicting glob + holder, not just the first
-    # (the "Recorded:" waiter line already did; the refusal line must too).
+    # The refusal itself must pair each glob with its holder (the "Recorded:" waiter line
+    # appended it after the first newline; the refusal clause is before it).
     main = out.reason.split("\n\nRecorded:")[0]
-    assert "src/a.py" in main and "src/b.py" in main
-    assert HOLDER in main and "agent-holder2" in main
+    assert "'src/a.py' overlaps 'src/a.py' held by agent-holder on A" in main
+    assert "'src/b.py' overlaps 'src/b.py' held by agent-holder2 on B" in main
+
+
+def test_claim_refusal_names_every_glob_one_holder_overlaps(repo):
+    # One other holder overlapping on more than one glob must still name them all: a Clash
+    # used to keep only the first pair, so its second glob was dropped from the refusal.
+    _proj(repo, ("A", "src/a.py,src/b.py"), ("Y", "src/a.py,src/b.py"))
+    assert A.claim(repo, "A", no_worktree=True, agent=HOLDER).ok
+    out = A.claim(repo, "Y", no_worktree=True, agent=WAITER)
+    assert not out.ok
+    main = out.reason.split("\n\nRecorded:")[0]
+    assert "'src/a.py' overlaps 'src/a.py' held by agent-holder on A" in main
+    assert "'src/b.py' overlaps 'src/b.py' held by agent-holder on A" in main
+
+
+def test_queued_behind_refusal_names_the_glob(repo):
+    # `update --globs` used to say "queued behind sw-cedefaults" without naming a glob;
+    # the queued-behind refusal must name the queued glob, not just who is ahead.
+    _proj(repo, ("X", "a.py"), ("Z", "a.py"), ("Y", "a.py"))
+    assert A.claim(repo, "X", no_worktree=True, agent=HOLDER).ok
+    assert not A.claim(repo, "Z", no_worktree=True, agent=QUEUER, queue=True).ok
+    run_cli(repo, "release", "X", "--agent", HOLDER)
+    out = A.claim(repo, "Y", no_worktree=True, agent=WAITER)
+    assert not out.ok and "queued behind" in out.reason
+    assert "a.py" in out.reason
+    assert QUEUER in out.reason
 
 
 def test_overlapping_lease_blocks_wait_names_holder_then_ready_and_claim_succeeds(repo):

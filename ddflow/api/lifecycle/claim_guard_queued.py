@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from ...core import outcome as O
+from ...core.admission import conflicts, shared_globs
 from ...services import waiting as WG
 from ...services.claimguards import ClaimContext, register
 
@@ -15,14 +16,14 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
     if ctx.skip or it is None:
         return None
     want = ctx.want
-    ahead = WG.queue_ahead(
-        ctx.st, ctx.cfg, ctx.item, ctx.me, list(want if want is not None else it.globs), time.time()
-    )
+    mine = list(want if want is not None else it.globs)
+    ahead = WG.queue_ahead(ctx.st, ctx.cfg, ctx.item, ctx.me, mine, time.time())
     if ahead is None:
         return None
+    queued = [m for m, _t in conflicts(mine, ahead.globs, shared_globs(ctx.cfg))]
     return O.refused(
         "item.claimed",
-        f"{ctx.item}: those files ({', '.join(ahead.globs)}) are queued behind "
+        f"{ctx.item}: those files ({', '.join(queued)}) are queued behind "
         f"{ahead.holder} ({ahead.item}), who asked for them first ([lease].wait_queue).",
         id=ctx.item,
         alternatives=[],

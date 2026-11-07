@@ -68,7 +68,7 @@ def conflicts(
 
 @dataclass(frozen=True)
 class Clash:
-    """The first other item ``globs`` would overlap, with the pair that does."""
+    """One overlapping pair with another item ``globs`` would collide on, and whose."""
 
     item: str
     pair: tuple[str, str]
@@ -87,7 +87,10 @@ def glob_clashes(
     live: dict[str, Lease] | None = None,
     others: Iterable[Item] = (),
 ) -> list[Clash]:
-    """Every other item whose globs overlap ``globs`` (``glob_conflict`` stops at the first).
+    """Every overlapping pair another item's globs have with ``globs`` (``glob_conflict``
+    stops at the first). One other item that overlaps on more than one glob yields one
+    `Clash` per pair, so a refusal built from the list names every held glob instead of
+    the first (B-glob-refusal-names-one-conflict).
 
     ``against="live"``: the live leases ``live`` (item id -> lease), skipping ``it``'s own
     and any held by ``holder`` (one author cannot collide with itself).
@@ -109,15 +112,13 @@ def glob_clashes(
             if other is not None and line_key(state, other, cfg) != mine:
                 continue
             pairs = conflicts(globs, lease.globs, shared)
-            if pairs:
-                out.append(Clash(other_id, pairs[0], lease))
+            out.extend(Clash(other_id, pair, lease) for pair in pairs)
         return out
     for other in others:
         if other.id == it.id or line_key(state, other, cfg) != mine:
             continue
         pairs = conflicts(globs, list(other.globs), shared)
-        if pairs:
-            out.append(Clash(other.id, pairs[0]))
+        out.extend(Clash(other.id, pair) for pair in pairs)
     return out
 
 
@@ -136,7 +137,5 @@ def glob_conflict(
 
     See `glob_clashes` for the rules; this is its first result.
     """
-    clashes = glob_clashes(
-        state, cfg, it, globs, holder, against=against, live=live, others=others
-    )
+    clashes = glob_clashes(state, cfg, it, globs, holder, against=against, live=live, others=others)
     return clashes[0] if clashes else None

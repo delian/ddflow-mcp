@@ -55,17 +55,16 @@ def glob_clashes(
     ]
 
 
-def clash_report(
-    clashes: list[tuple[str, Lease, tuple[str, str]]]
-) -> tuple[str, list[str]]:
+def clash_report(clashes: list[tuple[str, Lease, tuple[str, str]]]) -> tuple[str, list[str]]:
     """The clash list as (text, item ids): one `'mine' overlaps 'theirs' held by H on I`
     clause per clash, and every conflicting item id (a waiter must wait on each), so one
     refusal names them all instead of the first (B-glob-refusal-names-one-conflict)."""
     text = "; ".join(
-        f"{p0!r} overlaps {p1!r} held by {lz.holder} on {oid}"
-        for oid, lz, (p0, p1) in clashes
+        f"{p0!r} overlaps {p1!r} held by {lz.holder} on {oid}" for oid, lz, (p0, p1) in clashes
     )
-    return text, [oid for oid, _lz, _p in clashes]
+    # One other item that overlaps on two globs yields two clashes; a waiter must wait on
+    # that item once, not twice.
+    return text, list(dict.fromkeys(oid for oid, _lz, _p in clashes))
 
 
 def glob_clash(
