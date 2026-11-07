@@ -481,6 +481,59 @@ def test_a_new_offender_in_an_already_red_test_is_new_not_baseline_red(repo) -> 
     assert ID in found["new_failures"]
 
 
+def test_a_new_cause_hidden_by_a_truncated_failure_text_is_not_baseline_red(repo) -> None:
+    """B-baseline-red-hides-new-cause: a FAILED reason was cut to ``LINE_CHARS`` chars when the
+    gate stored it, so a ratchet's long message displayed byte-identically on the branch and
+    the base while the offending file/site differed below the cut -- baseline-red hid the
+    branch's new offender (which turns red again once the base is fixed). The reason is now kept
+    WHOLE, so a different full reason is a new offender."""
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # test_a fails on the base too
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services import flakes as FK
+    from ddflow.services.flakes import LINE_CHARS
+
+    # Same display prefix each side, different cause past the cut.
+    branch_full = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"
+    base_full = "ratchet grew:" + "x" * LINE_CHARS + "hookio.py"
+    assert branch_full[:LINE_CHARS] == base_full[:LINE_CHARS]
+    # The gate keeps the WHOLE reason, so the baseline comparison sees the difference.
+    ev: dict = FK.failure_evidence(f"FAILED {ID} - {branch_full}\n1 failed in 0.1s\n")
+    assert ev["failed_reasons"][ID] == branch_full  # not cut to LINE_CHARS
+
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: base_full},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ID in why
+    found = ev["baseline"]
+    assert found["red"] is False and found["still_failing"] == [] and ID in found["different"]
+    assert ID in found["new_failures"]
+
+
 def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     """The counterpart: a test whose failure text is byte-identical on the base stays
     baseline-red -- the text comparison must not turn a timing flake into a new offender."""

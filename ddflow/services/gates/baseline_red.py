@@ -124,19 +124,24 @@ def _tally(
 
 def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str] | None) -> bool:
     """Does the failure text the BRANCH showed for ``test_id`` differ from what the base showed?
-    Only when both are known and disagree: a base whose text is unknown (a cached id measured
-    before text was kept) never claims a new offender, and a branch whose text is unknown is
-    left to the id-only answer."""
+    A test the base also fails, but with a DIFFERENT full reason text, is a new offender, not
+    baseline-red. ``failed_reasons`` now keeps each FAILED reason WHOLE (its summary line is not
+    cut), so two reasons that differ only past what the display used to cap to are told apart
+    (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender."""
     base = (onbase or {}).get(test_id)
     if not base:
         return False
     branch = (before or {}).get(test_id)
-    return bool(branch) and branch != base
+    if not branch:
+        return False
+    return branch != base
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
-    """The branch's own failure text per id ({} when the evidence kept none): what
-    ``on_base`` compares against the base's text to spot a new offender in an already-red test."""
+    """The branch's own failure text per id ({} when the evidence kept none): what ``on_base``
+    compares against the base's text to spot a new offender in an already-red test. Each FAILED
+    reason is kept WHOLE so a new cause past the old display cap is told apart
+    (B-baseline-red-hides-new-cause)."""
     return dict(ev.get("failed_reasons") or {})
 
 
