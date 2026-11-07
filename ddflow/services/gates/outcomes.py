@@ -18,6 +18,8 @@ from .evidence import (
     commit_tree_entries,
     content_id,
     differing_paths,
+    head_of,
+    lost_branch,
     normal_fingerprint,
     recorded_content,
     split_identity,
@@ -456,4 +458,25 @@ def stale_evidence_detail(
         else:
             continue
         stale += _differing_note(StaleNote, gid, cwd, base, dirt, now, label, own)
+    # A gate held to no evidence can still outlive its branch: research and rules record
+    # a pass on the committed tree they were read against, and a re-claim on a new tree
+    # (the item parked, its branch deleted, then claimed afresh) keeps that pass as green
+    # though nothing of the branch exists. The commit its `tree_sha` names is then not an
+    # ancestor of what is being checked -- mark it stale, not passed (B-gates-survive-lost-
+    # branch). Content drift within the same branch is NOT marked here: those gates are
+    # supposed to precede the edits that follow them.
+    required = set(cfg.gates.evidence_required)
+    for gid, rec in sorted(it.gates.items()):
+        if gid in required or not rec or rec.outcome != "passed":
+            continue
+        was_sha = normal_fingerprint((rec.evidence or {}).get("tree_sha", "") or "")
+        head = head_of(was_sha)
+        if head and lost_branch(was_sha, cwd, landed):
+            stale.append(
+                StaleNote(
+                    gid,
+                    f"it was recorded on {head}, a commit {label} no longer descends from "
+                    f"(the branch was rebuilt, so this is not this claim's pass)",
+                )
+            )
     return sorted(stale)
