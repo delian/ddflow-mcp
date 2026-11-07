@@ -22,7 +22,15 @@ from .fix_task_drop import (  # noqa: F401 -- re-exported by the package
     _drop_fix_task,
     _ended_by_abandon,
 )
-from .regression import _half_node_id_why, _missing_tests, _named_tests, _unresolved_tests
+from .regression import (
+    _half_node_id_why,
+    _missing_tests,
+    _named_tests,
+    _owns_unlanded_fix,
+    _unlanded_fix_refusal,
+    _unlanded_fix_source,
+    _unresolved_tests,
+)
 
 
 def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
@@ -191,6 +199,15 @@ def _verified_close(
         # the check its pre-fix source (Bb49d834e90).
         return (
             O.refused("bug.fixed", _needs_fix_task_refusal(item, verify_ev), id=item),
+            "",
+            {},
+            landing,
+        )
+    if verified == "fix-not-landed":
+        # A claimed fix still working in its worktree has not reached the base: closing
+        # here would report fixed work that is absent from it (B-bug-fixed-before-fix-lands).
+        return (
+            O.refused("bug.fixed", _unlanded_fix_refusal(item, verify_ev), id=item),
             "",
             {},
             landing,
@@ -509,7 +526,17 @@ def _verify_regression(
     status, ev = G.verify_regression_test(
         repo, cfg, tree=tree, base=base, tests=module_tests, mutation=mutation
     )
-    return _regression_status(status, ev, G)
+    verdict, evidence = _regression_status(status, ev, G)
+    rec = st.bugs[bug_id]
+    if verdict in ("verified", "verified-by-mutation") and _owns_unlanded_fix(fx, rec):
+        # A CLEAN verification on the bug's OWN fix task, still working in its worktree,
+        # would mark the bug fixed while its branch has not reached the base -- the close
+        # the fix-task driver performs again, once, after merge (B-bug-fixed-before-fix-lands).
+        # The check still RAN (a fail-first test was shown to catch the bug); the close is
+        # held until that branch lands. A fix made in the ITEM the bug was FOUND on still
+        # verifies against its worktree (B-bug-fixed-other-item-unverified).
+        return "fix-not-landed", _unlanded_fix_source(rec)
+    return verdict, evidence
 
 
 _REMEDY = (

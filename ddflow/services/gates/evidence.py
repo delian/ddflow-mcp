@@ -39,6 +39,11 @@ FINGERPRINT_EXCLUDE: tuple[str, ...] = STATE_EXCLUDE
 UNLISTED = "unlisted"
 
 
+#: A tracked-change part (`git status`/`git diff`) git could not produce digs this, never
+#: "", so a damaged store cannot make a dirty tree read as clean. Mirrors `UNLISTED`.
+FAILED = "failed"
+
+
 def _untracked_listing(cwd: Path) -> list[str] | None:
     """Untracked, non-ignored paths, excluding ddflow's own state; None when git could
     not list them. ONE spelling.
@@ -242,7 +247,7 @@ def _dirt_parts(cwd: Path) -> tuple[str, list[str]]:
     # `HEAD` and not `--cached`: staged and unstaged changes are equally "not what is
     # committed", and a gate cares about the files on disk it just ran against.
     diff = W.git(cwd, "diff", "HEAD", "--", ".", *FINGERPRINT_EXCLUDE)
-    parts = [status.out if status.ok else "", diff.out if diff.ok else ""]
+    parts = [status.out if status.ok else FAILED, diff.out if diff.ok else FAILED]
     parts.append(_untracked_digest(cwd))
     return head.out.strip()[:12], parts
 

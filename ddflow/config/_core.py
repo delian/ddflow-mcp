@@ -9,61 +9,11 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-from ..config_sections._docs import KNOB_DOCS, RENAMED
+from ..config_sections import SECTION_MODULES  # noqa: F401 -- imports every section
+from ..config_sections._docs import KNOB_DOCS, RENAMED, SECTION_CLASSES
 from ..config_sections._layers import layer_path, read_toml
-from ..config_sections.agent import AgentConfig
-from ..config_sections.approvals import ApprovalsConfig
-from ..config_sections.bugs import BugsConfig
-from ..config_sections.cadence import CadenceConfig
-from ..config_sections.chore import ChoreConfig
-from ..config_sections.ci import CiConfig
-from ..config_sections.companions import CompanionsConfig
-from ..config_sections.dedupe import DedupeConfig
-from ..config_sections.digest import DigestConfig
-from ..config_sections.docs import DocsConfig
-from ..config_sections.enforce import EnforceConfig
-from ..config_sections.evaluation import EvaluationConfig
-from ..config_sections.export import ExportConfig, _export_table_problem, export_table_keys
-from ..config_sections.flow import FlowConfig
-from ..config_sections.gates import GatesConfig
-from ..config_sections.govern import GovernConfig
-from ..config_sections.grants import GrantsConfig
-from ..config_sections.handoff import HandoffConfig
-from ..config_sections.health import HealthConfig
-from ..config_sections.hooks import HooksConfig
-from ..config_sections.ids import IdsConfig
-from ..config_sections.imports import ImportConfig
-from ..config_sections.lanes import LanesConfig
-from ..config_sections.lease import LeaseConfig
-from ..config_sections.lessons import LessonsConfig
-from ..config_sections.locks import LocksConfig
-from ..config_sections.log import LogConfig
-from ..config_sections.loops import LoopsConfig
-from ..config_sections.mcp import McpConfig
-from ..config_sections.memory import MemoryConfig
-from ..config_sections.merge import MergeConfig
-from ..config_sections.merge_queue import MergeQueueConfig
-from ..config_sections.metrics import MetricsConfig
-from ..config_sections.output import OutputConfig
-from ..config_sections.pins import PinsConfig
-from ..config_sections.plan import PlanConfig
-from ..config_sections.prompts import PromptsConfig
-from ..config_sections.quality import QualityConfig
-from ..config_sections.quota import QuotaConfig
-from ..config_sections.rag import RagConfig
-from ..config_sections.reinstruct import ReinstructConfig
-from ..config_sections.release import ReleaseConfig
-from ..config_sections.review import ReviewConfig
-from ..config_sections.rules import RulesConfig
-from ..config_sections.schedule import SIGNALS, ScheduleConfig, merge_signals
-from ..config_sections.self_assessment import SelfAssessmentConfig
-from ..config_sections.sensitivity import SensitivityConfig
-from ..config_sections.session import SessionConfig
-from ..config_sections.swarm import SwarmConfig
-from ..config_sections.triggers import TriggersConfig
-from ..config_sections.upgrade import UpgradeConfig
-from ..config_sections.waves import WavesConfig
-from ..config_sections.worktree import WorktreeConfig
+from ..config_sections.export import _export_table_problem, export_table_keys
+from ..config_sections.schedule import SIGNALS, merge_signals
 from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
 from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
@@ -130,62 +80,35 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     return value
 
 
-@dataclass
-class Config:
-    lease: LeaseConfig = field(default_factory=LeaseConfig)
-    worktree: WorktreeConfig = field(default_factory=WorktreeConfig)
-    flow: FlowConfig = field(default_factory=FlowConfig)
-    gates: GatesConfig = field(default_factory=GatesConfig)
-    lessons: LessonsConfig = field(default_factory=LessonsConfig)
-    session: SessionConfig = field(default_factory=SessionConfig)
-    schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
-    bugs: BugsConfig = field(default_factory=BugsConfig)
-    importer: ImportConfig = field(default_factory=ImportConfig)
-    memory: MemoryConfig = field(default_factory=MemoryConfig)
-    dedupe: DedupeConfig = field(default_factory=DedupeConfig)
-    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
-    sensitivity: SensitivityConfig = field(default_factory=SensitivityConfig)
-    companions: CompanionsConfig = field(default_factory=CompanionsConfig)
-    cadence: CadenceConfig = field(default_factory=CadenceConfig)
-    reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
-    enforce: EnforceConfig = field(default_factory=EnforceConfig)
-    loops: LoopsConfig = field(default_factory=LoopsConfig)
-    locks: LocksConfig = field(default_factory=LocksConfig)
-    lanes: LanesConfig = field(default_factory=LanesConfig)
-    health: HealthConfig = field(default_factory=HealthConfig)
-    govern: GovernConfig = field(default_factory=GovernConfig)
-    metrics: MetricsConfig = field(default_factory=MetricsConfig)
-    review: ReviewConfig = field(default_factory=ReviewConfig)
-    swarm: SwarmConfig = field(default_factory=SwarmConfig)
-    quota: QuotaConfig = field(default_factory=QuotaConfig)
-    log: LogConfig = field(default_factory=LogConfig)
-    upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
-    pins: PinsConfig = field(default_factory=PinsConfig)
-    plan: PlanConfig = field(default_factory=PlanConfig)
-    quality: QualityConfig = field(default_factory=QualityConfig)
-    waves: WavesConfig = field(default_factory=WavesConfig)
-    merge: MergeConfig = field(default_factory=MergeConfig)
-    merge_queue: MergeQueueConfig = field(default_factory=MergeQueueConfig)
-    chore: ChoreConfig = field(default_factory=ChoreConfig)
-    digest: DigestConfig = field(default_factory=DigestConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
-    grants: GrantsConfig = field(default_factory=GrantsConfig)
-    approvals: ApprovalsConfig = field(default_factory=ApprovalsConfig)
-    handoff: HandoffConfig = field(default_factory=HandoffConfig)
-    hooks: HooksConfig = field(default_factory=HooksConfig)
-    release: ReleaseConfig = field(default_factory=ReleaseConfig)
-    mcp: McpConfig = field(default_factory=McpConfig)
-    ci: CiConfig = field(default_factory=CiConfig)
-    prompts: PromptsConfig = field(default_factory=PromptsConfig)
-    export: ExportConfig = field(default_factory=ExportConfig)
-    rules: RulesConfig = field(default_factory=RulesConfig)
-    agent: AgentConfig = field(default_factory=AgentConfig)
-    ids: IdsConfig = field(default_factory=IdsConfig)
-    triggers: TriggersConfig = field(default_factory=TriggersConfig)
-    rag: RagConfig = field(default_factory=RagConfig)
-    docs: DocsConfig = field(default_factory=DocsConfig)
-    self_assessment: SelfAssessmentConfig = field(default_factory=SelfAssessmentConfig)
+class _SectionFields:
+    """Mixes every `[section]` dataclass into `Config` as a field, alphabetically by
+    section name (sorted discovery, r-extension-contract). `declare()` is the ONE place a
+    section name maps to a class (r-extension-contract, B-config-section-needs-hub-edit), so
+    `SECTION_CLASSES` is complete by the time `Config` is declared from it, and a new
+    section edits only its own file -- never this field list (there is none) and never
+    `ddflow/config/__init__.py`'s re-exports. `Config` is only ever built as `Config()`, so
+    the alphabetical field order has no positional caller."""
 
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if hasattr(cls, "_section_fields_injected"):
+            # A subclass of `Config` inherits the section fields; this hook runs for it
+            # too (it is inherited), and re-adding the fields would make `@dataclass`
+            # treat them as shadowing and raise.
+            return
+        cls._section_fields_injected = True
+        # Prepend the section fields so they stay BEFORE the bookkeeping fields declared in
+        # the class body (a section was the first `fields(Config)` entry, never `sources`:
+        # `__init_subclass__` runs after the body, so appending would move `sources` first
+        # and reorder the positional `__init__`).
+        sections = dict(sorted(SECTION_CLASSES.items()))
+        cls.__annotations__ = {**sections, **cls.__annotations__}
+        for name in sections:
+            setattr(cls, name, field(default_factory=SECTION_CLASSES[name]))
+
+
+@dataclass
+class Config(_SectionFields):
     #: where each knob's final value came from -- "default" | "file" | "local" | "env",
     #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong
     sources: dict[str, str] = field(default_factory=dict, repr=False)
