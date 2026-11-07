@@ -84,7 +84,7 @@ def test_a_project_descriptor_may_add_an_agent(tmp_path):
 def test_a_project_descriptor_may_not_add_launch_argv(tmp_path):
     launching = _GOOD + '[headless]\nautonomy = "basic"\nargv = ["claude", "-p"]\n'
     _project(tmp_path, ("claude.toml", launching.replace('id = "demo"', 'id = "claude"')))
-    with pytest.raises(DP.PackError, match="headless.argv"):
+    with pytest.raises(DP.PackError, match=r"headless\.argv"):
         DP.load_descriptors(tmp_path)
 
 
