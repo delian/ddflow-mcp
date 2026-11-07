@@ -2,10 +2,10 @@
 
 With ``[lease].wait_queue`` off, ``update --globs`` that widens onto a file another
 agent's standing (non-queued) wait already asks for SUCCEEDS -- the grant is right,
-there is no queue to jump -- but the widening agent was told nothing, so its brief
-did not name the waiter it just overtook. The brief's "Waiting on you" section only
-read the deliberate `ddflow wait` registrations, never the standing `lease.waiting`
-records; this pins that the overtaken waiter is named there.
+there is no queue to jump -- but the reply said nothing, so the overtaken waiter had to
+be found in a status read. Both of the widening agent's replies now name that waiter:
+the ``update`` reply names it as overtaken, and the brief's "Waiting on you" section
+names the standing ``lease.waiting`` waiter for the files the holder now holds.
 """
 
 from __future__ import annotations
@@ -35,14 +35,23 @@ def _overtake(repo) -> None:
         == 3
     )
     assert run_cli(repo, "release", "BRES", agent="bres")[0] == 0
-    assert (
-        run_cli(repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx")[0]
-        == 0
+
+
+def test_the_update_reply_names_the_overtaken_waiter(repo):
+    _overtake(repo)
+    code, out, _ = run_cli(
+        repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx"
     )
+    assert code == 0
+    assert "overtook" in out and "bhy" in out and "BHY" in out, out
 
 
 def test_the_brief_names_the_overtaken_waiter(repo):
     _overtake(repo)
+    assert (
+        run_cli(repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx")[0]
+        == 0
+    )
     code, out, _ = run_cli(repo, "brief", agent="dx")
     assert code == 0
     assert "## Waiting on you" in out, out

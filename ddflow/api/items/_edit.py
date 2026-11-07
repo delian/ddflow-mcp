@@ -432,6 +432,14 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, accepted, resources)
+    overtook = (
+        [
+            {"item": w["item"], "holder": w["holder"], "globs": list(w["globs"])}
+            for w in WG.waiting_for(L._fold(log), cfg, it.id, time.time())
+        ]
+        if globs is not None and lease is not None
+        else []
+    )
     return O.ok(
         "item.updated",
         id=it.id,
@@ -440,6 +448,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, accepted),
         globs_withheld=withheld,
+        globs_overtook=overtook,
         needs_dropped=[n for n in it.needs if n not in fields["needs"]]
         if "needs" in fields
         else [],
