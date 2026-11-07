@@ -172,26 +172,35 @@ def _drop_repeated_locations(out: dict[str, Any]) -> bool:
     return stripped
 
 
+def _homogeneous(value: dict) -> bool:
+    """Whether every value is the same SHAPE (all scalars, all lists, or all dicts): the
+    mark of a series keyed by test/finding id, not a field struct whose value kinds mix."""
+    kinds = {
+        "list" if isinstance(v, list) else "dict" if isinstance(v, dict) else "scalar"
+        for v in value.values()
+    }
+    return len(kinds) == 1
+
+
 def _cap_findings(out: dict[str, Any], cap: int = FINDINGS_SHOWN) -> int:
     """Cap the repeatable evidence `ddflow_show` keeps. Every LIST inside a gate record
     (the per-finding lists -- `chunk_findings`, `baseline`, `failed_tests`, `failure_tails`,
-    `failed_reasons`, `titles`, ...), every leaf-map of scalars (the `baseline` / `failed_reasons`
-    maps keyed by test id) and each gate's triage keep the first `cap`; the rest are
-    counted, not echoed."""
+    `failed_reasons`, `titles`, ...), every homogeneous series map (the `baseline` /
+    `failed_reasons` maps keyed by test id, or a pathological evidence dict) and each gate's
+    triage keep the first `cap`; the rest are counted, not echoed. A field STRUCT mixes
+    value kinds and stays whole."""
     dropped = [0]
 
-    def walk(value: Any) -> Any:
+    def walk(value: Any, root: bool = False) -> Any:
         if isinstance(value, list):
             if len(value) > cap:
                 dropped[0] += len(value) - cap
                 value = value[:cap]
             return [walk(v) for v in value]
         if isinstance(value, dict):
-            # A leaf map (every value a scalar) is a series keyed by test/finding id -- the
-            # `unit_tests` `baseline` and `failed_reasons` maps, or a pathological evidence
-            # dict -- and is capped like a list. A field STRUCT holds nested dict/list
-            # values and stays whole.
-            if len(value) > cap and all(not isinstance(v, (dict, list)) for v in value.values()):
+            # The root `gates` map names the gates themselves and is not a series; a
+            # homogeneous map keyed by test/finding id is, and is capped like a list.
+            if not root and len(value) > cap and _homogeneous(value):
                 dropped[0] += len(value) - cap
                 value = dict(list(value.items())[:cap])
             return {k: walk(v) for k, v in value.items()}
@@ -199,7 +208,7 @@ def _cap_findings(out: dict[str, Any], cap: int = FINDINGS_SHOWN) -> int:
 
     gates = out.get("gates")
     if isinstance(gates, dict):
-        out["gates"] = walk(gates)
+        out["gates"] = walk(gates, root=True)
     triage = out.get("triage")
     if isinstance(triage, dict):
         for gate, recs in list(triage.items()):
