@@ -167,6 +167,11 @@ def discover_plugins(user_home: Path | str | None = None) -> dict[str, Plugin]:
             raw = tomllib.loads(path.read_text("utf-8"))
         except tomllib.TOMLDecodeError as exc:
             raise PluginError(f"{path.name}: not valid TOML") from exc
+        case_unknown = sorted(set(raw) - {"plugin"})
+        if case_unknown:
+            raise PluginError(
+                f"{path.name}: unknown top-level key(s) {', '.join(case_unknown)}"
+            )
         entries = raw.get("plugin")
         if entries is None:
             continue

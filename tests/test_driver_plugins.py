@@ -69,7 +69,7 @@ def test_an_unknown_protocol_version_is_refused(tmp_path: Path):
 def test_a_conforming_entry_point_builds_a_lane(tmp_path: Path):
     _write_plugin(
         tmp_path / "home",
-        '[[plugin]]\nname = "fake"\nkind = "entry_point"\nentry_point = "ddflow.adapters.fakes.lanes:FakeLane"\n',
+        '[[plugin]]\nname = "fake"\nkind = "entry_point"\ntrust = "operator"\nentry_point = "ddflow.adapters.fakes.lanes:FakeLane"\n',
     )
     lane = DP.load("fake", user_home=tmp_path / "home")
     assert isinstance(lane, Lane)
