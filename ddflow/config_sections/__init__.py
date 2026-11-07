@@ -12,8 +12,10 @@ import importlib
 import pkgutil
 
 #: Every section module: each public module of this package, found by convention. A new
-#: `[section]` is a new file here and no list names it. Nothing depends on the order:
-#: `config --explain` follows `Config`'s field order.
+#: `[section]` is a new file here: its `@declare("<name>")` maps the section name to its
+#: dataclass in `_docs.SECTION_CLASSES`, from which `Config` assembles its fields and
+#: `ddflow.config` re-exports the class (r-extension-contract). Nothing depends on the
+#: order: `config --explain` follows `Config`'s field order, which is `SECTION_NAMES`'.
 SECTION_NAMES = tuple(
     sorted(m.name for m in pkgutil.iter_modules(__path__) if not m.name.startswith("_"))
 )

@@ -97,6 +97,22 @@ def test_a_section_modules_public_tables_are_re_exported():
     assert C.EXPORT_TABLE_KEYS is export.EXPORT_TABLE_KEYS
 
 
+def test_a_section_is_wired_from_declare_not_a_kept_list():
+    """B-config-section-needs-hub-edit: a section is named only by its own `@declare()`.
+
+    `Config` assembles its fields, and `ddflow.config` its re-exports, from the
+    `SECTION_CLASSES` registry `declare()` populates -- `_core.py` no longer hand-lists a
+    field per section and `config/__init__.py` no longer re-exports a `*Config` name per
+    section, so a new section no longer takes a lease on either hub file. On the unfixed
+    code `_core.py` still hand-listed each field, so this test's source (`SECTION_CLASSES`)
+    did not exist and it failed to import."""
+    from ddflow.config_sections._docs import SECTION_CLASSES
+
+    assert _section_types() == dict(SECTION_CLASSES)
+    for cls in SECTION_CLASSES.values():
+        assert getattr(C, cls.__name__) is cls
+
+
 def test_the_knob_docs_are_one_registry():
     assert C.KNOB_DOCS is KNOB_DOCS
     explained = [k for k, *_ in C.Config().explain()]

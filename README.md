@@ -6060,48 +6060,143 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=18321eb3ca15 -->
+<!-- ddflow:begin README/knobs sha=66f2a630a1ba -->
 <details><summary>All 584 knobs across 53 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
-| `lease.ttl_s` | `1800` |  |
-| `lease.heartbeat_s` | `300` |  |
-| `lease.renew_long_commands` | `true` |  |
-| `lease.renew_log_min_s` | `120` |  |
-| `lease.grace_s` | `120` |  |
-| `lease.acquire_timeout_s` | `30` |  |
-| `lease.waiter_reservation_s` | `300` |  |
-| `lease.wait_max_s` | `600` |  |
-| `lease.wait_queue` | `false` |  |
-| `lease.idle_max_s` | `900` |  |
-| `lease.hold_max_s` | `3600` |  |
-| `lease.release_at_merge` | `true` |  |
-| `lease.break_on_timeout` | `false` |  |
-| `lease.inbox_max_chars` | `2000` |  |
-| `lease.inbox_max_pending` | `50` |  |
-| `lease.inbox_ttl_s` | `86400` |  |
-| `lease.wait_cap_s` | `1800` |  |
-| `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
-| `lease.resume_own` | `true` |  |
-| `lease.shared_globs` | `[]` |  |
-| `lease.new_file_globs` | (long: see `ddflow config --explain`) |  |
-| `lease.append_only_globs` | `[]` |  |
-| `lease.scan_view_trees_max` | `16` |  |
-| `lease.scan_view_verdicts_max` | `0` |  |
-| `worktree.enabled` | `true` |  |
-| `worktree.root` | `".ddflow/worktrees"` |  |
-| `worktree.branch_prefix` | `"ddflow/"` |  |
-| `worktree.base_ref` | `""` |  |
-| `worktree.merge_strategy` | `"no-ff"` | `no-ff` \| `ff-only` \| `squash` |
-| `worktree.remove_on_merge` | `true` |  |
-| `worktree.dispose_finished` | `true` |  |
-| `worktree.sweep_min_age_s` | `3600` |  |
-| `worktree.sweep_interval_s` | `900` |  |
-| `worktree.max_parallel` | `0` |  |
-| `worktree.sync_before_start` | `true` |  |
-| `worktree.adopt_existing` | `true` |  |
-| `worktree.local_files` | `[]` |  |
+| `agent.id` | `""` |  |
+| `agent.reviewer_family_must_differ` | `true` |  |
+| `agent.reviewer_independence` | `"model"` | `family` \| `model` \| `off` |
+| `agent.families` | (long: see `ddflow config --explain`) |  |
+| `agent.family` | `""` |  |
+| `agent.routers` | `{hydrafusion = []}` |  |
+| `agent.roles` | (long: see `ddflow config --explain`) |  |
+| `agent.actors` | `{}` |  |
+| `agent.default_role` | `"agent"` |  |
+| `agent.operator_role` | `"operator"` |  |
+| `agent.ask_ttl_s` | `86400` |  |
+| `agent.ask_code_length` | `8` |  |
+| `agent.token_ttl_h` | `168` |  |
+| `agent.token_max_ttl_h` | `720` |  |
+| `agent.pair_ttl_s` | `300` |  |
+| `agent.pair_code_length` | `10` |  |
+| `agent.pair_max_attempts` | `5` |  |
+| `agent.capability_verbs` | (long: see `ddflow config --explain`) |  |
+| `agent.require_operator_token` | `false` |  |
+| `approvals.use_ttl_s` | `3600` |  |
+| `approvals.auto_request` | `true` |  |
+| `approvals.reason_chars` | `300` |  |
+| `approvals.min_digest_chars` | `8` |  |
+| `approvals.accept_harness` | `true` |  |
+| `approvals.transcript_dirs` | `["~/.claude/projects"]` |  |
+| `approvals.expiry_warn_s` | `600` |  |
+| `approvals.policy` | `[]` |  |
+| `approvals.policy_max_uses` | `1` |  |
+| `approvals.policy_unavailable_runs` | `3` |  |
+| `approvals.auto_approve_after_retries` | `0` |  |
+| `approvals.standing_window_s` | `3600` |  |
+| `approvals.standing_verbs` | (long: see `ddflow config --explain`) |  |
+| `approvals.accept_chat_for_t3` | `false` |  |
+| `approvals.forbid_chat_for_t3` | `false` |  |
+| `approvals.require_approval` | `[]` |  |
+| `bugs.file_task` | `true` |  |
+| `bugs.phase` | `"bugs"` |  |
+| `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |
+| `bugs.named_scope_at` | `20` |  |
+| `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
+| `bugs.repro_max_bytes` | `65536` |  |
+| `bugs.repro_tail_bytes` | `4096` |  |
+| `bugs.repro_events` | `10` |  |
+| `bugs.repro_test_timeout_s` | `300` |  |
+| `bugs.repro_runs` | `1` |  |
+| `bugs.repro_env` | (long: see `ddflow config --explain`) |  |
+| `bugs.repro_redact_extra` | `[]` |  |
+| `cadence.integration_tests_every_tasks` | `5` |  |
+| `cadence.architecture_review_every_phases` | `2` |  |
+| `cadence.mutation_tests_every_phases` | `3` |  |
+| `cadence.dedupe_sweep_every_tasks` | `4` |  |
+| `cadence.lessons_pass_every_phases` | `4` |  |
+| `cadence.max_missed` | `1` |  |
+| `cadence.every_days` | `[]` |  |
+| `cadence.recall_recheck_s` | `1800` |  |
+| `cadence.recall_recheck_max` | `3` |  |
+| `chore.globs` | (long: see `ddflow config --explain`) |  |
+| `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
+| `ci.command` | `""` |  |
+| `ci.base` | `""` |  |
+| `ci.pins_precheck` | `true` |  |
+| `ci.timeout_s` | `3600` |  |
+| `ci.workers` | `"auto"` |  |
+| `ci.min_workers` | `1` |  |
+| `ci.suite_min_workers` | `8` |  |
+| `ci.max_workers` | `48` |  |
+| `ci.max_concurrent_suites` | `1` |  |
+| `ci.selected_lock_tests` | `20` |  |
+| `ci.selected_lock_s` | `600` |  |
+| `ci.selected_lock_min_runs` | `5` |  |
+| `ci.selected_lock_runs` | `50` |  |
+| `ci.suite_wait_s` | `1800` |  |
+| `ci.suite_queue_stale_s` | `120` |  |
+| `ci.suite_queue_grace_s` | `120` |  |
+| `ci.keep_env` | `[]` |  |
+| `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
+| `ci.tests_scope` | `"selected"` | `selected` \| `full` |
+| `ci.always_tests` | (long: see `ddflow config --explain`) |  |
+| `companions.probe_cache_ttl_s` | `300` |  |
+| `companions.tool_probe_timeout_s` | `20.0` |  |
+| `companions.tool_run_timeout_s` | `300.0` |  |
+| `dedupe.on_match` | `"ask"` | `ask` \| `warn` \| `off` |
+| `dedupe.show_floor` | `0.35` |  |
+| `dedupe.ask_threshold` | `0.55` |  |
+| `dedupe.max_candidates` | `3` |  |
+| `dedupe.min_words` | `8` |  |
+| `dedupe.research_task_asks` | `false` |  |
+| `dedupe.kinds` | (long: see `ddflow config --explain`) |  |
+| `digest.escalate_after` | `"1h, 24h"` |  |
+| `digest.escalate_after_red_main` | `"6h"` |  |
+| `digest.text_chars` | `400` |  |
+| `digest.spotcheck_min` | `1` |  |
+| `docs.severity` | `"warn"` | `block` \| `warn` \| `off` |
+| `docs.check_links` | `"local"` | `off` \| `local` \| `network` |
+| `docs.link_timeout_s` | `10` |  |
+| `docs.check_paths` | `[]` |  |
+| `docs.lint_command` | `""` |  |
+| `docs.ignore_paths` | `[]` |  |
+| `docs.ignore_names` | `[]` |  |
+| `docs.extract` | `[]` |  |
+| `docs.count` | `[]` |  |
+| `docs.cli_command` | `[]` |  |
+| `docs.command_timeout_s` | `20` |  |
+| `enforce.commit_without_lease` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.install_hooks_on_setup` | `true` |  |
+| `enforce.require_item_trailer` | `false` |  |
+| `enforce.item_trailer_keys` | `["Item"]` |  |
+| `enforce.forbidden_trailers` | `[]` |  |
+| `enforce.trailer_waivers` | `{}` |  |
+| `enforce.event_secrets` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.generated_views` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.stale_docs` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.merge_commit_scope` | `"own"` | `own` \| `all` |
+| `enforce.lapsed_lease` | `"accept"` | `accept` \| `holder` \| `refuse` |
+| `enforce.environment_commits` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.complexity_warn_at` | `18` |  |
+| `enforce.doc_globs` | `["**/*.md", "**/*.rst", "**/*.adoc"]` |  |
+| `enforce.doc_exclude` | (long: see `ddflow config --explain`) |  |
+| `enforce.stale_rules` | `"block"` | `block` \| `warn` \| `off` |
+| `enforce.readme_with_code` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.readme_code_globs` | `["ddflow/**"]` |  |
+| `enforce.readme_files` | `["README.md"]` |  |
+| `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
+| `enforce.max_behind` | `50` |  |
+| `enforce.machine_local_keys` | `[]` |  |
+| `evaluation.max_miss_rate` | `0.0` |  |
+| `evaluation.min_fixtures` | `1` |  |
+| `export.documents` | `[]` |  |
+| `export.redact` | `true` |  |
+| `export.max_bytes` | `60000` |  |
+| `export.refresh` | `"off"` | `off` \| `merge` \| `phase_close` \| `docs_gate` |
+| `export.tables` | `{}` |  |
 | `flow.model` | `"trunk"` | `trunk` \| `gitflow` |
 | `flow.integration` | `"merge"` | `merge` \| `pr` |
 | `flow.forge` | `"auto"` | `auto` \| `github` \| `gitlab` |
@@ -6160,6 +6255,125 @@ long default is left to `ddflow config --explain`.
 | `gates.scrub_env` | (long: see `ddflow config --explain`) |  |
 | `gates.keep_env` | `[]` |  |
 | `gates.standards_wait_s` | `900` |  |
+| `govern.quota_mark_1` | `0.4` |  |
+| `govern.quota_mark_2` | `0.6` |  |
+| `govern.quota_mark_3` | `0.8` |  |
+| `govern.context_mark_1` | `0.6` |  |
+| `govern.context_mark_2` | `0.75` |  |
+| `govern.context_mark_3` | `0.85` |  |
+| `govern.context_mark_4` | `0.95` |  |
+| `govern.hysteresis` | `0.05` |  |
+| `govern.cooldown_s` | `300` |  |
+| `govern.tier_cap_1` | `"balanced"` | `fast` \| `balanced` \| `deep` |
+| `govern.tier_cap_2` | `"fast"` | `fast` \| `balanced` \| `deep` |
+| `govern.tier_cap_2_other` | `"balanced"` | `fast` \| `balanced` \| `deep` |
+| `govern.effort_cap_1` | `"medium"` | `low` \| `medium` \| `high` |
+| `govern.effort_cap_2` | `"low"` | `low` \| `medium` \| `high` |
+| `govern.reviewer_floor_tier` | `"balanced"` | `fast` \| `balanced` \| `deep` |
+| `govern.effort_floor` | `"low"` | `low` \| `medium` \| `high` |
+| `govern.deep_floor` | `true` |  |
+| `govern.load_governs` | `true` |  |
+| `grants.max_count` | `3` |  |
+| `grants.ttl_h` | `48` |  |
+| `handoff.max_files` | `3` |  |
+| `handoff.max_lines` | `60` |  |
+| `handoff.max_bytes` | `65536` |  |
+| `handoff.max_open_per_owner_file` | `5` |  |
+| `handoff.min_interval_s` | `30` |  |
+| `handoff.reject_breaker` | `3` |  |
+| `handoff.ttl_s` | `86400` |  |
+| `handoff.kinds` | `["fix", "gate_fix", "refactor", "doc"]` |  |
+| `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
+| `health.stall_s` | `3600` |  |
+| `health.runaway_s` | `14400` |  |
+| `health.interval_s` | `900` |  |
+| `health.shown` | `10` |  |
+| `health.idle_s` | `900` |  |
+| `health.check_budget_s` | `60` |  |
+| `health.reply_s` | `600` |  |
+| `health.crash_s` | `300` |  |
+| `health.mode_idle` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_stalled` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_unresponsive` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_locked` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_crashed` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `health.mode_runaway` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
+| `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
+| `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
+| `hooks.fixture_max_age_months` | `6` |  |
+| `hooks.fixture_max_reply_bytes` | `65536` |  |
+| `ids.bug` | `"{prefix}{hash}"` |  |
+| `ids.lesson` | `"{prefix}{hash}"` |  |
+| `ids.research` | `"{prefix}{hash}"` |  |
+| `ids.decision` | `"{prefix}{hash}"` |  |
+| `ids.memory` | `"{prefix}{hash}"` |  |
+| `ids.job` | `"{prefix}{hash}"` |  |
+| `ids.session` | `"s{time}-{pid}"` |  |
+| `ids.fix_task` | `"fix-{parent}"` |  |
+| `ids.fix_task_followup` | `"fix-{parent}-{seq}"` |  |
+| `ids.gate_skip_followup` | `"gskip-{parent}-{seq}"` |  |
+| `ids.promotion` | `"promote-{env}-{seq}"` |  |
+| `ids.ci_bug` | `"Bci-{slug}-{digest}"` |  |
+| `ids.split_child` | `"{parent}.{seq}"` |  |
+| `ids.imported_phase` | `"{user-text}"` |  |
+| `ids.imported_task` | `"{phase}.{slug}"` |  |
+| `importer.max_tasks` | `200` |  |
+| `importer.preview_rows` | `8` |  |
+| `importer.phase_slug_chars` | `32` |  |
+| `importer.task_slug_chars` | `40` |  |
+| `importer.todo_globs` | `[]` |  |
+| `importer.lesson_globs` | `[]` |  |
+| `importer.lesson_summary_globs` | `[]` |  |
+| `importer.decision_globs` | `[]` |  |
+| `importer.research_globs` | `[]` |  |
+| `importer.journal_globs` | `[]` |  |
+| `importer.memory_globs` | `[]` |  |
+| `importer.archive_globs` | `[]` |  |
+| `lanes.window_s` | `86400` |  |
+| `lanes.stale_after_s` | `0` |  |
+| `lanes.fleet_window_s` | `0` |  |
+| `lanes.fleet_max_rows` | `18` |  |
+| `lanes.fleet_items` | `5` |  |
+| `lanes.fleet_failed_patterns` | (long: see `ddflow config --explain`) |  |
+| `lanes.fleet_reason_chars` | `120` |  |
+| `lanes.watch_interval_s` | `5` |  |
+| `lanes.advise_max` | `10` |  |
+| `lanes.brief_notes` | `3` |  |
+| `lanes.brief_text_chars` | `1200` |  |
+| `lanes.stop_grace_s` | `10` |  |
+| `lanes.event_buffer` | `1000` |  |
+| `lanes.scope` | `"none"` | `none` \| `systemd` |
+| `lanes.pass_env` | (long: see `ddflow config --explain`) |  |
+| `lanes.endpoint_slots` | `1` |  |
+| `lanes.slot_wait_s` | `600` |  |
+| `lanes.release_mode` | `"flag"` | `off` \| `flag` \| `auto` |
+| `lanes.release_max` | `4` |  |
+| `lanes.release_gates` | (long: see `ddflow config --explain`) |  |
+| `lanes.release_machine_gates` | `["standards"]` |  |
+| `lease.ttl_s` | `1800` |  |
+| `lease.heartbeat_s` | `300` |  |
+| `lease.renew_long_commands` | `true` |  |
+| `lease.renew_log_min_s` | `120` |  |
+| `lease.grace_s` | `120` |  |
+| `lease.acquire_timeout_s` | `30` |  |
+| `lease.waiter_reservation_s` | `300` |  |
+| `lease.wait_max_s` | `600` |  |
+| `lease.wait_queue` | `false` |  |
+| `lease.idle_max_s` | `900` |  |
+| `lease.hold_max_s` | `3600` |  |
+| `lease.release_at_merge` | `true` |  |
+| `lease.break_on_timeout` | `false` |  |
+| `lease.inbox_max_chars` | `2000` |  |
+| `lease.inbox_max_pending` | `50` |  |
+| `lease.inbox_ttl_s` | `86400` |  |
+| `lease.wait_cap_s` | `1800` |  |
+| `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
+| `lease.resume_own` | `true` |  |
+| `lease.shared_globs` | `[]` |  |
+| `lease.new_file_globs` | (long: see `ddflow config --explain`) |  |
+| `lease.append_only_globs` | `[]` |  |
+| `lease.scan_view_trees_max` | `16` |  |
+| `lease.scan_view_verdicts_max` | `0` |  |
 | `lessons.search_backend` | `"fts5"` | `fts5` \| `like` |
 | `lessons.max_results` | `5` |  |
 | `lessons.snippet_chars` | `320` |  |
@@ -6171,6 +6385,175 @@ long default is left to `ddflow config --explain`.
 | `lessons.test_file_globs` | (long: see `ddflow config --explain`) |  |
 | `lessons.verify_output_lines` | `12` |  |
 | `lessons.verify_load_ratio` | `1.0` |  |
+| `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
+| `locks.suggest_globs` | `true` |  |
+| `locks.suggest_history` | `30` |  |
+| `locks.suggest_min_items` | `2` |  |
+| `locks.suggest_shown` | `5` |  |
+| `locks.snapshot` | `true` |  |
+| `locks.snapshot_max_age_s` | `1800` |  |
+| `locks.probe` | `true` |  |
+| `locks.probe_timeout_s` | `30` |  |
+| `locks.probe_at` | `["claim", "gate", "merge"]` |  |
+| `locks.probe_merge_tree_min_git` | `"2.38"` |  |
+| `log.reuse_parsed` | `true` |  |
+| `log.max_cached_events` | `200000` |  |
+| `log.redact_builtin_shapes` | `true` |  |
+| `log.commit_events` | `true` |  |
+| `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
+| `log.commit_events_message` | `"events: {reason}"` |  |
+| `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
+| `log.snapshot` | `false` |  |
+| `log.snapshot_min_events` | `5000` |  |
+| `log.snapshot_max_mb` | `256` |  |
+| `log.snapshot_stale_days` | `7` |  |
+| `log.snapshot_touch_s` | `86400` |  |
+| `log.evidence_blobs` | `false` |  |
+| `log.evidence_blob_keys` | (long: see `ddflow config --explain`) |  |
+| `log.evidence_blob_min_bytes` | `256` |  |
+| `loops.max_claims_per_item` | `3` |  |
+| `loops.max_gate_flaps` | `4` |  |
+| `loops.max_reopens` | `2` |  |
+| `loops.max_repeated_failures` | `3` |  |
+| `loops.max_duplicate_items` | `2` |  |
+| `loops.no_progress_window` | `60` |  |
+| `loops.wait_cycle` | `true` |  |
+| `loops.wait_cycle_shown` | `5` |  |
+| `loops.wait_alarm_s` | `1200` |  |
+| `loops.on_detect` | `"warn"` | `warn` \| `block` |
+| `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
+| `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |
+| `mcp.lane_tools` | `""` |  |
+| `mcp.profile_lean_budget_tokens` | `16000` |  |
+| `mcp.profile_mid_budget_tokens` | `32000` |  |
+| `mcp.output_schemas` | `"off"` | `off` \| `on` |
+| `mcp.next_hints` | `"off"` | `off` \| `on` \| `1` \| `2` \| `3` |
+| `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
+| `mcp.stale_check_every_s` | `60.0` |  |
+| `mcp.progress_s` | `20.0` |  |
+| `memory.max_chars` | `280` |  |
+| `memory.brief_items` | `12` |  |
+| `merge.require_gates` | `"warn"` | `warn` \| `refuse` |
+| `merge_queue.max_batch` | `5` |  |
+| `merge_queue.run_unit_tests` | `false` |  |
+| `merge_queue.timeout_s` | `0` |  |
+| `merge_queue.eta_default_s` | `900` |  |
+| `merge_queue.eta_history` | `5` |  |
+| `merge_queue.keep_history` | `50` |  |
+| `merge_queue.auto_run` | `"on"` | `on` \| `off` |
+| `merge_queue.auto_run_after_s` | `120` |  |
+| `merge_queue.auto_run_max_parallel` | `1` |  |
+| `metrics.min_samples` | `10` |  |
+| `metrics.top` | `5` |  |
+| `metrics.forecast_runs` | `1000` |  |
+| `metrics.forecast_seed` | `0` |  |
+| `metrics.forecast_low_pct` | `50` |  |
+| `metrics.forecast_high_pct` | `90` |  |
+| `metrics.grid_step_s` | `3600` |  |
+| `metrics.grid_max_folds` | `24` |  |
+| `metrics.stage_size_small` | `50` |  |
+| `metrics.stage_size_large` | `300` |  |
+| `metrics.lock_probe_max` | `50` |  |
+| `metrics.lock_red_main_window_s` | `86400` |  |
+| `metrics.lock_falsifier_conflict_pct` | `5` |  |
+| `metrics.lock_falsifier_red_main_pct` | `10` |  |
+| `metrics.lock_revert_key` | `"locks.mode"` |  |
+| `metrics.lock_revert_value` | `"strict"` |  |
+| `output.max_rows` | `50` |  |
+| `output.max_chars` | `30000` |  |
+| `output.non_ascii_weight` | `4` |  |
+| `output.allow_full` | `true` |  |
+| `pins.recipes_file` | `".ddflow/pins.toml"` |  |
+| `pins.timeout_s` | `900` |  |
+| `pins.after_merge_timeout_s` | `120` |  |
+| `pins.after_merge` | `"amend"` | `amend` \| `leave` \| `off` |
+| `pins.parallel` | `4` |  |
+| `pins.progress_s` | `30` |  |
+| `pins.merge_check` | `"fast"` | `fast` \| `all` \| `off` |
+| `pins.baseline_globs` | `[]` |  |
+| `pins.mergiraf` | `false` |  |
+| `pins.mergiraf_globs` | `["*.py"]` |  |
+| `pins.mergiraf_min_git` | `"2.44"` |  |
+| `pins.mergiraf_keep_pct` | `10` |  |
+| `plan.warn_missing_globs` | `true` |  |
+| `prompts.review_system` | `""` |  |
+| `prompts.review_user` | `""` |  |
+| `prompts.gate_instruction` | `""` |  |
+| `prompts.session_brief_header` | `""` |  |
+| `prompts.mcp_instructions` | `""` |  |
+| `prompts.agent_brief` | `""` |  |
+| `prompts.agent_report` | `""` |  |
+| `quality.max_file_bytes` | `30000` |  |
+| `quota.stale_after_s` | `900` |  |
+| `quota.claude_state` | `""` |  |
+| `quota.claude_projects` | `""` |  |
+| `quota.kilo_db` | `""` |  |
+| `quota.snapshot_path` | `""` |  |
+| `quota.samples_path` | `""` |  |
+| `quota.samples_max_bytes` | `4194304` |  |
+| `quota.sample_interval_s` | `300` |  |
+| `quota.sample_tail_bytes` | `8192` |  |
+| `quota.token_windows` | `["5h", "day", "week"]` |  |
+| `quota.token_fields` | (long: see `ddflow config --explain`) |  |
+| `quota.transcript_max_bytes` | `1073741824` |  |
+| `quota.kilo_timeout_s` | `10.0` |  |
+| `rag.command` | `""` |  |
+| `rag.model_dir` | `""` |  |
+| `rag.timeout_s` | `60` |  |
+| `reinstruct.enabled` | `true` |  |
+| `reinstruct.every_calls` | `12` |  |
+| `reinstruct.every_seconds` | `240` |  |
+| `reinstruct.max_items` | `3` |  |
+| `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
+| `review.max_rounds` | `2` |  |
+| `review.settle_all_refuted` | `true` |  |
+| `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
+| `review.converge_floor` | `"HIGH"` | `HIGH` \| `MEDIUM` \| `LOW` |
+| `review.delta_default` | `false` |  |
+| `review.fix_round_free` | `true` |  |
+| `review.require_new_work` | `true` |  |
+| `review.combined_under_lines` | `150` |  |
+| `review.triage_ignore_globs` | (long: see `ddflow config --explain`) |  |
+| `review.doc_globs` | `["docs/**", "README*", "CHANGELOG*"]` |  |
+| `review.exclude_globs` | (long: see `ddflow config --explain`) |  |
+| `review.manifest_max_files` | `40` |  |
+| `review.exclude_pin_files` | `true` |  |
+| `review.chunk_max_tokens` | `0` |  |
+| `review.split_rounds` | `2` |  |
+| `review.degraded_cooldown_s` | `3600` |  |
+| `rules.max_rules` | `200` |  |
+| `rules.max_size_bytes` | `50000` |  |
+| `rules.tags_allowed` | `[]` |  |
+| `rules.scopes_allowed` | `["project", "phase", "task"]` |  |
+| `schedule.parallel` | `"auto"` | `auto` \| `fixed` |
+| `schedule.max_parallel_tasks` | `4` |  |
+| `schedule.max_parallel_min` | `2` |  |
+| `schedule.max_parallel_max` | `8` |  |
+| `schedule.adapt_up_after_s` | `600` |  |
+| `schedule.adapt_cooldown_s` | `300` |  |
+| `schedule.signal_interval_s` | `60` |  |
+| `schedule.signals` | (long: see `ddflow config --explain`) |  |
+| `schedule.ready_policy` | `"deps_and_lease"` | `deps_and_lease` \| `deps_only` |
+| `schedule.docs_ignore_phase_needs` | `true` |  |
+| `schedule.cycle_policy` | `"error"` | `error` \| `warn` |
+| `schedule.unknown_dep_policy` | `"block"` | `block` \| `warn` |
+| `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
+| `schedule.phase_full_suite` | `"require"` | `off` \| `require` \| `run` |
+| `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
+| `schedule.optimizer` | `"greedy-v1"` |  |
+| `schedule.bugs_first` | `true` |  |
+| `schedule.reserved_slots` | `0` |  |
+| `schedule.reserved_tags` | `["ddflow-gap"]` |  |
+| `schedule.dx_priority` | `8` |  |
+| `schedule.bug_priority` | `10` |  |
+| `schedule.dx_tags` | `["dx"]` |  |
+| `schedule.dx_id_prefix` | `"DX-"` |  |
+| `schedule.resources` | `[]` |  |
+| `schedule.repos` | `[]` |  |
+| `self_assessment.auto_file` | `true` |  |
+| `sensitivity.scan_at_write` | `true` |  |
+| `sensitivity.model_allowed` | `[]` |  |
+| `sensitivity.egress_doors` | `["search", "recall", "brief", "export"]` |  |
 | `session.log_prompts` | `true` |  |
 | `session.redact_patterns` | (long: see `ddflow config --explain`) |  |
 | `session.redact_extra` | `[]` |  |
@@ -6204,214 +6587,6 @@ long default is left to `ddflow config --explain`.
 | `session.report_test_files` | `12` |  |
 | `session.agent_brief_lessons` | `3` |  |
 | `session.agent_brief_extra` | `""` |  |
-| `schedule.parallel` | `"auto"` | `auto` \| `fixed` |
-| `schedule.max_parallel_tasks` | `4` |  |
-| `schedule.max_parallel_min` | `2` |  |
-| `schedule.max_parallel_max` | `8` |  |
-| `schedule.adapt_up_after_s` | `600` |  |
-| `schedule.adapt_cooldown_s` | `300` |  |
-| `schedule.signal_interval_s` | `60` |  |
-| `schedule.signals` | (long: see `ddflow config --explain`) |  |
-| `schedule.ready_policy` | `"deps_and_lease"` | `deps_and_lease` \| `deps_only` |
-| `schedule.docs_ignore_phase_needs` | `true` |  |
-| `schedule.cycle_policy` | `"error"` | `error` \| `warn` |
-| `schedule.unknown_dep_policy` | `"block"` | `block` \| `warn` |
-| `schedule.empty_phase` | `"note"` | `note` \| `problem` \| `off` |
-| `schedule.phase_full_suite` | `"require"` | `off` \| `require` \| `run` |
-| `schedule.auto_order` | `"propose"` | `off` \| `propose` \| `apply` |
-| `schedule.optimizer` | `"greedy-v1"` |  |
-| `schedule.bugs_first` | `true` |  |
-| `schedule.reserved_slots` | `0` |  |
-| `schedule.reserved_tags` | `["ddflow-gap"]` |  |
-| `schedule.dx_priority` | `8` |  |
-| `schedule.bug_priority` | `10` |  |
-| `schedule.dx_tags` | `["dx"]` |  |
-| `schedule.dx_id_prefix` | `"DX-"` |  |
-| `schedule.resources` | `[]` |  |
-| `schedule.repos` | `[]` |  |
-| `bugs.file_task` | `true` |  |
-| `bugs.phase` | `"bugs"` |  |
-| `bugs.lint_checks` | (long: see `ddflow config --explain`) |  |
-| `bugs.named_scope_at` | `20` |  |
-| `bugs.repro_capture` | `"full"` | `off` \| `basic` \| `full` |
-| `bugs.repro_max_bytes` | `65536` |  |
-| `bugs.repro_tail_bytes` | `4096` |  |
-| `bugs.repro_events` | `10` |  |
-| `bugs.repro_test_timeout_s` | `300` |  |
-| `bugs.repro_runs` | `1` |  |
-| `bugs.repro_env` | (long: see `ddflow config --explain`) |  |
-| `bugs.repro_redact_extra` | `[]` |  |
-| `importer.max_tasks` | `200` |  |
-| `importer.preview_rows` | `8` |  |
-| `importer.phase_slug_chars` | `32` |  |
-| `importer.task_slug_chars` | `40` |  |
-| `importer.todo_globs` | `[]` |  |
-| `importer.lesson_globs` | `[]` |  |
-| `importer.lesson_summary_globs` | `[]` |  |
-| `importer.decision_globs` | `[]` |  |
-| `importer.research_globs` | `[]` |  |
-| `importer.journal_globs` | `[]` |  |
-| `importer.memory_globs` | `[]` |  |
-| `importer.archive_globs` | `[]` |  |
-| `memory.max_chars` | `280` |  |
-| `memory.brief_items` | `12` |  |
-| `dedupe.on_match` | `"ask"` | `ask` \| `warn` \| `off` |
-| `dedupe.show_floor` | `0.35` |  |
-| `dedupe.ask_threshold` | `0.55` |  |
-| `dedupe.max_candidates` | `3` |  |
-| `dedupe.min_words` | `8` |  |
-| `dedupe.research_task_asks` | `false` |  |
-| `dedupe.kinds` | (long: see `ddflow config --explain`) |  |
-| `evaluation.max_miss_rate` | `0.0` |  |
-| `evaluation.min_fixtures` | `1` |  |
-| `sensitivity.scan_at_write` | `true` |  |
-| `sensitivity.model_allowed` | `[]` |  |
-| `sensitivity.egress_doors` | `["search", "recall", "brief", "export"]` |  |
-| `companions.probe_cache_ttl_s` | `300` |  |
-| `companions.tool_probe_timeout_s` | `20.0` |  |
-| `companions.tool_run_timeout_s` | `300.0` |  |
-| `cadence.integration_tests_every_tasks` | `5` |  |
-| `cadence.architecture_review_every_phases` | `2` |  |
-| `cadence.mutation_tests_every_phases` | `3` |  |
-| `cadence.dedupe_sweep_every_tasks` | `4` |  |
-| `cadence.lessons_pass_every_phases` | `4` |  |
-| `cadence.max_missed` | `1` |  |
-| `cadence.every_days` | `[]` |  |
-| `cadence.recall_recheck_s` | `1800` |  |
-| `cadence.recall_recheck_max` | `3` |  |
-| `reinstruct.enabled` | `true` |  |
-| `reinstruct.every_calls` | `12` |  |
-| `reinstruct.every_seconds` | `240` |  |
-| `reinstruct.max_items` | `3` |  |
-| `enforce.commit_without_lease` | `"warn"` | `block` \| `warn` \| `off` |
-| `enforce.install_hooks_on_setup` | `true` |  |
-| `enforce.require_item_trailer` | `false` |  |
-| `enforce.item_trailer_keys` | `["Item"]` |  |
-| `enforce.forbidden_trailers` | `[]` |  |
-| `enforce.trailer_waivers` | `{}` |  |
-| `enforce.event_secrets` | `"block"` | `block` \| `warn` \| `off` |
-| `enforce.generated_views` | `"block"` | `block` \| `warn` \| `off` |
-| `enforce.stale_docs` | `"warn"` | `block` \| `warn` \| `off` |
-| `enforce.merge_commit_scope` | `"own"` | `own` \| `all` |
-| `enforce.lapsed_lease` | `"accept"` | `accept` \| `holder` \| `refuse` |
-| `enforce.environment_commits` | `"block"` | `block` \| `warn` \| `off` |
-| `enforce.complexity_warn_at` | `18` |  |
-| `enforce.doc_globs` | `["**/*.md", "**/*.rst", "**/*.adoc"]` |  |
-| `enforce.doc_exclude` | (long: see `ddflow config --explain`) |  |
-| `enforce.stale_rules` | `"block"` | `block` \| `warn` \| `off` |
-| `enforce.readme_with_code` | `"warn"` | `block` \| `warn` \| `off` |
-| `enforce.readme_code_globs` | `["ddflow/**"]` |  |
-| `enforce.readme_files` | `["README.md"]` |  |
-| `enforce.behind` | `"warn"` | `block` \| `warn` \| `off` |
-| `enforce.max_behind` | `50` |  |
-| `enforce.machine_local_keys` | `[]` |  |
-| `loops.max_claims_per_item` | `3` |  |
-| `loops.max_gate_flaps` | `4` |  |
-| `loops.max_reopens` | `2` |  |
-| `loops.max_repeated_failures` | `3` |  |
-| `loops.max_duplicate_items` | `2` |  |
-| `loops.no_progress_window` | `60` |  |
-| `loops.wait_cycle` | `true` |  |
-| `loops.wait_cycle_shown` | `5` |  |
-| `loops.wait_alarm_s` | `1200` |  |
-| `loops.on_detect` | `"warn"` | `warn` \| `block` |
-| `locks.undeclared_write` | `"warn"` | `block` \| `warn` \| `off` |
-| `locks.suggest_globs` | `true` |  |
-| `locks.suggest_history` | `30` |  |
-| `locks.suggest_min_items` | `2` |  |
-| `locks.suggest_shown` | `5` |  |
-| `locks.snapshot` | `true` |  |
-| `locks.snapshot_max_age_s` | `1800` |  |
-| `locks.probe` | `true` |  |
-| `locks.probe_timeout_s` | `30` |  |
-| `locks.probe_at` | `["claim", "gate", "merge"]` |  |
-| `locks.probe_merge_tree_min_git` | `"2.38"` |  |
-| `lanes.window_s` | `86400` |  |
-| `lanes.stale_after_s` | `0` |  |
-| `lanes.fleet_window_s` | `0` |  |
-| `lanes.fleet_max_rows` | `18` |  |
-| `lanes.fleet_items` | `5` |  |
-| `lanes.fleet_failed_patterns` | (long: see `ddflow config --explain`) |  |
-| `lanes.fleet_reason_chars` | `120` |  |
-| `lanes.watch_interval_s` | `5` |  |
-| `lanes.advise_max` | `10` |  |
-| `lanes.brief_notes` | `3` |  |
-| `lanes.brief_text_chars` | `1200` |  |
-| `lanes.stop_grace_s` | `10` |  |
-| `lanes.event_buffer` | `1000` |  |
-| `lanes.scope` | `"none"` | `none` \| `systemd` |
-| `lanes.pass_env` | (long: see `ddflow config --explain`) |  |
-| `lanes.endpoint_slots` | `1` |  |
-| `lanes.slot_wait_s` | `600` |  |
-| `lanes.release_mode` | `"flag"` | `off` \| `flag` \| `auto` |
-| `lanes.release_max` | `4` |  |
-| `lanes.release_gates` | (long: see `ddflow config --explain`) |  |
-| `lanes.release_machine_gates` | `["standards"]` |  |
-| `health.mode` | `"propose"` | `off` \| `propose` \| `apply` |
-| `health.stall_s` | `3600` |  |
-| `health.runaway_s` | `14400` |  |
-| `health.interval_s` | `900` |  |
-| `health.shown` | `10` |  |
-| `health.idle_s` | `900` |  |
-| `health.check_budget_s` | `60` |  |
-| `health.reply_s` | `600` |  |
-| `health.crash_s` | `300` |  |
-| `health.mode_idle` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
-| `health.mode_stalled` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
-| `health.mode_unresponsive` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
-| `health.mode_locked` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
-| `health.mode_crashed` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
-| `health.mode_runaway` | `"inherit"` | `inherit` \| `off` \| `propose` \| `apply` |
-| `govern.quota_mark_1` | `0.4` |  |
-| `govern.quota_mark_2` | `0.6` |  |
-| `govern.quota_mark_3` | `0.8` |  |
-| `govern.context_mark_1` | `0.6` |  |
-| `govern.context_mark_2` | `0.75` |  |
-| `govern.context_mark_3` | `0.85` |  |
-| `govern.context_mark_4` | `0.95` |  |
-| `govern.hysteresis` | `0.05` |  |
-| `govern.cooldown_s` | `300` |  |
-| `govern.tier_cap_1` | `"balanced"` | `fast` \| `balanced` \| `deep` |
-| `govern.tier_cap_2` | `"fast"` | `fast` \| `balanced` \| `deep` |
-| `govern.tier_cap_2_other` | `"balanced"` | `fast` \| `balanced` \| `deep` |
-| `govern.effort_cap_1` | `"medium"` | `low` \| `medium` \| `high` |
-| `govern.effort_cap_2` | `"low"` | `low` \| `medium` \| `high` |
-| `govern.reviewer_floor_tier` | `"balanced"` | `fast` \| `balanced` \| `deep` |
-| `govern.effort_floor` | `"low"` | `low` \| `medium` \| `high` |
-| `govern.deep_floor` | `true` |  |
-| `govern.load_governs` | `true` |  |
-| `metrics.min_samples` | `10` |  |
-| `metrics.top` | `5` |  |
-| `metrics.forecast_runs` | `1000` |  |
-| `metrics.forecast_seed` | `0` |  |
-| `metrics.forecast_low_pct` | `50` |  |
-| `metrics.forecast_high_pct` | `90` |  |
-| `metrics.grid_step_s` | `3600` |  |
-| `metrics.grid_max_folds` | `24` |  |
-| `metrics.stage_size_small` | `50` |  |
-| `metrics.stage_size_large` | `300` |  |
-| `metrics.lock_probe_max` | `50` |  |
-| `metrics.lock_red_main_window_s` | `86400` |  |
-| `metrics.lock_falsifier_conflict_pct` | `5` |  |
-| `metrics.lock_falsifier_red_main_pct` | `10` |  |
-| `metrics.lock_revert_key` | `"locks.mode"` |  |
-| `metrics.lock_revert_value` | `"strict"` |  |
-| `review.max_rounds` | `2` |  |
-| `review.settle_all_refuted` | `true` |  |
-| `review.on_exceed` | `"refuse"` | `refuse` \| `warn` |
-| `review.converge_floor` | `"HIGH"` | `HIGH` \| `MEDIUM` \| `LOW` |
-| `review.delta_default` | `false` |  |
-| `review.fix_round_free` | `true` |  |
-| `review.require_new_work` | `true` |  |
-| `review.combined_under_lines` | `150` |  |
-| `review.triage_ignore_globs` | (long: see `ddflow config --explain`) |  |
-| `review.doc_globs` | `["docs/**", "README*", "CHANGELOG*"]` |  |
-| `review.exclude_globs` | (long: see `ddflow config --explain`) |  |
-| `review.manifest_max_files` | `40` |  |
-| `review.exclude_pin_files` | `true` |  |
-| `review.chunk_max_tokens` | `0` |  |
-| `review.split_rounds` | `2` |  |
-| `review.degraded_cooldown_s` | `3600` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
@@ -6446,34 +6621,7 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
-| `quota.stale_after_s` | `900` |  |
-| `quota.claude_state` | `""` |  |
-| `quota.claude_projects` | `""` |  |
-| `quota.kilo_db` | `""` |  |
-| `quota.snapshot_path` | `""` |  |
-| `quota.samples_path` | `""` |  |
-| `quota.samples_max_bytes` | `4194304` |  |
-| `quota.sample_interval_s` | `300` |  |
-| `quota.sample_tail_bytes` | `8192` |  |
-| `quota.token_windows` | `["5h", "day", "week"]` |  |
-| `quota.token_fields` | (long: see `ddflow config --explain`) |  |
-| `quota.transcript_max_bytes` | `1073741824` |  |
-| `quota.kilo_timeout_s` | `10.0` |  |
-| `log.reuse_parsed` | `true` |  |
-| `log.max_cached_events` | `200000` |  |
-| `log.redact_builtin_shapes` | `true` |  |
-| `log.commit_events` | `true` |  |
-| `log.commit_events_at` | `["merge", "complete", "release", "stop"]` |  |
-| `log.commit_events_message` | `"events: {reason}"` |  |
-| `log.pre_push_events` | `"warn"` | `warn` \| `block` \| `off` |
-| `log.snapshot` | `false` |  |
-| `log.snapshot_min_events` | `5000` |  |
-| `log.snapshot_max_mb` | `256` |  |
-| `log.snapshot_stale_days` | `7` |  |
-| `log.snapshot_touch_s` | `86400` |  |
-| `log.evidence_blobs` | `false` |  |
-| `log.evidence_blob_keys` | (long: see `ddflow config --explain`) |  |
-| `log.evidence_blob_min_bytes` | `256` |  |
+| `triggers.max_fires_per_hour` | `10` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.skew_notice` | `"once"` | `once` \| `always` \| `off` |
 | `upgrade.backup` | `"local"` | `local` \| `snapshot` \| `none` |
@@ -6487,168 +6635,20 @@ long default is left to `ddflow config --explain`.
 | `upgrade.index_url` | `""` |  |
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
-| `pins.recipes_file` | `".ddflow/pins.toml"` |  |
-| `pins.timeout_s` | `900` |  |
-| `pins.after_merge_timeout_s` | `120` |  |
-| `pins.after_merge` | `"amend"` | `amend` \| `leave` \| `off` |
-| `pins.parallel` | `4` |  |
-| `pins.progress_s` | `30` |  |
-| `pins.merge_check` | `"fast"` | `fast` \| `all` \| `off` |
-| `pins.baseline_globs` | `[]` |  |
-| `pins.mergiraf` | `false` |  |
-| `pins.mergiraf_globs` | `["*.py"]` |  |
-| `pins.mergiraf_min_git` | `"2.44"` |  |
-| `pins.mergiraf_keep_pct` | `10` |  |
-| `plan.warn_missing_globs` | `true` |  |
-| `quality.max_file_bytes` | `30000` |  |
 | `waves.auto_stamp` | `true` |  |
-| `merge.require_gates` | `"warn"` | `warn` \| `refuse` |
-| `merge_queue.max_batch` | `5` |  |
-| `merge_queue.run_unit_tests` | `false` |  |
-| `merge_queue.timeout_s` | `0` |  |
-| `merge_queue.eta_default_s` | `900` |  |
-| `merge_queue.eta_history` | `5` |  |
-| `merge_queue.keep_history` | `50` |  |
-| `merge_queue.auto_run` | `"on"` | `on` \| `off` |
-| `merge_queue.auto_run_after_s` | `120` |  |
-| `merge_queue.auto_run_max_parallel` | `1` |  |
-| `chore.globs` | (long: see `ddflow config --explain`) |  |
-| `chore.skip_gates` | (long: see `ddflow config --explain`) |  |
-| `digest.escalate_after` | `"1h, 24h"` |  |
-| `digest.escalate_after_red_main` | `"6h"` |  |
-| `digest.text_chars` | `400` |  |
-| `digest.spotcheck_min` | `1` |  |
-| `output.max_rows` | `50` |  |
-| `output.max_chars` | `30000` |  |
-| `output.non_ascii_weight` | `4` |  |
-| `output.allow_full` | `true` |  |
-| `grants.max_count` | `3` |  |
-| `grants.ttl_h` | `48` |  |
-| `approvals.use_ttl_s` | `3600` |  |
-| `approvals.auto_request` | `true` |  |
-| `approvals.reason_chars` | `300` |  |
-| `approvals.min_digest_chars` | `8` |  |
-| `approvals.accept_harness` | `true` |  |
-| `approvals.transcript_dirs` | `["~/.claude/projects"]` |  |
-| `approvals.expiry_warn_s` | `600` |  |
-| `approvals.policy` | `[]` |  |
-| `approvals.policy_max_uses` | `1` |  |
-| `approvals.policy_unavailable_runs` | `3` |  |
-| `approvals.auto_approve_after_retries` | `0` |  |
-| `approvals.standing_window_s` | `3600` |  |
-| `approvals.standing_verbs` | (long: see `ddflow config --explain`) |  |
-| `approvals.accept_chat_for_t3` | `false` |  |
-| `approvals.forbid_chat_for_t3` | `false` |  |
-| `approvals.require_approval` | `[]` |  |
-| `handoff.max_files` | `3` |  |
-| `handoff.max_lines` | `60` |  |
-| `handoff.max_bytes` | `65536` |  |
-| `handoff.max_open_per_owner_file` | `5` |  |
-| `handoff.min_interval_s` | `30` |  |
-| `handoff.reject_breaker` | `3` |  |
-| `handoff.ttl_s` | `86400` |  |
-| `handoff.kinds` | `["fix", "gate_fix", "refactor", "doc"]` |  |
-| `hooks.forbidden_commands` | (long: see `ddflow config --explain`) |  |
-| `hooks.allowed_commands` | `["ddflow review --force --reason"]` |  |
-| `hooks.fixture_max_age_months` | `6` |  |
-| `hooks.fixture_max_reply_bytes` | `65536` |  |
-| `release.manifest_lint` | `"block"` | `block` \| `warn` \| `off` |
-| `mcp.tools` | `"auto"` | `auto` \| `lean` \| `families` \| `hot+families` \| `core` \| `standard` \| `all` |
-| `mcp.worker_tools` | `"core"` | `core` \| `standard` \| `all` |
-| `mcp.lane_tools` | `""` |  |
-| `mcp.profile_lean_budget_tokens` | `16000` |  |
-| `mcp.profile_mid_budget_tokens` | `32000` |  |
-| `mcp.output_schemas` | `"off"` | `off` \| `on` |
-| `mcp.next_hints` | `"off"` | `off` \| `on` \| `1` \| `2` \| `3` |
-| `mcp.on_upgrade` | `"notify"` | `notify` \| `reexec` \| `off` |
-| `mcp.stale_check_every_s` | `60.0` |  |
-| `mcp.progress_s` | `20.0` |  |
-| `ci.command` | `""` |  |
-| `ci.base` | `""` |  |
-| `ci.pins_precheck` | `true` |  |
-| `ci.timeout_s` | `3600` |  |
-| `ci.workers` | `"auto"` |  |
-| `ci.min_workers` | `1` |  |
-| `ci.suite_min_workers` | `8` |  |
-| `ci.max_workers` | `48` |  |
-| `ci.max_concurrent_suites` | `1` |  |
-| `ci.selected_lock_tests` | `20` |  |
-| `ci.selected_lock_s` | `600` |  |
-| `ci.selected_lock_min_runs` | `5` |  |
-| `ci.selected_lock_runs` | `50` |  |
-| `ci.suite_wait_s` | `1800` |  |
-| `ci.suite_queue_stale_s` | `120` |  |
-| `ci.suite_queue_grace_s` | `120` |  |
-| `ci.keep_env` | `[]` |  |
-| `ci.on_merge` | `"fast"` | `off` \| `fast` \| `full` |
-| `ci.tests_scope` | `"selected"` | `selected` \| `full` |
-| `ci.always_tests` | (long: see `ddflow config --explain`) |  |
-| `prompts.review_system` | `""` |  |
-| `prompts.review_user` | `""` |  |
-| `prompts.gate_instruction` | `""` |  |
-| `prompts.session_brief_header` | `""` |  |
-| `prompts.mcp_instructions` | `""` |  |
-| `prompts.agent_brief` | `""` |  |
-| `prompts.agent_report` | `""` |  |
-| `export.documents` | `[]` |  |
-| `export.redact` | `true` |  |
-| `export.max_bytes` | `60000` |  |
-| `export.refresh` | `"off"` | `off` \| `merge` \| `phase_close` \| `docs_gate` |
-| `export.tables` | `{}` |  |
-| `rules.max_rules` | `200` |  |
-| `rules.max_size_bytes` | `50000` |  |
-| `rules.tags_allowed` | `[]` |  |
-| `rules.scopes_allowed` | `["project", "phase", "task"]` |  |
-| `agent.id` | `""` |  |
-| `agent.reviewer_family_must_differ` | `true` |  |
-| `agent.reviewer_independence` | `"model"` | `family` \| `model` \| `off` |
-| `agent.families` | (long: see `ddflow config --explain`) |  |
-| `agent.family` | `""` |  |
-| `agent.routers` | `{hydrafusion = []}` |  |
-| `agent.roles` | (long: see `ddflow config --explain`) |  |
-| `agent.actors` | `{}` |  |
-| `agent.default_role` | `"agent"` |  |
-| `agent.operator_role` | `"operator"` |  |
-| `agent.ask_ttl_s` | `86400` |  |
-| `agent.ask_code_length` | `8` |  |
-| `agent.token_ttl_h` | `168` |  |
-| `agent.token_max_ttl_h` | `720` |  |
-| `agent.pair_ttl_s` | `300` |  |
-| `agent.pair_code_length` | `10` |  |
-| `agent.pair_max_attempts` | `5` |  |
-| `agent.capability_verbs` | (long: see `ddflow config --explain`) |  |
-| `agent.require_operator_token` | `false` |  |
-| `ids.bug` | `"{prefix}{hash}"` |  |
-| `ids.lesson` | `"{prefix}{hash}"` |  |
-| `ids.research` | `"{prefix}{hash}"` |  |
-| `ids.decision` | `"{prefix}{hash}"` |  |
-| `ids.memory` | `"{prefix}{hash}"` |  |
-| `ids.job` | `"{prefix}{hash}"` |  |
-| `ids.session` | `"s{time}-{pid}"` |  |
-| `ids.fix_task` | `"fix-{parent}"` |  |
-| `ids.fix_task_followup` | `"fix-{parent}-{seq}"` |  |
-| `ids.gate_skip_followup` | `"gskip-{parent}-{seq}"` |  |
-| `ids.promotion` | `"promote-{env}-{seq}"` |  |
-| `ids.ci_bug` | `"Bci-{slug}-{digest}"` |  |
-| `ids.split_child` | `"{parent}.{seq}"` |  |
-| `ids.imported_phase` | `"{user-text}"` |  |
-| `ids.imported_task` | `"{phase}.{slug}"` |  |
-| `triggers.max_fires_per_hour` | `10` |  |
-| `rag.command` | `""` |  |
-| `rag.model_dir` | `""` |  |
-| `rag.timeout_s` | `60` |  |
-| `docs.severity` | `"warn"` | `block` \| `warn` \| `off` |
-| `docs.check_links` | `"local"` | `off` \| `local` \| `network` |
-| `docs.link_timeout_s` | `10` |  |
-| `docs.check_paths` | `[]` |  |
-| `docs.lint_command` | `""` |  |
-| `docs.ignore_paths` | `[]` |  |
-| `docs.ignore_names` | `[]` |  |
-| `docs.extract` | `[]` |  |
-| `docs.count` | `[]` |  |
-| `docs.cli_command` | `[]` |  |
-| `docs.command_timeout_s` | `20` |  |
-| `self_assessment.auto_file` | `true` |  |
+| `worktree.enabled` | `true` |  |
+| `worktree.root` | `".ddflow/worktrees"` |  |
+| `worktree.branch_prefix` | `"ddflow/"` |  |
+| `worktree.base_ref` | `""` |  |
+| `worktree.merge_strategy` | `"no-ff"` | `no-ff` \| `ff-only` \| `squash` |
+| `worktree.remove_on_merge` | `true` |  |
+| `worktree.dispose_finished` | `true` |  |
+| `worktree.sweep_min_age_s` | `3600` |  |
+| `worktree.sweep_interval_s` | `900` |  |
+| `worktree.max_parallel` | `0` |  |
+| `worktree.sync_before_start` | `true` |  |
+| `worktree.adopt_existing` | `true` |  |
+| `worktree.local_files` | `[]` |  |
 
 </details>
 <!-- ddflow:end README/knobs -->
