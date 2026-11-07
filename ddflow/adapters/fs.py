@@ -15,6 +15,12 @@ from typing import Protocol, runtime_checkable
 
 from .ports import port
 
+#: Re-exported so `FakeFs` raises the exact exceptions `LocalFs` raises (via `shutil`)
+#: without importing `shutil` itself: the `fsio-home` contract keeps `shutil` in this one
+#: module, D-adapters-answers).
+Error = shutil.Error
+SameFileError = shutil.SameFileError
+
 
 @port
 @runtime_checkable
