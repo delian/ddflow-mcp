@@ -45,6 +45,7 @@ from .gate import (
 )
 from .records import (
     PROGRESS_EVERY_S,
+    _blocking_findings,
     _finding_rows,
     _gate_outcome,
     _item_intent,
@@ -404,6 +405,21 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     return cross[0] if cross else best
 
 
+def _failing_reviewer(best, results, it, gate, converging, cfg, outcome):
+    """For a failed outcome, the reviewer whose finding blocked the gate (bug B3113b1f522);
+    else ``best``. A failed review must name the reviewer that found the blocking defect,
+    not a clean peer that ranked first (or the author's own family, listed first). The
+    findings `_blocking_findings` returns are the SAME objects each reviewer's ``findings``
+    held (matched by identity), so the return is one of ``results`` or ``best``."""
+    if outcome != "failed":
+        return best
+    blocking = _blocking_findings(results, it, gate, converging, cfg)
+    for r in results:
+        if any(b is f for b in blocking for f in r.findings):
+            return r
+    return best
+
+
 def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -624,6 +640,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
     outcome, extra_evidence = _gate_outcome(
         best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )
+    best = _failing_reviewer(best, results, it, gate, _converges(kind, fix), cfg, outcome)
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,

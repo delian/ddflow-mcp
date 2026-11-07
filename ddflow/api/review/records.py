@@ -194,6 +194,24 @@ def _confirmed_unrechecked(it, gate: str) -> bool:
     return bool(GD.unresolved_review_failure(it, gate, confirmed_only=True))
 
 
+def _blocking_findings(results, it, gate: str, converging: bool, cfg):
+    """The findings of this round that keep the gate open -- the same set `_gate_outcome`
+    consults, computed once so the caller can name the REVIEWER that found one (bug
+    B3113b1f522). Empty when nothing this round blocks (no finding, or every finding is
+    below a converged full re-review's floor)."""
+    found = [f for r in results if r.status in _HEARD for f in r.findings]
+    if not found:
+        return []
+    prior = _last_review(it, gate) if it is not None else {}
+    converged_round = converging and bool(prior.get("chunk_findings"))
+    return RV.blocking_findings(
+        found,
+        converged=converged_round,
+        floor=cfg.review.converge_floor,
+        known=_still_standing(it, gate, prior.get("chunk_findings")),
+    )
+
+
 def _gate_outcome(
     best, results, it, item: str, gate: str, converging: bool, cfg, extra_evidence, say
 ) -> tuple[str, dict | None]:
@@ -221,12 +239,7 @@ def _gate_outcome(
     found = [f for r in results if r.status in _HEARD for f in r.findings]
     if not found:
         return "passed", extra_evidence
-    blocking = RV.blocking_findings(
-        found,
-        converged=converged_round,
-        floor=cfg.review.converge_floor,
-        known=_still_standing(it, gate, prior.get("chunk_findings")),
-    )
+    blocking = _blocking_findings(results, it, gate, converging, cfg)
     if blocking:
         return "failed", extra_evidence
     # A full re-review must not converge (pass on below-floor findings) while a confirmed
