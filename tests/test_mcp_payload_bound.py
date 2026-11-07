@@ -305,9 +305,9 @@ def test_show_caps_a_leaf_map_the_string_clip_leaves_under_the_threshold():
 
 
 def test_show_stays_under_the_budget_for_a_nested_shape_the_caps_miss():
-    """A nested dict-of-dicts (each inner map just under `FINDINGS_SHOWN`) is
-    indistinguishable from an evidence record, so the structural caps alone would not
-    catch it; the size guard does (B-show-mcp-result-over-ceiling)."""
+    """A homogeneous dict-of-dicts keyed by id (`_homogeneous`) or a deep nesting that no
+    single cap bounds is cut until `ddflow_show` serialises under `SHOW_MAX_CHARS`
+    (B-show-mcp-result-over-ceiling)."""
     body = {
         "state": "open",
         "gates": {
@@ -323,6 +323,18 @@ def test_show_stays_under_the_budget_for_a_nested_shape_the_caps_miss():
     out, _ = B.bound_show(body, {})
     assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
     assert out["truncated"]["findings_cut"] > 0
+
+
+def test_a_gates_map_with_more_names_than_the_cap_stays_whole():
+    """The root `gates` map NAMES the gates, so a project with more than `FINDINGS_SHOWN`
+    gates must keep every gate record -- the series-map cap must not truncate it."""
+    body = {
+        "state": "open",
+        "gates": {f"g{i}": {"outcome": "passed", "note": "kept"} for i in range(14)},
+    }
+    out, _ = B.bound_show(body, {})
+    assert set(out["gates"]) == {f"g{i}" for i in range(14)}, list(out["gates"])
+    assert (out.get("truncated") or {}).get("findings_cut", 0) == 0
 
 
 def test_a_string_just_over_the_cut_is_left_whole_because_cutting_would_not_shrink_it():
