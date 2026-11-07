@@ -84,6 +84,18 @@ def fs_conformance(adapter) -> None:
         h.rmtree(h.path("b"), ignore_errors=False)
     with pytest.raises(FileNotFoundError):
         h.copy_file(h.path("nope"), h.path("x"))
+    # ADP-fs-fake-parity: a same-path move is a no-op for a file and for a directory,
+    # and copy_tree into its own subtree with dirs_exist_ok=True returns rather than
+    # raising — shutil's snapshot copy lands one level deep, so both adapters must
+    # agree on a NESTED source, not one small tree.
+    h.put("self/one.txt", b"1")
+    h.put("self/sub/two.txt", b"2")
+    h.move(h.path("self"), h.path("self"))  # move(dir, same dir) -> no-op
+    h.move(h.path("self/one.txt"), h.path("self/one.txt"))  # move(file, same file) -> no-op
+    assert h.read("self/one.txt") == b"1" and h.read("self/sub/two.txt") == b"2"
+    h.copy_tree(h.path("self"), h.path("self/sub"), dirs_exist_ok=True)
+    assert h.read("self/one.txt") == b"1" and h.read("self/sub/two.txt") == b"2"
+    assert h.read("self/sub/one.txt") == b"1" and h.read("self/sub/sub/two.txt") == b"2"
 
 
 def _real(monkeypatch) -> _Disk:
@@ -261,8 +273,8 @@ def test_fake_mirrors_shutil_on_directories():
         f.move("/c/g", "/dd")  # the name is taken inside the directory
     with pytest.raises(FileExistsError):
         f.move("/z", "/dst")  # a directory over a file
-    with pytest.raises(ValueError):
-        f.copy_tree("/z", "/z/sub", dirs_exist_ok=True)
+    f.copy_tree("/z", "/z/sub", dirs_exist_ok=True)  # its own subtree: shutil returns
+    assert f.files["/z/sub/f"] == b"1" and f.is_dir("/z/sub/empty")
     for call in (lambda: f.rmtree("/"), lambda: f.copy_tree("/", "/x"), lambda: f.move("/", "/x")):
         with pytest.raises(ValueError):
             call()
