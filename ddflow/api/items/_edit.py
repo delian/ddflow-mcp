@@ -454,7 +454,9 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
     )
 
 
-def _overtaken_waiters(log, cfg, old_globs: list[str], accepted: list[str] | None) -> list[dict[str, Any]]:
+def _overtaken_waiters(
+    log, cfg, old_globs: list[str], accepted: list[str] | None
+) -> list[dict[str, Any]]:
     """The standing waiters a just-applied widening overtook (B-widen-over-standing-wait-silent).
 
     Only a waiter is "overtaken" that a NEWLY-granted glob now blocks and that the item's
@@ -468,7 +470,9 @@ def _overtaken_waiters(log, cfg, old_globs: list[str], accepted: list[str] | Non
     if not new_globs:
         return []
     waiters = WG.waiters(L._fold(log), cfg, time.time())
-    blocked_before = {w.item for w in waiters if any(globs_overlap(g, x) for g in old_globs for x in w.globs)}
+    blocked_before = {
+        w.item for w in waiters if any(globs_overlap(g, x) for g in old_globs for x in w.globs)
+    }
     return [
         {"item": w.item, "holder": w.holder, "globs": list(w.globs)}
         for w in waiters

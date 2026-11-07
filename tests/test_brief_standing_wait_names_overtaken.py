@@ -10,8 +10,8 @@ names the standing ``lease.waiting`` waiter for the files the holder now holds.
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
@@ -25,13 +25,22 @@ def _overtake(repo) -> None:
         ("BHY", "ddflow/tools/stop.py", "bhy"),
         ("BRES", "ddflow/api/lifecycle/brief.py", "bres"),
     ):
-        assert run_cli(repo, "task", "add", item, "--title", item, "--globs", g, agent=agent)[0] == 0
+        assert (
+            run_cli(repo, "task", "add", item, "--title", item, "--globs", g, agent=agent)[0] == 0
+        )
     assert run_cli(repo, "claim", "BRES", "--no-worktree", agent="bres")[0] == 0
     assert run_cli(repo, "claim", "BHY", "--no-worktree", agent="bhy")[0] == 0
     assert run_cli(repo, "claim", "DX", "--no-worktree", agent="dx")[0] == 0
     # BHY's standing non-queued wait on lifecycle/ (refused: BRES holds brief.py).
     assert (
-        run_cli(repo, "update", "BHY", "--globs", "ddflow/tools/stop.py,ddflow/api/lifecycle/", agent="bhy")[0]
+        run_cli(
+            repo,
+            "update",
+            "BHY",
+            "--globs",
+            "ddflow/tools/stop.py,ddflow/api/lifecycle/",
+            agent="bhy",
+        )[0]
         == 3
     )
     assert run_cli(repo, "release", "BRES", agent="bres")[0] == 0
@@ -40,7 +49,12 @@ def _overtake(repo) -> None:
 def test_the_update_reply_names_the_overtaken_waiter(repo):
     _overtake(repo)
     code, out, _ = run_cli(
-        repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx"
+        repo,
+        "update",
+        "DX",
+        "--globs",
+        "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py",
+        agent="dx",
     )
     assert code == 0
     assert "overtook" in out and "bhy" in out and "BHY" in out, out
@@ -49,7 +63,14 @@ def test_the_update_reply_names_the_overtaken_waiter(repo):
 def test_the_brief_names_the_overtaken_waiter(repo):
     _overtake(repo)
     assert (
-        run_cli(repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx")[0]
+        run_cli(
+            repo,
+            "update",
+            "DX",
+            "--globs",
+            "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py",
+            agent="dx",
+        )[0]
         == 0
     )
     code, out, _ = run_cli(repo, "brief", agent="dx")
@@ -62,11 +83,23 @@ def test_the_brief_names_the_overtaken_waiter(repo):
 def test_a_later_unrelated_widening_does_not_name_the_waiter_again(repo):
     _overtake(repo)
     assert (
-        run_cli(repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py", agent="dx")[0]
+        run_cli(
+            repo,
+            "update",
+            "DX",
+            "--globs",
+            "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py",
+            agent="dx",
+        )[0]
         == 0
     )
     code, out, _ = run_cli(
-        repo, "update", "DX", "--globs", "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py,ddflow/tools/extra.py", agent="dx"
+        repo,
+        "update",
+        "DX",
+        "--globs",
+        "ddflow/tools/foo.py,ddflow/api/lifecycle/brief.py,ddflow/tools/extra.py",
+        agent="dx",
     )
     assert code == 0
     # extra.py is new but overlaps nothing BHY asked for: it was not overtaken by THIS widen.
@@ -76,17 +109,47 @@ def test_a_later_unrelated_widening_does_not_name_the_waiter_again(repo):
 def test_a_wider_glob_that_only_subsume_a_held_file_is_not_an_overtake(repo):
     # DX already holds brief.py when BHY comes to wait on a DIRECTORY glob that covers it;
     # widening DX to that directory only re-states the held file, so no overtake happened.
-    assert run_cli(repo, "task", "add", "DX", "--title", "DX", "--globs", "ddflow/api/lifecycle/brief.py", agent="dx")[0] == 0
-    assert run_cli(repo, "task", "add", "BHY", "--title", "BHY", "--globs", "ddflow/tools/stop.py", agent="bhy")[0] == 0
+    assert (
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "DX",
+            "--title",
+            "DX",
+            "--globs",
+            "ddflow/api/lifecycle/brief.py",
+            agent="dx",
+        )[0]
+        == 0
+    )
+    assert (
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "BHY",
+            "--title",
+            "BHY",
+            "--globs",
+            "ddflow/tools/stop.py",
+            agent="bhy",
+        )[0]
+        == 0
+    )
     assert run_cli(repo, "claim", "DX", "--no-worktree", agent="dx")[0] == 0
     assert run_cli(repo, "claim", "BHY", "--no-worktree", agent="bhy")[0] == 0
     assert (
-        run_cli(repo, "update", "BHY", "--globs", "ddflow/tools/stop.py,ddflow/api/lifecycle/", agent="bhy")[0]
+        run_cli(
+            repo,
+            "update",
+            "BHY",
+            "--globs",
+            "ddflow/tools/stop.py,ddflow/api/lifecycle/",
+            agent="bhy",
+        )[0]
         == 3
     )
     code, out, _ = run_cli(repo, "update", "DX", "--globs", "ddflow/api/lifecycle/", agent="dx")
     assert code == 0
     assert "overtook" not in out, out
-
-
-
