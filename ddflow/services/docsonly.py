@@ -61,6 +61,8 @@ def _ast_unchanged(tree, base: str, paths: list[str]) -> bool:
     for p in paths:
         if not p.endswith(".py"):
             return False
+        if not _is_regular(tree, base, p) or not _is_regular(tree, "HEAD", p):
+            return False
         if _mode(tree, base, p) != _mode(tree, "HEAD", p):
             return False
         before = _show(tree, base, p)
@@ -114,6 +116,13 @@ def _mode(tree, ref: str, path: str) -> str | None:
     if not r.ok or not r.out:
         return None
     return r.out.split(" ", 1)[0]
+
+
+def _is_regular(tree, ref: str, path: str) -> bool:
+    """Whether ``path`` at ``ref`` is a regular file (``100644``/``100755``), not a symbolic
+    link (``120000``) or a gitlink (``160000``): ``_show`` returns a symlink's TARGET text, so
+    a retarget that keeps the parsed text identical would otherwise read as "unchanged"."""
+    return _mode(tree, ref, path) in ("100644", "100755")
 
 
 def _is_format_or_comment(tree, base: str, paths: list[str]) -> bool:
