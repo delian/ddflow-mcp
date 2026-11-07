@@ -78,9 +78,9 @@ forbidden_modules =
     shutil
 allow_indirect_imports = True
 
-# Content digests belong in ddflow.core.digest.
+# Content digests belong in ddflow.adapters.digest.
 [importlinter:contract:digest-home]
-name = hashlib is imported only by ddflow.core.digest
+name = hashlib is imported only by ddflow.adapters.digest
 type = forbidden
 source_modules =
     ddflow

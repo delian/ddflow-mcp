@@ -52,7 +52,7 @@ STDLIB_HOMES: dict[str, tuple[str, ...]] = {
     "subprocess": ("ddflow.infra.proc", "ddflow.infra.git"),
     "fsio": ("ddflow.infra.fsio",),
     "shutil": ("ddflow.infra.fsio",),
-    "hashlib": ("ddflow.core.digest",),
+    "hashlib": ("ddflow.adapters.digest",),
     "http": ("ddflow.adapters.http",),
 }
 
