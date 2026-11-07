@@ -68,9 +68,15 @@ def _approved_force(
         state=content_digest("\n".join(sorted(blockers))),
     )  # fmt: skip
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
+    if decision.ok:
+        return True, decision.stamp, ""
     # `operator_gate` already prefixes its refusal; adding "refusing: " here stacked it
-    # (B-approval-refusal-doubled-prefix).
-    return (True, decision.stamp, "") if decision.ok else (False, {}, decision.message)
+    # (B-approval-refusal-doubled-prefix). The request text names the verb, not the conditions
+    # the approval would override -- those live only in ``blockers`` -- so name them too.
+    why = decision.message
+    if blockers:
+        why = f"{why} It would override: {'; '.join(blockers)}"
+    return False, {}, why
 
 
 def _person_force(force: bool, agent: str) -> bool:
