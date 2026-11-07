@@ -2,9 +2,11 @@
 
 Paths are normalised to POSIX strings; a directory exists when a file lies under it or it
 was made with `mkdir`. `calls` records every operation as `(name, *paths)`. Errors are `OSError` subclasses like
-the real ones (`FileExistsError` where `shutil` raises `shutil.Error`: callers catch
-`OSError`); a missing source raises `FileNotFoundError`; `rmtree` of a missing path raises
-unless `ignore_errors` (the port's default). The filesystem root is refused (`ValueError`).
+the real ones (`FileExistsError` where `shutil.move` refuses a taken name; `shutil.Error`
+for a directory moved into itself and `shutil.SameFileError` for a file copied onto
+itself, so callers catch `OSError`); a missing source raises `FileNotFoundError`; `rmtree`
+of a missing path raises unless `ignore_errors` (the port's default). The filesystem root
+is refused (`ValueError`).
 """
 
 from __future__ import annotations

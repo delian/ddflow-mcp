@@ -175,6 +175,10 @@ def test_fake_move_mirrors_local_on_parents_and_self():
     f = FakeFs({"/f": b"1"})
     f.move("/f", "/f")
     assert f.files == {"/f": b"1"}
+    # a directory onto itself is a no-op too, like shutil.move's os.rename shortcut
+    d2d = FakeFs({"/a/f": b"1"})
+    d2d.move("/a", "/a")
+    assert d2d.files == {"/a/f": b"1"}
     # moving a directory into its own subtree is refused, like shutil.move
     with pytest.raises(shutil.Error):
         FakeFs({"/a/f": b"1"}).move("/a", "/a/b")
