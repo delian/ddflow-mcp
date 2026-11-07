@@ -471,4 +471,22 @@ def attest(
     return True, f"{ask_id} {outcome} by the person who answered in {hit.file} ({hit.at}){tail}"
 
 
+def attest_pending(
+    log, cfg: Config, *, repo: Path | None = None, now: float | None = None
+) -> list[dict[str, Any]]:
+    """Auto-attest every pending request whose canonical question already has an accepted
+    answer in a transcript (B3068414423). The agent couriers the canonical `ask` payload to
+    the person, the person answers in chat, and ONE call here attests each answered request
+    from the harness-written transcript -- a chat answer alone flips it to answered, with no
+    terminal and no `approve --all`. Each result is ``{"id", "ok", "message"}`` for one
+    request that `attest` considered (nothing is invented: unanswered requests come back
+    ``ok: False`` with `attest`'s waiting message)."""
+    state = fold(log.read_all(), strict=False)
+    done: list[dict[str, Any]] = []
+    for row in E.pending(state, now):
+        ok, message = attest(log, cfg, row["id"], repo=repo, now=now)
+        done.append({"id": row["id"], "ok": ok, "message": message})
+    return done
+
+
 E.LEVEL_VERIFIERS[VIA] = verify
