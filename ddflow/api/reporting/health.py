@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -12,7 +11,6 @@ from ...adapters.clock import DEFAULT as CLOCK
 from ...config import Config
 from ...core import outcome as O
 from ...core import progress as PR
-from ...core.events import is_older
 from ...core.schedule import is_external, unpickable
 from ...core.stuck import stuck_edges
 from ...core.tier import unknown_tier_notes
@@ -46,27 +44,23 @@ from ...services import upgrade as UP
 from ...services import upgrade_check as UC
 from ...services import upgrade_start as US
 from ...services import workflow as WF
-from ...services.adopt import DUPLICATE, MISSING, NOT_BINDING, STALE, block_version, rules_status
 from ...services.approvals import audit as AUD
 from ...services.approvals import overrides as OVR
 from ...services.completion import verdict
-from ...services.export import ops as X
 from ...services.export import select as export_select
-from ...services.export.query import ExportError
 from ...services.gates import load_gates
 from ...services.guidance import ruleview as RULEVIEW
-from ...services.review import load_reviewers
+from ...services.review import degraded_notes, load_reviewers
 from ...views import human
 from ...views.markdown import render_views
 from .._base import _load
-from ..knowledge import pairs_from
-from ..knowledge.pairs import _sweep_records
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
 from .foldnotes import FOLD_PROBLEMS_SHOWN, fold_problem_notes  # noqa: F401  (re-exported)
+from .health_notes import _dupe_note, _export_target_notes, _rules_findings, _untitled
 from .records import _contest_problems
 from .recovery_notes import _recovery_findings
-from .waitcycles import wait_cycles, wait_findings, wait_order
+from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
@@ -428,6 +422,10 @@ def doctor(
     except Exception:
         urls = []
     notes.extend(CT.warnings(repo, cfg, urls))
+    # Reviewers a quota/exhaustion wall marked degraded and shed (B8efd3d1bc4): surfaced
+    # here rather than as a run of silently `unavailable` rubber_duck/critic gates. Only a
+    # mark still within [review].degraded_cooldown_s is still a shed (bug B066719c493).
+    notes.extend(degraded_notes(st, cfg.review.degraded_cooldown_s))
 
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
@@ -459,8 +457,10 @@ def doctor(
         notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
     notes += _dupe_note(st, cfg)
-    problems += wait_findings(cycles := wait_cycles(st, cfg), cfg)
-    ordered = wait_order(log, st, cfg, cycles, notes, repo)
+    problems += wait_findings(
+        (waits := wait_report(log, st, cfg, events)).cycles, cfg, waits.alarms
+    )
+    ordered = wait_order(log, st, cfg, waits.cycles, notes, repo)
     notes += LBR.doctor_notes(st, cfg, events, log.root)  # yield-requested/breakable leases
     notes += cost.notes()
     table, over = _over_budget_notes(timings, cfg.health.check_budget_s)
@@ -476,7 +476,9 @@ def doctor(
         "repo": str(repo),
         "index_stale": store.stale(log),
         "fts": bool(store.fts),
-        "wait_cycles": [c.as_dict() for c in cycles],
+        "wait_cycles": [],
+        "wait_alarms": [],
+        **wait_rows(*waits),
         "auto_order": ordered,
         **cost.data(),
     }
@@ -487,129 +489,3 @@ def doctor(
     )
     out.data["text"] = human.render(out)
     return out
-
-
-def _rules_findings(repo: Path, highest: str, problems: list[str], notes: list[str]) -> None:
-    """The rules surface: MISSING, NOT_BINDING and DUPLICATE are PROBLEMs, a drifted or stripped
-    block is a note (the agent has rules, they are just not current)."""
-    for state in rules_status(repo):
-        if not state.needs_attention:
-            continue
-        # A block a newer ddflow wrote is not rewritten by a refresh: its own line says so.
-        line = (
-            state.render()
-            if state.newer
-            else (
-                f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
-                "(plain `ddflow adopt` also rewrites MCP launches)"
-            )
-        )
-        # NOT_BINDING sits with MISSING: a rule the agent may never load is not a
-        # milder version of a drifted one, it is the mechanism switched off.
-        severe = state.state in (MISSING, NOT_BINDING, DUPLICATE)
-        (problems if severe else notes).append(line)
-        # A section that needs a refresh AND was written by a ddflow older than the one that
-        # last worked on this log: say which, so the refresh is not mistaken for noise.
-        wrote = block_version(repo / state.path) if state.state in (DUPLICATE, STALE) else None
-        if wrote and is_older(wrote, highest):
-            notes.append(
-                f"{state.path}'s ddflow section is stamped {wrote}, older than {highest}, "
-                f"the highest ddflow stamp in this log"
-            )
-
-
-def _only_ids(title: str) -> bool:
-    """Empty, or nothing but id-shaped tokens and punctuation: `B30`, `B30.`, `+ B159`,
-    `B62-B64`. A word without a digit is what makes a title say something."""
-    return all(any(c.isdigit() for c in word) for word in re.findall(r"\w+", title))
-
-
-#: How many untitled ids one note names before it counts the rest.
-_UNTITLED_SHOWN = 8
-
-
-def _export_target_notes(repo: Path, cfg: Config) -> list[str]:
-    """A NOTE for each selected export target that is stale or hand-edited (B-export-enforce).
-
-    Not a problem: regenerating is one command, and a doctor that fails on a document the log
-    has simply moved past would block work. `[enforce].generated_views = "off"` silences it.
-    """
-    if cfg.enforce.generated_views == "off" or not cfg.export.documents:
-        return []
-
-    try:
-        rows = X.listing(repo, cfg)
-    except ExportError as exc:
-        return [f"export: could not check the selected documents ({exc})"]
-    return [
-        f"export: {r['target']} ({r['doc']}) is {r['state']}"
-        + (f": {r['detail']}" if r.get("detail") else "")
-        + (
-            f" (`ddflow export {r['doc']} --update`)"
-            if r["state"] == "stale"
-            else " (`ddflow export --check`; regenerating needs --force)"
-        )
-        for r in rows
-        if r["selected"] and r["state"] in ("stale", "hand-edited")
-    ]
-
-
-def _untitled(st) -> list[str]:
-    """ONE note naming the items whose title says nothing but their id.
-
-    A migration that cannot find a title writes the id (bug B9e8ca361ea: 24 backlog
-    items were titled `B30`, `B157`...), and every board, brief and gate prompt then
-    shows a number. Nothing else here asks whether an item can be told apart from it.
-    """
-    ids = sorted(it.id for it in st.items.values() if not it.removed and _only_ids(it.title))
-    if not ids:
-        return []
-    shown = ", ".join(ids[:_UNTITLED_SHOWN]) + (" ..." if len(ids) > _UNTITLED_SHOWN else "")
-    return [
-        f"{len(ids)} item(s) have no title of their own, only the id: {shown} — "
-        f"`ddflow update <id> --title ...`"
-    ]
-
-
-#: The inline duplicate count is bounded: the all-pairs sweep grows with the log (~3 s at
-#: 1559 records), so above this many records `doctor` points at `ddflow dupes` instead.
-_DOCTOR_SWEEP_MAX = 1000
-#: Stop the count once this many pairs are found; the note then says "at least".
-_DOCTOR_PAIR_CAP = 200
-
-
-def _dupe_note(st, cfg) -> list[str]:
-    """How many near-duplicate pairs the log holds that nobody has settled (B-dupes-sweep).
-
-    A NOTE, never a problem: below the ask threshold a score is a prompt to LOOK, not a
-    verdict (R-dedupe-matchers), so failing `doctor` on one would be failing it on a
-    question. Counted at the ASK threshold -- the actionable "likely duplicate" band,
-    not the wide show floor -- and bounded by record count and pair cap so `doctor`
-    stays fast; above the bound the note names `ddflow dupes` rather than paying the
-    sweep. `off` skips it: a project that switched the check off does not want its cost.
-    """
-    if cfg.dedupe.on_match == "off":
-        return []
-    try:
-        n_records = sum(1 for r in _sweep_records(st) if r["kind"] in cfg.dedupe.kinds)
-        if n_records > _DOCTOR_SWEEP_MAX:
-            return [
-                f"{n_records} records: the inline near-duplicate count is skipped above "
-                f"{_DOCTOR_SWEEP_MAX} — `ddflow dupes` lists the pairs"
-            ]
-        rows = pairs_from(
-            st,
-            cfg,
-            floor=cfg.dedupe.ask_threshold,
-            limit=_DOCTOR_PAIR_CAP,
-            stop_after=_DOCTOR_PAIR_CAP,
-        )
-    except Exception as exc:  # an unreadable index must not take the report down
-        return [f"near-duplicate sweep could not run ({type(exc).__name__}: {exc})"]
-    if not rows:
-        return []
-    n = f"at least {_DOCTOR_PAIR_CAP}" if len(rows) >= _DOCTOR_PAIR_CAP else str(len(rows))
-    return [
-        f"{n} unsettled near-duplicate pair(s) at the ask threshold — `ddflow dupes` "
-        f"lists them; `ddflow link A --duplicate-of B` settles one (or `--distinct`)"
-    ]

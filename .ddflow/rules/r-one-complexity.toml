@@ -1,0 +1,10 @@
+id = "r-one-complexity"
+title = "One complexity signal drives tier, effort, review depth and concurrency weight"
+tags = ["agent-parity", "governor"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:25:12.543288+00:00"
+updated = "2026-11-05T13:42:13.272508+00:00"
+
+R-agent-parity-ops 5. RULE: tier, effort, review depth and the concurrency weight all derive from one deterministic score, not separate tags. The score may reserve more review but never lightens a gate: its review output is planning only, and any decision to lighten a gate reads the real diff (D-task-size-estimate). CHECK: a grep guard for a second tier reader (GV-complexity-score). VERIFY: does this feature read the score or invent its own, and does anything lighten a gate on an estimate?

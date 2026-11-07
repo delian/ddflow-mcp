@@ -42,7 +42,13 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
         if rec is None or rec.outcome != "failed" or not cfg.review.settle_all_refuted:
             continue
         counts = GD.triage_counts(it, g) or {}
-        if counts.get("untriaged", 1) or counts.get("confirmed") or not counts.get("refuted"):
+        if counts.get("untriaged", 1) or not counts.get("refuted"):
+            continue
+        # A confirmed finding a later delta round did not raise again is answered (the rule
+        # `merge`/`complete` already apply): counting every confirmed one from the merged
+        # record leaves a gate stuck failed when its confirmed findings were re-reviewed
+        # clean afterwards (bug B-review-gate-stuck-failed-after-triage).
+        if GD.unresolved_review_failure(it, g, confirmed_only=True):
             continue
         if stale := reviewed_other_tree(repo, cfg, st, item, g):
             if stale not in text:

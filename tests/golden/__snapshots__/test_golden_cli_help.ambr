@@ -65,13 +65,15 @@
 # ---
 # name: test_help[ddflow approvals attest]
   '''
-  usage: ddflow approvals attest [-h] id
+  usage: ddflow approvals attest [-h] [--all] [id]
   
   positional arguments:
     id          the request id
   
   options:
     -h, --help  show this help message and exit
+    --all       auto-attest every pending request whose canonical question is answered (a chat
+                answer alone approves each)
   
   '''
 # ---
@@ -292,11 +294,13 @@
 # ---
 # name: test_help[ddflow board]
   '''
-  usage: ddflow board [-h] [--phase PHASE]
+  usage: ddflow board [-h] [--phase PHASE] [--full]
   
   options:
     -h, --help     show this help message and exit
     --phase PHASE
+    --full         print everything: lift the default output caps ([output] max_rows, max_chars) for
+                   this call
   
   '''
 # ---
@@ -711,17 +715,20 @@
 # ---
 # name: test_help[ddflow config]
   '''
-  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--append-toml APPEND_TOML] [--local] [--approval APPROVAL] [value ...]
+  usage: ddflow config [-h] [--explain] [--filter FILTER] [--set SET] [--write] [--append-toml APPEND_TOML] [--local] [--approval APPROVAL] [value ...]
   
   positional arguments:
     value                 the value, when --set is used; or `KEY VALUE` with no --set (ddflow config
-                          review.max_rounds 0 --local)
+                          review.max_rounds 0 --local); or `defaults`, to print the packaged
+                          default.toml
   
   options:
     -h, --help            show this help message and exit
     --explain
     --filter FILTER
     --set SET             edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'
+    --write               with `defaults`: regenerate the packaged default.toml in ddflow's own
+                          source tree
     --append-toml APPEND_TOML
                           append this TOML to .ddflow/config.toml (validated first)
     --local               write --set/--append-toml to the git-ignored .ddflow/local/config.toml:
@@ -858,6 +865,16 @@
   
   '''
 # ---
+# name: test_help[ddflow digest]
+  '''
+  usage: ddflow digest [-h] [--ask ASK]
+  
+  options:
+    -h, --help  show this help message and exit
+    --ask ASK   one entry id (kind:key): render that entry alone
+  
+  '''
+# ---
 # name: test_help[ddflow docs]
   '''
   usage: ddflow docs [-h] [--diff BASE] [{check}]
@@ -873,10 +890,12 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
+  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
+    --full                print everything: lift the default output caps ([output] max_rows,
+                          max_chars) for this call
     --upgrade             the upgrade plan instead (the same as `ddflow upgrade`)
     --accept-lost-events  record the present event counts of the shards that lost events (to a
                           force-push, revert, reset or deletion) as known, clearing that PROBLEM;
@@ -1265,6 +1284,25 @@
   
   '''
 # ---
+# name: test_help[ddflow harness record]
+  '''
+  usage: ddflow harness record [-h] [--prepare DIR] [--from DIR] [--write] [--dest DIR] [--agent-version AGENT_VERSION] id
+  
+  positional arguments:
+    id                    a descriptor id
+  
+  options:
+    -h, --help            show this help message and exit
+    --prepare DIR         a new scratch project with capture taps
+    --from DIR            a prepared project after a session
+    --write               write the fixtures (default: report)
+    --dest DIR            default: tests/fixtures/harness in this tree
+    --agent-version AGENT_VERSION
+                          what `<agent> --version` says; --from needs it, a fixture always carries
+                          it
+  
+  '''
+# ---
 # name: test_help[ddflow harness show]
   '''
   usage: ddflow harness show [-h] id
@@ -1291,10 +1329,10 @@
 # ---
 # name: test_help[ddflow harness]
   '''
-  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe} ...
+  usage: ddflow harness [-h] {list,show,doctor,facts,add,lint,test,probe,record} ...
   
   positional arguments:
-    {list,show,doctor,facts,add,lint,test,probe}
+    {list,show,doctor,facts,add,lint,test,probe,record}
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
@@ -1304,6 +1342,8 @@
                           problems)
       test                the offline conformance of one descriptor
       probe               what the agent's binary would be asked; runs nothing without --run
+      record              live payload fixtures: what is recorded, --prepare a scratch project, or
+                          take --from
   
   options:
     -h, --help            show this help message and exit
@@ -1680,6 +1720,18 @@
   
   '''
 # ---
+# name: test_help[ddflow lesson show]
+  '''
+  usage: ddflow lesson show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lesson verify]
   '''
   usage: ddflow lesson verify [-h]
@@ -1691,10 +1743,10 @@
 # ---
 # name: test_help[ddflow lesson]
   '''
-  usage: ddflow lesson [-h] {add,verify,search,list} ...
+  usage: ddflow lesson [-h] {add,verify,search,show,list} ...
   
   positional arguments:
-    {add,verify,search,list}
+    {add,verify,search,show,list}
       verify              re-scan every lesson's pattern and name the sites that reappeared
       list                list lessons, newest first: the live ones unless --all or --state
   
@@ -1830,34 +1882,39 @@
 # ---
 # name: test_help[ddflow merge]
   '''
-  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--branch BRANCH] [--model MODEL] id
+  usage: ddflow merge [-h] [--message MESSAGE] [--queue] [--keep] [--allow-dirty] [--allow-empty] [--force] [--approval APPROVAL] [--branch BRANCH] [--model MODEL] id
   
   positional arguments:
     id
   
   options:
-    -h, --help         show this help message and exit
+    -h, --help           show this help message and exit
     --message MESSAGE
-    --queue            enqueue the item in the merge queue instead of landing it (`ddflow queue
-                       add`)
+    --queue              enqueue the item in the merge queue instead of landing it (`ddflow queue
+                         add`)
     --keep
     --allow-dirty
-    --allow-empty      land a branch with no commits ahead of its target (refused by default: it
-                       would record the item merged with nothing landed)
-    --branch BRANCH    for an item claimed without a worktree: the branch to land (default: the one
-                       checked out in the worktree you are standing in)
-    --model MODEL      the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and
-                       the reviewer-independence check needs it then
+    --allow-empty        land a branch with no commits ahead of its target (refused by default: it
+                         would record the item merged with nothing landed)
+    --force              with [merge].require_gates = refuse: land although required gates are
+                         unsettled (recorded as merge.forced). An agent also passes --approval
+    --approval APPROVAL  an agent: 'request' files an approval request for forcing this merge (the
+                         operator answers in chat), then the approval id
+    --branch BRANCH      for an item claimed without a worktree: the branch to land (default: the
+                         one checked out in the worktree you are standing in)
+    --model MODEL        the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and
+                         the reviewer-independence check needs it then
   
   '''
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,swarm}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks}
-                          summary (default), forecast, retro <id>, skips, lanes, stages or locks
+    {summary,forecast,retro,skips,lanes,stages,locks,swarm}
+                          summary (default), forecast, retro <id>, skips, lanes, stages, locks or
+                          swarm
     item                  with retro: the item id
   
   options:
@@ -1896,12 +1953,16 @@
 # ---
 # name: test_help[ddflow next]
   '''
-  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}]
+  usage: ddflow next [-h] [--phase PHASE] [--kind {task,phase}] [--lane LANE] [--full] [--cursor CURSOR]
   
   options:
     -h, --help           show this help message and exit
     --phase PHASE        limit to this phase; exit 1 if it names no phase or item
     --kind {task,phase}
+    --lane LANE          answer this idle lane: its best item and a note for claim
+    --full               print everything: lift the default output caps ([output] max_rows,
+                         max_chars) for this call
+    --cursor CURSOR      resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -1918,6 +1979,20 @@
     --apply               act on the stage's proposal (preflight/legacy/memory/harness)
     --accept NAME         approve one named item (repeatable); without it, apply acts on everything
                           the report marked safe
+  
+  '''
+# ---
+# name: test_help[ddflow pair]
+  '''
+  usage: ddflow pair [-h] --role ROLE [--ttl-h TTL_H] name
+  
+  positional arguments:
+    name           the client: its token's name is its identity
+  
+  options:
+    -h, --help     show this help message and exit
+    --role ROLE    its role, a name in [agent].roles
+    --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
   
   '''
 # ---
@@ -2393,14 +2468,17 @@
 # ---
 # name: test_help[ddflow recover]
   '''
-  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan]
+  usage: ddflow recover [-h] [--item ITEM] [--apply] [--all] [--plan] [--full] [--cursor CURSOR]
   
   options:
-    -h, --help   show this help message and exit
+    -h, --help       show this help message and exit
     --item ITEM
     --apply
     --all
     --plan
+    --full           print everything: lift the default output caps ([output] max_rows, max_chars)
+                     for this call
+    --cursor CURSOR  resume a cut list at this row (the number the previous footer gave)
   
   '''
 # ---
@@ -2858,6 +2936,15 @@
   
   '''
 # ---
+# name: test_help[ddflow session inbox]
+  '''
+  usage: ddflow session inbox [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow session list]
   '''
   usage: ddflow session list [-h] [--state STATE] [--owner OWNER] [--since SINCE] [--limit LIMIT]
@@ -2942,12 +3029,13 @@
 # ---
 # name: test_help[ddflow session]
   '''
-  usage: ddflow session [-h] {start,prompt,message,note,adopt-orphans,end,list,show} ...
+  usage: ddflow session [-h] {start,prompt,message,inbox,note,adopt-orphans,end,list,show} ...
   
   positional arguments:
-    {start,prompt,message,note,adopt-orphans,end,list,show}
+    {start,prompt,message,inbox,note,adopt-orphans,end,list,show}
       message             put a message in another lane's inbox (delivered at its next wait, watch
                           or heartbeat)
+      inbox               read this lane's delivered inbox messages again
       adopt-orphans       attach prompts/notes recorded with no session id to a session
       list                sessions, newest first: agent, span, items, prompts, state
       show                one session: every prompt and note in order, redacted
@@ -3002,12 +3090,14 @@
 # ---
 # name: test_help[ddflow status]
   '''
-  usage: ddflow status [-h] [--by-tag BY_TAG]
+  usage: ddflow status [-h] [--by-tag BY_TAG] [--full]
   
   options:
     -h, --help       show this help message and exit
     --by-tag BY_TAG  also print per-value counts for this label namespace, e.g. wave or track, with
                      the top blockers per value
+    --full           print everything: lift the default output caps ([output] max_rows, max_chars)
+                     for this call
   
   '''
 # ---
@@ -3134,6 +3224,69 @@
                  selected tests)
     --flakes     show the flake log instead: every test that failed and then passed on the same tree
                  through ddflow on this machine (.ddflow/local/flakes.jsonl)
+  
+  '''
+# ---
+# name: test_help[ddflow tokens list]
+  '''
+  usage: ddflow tokens list [-h] [--all]
+  
+  options:
+    -h, --help  show this help message and exit
+    --all       also expired and revoked
+  
+  '''
+# ---
+# name: test_help[ddflow tokens redeem]
+  '''
+  usage: ddflow tokens redeem [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
+# name: test_help[ddflow tokens revoke]
+  '''
+  usage: ddflow tokens revoke [-h] --reason REASON name
+  
+  positional arguments:
+    name             the token's name or id
+  
+  options:
+    -h, --help       show this help message and exit
+    --reason REASON  why this credential ended
+  
+  '''
+# ---
+# name: test_help[ddflow tokens rotate]
+  '''
+  usage: ddflow tokens rotate [-h] [--ttl-h TTL_H] name
+  
+  positional arguments:
+    name           the token's name or id
+  
+  options:
+    -h, --help     show this help message and exit
+    --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
+# name: test_help[ddflow tokens]
+  '''
+  usage: ddflow tokens [-h] {redeem,list,revoke,rotate} ...
+  
+  positional arguments:
+    {redeem,list,revoke,rotate}
+      redeem              exchange a one-time code (read from stdin) for the token, shown once
+      list                who holds a token: names, roles and dates from the log, never a secret
+      revoke              a PERSON ends a token (by name or id) and any pairing waiting for that
+                          name
+      rotate              a PERSON mints a code that replaces a token; the old one works until it is
+                          redeemed
+  
+  options:
+    -h, --help            show this help message and exit
   
   '''
 # ---
@@ -3334,6 +3487,15 @@
   
   '''
 # ---
+# name: test_help[ddflow vigil]
+  '''
+  usage: ddflow vigil [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow wait]
   '''
   usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
@@ -3468,13 +3630,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3555,6 +3717,8 @@
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
       lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
+      vigil               one compact health snapshot: bug severity counts, stale pins, active
+                          lanes, interrupted, pending approvals, reviewer up/429/slow
       health              idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is
                           the periodic watchdog pass
       decide              close a decide task: write its decision document from the record, land,
@@ -3590,6 +3754,9 @@
                           violations
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
+      digest              the operator queue: what waits on a person, as askable entries
+      pair                a PERSON mints a one-time code for a named client with a role (`tokens
+                          redeem` spends it)
       sync                merge the item's recorded base into its branch when that is safe; --check
                           only measures
       watch               wait for a job, a file line, a process or a gate, renewing your leases;
@@ -3666,6 +3833,7 @@
     'ddflow decision search',
     'ddflow decision show',
     'ddflow decision supersede',
+    'ddflow digest',
     'ddflow docs',
     'ddflow doctor',
     'ddflow dupes',
@@ -3692,6 +3860,7 @@
     'ddflow harness lint',
     'ddflow harness list',
     'ddflow harness probe',
+    'ddflow harness record',
     'ddflow harness show',
     'ddflow harness test',
     'ddflow health',
@@ -3721,6 +3890,7 @@
     'ddflow lesson add',
     'ddflow lesson list',
     'ddflow lesson search',
+    'ddflow lesson show',
     'ddflow lesson verify',
     'ddflow link',
     'ddflow list',
@@ -3736,6 +3906,7 @@
     'ddflow model show',
     'ddflow next',
     'ddflow onboard',
+    'ddflow pair',
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',
@@ -3796,6 +3967,7 @@
     'ddflow session',
     'ddflow session adopt-orphans',
     'ddflow session end',
+    'ddflow session inbox',
     'ddflow session list',
     'ddflow session message',
     'ddflow session note',
@@ -3812,6 +3984,11 @@
     'ddflow task fold',
     'ddflow task list',
     'ddflow tests',
+    'ddflow tokens',
+    'ddflow tokens list',
+    'ddflow tokens redeem',
+    'ddflow tokens revoke',
+    'ddflow tokens rotate',
     'ddflow unblock',
     'ddflow update',
     'ddflow upgrade',
@@ -3820,6 +3997,7 @@
     'ddflow version cut',
     'ddflow version lint',
     'ddflow version show',
+    'ddflow vigil',
     'ddflow wait',
     'ddflow watch',
     'ddflow waves',

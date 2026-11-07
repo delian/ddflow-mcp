@@ -22,10 +22,11 @@ PKG = Path(__file__).resolve().parents[1] / "ddflow"
 #: file (relative to the repo) -> (sites, why they are not descriptor reads)
 BASELINE: dict[str, tuple[int, str]] = {
     "ddflow/mcpshim/clients.py": (
-        30,
+        31,
         "the shim's own stdlib table: the clientInfo.name strings clients send (kilo, opencode, "
-        "cline, goose... coincide with descriptor ids) and the `harness` join column; the shim "
-        "must not import the descriptor loader (follow-up SU-client-table-descriptors)",
+        "cline, goose... coincide with descriptor ids) and the `harness` join column, one site "
+        "for each agent with a row, so grok.toml's row adds one; the shim must not import the "
+        "descriptor loader (follow-up SU-client-table-descriptors)",
     ),
     "ddflow/services/hookio.py": (
         20,
@@ -91,6 +92,18 @@ BASELINE: dict[str, tuple[int, str]] = {
     "ddflow/services/harness.py": (1, "Claude-only onboarding, replaced by B-hx-onboard-generic"),
     "ddflow/services/legacy.py": (1, "the legacy command-file glob an import reads"),
     "ddflow/surfaces/parsers/workflow.py": (1, "the default of `hooks run --harness` (compat)"),
+    "ddflow/surfaces/declared/capflags.py": (
+        1,
+        "the `cursor` field name of capped reads (the paging cursor), not the Cursor harness",
+    ),
+    "ddflow/views/output_caps.py": (
+        2,
+        "the `cursor` key/flag of capped reads (the paging cursor), not the Cursor harness",
+    ),
+    "ddflow/services/export/kind_security.py": (
+        1,
+        "the `.github/SECURITY.md` path the security export names, not a descriptor read",
+    ),
 }
 
 

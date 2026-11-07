@@ -101,7 +101,8 @@ def test_doctor_names_the_cycle_in_text_and_data(repo):
     assert code == 1 and "lease deadlock: agent-a -> agent-b -> agent-a" in out
     _, js, _ = run_cli(repo, "--json", "doctor", agent=AGENTS[0])
     data = json.loads(js)["wait_cycles"]
-    assert data[0]["agents"] == ["agent-a", "agent-b"] and data[0]["victim"] == "agent-b"
+    # doctor measures progress: T1 was claimed first and neither shows work since
+    assert data[0]["agents"] == ["agent-a", "agent-b"] and data[0]["victim"] == "agent-a"
 
 
 def test_the_knob_turns_the_report_off(repo):

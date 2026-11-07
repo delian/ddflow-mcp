@@ -173,6 +173,7 @@ WAIT = Command(
             "path/glob (until no other agent's live lease covers it); a bare wait returns the "
             "first ready item at once",
         ),
+        Param("token", default="", help="resume token from an earlier wait"),
         Param(
             "timeout",
             type="number",
@@ -193,6 +194,18 @@ WAIT = Command(
 APPROVE = Command(
     path=("approve",),
     summary="a PERSON clears (or rejects) a human-approval gate — no MCP equivalent",
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog=(
+        "who: a PERSON only. The command is refused under --agent, DDFLOW_AGENT, a harness marker\n"
+        "and MCP; there is no MCP tool for it. An agent files a request instead.\n"
+        "what: a recorded `partial` outcome of a required gate that ddflow MEASURED as baseline-red\n"
+        "(the failing tests also fail on the base branch). The approval is bound to the digest of\n"
+        "that record (outcome, time, reason): a re-run or re-record is a different outcome and\n"
+        "needs its own approval. The gate stays `partial`; completion only stops counting it.\n"
+        "agent route: re-run with `--approval request` to file the request, a person answers it,\n"
+        "then re-run with `--approval ID`. Pending requests: `ddflow approvals list`; a person\n"
+        "answers with `ddflow approvals approve ID` (see `ddflow approvals --help`)."
+    ),
     params=(
         Param("id", positional=True),
         Param("gate", positional=True),

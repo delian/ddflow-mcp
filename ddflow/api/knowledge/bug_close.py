@@ -22,7 +22,15 @@ from .fix_task_drop import (  # noqa: F401 -- re-exported by the package
     _drop_fix_task,
     _ended_by_abandon,
 )
-from .regression import _half_node_id_why, _missing_tests, _named_tests, _unresolved_tests
+from .regression import (
+    _half_node_id_why,
+    _missing_tests,
+    _named_tests,
+    _owns_unlanded_fix,
+    _unlanded_fix_refusal,
+    _unlanded_fix_source,
+    _unresolved_tests,
+)
 
 
 def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
@@ -191,6 +199,15 @@ def _verified_close(
         # the check its pre-fix source (Bb49d834e90).
         return (
             O.refused("bug.fixed", _needs_fix_task_refusal(item, verify_ev), id=item),
+            "",
+            {},
+            landing,
+        )
+    if verified == "fix-not-landed":
+        # A claimed fix still working in its worktree has not reached the base: closing
+        # here would report fixed work that is absent from it (B-bug-fixed-before-fix-lands).
+        return (
+            O.refused("bug.fixed", _unlanded_fix_refusal(item, verify_ev), id=item),
             "",
             {},
             landing,
@@ -388,9 +405,11 @@ def _has_landing_pair(item: Any) -> bool:
 
 
 def _fixing_item(st, cfg, bug_id: str) -> Any:
-    """The item whose source is the fix: the bug's fix task, else -- for `bug found
-    --item X --no-task`, fixed in the commit that found it -- X while it works in a
-    worktree, or X landed through ddflow's own merge (a landed_before/landed_after
+    """The item whose source is the fix: the bug's fix task while it works somewhere --
+    in its worktree, or landed with a before/after pair; else -- for `bug found
+    --item X --no-task`, or a fix made in the item that found the bug while its own
+    fix task stayed unclaimed (B-bug-fixed-other-item-unverified) -- X while it works
+    in a worktree, or X landed through ddflow's own merge (a landed_before/landed_after
     pair) named as the pre-fix source (Bb49d834e90). Only then: a landed X recorded
     through a pull request, which keeps only `merged_sha` and no before/after pair,
     may have been merely where an older bug was seen."""
@@ -398,7 +417,17 @@ def _fixing_item(st, cfg, bug_id: str) -> Any:
     if rec is None:
         return None
     fix_task = CM.fix_task_for(st, bug_id, cfg)
-    if fix_task is not None:
+    # The bug's own fix task names the source only while it actually works somewhere, or
+    # has already landed (by any path -- a PR keeps only `merged_sha`, no before/after
+    # pair, yet still landed: mirroring the found-item guard just below, so it does not
+    # fall through to a stale found item). An unclaimed one is not the source, and the
+    # item the bug was found on (working in its own worktree, or landed) is looked up next.
+    if fix_task is not None and (
+        fix_task.worktree
+        or _has_landing_pair(fix_task)
+        or fix_task.landed_after
+        or fix_task.merged_sha
+    ):
         return fix_task
     found_on = st.items.get(rec.item) if rec.item else None
     if _has_landing_pair(found_on):
@@ -409,7 +438,10 @@ def _fixing_item(st, cfg, bug_id: str) -> Any:
         and not (found_on.landed_after or found_on.merged_sha)
     ):
         return found_on
-    return None
+    # No working source: the unclaimed fix task (so `_verify_regression` records the
+    # could-not-run gap with its remedy -- claiming the fix task is the fix), or nothing
+    # (the close is refused demanding one, Bb49d834e90).
+    return fix_task
 
 
 def _verify_regression(
@@ -494,7 +526,17 @@ def _verify_regression(
     status, ev = G.verify_regression_test(
         repo, cfg, tree=tree, base=base, tests=module_tests, mutation=mutation
     )
-    return _regression_status(status, ev, G)
+    verdict, evidence = _regression_status(status, ev, G)
+    rec = st.bugs[bug_id]
+    if verdict in ("verified", "verified-by-mutation") and _owns_unlanded_fix(fx, rec):
+        # A CLEAN verification on the bug's OWN fix task, still working in its worktree,
+        # would mark the bug fixed while its branch has not reached the base -- the close
+        # the fix-task driver performs again, once, after merge (B-bug-fixed-before-fix-lands).
+        # The check still RAN (a fail-first test was shown to catch the bug); the close is
+        # held until that branch lands. A fix made in the ITEM the bug was FOUND on still
+        # verifies against its worktree (B-bug-fixed-other-item-unverified).
+        return "fix-not-landed", _unlanded_fix_source(rec)
+    return verdict, evidence
 
 
 _REMEDY = (

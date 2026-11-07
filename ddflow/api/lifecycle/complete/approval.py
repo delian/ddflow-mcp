@@ -7,6 +7,7 @@ from __future__ import annotations
 from ....core import outcome as O
 from ....core.digest import content_digest
 from ....services import approval as AP
+from ....services import gate_accept as GA
 from ....services.approvals import consume as CN
 from ....services.approvals.canon import Canon
 
@@ -15,12 +16,16 @@ def _only_unavailable(v, it) -> bool:
     """Would the standing `complete_unavailable` rule answer this completion: its ONLY unmet
     conditions are required gates recorded `unavailable`/`partial`. There must be a single
     blocker (the "required gate(s) not passed" one) and every unmet required gate a coverage
-    gap -- never a failure, silence, an open bug or unfinished sub-tasks. Nor a gate whose tests
-    FAILED and only their comparison with the base could not run: that is a person's call."""
+    gap -- never a failure, silence, an open bug or unfinished sub-tasks. Nor a gate whose
+    tests FAILED and only their comparison with the base could not run (`baseline.unmeasured`),
+    nor a measured baseline-red partial only a person accepts (`gate_accept.person_only`):
+    both are a person's call."""
     if not v.unmet_gates or len(v.blockers) != 1:
         return False
     records = [it.gates[g] for g in v.unmet_gates if g in it.gates]
     if any(((r.evidence or {}).get("baseline") or {}).get("unmeasured") for r in records):
+        return False
+    if any(GA.person_only(it, g) for g in v.unmet_gates if g in it.gates):
         return False
     return set(v.unmet_gates) <= set(v.coverage_gaps)
 
@@ -63,9 +68,15 @@ def _approved_force(
         state=content_digest("\n".join(sorted(blockers))),
     )  # fmt: skip
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
-    return (
-        (True, decision.stamp, "") if decision.ok else (False, {}, "refusing: " + decision.message)
-    )
+    if decision.ok:
+        return True, decision.stamp, ""
+    # `operator_gate` already prefixes its refusal; adding "refusing: " here stacked it
+    # (B-approval-refusal-doubled-prefix). The request text names the verb, not the conditions
+    # the approval would override -- those live only in ``blockers`` -- so name them too.
+    why = decision.message
+    if blockers:
+        why = f"{why} It would override: {'; '.join(blockers)}"
+    return False, {}, why
 
 
 def _person_force(force: bool, agent: str) -> bool:

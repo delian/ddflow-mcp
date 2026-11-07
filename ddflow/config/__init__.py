@@ -16,7 +16,13 @@ from __future__ import annotations
 
 # Every [section] dataclass lives in `config_sections/`; each name is re-exported from here.
 from ..config_sections._compat import is_source_tree, upgrade_advice  # noqa: F401
-from ..config_sections._docs import DECLARED, KNOB_DOCS, RENAMED, declared_tables  # noqa: F401
+from ..config_sections._docs import (  # noqa: F401
+    DECLARED,
+    KNOB_DOCS,
+    RENAMED,
+    SECTION_CLASSES,
+    declared_tables,
+)
 from ..config_sections._layers import ConfigConflict, layer_path, read_toml  # noqa: F401
 from ..config_sections.agent import FAMILY_HINTS, family_for, router_set  # noqa: F401
 from ..config_sections.ci import CI_ON_MERGE_MODES, CI_TESTS_SCOPES  # noqa: F401
@@ -26,6 +32,7 @@ from ..config_sections.export import (  # noqa: F401
     EXPORT_DEFAULT_TARGETS,
     EXPORT_MODES,
     EXPORT_REFRESH_MODES,
+    EXPORT_TABLE_KEYS,
 )
 from ..config_sections.flow import (  # noqa: F401
     FLOW_CLAIMS,
@@ -71,61 +78,13 @@ from ._coerce import (  # noqa: F401
 from ._compat import _WARNED_RENAMED, _migrate_renamed  # noqa: F401
 
 # The loader machinery, split across submodules so each stays under 30k chars; every
-# name is re-exported from here so call sites keep `from ddflow.config import X`.
+# name is re-exported from here so call sites keep `from ddflow.config import X`. The
+# `*Config` section classes are re-exported lazily through `__getattr__` below (not a
+# hand-kept list) -- `declare()` owns the name (B-config-section-needs-hub-edit).
 from ._core import (  # noqa: F401
     _NOT_SECTIONS,
     CONFIG_FORMAT,
-    AgentConfig,
-    ApprovalsConfig,
-    BugsConfig,
-    CadenceConfig,
-    ChoreConfig,
-    CiConfig,
-    CompanionsConfig,
     Config,
-    DedupeConfig,
-    DigestConfig,
-    DocsConfig,
-    EnforceConfig,
-    EvaluationConfig,
-    ExportConfig,
-    FlowConfig,
-    GatesConfig,
-    GovernConfig,
-    GrantsConfig,
-    HandoffConfig,
-    HealthConfig,
-    HooksConfig,
-    IdsConfig,
-    ImportConfig,
-    LanesConfig,
-    LeaseConfig,
-    LessonsConfig,
-    LocksConfig,
-    LogConfig,
-    LoopsConfig,
-    McpConfig,
-    MemoryConfig,
-    MergeQueueConfig,
-    MetricsConfig,
-    PinsConfig,
-    PlanConfig,
-    PromptsConfig,
-    QualityConfig,
-    RagConfig,
-    ReinstructConfig,
-    ReleaseConfig,
-    ReviewConfig,
-    RulesConfig,
-    ScheduleConfig,
-    SelfAssessmentConfig,
-    SensitivityConfig,
-    SessionConfig,
-    SwarmConfig,
-    TriggersConfig,
-    UpgradeConfig,
-    WavesConfig,
-    WorktreeConfig,
     _merge_budget_table,
     parallel_range_problems,
 )
@@ -145,3 +104,24 @@ from ._decls import (  # noqa: F401
 from ._errors import InvalidValue  # noqa: F401
 from ._tree import _CODE_TREE, _is_code_tree  # noqa: F401
 from ._warn import _WARNED, _warn_unknown  # noqa: F401
+
+#: `ddflow.config.<Section>Config` names, by class name, so the re-export is a lookup on
+#: the registry `declare()` populated -- not a hand-kept list that a new section must edit
+#: (r-extension-contract, B-config-section-needs-hub-edit).
+_SECTION_CLASS_BY_NAME: dict[str, type] = {cls.__name__: cls for cls in SECTION_CLASSES.values()}
+
+
+def __getattr__(name: str):
+    cls = _SECTION_CLASS_BY_NAME.get(name)
+    if cls is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return cls
+
+
+#: A star-import reads the module `__dict__` or `__all__`, never `__getattr__`: name every
+#: public name (real globals plus the section classes) so `from ddflow.config import *`
+#: binds the section classes, as the eager re-export it replaced did (review finding).
+#: PLE0605: dynamic by design -- the section classes exist only after every module's
+#: `declare()` ran, so no literal can name them; a literal here is the hand-kept list
+#: B-config-section-needs-hub-edit removed (r-extension-contract).
+__all__ = sorted({n for n in globals() if not n.startswith("_")} | set(_SECTION_CLASS_BY_NAME))  # noqa: PLE0605

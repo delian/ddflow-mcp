@@ -1,0 +1,10 @@
+id = "r-bounded-everything"
+title = "Every loop, retry, review round, queue and fan-out has a cap and a visible stop"
+tags = ["process", "safety"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:13:07.362312+00:00"
+updated = "2026-11-03T14:13:07.362324+00:00"
+
+Decisions D-review-budget-r2, D-optimizer-answers, D-handoff-peers, D-lifecycle-answers. RULE: no unbounded loop, retry, polling, review round, recursion, proposal flood, suggestion exchange, cross-repo propagation or parallel fan-out: each has a knob-set cap, a circuit breaker with a visible note and an idempotency key; review rounds follow the stopping rule when they do not converge (fix HIGH and MEDIUM, file LOW as one follow-up, one ci run, skip with exact counts). CHECK: loop-guard tests per feature (MR-loop-guard, LK-sg-expiry) and the architecture constants ratchet. VERIFY: what stops this if it misbehaves for a day?

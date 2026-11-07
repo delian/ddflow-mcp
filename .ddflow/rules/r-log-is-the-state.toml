@@ -1,0 +1,10 @@
+id = "r-log-is-the-state"
+title = "A server without a filesystem keeps the same event log format; no second store"
+tags = ["architecture", "mode-parity", "data"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:20:33.715035+00:00"
+updated = "2026-11-03T16:20:33.715043+00:00"
+
+R-mode-parity 5, D-mode-parity-answers; extends r-derive-dont-store and r-replay-compat. RULE: a no-fs server keeps the same event log format and writes it through the storage seam to a server-side repo pushed to the project's git remote; there is no second store. CHECK: a round-trip test that a log written no-fs equals one written locally (ST-merge-strategy). VERIFY: can this log be replayed by a local clone?

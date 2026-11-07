@@ -150,7 +150,7 @@ def _yield_request(log, cfg, item: str) -> str:
     st = localize(fold(log.read_all(), strict=False), log, now)
     asked = [
         LB.yield_text(v)
-        for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root))
+        for v in LB.verdicts(st, cfg, log.read_all(), now, LB.tree_activity(log.root), log.root)
         if v.item == item
     ]
     asked.append(HW.stop_notice(st, item))  # the watchdog's stop request (DX-health-watch)
@@ -248,7 +248,13 @@ def _inbox(repo: Path, cfg, agent: str, *, consume: bool) -> dict[str, Any]:
     """The caller's lane inbox as `{"wake": {...}}` ({} when empty): delivered at a heartbeat, only shown
     at a release or completion. Advisory, like `_waiters`."""
     try:
-        got = IB.wake(repo, agent, ttl_s=cfg.lease.inbox_ttl_s, consume=consume)
+        got = IB.wake(
+            repo,
+            agent,
+            ttl_s=cfg.lease.inbox_ttl_s,
+            consume=consume,
+            retain_s=cfg.lease.inbox_retain_s,
+        )
         return {"wake": got} if got else {}
     except (OSError, ValueError, TypeError, AttributeError):
         return {}

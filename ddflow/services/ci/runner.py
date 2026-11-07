@@ -13,6 +13,7 @@ import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 from ...config import Config
@@ -22,7 +23,7 @@ from .. import ci_scope as CS
 from .. import suitelock as SL
 from .. import workers as WK
 from ..cmdrunner import TIMEOUT, CommandRunner, Declared
-from ..flakes import failure_evidence
+from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
 from ..pins import pin_files
 from ..pins import regenerate as regenerate_pins
@@ -34,6 +35,7 @@ from .types import CONFLICT, Check, Result
 
 _HOOK_LINE = re.compile(r"^(?P<name>.+?)\.{3,}.*?(?P<status>Passed|Failed|Skipped)\s*$")
 TAIL_CHARS = 4000
+TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
 def parse_checks(output: str) -> list[Check]:
@@ -65,6 +67,27 @@ def _merge_base(
         + (" (misconfigured [ci].base or --base?)" if named else "")
         + ", so the merge result cannot be checked",
     )
+
+
+def _merge_refused(cmd: str, sha: str, failure) -> Result:
+    """The Result for a merge that yielded no tree: ``failed`` for a conflict, ``unavailable``
+    when git could not do it at all."""
+    status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
+    return Result(status, command=cmd, sha=sha, reason=failure)
+
+
+def _plan(cfg, repo, cmd, tree, sha, base, changed_from, *, full, override, for_item):
+    """The check command scoped to ``tree``'s diff, and the scope an item's run plans in it
+    (``_default_on_the_diff`` then ``CS.plan``). For a full-suite or named-command run both keep
+    their defaults: the command as written, and no planned scope."""
+    cmd = _default_on_the_diff(
+        repo, cfg, cmd, tree, sha, base, changed_from, full=full, override=override
+    )
+    scope = None
+    if for_item and not override:
+        asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
+        scope = CS.plan(cfg, tree, base, requested=asked)
+    return cmd, scope
 
 
 def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
@@ -115,47 +138,153 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     base, refused = _merge_base(repo, cfg, base, cmd, sha)
     if refused is not None:
         return refused
-    with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-        if tree is None:
-            status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
-            return Result(status, command=cmd, sha=sha, reason=failure)
-        if stale := _stale_pins(tree, cfg, base, custom=bool(command.strip())):
+    return _settle(
+        cfg, repo, sha, base, cmd,
+        command=command, ref=ref, timeout_s=timeout_s, tick=tick,
+        changed_from=changed_from, full=full, for_item=for_item, rates=rates,
+    )
+
+
+def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
+    cfg,
+    repo,
+    sha,
+    base,
+    cmd,
+    *,
+    command,
+    ref,
+    timeout_s,
+    tick,
+    changed_from,
+    full,
+    for_item,
+    rates,
+) -> Result:
+    """Once ``sha`` and ``base`` are resolved: plan the scope, decide the host suite slot, merge
+    the tree when the checks RUN -- under the slot for a full-suite run, so a base that moved
+    while the run queued does not leave it stale (B-ci-merge-tree-stale-after-queue-wait) -- then
+    run the checks and build the Result."""
+    budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
+    holder = _holder(repo, ref)
+    override = bool(command.strip())
+    used: dict[str, dict] = {}
+
+    def plan(tree):
+        return _plan(
+            cfg, repo, cmd, tree, sha, base, changed_from,
+            full=full, override=override, for_item=for_item,
+        )
+
+    def merged(tree):
+        if stale := _stale_pins(tree, cfg, base, custom=override):
             return Result("failed", command=cmd, sha=sha, reason=stale)
-        budget = timeout_s if timeout_s > 0 else cfg.ci.timeout_s
-        cmd = _default_on_the_diff(repo, cfg, cmd, tree, sha, base, changed_from)
-        scope = None
-        if for_item and not command.strip():
-            asked = "selected" if not full and cfg.ci.tests_scope == "selected" else "full"
-            scope = CS.plan(cfg, tree, base, requested=asked)
-        used: dict[str, dict] = {}
-        full_suite = not command.strip() and _needs_suite_slot(cfg, cmd, scope, rates)
-        holder = _holder(repo, ref)
-        try:
-            p, out_prefix, waited = _run_locked(
-                cfg,
-                holder,
-                tree,
-                cmd,
-                scope,
-                budget,
-                tick,
-                used,
-                full_suite,
+        return plan(tree)
+
+    def finish(p, out_prefix, waited, cmd, scope):
+        if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
+            unfinished.waited_s = waited
+            return unfinished
+        res = _result(p, out_prefix, cmd, sha, base, scope)
+        res.waited_s = waited
+        if scope is None and used:
+            res.scope = {"workers": used}
+        return res
+
+    def without_slot(tree, cmd, scope):
+        if stale := _stale_pins(tree, cfg, base, custom=override):
+            return Result("failed", command=cmd, sha=sha, reason=stale)
+        return finish(
+            *_run_locked(
+                cfg, holder, tree, cmd, scope, budget, tick, used, False,
                 lock_wait=_lock_wait(timeout_s),
-            )
+            ),
+            cmd, scope,
+        )
+
+    # Only a selected run merges a tree to plan its scope before it knows whether it slots; a
+    # full-suite run has no scope to plan and merges afresh INSIDE the slot, so its conflict (if
+    # any) is decided there, not before the wait; a named command merges once and takes no slot.
+    scope = None
+    if for_item and not override:
+        try:
+            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+                if tree is None:
+                    return _merge_refused(cmd, sha, failure)
+                cmd, scope = plan(tree)
+                if not _needs_suite_slot(cfg, cmd, scope, rates):
+                    return without_slot(tree, cmd, scope)
         except SL.SuiteBusy as busy:
             return Result(
                 "unavailable", command=cmd, sha=sha, reason=str(busy),
                 waited_s=round(busy.waited_s, 6),
             )  # fmt: skip
-        if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
-            unfinished.waited_s = waited
-            return unfinished
-    res = _result(p, out_prefix, cmd, sha, base, scope)
-    res.waited_s = waited
-    if scope is None and used:
-        res.scope = {"workers": used}
-    return res
+
+    elif override:
+        try:
+            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+                if tree is None:
+                    return _merge_refused(cmd, sha, failure)
+                cmd, scope = plan(tree)
+                return without_slot(tree, cmd, scope)
+        except SL.SuiteBusy as busy:
+            return Result(
+                "unavailable", command=cmd, sha=sha, reason=str(busy),
+                waited_s=round(busy.waited_s, 6),
+            )  # fmt: skip
+
+    elif not _needs_suite_slot(cfg, cmd, None, rates):
+        try:
+            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+                if tree is None:
+                    return _merge_refused(cmd, sha, failure)
+                return without_slot(tree, *plan(tree))
+        except SL.SuiteBusy as busy:
+            return Result(
+                "unavailable", command=cmd, sha=sha, reason=str(busy),
+                waited_s=round(busy.waited_s, 6),
+            )  # fmt: skip
+
+    try:
+        p, out_prefix, waited, cmd, scope = _run_under_slot(
+            cfg, holder, repo, sha, base, cmd, budget, tick, used,
+            lock_wait=_lock_wait(timeout_s), plan=merged,
+        )
+    except SL.SuiteBusy as busy:
+        return Result(
+            "unavailable", command=cmd, sha=sha, reason=str(busy),
+            waited_s=round(busy.waited_s, 6),
+        )  # fmt: skip
+    if p is None:  # the fresh merge refused the run: a conflict, or stale pins
+        out_prefix.waited_s = waited
+        return out_prefix
+    return finish(p, out_prefix, waited, cmd, scope)
+
+
+def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, lock_wait, plan):
+    """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
+    before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
+    B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
+    returns the tree's (scoped command, scope) or the Result that refuses it. Returns
+    ``(run, out_prefix, waited, cmd, scope)``: ``run`` is the process, or None with ``out_prefix``
+    the Result that refused the fresh merge."""
+    waited = None
+    queued_at = time.monotonic()
+    with SL.hold(cfg, holder, wait_s=lock_wait):
+        waited = round(time.monotonic() - queued_at, 6)
+        if lock_wait is not None:
+            budget = max(1, int(lock_wait) - int(waited))
+        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+            if tree is None:
+                status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
+                return None, Result(status, command=cmd, sha=sha, reason=failure), waited, cmd, None
+            planned = plan(tree)
+            if isinstance(planned, Result):
+                return None, planned, waited, cmd, None
+            cmd, scope = planned
+            p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used)
+            return p, out_prefix, waited, cmd, scope
+    raise AssertionError("unreachable: SL.hold raises SuiteBusy instead of yielding past here")
 
 
 def _lock_wait(timeout_s: int) -> float | None:
@@ -180,6 +309,8 @@ def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *
     with SL.hold(cfg, holder, wait_s=lock_wait) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
+            if lock_wait is not None:  # the per-run timeout also bounds the run BEHIND the wait
+                budget = max(1, int(lock_wait) - int(waited))
         p, out_prefix = _execute(
             cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
         )
@@ -231,13 +362,34 @@ def _stale_pins(tree: Path, cfg: Config, base: str, *, custom: bool = False) -> 
 
 
 def _default_on_the_diff(
-    repo: Path, cfg: Config, cmd: str, tree: Path, sha: str, base: str, changed_from: str
+    repo: Path,
+    cfg: Config,
+    cmd: str,
+    tree: Path,
+    sha: str,
+    base: str,
+    changed_from: str,
+    *,
+    full: bool = False,
+    override: bool = False,
 ) -> str:
-    """``cmd`` scoped to the diff the check is about, when it is the default command (an
-    operator's own `[ci].command` is run as written). The diff is the one the check is about:
-    on the base itself (the after-merge check) there is no branch to compare with, so the
-    commit just made against its first parent."""
-    if cfg.ci.command.strip() or DEFAULT_COMMAND not in cmd:
+    """``cmd`` scoped to the diff the check is about, when it is the default command. A
+    whole-suite run -- ``--full``, or `[ci].tests_scope = "full"` on a run with no named
+    ``--command`` -- keeps ``--all-files``; a command the operator wrote themselves (`[ci].command`,
+    or a ``--command`` carrying the default phrase, with no merge range) runs as written. The
+    after-merge check's resolved default (``changed_from`` names the range it added) is the one
+    default that scopes: on the base itself there is no branch to compare with, so the commit just
+    made is its first parent."""
+    whole_suite = full or (not override and cfg.ci.tests_scope == "full")
+    # This mirrors the `asked` below (`"selected" if not full and tests_scope == "selected" else
+    # "full"`): both read "whole suite" as the SAME two cases only because `[ci].tests_scope` is a
+    # binary {selected, full} choice. Keep them in step if the choice ever gains a third value.
+    if (
+        whole_suite
+        or (override and not changed_from)
+        or cfg.ci.command.strip()
+        or DEFAULT_COMMAND not in cmd
+    ):
         return cmd
     # (`merge` always says where its range began; this is for a caller that does not.)
     since = changed_from or (f"{sha}^" if W.rev(repo, base) == sha else base)
@@ -364,6 +516,7 @@ def _run_stages(
     before, spent = p.output, p.elapsed_s
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
+    red = None  # the selection, when it ran and failed: the guards still run after it
     for at, (raw, label) in enumerate(todo):
         cmd_ = _with_workers(raw, cfg, used, label, holding_suite=holding_suite)
         before += f"\n$ {cmd_}\n"
@@ -382,11 +535,29 @@ def _run_stages(
             unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
-        if not scope.ok[label] or at == len(todo) - 1:
+        if at == len(todo) - 1 or not p.ran:
             break
+        red = None if scope.ok[label] else p
         before += p.output
+    if red is not None:
+        p = _selection_verdict(red, p, unran)
     _say_what_ran(scope, unran)
     return p, before
+
+
+def _selection_verdict(red, guards, unran: set[str]):
+    """The run that decides a selection which failed before ``guards`` ran: the selection's own
+    exit, whatever the guards did (their pass must not read as the run's), with their output, the
+    part of the log not yet in the prefix.
+
+    `_guards_unran` reads a guard stage that ran red as one whose failures are among the failing
+    ids. That holds only for a run that went to its end and lists them; a timeout, a crash or a
+    collection error that interrupted the run gave no verdict on the guards it never reached.
+    "always" goes to ``unran`` then, so the selection alone cannot make the run baseline-red."""
+    finished = guards.code == 0 or (guards.code == TESTS_FAILED and failed_tests(guards.output))
+    if not guards.ran or not finished:
+        unran.add("always")
+    return replace(red, out=guards.output or guards.reason, err="")
 
 
 _STAGE_NAMES = {
@@ -398,8 +569,9 @@ _STAGE_NAMES = {
 
 def _say_what_ran(scope, unran: set[str] = frozenset()) -> None:
     """Make the scope's ``why`` (the line the gate records) say what ran, not what was planned:
-    a failed hook stage or test stage stops the later ones, and a selected scope that ran no
-    test must not read as 'selected N files'."""
+    a failed hook stage stops the test stages, failed guards end the run, and a selected scope
+    that ran no test must not read as 'selected N files'. The guards run after a selection that
+    failed, so what they said is told beside it."""
     order = ("hooks", "selected", "always")
     asked = [
         "hooks",
@@ -417,6 +589,10 @@ def _say_what_ran(scope, unran: set[str] = frozenset()) -> None:
     scope.why += f"; {_STAGE_NAMES[bad]} {verb}" + (
         f", so {' and '.join(notrun)} did not run" if notrun else ""
     )
+    if bad == "selected" and "always" in scope.ok:
+        said = "passed" if scope.ok["always"] else "failed"
+        said = "gave no verdict" if "always" in unran else said
+        scope.why += f"; {_STAGE_NAMES['always']} {said}"
 
 
 def _scope_evidence(scope, sha: str) -> dict:

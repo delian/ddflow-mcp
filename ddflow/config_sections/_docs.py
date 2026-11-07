@@ -78,6 +78,11 @@ class Knob:
 DECLARED: dict[str, Knob] = {}
 #: The module whose `declare()` registered each of them (a section declares only its own).
 DECLARED_IN: dict[str, str] = {}
+#: The dataclass of every `[section]`, keyed by its section name: `declare()` is the ONE
+#: place a section name maps to a class (r-extension-contract, B-config-section-needs-hub-
+#: edit), so `Config` assembles its fields from this registry, never from a hand-kept list
+#: in `config/_core.py`. A new section is a new file here, nothing more.
+SECTION_CLASSES: dict[str, type] = {}
 #: Old key -> (current key, since, removed_in) for every ``renamed_from`` (D-compat).
 RENAMED: dict[str, tuple[str, str, str]] = {}
 
@@ -140,6 +145,12 @@ def declare(section: str) -> Callable[[type], type]:
     """Class decorator, above `@dataclass`: register each `knob()` field of `[section]`."""
 
     def register(cls: type) -> type:
+        if section in SECTION_CLASSES:
+            raise ValueError(
+                f"section {section} is declared twice ({SECTION_CLASSES[section].__module__} "
+                f"and {cls.__module__})"
+            )
+        SECTION_CLASSES[section] = cls
         for f in fields(cls):
             meta = f.metadata.get(KNOB)
             if meta is None:

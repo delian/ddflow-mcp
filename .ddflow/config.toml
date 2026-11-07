@@ -50,7 +50,7 @@ enabled = true
 # A tree whose ddflow predates this knob skips it with a warning (B9cb7dd1c3b); one that
 # predates 81a52e3 refuses the whole config until it merges main.
 local_files = [".roborev.toml"]
-base_ref = "--local"
+base_ref = ""
 [schedule]
 
 [enforce]
@@ -99,6 +99,7 @@ new = "UNPARSEABLE = (TypeError, OverflowError, OSError)"
 [ci]
 # Mutation (B-mut-ci-registry): `gate verify <item> ci` commits this to a scratch ref, so
 # `ddflow ci run` reads it at HEAD, and ruff must reject an unused import (F401).
+selected_lock_tests = 100
 [[gate.ci.mutations]]
 file = "ddflow/core/clock.py"
 old = "import math\nimport re\n"
@@ -109,10 +110,10 @@ task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "sta
 
 [review]
 max_rounds = 4
-
+degraded_cooldown_s = 60
 [approvals]
 standing_window_s = 86400
-policy = ["skip_after_unavailable","accept_baseline_red","complete_unavailable","claim_unavailable"]
-
+policy = ["complete_unavailable", "claim_unavailable", "skip_after_unavailable", "accept_baseline_red"]
+auto_approve_after_retries = 2
 [lanes]
 release_mode = "auto"

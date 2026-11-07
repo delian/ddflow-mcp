@@ -114,6 +114,42 @@ def test_the_knob_full_and_a_call_not_for_an_item_run_the_whole_suite(project, s
     assert not _calls(stubs, "pytest")
 
 
+def test_full_on_the_base_itself_runs_the_whole_suite_not_the_last_commit(project, stubs):
+    """B-ci-full-skips-tests-on-events-head: `ci run --full --ref main` narrowed the default
+    pre-push command to ``sha^..sha`` when the ref was the base itself, so the sole (events:)
+    commit's diff skipped the `tests` hook and --full ran no test yet exited 0. ``full`` means
+    the whole suite: the default command keeps ``--all-files``."""
+
+    res = CI.run(project, Config.load(project), ref="HEAD", base="main", for_item=True, full=True)
+    assert res.ok, res.reason
+    assert res.scope["scope"] == "full"
+    assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
+    assert _calls(stubs, "precommit") == ["SKIP="]
+
+
+def test_an_explicit_default_command_is_run_as_written_not_narrowed(project, stubs):
+    """B-ci-full-skips-tests-on-events-head: `--command` written as the default phrase was
+    silently rewritten to ``--from-ref ... --to-ref HEAD`` with no notice. A named command is
+    the operator's own: it runs as written, ``--all-files`` intact."""
+
+    res = CI.run(project, Config.load(project), ref="HEAD", base="main", command=CI.DEFAULT_COMMAND)
+    assert res.ok, res.reason
+    assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
+
+
+def test_a_configured_full_scope_on_the_base_runs_the_whole_suite(project, stubs):
+    """B-ci-full-skips-tests-on-events-head: `[ci].tests_scope = "full"` is a whole-suite run too,
+    so on a ref equal to its base the default command keeps ``--all-files`` instead of narrowing to
+    the last commit -- otherwise an events-only head skips the tests hook and 'full' runs nothing."""
+
+    cfg = Config.load(project)
+    cfg.ci.tests_scope = "full"
+    res = CI.run(project, cfg, ref="HEAD", base="main", for_item=True)
+    assert res.ok, res.reason
+    assert res.scope["scope"] == "full"
+    assert "--all-files" in res.command and "--from-ref" not in res.command, res.command
+
+
 def test_a_comment_only_change_to_a_hub_is_scoped_selected_not_the_whole_suite(project, stubs):
     """Bug B0bdd3b9a39: a format/comment-only change to a hub scoped the whole suite, so a
     trivial fix cleared its ci gate only after a ~12-minute run over a red main. The change
@@ -205,7 +241,10 @@ def test_the_merge_queue_integrator_asks_for_the_whole_suite(monkeypatch):
     monkeypatch.setattr(MR, "effective_pipeline", lambda repo, cfg, it: ["ci"])
     monkeypatch.setattr(MR.MQ, "log_path", lambda repo, e: Path("log"))
     with pytest.raises(RuntimeError):
-        MR._run_checks(Path("."), _Cfg(), _It(), _E(), {}, unit_tests=False, timeout_s=0, agent="")
+        MR._run_checks(
+            Path("."), _Cfg(), _It(), MR.MQ.Entry(item="T1", seq=1), {},
+            unit_tests=False, timeout_s=0, agent="",
+        )  # fmt: skip
     assert seen["full"] is True
 
 
@@ -215,10 +254,6 @@ class _Cfg:
 
 class _It:
     id = "T1"
-
-
-class _E:
-    pass
 
 
 def test_the_marker_line_carries_the_scope_and_the_gate_reads_it_back():

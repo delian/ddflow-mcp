@@ -29,6 +29,7 @@ from shlex import quote
 from typing import Any
 
 from ..core import clock
+from ..core.admission import conflicts, shared_globs
 from ..core.model import ABANDONED, DONE, Lease, State
 from ..core.schedule import stale_package_globs
 from ..infra import treeactivity as TA
@@ -122,12 +123,37 @@ def judge(
 
 
 def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
-    """Leased item -> the items whose recorded waits name it (the wait-for graph, inverted)."""
+    """Leased item -> the items whose recorded waits name it (the wait-for graph, inverted),
+    limited to waiters whose CURRENT globs still overlap the item's LIVE lease.
+
+    The wait-for graph recomputes its edges from the globs a waiter asked for when its
+    widening was refused, and those go stale: when the waiter later narrows its globs back
+    down (gives up the file it could not get), naming it here becomes a false YIELD
+    REQUESTED -- the waiter no longer needs the holder's files (B38ebc3e392). The edge
+    survives (a recorded wait lives with its lease); a named holder that has since released
+    its lease is not leased at all and is dropped too. A waiter is named only while its
+    CURRENT globs still overlap the holder's LIVE lease (an empty want overlaps nothing)."""
+    shared = shared_globs(cfg)
     out: dict[str, list[str]] = {}
     for waiter, held in WG.wait_for_graph(st, cfg, now).items():
+        wit = st.items.get(waiter)
+        wanted = wit.globs if wit is not None else []
         for item_id in held:
-            if item_id != waiter:
-                out.setdefault(item_id, []).append(waiter)
+            if item_id == waiter:
+                continue
+            it = st.items.get(item_id)
+            if it is None or it.lease is None:
+                # The named holder is gone or no longer holds a live lease: it is not a
+                # "Leased item" and has nothing to yield, so a stale wait edge that still
+                # names it must not name it here either (a drop that fires only for a
+                # disjoint-overlap holder would let a released holder stay falsely named).
+                continue
+            if not conflicts(wanted, it.lease.globs, shared):
+                # None of the waiter's CURRENT globs overlaps the holder's lease (an
+                # empty ``wanted`` overlaps nothing): the recorded edge is stale, so the
+                # waiter no longer needs this holder's files and it is not named.
+                continue
+            out.setdefault(item_id, []).append(waiter)
     return out
 
 

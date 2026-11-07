@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,7 @@ from .gate import (
 )
 from .records import (
     PROGRESS_EVERY_S,
+    _blocking_findings,
     _finding_rows,
     _gate_outcome,
     _item_intent,
@@ -304,6 +306,86 @@ def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     return O.Outcome(kind="review", data=data, exit=worst.exit, reason=worst.reason)
 
 
+def _shed_degraded(revs, st, gate: str, cooldown_s: float, say) -> tuple[list, list]:
+    """(reviewers, shed names) -- the gate's pool with reviewers a quota/exhaustion wall
+    already marked (``RV.degraded_marks``) dropped, and the shed names said, in pool order
+    (the next enabled cross-family reviewer serves). An unmarked reviewer is never dropped:
+    it still gets one run to fail honestly before being marked.
+
+    ``cooldown_s`` is `[review].degraded_cooldown_s`: a reviewer is shed only while its
+    mark is younger than that many seconds. A mark at or past the cooldown is EXPIRED,
+    so the reviewer is re-probed (and re-marked if the wall is still up) instead of shed
+    forever -- a transient 429 used to permanently disable a cross-family reviewer
+    (bug B066719c493). <= 0 re-probes on every review (the mark blocks no run).
+    """
+    degraded = {
+        name: row
+        for name, row in RV.active_degraded_marks(st, cooldown_s).items()
+        if any(r.name == name for r in revs)
+    }
+    for name in sorted(degraded):
+        say(f"→ shed {name}: degraded ({degraded[name].get('reason') or 'quota/exhaustion'})")
+    return [r for r in revs if r.name not in degraded], sorted(degraded)
+
+
+def _note_degraded(res, r, gate: str, cooldown_s: float, extra_evidence: dict, say) -> None:
+    """Append the quota/exhaustion mark of one review to `extra_evidence` and SAY it, so a
+    degraded reviewer is recorded and surfaced instead of silently folded into
+    `unavailable` (B8efd3d1bc4). No mark for anything but a reviewer's own quota wall.
+
+    The mark carries ``at`` (the epoch second it was written) so it can EXPIRE after
+    `[review].degraded_cooldown_s` and the reviewer is re-probed (bug B066719c493)."""
+    if not res.degraded:
+        return
+    if extra_evidence is None:
+        extra_evidence = {}
+    extra_evidence.setdefault("review_degraded", []).append(
+        {
+            "reviewer": r.name,
+            "reason": res.degraded,
+            "gate": gate,
+            "model": r.model,
+            "family": r.resolved_family(),
+            "at": time.time(),
+        }
+    )
+    say(
+        f"→ {r.name} quota/exhaustion ({res.degraded}): marked degraded and shed from "
+        f"{gate} -- re-probed after {cooldown_s}s once the mark expires (the next enabled "
+        f"cross-family reviewer serves meanwhile)"
+    )
+
+
+#: Dispatch rank by independence tier: a reviewer OUTSIDE the author's family first, a
+#: different model of the same family next, and one that establishes nothing (the
+#: author's own model, or a model no map recognises) last. Falls back to the tail for a
+#: tier `review_tier` never returns, so an unknown enough reviewer still runs, just last.
+_TIER_RANK = {"family": 0, "model": 1, "none": 2}
+
+
+def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
+    """`revs` with the fast cross-family tier led, so a slow same-family reviewer is not
+    paid for before an outside-family one can serve (bug B19066e802f), and a reviewer
+    that establishes nothing runs last instead of first in config order.
+
+    The sort is STABLE: within a tier, config order survives, so order only yields when a
+    tier makes it. When the author cannot be named here (`[agent].family` and the session
+    model are both empty) `review_tier` returns `none` for every reviewer and the pool
+    keeps its config order -- a gate must not reorder on a guess about independence.
+
+    Degraded/429 reviewers are shed BEFORE this runs (`_shed_degraded`), so the cascade
+    B8efd3d1bc4 dropped decides the pool's members and this only orders what remains.
+    """
+
+    def rank(r):
+        return _TIER_RANK.get(GD.review_tier(cfg, author_model, r.model, r.family), 2)
+
+    ordered = sorted(revs, key=rank)
+    if [r.name for r in ordered] != [r.name for r in revs]:
+        say("→ order (cross-family first): " + ", ".join(r.name for r in ordered))
+    return ordered
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -312,18 +394,59 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     case -- a reviewer from a DIFFERENT family than the author is the one named, so a
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
-    `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, but the panel's other families are
-    carried in `reviewer_families` so a clean cross-family round is still seen (bug
-    B1a30dc3303).
+    `complete` resolves it (`[agent].family`, else the session model). The reviewer's
+    family is resolved as `review_tier` resolves it (declared family, else its model).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    return cross[0] if cross else best
+    if cross:
+        return cross[0]
+    # When the author cannot be named here (`[agent].family` and the session model are
+    # both empty) `review_tier` returns `none` for every reviewer, so `cross` is empty
+    # and the first tied reviewer would be the author's own family when the lane also
+    # serves its model (bug B2e5ca93520). The author then has exactly ONE family, so
+    # when the clean reviewers span two or more distinct families, name a reviewer whose
+    # family differs from the tied-first one. This is a heuristic: with the author
+    # unknown no choice provably names the cross-family reviewer, and `reviewer_families`
+    # still carries every family so `complete` reads the cross-family panel either way
+    # (bug B1a30dc3303).
+    first = _fam(tied[0]) or GD.family_of(tied[0].model, cfg).strip().lower()
+    fams = {_fam(r) or GD.family_of(r.model, cfg).strip().lower() for r in tied}
+    fams.discard("")
+    if len(fams) > 1:
+        for r in tied:
+            fam = _fam(r) or GD.family_of(r.model, cfg).strip().lower()
+            if fam and fam != first:
+                return r
+    return best
 
 
-def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _fam(r) -> str:
+    """A reviewer's family as `review_tier` resolves it: a declared family, `unknown`
+    normalised to ``""`` so the model's family is consulted, stripped and lowercased."""
+    fam = (getattr(r, "family", "") or "").strip().lower()
+    return "" if fam == "unknown" else fam
+
+
+def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_model: str = ""):
+    """The reviewer whose finding blocked the gate (bug B3113b1f522), else ``identifying``.
+    A failed review must name the reviewer that found the blocking defect, not a clean peer
+    that ranked first (or the author's own family, listed first), and must not re-purpose a
+    PARTIAL reviewer as the identifying pass (which would flip the run's exit code). The
+    findings `_blocking_findings` returns are the SAME objects each reviewer's ``findings``
+    held (matched by identity), so the return is one of ``results`` or ``identifying``. The
+    same ``author_model`` as `_gate_outcome` decides the discount (bug B7dbf432caa): a
+    same-family finding discounted over a clean cross-family verdict must not make the
+    same-family reviewer the named failing one on a passed gate."""
+    blocking = _blocking_findings(results, it, gate, converging, cfg, author_model)[0]
+    for r in results:
+        if any(b is f for b in blocking for f in r.findings):
+            return r
+    return identifying
+
+
+def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -421,6 +544,17 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         )
 
     it = st.items.get(item)
+    author_model, _ = _author_model(st, agent, "", cfg)
+    revs, shed = _shed_degraded(revs, st, gate, cfg.review.degraded_cooldown_s, say)
+    if not revs:
+        return unavailable(
+            f"Every reviewer for gate {gate!r} is degraded ("
+            + ", ".join(shed)
+            + ") and was shed. Recording UNAVAILABLE — which is NOT a pass. "
+            + "`ddflow doctor` names the degraded reviewers.",
+            how="",
+        )
+    revs = _order_cross_family_first(revs, author_model, cfg, say)
     # The head the diff is taken from, captured BEFORE the diff (B4f5be8179f): a commit
     # landing in between is then in the diff AND after this head, so it is reviewed again
     # by the next delta rather than counted as reviewed by none.
@@ -526,16 +660,28 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
                 )
         results.append(res)
         _say_result(say, res)
+        _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
-    author_model, _ = _author_model(st, agent, "", cfg)
-    best = _identifying_reviewer(results, author_model, cfg)
+    identifying = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
-        best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        identifying,
+        results,
+        it,
+        item,
+        gate,
+        _converges(kind, fix),
+        cfg,
+        extra_evidence,
+        say,
+        author_model,
+    )
+    named = _failing_reviewer(
+        results, it, gate, _converges(kind, fix), cfg, identifying, author_model
     )
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            called_from=called_from, gates=gates, say=say, best=identifying, named=named, results=results, keeps=keeps, extra_evidence=extra_evidence,
             scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
@@ -544,9 +690,9 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         "gate": gate,
         "outcome": outcome,
         "how": how,
-        "reviewer": best.reviewer,
-        "family": best.family,
-        "findings": _finding_rows(best),
+        "reviewer": named.reviewer,
+        "family": named.family,
+        "findings": _finding_rows(results),
         "text": "\n".join(transcript),
     }
     exit_code = {
@@ -554,12 +700,12 @@ def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | t
         RV.PARTIAL: O.REFUSED,
         RV.UNAVAILABLE: O.NOTHING,
         RV.ERROR: O.FAIL,
-    }[best.status]
+    }[identifying.status]
     if exit_code == O.OK:
         return O.ok("review", **data)
     return O.Outcome(
         kind="review",
         data=data,
         exit=exit_code,
-        reason=best.reason or f"{len(best.findings)} finding(s)",
+        reason=identifying.reason or f"{len(identifying.findings)} finding(s)",
     )

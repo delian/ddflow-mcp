@@ -15,6 +15,8 @@ baseline = 0
 # The production wiring of the ExternalTool port (ADP-tools): `ddflow.services.toolrun`; SEC-scanners
 # is its first caller.
 "ddflow/services/toolrun.py:external_tool" = "SEC-scanners"
+# Builds a HumanChannel from its settings (ADP-notify-ask); the [notify] knobs and their callers wire it.
+"ddflow/services/ask/channels.py:open_channel" = "ADP-notify-knobs"
 # Per-role schema cost of a lean agent definition (LS-agents); the LS-e2e probe matrix reports it.
 "ddflow/surfaces/startcost_texts.py:role_tokens" = "LS-e2e"
 # Renders a document type from its sources (B-dt-sources); B-dt-ownership's render.py calls it.
@@ -29,6 +31,9 @@ baseline = 0
 "ddflow/api/quota.py:quota_show" = "BL-quotas"
 "ddflow/api/quota.py:quota_list" = "BL-quotas"
 "ddflow/api/quota.py:quota_forget" = "BL-quotas"
+# Usage meters: `ddflow quota snapshot` is their caller, in the command surface.
+"ddflow/services/meters_vendor.py:snapshot_statusline" = "B-quota-surfaces"
+"ddflow/services/meters_vendor.py:snapshot_stream_line" = "B-quota-surfaces"
 # One DAG module (B-uni-graph): the transitively reduced phase graph is its first caller.
 "ddflow/core/graph.py:transitive_reduction" = "B-rm-graph"
 # The upgrade manifest (B-upgrade.2-changes.1-manifest): the upgrade plan reads what changed
@@ -54,3 +59,8 @@ baseline = 0
 "ddflow/services/review_keys.py:key_hints" = "DX-reviewers-list-key-hint"
 # The `pins drivers --check` mergiraf keep/drop evaluation (tests/test_merge_drivers.py pins it).
 "ddflow/services/mergedrivers.py:keep_mergiraf" = "B-mergiraf-eval"
+# The driver-pack loaders (DRV-packs): `ddflow harness list|show|doctor` reads the layered set
+# and modelreg reads the model overlays; the api wiring lands with DRV-migrate.
+"ddflow/services/driverpacks.py:model_overlay_paths" = "DRV-migrate"
+"ddflow/services/driverpacks.py:load_descriptors" = "DRV-migrate"
+"ddflow/services/driverpacks.py:load_pack" = "DRV-migrate"

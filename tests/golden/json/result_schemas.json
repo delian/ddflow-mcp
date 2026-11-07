@@ -312,6 +312,9 @@
    "merge_gate_human",
    "worktree",
    "worktree_removed",
+   "awaiting_gates",
+   "gate_states",
+   "forced",
    "queued",
    "state",
    "position",
@@ -334,6 +337,9 @@
     "merge_gate_human": {},
     "worktree": {},
     "worktree_removed": {},
+    "awaiting_gates": {},
+    "gate_states": {},
+    "forced": {},
     "queued": {},
     "state": {},
     "position": {},
@@ -2880,6 +2886,57 @@
   },
   "array_schema": null
  },
+ "ddflow_vigil": {
+  "command": "vigil",
+  "schema": "vigil@1",
+  "shape": "object",
+  "payload": [
+   "bugs",
+   "stale_pins",
+   "lanes",
+   "lanes_total",
+   "interrupted",
+   "approvals_pending",
+   "pending_approval_ids",
+   "reviewers",
+   "reviewer_latency_ratio",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "vigil@1"
+    },
+    "bugs": {},
+    "stale_pins": {},
+    "lanes": {},
+    "lanes_total": {},
+    "interrupted": {},
+    "approvals_pending": {},
+    "pending_approval_ids": {},
+    "reviewers": {},
+    "reviewer_latency_ratio": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_lesson_show": {
+  "command": "lesson_show",
+  "schema": "lesson_show@1",
+  "shape": "nested",
+  "payload": "lesson",
+  "output_schema": null,
+  "array_schema": null
+ },
  "ddflow_phase_complete": {
   "command": "phase_complete",
   "schema": "phase_complete@1",
@@ -3018,6 +3075,41 @@
    },
    "additionalProperties": true
   },
+  "array_schema": null
+ },
+ "ddflow_session_inbox": {
+  "command": "session_inbox",
+  "schema": "session_inbox@1",
+  "shape": "object",
+  "payload": [
+   "messages",
+   "count"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "session_inbox@1"
+    },
+    "messages": {},
+    "count": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_digest": {
+  "command": "digest",
+  "schema": "digest@1",
+  "shape": "text",
+  "payload": "text",
+  "output_schema": null,
   "array_schema": null
  },
  "ddflow_sync": {

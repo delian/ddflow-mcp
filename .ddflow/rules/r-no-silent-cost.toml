@@ -1,0 +1,10 @@
+id = "r-no-silent-cost"
+title = "Spend is never zero by default: missing tokens or cost are unavailable"
+tags = ["agent-parity", "cost"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:24:12.917080+00:00"
+updated = "2026-11-03T16:24:12.917088+00:00"
+
+R-agent-parity-ops 5; extends r-unavailable-not-pass. RULE: a missing token or cost figure is recorded UNAVAILABLE, never 0, and a quota with no meter is reported as unmetered. CHECK: a test that a usage event without a source has status unavailable (B-quota-metering-ledger). VERIFY: what does this report when the meter is missing?

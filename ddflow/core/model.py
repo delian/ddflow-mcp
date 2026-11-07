@@ -156,6 +156,7 @@ from .handlers.sessions import (  # noqa: F401
     _session,
 )
 from .handlers.suggestions import SUGGESTION_HANDLERS
+from .handlers.tokens import TOKEN_HANDLERS
 from .handlers.waiting import WAITING_HANDLERS
 
 # The records live in `records.py` and the handlers in `handlers/`; every name is re-exported
@@ -211,6 +212,11 @@ from .upcasters import NewerPayload, upcast
 # ---------------------------------------------------------------------------------
 
 
+def _h_merge_forced(st: State, ev: Event) -> None:
+    """`merge.forced`: the record of a merge landed over unsettled required gates. It changes no
+    state: `worktree.merged` is what moved the item; this names the gates and the approval."""
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, work_kind(ev.data))),
@@ -242,6 +248,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     # distinction the projection cannot act on.
     "worktree.adopted": _h_worktree_adopted,
     "worktree.merged": _h_worktree_merged,
+    "merge.forced": _h_merge_forced,
     "worktree.removed": _h_worktree_removed,
     "pr.opened": _h_pr_opened,
     "pr.synced": _h_pr_synced,
@@ -298,6 +305,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **LANERELEASE_HANDLERS,
     # first writer: api/probe.py (`ddflow probe`)
     **PROBE_HANDLERS,
+    # first writer: services/auth.py (a redeemed pairing, a revocation)
+    **TOKEN_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

@@ -20,6 +20,7 @@ from conftest import run_cli
 
 from ddflow.api import setup as AS
 from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
 from ddflow.services import gates as G
 from ddflow.services import reviewer_trust as RT
 
@@ -98,7 +99,7 @@ def test_a_person_may_add_a_command_reviewer_and_it_still_needs_approval(proj, l
 def test_a_tool_written_http_reviewer_is_recorded(proj):
     out = AS.configure(proj, AS.ConfigEdit(append_toml=HTTP, local=True))
     assert out.exit == 0, out.reason
-    st = fold(AS._load(proj)[0].read_all())
+    st = fold(EventLog(proj).read_all())
     dig = RT.digest_of(proj, "lan")
     assert dig and dig in st.reviewer_writes, st.reviewer_writes
 
@@ -136,7 +137,7 @@ def test_approve_refuses_under_an_agent_identity(proj, monkeypatch, how):
         proj, "reviewers", "approve", "lan", agent="bot" if how == "--agent" else ""
     )
     assert code != 0 and "person" in err, err
-    assert not fold(AS._load(proj)[0].read_all()).reviewer_approvals
+    assert not fold(EventLog(proj).read_all()).reviewer_approvals
 
 
 def test_approve_is_not_an_mcp_tool():
@@ -243,7 +244,7 @@ def test_approve_lists_what_waits_and_keeps_the_note(proj, monkeypatch):
     assert code == 0 and "lan" in out, err
     code, out, err = run_cli(proj, "reviewers", "approve", "lan", "--note", "checked endpoint")
     assert code == 0 and "checked endpoint" in out, err
-    st = fold(AS._load(proj)[0].read_all())
+    st = fold(EventLog(proj).read_all())
     assert [a["note"] for a in st.reviewer_approvals.values()] == ["checked endpoint"]
     assert run_cli(proj, "reviewers", "approve")[0] == 2  # nothing waits any more
 
@@ -252,7 +253,7 @@ def test_approve_lists_what_waits_and_keeps_the_note(proj, monkeypatch):
 
 
 def _configured_authors(repo: Path) -> set[str]:
-    return {e.agent for e in AS._load(repo)[0].read_all() if e.kind == "reviewer.configured"}
+    return {e.agent for e in EventLog(repo).read_all() if e.kind == "reviewer.configured"}
 
 
 def test_configure_records_the_per_call_agent(proj):

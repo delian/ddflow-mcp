@@ -1,0 +1,10 @@
+id = "r-telemetry-unavailable-not-zero"
+title = "Unavailable is never zero: a missing measurement is unavailable, imported figures are labelled approximate"
+tags = ["observability", "safety"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:14:58.382841+00:00"
+updated = "2026-11-03T16:14:58.382847+00:00"
+
+R-observability 7; extends r-unavailable-not-pass to telemetry. RULE: a measurement that could not be taken (no meter, no usage block, collector off) is reported unavailable, never 0; anything imported (cost, tokens) is labelled approximate. CHECK: an unavailable-path test per metric (OBS-cost-gate). VERIFY: what does this metric show when its source is missing?

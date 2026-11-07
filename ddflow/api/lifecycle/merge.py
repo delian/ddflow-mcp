@@ -18,6 +18,7 @@ from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
 from ...services import leases as LS
+from ...services import merge_force as MF
 from ...services import pins_dirt as PD
 from ...services import pins_merge as PM
 from ...services.cleanup import (  # noqa: F401  (re-exported)
@@ -50,6 +51,90 @@ def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
     return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
 
 
+def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, agent: str):
+    """(assessment, stamp, refusal): a configuration problem refuses first, then what
+    `[merge].require_gates` makes of the unsettled gates.
+    The approval is spent inside `MF.authorise`, so the caller runs this after every other refusal."""
+    bad = F.problems(cfg)
+    if bad:
+        return None, None, O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+    gates = MF.assess(repo, cfg, st, item)
+    if not gates.refuses:
+        return gates, None, None
+    stamp, why = MF.authorise(log, cfg, item, gates, force=force, approval=approval, agent=agent)
+    if not why:
+        return gates, stamp, None
+    return (
+        gates,
+        None,
+        O.refused("worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)),
+    )
+
+
+def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str:
+    """ "" for a clean merge; else the note `_landed_anyway` has for a failure that landed."""
+    return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+
+
+def _wrong_base(st, it, wt, remote_base: str, item: str) -> O.Outcome | None:
+    """A refusal when the branch was forked from one line's base and would land on another's,
+    carrying the first line's history along (RESEARCH R17 review)."""
+    if it.base and it.base not in (wt.base, remote_base) and FS.stacked_on(st, it) is None:
+        return O.refused(
+            "worktree.merged",
+            f"{item}'s branch was forked from {it.base!r} but would land on {wt.base!r}. "
+            f"Merging would carry {it.base}'s history into {wt.base}. Re-file the work on "
+            f"the line it was forked for, or port it.",
+            id=item,
+            sha="",
+            dirty=[],
+        )
+    return None
+
+
+def _when(cond: Any, **fields: Any) -> dict[str, Any]:
+    """``fields`` when ``cond`` is truthy, else nothing: an optional part of a result."""
+    return fields if cond else {}
+
+
+def _kept_reason(kept: str, landed_note: str, back_failed: list[str]) -> str:
+    """Why the tree was kept and what went wrong after the landing, as one line."""
+    failed = ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else ""
+    return "; ".join(filter(None, [kept, landed_note, failed]))
+
+
+def _say_awaiting(say, item: str, gates) -> None:
+    """Say which required gates the landing left unsettled (`[merge].require_gates`)."""
+    if gates.unmet:
+        say(MF.warning(item, gates))
+
+
+def _ci_fields(ci_after: dict) -> dict:
+    """`ci` is kept for readers of the old key; it is the BASE's post-merge check, never the ci
+    gate (Bb55340e14b): `gate_states` has the gate."""
+    return {"ci": ci_after, "post_merge_check": ci_after} if ci_after else {}
+
+
+def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
+    """The `merge.forced` event of a landing that went over unsettled gates (no-op otherwise)."""
+    if stamp is not None:
+        log.append(
+            "merge.forced",
+            item,
+            {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
+        )
+
+
+def _commit_shards_before_merge(log, cfg, item: str) -> None:
+    """Commit the primary's uncommitted event shards before the git merge, unless the
+    strategy is a fast-forward: landing them on the target drifts it past the branch's fork
+    and makes ``git merge --ff-only`` report diverged branches instead of landing
+    (B83b4102c08). For ff-only the shards are committed after the landing, on the
+    fast-forwarded target, by the post-merge `commit_at` in `merge`."""
+    if cfg.worktree.merge_strategy != "ff-only":
+        EC.commit_at(log, cfg, "merge", f"merge {item}")
+
+
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
     """The first failed-gate blocker that stops ``item`` landing, or ""."""
     found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
@@ -69,6 +154,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     shell_cwd: Path | None = None,
     agent: str = "",
     allow_empty: bool = False,
+    force: bool = False,
+    approval: str = "",
     on_progress=None,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
@@ -150,18 +237,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if empty is not None:
         return empty
     remote_base = f"{cfg.flow.remote}/{wt.base}"
-    if it.base and it.base not in (wt.base, remote_base) and FS.stacked_on(st, it) is None:
-        # The branch was forked from one line's base and would land on another's,
-        # carrying the first line's history along (RESEARCH R17 review).
-        return O.refused(
-            "worktree.merged",
-            f"{item}'s branch was forked from {it.base!r} but would land on {wt.base!r}. "
-            f"Merging would carry {it.base}'s history into {wt.base}. Re-file the work on "
-            f"the line it was forked for, or port it.",
-            id=item,
-            sha="",
-            dirty=[],
-        )
+    if (wrong := _wrong_base(st, it, wt, remote_base, item)) is not None:
+        return wrong
     if cfg.flow.integration == "pr":
         if borrowed:
             return O.refused(
@@ -174,9 +251,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
                 dirty=[],
             )
         return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
-    bad = F.problems(cfg)
-    if bad:
-        return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+    # Last of the refusals: an agent's approval is spent here, so no refusal above is its cost.
+    gates, forced_by, over = _override(repo, cfg, log, st, item, force, approval, agent)
+    if over is not None:
+        return over
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     # The primary keeps its event shards uncommitted between doors; a branch that also
@@ -191,14 +269,16 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     # also moves the base by landing the event shards (B6b7e47955e); the range a caller saw
     # must not skip that commit and start from a base the caller never held (Be40e9c84d5).
     merge_since = W.rev(repo, wt.base)
-    EC.commit_at(log, cfg, "merge", f"merge {item}")
-    # Capture the pre-merge base AFTER the shard commit above: that commit moves the base
-    # (it lands the event shards on the primary), so a landing check against a rev read
-    # before it would misread a refused git merge the shard commit caused as "landed anyway".
+    _commit_shards_before_merge(log, cfg, item)
+    # Capture the pre-merge base AFTER the shard commit above, when one was made: that
+    # commit moves the base (it lands the event shards on the primary), so a landing check
+    # against a rev read before it would misread a refused git merge the shard commit caused
+    # as "landed anyway". Under ff-only the helper commits nothing, so `landed_before` equals
+    # `merge_since`: still the right read for `_landed_anyway`, just with no shard commit stepped.
     landed_before = W.rev(repo, wt.base)
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
-    landed_note = "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+    landed_note = _landed_note(repo, wt, landed_before, branch_head, r)
     if not r.ok and not landed_note:
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
@@ -235,10 +315,13 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             # The target's range this merge added -- what a cherry-pick port re-applies.
             "landed_before": landed_before,
             "landed_after": landed_after,
+            # Each gate's real state when it landed (Bb55340e14b), not the post-merge check's.
+            "gates": gates.states,
             # Landed from a branch the item does not own (claimed --no-worktree).
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
+    _record_forced(log, item, sha, gates, forced_by, agent)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.
     back_merged, back_failed = [], []
@@ -263,19 +346,11 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     removed_tree, kept_reason = _dispose_tree(
         repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
     )
-    kept_reason = "; ".join(
-        filter(
-            None,
-            [
-                kept_reason,
-                landed_note,
-                ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else "",
-            ],
-        )
-    )
+    kept_reason = _kept_reason(kept_reason, landed_note, back_failed)
 
     say = on_progress or (lambda _line: None)
     say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    _say_awaiting(say, item, gates)
     say(_ci_notice(repo, cfg))
     ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=merge_since)
     say(
@@ -287,7 +362,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     return O.ok(
         "worktree.merged",
         id=item,
-        **({"ci": ci_after} if ci_after else {}),
+        **_ci_fields(ci_after),
+        gate_states=gates.states,
+        awaiting_gates=gates.awaiting(),
+        forced=forced_by is not None,
         sha=sha,
         branch_head=branch_head,
         base=wt.base,
@@ -302,7 +380,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         # The merge gate is a person's to clear here; nothing was recorded for it.
         merge_gate_human=human_gate,
         lease_released=freed,
-        **({"export_refresh": refreshed} if refreshed else {}),
+        **_when(refreshed, export_refresh=refreshed),
         **committed,
     )
 

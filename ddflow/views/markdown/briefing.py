@@ -28,13 +28,43 @@ from ...services.pipeline_diff import effective_pipeline
 from .report import _HOLDING, _RECOVERY_SHOWN, _UNHELD, _UNMEASURED, recovery_band
 
 
+def _own_recovery(bands: dict[str, list], item: str) -> list:
+    """The focused item's recovery entries, in band order (usually one: a stale_running
+    item is exactly the crash this brief resumes)."""
+    own = []
+    for what, band in bands.items():
+        for r in band:
+            if r.item == item:
+                own.append((what, r))
+    return own
+
+
+def _append_entry(out: list[str], what: str, r, state: State | None, cfg: Config | None) -> None:
+    """One recovery entry's name line and, with a live state, its resume status line."""
+    out.append(f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}")
+    if state is not None:
+        out.append(_resume_line(state, cfg, r, what))
+
+
 def _brief_recovery(
-    out: list[str], recovery: list, *, state: State | None = None, cfg: Config | None = None
+    out: list[str],
+    recovery: list,
+    *,
+    state: State | None = None,
+    cfg: Config | None = None,
+    item: str = "",
 ) -> list[str]:
-    """The RESUME block: every recoverable entry, with what was interrupted and whether
+    """The RESUME block: the recoverable entries, with what was interrupted and whether
     ddflow has resumed it -- rendered OUTSIDE the budget, so `brief_max_tokens` never
     cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns only the
-    lines THIS call appended (not the lines ``out`` already held: duck #1)."""
+    lines THIS call appended (not the lines ``out`` already held: duck #1).
+
+    When a brief is ABOUT one item AND that item is itself among the recoverable
+    entries, the item's own entry renders FIRST and every OTHER entry collapses to one
+    count line, so reserving the slice cannot crowd the focused item's own "Current"
+    detail into a ``[N more cut]`` (B-brief-recover-eats-budget). An item that has no
+    recovery entry of its own keeps the per-band list: those are OTHER items' crashes,
+    and warning about them first is the slice's job (DX-recover-brief-slice)."""
     start = len(out)
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
@@ -60,14 +90,26 @@ def _brief_recovery(
         "holds finished work that exists nowhere else.",
         "",
     ]
-    for what, band in bands.items():
-        for r in band[:_RECOVERY_SHOWN]:
-            out.append(f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}")
-            if state is not None:
-                out.append(_resume_line(state, cfg, r, what))
-        if len(band) > _RECOVERY_SHOWN:
-            more = len(band) - _RECOVERY_SHOWN
-            out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
+    own = _own_recovery(bands, item)
+    if own:
+        # A brief about the crashed item itself: its own entry first, the rest counted.
+        # The item's own entries are capped too (a stray/repeated scan could yield several
+        # for one item): the same _RECOVERY_SHOWN bound the every-band loop applies.
+        for what, r in own[:_RECOVERY_SHOWN]:
+            _append_entry(out, what, r, state, cfg)
+        # "other" = entries for a DIFFERENT item: subtract every own entry, not the shown
+        # slice, so a repeated own scan is never relabelled as an unrelated recovery.
+        others = sum(len(band) for band in bands.values()) - len(own)
+        if others:
+            label = "entry" if others == 1 else "entries"
+            out.append(f"- _{others} other recoverable {label}: `ddflow recover` lists them._")
+    else:
+        for what, band in bands.items():
+            for r in band[:_RECOVERY_SHOWN]:
+                _append_entry(out, what, r, state, cfg)
+            if len(band) > _RECOVERY_SHOWN:
+                more = len(band) - _RECOVERY_SHOWN
+                out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
     if count:
         out.append(f"- _{count}_")
     out.append("")
@@ -587,8 +629,9 @@ def _assemble(
     ``prefix`` (the head and the RESUME slice) is never cut (DX-recover-brief-slice): a
     squeeze takes from the budgeted sections, never from recoverable work. When even the
     note no longer fits after the prefix (a RESUME slice that alone fills the budget),
-    the note is dropped rather than the slice: each trimmed section's own marker already
-    says where its rest is."""
+    the slice stays and the note goes while a trimmed section's own marker still says
+    where its rest is. With no marker left the note stays over the cap: the backstop can
+    cut the body to nothing, and a pack that ends at its head must still say it was cut."""
     set_aside = len(charter) + 2 if charter else 0
     cap = chars - set_aside
     prefix_text = "\n".join(prefix)
@@ -611,7 +654,7 @@ def _assemble(
         text = prefix_text + ("\n" + body if body else "")
         trimmed = True
     if trimmed:
-        text += note if len(text) + len(note) <= cap else ""
+        text += note if len(text) + len(note) <= cap or SECTION_TRIMMED not in body else ""
     return text + ("\n\n" + charter if charter else "")
 
 
@@ -654,7 +697,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     sections.pop(0)
     part = dict(sections)
     reserved: list[str] = []
-    _brief_recovery(reserved, recovery or [], state=state, cfg=cfg)
+    _brief_recovery(reserved, recovery or [], state=state, cfg=cfg, item=item)
     _brief_jobs(part["jobs"], state, item, agent)
     if item:
         _brief_current(

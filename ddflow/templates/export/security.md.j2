@@ -1,0 +1,56 @@
+# Security Policy
+
+{% call region("versions") %}
+## Supported Versions
+
+{% if versions %}
+| Version | Status | Latest release | Known vulnerabilities |
+| --- | --- | --- | --- |
+{% for v in versions %}
+| {{ v.line | md_escape }}.x | {{ v.status | capitalize }} | {{ v.latest | md_escape }}{% if v.released %} ({{ v.released }}){% endif %} | {% if v.vulnerable %}{% for m in v.vulnerable %}{{ m | md_escape }}{% if not loop.last %}; {% endif %}{% endfor %}{% else %}none recorded{% endif %} |
+{% endfor %}
+
+A release is marked when a recorded security issue was found on or before its tag and the
+fix is not in it. The newest release is also marked for any issue no release has fixed yet, even
+one found after it was tagged. A line last tagged before an issue was found is not marked: that
+says nothing is known, not that it is safe.
+{% else %}
+No version has been released yet.
+{% endif %}
+{% endcall %}
+
+{% call region("known-issues") %}
+## Known Issues
+
+{% if open or fixed %}
+{% if open %}
+### Open
+
+{% for r in open %}
+- {{ r.id | md_escape }} ({{ r.severity | md_escape }}{% if r.scope %}, {{ r.scope | md_escape }}{% endif %}), found {{ r.found }}{% if r.title %}: {{ r.title | md_escape }}{% endif %}
+
+{% endfor %}
+
+{% endif %}
+{% if fixed %}
+### Fixed
+
+{% for r in fixed %}
+- {{ r.id | md_escape }} ({{ r.severity | md_escape }}{% if r.scope %}, {{ r.scope | md_escape }}{% endif %}), fixed in {{ r.fixed_in | md_escape }}{% if r.by_date %} (by date){% endif %}{% if r.title %}: {{ r.title | md_escape }}{% endif %}
+
+{% endfor %}
+
+{% endif %}
+{% else %}
+None recorded.
+
+{% endif %}
+Source: the bugs recorded as security issues in this project's log. Dependency advisories and
+security-pass findings are not recorded there, so they are not covered here.
+{% endcall %}
+
+## Reporting a Vulnerability
+
+TODO (project owner): replace this paragraph. Say how to report a vulnerability privately (a
+contact, or the repository's private vulnerability reporting link) and how soon a reporter can
+expect an answer. ddflow keeps the two sections above up to date and never writes this one again.

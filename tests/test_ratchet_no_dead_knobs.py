@@ -52,12 +52,6 @@ KNOWN_UNREAD: dict[str, str] = {
     "swarm.seed_entry_chars": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
     "swarm.seed_item_chars": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
     "swarm.seed_handoff_chars": "read dynamically via seedpack.Knobs.from_config (getattr(cfg.swarm, 'seed_' + field.name))",
-    # Declared for the lane-launch scheduler tick (D-swarm-answers Q2/Q6), which is a later
-    # phase: lanes/launch.py::launch takes an already-loaded Template and launch_template.load
-    # has no caller yet, so nothing reads this knob until that tick lands. Deliberately kept
-    # on the allowlist rather than a fake read behind dead code (the roborev standards
-    # finding on fix-B-ci-main-constants-ratchet).
-    "swarm.launch_templates_file": "declared for the pending lane-launch scheduler tick; no reachable code reads it yet",
     # Declared for the `pins drivers --check` mergiraf evaluation (mergedrivers.keep_mergiraf);
     # that caller is not yet wired, so nothing reads it yet.
     "pins.mergiraf_keep_pct": "declared for the `pins drivers --check` mergiraf keep/drop evaluation; keep_mergiraf has no caller yet",
@@ -187,6 +181,12 @@ def test_no_knob_is_dead():
 def test_the_allowlist_only_shrinks():
     stale = [k for k in KNOWN_UNREAD if k not in dead_knobs()]
     assert not stale, f"allowlisted knobs that are now read; remove them: {stale}"
+
+
+def test_the_merge_knob_require_gates_is_read():
+    """`[merge].require_gates` is consumed as `cfg.merge.require_gates`
+    (merge_force.mode_of), not a bare `getattr` the name-based scan cannot see."""
+    assert dead_knobs(["merge.require_gates"]) == []
 
 
 def test_the_detector_resolves_section_aliases():

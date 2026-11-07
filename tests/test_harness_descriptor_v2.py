@@ -25,12 +25,30 @@ def p(extra: str = ""):
     return parse(BASE + extra, "acme")
 
 
+#: Shipped descriptors that declare v2 sections, read from their vendor's docs. Every other one
+#: still loads with them absent, which means not verified. A new one fails below, so it is noticed.
+V2_DECLARED = {"grok"}
+
+
 def test_shipped_descriptors_still_load_with_v2_not_verified():
     shipped = harnessreg.load()
     assert shipped
+    declared = {h.id for h in shipped if h.detect or h.headless or h.autonomy}
+    assert declared == V2_DECLARED, (sorted(declared - V2_DECLARED), sorted(V2_DECLARED - declared))
     for h in shipped:
-        assert h.detect is None and h.headless is None and h.autonomy is None
+        if h.id not in V2_DECLARED:
+            assert h.detect is None and h.headless is None and h.autonomy is None
         assert h.reserved == {}
+
+
+def test_a_shipped_v2_section_keeps_its_values_and_its_source():
+    grok = next(h for h in harnessreg.load() if h.id == "grok")
+    assert grok.detect.process_names == ("grok",)
+    assert grok.headless.argv == ("grok", "-p") and grok.headless.autonomy == "always-approve"
+    assert grok.autonomy.profiles == {"always-approve": "--always-approve"}
+    for key in ("detect.process_names", "headless.argv", "autonomy.profiles"):
+        fact = grok.facts[key]
+        assert fact["s"] == "documented" and fact["src"].startswith("https://docs.x.ai/build/")
 
 
 def test_all_v2_sections_parse():

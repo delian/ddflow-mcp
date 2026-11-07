@@ -239,7 +239,7 @@ def test_a_mark_that_cannot_be_written_never_fails_the_append(clone, monkeypatch
     def boom(*_a, **_k):
         raise OSError("read-only file system")
 
-    monkeypatch.setattr(logmod, "APPEND_HOOKS", [boom])
+    monkeypatch.setattr(logmod._eventlog, "APPEND_HOOKS", [boom])
     log = logmod.EventLog(clone, AGENT)
     before = _lines(clone)
     log.append("task.added", "T9", {"title": "x", "globs": []})

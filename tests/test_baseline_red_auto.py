@@ -87,13 +87,52 @@ def test_a_failure_in_a_file_the_item_changed_is_not_accepted(repo) -> None:
     assert not GA.accepted(st, st.items["T1"], "unit_tests", _cfg(repo)).ok
 
 
+def test_a_whole_tree_guard_selected_by_governing_does_not_block_auto_accept(
+    repo, monkeypatch
+) -> None:
+    """B-baseline-reach-blocks-red-main-fix: an item whose ci selects the architecture guards
+    only because they declare ``GOVERNS = ("ddflow/**", ...)`` -- the whole tree -- did not
+    cause a guard that also fails on the base. The guard's test file is reached trivially, so
+    its presence in the selection must not block auto-accept."""
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected("tests/test_architecture_guards.py", "governs ddflow/**", 1)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_architecture_guards.py::test_ratchet"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_whole_tree_guard_the_item_changed_still_blocks_auto_accept(repo, monkeypatch) -> None:
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["tests/test_architecture_guards.py"],
+        tests=[Selected("tests/test_architecture_guards.py", "changed", 0)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_architecture_guards.py::test_ratchet"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_architecture_guards.py" in auto["why"]
+
+
 def test_the_base_is_run_once_per_sha_and_shared(repo) -> None:
     _project(repo)
     calls: list[str] = []
 
     def run(gdef, cwd):
         calls.append(gdef.command)
-        return "failed", {"failed_tests": [ID]}
+        # The failure text is what the cache hangs the round-trip on: an entry with no text
+        # is re-run to spot a new offender, so without it the 2nd call would not hit "cached".
+        return "failed", {"failed_tests": [ID], "failed_reasons": {ID: "assert 1 == 2"}}
 
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
     a = BR.on_base(repo, "main", gdef, [ID], run, 3600)
@@ -144,6 +183,31 @@ def test_an_open_bug_naming_the_ids_is_linked_not_refiled(repo) -> None:
     assert GB._names(f"see {ID}: fails.", ID) and GB._names(f"[{ID}] red", ID)
     assert not GB._names(f"{ID}_b is red", ID) and not GB._names(f"{ID}/helpers.py", ID)
     assert GB._linked(repo, "worker", [ID[:-1]]) == ""  # the start of a longer id is not the id
+
+
+def test_a_run_whose_ids_are_each_owned_by_a_bug_is_linked_not_refiled(repo) -> None:
+    """B-baseline-red-filer-piles-up: `_linked` deduped only when ONE open bug named every id,
+    so a run whose failing set differs by a single test filed a whole new bug even though each
+    id already had its own open bug. An id the set of open bugs already names (any one of them)
+    is owned; only ids no open bug names are new."""
+    from ddflow.api import gate_baseline as GB
+
+    _project(repo)
+    a = ID
+    b = "tests/test_y.py::test_b"
+    run_cli(repo, "bug", "found", "--summary", f"{a} fails on main", agent="worker")
+    run_cli(repo, "bug", "found", "--summary", f"{b} fails on main", agent="worker")
+    st = _state(repo)
+    assert len(st.bugs) == 2
+    # A single bug naming the single id (the old case) still links.
+    assert GB._linked(repo, "worker", [a]) in st.bugs
+    # Each id owned by a DIFFERENT open bug: the set is still fully owned -- nothing new.
+    got = GB._linked(repo, "worker", [a, b])
+    assert got, "a set whose ids each already have an open bug must not read as unlinked"
+    assert got in st.bugs
+    # An id no open bug names leaves the set new.
+    c = "tests/test_z.py::test_c"
+    assert GB._linked(repo, "worker", [a, c]) == ""
 
 
 def _ci_project(repo, n: int, *, extra_fail: str = "") -> None:

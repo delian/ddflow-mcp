@@ -176,7 +176,7 @@ COMMANDS: tuple[Command, ...] = (
         },
         description="Report a bug the moment you find it, BEFORE fixing it. Recording it first "
         "makes the fix accountable: `ddflow_bug_fixed` refuses to close one without "
-        "a regression test. A hunt that records nothing looks like one that found nothing.",
+        "a regression test.",
         call=lambda repo, a, agent: _api().bug_found(
             repo,
             summary=a.get("summary", "") or "",
@@ -557,8 +557,7 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("session", "prompt"),
         tool="ddflow_session_prompt",
-        description="Record the operator's prompt verbatim. This is what makes the project "
-        "reconstructible from the log alone if everything else is lost. Secrets are "
+        description="Record the operator's prompt verbatim. Secrets are "
         "redacted before anything touches disk. Call it once per operator turn.",
         call=lambda repo, a, agent: _api().session_prompt(
             repo,
@@ -631,12 +630,26 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("session", "inbox"),
+        tool="ddflow_session_inbox",
+        tier="all",
+        summary="read this lane's delivered inbox messages again",
+        description="Read the lane's delivered messages again: `ddflow heartbeat` delivers and "
+        "RETAINS them for [lease].inbox_retain_s, so a piped heartbeat that lost the text can "
+        "be shown whole here, fenced as untrusted data. Local to this machine.",
+        call=lambda repo, a, agent: _api().session_inbox(repo, agent=agent),
+        payload=("messages", "count"),
+        render=lambda out, a: (
+            "\n\n".join(m["fenced"] for m in out.data["messages"]) or "no retained inbox messages"
+        ),
+        params=(),
+    ),
+    Command(
         path=("session", "note"),
         tool="ddflow_session_note",
         description="Record something that happened during a session which is neither an "
         "operator prompt nor a decision — a surprise, a dead end, why you changed "
-        "approach. It goes into the reconstruction alongside the prompts, and a "
-        "dead end recorded is a dead end nobody walks down twice.",
+        "approach. It goes into the reconstruction alongside the prompts.",
         call=lambda repo, a, agent: _api().session_note(
             repo,
             a.get("session", "") or "",

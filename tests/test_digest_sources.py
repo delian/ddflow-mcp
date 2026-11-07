@@ -105,6 +105,22 @@ def test_every_command_resolves_against_the_real_parser():
         assert not (subs and stray and rest[0] == stray[0]), (s.kind, stray)
 
 
+def test_the_ask_chat_route_names_a_real_command():
+    """B-digest-route-names-missing-command: the ASK chat route told the lead to run
+    `ddflow digest --ask`, but `digest` was not a CLI or MCP verb, so the operator queue
+    had no surface. The route must name the real verb, whose `--ask` flag is real."""
+    parser, _rest = _resolve(S.ASK)
+    assert parser.prog != build_parser().prog, "the ASK route names no real verb"
+    known = {o for a in parser._actions for o in a.option_strings}
+    assert "--ask" in known, "the ASK route's --ask flag must resolve"
+    # every operator-owned kind's chat route names a real verb too (not just ASK/APPROVAL_ASK)
+    for s in S.SOURCES:
+        if s.owner != S.OPERATOR:
+            continue
+        parser, _rest = _resolve(s.chat)
+        assert parser.prog != build_parser().prog, (s.kind, "chat route names no real verb")
+
+
 def test_collectors_resolve_once_the_queue_module_exists():
     """OD-queue lands `queue.py`; from then on every named collector must exist and be callable."""
     import importlib

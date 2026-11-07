@@ -68,6 +68,9 @@ class DocKind:
     schema_version: int = 1
     #: Extra header attributes the kind records for a render (the roadmap's ``since=``).
     header: Callable[[Any, Any], dict[str, str]] | None = None
+    #: Other places this document may already live, tried in order when the default target
+    #: does not exist and no path was configured (``ops.target_of``).
+    also_at: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.update_mode not in UPDATE_MODES:
