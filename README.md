@@ -1122,7 +1122,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 584 knobs.
+cadences, and the rest of the 585 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5411,7 +5411,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 584): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 585): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5695,7 +5695,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=2a81e2fa2665 -->
+<!-- ddflow:begin README/tools sha=cd05aead4b61 -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5711,17 +5711,17 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_ship` (5 actions): `version_show` (was `ddflow_version_show`), `version_cut` (was `ddflow_version_cut`), `promote_add` (was `ddflow_promote_add`), `promote_deployed` (was `ddflow_promote_deployed`), `promote_status` (was `ddflow_promote_status`)
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
 - `ddflow_task` (12 actions): `phase_add` (was `ddflow_phase_add`), `split` (was `ddflow_split`), `add` (was `ddflow_task_add`), `research_add` (was `ddflow_research_add`), `update` (was `ddflow_update`), `remove` (was `ddflow_remove`), `resolve` (was `ddflow_resolve`), `phase_close` (was `ddflow_phase_close`), `batch` (was `ddflow_batch`), `fold` (was `ddflow_task_fold`), `rename` (was `ddflow_rename`), `phase_complete` (was `ddflow_phase_complete`)
-- `ddflow_memory` (10 actions): `lesson_verify` (was `ddflow_lesson_verify`), `lesson_add` (was `ddflow_lesson_add`), `lesson_search` (was `ddflow_lesson_search`), `recall` (was `ddflow_recall`), `similar` (was `ddflow_similar`), `dupes` (was `ddflow_dupes`), `link` (was `ddflow_link`), `add` (was `ddflow_memory_add`), `list` (was `ddflow_memory_list`), `forget` (was `ddflow_memory_forget`)
+- `ddflow_memory` (11 actions): `lesson_verify` (was `ddflow_lesson_verify`), `lesson_add` (was `ddflow_lesson_add`), `lesson_search` (was `ddflow_lesson_search`), `recall` (was `ddflow_recall`), `similar` (was `ddflow_similar`), `dupes` (was `ddflow_dupes`), `link` (was `ddflow_link`), `add` (was `ddflow_memory_add`), `list` (was `ddflow_memory_list`), `forget` (was `ddflow_memory_forget`), `lesson_show` (was `ddflow_lesson_show`)
 - `ddflow_bug` (5 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`), `dedupe` (was `ddflow_bug_dedupe`)
 - `ddflow_doctor` (10 actions): `recover` (was `ddflow_recover`), `cleanup` (was `ddflow_cleanup`), `replay` (was `ddflow_replay`), `rebuild` (was `ddflow_rebuild`), `verify` (was `ddflow_verify`), `bisect` (was `ddflow_bisect`), `hooks` (was `ddflow_hooks`), `check`, `precommit` (was `ddflow_precommit`), `record` (was `ddflow_record`)
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
-- `ddflow_session` (8 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`), `ask` (was `ddflow_session_ask`), `asks` (was `ddflow_session_asks`), `withdraw` (was `ddflow_session_withdraw`), `message` (was `ddflow_session_message`)
+- `ddflow_session` (9 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`), `ask` (was `ddflow_session_ask`), `asks` (was `ddflow_session_asks`), `withdraw` (was `ddflow_session_withdraw`), `message` (was `ddflow_session_message`), `inbox` (was `ddflow_session_inbox`)
 - `ddflow_lease` (7 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`), `probe` (was `ddflow_probe`), `watch` (was `ddflow_watch`)
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 135 MCP tools by their own name (the flat list): 34 in the `core` tier, 50 more in `standard`, 51 more in `all`</summary>
+<details><summary>All 137 MCP tools by their own name (the flat list): 34 in the `core` tier, 51 more in `standard`, 52 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5816,6 +5816,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_dupes` | standard | 'IS ANYTHING FILED TWICE?' -- the near-duplicate PAIRS already in the log, skipping pairs already linked or… |
 | What the project remembers | `ddflow_lesson_add` | core | Record a lesson so it is never re-learned. |
 | What the project remembers | `ddflow_lesson_search` | standard | Search past lessons by relevance (BM25). |
+| What the project remembers | `ddflow_lesson_show` | standard | Read ONE lesson in full by its id — its rule, why and how. |
 | What the project remembers | `ddflow_lesson_verify` | all | Re-scan every lesson that declared a code `pattern` and report the sites where it has REAPPEARED. |
 | What the project remembers | `ddflow_link` | standard | Settle a near-duplicate pair: say how record `subject` relates to record `target`. |
 | What the project remembers | `ddflow_memory_add` | standard | Remember ONE operational fact about this machine, repository or working state ('this box has 8 H200s', 'use… |
@@ -5827,6 +5828,7 @@ drift. The groups are the ones `ddflow help` prints.
 | What the project remembers | `ddflow_session_ask` | all | File an approval request for a gated command (complete --force, gate skip, claim --force ...); returns its… |
 | What the project remembers | `ddflow_session_asks` | all | Your own approval requests and their state (pending, approved, spent). |
 | What the project remembers | `ddflow_session_end` | core | Close a session with a summary of what it achieved. |
+| What the project remembers | `ddflow_session_inbox` | all | Read the lane's delivered messages again: `ddflow heartbeat` delivers and RETAINS them for… |
 | What the project remembers | `ddflow_session_message` | all | Put a message in a lane's inbox: the receiver sees it, fenced as untrusted data, at its next wait, watch or… |
 | What the project remembers | `ddflow_session_note` | core | Record something that happened during a session which is neither an operator prompt nor a decision — a… |
 | What the project remembers | `ddflow_session_prompt` | core | Record the operator's prompt verbatim. |
@@ -5995,7 +5997,7 @@ declared once and persists — see
 
 ## Configuration
 
-584 knobs across 53 sections, every one documented in place and listed, with its default
+585 knobs across 53 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6062,8 +6064,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=66f2a630a1ba -->
-<details><summary>All 584 knobs across 53 sections</summary>
+<!-- ddflow:begin README/knobs sha=1e83a3db2c63 -->
+<details><summary>All 585 knobs across 53 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6368,6 +6370,7 @@ long default is left to `ddflow config --explain`.
 | `lease.inbox_max_chars` | `2000` |  |
 | `lease.inbox_max_pending` | `50` |  |
 | `lease.inbox_ttl_s` | `86400` |  |
+| `lease.inbox_retain_s` | `86400` |  |
 | `lease.wait_cap_s` | `1800` |  |
 | `lease.reclaim_policy` | `"report"` | `report` \| `auto` |
 | `lease.resume_own` | `true` |  |

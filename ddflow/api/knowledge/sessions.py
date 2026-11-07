@@ -103,6 +103,16 @@ def session_message(
     return O.ok("session.message", to=to, sent=True, wake=msg.reason, id=msg.id)
 
 
+def session_inbox(repo: Path, *, agent: str = "") -> O.Outcome:
+    """The lane's retained delivered messages, fenced as untrusted data, oldest first. The
+    read verb of bug B-inbox-message-gone-after-heartbeat: `ddflow heartbeat` delivers and
+    retains a message (`[lease].inbox_retain_s`), and this re-reads it after a piped
+    heartbeat lost the text."""
+    log, cfg, _st = _load(repo, agent)
+    msgs = IB.delivered(repo, cfg.agent.id or log.agent_id, retain_s=cfg.lease.inbox_retain_s)
+    return O.ok("session.inbox", messages=IB.view(msgs), count=len(msgs))
+
+
 def session_adopt_orphans(repo: Path, *, agent: str = "") -> O.Outcome:
     """Attach prompts and notes recorded with no session id to the nearest session."""
 
