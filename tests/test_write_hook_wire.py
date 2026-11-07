@@ -30,7 +30,7 @@ def test_verdict_names_the_holder_and_the_options(repo, monkeypatch):
     assert code == CK.REFUSE
     assert "agent-2" in msg
     assert "ddflow wait" in msg
-    assert "`ddflow suggest" in msg
+    assert "`ddflow suggest ...`" in msg
     assert "ddflow task add" in msg
 
 
