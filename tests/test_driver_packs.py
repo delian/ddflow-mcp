@@ -78,21 +78,29 @@ def test_non_process_keys_are_not_operator_only():
 
 def test_a_project_descriptor_may_add_an_agent(tmp_path):
     _project(tmp_path, ("demo.toml", _GOOD))
-    assert "demo" in {h.id for h in DP.load_descriptors(tmp_path)}
+    assert "demo" in {h.id for h in DP.load_descriptors(tmp_path, user_home=tmp_path / "user")}
 
 
 def test_a_project_descriptor_may_not_add_launch_argv(tmp_path):
     launching = _GOOD + '[headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n'
     _project(tmp_path, ("demo.toml", launching))
     with pytest.raises(DP.PackError, match=r"headless\.argv"):
-        DP.load_descriptors(tmp_path)
+        DP.load_descriptors(tmp_path, user_home=tmp_path / "user")
 
 
 def test_a_project_descriptor_may_not_add_probe_argv(tmp_path):
     probing = _GOOD + '\n[probe]\nargv = [["demo", "--version"]]\n'
     _project(tmp_path, ("demo.toml", probing))
     with pytest.raises(DP.PackError, match="probe"):
-        DP.load_descriptors(tmp_path)
+        DP.load_descriptors(tmp_path, user_home=tmp_path / "user")
+
+
+def test_a_machine_local_descriptor_may_not_add_launch_argv(tmp_path):
+    d = tmp_path / ".ddflow" / "local" / "harnesses.d"
+    d.mkdir(parents=True)
+    (d / "demo.toml").write_text(_GOOD + '[headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n')
+    with pytest.raises(DP.PackError, match=r"headless\.argv"):
+        DP.load_descriptors(tmp_path, user_home=tmp_path / "user")
 
 
 # -- layers ----------------------------------------------------------------

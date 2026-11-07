@@ -9,10 +9,11 @@ way (``models.toml`` under the user, project and local layers).
 
 Security split (D-DRV-Q5): a descriptor from a cloned project may add detection, paths
 and facts, but never a key that runs a process. ``[headless] argv`` and ``[probe]`` are
-operator-only: they are read only from the operator layers (packaged, user, machine-local,
-company enforced), so a cloned project that smuggles a launch command is refused at load,
-not run. A company pack is data only and pinned by digest (the CM-packs pattern): a bare
-URL without a digest is refused, a mismatched digest keeps the content out.
+operator-only: they are read only from the shipped set and the operator's user layer
+(``~/.config/ddflow/harnesses.d``), never from a per-repo descriptor (project or local),
+so a cloned -- or force-added -- repo file that smuggles a launch command is refused at
+load, not run. A company pack is data only and pinned by digest (the CM-packs pattern): a
+bare URL without a digest is refused, a mismatched digest keeps the content out.
 
 Schema versioned (D-DRV-5): each file carries ``schema = N``. A newer schema is
 "unavailable: upgrade ddflow", never half-read; upgrade is the existing upgrade manifest's
@@ -121,21 +122,23 @@ def operator_only_violations(raw: Any) -> list[str]:
 
 
 def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
-    """Parse one layer's descriptors. The project layer (a clone) may not set an
-    operator-only key; the check reads the raw table so an explicit empty ``argv`` is a
-    refusal, not a default."""
+    """Parse one layer's descriptors. A per-repo layer (``project`` or ``local``) may not
+    set an operator-only key: both live under the repo, so a project could ``git add -f``
+    either, and a key that runs a process must reach a descriptor only from the shipped set
+    or the operator's own user layer. The check reads the raw table so an explicit empty
+    ``argv`` is a refusal, not a default."""
     if not directory.is_dir():
         return []
     out: list[Harness] = []
     for p in sorted(directory.glob("*.toml")):
         text = p.read_text(encoding="utf-8")
         require_known_schema(text)
-        if layer == "project":
+        if layer in ("project", "local"):
             bad = operator_only_violations(tomllib.loads(text))
             if bad:
                 raise PackError(
-                    f"{p.name}: a cloned project may add detection, paths and facts, never a "
-                    f"key that runs a process; operator-only {', '.join(bad)}"
+                    f"{p.name}: a per-repo descriptor may add detection, paths and facts, "
+                    f"never a key that runs a process; operator-only {', '.join(bad)}"
                 )
         out.append(harnessreg.parse(text, p.stem))
     return out
