@@ -175,8 +175,9 @@ def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any
 
     A bare URL without a digest is refused (remote content is data, never instructions, and
     never silently changed). With a digest, the fetched or read content is checked against
-    it and a mismatch keeps the content out. With a local path and no digest the file is
-    parsed as-is. Returns the raw TOML tables."""
+    it and a mismatch keeps the content out; a newer ``schema`` is "unavailable: upgrade
+    ddflow", never half-read. A company pack is data only: a key that runs a process
+    (``[headless] argv``, ``[probe]``) is refused. Returns the raw TOML tables."""
     if _is_url(str(source)):
         if not digest:
             raise PackError("a bare URL pack without a digest is refused; pin the digest first")
@@ -188,4 +189,10 @@ def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any
         got = content_digest(data)
         if got != digest:
             raise PackError(f"pack digest mismatch: pinned {digest[:12]}…, content {got[:12]}…")
-    return tomllib.loads(data if isinstance(data, str) else data.decode("utf-8"))
+    text = data if isinstance(data, str) else data.decode("utf-8")
+    require_known_schema(text)
+    raw = tomllib.loads(text)
+    bad = operator_only_violations(raw)
+    if bad:
+        raise PackError(f"a company pack is data only; it may not set {', '.join(bad)}")
+    return raw

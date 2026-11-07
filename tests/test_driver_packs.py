@@ -98,7 +98,14 @@ def test_a_project_descriptor_may_not_add_probe_argv(tmp_path):
 # -- layers ----------------------------------------------------------------
 
 
-def test_layers_merge_with_later_winning(tmp_path):
+def test_a_user_layer_descriptor_is_loaded(tmp_path):
+    user = tmp_path / "user"
+    (user / "harnesses.d").mkdir(parents=True)
+    (user / "harnesses.d" / "demo.toml").write_text(_GOOD)
+    assert "demo" in {h.id for h in DP.load_descriptors(tmp_path, user_home=user)}
+
+
+def test_project_wins_over_user(tmp_path):
     user = tmp_path / "user"
     (user / "harnesses.d").mkdir(parents=True)
     (user / "harnesses.d" / "demo.toml").write_text(
@@ -110,7 +117,7 @@ def test_layers_merge_with_later_winning(tmp_path):
 
 
 def test_shipped_descriptors_load_with_no_extra_layers(tmp_path):
-    assert DP.load_descriptors(tmp_path) == harnessreg.load()
+    assert DP.load_descriptors(tmp_path, user_home=tmp_path / "user") == harnessreg.load()
 
 
 # -- packs -----------------------------------------------------------------
@@ -132,6 +139,20 @@ def test_a_local_pack_with_a_mismatched_digest_is_refused(tmp_path):
     p.write_text(_GOOD)
     with pytest.raises(DP.PackError, match="digest mismatch"):
         DP.load_pack(str(p), digest=hashlib.sha256(b"other").hexdigest())
+
+
+def test_a_company_pack_is_data_only(tmp_path):
+    p = tmp_path / "pack.toml"
+    p.write_text(_GOOD + '[headless]\nautonomy = "basic"\nargv = ["demo", "-p"]\n')
+    with pytest.raises(DP.PackError, match="data only"):
+        DP.load_pack(str(p), digest=DP.content_digest(p.read_text()))
+
+
+def test_a_pack_with_a_newer_schema_is_refused(tmp_path):
+    p = tmp_path / "pack.toml"
+    p.write_text("schema = 99\n" + _GOOD)
+    with pytest.raises(DP.PackError, match="upgrade ddflow"):
+        DP.load_pack(str(p), digest=DP.content_digest(p.read_text()))
 
 
 def test_content_digest_is_sha256_hex():
