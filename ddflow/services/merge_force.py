@@ -41,9 +41,9 @@ class Assessment:
 
 
 def mode_of(cfg: Any) -> str:
-    """`[merge].require_gates`; `warn` while the section is not registered in `Config`."""
-    sect = getattr(cfg, "merge", None)
-    return getattr(sect, "require_gates", "warn") or "warn"
+    """`[merge].require_gates`: `warn` lands and names the unmet gates; `refuse` needs
+    `--force` (a person's alone, an agent's with an operator approval)."""
+    return cfg.merge.require_gates or "warn"
 
 
 def assess(repo: Path, cfg: Any, st: Any, item: str) -> Assessment:

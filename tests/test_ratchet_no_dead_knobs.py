@@ -183,6 +183,12 @@ def test_the_allowlist_only_shrinks():
     assert not stale, f"allowlisted knobs that are now read; remove them: {stale}"
 
 
+def test_the_merge_knob_require_gates_is_read():
+    """`[merge].require_gates` is consumed as `cfg.merge.require_gates`
+    (merge_force.mode_of), not a bare `getattr` the name-based scan cannot see."""
+    assert dead_knobs(["merge.require_gates"]) == []
+
+
 def test_the_detector_resolves_section_aliases():
     """`lc = cfg.loops` then `lc.max_gate_flaps` is a read, and must not be reported."""
     src = "lc = cfg.loops\nif flips < lc.max_gate_flaps: pass"

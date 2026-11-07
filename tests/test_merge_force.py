@@ -182,6 +182,17 @@ def test_the_knob_is_registered_and_defaults_to_warn(repo):
     assert "warn" in line
 
 
+def test_the_knob_reads_refuse_from_config_and_agent_force_still_refuses(repo):
+    """`mode_of` reads the knob through `cfg.merge.require_gates` (not a bare getattr), so
+    setting it to `refuse` makes an agent `--force` without an approval refuse."""
+    _claimed(repo)
+    run_cli(repo, "config", "merge.require_gates", "refuse")
+    out = _merge(repo, force=True)
+    assert out.exit == 3
+    assert "--approval request" in out.reason
+    assert not _events(repo, "worktree.merged")
+
+
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
     assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "")
