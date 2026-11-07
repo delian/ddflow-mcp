@@ -2483,6 +2483,10 @@
       lease.inbox_ttl_s = 86400   [default]
           Seconds an undelivered inbox message stays before it is dropped, so a lane
           that never reads cannot keep an inbox forever. 0 keeps them until read.
+      lease.inbox_retain_s = 86400   [default]
+          Seconds a DELIVERED inbox message is kept after delivery, so an agent can
+          read it again once a piped `ddflow heartbeat` lost it (bug B-inbox-message-
+          gone-after-heartbeat). `ddflow session inbox` shows them; 0 keeps them.
       lease.wait_cap_s = 1800   [default]
           Longest one `wait` or `watch` call sleeps unless the caller names `--max-s`;
           a longer ask is cut and the caller is told to resume with the token. Below

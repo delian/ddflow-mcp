@@ -45,13 +45,27 @@ from .planning import plan_for
 from .ready import DEFAULT_CHECK_RECOVERY, _unknown_phase
 
 
-def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
-    """The brief's section on who the agent holds up, "" when nobody waits."""
+def _waiting_on_you(repo: Path, st, cfg, held_ids: list[str]) -> str:
+    """The brief's section on who the agent holds up, "" when nobody waits.
+
+    Two registries feed it: the deliberate `ddflow wait` registrations (a live process),
+    and the standing `lease.waiting` records a refused widening left behind. The second is
+    the overtake: with ``[lease].wait_queue`` off, widening onto a file a standing waiter
+    asked for SUCCEEDS (there is no queue to jump), so the only trace is here -- the holder
+    must be told it just overtook that waiter, not shown a silent grant
+    (B-widen-over-standing-wait-silent)."""
+    now = time.time()
     lines = [
         f"- {w['agent']} has waited {clock.fmt_age(w['waiting_s'])} for the files {iid} holds"
         + (f" (for {w['item']})" if w["item"] else "")
         for iid in held_ids
         for w in _waiters(repo, iid)
+    ]
+    lines += [
+        f"- {w['holder']} has waited {clock.fmt_age(now - w['since'])} for the files {iid} "
+        f"holds" + (f" (for {w['item']})" if w["item"] else "")
+        for iid in held_ids
+        for w in WG.waiting_for(st, cfg, iid, now)
     ]
     if not lines:
         return ""
@@ -398,7 +412,7 @@ def brief(
     text = reports_block + contest_text + text
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
-    text += _waiting_on_you(repo, held_ids)
+    text += _waiting_on_you(repo, st, cfg, held_ids)
     text += _waits_block(log, st, cfg)
     text += _queue_block(repo, st, cfg)
     text += _progress_block(log, cfg, st, held_ids)

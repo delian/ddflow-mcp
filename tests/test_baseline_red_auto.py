@@ -87,13 +87,52 @@ def test_a_failure_in_a_file_the_item_changed_is_not_accepted(repo) -> None:
     assert not GA.accepted(st, st.items["T1"], "unit_tests", _cfg(repo)).ok
 
 
+def test_a_whole_tree_guard_selected_by_governing_does_not_block_auto_accept(
+    repo, monkeypatch
+) -> None:
+    """B-baseline-reach-blocks-red-main-fix: an item whose ci selects the architecture guards
+    only because they declare ``GOVERNS = ("ddflow/**", ...)`` -- the whole tree -- did not
+    cause a guard that also fails on the base. The guard's test file is reached trivially, so
+    its presence in the selection must not block auto-accept."""
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected("tests/test_architecture_guards.py", "governs ddflow/**", 1)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_architecture_guards.py::test_ratchet"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_whole_tree_guard_the_item_changed_still_blocks_auto_accept(repo, monkeypatch) -> None:
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["tests/test_architecture_guards.py"],
+        tests=[Selected("tests/test_architecture_guards.py", "changed", 0)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_architecture_guards.py::test_ratchet"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_architecture_guards.py" in auto["why"]
+
+
 def test_the_base_is_run_once_per_sha_and_shared(repo) -> None:
     _project(repo)
     calls: list[str] = []
 
     def run(gdef, cwd):
         calls.append(gdef.command)
-        return "failed", {"failed_tests": [ID]}
+        # The failure text is what the cache hangs the round-trip on: an entry with no text
+        # is re-run to spot a new offender, so without it the 2nd call would not hit "cached".
+        return "failed", {"failed_tests": [ID], "failed_reasons": {ID: "assert 1 == 2"}}
 
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
     a = BR.on_base(repo, "main", gdef, [ID], run, 3600)

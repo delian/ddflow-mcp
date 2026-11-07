@@ -123,6 +123,8 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+
+
 def _commit_shards_before_merge(log, cfg, item: str) -> None:
     """Commit the primary's uncommitted event shards before the git merge, unless the
     strategy is a fast-forward: landing them on the target drifts it past the branch's fork
