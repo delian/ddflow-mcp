@@ -293,10 +293,13 @@ def test_show_caps_a_leaf_map_the_string_clip_leaves_under_the_threshold():
     string clip alone would not shrink it (B-show-mcp-result-over-ceiling)."""
     body = {
         "state": "open",
-        "gates": {"critic": {"outcome": "passed", "evidence": {f"k{i}": "x" * 160 for i in range(200)}}},
+        "gates": {
+            "critic": {"outcome": "passed", "evidence": {f"k{i}": "x" * 160 for i in range(200)}}
+        },
     }
     out, _ = B.bound_show(body, {})
-    assert len(out["gates"]["critic"]["evidence"]) == B.FINDINGS_SHOWN
+    kept = out["gates"]["critic"]["evidence"]
+    assert set(kept) == {f"k{i}" for i in range(B.FINDINGS_SHOWN)}
     assert out["truncated"]["findings_cut"] == 200 - B.FINDINGS_SHOWN
     assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
 
