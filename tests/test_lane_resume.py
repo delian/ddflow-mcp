@@ -109,7 +109,7 @@ class TestEmittedInstructionKeepsTheLaneAlive:
         assert "keep YOUR OWN session" in text
         assert "session goal" in text
         assert "re-loop and heartbeat" in text
-        assert "You return a final result" in text
+        assert "Your ONE final result" in text
         # The unfixed instruction told the lane NOT to use a session goal, which is the
         # exact advice that completes the lane and drops the lobby -- it must be gone.
         assert not re.search(r"Do NOT wrap the mission in a session goal", text)

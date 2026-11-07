@@ -10,8 +10,10 @@ alive until the scope drains: wrap the wave loop in your own session goal (a goa
 background subagent, never a foreground `goal start` in the operator's chat, which is what
 blocks them). Your claim survives only while you keep heartbeating, and a subagent wakeup
 you schedule then leave behind is DROPPED the moment you return a final result — so a WAIT
-never returns one (re-loop and heartbeat instead, Bbc611c0165). You return a final result
-exactly once: the DONE report at an empty scope, or a `question` for the operator.
+never returns one (re-loop and heartbeat instead, Bbc611c0165). Your ONE final result is
+the DONE report at an empty scope. A `question` for the operator is not a final result: it
+SUSPENDS your run (your goal stays alive, so in-flight claims stay heartbeat-held) and
+resumes when the answer comes back.
 
 1. The mission is one countdown: drive `ddflow next` in scope to empty. The scope is a
    phase id, the open bugs, or an item id (one per `/ddflow-wave` run). Start your own
@@ -43,8 +45,9 @@ exactly once: the DONE report at an empty scope, or a `question` for the operato
    and stop), or the question tool requires a person: an operator approval
    (`ddflow ... --approval request` needs an answer only a person gives), a policy
    decision, an un-settleable review finding (`ddflow review triage` could not close it),
-   or explicit operator input. Everything else — including any wait — carries the wave
-   forward.
+   or explicit operator input. A question SUSPENDS your run to the operator and resumes on
+   the answer; it does not end the run and does not lapse a claim. Everything else —
+   including any wait — carries the wave forward.
 6. When a `question` answer comes back, feed it straight to the corresponding ddflow
    approval/decision record and continue the wave.
 7. At the end of every agent run — including a partial stop at a question gate — at phase
