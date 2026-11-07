@@ -61,6 +61,8 @@ def _ast_unchanged(tree, base: str, paths: list[str]) -> bool:
     for p in paths:
         if not p.endswith(".py"):
             return False
+        if _mode(tree, base, p) != _mode(tree, "HEAD", p):
+            return False
         before = _show(tree, base, p)
         after = _show(tree, "HEAD", p)
         if before is None or after is None or not _py_ast_equal(before, after):
@@ -101,6 +103,17 @@ def _show(tree, ref: str, path: str) -> bytes | None:
     if not r.ok or r.out_bytes is None:
         return None
     return r.out_bytes
+
+
+def _mode(tree, ref: str, path: str) -> str | None:
+    """The file mode at ``ref`` (the leading ``100644``/``100755`` of ``git ls-tree``), or None
+    when git cannot read it. A mode-only change (``chmod +x``) changes executability, which the
+    blob-comparing ``_show`` cannot see, so it is compared here: a mode that moved is a
+    behavior change, never a format-only claim."""
+    r = W.git(tree, "ls-tree", ref, "--", path)
+    if not r.ok or not r.out:
+        return None
+    return r.out.split(" ", 1)[0]
 
 
 def _is_format_or_comment(tree, base: str, paths: list[str]) -> bool:

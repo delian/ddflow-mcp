@@ -84,7 +84,7 @@ def test_a_logic_change_does_not_accept_the_trivial_tier(repo):
     it = _worktree_change(repo, "src/mod.py", "x = 1\n", "x = 2\n")
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
     s = _pipeline(repo, cfg)
-    assert "rubber_duck" in s.pipeline or "critic" in s.pipeline or "ci" in s.pipeline, s.pipeline
+    assert "rubber_duck" in s.pipeline and "critic" in s.pipeline and "ci" in s.pipeline, s.pipeline
     assert CO.needs_independent_reviewer(it, cfg, CO.changed_paths(repo, it), repo)
 
 
@@ -101,6 +101,22 @@ def test_a_shebang_change_is_not_trivial(repo):
     which interpreter runs the file, so it must never read as trivial."""
     cfg = _with_ci(Config.load(repo))
     it = _worktree_change(repo, "src/mod.py", "#!/usr/bin/env python3\nx = 1\n", "#!/usr/bin/env python2\nx = 1\n")
+    assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
+
+
+def test_a_mode_only_change_is_not_trivial(repo):
+    """critic: a `chmod +x` (mode 100644 -> 100755) changes executability, not the bytes, so
+    it must never read as trivial."""
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    _commit(repo, "src/mod.py", "x = 1\n")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    subprocess.run(["git", "-C", str(tree), "add", "--chmod=+x", "src/mod.py"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "chmod +x"], check=True)
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
 
 
