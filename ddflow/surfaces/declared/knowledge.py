@@ -30,7 +30,7 @@ _DECISION_FIELDS = (
 )
 
 
-def _contested_decision_text(d) -> str:
+def _contested_record_text(d, fields, globs_label="") -> str:
     """Every rival definition whole, each from its own event: never one merged record."""
     lines = [
         f"{d['id']} — CONTESTED: {len(d['contested'])} definitions from different agents; "
@@ -40,12 +40,16 @@ def _contested_decision_text(d) -> str:
         x = r["data"]
         lines.append(f"\n  definition {r['event']} by {r['agent']} (lamport {r['lamport']})")
         lines.append(f"    title {x.get('title', '')!r}")
-        for label, key in _DECISION_FIELDS:
+        for label, key in fields:
             if x.get(key):
                 lines.append(f"    {label}: {x[key]}")
-        if x.get("globs"):
-            lines.append(f"    Governs: {', '.join(x['globs'])}")
+        if globs_label and x.get("globs"):
+            lines.append(f"    {globs_label}: {', '.join(x['globs'])}")
     return "\n".join(lines)
+
+
+def _contested_decision_text(d) -> str:
+    return _contested_record_text(d, _DECISION_FIELDS, globs_label="Governs")
 
 
 def _decision_text(out, a) -> str:
@@ -101,18 +105,7 @@ _LESSON_FIELDS = (
 def _lesson_text(out, a) -> str:
     l = out.data["lesson"]
     if l.get("contested"):
-        lines = [
-            f"{l['id']} — CONTESTED: {len(l['contested'])} definitions from different agents; "
-            f"none is in force. `ddflow resolve {l['id']} --keep <event-id|agent>` settles it"
-        ]
-        for r in l["contested"]:
-            x = r["data"]
-            lines.append(f"\n  definition {r['event']} by {r['agent']} (lamport {r['lamport']})")
-            lines.append(f"    title {x.get('title', '')!r}")
-            for label, key in _LESSON_FIELDS:
-                if x.get(key):
-                    lines.append(f"    {label}: {x[key]}")
-        return "\n".join(lines)
+        return _contested_record_text(l, _LESSON_FIELDS)
     head = f"{l['id']} — {l['title']}"
     if l.get("superseded_by"):
         head += f" (superseded by {l['superseded_by']})"
