@@ -45,16 +45,15 @@ ORCHESTRATION_LOOPS = frozenset(
 #: resume a completing lane schedules for after that turn is dropped by the harness at
 #: completion, so such a loop MUST name an ``orchestration.keepalive`` -- how the lane keeps
 #: its own session alive across waits -- instead of relying on a self-scheduled wakeup
-#: (Bbc611c0165). ``self-paced-command`` runs until it stops itself, so it is its own keepalive.
-BACKGROUND_LOOPS = ("background-subagents", "subtask", "second-window")
+#: (Bbc611c0165). ``self-paced-command`` and ``second-window`` run until they stop
+#: themselves (the loop primitive is its own keepalive), so they are exempt.
+COMPLETABLE_LOOPS = ("background-subagents", "subtask")
 
-#: How a lane keeps its OWN session alive across the wave loop's waits, so it never
+#: How a lane keeps its OWN session alive across a completable loop's waits, so it never
 #: completes prematurely and its claim lease cannot lapse while work or a wait is in flight.
 ORCHESTRATION_KEEPALIVES = frozenset(
     {
         "session-goal",  # the lane wraps the wave loop in its own session goal (alive across turns)
-        "self-paced-command",  # a self-paced slash command that runs until it stops itself
-        "second-window",  # the second window / terminal the loop runs in, alive until the scope drains
         "in-process-wait",  # the lane blocks in a live `ddflow wait` process until the scope drains
         "persistent-process",  # a persistent background process (inherit/persistent lifetime)
     }
@@ -239,7 +238,7 @@ def _require_orchestration_keepalive(table: dict, where: str) -> None:
     must name a keepalive that keeps its own session alive across waits -- or its claim
     lapses to INTERRUPTED (Bbc611c0165)."""
     loop = table.get("loop")
-    if loop in BACKGROUND_LOOPS and not table.get("keepalive"):
+    if loop in COMPLETABLE_LOOPS and not table.get("keepalive"):
         raise DescriptorError(
             f"{where}: orchestration.keepalive names how its {loop!r} loop keeps the "
             "lane's own session alive across waits; without one the lane can complete and "
