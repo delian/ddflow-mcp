@@ -35,10 +35,11 @@ def _by_value_reexports() -> dict[str, set[str]]:
     return out
 
 
-def _log_package_bindings(tree: ast.Module) -> set[str]:
-    """The local names a test file binds to ``ddflow.infra.log`` itself (``import
-    ddflow.infra.log as L`` or ``from ddflow.infra import log as L``)."""
-    names: set[str] = set()
+def _log_package_bindings(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """``(log_names, parent_names)``: local names a test file binds to ``ddflow.infra.log``
+    itself and to its parent ``ddflow.infra`` (so ``setattr(infra.log, …)`` is caught too)."""
+    log_names: set[str] = set()
+    parent_names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -47,12 +48,19 @@ def _log_package_bindings(tree: ast.Module) -> set[str]:
                     # then reached as ``ddflow.infra.log`` (an attribute chain), handled by
                     # ``_is_log_package`` -- not a name we can key off here.
                     if alias.asname:
-                        names.add(alias.asname)
-        elif isinstance(node, ast.ImportFrom) and node.module == "ddflow.infra":
-            for alias in node.names:
-                if alias.name == "log":
-                    names.add(alias.asname or "log")
-    return names
+                        log_names.add(alias.asname)
+                elif alias.name == "ddflow.infra" and alias.asname:
+                    parent_names.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "ddflow.infra":
+                for alias in node.names:
+                    if alias.name == "log":
+                        log_names.add(alias.asname or "log")
+            elif node.module == "ddflow":
+                for alias in node.names:
+                    if alias.name == "infra":
+                        parent_names.add(alias.asname or "infra")
+    return log_names, parent_names
 
 
 def _dotted_path(node: ast.expr) -> str | None:
@@ -66,14 +74,20 @@ def _dotted_path(node: ast.expr) -> str | None:
     return None
 
 
-def _is_log_package(target: ast.expr, log_names: set[str]) -> bool:
-    """Whether ``target`` is ``ddflow.infra.log`` (spelled out, bound to a local alias, or
-    passed as the module-path string pytest imports) rather than one of its submodules or an
-    unrelated module."""
+def _is_log_package(
+    target: ast.expr, log_names: set[str], parent_names: set[str]
+) -> bool:
+    """Whether ``target`` is ``ddflow.infra.log`` (spelled out, bound to a local alias,
+    reached through a parent alias like ``infra.log``, or passed as the module-path string
+    pytest imports) rather than one of its submodules or an unrelated module."""
     if isinstance(target, ast.Name) and target.id in log_names:
         return True
     if isinstance(target, ast.Constant) and isinstance(target.value, str):
         return target.value == "ddflow.infra.log"
+    if isinstance(target, ast.Attribute) and target.attr == "log":
+        base = _dotted_path(target.value)
+        if base in parent_names:
+            return True
     return _dotted_path(target) == "ddflow.infra.log"
 
 
@@ -84,7 +98,7 @@ def _dotted_string_name(dotted: str) -> tuple[str, str]:
 
 
 def _patched_reexport(
-    node: ast.Call, log_names: set[str], reexports: dict[str, set[str]]
+    node: ast.Call, log_names: set[str], parent_names: set[str], reexports: dict[str, set[str]]
 ) -> str | None:
     """The re-export name a ``monkeypatch.setattr`` rebinds on the log PACKAGE, or ``None``
     when the call is not such a patch. The name is the string it sets (``"APPEND_HOOKS"``)
@@ -98,17 +112,19 @@ def _patched_reexport(
         # ``setattr(obj, "name", value)`` / ``setattr(target=…, name=…, value=…)``: ``name``
         # is the attribute being set.
         if isinstance(name, ast.Constant) and isinstance(name.value, str):
-            return name.value if name.value in reexports and _is_log_package(target, log_names) else None
+            on_log = name.value in reexports and _is_log_package(target, log_names, parent_names)
+            return name.value if on_log else None
         # A variable attribute name on the package re-spells any re-export and cannot be
         # resolved statically: flag it so the author spells the submodule patch out.
-        return "<dynamic>" if _is_log_package(target, log_names) else None
+        return "<dynamic>" if _is_log_package(target, log_names, parent_names) else None
     # Two-arg form. ``setattr("ddflow.infra.log.<name>", value)`` gives the target path as a
     # dotted string; ``setattr(L, "APPEND_HOOKS")`` deletes the package attribute.
     if isinstance(target, ast.Constant) and isinstance(target.value, str):
         path_str, attr = _dotted_string_name(target.value)
         return attr if attr in reexports and path_str == "ddflow.infra.log" else None
     if isinstance(name, ast.Constant) and isinstance(name.value, str):
-        return name.value if name.value in reexports and _is_log_package(target, log_names) else None
+        on_log = name.value in reexports and _is_log_package(target, log_names, parent_names)
+        return name.value if on_log else None
     return None
 
 
@@ -116,12 +132,12 @@ def _offenders(src: str, reexports: dict[str, set[str]]) -> list[tuple[int, str]
     """``(line, name)`` for each monkeypatch in ``src`` rebinding a re-export on the log
     package itself rather than the sibling submodule that actually reads the name."""
     tree = ast.parse(src)
-    log_names = _log_package_bindings(tree)
+    log_names, parent_names = _log_package_bindings(tree)
     bad = []
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "setattr"):
             continue
-        attr = _patched_reexport(node, log_names, reexports)
+        attr = _patched_reexport(node, log_names, parent_names, reexports)
         if attr is not None:
             bad.append((node.lineno, attr))
     return bad
@@ -149,6 +165,8 @@ _PACKAGE_PATCH_FORMS = [
     'monkeypatch.setattr(target="ddflow.infra.log", name="APPEND_HOOKS", value=[])',
     # deletion form: omitting ``value`` deletes the package attribute only
     'import ddflow.infra.log as L\nmonkeypatch.setattr(L, "APPEND_HOOKS")',
+    # parent-import spelling: ``from ddflow import infra`` reaches the package as ``infra.log``
+    'from ddflow import infra\nmonkeypatch.setattr(infra.log, "APPEND_HOOKS", [])',
 ]
 
 
