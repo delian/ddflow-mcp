@@ -45,6 +45,10 @@ _WRAPPERS = frozenset(
 )  # fmt: skip
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
+#: What may come right before a `#` that begins a comment: a blank, or an operator
+#: (`)`, `}`, `(`, `{`, `<`, `>`, `;`, `&`, `|`) -- bash starts a comment after any of
+#: these, not only after a blank (B-forbidden-guard-multiline-quote-bypass `)`/`}` finding).
+_COMMENT_BOUNDARY = " \t\r\n;|&(){}<>"
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
@@ -177,7 +181,7 @@ def _case_end(text: str, n: int, k: int) -> int:
     depth = 1
     k += 4
     while k < n and depth:
-        if text[k] == "#" and text[k - 1] in " \t\r\n;|&":
+        if text[k] == "#" and text[k - 1] in _COMMENT_BOUNDARY:
             k2 = text.find("\n", k)
             k = k2 if k2 >= 0 else n
         elif text[k] == "'":
@@ -206,7 +210,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
         c = text[k]
         if c == closer:
             return k
-        if c == "#" and (k == j or text[k - 1] in " \t\r\n;|&"):
+        if c == "#" and (k == j or text[k - 1] in _COMMENT_BOUNDARY):
             k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
             k = k2 if k2 >= 0 else n
         elif closer == ")" and _bare_word(text, n, k, "case"):
@@ -270,7 +274,7 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
         if c == "\n":
             cut[i] = True
             i += 1
-        elif c == "#" and (i == 0 or text[i - 1] in " \t\r\n;|&"):
+        elif c == "#" and (i == 0 or text[i - 1] in _COMMENT_BOUNDARY):
             k2 = text.find("\n", i)  # a comment: its quotes are data to the end of the line
             i = k2 if k2 >= 0 else n
         elif c == "'":

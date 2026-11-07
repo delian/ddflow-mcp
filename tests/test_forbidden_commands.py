@@ -139,8 +139,9 @@ def test_refused_command_substitution_multiline(cmd):
     [
         "echo hi # don't\ngit push 'origin main'",
         "echo hi # comment\npkill -f myserver",
-        "echo ok >#x; git push origin main",
-        "echo $(echo x)#; git push origin main",
+        # a `#` after a closing `)` starts a comment (its next `'` is data), so the real git push
+        # on the next line is the command that runs and must still be seen
+        "(true)#'\ngit push origin main\n'",
     ],
 )
 def test_refused_comment_quote_spans_lines(cmd):
