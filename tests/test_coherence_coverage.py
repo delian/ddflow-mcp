@@ -86,8 +86,6 @@ WRITERS_EXEMPT: dict[str, str] = {
     "environment is enforced instead",
     "services/items.py:add_task": "the one task writer: every caller passes the settled check "
     "or the reason there is none, and this scan follows the calls to it",
-    "services/gates/skip_followup.py:_file": "a generated gate-skip follow-up task: its "
-    "(item, gate) is its own dedupe key, enforced fire-once by `_open`",
     "services/importer/_apply.py:_add_imported_tasks": "tasks carry dependencies, so the plan does "
     "not withhold one (`_dedupe_found` checks the knowledge kinds)",
     "services/importer/_apply.py:apply_import": "the plan was de-duplicated against the queue with "
@@ -128,8 +126,6 @@ CLI_VERBS: dict[tuple[str, ...], str] = {
     + EXEMPT["session.prompt"],
     ("reviewers", "add"): _CONFIG,
     ("companions", "add"): _CONFIG,
-    ("harness", "add"): "a harness descriptor skeleton written into .ddflow/local/harnesses by "
-    "the operator: machine-local config, not an authored record the duplicate check covers",
     ("prompts", "eject"): "copies the shipped prompt templates verbatim; there is no "
     "prompt-template add",
 }
