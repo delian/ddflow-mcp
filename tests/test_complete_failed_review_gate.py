@@ -319,6 +319,19 @@ def test_the_merge_refusal_names_a_fix_round_free_when_the_knob_is_on(repo, tmp_
     assert any("--force --reason" in b for b in blocks), blocks
 
 
+def test_no_unresolved_failure_returns_no_blocker(repo, tmp_path):
+    """B-merge-refusal-says-delta-is-free-of-max-rounds review: with no unresolved review
+    failure the function must return no blocker (the ``rows == []`` guard)."""
+    from ddflow.config import Config
+    from ddflow.services.gates import failed_review_blockers
+
+    _setup(repo, tmp_path)
+    assert api.review(repo, gate="critic", item="T1", branch="feat").data["outcome"] == "failed"
+    api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="ran it: fine")
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert failed_review_blockers(st, Config.load(repo), "T1", None) == []
+
+
 def test_a_request_merged_by_a_person_over_a_failed_review_gate_is_not_completed(
     pr_repo,  # noqa: F811
 ):
