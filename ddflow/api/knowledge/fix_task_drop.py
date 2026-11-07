@@ -40,11 +40,11 @@ def _finished(t, mine: bool) -> bool:
     """The fix task has nothing for a bug close to remove: done or abandoned; not open
     and not the closer's own (it ran under someone else); or already landed through
     ddflow's own merge (B-bug-fixed-removes-merged-fix-task) -- releasing at merge puts
-    it back to OPEN, so the first two miss it. A finished task is kept, not removed."""
+    it back to OPEN, so the first two miss it. `merged_sha` is the one marker merge (and
+    PR sync) sets, so it alone names a landed task; `landed_after` is NOT one (a task
+    definition may carry one without a merge). A finished task is kept, not removed."""
 
-    return (
-        t.terminal or (t.state != OPEN and not mine) or bool(t.merged_sha) or bool(t.landed_after)
-    )
+    return t.terminal or (t.state != OPEN and not mine) or bool(t.merged_sha)
 
 
 def _drop_fix_task_unchecked(
