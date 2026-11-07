@@ -121,4 +121,7 @@ def __getattr__(name: str):
 #: A star-import reads the module `__dict__` or `__all__`, never `__getattr__`: name every
 #: public name (real globals plus the section classes) so `from ddflow.config import *`
 #: binds the section classes, as the eager re-export it replaced did (review finding).
-__all__ = sorted({n for n in globals() if not n.startswith("_")} | set(_SECTION_CLASS_BY_NAME))
+#: PLE0605: dynamic by design -- the section classes exist only after every module's
+#: `declare()` ran, so no literal can name them; a literal here is the hand-kept list
+#: B-config-section-needs-hub-edit removed (r-extension-contract).
+__all__ = sorted({n for n in globals() if not n.startswith("_")} | set(_SECTION_CLASS_BY_NAME))  # noqa: PLE0605
