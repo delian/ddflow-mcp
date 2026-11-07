@@ -133,7 +133,7 @@ class FakeFs:
             self.files[d] = self.files.pop(s)
             return
         if d.startswith(s + "/"):  # only a directory moves into its own subtree
-            raise ValueError(f"cannot move {s} into itself ({d})")
+            raise OSError(f"cannot move a directory into itself ({d})")
         self._relocate_dir(s, d)
 
     def rmtree(self, path: Path | str, *, ignore_errors: bool = True) -> None:
