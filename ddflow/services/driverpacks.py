@@ -121,14 +121,18 @@ def operator_only_violations(raw: Any) -> list[str]:
     return out
 
 
-def _read_bounded(path: Path) -> str:
-    """One descriptor file, bounded (a layer directory is untrusted: a symlink to /dev/zero
-    would hang an unbounded read). The cap is the same one a fetched pack has."""
-    with path.open("rb") as f:
-        data = f.read(MAX_PACK_BYTES + 1)
+def _read_bytes_bounded(path: Path) -> bytes:
+    """One pack or descriptor file, bounded: ``read(max+1)`` ends a /dev/zero or growing
+    file instead of reading until OOM. The cap is the same one a fetched pack has."""
+    data = path.open("rb").read(MAX_PACK_BYTES + 1)
     if len(data) > MAX_PACK_BYTES:
         raise PackError(f"{path.name}: larger than {MAX_PACK_BYTES} bytes, not a descriptor file")
-    return data.decode("utf-8")
+    return data
+
+
+def _read_bounded(path: Path) -> str:
+    """``_read_bytes_bounded`` decoded: the text of one descriptor file."""
+    return _read_bytes_bounded(path).decode("utf-8")
 
 
 def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
@@ -194,7 +198,7 @@ def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any
             raise PackError("a bare URL pack without a digest is refused; pin the digest first")
         data = _fetch(str(source))
     else:
-        data = Path(source).read_bytes()
+        data = _read_bytes_bounded(Path(source))
     digest = digest.lower() if digest else digest
     if digest:
         got = content_digest(data)
