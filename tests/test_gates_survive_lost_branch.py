@@ -74,3 +74,13 @@ def test_research_and_rules_stay_fresh_within_the_same_branch(adopted):
     _git(adopted, "commit", "-qm", "more work")
     head = _git(adopted, "rev-parse", "HEAD").strip()
     assert _stale(adopted, head) == []
+
+
+def test_a_squashed_landing_is_not_a_lost_branch(adopted):
+    # A squash merge lands the SAME work in a commit whose parent is main, not the item's
+    # branch: the recorded commit is not an ancestor of what landed, but the branch was not
+    # rebuilt. The landed-after commit must not read as a lost branch.
+    _git(adopted, "checkout", "-q", "--detach", "HEAD~1")
+    _git(adopted, "commit", "-qm", "squash the item into main", "--allow-empty")
+    squash = _git(adopted, "rev-parse", "HEAD").strip()
+    assert _stale(adopted, squash) == []

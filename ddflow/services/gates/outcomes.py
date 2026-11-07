@@ -479,7 +479,16 @@ def _lost_branch_notes(
     Content drift within the same branch is NOT marked here -- those gates are *supposed*
     to precede the edits that follow them (`gates.evidence_required` handles content for
     the gates held to it above).
+
+    Only the item's own branch is checked. `landed` is "HEAD" or "" for the worktree/
+    branch the gates were recorded on (`gate status`, `sync`, a pre-landing `complete`) --
+    there, a non-ancestor commit IS a rebuilt branch. A landed-after commit (a squash or
+    rebased landing) is skipped: its commits descend from the target, not the item's
+    branch, so the same ancestry miss would read the landing itself as a rebuilt branch
+    and fire the exact always-fires warning this module guards against.
     """
+    if landed not in ("", "HEAD"):
+        return []
     out = []
     required = set(cfg.gates.evidence_required)
     for gid, rec in sorted(it.gates.items()):
