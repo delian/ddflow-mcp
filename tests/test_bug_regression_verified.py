@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import pass_pipeline, run_cli
 
 from ddflow import api
 from ddflow.infra.log import EventLog
@@ -83,12 +83,21 @@ def _case(repo: Path) -> Path:
     return wt
 
 
+def _merge(repo: Path) -> None:
+    """Merge `_case`'s fix task for real, so `bug_fixed` checks its landing pair (the
+    `landed_before..landed_after` range) rather than a worktree -- the state `complete
+    --regression-test` sees."""
+    pass_pipeline(repo, "fix-B1")
+    code, out, err = run_cli(repo, "merge", "fix-B1")
+    assert code == OK, (out, err)
+
+
 def _fixed_events(repo: Path) -> list[dict]:
     return [e.data for e in EventLog(repo).read_all() if e.kind == "bug.fixed"]
 
 
 def test_a_test_that_fails_without_the_fix_and_passes_with_it_is_verified(repo):
-    _case(repo)
+    _merge(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "verified", out.data
@@ -102,6 +111,7 @@ def test_a_test_that_passes_on_the_pre_fix_tree_is_refused(repo):
     wt = _case(repo)
     (wt / "tests" / "test_always.py").write_text(ALWAYS_PASSES)
     _commit(wt, "an always-passing test")
+    _merge(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_always.py::test_always")
     assert out.exit == REFUSED, out
     assert "pre-fix tree" in out.reason
@@ -114,6 +124,16 @@ def test_a_bug_whose_fix_task_is_not_in_a_worktree_is_could_not_run(repo):
     out = api.bug_fixed(repo, "B2", regression_test="tests/test_f.py::test_f")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "could-not-run", out.data
+
+
+def test_a_bug_whose_fix_has_not_landed_is_refused(repo):
+    """A claimed fix task whose branch is NOT merged must not close: `bug fixed` would
+    report fixed work that is absent from the base (B-bug-fixed-before-fix-lands)."""
+    _case(repo)  # B1's fix task is claimed in a worktree; its branch is NOT merged
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
+    assert out.exit == REFUSED, out
+    assert "not landed" in out.reason, out.reason
+    assert not _fixed_events(repo), "a fix that has not landed must not close the bug"
 
 
 def test_the_override_needs_a_reason_and_is_recorded(repo):
@@ -195,6 +215,7 @@ def test_a_test_that_fails_on_the_fixed_tree_is_refused(repo):
     wt = _case(repo)
     (wt / "tests" / "test_never.py").write_text(FAILS_ALWAYS)
     _commit(wt, "a test that never passes")
+    _merge(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_never.py::test_never")
     assert out.exit == REFUSED, out
     assert "fixed tree" in out.reason, out.reason
@@ -204,7 +225,7 @@ def test_a_test_that_fails_on_the_fixed_tree_is_refused(repo):
 def test_an_unrecognized_verification_status_is_recorded_not_verified(repo, monkeypatch):
     """The dispatch names ONE success status; anything else must not fall through to
     `verified` (rubber_duck #1)."""
-    _case(repo)  # B1's fix task IS claimed in a worktree, so control reaches the patch
+    _merge(repo)  # B1's fix IS landed, so the close reaches the patch
     monkeypatch.setattr(
         "ddflow.services.gates.verify_regression_test",
         lambda *a, **k: ("some-future-status", {}),

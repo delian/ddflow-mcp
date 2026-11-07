@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import pass_pipeline, run_cli
 from test_bug_regression_verified import _commit, _fixed_events, _worktree
 
 from ddflow import api
@@ -40,10 +40,19 @@ def _repo(repo: Path, base_test: str, name: str) -> Path:
     return _worktree(repo, "fix-B1")
 
 
+def _merge(repo: Path) -> None:
+    """Merge `_repo`'s fix task for real, so `bug_fixed` checks the landing pair rather
+    than a worktree (the state `complete --regression-test` sees after the merge)."""
+    pass_pipeline(repo, "fix-B1")
+    code, out, err = run_cli(repo, "merge", "fix-B1")
+    assert code == OK, (out, err)
+
+
 def test_a_fix_in_the_test_file_is_verified_against_the_pre_fix_test_files(repo):
     wt = _repo(repo, BROKEN, "test_v.py")
     (wt / "tests" / "test_v.py").write_text(FIXED)
     _commit(wt, "fix the fixture")
+    _merge(repo)
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_v.py::test_v")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "verified", out.data
@@ -67,6 +76,7 @@ def test_a_mutation_that_makes_the_test_fail_verifies_by_mutation(repo):
     wt = _repo(repo, FLAKY_BASE, "test_h.py")
     (wt / "tests" / "test_h.py").write_text(GUARDED)
     _commit(wt, "guard")
+    _merge(repo)
     out = api.bug_fixed(
         repo,
         "B1",
@@ -110,6 +120,7 @@ def test_the_mutation_flags_reach_complete_and_bug_fixed_on_the_cli(repo):
     wt = _repo(repo, FLAKY_BASE, "test_h.py")
     (wt / "tests" / "test_h.py").write_text(GUARDED)
     _commit(wt, "guard")
+    _merge(repo)
     code, out, err = run_cli(
         repo,
         "bug",
