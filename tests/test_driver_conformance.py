@@ -86,6 +86,18 @@ def test_run_reports_failed_when_a_command_hooked_agent_has_no_plan(monkeypatch)
     assert result["checks"]["hooks"]["status"] == "failed", result
 
 
+def test_run_reports_failed_when_a_fact_has_an_unknown_status(monkeypatch):
+    from ddflow.services import harnessfacts
+
+    h = HR.get("claude")
+    monkeypatch.setattr(
+        harnessfacts, "rows", lambda _h, **k: [{"fact": "who", "status": "bogus"}]
+    )
+    result = DC.run(h)
+    assert result["status"] == "failed", result
+    assert result["checks"]["facts"]["status"] == "failed", result
+
+
 def test_the_gap_set_only_shrinks():
     """A descriptor lacking a fixture for a declared check fails here until it has one (or the
     baseline is knowingly regenerated); a gap that was closed must leave the baseline."""
