@@ -525,7 +525,7 @@ def test_attest_all_reports_a_refused_request_beside_an_attested_one(log, cfg, r
     cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
     log = EventLog(repo, "bot")
     row = _file(log, Config())  # T2, answerable over chat
-    t3 = _file(log, Config(), _canon(verb="config.reviewer_command", item="", target=""))
+    _file(log, Config(), _canon(verb="config.reviewer_command", item="", target=""))  # T3: refused
     d = projects / "slug"
     d.mkdir(parents=True)
     (d / "s.jsonl").write_text("\n".join(json.dumps(r) for r in _approved_row(row)))
