@@ -31,11 +31,12 @@ def test_a_shared_choice_parameter_lists_every_actions_values():
     """`view` belongs to `metrics` and `lanes` with different values; the union must say
     each action's, not drop one for the longer (bug B-family-view-param-one-help)."""
     view = FS.family_entry("ddflow_view")["inputSchema"]["properties"]["view"]["description"]
-    for value in ("summary", "forecast", "retro", "skips", "stages", "locks", "swarm"):
-        assert value in view  # metrics' values
+    metrics = view.split("metrics: ", 1)[1]  # the metrics action's clause
+    for value in ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "swarm"):
+        assert value in metrics
+    lanes = view.split("lanes: ", 1)[1].split(" metrics: ", 1)[0]  # the lanes action's clause
     for value in ("state", "brief", "advise", "fleet", "resume"):
-        assert value in view  # lanes' values
-    assert "metrics" in view and "lanes" in view
+        assert value in lanes
 
 
 @pytest.mark.parametrize("family", FAMILY_NAMES)

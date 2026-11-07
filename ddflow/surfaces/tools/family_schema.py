@@ -100,16 +100,17 @@ def _union(family: Family) -> dict[str, tuple[set[str], str]]:
 
 def _joined_params(family: Family) -> set[str]:
     """Parameters whose bounded ``choices`` differ between members, joined per action in the
-    union rather than 'the longest description wins' (bug B-family-view-param-one-help)."""
-    sets: dict[str, set[tuple[str, ...]]] = {}
+    union rather than 'the longest description wins' (bug B-family-view-param-one-help). A
+    member that declares the name without ``choices`` is free-form there, counted as its own
+    value shape, so a parameter bounded in one action and free-form in another is joined too."""
+    values: dict[str, set[tuple[str, ...] | None]] = {}
     for tool in family.members.values():
         cmd = DECLARED.get(tool)
         if cmd is None:
             continue
         for p in cmd.params:
-            if p.choices:
-                sets.setdefault(p.name, set()).add(tuple(p.choices))
-    return {n for n, seen in sets.items() if len(seen) > 1}
+            values.setdefault(p.name, set()).add(tuple(p.choices) if p.choices else None)
+    return {n for n, seen in values.items() if len(seen) > 1}
 
 
 def _listed(text: str) -> str:
