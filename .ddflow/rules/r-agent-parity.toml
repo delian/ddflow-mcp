@@ -1,0 +1,10 @@
+id = "r-agent-parity"
+title = "Every harness descriptor declares every capability or states none"
+tags = ["agent-parity", "architecture"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:23:54.852401+00:00"
+updated = "2026-11-03T16:23:54.852408+00:00"
+
+R-agent-parity-ops 5. RULE: a descriptor either carries each parity section ([headless], [meters], [caps], [continuation], [hooks], [subagents]...) or states none, never silence; a fact is unverified until a probe or source is recorded. CHECK: the parity matrix test (P-agent-parity.matrix-test). VERIFY: which capability of this agent is undeclared?
