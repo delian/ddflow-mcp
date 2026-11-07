@@ -66,7 +66,7 @@ def cache_signatures(
         out: dict[str, str] = {}
         for k, v in seen.items():
             if _fresh(v, clock_now, ttl_s) and len(v) > SIG_AT and v[SIG_AT]:
-                out[str(k)] = str(v[2])
+                out[str(k)] = str(v[SIG_AT])
         return out
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return {}
