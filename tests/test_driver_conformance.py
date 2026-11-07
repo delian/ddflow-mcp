@@ -20,7 +20,8 @@ from harness_conformance import declared as D
 from harness_conformance import engines as E
 from harness_conformance import report as R
 
-from ddflow.services import facts, harnessfacts
+from ddflow.services import driver_conformance as DC
+from ddflow.services import hookio
 from ddflow.services import harnessreg as HR
 
 ENGINE_CHECKS = [c for c in D.all_checks() if c[1] != D.HOOK]
@@ -71,10 +72,18 @@ def test_every_fixture_on_disk_belongs_to_a_declared_check():
 @pytest.mark.parametrize("hid", C.ALL)
 def test_the_facts_overlay_is_total_and_well_formed(hid):
     h = HR.get(hid)
-    for r in harnessfacts.rows(h, absent=True):
-        assert r["status"] in facts.STATUSES, (hid, r["fact"])
-    for key, node in h.facts.items():
-        assert not facts.problems(f"{hid}.{key}", node), (hid, key)
+    # The per-descriptor checks (facts overlay, hook plan) live in the package `run`;
+    # this test calls it rather than keeping a second copy of the loop.
+    result = DC.run(h)
+    assert result["checks"]["facts"]["status"] == "ok", (hid, result)
+
+
+def test_run_reports_failed_when_a_command_hooked_agent_has_no_plan(monkeypatch):
+    h = HR.get("claude")
+    monkeypatch.setattr(hookio, "plan_for", lambda _hid: None)
+    result = DC.run(h)
+    assert result["status"] == "failed", result
+    assert result["checks"]["hooks"]["status"] == "failed", result
 
 
 def test_the_gap_set_only_shrinks():
