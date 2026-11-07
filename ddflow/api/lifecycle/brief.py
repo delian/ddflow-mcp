@@ -293,6 +293,23 @@ def _sweep_stamp(repo: Path) -> None:
         pass  # a stamp that cannot be written only means the next brief sweeps too
 
 
+def _under_resume(text: str, reports_block: str, contest_text: str, undecided: str) -> str:
+    """``text`` with the leading blocks under the RESUME slice: the new-reports, contest and
+    Open-workflow-choices blocks go right before the one `# ddflow brief` heading the view
+    emits, not above the slice, so a restarted session still sees recoverable work first
+    (B-brief-choices-above-resume). The insertion is anchored to the `# ddflow brief` H1 line,
+    not the first `# ddflow brief` substring -- which a `## ddflow brief` heading inside RESUME
+    (or `### ddflow brief`) would otherwise match -- and Review feedback is prepended later."""
+    lead = reports_block + contest_text + (undecided + "\n" if undecided else "")
+    if not lead:
+        return text
+    head = "# ddflow brief"
+    at = text.find("\n" + head)
+    if at < 0:
+        return lead + text if text.startswith(head) else text
+    return text[: at + 1] + lead + text[at + 1:]
+
+
 def brief(
     repo: Path,
     *,
@@ -407,9 +424,7 @@ def brief(
         reserve=render_md._approx_tokens(prepended) if prepended else 0,
         agent=log.agent_id,
     )
-    if undecided:
-        text = undecided + "\n" + text
-    text = reports_block + contest_text + text
+    text = _under_resume(text, reports_block, contest_text, undecided)
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, st, cfg, held_ids)
