@@ -113,11 +113,16 @@ def failed_review_blockers(
             rows.append(f"{g} ({why})")
     if not rows:
         return []
-    # A fix round is free of max_rounds only when [review].fix_round_free allows it
-    # (B-merge-refusal-says-delta-is-free-of-max-rounds): with the knob off a re-run is
-    # counted like any round and is refused past the cap, so the refusal must not promise
-    # a free round that does not exist.
-    fix_free = " (a fix round is free of max_rounds)" if cfg.review.fix_round_free else ""
+    # A fix round is free of max_rounds only when [review].fix_round_free allows it AND the
+    # re-run actually addresses every finding (B-merge-refusal-says-delta-is-free-of-max-rounds):
+    # a plain delta past the cap is refused either way, so the refusal must not promise a
+    # free round that does not exist.
+    fix_free = (
+        " (a fix round is free of max_rounds only when it addresses every finding; a plain "
+        "delta past the cap is refused)"
+        if cfg.review.fix_round_free
+        else ""
+    )
     return [
         FAILED_REVIEW_BLOCKER
         + "; ".join(rows)

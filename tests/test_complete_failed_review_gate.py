@@ -302,8 +302,9 @@ def test_the_merge_refusal_does_not_promise_a_free_fix_round_when_the_knob_is_of
 
 
 def test_the_merge_refusal_names_a_fix_round_free_when_the_knob_is_on(repo, tmp_path):
-    """The default `review.fix_round_free = true` keeps the accurate wording: a fix round
-    is free of max_rounds (a plain delta past the cap is not, but is not what this says)."""
+    """The default `review.fix_round_free = true` keeps the fix-round hint, qualified: a fix
+    round is free of max_rounds only when it addresses every finding, a plain delta past the
+    cap is refused."""
     from ddflow.config import Config
     from ddflow.services.gates import failed_review_blockers
 
@@ -312,6 +313,7 @@ def test_the_merge_refusal_names_a_fix_round_free_when_the_knob_is_on(repo, tmp_
     st = fold(EventLog(repo).read_all(), strict=False)
     blocks = failed_review_blockers(st, Config.load(repo), "T1", None)
     assert any("a fix round is free of max_rounds" in b for b in blocks), blocks
+    assert any("a plain delta past the cap is refused" in b for b in blocks), blocks
 
 
 def test_a_request_merged_by_a_person_over_a_failed_review_gate_is_not_completed(
