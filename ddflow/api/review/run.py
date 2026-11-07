@@ -45,6 +45,7 @@ from .gate import (
 )
 from .records import (
     PROGRESS_EVERY_S,
+    _blocking_findings,
     _finding_rows,
     _gate_outcome,
     _item_intent,
@@ -404,6 +405,20 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     return cross[0] if cross else best
 
 
+def _failing_reviewer(results, it, gate, converging, cfg, identifying):
+    """The reviewer whose finding blocked the gate (bug B3113b1f522), else ``identifying``.
+    A failed review must name the reviewer that found the blocking defect, not a clean peer
+    that ranked first (or the author's own family, listed first), and must not re-purpose a
+    PARTIAL reviewer as the identifying pass (which would flip the run's exit code). The
+    findings `_blocking_findings` returns are the SAME objects each reviewer's ``findings``
+    held (matched by identity), so the return is one of ``results`` or ``identifying``."""
+    blocking, _ = _blocking_findings(results, it, gate, converging, cfg)
+    for r in results:
+        if any(b is f for b in blocking for f in r.findings):
+            return r
+    return identifying
+
+
 def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -620,14 +635,15 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         _say_result(say, res)
         _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
-    best = _identifying_reviewer(results, author_model, cfg)
+    identifying = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
-        best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        identifying, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
     )
+    named = _failing_reviewer(results, it, gate, _converges(kind, fix), cfg, identifying)
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            called_from=called_from, gates=gates, say=say, best=identifying, named=named, results=results, keeps=keeps, extra_evidence=extra_evidence,
             scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
@@ -636,9 +652,9 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         "gate": gate,
         "outcome": outcome,
         "how": how,
-        "reviewer": best.reviewer,
-        "family": best.family,
-        "findings": _finding_rows(best),
+        "reviewer": named.reviewer,
+        "family": named.family,
+        "findings": _finding_rows(named),
         "text": "\n".join(transcript),
     }
     exit_code = {
@@ -646,12 +662,12 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         RV.PARTIAL: O.REFUSED,
         RV.UNAVAILABLE: O.NOTHING,
         RV.ERROR: O.FAIL,
-    }[best.status]
+    }[identifying.status]
     if exit_code == O.OK:
         return O.ok("review", **data)
     return O.Outcome(
         kind="review",
         data=data,
         exit=exit_code,
-        reason=best.reason or f"{len(best.findings)} finding(s)",
+        reason=identifying.reason or f"{len(identifying.findings)} finding(s)",
     )
