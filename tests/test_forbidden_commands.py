@@ -171,6 +171,8 @@ def test_refused_comment_quote_spans_lines(cmd):
         # an esac inside a nested $() (or a double-quoted word with a blank before it) in a
         # case body is not the case's end, so `git push` after the `;;` is still seen
         'echo "$(case x in x) $(echo esac); git push origin main;; esac)"',
+        # a <(...) process substitution's `)` is not the outer $()'s close, so `git push` is seen
+        'echo "$(cat <(echo ); git push origin main)"',
     ],
 )
 def test_refused_substitution_body_edge_cases(cmd):

@@ -196,7 +196,7 @@ def _case_end(text: str, n: int, k: int, bodies: list[str]) -> int:
             k = _ansi_c_end(text, n, k)
         elif text[k] == '"':
             k = _dquote_end(text, n, bodies, k)
-        elif text[k] == "`" or (text[k] == "$" and k + 1 < n and text[k + 1] == "("):
+        elif text[k] == "`" or (text[k] in "$<>" and k + 1 < n and text[k + 1] == "("):
             k = _sub_body(text, n, bodies, k)
         elif text[k] == "\\":
             k += 2 if k + 1 < n else 1
@@ -239,7 +239,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
             k = _dquote_end(text, n, bodies, k)
         elif c == "\\":  # an escaped closer (\) / \`) is not the end of the body
             k += 2 if k + 1 < n else 1
-        elif c == "`" or (c == "$" and k + 1 < n and text[k + 1] == "("):
+        elif c == "`" or (c in "$<>" and k + 1 < n and text[k + 1] == "("):
             k = _sub_body(text, n, bodies, k)
         else:
             k += 1
@@ -256,7 +256,7 @@ def _dquote_end(text: str, n: int, bodies: list[str], j: int) -> int:
             return k + 1
         if cc == "\\":
             k += 2 if k + 1 < n else 1
-        elif cc == "`" or (cc == "$" and k + 1 < n and text[k + 1] == "("):
+        elif cc == "`" or (cc in "$<>" and k + 1 < n and text[k + 1] == "("):
             k = _sub_body(text, n, bodies, k)
         else:
             k += 1
@@ -264,10 +264,11 @@ def _dquote_end(text: str, n: int, bodies: list[str], j: int) -> int:
 
 
 def _sub_body(text: str, n: int, bodies: list[str], k: int) -> int:
-    """Index just past the `$(` / backtick substitution that opened at `k`; its body is
-    recorded (a nested substitution's commands run as commands)."""
-    closer = ")" if text[k] == "$" else "`"
-    start = k + 2 if text[k] == "$" else k + 1
+    """Index just past the substitution that opened at `k`: a backtick (closer `` ` ``), a `$(` or
+    a `<(` / `>(` process substitution (closer `)`); its body is recorded (a nested
+    substitution's commands run as commands)."""
+    closer = "`" if text[k] == "`" else ")"
+    start = k + 2 if text[k] != "`" else k + 1
     k2 = _find_body(text, n, bodies, start, closer)
     bodies.append(text[start:k2])
     return k2 + 1
