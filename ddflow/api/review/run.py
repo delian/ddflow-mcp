@@ -50,6 +50,7 @@ from .records import (
     _gate_outcome,
     _item_intent,
     _lease_ticker,
+    _prior_evidence,
     _record,
     _say_result,
 )
@@ -285,6 +286,17 @@ def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
     if counted:
         out["round"] = done + 1
     return out
+
+
+def _delta_kept(it, gate: str, kind: str) -> list | None:
+    """The gate's earlier recorded findings a delta round merges into, so the round's
+    output numbers its own findings by their place in that record (bug B32ce00713b);
+    None for a full round or chunk re-run, whose numbering is already the record's."""
+    if kind != "delta" or it is None:
+        return None
+    prior = _prior_evidence(it.gates.get(gate))
+    kept = prior.get("chunk_findings")
+    return list(kept) if isinstance(kept, list) else None
 
 
 def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
@@ -600,6 +612,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         return _intent_missing(item, gate, how)
 
     revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
+    delta_kept = _delta_kept(it, gate, kind)
     context = dispatch.pack(
         context,
         [
@@ -659,7 +672,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
                     kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
                 )
         results.append(res)
-        _say_result(say, res)
+        _say_result(say, res, delta_kept)
         _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
     identifying = _identifying_reviewer(results, author_model, cfg)
