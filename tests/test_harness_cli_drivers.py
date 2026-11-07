@@ -60,6 +60,17 @@ def test_test_runs_the_offline_conformance(tmp_path):
     assert out.data["result"]["status"] == "ok"
 
 
+def test_test_reports_a_failed_descriptor_through_the_cli(tmp_path, monkeypatch):
+    from ddflow.services import hookio
+
+    monkeypatch.setattr(hookio, "plan_for", lambda hid: None)
+    out = H.harness_view(tmp_path, what="test", id="claude")
+    assert out.ok and out.data["status"] == "ran"
+    # a command-hooked agent with no hook plan fails conformance, through the CLI
+    assert out.data["result"]["status"] == "failed", out.data["result"]
+    assert out.data["result"]["checks"]["hooks"]["status"] == "failed", out.data["result"]
+
+
 def test_test_is_unavailable_when_the_module_cannot_import(tmp_path, monkeypatch):
     def gone(name):
         raise ImportError(name)
