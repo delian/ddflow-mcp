@@ -109,7 +109,7 @@ def test_the_ask_chat_route_names_a_real_command():
     """B-digest-route-names-missing-command: the ASK chat route told the lead to run
     `ddflow digest --ask`, but `digest` was not a CLI or MCP verb, so the operator queue
     had no surface. The route must name the real verb, whose `--ask` flag is real."""
-    parser, rest = _resolve(S.ASK)
+    parser, _rest = _resolve(S.ASK)
     assert parser.prog != build_parser().prog, "the ASK route names no real verb"
     known = {o for a in parser._actions for o in a.option_strings}
     assert "--ask" in known, "the ASK route's --ask flag must resolve"
