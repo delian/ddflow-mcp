@@ -394,17 +394,32 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     case -- a reviewer from a DIFFERENT family than the author is the one named, so a
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
-    `complete` resolves it (`[agent].family`, else the session model). When it is
-    resolvable here `review_tier` ranks a reviewer from another family, and the first
-    such reviewer is named. When the author cannot be named at review time its family is
-    genuinely unknown, so counting every reviewer that came back clean -- the panel the
-    author resolves at `complete` -- is what records the cross-family review; that is in
-    `reviewer_families` (bug B1a30dc3303).
+    `complete` resolves it (`[agent].family`, else the session model). When that is
+    resolvable here `review_tier` ranks a reviewer from another family and the first such
+    reviewer is named; when it is not, a reviewer from a family OTHER than the tied-first
+    one is named so a clean cross-family review is not discarded when a same-family
+    reviewer also ran clean and happened to be listed first (bugs Be2bb7ea786,
+    B2e5ca93520). The panel's other families are still carried in `reviewer_families`
+    (bug B1a30dc3303).
     """
     best = min(results, key=lambda r: r.status)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    return cross[0] if cross else best
+    if cross:
+        return cross[0]
+    # When the author cannot be named here (`[agent].family` and the session model are
+    # both empty) `review_tier` returns `none` for every reviewer, so `cross` is empty
+    # and the first tied reviewer would be the author's own family when the lane also
+    # serves its model (bug B2e5ca93520). An unknown author has exactly ONE family, so
+    # when the clean reviewers span two or more distinct families, name a reviewer from a
+    # family OTHER than the tied-first one -- the cross-family reviewer `complete` needs.
+    fams = {(r.family or "").strip().lower() for r in tied}
+    fams.discard("")
+    if fams and len(fams) > 1:
+        for r in tied:
+            if (r.family or "").strip().lower() and (r.family or "").strip().lower() != (best.family or "").strip().lower():
+                return r
+    return best
 
 
 def _failing_reviewer(results, it, gate, converging, cfg, identifying):
