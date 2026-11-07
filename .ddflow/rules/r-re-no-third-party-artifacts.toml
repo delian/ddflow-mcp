@@ -1,0 +1,10 @@
+id = "r-re-no-third-party-artifacts"
+title = "No third-party proprietary artifact is committed"
+tags = ["reimpl", "off"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T23:36:31.525653+00:00"
+updated = "2026-11-03T23:36:31.525659+00:00"
+
+Third-party binaries, code or data are kept as hash pointers outside git; a commit-time scan refuses them.

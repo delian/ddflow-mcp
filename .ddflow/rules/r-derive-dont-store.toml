@@ -1,0 +1,10 @@
+id = "r-derive-dont-store"
+title = "One source of truth per fact: derive views from the event log and records; no second tracker"
+tags = ["architecture", "data"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:12:19.350470+00:00"
+updated = "2026-11-03T14:12:19.350478+00:00"
+
+Decisions D-no-duckdb, D-arch-product-answers, D-change-answers, D-lifecycle-answers. RULE: before adding a record kind, store, index or table, show that the fact is not already derivable from the event log and existing records; prefer a derived view (change record, trace matrix, lifecycle health, metrics) with typed edges over a copy; caches are rebuildable and local. Extends r-reuse-core from behaviour to data. CHECK: kind-registry review in the plan (PO-kinds-reconcile) and a rebuild-from-log test per derived view. VERIFY: can the new data be deleted and rebuilt from the log?

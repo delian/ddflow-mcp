@@ -1,0 +1,10 @@
+id = "r-read-verbs-read-only"
+title = "Read verbs append zero events and never restamp"
+tags = ["performance", "data"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:30:12.123227+00:00"
+updated = "2026-11-03T16:30:12.123236+00:00"
+
+Bug Bc5d4aafb98, R-scalability. RULE: a read verb (show, list, board, next, status, brief, recall, gate status, doctor quick) appends zero events and calls no stamping or batch apply; only the caller's own write verbs may stamp. CHECK: a test with a second process appending in a loop (PS-restamp-own) and a counter of events appended by read verbs. VERIFY: can this command change the log?
