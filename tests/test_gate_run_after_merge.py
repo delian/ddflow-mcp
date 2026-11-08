@@ -156,7 +156,10 @@ def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
             },
         },
     )
-    assert run_cli(repo, "merge", "T1")[0] == 0
+    # B0eca409559: a person-only baseline-red partial is REFUSED by a plain `merge` (it would
+    # land unsettled and `complete` would then refuse with no tree left to re-run); a person
+    # lands it deliberately with --force to reach the merged state this test exercises.
+    assert run_cli(repo, "merge", "T1", "--force")[0] == 0
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "later work on main")
