@@ -40,6 +40,28 @@ from .staged import (
 )
 
 
+def _git_merge_temp(path: str) -> bool:
+    """``git merge``'s own transient working-directory temp file, not work.
+
+    A custom merge driver (`pinsregen`) makes git write the ancestor/ours/theirs
+    blobs as ``.merge_file_XXXXXX`` temp files in the tree it is merging in; a
+    concurrent ``git add -A`` stages them and then they vanish as git finishes,
+    leaving an 'AD' index entry no lease covers (B-merge-driver-temp-staged). Down
+    here it is refused as outside the lease, with a remedy to widen the globs to the
+    temp names -- widening nothing real. Git cleans these files up itself, so they
+    are never a commit the agent made and never belong to a lease.
+    """
+    return path.rsplit("/", 1)[-1].startswith(".merge_file_")
+
+
+def _not_work(path: str) -> bool:
+    """A staged path the lease check waves through: ddflow's own output, or git's
+    transient merge temp file. Keeping one predicate here (rather than a second
+    comprehension in `_check_lease`) holds `_check_lease` under the complexity
+    budget `tests/test_architecture_guards.py` ratchets."""
+    return any(path.startswith(prefix) for prefix in SELF_MANAGED) or _git_merge_temp(path)
+
+
 def _made_tree(repo: Path, lease: Lease) -> Path | None:
     """The tree ``lease`` made, resolved; None for a lease with no tree."""
     return W.load_path(repo, lease.worktree).resolve() if lease.worktree else None
@@ -571,7 +593,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> Verdict:
         return (
             (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
         )
-    paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
+    paths = [p for p in staged if not _not_work(p)]
     paths = _commit_scope(_index_tree(repo), paths, cfg, lease=True)
     if not paths:
         return Verdict(OK, "")
