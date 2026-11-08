@@ -398,7 +398,13 @@ def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str
     it = st.items[item]
     moved = _moved_for(repo, cfg, st, item, gate)
     settled = _settle_after_cap(
-        log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate), moved=moved
+        log,
+        cfg,
+        it,
+        gate,
+        counts,
+        stale=reviewed_other_tree(repo, cfg, st, item, gate),
+        moved=moved,
     )
     if settled:
         parts.append(settled)
@@ -418,7 +424,14 @@ def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str
 
 
 def _settle_after_cap(
-    log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "", moved: list[str] | None = None
+    log,
+    cfg,
+    it,
+    gate: str,
+    counts: dict[str, int],
+    *,
+    stale: str = "",
+    moved: list[str] | None = None,
 ) -> str:
     """What the triage means for a gate whose review budget is spent (decision
     D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
