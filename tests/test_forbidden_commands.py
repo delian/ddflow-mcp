@@ -161,6 +161,28 @@ def test_refused_comment_quote_spans_lines(cmd):
 @pytest.mark.parametrize(
     "cmd",
     [
+        # a `#` after a `$(`/`<(`/`>(` close is literal, not a comment start (bash glues it
+        # to the substitution's value), so the `;` still separates the forbidden command
+        # (residual finding: _COMMENT_BOUNDARY must make that `)` an exception)
+        "echo $(echo hi)#; git push origin main",
+        "echo $(echo hi)#; pkill -f myserver",
+        "cat <(echo hi)#; git stash -q",
+        # a `$((...))` arithmetic expansion's outer `)` keeps the `#` literal too
+        "echo $((1+2))#; git push origin main",
+        # nested: the `#` after the inner <(...) is literal inside the outer $() body, so
+        # `git push` runs there and must still be refused
+        'echo "$(cat <(echo hi)#; git push origin main)"',
+    ],
+)
+def test_refused_hash_literal_after_substitution_close(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
         # a $'...' ANSI-C quote escapes its quote: the `)` after it still lives inside the $()
         # body, so a forbidden command after the `;` must still be seen
         "echo $(echo $'a\\')' ; git push origin main ; echo done)",
