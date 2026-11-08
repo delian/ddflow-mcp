@@ -513,9 +513,9 @@ def localize_hooks(
 def _execute(
     cfg: Config, tree: Path, cmd: str, scope, budget: int, tick=None, holding_suite=False, used=None
 ):
-    """(the run that decided the verdict, the output of the run before it): the command as
-    written, or -- for a selected scope -- the hooks without the suite, then the selected
-    tests on the same tree."""
+    """(the run that decided the verdict, the output of the run before it, and the run's own
+    elapsed seconds summed across its stages): the command as written, or -- for a selected
+    scope -- the hooks without the suite, then the selected tests on the same tree."""
     selected = scope is not None and scope.scope == "selected"
     used = _worker_log(scope) if scope is not None else (used if used is not None else {})
     cmd = _with_workers(cmd, cfg, used, "command", holding_suite=holding_suite)

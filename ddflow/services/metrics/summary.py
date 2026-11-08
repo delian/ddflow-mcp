@@ -202,11 +202,15 @@ def build(ctx: Context, group_by: str = "gate") -> dict:
         return s
 
     cycle = need("cycle_time", [s.cycle_s for s in completed_spans(ctx)], "completed items")
+    timed = _timed(ctx)
     per_gate: dict[str, list[float]] = defaultdict(list)
-    for o, secs in gate_durations(ctx):
-        per_gate[o.gate].append(secs)
+    untimed: dict[str, int] = defaultdict(int)
+    for o, secs in timed:
+        if secs is None:
+            untimed[o.gate] += 1
+        else:
+            per_gate[o.gate].append(secs)
     waits = gate_waits(ctx)
-    untimed = gate_untimed(ctx)
     gate_time = [
         {
             "gate": g,
