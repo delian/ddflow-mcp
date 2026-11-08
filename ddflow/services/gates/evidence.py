@@ -305,17 +305,20 @@ def superseded_by(
 
     ``paths`` (the item's globs) scope it to content: commits that touch none of them -- other
     agents' merges moving a shared checkout's HEAD -- leave the run's verdict standing
-    (B-e47bb1cade). Empty/None: ancestry alone. Git unable to list the diff: superseded."""
+    (B-e47bb1cade). Empty/None: the whole source tree scopes it, so only a commit that
+    changed non-bookkeeping source supersedes -- an event-only commit (`.ddflow/`, ddflow's
+    own record) does not move the source the gate ran against (B267a6b0b5e). Git unable to
+    list the diff: superseded."""
     a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
     if _is_ancestor(cwd, a, b) is not True:
         return False
-    if not paths:
-        return True
     changed = W.git(cwd, "diff", "--name-only", "-z", a, b)
     if not changed.ok:
         return True
+    if not paths:
+        return any(f for f in changed.out.split("\0") if f and not is_state(f))
     return any(globs.match(f, g) for f in changed.out.split("\0") if f for g in paths)
 
 
