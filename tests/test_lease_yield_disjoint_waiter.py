@@ -50,9 +50,10 @@ def test_a_waiter_that_narrowed_away_is_not_held_contended(repo):
     assert run_cli(repo, "update", "T2", "--globs", "src/b.py", agent=B)[0] == 0
 
     st = _state(repo)
-    # The refused wait is still on record (a widening wait lives and dies with its lease)...
-    assert "T2" in WG.standing(st, _cfg(repo), time.time())
-    # ...but it must no longer mark T1 as contended by T2: T2 gave src/a.py up, so T1 has
+    # The refused wait is withdrawn by the narrow (B-update-queue-wait-not-withdrawable): a
+    # wait the waiter gave up must not stay on record...
+    assert "T2" not in WG.standing(st, _cfg(repo), time.time())
+    # ...and it must not mark T1 as contended by T2: T2 gave src/a.py up, so T1 has
     # nobody to yield to and must not be told to.
     assert "T2" not in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
 
@@ -68,9 +69,9 @@ def test_a_waiter_narrowed_down_to_no_globs_is_not_held_contended(repo):
     assert code == 0, err
     st = _state(repo)
     assert st.items["T2"].globs == []
-    # Pin the stale wait edge STILL STANDS before asserting the contended edge for it is
-    # gone -- otherwise the emptiness would pass even against the unfixed short-circuit.
-    assert "T2" in WG.standing(st, _cfg(repo), time.time())
+    # The empty narrow withdraws the wait whose want overlap no holder (the withdrawal,
+    # not the contended filter, is what clears the stale edge for it).
+    assert "T2" not in WG.standing(st, _cfg(repo), time.time())
     assert "T2" not in LB.contended(st, _cfg(repo), time.time()).get("T1", [])
 
 
