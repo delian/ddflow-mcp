@@ -127,6 +127,16 @@ def merge_tree(
     that makes the tree and the merge inside it: past it git is killed and reported as a
     cannot-merge failure, and the throwaway tree is removed (the probe's old-git fallback
     passes its ``[locks].probe_timeout_s`` so the CLI never outlives it, LK-probe-scratch-deadline)."""
+    # One budget for the WHOLE scratch merge -- the worktree add AND the merge inside it --
+    # not a fresh timeout per git call: a slow `worktree add` plus a slow `merge` must not
+    # each get its own `deadline_s` and run for twice the caller's deadline
+    # (LK-probe-scratch-deadline critic/rubber_duck #1). The cutoff starts here, before the
+    # tree is made, and every git call takes the time left.
+    cutoff = time.monotonic() + deadline_s if deadline_s is not None else None
+
+    def left() -> float | None:
+        return None if cutoff is None else cutoff - time.monotonic()
+
     with W.scratch_tree(
         repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner,
         deadline_s=deadline_s,
@@ -139,16 +149,6 @@ def merge_tree(
             return
         tree = s.path
         marker = owner_marker(tree)  # written by `claim`, BEFORE the add registered the tree
-        # One budget for the WHOLE scratch merge, not a fresh timeout per git call: the
-        # deadline that falls between two git calls must shorten the next one, or a slow
-        # `worktree add` plus a slow `merge` could run for twice `deadline_s` after each call
-        # got its own `deadline_s` (LK-probe-scratch-deadline critic #1). Each call takes the
-        # time left, so the caller's deadline bounds the total.
-        cutoff = time.monotonic() + deadline_s if deadline_s is not None else None
-
-        def left() -> float | None:
-            return None if cutoff is None else cutoff - time.monotonic()
-
         with _remove_on_signals(repo, tree, marker):
             if (
                 base
