@@ -126,7 +126,7 @@ def _paths(ctx: Context) -> Answer:
     return Answer(ok, "" if ok else why, metrics=data, text=paths_text(data))
 
 
-def run(  # noqa: PLR0911 -- one return per view; the dispatcher IS the branch
+def run(  # noqa: PLR0911, C901 -- one return per view; the dispatcher IS the branch
     events: Sequence[Event],
     state: State,
     cfg: Config,
