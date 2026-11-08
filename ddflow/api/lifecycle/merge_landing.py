@@ -33,6 +33,7 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
     for line in PM.merge_lines(PM.merge_report(repo, cfg)):
         say(line)
 
+
 def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
     """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
     are free for a waiter, whose `wait` reads the release as ready, and `complete` needs no
@@ -40,9 +41,11 @@ def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
     its files to retry). Only reached after a landing, so a failed merge keeps the lease."""
     return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
 
+
 def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str:
     """ "" for a clean merge; else the note `_landed_anyway` has for a failure that landed."""
     return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+
 
 def _wrong_base(st, it, wt, remote_base: str, item: str) -> O.Outcome | None:
     """A refusal when the branch was forked from one line's base and would land on another's,
@@ -59,24 +62,29 @@ def _wrong_base(st, it, wt, remote_base: str, item: str) -> O.Outcome | None:
         )
     return None
 
+
 def _when(cond: Any, **fields: Any) -> dict[str, Any]:
     """``fields`` when ``cond`` is truthy, else nothing: an optional part of a result."""
     return fields if cond else {}
+
 
 def _kept_reason(kept: str, landed_note: str, back_failed: list[str]) -> str:
     """Why the tree was kept and what went wrong after the landing, as one line."""
     failed = ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else ""
     return "; ".join(filter(None, [kept, landed_note, failed]))
 
+
 def _say_awaiting(say, item: str, gates) -> None:
     """Say which required gates the landing left unsettled (`[merge].require_gates`)."""
     if gates.unmet:
         say(MF.warning(item, gates))
 
+
 def _ci_fields(ci_after: dict) -> dict:
     """`ci` is kept for readers of the old key; it is the BASE's post-merge check, never the ci
     gate (Bb55340e14b): `gate_states` has the gate."""
     return {"ci": ci_after, "post_merge_check": ci_after} if ci_after else {}
+
 
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
     """The `merge.forced` event of a landing that went over unsettled gates (no-op otherwise)."""
@@ -86,6 +94,7 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+
 
 def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: str) -> dict | None:
     """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
@@ -98,6 +107,7 @@ def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: s
     spent = MF.spend(log, cfg, item, gates, pending)
     return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
 
+
 def _commit_shards_before_merge(log, cfg, item: str) -> None:
     """Commit the primary's uncommitted event shards before the git merge, unless the
     strategy is a fast-forward: landing them on the target drifts it past the branch's fork
@@ -107,10 +117,12 @@ def _commit_shards_before_merge(log, cfg, item: str) -> None:
     if cfg.worktree.merge_strategy != "ff-only":
         EC.commit_at(log, cfg, "merge", f"merge {item}")
 
+
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
     """The first failed-gate blocker that stops ``item`` landing, or ""."""
     found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
     return (found or OC.failed_ci_blockers(st, cfg, item) or [""])[0]
+
 
 def _landing_refusal(
     repo: Path, cfg, st, it, wt: W.Worktree, dirty, item: str, allow_dirty: bool, allow_empty: bool
@@ -156,6 +168,7 @@ def _landing_refusal(
         return empty
     return _wrong_base(st, it, wt, f"{cfg.flow.remote}/{wt.base}", item)
 
+
 def _record_landing(
     log,
     item: str,
@@ -187,6 +200,7 @@ def _record_landing(
         },
     )
 
+
 def _failed_landing_outcome(
     repo: Path, cfg, log, it, wt, item: str, landed_note: str, r, *, borrowed: bool
 ) -> O.Outcome | None:
@@ -215,6 +229,7 @@ def _failed_landing_outcome(
         exit=O.REFUSED if r.code == W.GIT_REFUSED else O.FAIL,
         reason=(r.err or r.out) + PD.dirt_hint(repo, cfg, r.err or r.out, repo),
     )
+
 
 def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; the tail spends them
     repo: Path,
@@ -310,6 +325,7 @@ def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; t
         **committed,
     )
 
+
 def _ci_notice(repo: Path, cfg) -> str:
     """The line said before the post-merge check starts: what runs and which knobs bound it."""
     try:
@@ -324,6 +340,7 @@ def _ci_notice(repo: Path, cfg) -> str:
     if not command:
         return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
     return notice
+
 
 def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
     """A note when git reported failure but the merge commit is on the base; else "".
@@ -348,6 +365,7 @@ def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: 
         f"git {how} after the merge commit landed on {wt.base} ({now[:12]}): recorded as "
         f"merged, from what the base holds ({(r.err or r.out or '')[:200]!r})"
     )
+
 
 def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
     """A refusal when ``wt.branch`` has no commits its target lacks; else None.
@@ -374,6 +392,7 @@ def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
         branch=wt.branch,
     )
 
+
 def _dispose_tree(
     repo: Path, cfg, log, it, wt: W.Worktree, *, borrowed: bool, keep: bool, callers
 ) -> tuple[bool, str]:
@@ -398,6 +417,7 @@ def _dispose_tree(
     gone = dispose_tree(repo, cfg, log, wt, item=it)
     return (True, "") if gone.removed else (False, gone.why)
 
+
 def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
     """`outside_globs` as recorded and returned: a list always, and `outside_globs_unknown`
     beside it -- true when git could not list the landing's paths, false when it did, null
@@ -409,4 +429,3 @@ def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
     if outside is None:
         return {"outside_globs": [], "outside_globs_unknown": True}
     return {"outside_globs": outside, "outside_globs_unknown": False}
-

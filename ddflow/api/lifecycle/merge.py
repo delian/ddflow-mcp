@@ -69,6 +69,7 @@ def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, a
         O.refused("worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)),
     )
 
+
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
     repo: Path,
     item: str,
@@ -232,6 +233,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         on_progress=on_progress,
     )
 
+
 def _what_to_land(
     repo: Path, cfg, st, it, target: str, branch: str, called_from: Path | None
 ) -> tuple[W.Worktree, list[str], list[str] | None] | O.Outcome:
@@ -262,6 +264,7 @@ def _what_to_land(
     wt = W.Worktree(item=it.id, path=tree or W.repo_root(repo), branch=picked, base=target)
     dirty = W.dirty(wt) if tree is not None else []
     return wt, dirty, _outside_globs(repo, it, target, picked, cfg)
+
 
 def _branch_to_land(
     repo: Path, cfg, st, it, branch: str, called_from: Path | None, target: str
@@ -323,6 +326,7 @@ def _branch_to_land(
         )
     return branch
 
+
 def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] | None:
     """Paths the landing changes that the item never declared; None when git could not list
     them -- "could not tell", never "none" (B4e42502034).
@@ -353,6 +357,7 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
         and p not in fresh
         and not any(path_in_glob(p, g) for g in it.globs)
     ]
+
 
 def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
     repo: Path,
@@ -397,6 +402,7 @@ def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the ca
         req.data["forced"] = True
     return req
 
+
 def _open_request(
     repo: Path, cfg, log, it, *, message: str, model: str, dirty: list[str]
 ) -> O.Outcome:
@@ -419,4 +425,3 @@ def _open_request(
     if op.refused:
         return O.refused("worktree.merged", op.reason, **data)
     return O.ok("worktree.merged", **data)
-
