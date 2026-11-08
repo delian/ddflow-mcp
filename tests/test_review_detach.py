@@ -291,22 +291,36 @@ def test_detach_emits_a_stop_command_in_the_prose_and_the_data(monkeypatch):
     assert captured["data"]["stop"] == "kill -TERM -2618834"
 
 
-def test_detach_stop_command_stops_the_process_group(tmp_path):
-    """The stop command `_detach_stop` returns must STOP a live process GROUP -- the pid is
-    the setsid session leader, and only a group kill reaches the review (bug B-review-
-    detach-prints-launcher-pid). Spawn a setsid session leader like the launcher does, run
-    the returned command from a shell, and assert the leader was SIGTERMed."""
+def test_detach_stop_command_kills_the_review_child_not_only_the_leader(tmp_path):
+    """The stop command `_detach_stop` returns must kill the review CHILD, not only the
+    group leader (bug B-review-detach-prints-launcher-pid). The launcher's pid is a
+    `/bin/sh -c` session leader and the review (python) is its child: a plain
+    `kill <leader>` stops only the wrapper and leaves the review running, so the next review
+    is refused 'already being reviewed'. Spawn that exact shape and assert BOTH die."""
     from ddflow.surfaces.commands import review as CR
 
+    childpid = tmp_path / "child.pid"
     leader = subprocess.Popen(
-        ["setsid", "sleep", "60"],
+        ["setsid", "/bin/sh", "-c", f"sleep 60 & echo $! > '{childpid}'; wait"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    review = -1
     try:
+        deadline = time.monotonic() + 10
+        while not childpid.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert childpid.exists(), "the review child never started"
+        review = int(childpid.read_text())
+        assert _alive(review), "the review child was not running"
         subprocess.run(["bash", "-c", CR._detach_stop(leader.pid)], check=True, timeout=30)
         leader.wait(timeout=5)
         assert leader.returncode == -signal.SIGTERM
+        # A plain `kill <leader>` would stop only the wrapper; the group kill must also
+        # reach the review child, which proves it is a group kill and not the bug's shape.
+        assert _alive(review) is False
     finally:
         with contextlib.suppress(ProcessLookupError):
             os.kill(leader.pid, signal.SIGKILL)
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(-leader.pid, signal.SIGKILL)
