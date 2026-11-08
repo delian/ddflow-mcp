@@ -273,7 +273,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return over
     if cfg.flow.integration == "pr":
         return _open_request_outcome(
-            repo, cfg, log, it, wt, item, gates, forced_by, agent,
+            repo, cfg, log, it, wt, item, gates, forced_by, pending_approval, agent,
             message=message, model=model, dirty=dirty,
         )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
@@ -641,12 +641,12 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
 
 
 def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
-    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, agent: str, *, message: str, model: str, dirty: list[str]
+    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, pending_approval: str, agent: str, *, message: str, model: str, dirty: list[str]
 ) -> O.Outcome:
     """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
     opening a request past unsettled required gates is never silently skipped. A forced
-    request records a `merge.forced` event just as a forced landing does (the branch head is
-    the proposed landing, `pr sync` lands it)."""
+    request spends the approval and records a `merge.forced` event only when the request
+    actually opened (the branch head is the proposed landing, `pr sync` lands it)."""
     if not it.worktree:  # claimed --no-worktree
         return O.refused(
             "worktree.merged",
@@ -658,9 +658,13 @@ def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the ca
             dirty=[],
         )
     req = _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
+    if req.exit != 0:
+        return req  # a refused/unavailable open is not an override to record
     if gates.unmet:
         req.data["awaiting_gates"] = list(gates.awaiting())
     if forced_by is not None:
+        if pending_approval:
+            forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
         _record_forced(log, item, W.head_sha(wt.path) or "", gates, forced_by, agent)
         req.data["forced"] = True
     return req
