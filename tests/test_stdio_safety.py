@@ -176,13 +176,14 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
         # the two column spaces must agree or a real call right after a same-line
         # tab-bearing string would be mistaken for prose.
         norm = src.expandtabs(8)
-        prose_types = {
-            tokenize.COMMENT,
-            tokenize.STRING,
-            tokenize.FSTRING_START,
-            tokenize.FSTRING_MIDDLE,
-            tokenize.FSTRING_END,
+        # f-string literal text is tokenized as FSTRING_* on 3.12+; on earlier
+        # interpreters the whole f-string is a STRING token, already covered.
+        fstring_types = {
+            getattr(tokenize, n)
+            for n in ("FSTRING_START", "FSTRING_MIDDLE", "FSTRING_END")
+            if hasattr(tokenize, n)
         }
+        prose_types = {tokenize.COMMENT, tokenize.STRING, *fstring_types}
         protected = [
             (t.start, t.end)
             for t in tokenize.generate_tokens(io.StringIO(norm).readline)
