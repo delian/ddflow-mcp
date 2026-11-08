@@ -141,7 +141,7 @@ def test_the_approval_is_single_use(repo, refuse):
     assert _merge(repo, force=True, approval=ask).exit == 0
     assert _asks(repo)[ask]["used"] == 1
     # same command, same agent, same gates: only the spend count differs
-    stamp, why, pending = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    stamp, why, _pending = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
     assert stamp is None and "is spent" in why, why
     assert _asks(repo)[ask]["used"] == 1
 
