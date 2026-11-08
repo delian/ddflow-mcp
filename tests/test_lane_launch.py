@@ -357,3 +357,15 @@ def test_unpriced_template_and_negative_prices_and_bare_tables(tmp_path):
     got, notes = T.load(tmp_path / "t.toml")
     assert got == {} and any("x: harness is empty" in n for n in notes)
     assert any("y: " in n and "negative" in n for n in notes)
+
+
+def test_launch_reads_the_conformance_store_and_endpoint_pool(tmp_path, tree):
+    from ddflow.services.swarm.conformance import Report
+    from ddflow.services.swarm.conformance_io import save
+
+    root = tree[0]
+    assert LN.conformance_level(root, "lane-7") == 0
+    save(root, Report("lane-7", 3, ()))
+    assert LN.conformance_level(root, "lane-7") == 3
+    pools = LN.endpoint_pools(cat(tmp_path), "lan-vllm", "", 1, tmp_path / "slots")
+    assert pools and pools[0].pool == "ep-lan-vllm" and pools[0].limit == 2

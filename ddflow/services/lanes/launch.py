@@ -24,10 +24,13 @@ from typing import Any
 from ...config import Config
 from .. import modelreg
 from ..lane_driver import LaneHandle, Result, driver_for
+from ..swarm import conformance_io as CIO
 from ..swarm import lanehooks as LH
 from ..swarm import score
 from ..swarm import seedpack as SP
 from ..swarm.score_config import Weights
+from . import capacity as CAPACITY
+from . import endpoint as EP
 from . import launch_template as T
 from . import opencode as OC
 
@@ -63,8 +66,6 @@ class Request:
     state: Any  #: folded event log (approvals, item, decisions)
     cat: modelreg.Catalog
     world: score.World  #: the scheduler's snapshot of live lanes: the caps are judged on it
-    level: int = 0  #: measured conformance level (0 = none), from the conformance store
-    pools: tuple = ()  #: endpoint/GPU pool headroom (capacity.view), from the capacity probe
     cfg: Config = field(default_factory=Config)
     est_in: int = 0
     est_out: int = 0
@@ -79,6 +80,29 @@ def _check_template(t: T.Template, cfg: Config) -> list[str]:
     if cap > 0 and t.budget_usd > cap:
         out.append(f"template budget_usd {t.budget_usd} is above launch_max_budget_usd {cap}")
     return out
+
+
+def conformance_level(repo: Path, agent: str) -> int:
+    """The lane's measured conformance level, or 0 when no run has graded it yet."""
+    report = CIO.load(repo, agent)
+    return report.level if report is not None else 0
+
+
+def endpoint_pools(
+    cat: modelreg.Catalog,
+    route: str,
+    model: str,
+    default_slots: int,
+    directory: Path | str | None = None,
+) -> tuple:
+    """The endpoint pool headroom a lane on ``route`` needs now: the route's ``concurrency``
+    (or ``default_slots``) against the slots busy in ``directory`` (the host slot dir when
+    None). Empty when the route cannot be read."""
+    ep = EP.resolve(cat, route, model, require_tools=False)
+    if isinstance(ep, EP.Result):
+        return ()
+    pools = CAPACITY.pools_for(ep, default_slots, {})
+    return CAPACITY.view(pools, CAPACITY.busy_counts(pools, directory))
 
 
 def _constraints(req: Request, w: Weights) -> list[str]:
@@ -100,8 +124,8 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         price_out=t.price_out,
         local=t.local,
         kinds=t.kinds,
-        level=req.level,
-        pools=req.pools,
+        level=conformance_level(req.repo, req.agent),
+        pools=endpoint_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
     )
     out = score.refusals(sc_item, lane, req.world, w)
     if not t.local and (t.price_in is None or t.price_out is None):
