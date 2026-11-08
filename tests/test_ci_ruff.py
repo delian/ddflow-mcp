@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 from conftest import run_cli
@@ -33,18 +34,25 @@ echo 'bandit...................Skipped'
 exit $rc
 """
 
-#: The auto-fix runs `ruff format <files>` and `ruff check --fix <files>`; this fake models
-#: only the format drift: `format` rewrites it in place, everything else is a no-op.
-FAKE_RUFF = """#!/bin/sh
-m="$1"
-shift
-if [ "$m" = format ]; then
-  for f in "$@"; do
-    [ -f "$f" ] || continue
-    sed -i 's/value=1/value = 1/g' "$f"
-  done
-fi
-exit 0
+#: The auto-fix runs `ruff check --fix -- <files>` then `ruff format -- <files>`; this fake
+#: models only the format drift: `format` rewrites it in place, `check --fix` is a no-op.
+FAKE_RUFF = """#!{python}
+import sys
+mode = sys.argv[1]
+args = sys.argv[2:]
+if "--" in args:
+    args = args[args.index("--") + 1:]
+files = [a for a in args if not a.startswith("-")]
+if mode == "format":
+    for p in files:
+        try:
+            text = open(p).read()
+        except OSError:
+            continue
+        rewritten = text.replace("value=1", "value = 1")
+        if rewritten != text:
+            open(p, "w").write(rewritten)
+sys.exit(0)
 """
 
 
@@ -55,7 +63,7 @@ def _fake_tools(tmp_path, monkeypatch):
     pc.write_text(FAKE_PRECOMMIT)
     pc.chmod(pc.stat().st_mode | stat.S_IXUSR)
     ruff = bin_dir / "ruff"
-    ruff.write_text(FAKE_RUFF)
+    ruff.write_text(FAKE_RUFF.format(python=sys.executable))
     ruff.chmod(ruff.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
 
