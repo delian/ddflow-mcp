@@ -131,16 +131,17 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
     )
     finish.chmod(finish.stat().st_mode | stat.S_IXUSR)
 
+    # Isolate the resume: the killed run already logged chunk 1 and chunk 2's bodies to `seen`,
+    # so a resume that never calls the reviewer would still find `y_marker_zz` in the old log.
+    seen.write_text("")
     _code, shown, _err = run_cli(
         repo, "review", "T1", "--gate", "critic", "--full", "--branch", "feat"
     )
     gate = _gate(repo)
     got = seen.read_text()
-    # The resumed run must not re-pay chunk 1: the finished chunk is kept, only y.py re-ran.
+    # The resumed run must re-send ONLY the unreviewed chunk 2, not the finished chunk 1.
     assert "y_marker_zz" in got, "chunk 2 was never sent: " + repr(shown) + "\n" + got
-    assert got.count("x_marker_zz") == 1, (
-        "chunk 1 was re-sent on resume: " + repr(shown) + "\n" + got
-    )
+    assert "x_marker_zz" not in got, "chunk 1 was re-sent on resume: " + repr(shown) + "\n" + got
     assert gate["evidence"]["reviewed"] == [1, 2], (gate["evidence"], shown)
     locs = {str(fd.get("location", "")) for fd in gate["evidence"].get("chunk_findings", [])}
     assert any(loc.startswith("x.py") for loc in locs), gate[
