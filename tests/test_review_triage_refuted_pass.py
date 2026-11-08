@@ -117,3 +117,33 @@ def test_before_the_cap_it_passes_too_and_the_evidence_is_this_rounds(repo, tmp_
     flag = _state(repo).gates["critic"].evidence["passed_on_refutation"]
     assert flag["rounds"] == 1 and flag["max_rounds"] == 2
     assert [(r["finding"], r["probe"]) for r in flag["refutations"]] == [(1, "p1"), (2, "p2")]
+
+
+def test_a_fixed_confirmed_finding_is_not_called_refuted(repo, tmp_path):
+    # B50d87afdc7: the pass-on-refutation message said "every one of the N finding(s) was
+    # refuted with its probe" when a CONFIRMED finding was cleared by a later delta (fixed,
+    # not refuted). The record's own counts say "1 refuted, 1 confirmed"; the message must
+    # not contradict them.
+    from test_complete_failed_review_gate import _commit, _failed_and_confirmed
+    from test_complete_failed_review_gate import _setup as _cg_setup
+
+    import ddflow.api.review as api
+    from ddflow.core.model import fold
+
+    def _st():
+        return fold(EventLog(repo).read_all(), strict=False).items["T1"]
+
+    _cg_setup(repo, tmp_path)
+    _failed_and_confirmed(repo)  # R1 full: #1 confirmed
+    _commit(repo, "x.py", "x = 1\n")  # fix #1, so the next delta clears it
+    _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # new finding #2
+    out = api.review(repo, gate="critic", item="T1", branch="feat")  # R2 delta -> #2 only
+    assert out.data["outcome"] == "failed", out.data
+    t = ST.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="y.py is fine")
+    assert t.exit == 0, t.reason
+    assert t.data["passed_on_refutation"] is True
+    assert "every one of the 2 finding(s) was refuted" not in t.data["text"], t.data["text"]
+    assert "1 refuted, 1 confirmed (fixed)" in t.data["text"], t.data["text"]
+    flag = _st().gates["critic"].evidence["passed_on_refutation"]
+    assert flag["refuted"] == 1 and flag["confirmed"] == 1
+    assert _st().gates["critic"].outcome == "passed"
