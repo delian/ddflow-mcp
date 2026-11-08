@@ -353,6 +353,34 @@ def test_show_stays_under_the_budget_for_a_nested_shape_the_caps_miss():
     assert out["truncated"]["findings_cut"] > 0
 
 
+def test_show_bounds_a_flat_string_list_in_gate_evidence():
+    """A gate-evidence LIST OF BARE STRINGS is bounded too: a `ci` gate's `baseline.ids`
+    (and `failed_tests`) is a flat list of test ids, not a list of finding dicts, and its
+    50 KB of ids alone once pushed `ddflow_show` past the tool-result cap
+    (B-show-result-over-mcp-cap). Each id is short, so the string clip leaves it alone; the
+    list itself must be capped and counted, like the findings lists are."""
+    ids = [f"tests/test_x{i:04d}.py::test_thing" for i in range(5_000)]
+    body = {
+        "state": "running",
+        "gates": {
+            "ci": {
+                "outcome": "partial",
+                "evidence": {
+                    "baseline": {"ids": list(ids), "still_failing": list(ids), "red": True},
+                    "failed_tests": list(ids),
+                },
+            }
+        },
+    }
+    out, _ = B.bound_show(body, {})
+    ev = out["gates"]["ci"]["evidence"]
+    assert len(ev["baseline"]["ids"]) <= B.FINDINGS_SHOWN
+    assert len(ev["baseline"]["still_failing"]) <= B.FINDINGS_SHOWN
+    assert len(ev["failed_tests"]) <= B.FINDINGS_SHOWN
+    assert out["truncated"]["findings_cut"] >= 3 * (5_000 - B.FINDINGS_SHOWN)
+    assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
+
+
 def test_a_gates_map_with_more_names_than_the_cap_stays_whole():
     """The root `gates` map NAMES the gates, so a project with more than `FINDINGS_SHOWN`
     gates must keep every gate record -- the series-map cap must not truncate it."""
