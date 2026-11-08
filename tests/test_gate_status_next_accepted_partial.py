@@ -36,7 +36,16 @@ def _auto_accepted_baseline():
     }
 
 
-def _project(repo):
+def _person_only_baseline():
+    return {
+        "red": True,
+        "base": "main",
+        "ids": ["tests/t.py::test_x"],
+        "auto": {"accepted": False, "ids": []},
+    }
+
+
+def _project(repo, *, baseline=None):
     run_cli(repo, "init")
     run_cli(repo, "workflow", "pipeline", "task", "implement,ci,merge")
     run_cli(repo, "task", "add", "T1", "--title", "T1", "--globs", "a.py")
@@ -55,7 +64,7 @@ def _project(repo):
             "gate": "ci",
             "by": "ddflow",
             "reason": "baseline-red: tests/t.py::test_x",
-            "evidence": {"baseline": _auto_accepted_baseline()},
+            "evidence": {"baseline": baseline or _auto_accepted_baseline()},
         },
     )
 
@@ -68,3 +77,13 @@ def test_next_advances_past_an_auto_accepted_partial(repo):
     s = G.status(st, cfg, "T1", G.load_gates(repo, cfg))
     assert s.current != "ci", s.render()
     assert s.complete, s.render()
+
+
+def test_next_stays_on_a_person_only_partial(repo):
+    _project(repo, baseline=_person_only_baseline())
+    st = _state(repo)
+    cfg = Config.load(repo)
+    assert st.items["T1"].gate_outcome("ci") == "partial"
+    s = G.status(st, cfg, "T1", G.load_gates(repo, cfg))
+    assert s.current == "ci", s.render()
+    assert not s.complete, s.render()
