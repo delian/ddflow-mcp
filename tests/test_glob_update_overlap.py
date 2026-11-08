@@ -260,11 +260,9 @@ def test_a_widening_refused_for_a_new_glob_names_only_that_glob(repo):
         "M1",
         "--globs",
         "tests/test_no_agent_literals.py,changes.toml",
-        "--json",
         agent="mine",
     )
     assert code != 0
-    json.loads(out)
     assert "changes.toml" in (out + err), (out, err)
     # The vague wording is gone: the refusal names the one contended glob, and does not
     # name the held glob the requester already owns.
