@@ -17,8 +17,7 @@ claude_md = "yes"
 [hooks]
 style = "plugin"
 file = ".kilo/plugin/"
-normalizer = "opencode"
-emitter = "opencode"
+emitter = "silent"
 block = "throw"
 session_id = "sessionID"
 inject = ["session_start", "prompt"]
@@ -68,3 +67,4 @@ date = "2026-10-09"
 sources = ["https://github.com/Kilo-Org/kilocode"]
 record = "R-hx-kilo"
 probe = "kilo --version -> 7.2.20; kilo mcp --help; kilo agent --help; kilo debug paths"
+

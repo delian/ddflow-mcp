@@ -72,14 +72,11 @@ def complete_phase(
         )
         decided = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
         if not decided.ok:
-            # `operator_gate` prefixes its refusal where one is refused (a request or a
-            # refused spend); the "to ask the operator" steering message (no id, `auto` False)
-            # is NOT prefixed, so add the prefix only when it is not already there.
+            # `operator_gate` owns the 'refusing: ' prefix on every refusal, steering
+            # message included (B-consume-refusal-prefix-owner): pass it through untouched.
             return O.refused(
                 KIND,
-                decided.message
-                if decided.message.startswith("refusing: ")
-                else "refusing: " + decided.message,
+                decided.message,
                 id=phase_id,
                 approval=decided.ask_id,
             )

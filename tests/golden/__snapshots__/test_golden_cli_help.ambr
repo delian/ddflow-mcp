@@ -890,7 +890,7 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
+  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--fix-stale-globs] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
@@ -906,6 +906,10 @@
                           accepts directly; an agent passes approval=request, the person answers in
                           chat, and the agent re-runs with the approval id. doctor then reports them
                           as accepted notes; a changed or new finding is a PROBLEM again
+    --fix-stale-globs     rewrite the stale package glob of every unfinished item to its package
+                          path (a module that became a package left `x.py` globs covering none of
+                          the package's files), and retarget each live lease; B-stale-globs-after-
+                          split-wave
     --history-reason HISTORY_REASON
                           why the history is known and accepted (required to accept it)
     --history-note HISTORY_NOTE

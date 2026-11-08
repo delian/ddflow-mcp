@@ -17,8 +17,7 @@ claude_md = "nv"
 [hooks]
 style = "claude"
 file = "~/.kimi/config.toml"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -36,3 +35,4 @@ session_end = "SessionEnd"
 date = "2026-10-09"
 sources = ["https://moonshotai.github.io/kimi-cli/en/customization/hooks.html"]
 unverified = ["project-level hook file", "additionalContext field", "session id env var"]
+

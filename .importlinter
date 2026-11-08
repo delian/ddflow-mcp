@@ -56,9 +56,9 @@ forbidden_modules =
     ddflow.infra
 allow_indirect_imports = True
 
-# Processes start in ddflow.infra.proc (and git in ddflow.infra.git, when it exists).
+# Processes start in ddflow.adapters.proc (and git in ddflow.adapters.git, when it exists).
 [importlinter:contract:subprocess-home]
-name = subprocess is imported only by ddflow.infra.proc and ddflow.infra.git
+name = subprocess is imported only by ddflow.adapters.proc and ddflow.adapters.git
 type = forbidden
 source_modules =
     ddflow
@@ -66,9 +66,9 @@ forbidden_modules =
     subprocess
 allow_indirect_imports = True
 
-# Atomic writes, temporary files and locks belong in ddflow.infra.fsio.
+# Atomic writes, temporary files and locks belong in ddflow.adapters.fsio.
 [importlinter:contract:fsio-home]
-name = tempfile and fcntl are imported only by ddflow.infra.fsio, shutil only by ddflow.adapters.fs
+name = tempfile and fcntl are imported only by ddflow.adapters.fsio, shutil only by ddflow.adapters.fs
 type = forbidden
 source_modules =
     ddflow
@@ -78,9 +78,9 @@ forbidden_modules =
     shutil
 allow_indirect_imports = True
 
-# Content digests belong in ddflow.core.digest.
+# Content digests belong in ddflow.adapters.digest.
 [importlinter:contract:digest-home]
-name = hashlib is imported only by ddflow.core.digest
+name = hashlib is imported only by ddflow.adapters.digest
 type = forbidden
 source_modules =
     ddflow
@@ -102,6 +102,19 @@ forbidden_modules =
     urllib
     http
     socket
+allow_indirect_imports = True
+
+# TOML is read and written only by ddflow.adapters.toml (TomlIo); every other importer is
+# debt that moves behind the port family by family (ADP-toml-unify), so the baseline can
+# only shrink.
+[importlinter:contract:toml-home]
+name = tomllib and tomlkit are imported only by ddflow.adapters.toml
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    tomllib
+    tomlkit
 allow_indirect_imports = True
 
 # Optional extras (D-unify 2): each is imported by exactly ONE adapter module, which owns

@@ -53,6 +53,7 @@ from ...services.guidance import ruleview as RULEVIEW
 from ...services.review import degraded_notes, load_reviewers
 from ...views import human
 from ...views.markdown import render_views
+from .. import items as _items
 from .._base import _load
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
@@ -63,6 +64,49 @@ from .recovery_notes import _recovery_findings
 from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
+
+
+def _stale_glob_section(
+    repo: Path, cfg, st, agent: str, fix: bool, problems: list[str], notes: list[str]
+) -> None:
+    """The stale-package-glob part of `doctor`, appended onto ``problems``/``notes``: the
+    notes, or -- the `--fix-stale-globs` flag -- each item's stale glob rewritten to its
+    package path and each live lease retargeted (B-stale-globs-after-split-wave). A stale
+    glob the fix could not rewrite is a PROBLEM: the caller asked for a rewrite and it did
+    not happen."""
+    if fix:
+        p, n = _apply_stale_globs(repo, cfg, st, agent)
+    else:
+        p, n = [], _stale_glob_notes(repo, st)
+    problems += p
+    notes += n
+
+
+def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list[str]]:
+    """`ddflow doctor --fix-stale-globs`: rewrite the stale package glob of every unfinished
+    item to its package path, so no open item is left leasing a module that no longer is,
+    and each holder's lease is retargeted to the package (B-stale-globs-after-split-wave).
+    Returns `(problems, notes)`: a rewrite `items.update` refused is a problem; a correction
+    parts held back against another live lease is a problem that says so."""
+    if not LBR.has_py_glob(st):
+        return [], []  # no `x.py` glob can name a package: do not touch git for nothing
+    tracked = LBR._tree_files(repo)
+    if tracked is None:
+        return ["stale task globs not fixed: git could not list the tracked files"], []
+    problems: list[str] = []
+    notes: list[str] = []
+    for item_id, stale in LBR.stale_glob_updates(st, tracked):
+        corrected = [dict(stale).get(g, g) for g in st.items[item_id].globs]
+        out = _items.update(repo, item_id, _items.ItemEdit(globs=corrected), agent=agent)
+        if out.exit != O.OK:
+            problems.append(f"{item_id}: stale globs not corrected: {out.reason or out.exit}")
+            continue
+        withheld = out.data.get("globs_withheld") or []
+        if withheld:
+            problems.append(f"{item_id}: globs partly corrected; withheld: {', '.join(withheld)}")
+        else:
+            notes.append(f"{item_id}: globs corrected to {', '.join(corrected)}")
+    return problems, notes
 
 
 def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[str]) -> None:
@@ -280,6 +324,7 @@ def doctor(
     tools: Any = None,
     accept_lost_events: bool = False,
     accept_history: bool = False,
+    fix_stale_globs: bool = False,
     history: tuple[str, str, str, str] = ("", "", "", ""),
     start_texts: Any = None,
 ) -> O.Outcome:
@@ -399,7 +444,7 @@ def doctor(
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
-    notes += _stale_glob_notes(repo, st)
+    _stale_glob_section(repo, cfg, st, agent, fix_stale_globs, problems, notes)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)

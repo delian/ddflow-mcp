@@ -11,6 +11,7 @@ import time
 
 import pytest
 
+from ddflow.adapters import proc as PQ
 from ddflow.infra import proc as P
 
 
@@ -53,7 +54,10 @@ def _spawned(monkeypatch):
         made.append(real(*a, **k))
         return made[-1]
 
-    monkeypatch.setattr(P, "popen", spy)
+    # `_shell_group` lives in `ddflow.adapters.proc_server` and reaches `popen` through
+    # `ddflow.adapters.proc`, so the seam is patched there (the compat shim's copy is a
+    # different binding, ADP-migrate-homes).
+    monkeypatch.setattr(PQ, "popen", spy)
     return made
 
 

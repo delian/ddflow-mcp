@@ -162,10 +162,12 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
     for r in results or []:
         if r.status not in _HEARD:
             continue
-        who = getattr(r, "reviewer", "")
-        fam = (getattr(r, "family", "") or "").strip().lower()
         for fd in r.evidence()["chunk_findings"]:
-            out.append({**fd, "reviewer": who, "family": fam})
+            # `evidence()` names the reviewer on each finding: `_stamp_raised_by` stamps the
+            # one a reviewer raised, and `merge_rerun` carries a peer's (or an old record's
+            # unattributed) finding with its own `reviewer`. Emitted as-is -- a carried
+            # finding must not be relabelled to the result's reviewer.
+            out.append({**fd})
     return out
 
 
@@ -200,8 +202,9 @@ def _finding_rows(results) -> list[dict[str, str]]:
                 "title": f.title,
                 "location": f.location,
                 "detail": f.detail,
-                "reviewer": r.reviewer,
-                "family": r.family,
+                # `review()` and `merge_rerun` name the reviewer on each finding.
+                "reviewer": f.reviewer,
+                "family": f.family,
             }
             for f in r.findings
         )

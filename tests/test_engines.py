@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from ddflow.services import hookio, mcpconfig
+from ddflow.services import harnessreg, hookio, mcpconfig
 from ddflow.services.engines import (
     ENGINES,
     EngineError,
@@ -86,15 +86,18 @@ def test_fieldmap_matches_hookio_for_every_shipped_dialect():
             "toolCall": {"name": "t"},
         }
     )
-    for name, fm in hookio.NORMALIZERS.items():
-        p = hookio.normalize(name, "prompt", name, stdin)
+    for h in harnessreg.load():
+        if h.hooks is None or h.hooks.style not in harnessreg.COMMAND_HOOK_STYLES:
+            continue
+        fm = hookio.plan_for(h.id).normalizer
+        p = hookio.normalize(fm, "prompt", h.id, stdin)
         got = fieldmap.extract(fm, json.loads(stdin))
         assert (got["session"], got["prompt"], got["cwd"], got["tool"]) == (
             p.session_id,
             p.prompt or "",
             p.cwd,
             p.tool,
-        )
+        ), h.id
 
 
 def test_fieldmap_from_table_validates():
@@ -119,29 +122,20 @@ def test_fieldmap_deep_and_nonobject_input_is_empty_not_a_crash():
 
 
 # --- E2 emit ----------------------------------------------------------------------------
-LEGACY = {  # variant -> the shipped emitter id that prints the same
-    "plain": "claude",
-    "json_context": "gemini",
-    "additional_context": "copilot",
-    "additional_context_snake": "cursor",
-    "context_modification": "cline",
-    "empty_json": "antigravity",
-    "silent": "cascade",
-}
 
 
-@pytest.mark.parametrize("variant", sorted(LEGACY))
-def test_emit_variants_equal_the_shipped_emitters(variant):
+@pytest.mark.parametrize("variant", sorted(hookio.EMIT_VARIANTS))
+def test_emit_variants_render_via_the_closed_list(variant):
     for inject in (True, False):
         for text in ("ctx", ""):
-            assert emit.render(variant, "prompt", text, inject, "BeforeAgent") == hookio.EMITTERS[
-                LEGACY[variant]
+            assert emit.render(variant, "prompt", text, inject, "BeforeAgent") == hookio.EMIT_VARIANTS[
+                variant
             ]("prompt", text, inject, "BeforeAgent")
-    assert emit.variant_for(LEGACY[variant]) == variant
+    assert emit.variant_for(variant) == variant
 
 
 def test_emit_is_closed():
-    assert set(emit.VARIANTS) == set(LEGACY)
+    assert set(emit.VARIANTS) == set(hookio.EMIT_VARIANTS)
     with pytest.raises(EngineError):
         emit.render("rm -rf", "prompt", "x", True, "")
     with pytest.raises(EngineError):

@@ -204,6 +204,7 @@ from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,
     Runner,
     counts_of,
+    coverage_of,
     declares_xdist,
     detect,
     file_text,

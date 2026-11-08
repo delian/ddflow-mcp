@@ -42,6 +42,44 @@ def _landed_elsewhere(repo: Path, test_src: str = FAILS_FIRST, name: str = "test
     return sha
 
 
+def _landed_with_invalid_committed_base_ref(repo: Path) -> str:
+    """A landing commit whose COMMITTED config leaks a flag into `[worktree].base_ref`,
+    exactly the historical `--local` leak B20cfd41344 is about. Both the landing commit AND
+    its first parent (the pre-fix source) carry the value `Config.load` refuses, so the test
+    exercises BOTH scratch checkouts ddflow builds. The base has since moved on with a valid
+    config, so only those checkouts still carry the value."""
+    run_cli(repo, "init")
+    (repo / "src.py").write_text("def f():\n    return 1\n")
+    run_cli(repo, "config", "--set", "gate.unit_tests.command", f"{sys.executable} -m pytest -q")
+    _commit(repo, "src, and a runner that can run a node id")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "f returns 1")
+    cfgp = repo / ".ddflow" / "config.toml"
+    before = cfgp.read_text()
+    injected = before.replace(
+        "[worktree]\nenabled = true\n",
+        '[worktree]\nenabled = true\nbase_ref = "--local"\n',
+    )
+    assert injected != before and 'base_ref = "--local"' in injected, (
+        "expected the scaffold's [worktree].enabled = true block to inject the broken base_ref"
+    )
+    cfgp.write_text(injected)
+    # The PRE-FIX source carries the broken config: the parent of the landing commit.
+    _commit(repo, "leak a flag into [worktree].base_ref")
+    (repo / "src.py").write_text("def f():\n    return 2\n")
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_f.py").write_text(FAILS_FIRST)
+    _commit(repo, "fix f, elsewhere (its committed config still leaks the flag)")
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    # The base moves on with a valid config again: only the LANDING commit and its parent
+    # carry the broken value, as this project's history actually does.
+    cfgp.write_text(before)
+    (repo / "later.txt").write_text("unrelated\n")
+    _commit(repo, "a later commit: the base has moved on with a valid config again")
+    return sha
+
+
 def _item(repo: Path, item: str):
     return fold(EventLog(repo).read_all()).items[item]
 
@@ -56,6 +94,18 @@ def test_a_fix_landed_elsewhere_is_verified_against_its_landing_commit(repo):
     assert ev["tree"] == sha
     assert res.data["landed"] == sha
     assert [e.data["landed"] for e in EventLog(repo).read_all() if e.kind == "bug.fixed"] == [sha]
+
+
+def test_a_landing_whose_committed_config_is_invalid_uses_the_callers_config(repo):
+    """B20cfd41344: the fixed/pre-fix run must not reload config from a historical commit
+    it checks out. One that committed `base_ref = "--local"` makes `Config.load` raise
+    InvalidValue (a value starting with '-' is a flag, not a ref), which used to crash the
+    whole `bug fixed --landed` before the check even ran. The project's own config governs
+    the run, so the close succeeds."""
+    sha = _landed_with_invalid_committed_base_ref(repo)
+    res = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f", landed=sha)
+    assert res.exit == OK, res.reason
+    assert res.data["regression_verified"] == "verified", res.data
 
 
 def test_the_fix_task_is_ended_naming_the_landing(repo):

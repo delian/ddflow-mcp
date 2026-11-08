@@ -16,8 +16,7 @@ claude_md = "config"
 [hooks]
 style = "claude"
 file = ".codex/hooks.json"
-normalizer = "codex"
-emitter = "codex"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -50,3 +49,4 @@ date = "2026-10-09"
 sources = ["https://developers.openai.com/codex/hooks", "https://developers.openai.com/codex/mcp"]
 record = "R-hx-codex"
 unverified = ["session id env var", "CLI worktree"]
+

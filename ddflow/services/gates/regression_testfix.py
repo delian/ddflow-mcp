@@ -101,7 +101,7 @@ def verify_test_only_fix(
                 restored = "not run (no runnable pytest command)"
             else:
                 run = GateDef(id="regression_check", title="regression test", command=command)
-                outcome, rev = run_command_gate(run, ptree)
+                outcome, rev = run_command_gate(run, ptree, cfg=cfg)
                 restored = outcome
                 if outcome == "unavailable":
                     restored = f"unavailable ({rev.get('reason', 'no reason given')})"
@@ -189,7 +189,7 @@ def _by_mutation(
         if not command:
             return UNRUN, {**ev, "reason": "the mutated tree has no runnable pytest command"}
         run = GateDef(id="regression_check", title="regression test", command=command)
-        outcome, rev = run_command_gate(run, ptree)
+        outcome, rev = run_command_gate(run, ptree, cfg=cfg)
     ev = {**ev, "mutated_command": command, "mutated_outcome": outcome, "mutated_run": _ran(rev)}
     if outcome == "unavailable":
         return UNRUN, {

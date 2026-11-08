@@ -28,11 +28,6 @@ BASELINE: dict[str, tuple[int, str]] = {
         "for each agent with a row, so grok.toml's row adds one; the shim must not import the "
         "descriptor loader (follow-up SU-client-table-descriptors)",
     ),
-    "ddflow/services/hookio.py": (
-        20,
-        "the dialect names: keys of NORMALIZERS and EMITTERS, which the descriptors' "
-        "[hooks] normalizer/emitter name",
-    ),
     "ddflow/surfaces/commands/setup.py": (
         11,
         "the --claude/--gemini aliases of `hooks install --harness` and the per-event "
@@ -47,17 +42,7 @@ BASELINE: dict[str, tuple[int, str]] = {
         6,
         "the hook-style vocabulary, the legacy session variables and the title doc",
     ),
-    "ddflow/services/compat_refs.py": (
-        5,
-        "the reference checker's table of known agent paths; read by `doctor`",
-    ),
-    "ddflow/services/review/model.py": (2, "reviewer provider kinds (gemini) are not harnesses"),
     "ddflow/services/review/engine.py": (1, "reviewer provider kinds (gemini) are not harnesses"),
-    "ddflow/config_sections/approvals.py": (
-        2,
-        "the default transcript root ~/.claude/projects and its doc: a path the claude "
-        "harness writes, not a descriptor read (RA-channel-harness)",
-    ),
     "ddflow/services/leanagents.py": (
         1,
         "HARNESS = 'claude': the lean agent definitions are a claude-only template set",
@@ -264,6 +249,19 @@ def test_shadowed_family_hints_is_not_exempt():
     assert "grok" in ids
     source = 'def f():\n    FAMILY_HINTS = {"grok": "x"}\n    return FAMILY_HINTS\n'
     assert sites(source, ids, _roots(), skip_vendor_keys=True) == [2]
+
+
+def test_the_moved_tables_are_no_longer_agent_literal_sites():
+    # The hook dialects (hookio), the known agent paths (compat_refs) and the transcript
+    # root (approvals) moved to descriptor data; none of the files that held them still
+    # names an agent, so the ratchet no longer counts a single site in them.
+    counts = _counts()
+    for gone in (
+        "ddflow/services/hookio.py",
+        "ddflow/services/compat_refs.py",
+        "ddflow/config_sections/approvals.py",
+    ):
+        assert counts.get(gone, 0) == 0, gone
 
 
 #: A selected `ddflow ci run` runs this file for EVERY item (B93f74bc125): it scans the whole

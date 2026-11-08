@@ -75,7 +75,7 @@ def failed_tests(text: str) -> list[dict[str, str]]:
         line = raw.strip()
         if m := _PYTEST_LINE.match(line):
             kind = "ERROR" if line.startswith("ERROR") else "FAILED"
-            seen.setdefault((m["id"], kind), (m["why"] or "")[:LINE_CHARS])
+            seen.setdefault((m["id"], kind), m["why"] or "")
         elif m := _UNITTEST_LINE.match(line):
             where = m["where"]
             tid = where if where.endswith(m["name"]) else f"{where}.{m['name']}"
@@ -150,7 +150,7 @@ def _error_fields(
         section = _section_of(f["id"], tails, error=is_error)
         why = f["why"] or (_last_error_line(section[1]) if section else "")
         if is_error:
-            errored[f["id"]] = why
+            errored[f["id"]] = why[:LINE_CHARS]
             if section:
                 where[f["id"]] = _error_place(*section)
         elif why:

@@ -276,3 +276,20 @@ def test_authorise_needs_nothing_when_nothing_refuses():
         "",
         "",
     )
+
+
+def test_pr_mode_still_refuses_unsettled_gates_before_opening_a_request(repo, refuse, monkeypatch):
+    """Bc6c07dfe52: [merge].require_gates=refuse must refuse even under [flow].integration=pr,
+    before `_open_request` opens a request past the unsettled gates (which, unfixed, returned
+    through the PR branch ahead of the require_gates check)."""
+    from importlib import import_module
+
+    M = import_module("ddflow.api.lifecycle.merge")
+    _claimed(repo)
+    run_cli(repo, "config", "flow.integration", "pr")
+    reached = []
+    monkeypatch.setattr(M, "_open_request", lambda *a, **k: reached.append(1) or "REACHED")
+    out = _merge(repo)
+    assert out.exit == 3, out.reason
+    assert "require_gates = refuse" in out.reason
+    assert not reached  # the request path must never be entered

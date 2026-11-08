@@ -25,6 +25,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
+from ..flakes import LINE_CHARS
 from .baseline import cache_load, cache_signatures, cache_store
 from .testcmd import counts_of
 
@@ -92,8 +93,16 @@ def on_base(
     where = {"base": base, "base_sha": sha}
     # A cache entry measured before failure text was kept (old format, no text) has nothing to
     # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
-    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet).
-    todo = [i for i in ids if i not in known or (known.get(i) and i not in cached_sigs)]
+    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet). An entry whose text sits at
+    # the old cut-to-LINE_CHARS length is ambiguous -- the base's whole reason may differ past it
+    # or not -- so it is re-measured too, never guessed either way (B-baseline-red-hides-new
+    # -cause, the legacy-cache migration).
+    todo = [
+        i
+        for i in ids
+        if i not in known
+        or (known.get(i) and (i not in cached_sigs or len(cached_sigs[i]) == LINE_CHARS))
+    ]
     if not todo:
         return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
     ran = _run_chunks(repo, sha, gdef, todo, run, ttl_s, tree or repo)
@@ -124,19 +133,26 @@ def _tally(
 
 def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str] | None) -> bool:
     """Does the failure text the BRANCH showed for ``test_id`` differ from what the base showed?
-    Only when both are known and disagree: a base whose text is unknown (a cached id measured
-    before text was kept) never claims a new offender, and a branch whose text is unknown is
-    left to the id-only answer."""
+    A test the base also fails, but with a DIFFERENT full reason text, is a new offender, not
+    baseline-red. ``failed_reasons`` now keeps each FAILED reason WHOLE (its summary line is not
+    cut), so two reasons that differ only past what the display used to cap to are told apart
+    (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender.
+    A base text that is ambiguous (the legacy cut shape) is re-measured by ``on_base`` before it
+    reaches here, so this comparison is always whole-versus-whole."""
     base = (onbase or {}).get(test_id)
     if not base:
         return False
     branch = (before or {}).get(test_id)
-    return bool(branch) and branch != base
+    if not branch:
+        return False
+    return branch != base
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
-    """The branch's own failure text per id ({} when the evidence kept none): what
-    ``on_base`` compares against the base's text to spot a new offender in an already-red test."""
+    """The branch's own failure text per id ({} when the evidence kept none): what ``on_base``
+    compares against the base's text to spot a new offender in an already-red test. Each FAILED
+    reason is kept WHOLE so a new cause past the old display cap is told apart
+    (B-baseline-red-hides-new-cause)."""
     return dict(ev.get("failed_reasons") or {})
 
 
