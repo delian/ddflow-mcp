@@ -1,0 +1,2 @@
+{"agent":"bg61","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e8bf95b80f9588bafbbe27f88","kind":"ddflow.seen","lamport":152660,"schema":1,"subject":"ddflow","ts":"2026-11-08T04:35:41.242199Z"}
+{"agent":"bg61","data":{"path":".ddflow/worktrees/fix-Bede059773d"},"id":"e389e1b8de0ea4f859806b78e","kind":"worktree.removed","lamport":152661,"schema":1,"subject":"fix-Bede059773d","ts":"2026-11-08T04:35:41.339246Z"}
