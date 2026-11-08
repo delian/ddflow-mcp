@@ -9,7 +9,9 @@ import re
 from dataclasses import dataclass
 
 _FILE = re.compile(
-    r'^diff --git (?P<aq>"?)a/(?P<a>.+?)(?P=aq) (?P<bq>"?)b/(?P<b>.+?)(?P=bq)$'
+    r'^diff --git '
+    r'(?P<a>"a/(?:[^"\\]|\\.)*"|a/.*) '
+    r'(?P<b>"b/(?:[^"\\]|\\.)*"|b/.*)$'
 )
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
@@ -128,7 +130,8 @@ class _Reader:
             # `b/`). An unquoted name is a literal POSIX byte string (quotePath=false), e.g.
             # `a/foo bar.txt` or `a/café.txt`, so only a side the header actually quoted is
             # passed to `_dequote`.
-            b = _dequote(m["b"]) if m["bq"] == '"' else m["b"]
+            b_side = m["b"]
+            b = _dequote(b_side[3:-1]) if b_side[0] == '"' else b_side[2:]
             if b not in self.files:
                 self.files.append(b)
         elif not self.files or self.in_binary:

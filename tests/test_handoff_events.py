@@ -435,3 +435,13 @@ def test_quoted_name_with_escaped_quote_is_decoded() -> None:
         '--- "a/foo\\"bar.txt"\n+++ "b/foo\\"bar.txt"\n@@ -1 +1 @@\n-x\n+y\n'
     )
     assert P.shape(quoted).files == ('foo"bar.txt',), P.shape(quoted)
+
+
+def test_quoted_name_containing_space_b_slash_is_decoded() -> None:
+    # a quoted name may itself contain ` b/`; the splitter must not take that as the
+    # a/b separator (`foo" b/bar`).
+    quoted = (
+        'diff --git "a/foo\\" b/bar" "b/foo\\" b/bar"\n'
+        '--- "a/foo\\" b/bar"\n+++ "b/foo\\" b/bar"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    assert P.shape(quoted).files == ('foo" b/bar',), P.shape(quoted)
