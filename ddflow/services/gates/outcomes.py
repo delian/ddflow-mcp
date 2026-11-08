@@ -10,6 +10,7 @@ from typing import Any
 from ...config import Config
 from ...core import blobref as B
 from ...core.model import OUTCOME_MARK, State
+from .. import gate_accept as GA
 from .. import logblobs as LB
 from ..docsonly import pipeline_by_diff
 from .defs import GateDef, pipeline_for, required_gates
@@ -313,9 +314,6 @@ def status(
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
-    # deferred: outcomes is imported by gates.__init__, which gate_accept also needs
-    from .. import gate_accept as GA
-
     gates, diff = pipeline_by_diff(it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"))
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
