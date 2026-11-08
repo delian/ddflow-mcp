@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_review_triage import _full_review, _setup, _state
 
 import ddflow.api.review_settle as ST
+from ddflow.services.gates.outcomes import on_refutation
 
 
 def _tri(repo, n, verdict="refuted", probe="ran it: no such bug"):
@@ -38,3 +39,4 @@ def test_retriage_to_confirmed_revokes_the_pass_on_refutation(repo, tmp_path):
     gate = _state(repo).gates["critic"]
     assert "passed_on_refutation" not in (gate.evidence or {}), "the stale refutation flag must be dropped"
     assert gate.outcome != "passed", "a confirmed unfixed finding must unpass the gate"
+    assert on_refutation(_state(repo), "critic") is None, "the display path must not show a refutation pass"

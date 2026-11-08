@@ -194,22 +194,14 @@ def rounds_line(it, gate: str) -> str:
 def on_refutation(it, gate: str) -> dict[str, Any] | None:
     """The `passed_on_refutation` flag of ``gate``'s recorded PASS (its refuted and
     confirmed counts and the rounds it took), or None: passed by a clean review, or not
-    passed (decision D-unify 5: such a pass is allowed, and always visible).
-
-    A finding re-triaged CONFIRMED after the pass revives a confirmed, unfixed defect, so
-    the refutation pass no longer holds: its recorded confirmed count is stale against the
-    current triage, and the gate must not keep showing ``PASSED ON REFUTATION``
-    (bug B31e91454f8)."""
+    passed (decision D-unify 5: such a pass is allowed, and always visible). A finding
+    re-triaged CONFIRMED re-records the gate failed in `triage` (B31e91454f8), so the
+    record this reads is already no longer `passed`."""
     rec = it.gates.get(gate)
     if rec is None or rec.outcome != "passed":
         return None
     flag = (rec.evidence or {}).get("passed_on_refutation")
-    if not isinstance(flag, dict):
-        return None
-    live = triage_counts(it, gate) or {}
-    if live.get("confirmed", 0) > int(flag.get("confirmed", 0)):
-        return None
-    return flag
+    return flag if isinstance(flag, dict) else None
 
 
 def _pass_mark(it, gate: str) -> str:
