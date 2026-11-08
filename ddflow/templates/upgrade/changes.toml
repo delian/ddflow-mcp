@@ -1916,7 +1916,7 @@ kind = "knob_changed"
 key = "lessons.test_file_globs"
 old = "[\"tests/**\", \"test/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
 new = "[\"**/tests/**\", \"**/test/**\", \"**/spec/**\", \"**/specs/**\", \"**/__tests__/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\", \"**/*.test.[jt]s\", \"**/*.test.[jt]sx\", \"**/*.test.[mc]js\", \"**/*.spec.[jt]s\", \"**/*.spec.[jt]sx\", \"**/*.spec.[mc]js\", \"**/*_test.go\", \"**/*_spec.rb\", \"**/*_test.rb\", \"**/test_*.rb\"]"
-why = "Path globs naming TEST files: the tests/, test/, spec/, specs/ and __tests__/ trees at any depth (Rust's tests/**/*.rs among them), and by name Python (test_*.py, conftest.py), JS/TS (*.test.ts, *.spec.js), Go (*_test.go) and Ruby (*_spe..."
+why = "Path globs naming TEST files: the tests/, test/, spec/, specs/ and __tests__/ trees at any depth (Rust's tests/**/*.rs among them), and by name Python (test_*.py, conftest.py), JS/TS (*.test.ts, *.spec.js), Go (*_test.go) and Ruby (*_spec.rb, *_test.rb, test_*.rb)."
 
 [[release.change]]
 kind = "knob_added"
