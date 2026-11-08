@@ -205,8 +205,11 @@ def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
         log.append(
             "lesson.recorded",
             f"L{i}",
-            {"title": f"lesson {i}", "rule": f"zebra rule {i}",
-             "why": "a rotation without a flush lost writes"},
+            {
+                "title": f"lesson {i}",
+                "rule": f"zebra rule {i}",
+                "why": "a rotation without a flush lost writes",
+            },
         )
     for i in range(8):
         claim = LC.claim(repo, f"W{i}", agent="crashed")
