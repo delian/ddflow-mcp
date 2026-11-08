@@ -532,3 +532,17 @@ def test_the_lane_sources_level_and_pools_reach_the_score():
     reasons = refusals(Item("a"), lane, World(), replace(Weights(), conformance_min_level=2))
     assert any("conformance level" in r for r in reasons)
     assert any("full" in r for r in reasons)
+
+
+def test_the_pull_source_reads_the_conformance_store_and_pool(repo):
+    _queue(repo)
+    _approve(repo, "ds")
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.services.swarm.conformance import Report
+    from ddflow.services.swarm.conformance_io import save
+
+    save(repo, Report("ds", 3, ()))
+    src = PL._source(repo, Config(), fold([]), "ds", 1000.0)
+    assert src.level == 3
+    assert any(h.pool == "ep-deepseek" for h in src.pools)

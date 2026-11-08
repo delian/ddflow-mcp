@@ -21,6 +21,7 @@ from ...core.model import RUNNING, State
 from ...core.schedule import Caps, caps, critical_path, needs_tree, open_slots
 from ...services import flowstate as FL
 from ...services import modelreg
+from ...services.lanes import launch as LN
 from ...services.lanes import launch_template as T
 from ...services.swarm import dispatch as D
 from ...services.swarm import ledger as LG
@@ -49,12 +50,15 @@ def _source(repo: Path, cfg: Config, st: State, lane: str, now: float) -> D.Lane
     live = sum(lz.holder == lane for lz in st.active_leases(now, cfg.lease.grace_s).values())
     if t is None:
         return D.LaneSource(None, D.LaneFacts(), False, False, live=live)
+    cat = modelreg.load(local_dir=Path(repo) / LOCAL)
     return D.LaneSource(
         t,
-        D.catalog_facts(modelreg.load(local_dir=Path(repo) / LOCAL), t),
+        D.catalog_facts(cat, t),
         _declares_trust(path, lane),
         T.approved(st, t).ok,
         live=live,
+        level=LN.conformance_level(repo, lane),
+        pools=LN.endpoint_pools(cat, t.route, t.model, cfg.lanes.endpoint_slots),
     )
 
 
