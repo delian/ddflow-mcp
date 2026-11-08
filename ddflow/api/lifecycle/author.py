@@ -27,11 +27,11 @@ def _remember_declared_model(st: State, log, cfg, model: str, model_source: str)
     `complete --model X` used the flag only in-memory, and a REFUSAL recorded nothing, so
     a later `recover`/`lanes` had no session record to read and reported "the author's
     model is unknown". Record the flag model as a session declaration -- the one carrier
-    `open_session_model` and the lanes ledger already read -- MERGED into the agent's
-    latest session rather than a new one: a brand-new, never-ended session would re-point
-    the lanes ledger's `session`/`ended` signal and make a finished lane read as still
-    open (roborev 4245). Deduped against that same record; a `[agent].family` or a
-    session model is already durable."""
+    `open_session_model` and the lanes ledger already read. With a prior session it MERGES
+    into that record: a brand-new, never-ended session would re-point the lanes ledger's
+    `session`/`ended` signal and make a finished lane read as still open (roborev 4245).
+    With none, a fresh session IS the declaration. Deduped against that record; a
+    `[agent].family` or a session model is already durable."""
     if model_source != "flag" or not model:
         return
     own = [s for s in st.sessions.values() if s.agent == log.agent_id]
