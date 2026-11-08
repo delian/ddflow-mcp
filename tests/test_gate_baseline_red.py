@@ -573,6 +573,22 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
+def test_a_red_id_whose_branch_failure_text_is_absent_is_blind_not_matched(repo) -> None:
+    """B0f41a2f1d6 tightening: when the branch run left NO failure text for a red id
+    (`failed_reasons` lacks it), `_differs` cannot claim "not different" is a match, so
+    `_tally` marks the id blind -- red stays true (the id did fail on the base) but the
+    whole-vs-whole comparison never happened. An auto-accept that rests on that comparison
+    (a full selection whose reach cannot be told) must treat the id as not compared."""
+    from ddflow.services.gates import baseline_red as BR
+
+    ids = [ID]
+    known = {ID: True}  # measured: it fails on the base too
+    found = BR._tally(ids, known, before={}, onbase={ID: "assert 1 == 2"})
+    assert found["red"] is True  # no DIFFERENCE was detected...
+    assert found["blind"] == [ID]  # ...only because the branch text was absent
+    assert found["different"] == [] and ID in found["still_failing"]
+
+
 def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
     """B-baseline-red-hides-new-cause legacy sensitive: a base entry cached BEFORE the reason was
     kept whole stored it cut to ``LINE_CHARS``. That cut text cannot say whether the base's
