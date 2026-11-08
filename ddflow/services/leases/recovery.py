@@ -268,7 +268,7 @@ def _note_landed(
 
 def _branch_ahead(repo: Path, facts: RepoFacts, cfg: Config, branch: str) -> int:
     """Commits ``branch`` holds that the base lacks, three-valued like the rest of this
-    module: N>0 unmerged · 0 the branch is genuinely gone · -1 cannot be told.
+    module: N>0 unmerged · 0 the branch is gone or fully merged · -1 cannot be told.
 
     Asked only when the worktree is gone: the branch may still carry unmerged work, and
     "nothing to salvage" over it deletes real work (B5b1c6272c1). `W.branch_exists` answers
@@ -286,7 +286,14 @@ def _branch_ahead(repo: Path, facts: RepoFacts, cfg: Config, branch: str) -> int
     return G.commits_ahead(repo, facts.base(cfg.worktree.base_ref), branch)
 
 
-def _gone_tree(rec: Recovery, repo: Path, cfg: Config, facts: RepoFacts, held: bool) -> None:
+def _gone_tree(
+    rec: Recovery,
+    repo: Path,
+    cfg: Config,
+    facts: RepoFacts,
+    held: bool,
+    budget: _Budget | None = None,
+) -> None:
     """Fill the row for an item whose worktree path is gone.
 
     The tree is gone (a merge removed it), so `recover` must not name a path that no
@@ -297,6 +304,14 @@ def _gone_tree(rec: Recovery, repo: Path, cfg: Config, facts: RepoFacts, held: b
     (B5b1c6272c1). Ask the branch before declaring it empty.
     """
     rec.worktree = ""
+    if budget is not None and not budget.take_tree():
+        rec.salvageable = None  # not measured: unknown is never clean
+        rec.advice = (
+            "worktree is gone: NOT MEASURED in this view (it measures at most "
+            f"{cfg.lease.scan_view_trees_max} trees, `lease.scan_view_trees_max`). Treat it as "
+            f"containing work until `ddflow recover` has measured it."
+        )
+        return
     ahead = _branch_ahead(repo, facts, cfg, rec.branch)
     if ahead < 0:
         # The branch could not be measured (none recorded, or git could not count): unknown
@@ -356,7 +371,7 @@ def _measure(
     facts = facts or RepoFacts(repo)
     wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
-        _gone_tree(rec, repo, cfg, facts, held)
+        _gone_tree(rec, repo, cfg, facts, held, budget)
         return
     if budget is not None and not budget.take_tree():
         rec.salvageable = None  # not measured: unknown is never clean
