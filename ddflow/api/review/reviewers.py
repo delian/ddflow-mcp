@@ -231,11 +231,12 @@ class _ReplyFile:
         self._started = False
         _ACTIVE.append(self)
 
-    def plan(self, diff_sha: str, chunks_total: int, max_chunk_chars: int) -> None:
+    def plan(self, diff_sha: str, chunks_total: int, max_chunk_chars: int, wanted: list[int]) -> None:
         """Checkpoint the cut's identity the moment it is known, so a killed review's record
         can RESUME from the next chunk instead of re-running every chunk (bug Bd8c4e1d8d6).
         A chunk number means nothing across two cuts, so a resume must name the same diff,
-        the same chunk size and the same reviewer -- this one line carries all four."""
+        the same chunk size, the same reviewer and the same ``wanted`` subset -- this one line
+        carries all five."""
         with self._lock:
             try:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,6 +249,7 @@ class _ReplyFile:
                                     "diff_sha": diff_sha,
                                     "chunks_total": chunks_total,
                                     "max_chunk_chars": max_chunk_chars,
+                                    "wanted": wanted,
                                 }
                             }
                         )

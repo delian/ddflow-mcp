@@ -469,7 +469,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 60,
     on_chunk: Callable[[int, str], None] | None = None,
-    on_plan: Callable[[str, int, int], None] | None = None,
+    on_plan: Callable[[str, int, int, list[int]], None] | None = None,
     manifest: str = "",
     chunk_max_tokens: int = 0,
     split_rounds: int = 2,
@@ -508,8 +508,6 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     chunks = _split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
     res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
-    if on_plan:
-        on_plan(res.diff_sha, res.chunks_total, res.max_chunk_chars)
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
@@ -517,6 +515,8 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
         res.status = ERROR
         res.reason = f"no chunk {outside} -- this diff has chunks 1..{len(chunks)}"
         return res
+    if on_plan:
+        on_plan(res.diff_sha, res.chunks_total, res.max_chunk_chars, wanted)
     res.requested = sorted(set(only or ()))
 
     overrides = dict(prompt_overrides or {})

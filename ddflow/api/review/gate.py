@@ -195,7 +195,7 @@ def _terminated_gate(
     # checkpointed by the runner the moment it knew the chunks. Without it a later run cannot
     # tell which chunk numbers still mean something, so it re-runs every chunk from scratch.
     plan = next((f.plan_meta() for f in files if f.plan_meta()), {})
-    for key in ("reviewer", "diff_sha", "chunks_total", "max_chunk_chars"):
+    for key in ("reviewer", "diff_sha", "chunks_total", "max_chunk_chars", "wanted"):
         if key in plan:
             evidence[key] = plan[key]
     evidence.setdefault(

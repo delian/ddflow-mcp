@@ -113,6 +113,7 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
     assert ev.get("diff_sha"), ev
     assert ev.get("chunks_total") == 2, ev
     assert ev.get("reviewer") == "r", ev
+    assert ev.get("wanted") == [1, 2], ev
 
     # Replace the reviewer with one that finishes chunk 2, then resume.
     finish = tmp_path / "reviewer"
