@@ -124,7 +124,14 @@ def test_a_registered_filter_and_key_take_part_in_the_plan(log, cfg, monkeypatch
     p = plan(fold(log.read_all()), cfg, agent="me")
     assert any(b.item == "T2" and b.detail == "test says no" for b in p.blocked)
     assert "T2" not in [i.id for i in p.ready]
-    assert _filters.ORDER == ["recover_first", "bugs_first", "unphased_first", "late_first", "priority", "id"]
+    assert _filters.ORDER == [
+        "recover_first",
+        "bugs_first",
+        "unphased_first",
+        "late_first",
+        "priority",
+        "id",
+    ]
 
 
 def test_glob_conflict_live_skips_own_item_holder_and_other_lines(log, cfg):
