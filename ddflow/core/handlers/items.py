@@ -187,10 +187,13 @@ def _h_item_reworked(st: State, ev: Event) -> None:
     """A re-claim of an item that had already merged reopens that stale merge: the landing
     is no longer `merged_sha`, so it clears, and the item's gates clear with it -- a rework
     re-gates the new work in the normal order, exactly like `item.reopened`
-    (B-rework-of-merged-item-keeps-stale-merge)."""
+    (B-rework-of-merged-item-keeps-stale-merge). The prior landing is kept on
+    `reopened_merge`, so the gates that need it can accept the already-landed work
+    (B600455cc2a)."""
     it = st.items.get(ev.subject)
     if it is None:
         return
+    it.reopened_merge = ev.data.get("sha") or ""
     it.merged_sha = ""
     it.merged_head = ""
     it.landed_before = ""
