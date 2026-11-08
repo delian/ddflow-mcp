@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/deltas/kilo-cline ddflow=0.2.10 fmt=1 sha=3b472cc902b6 -->
+<!-- ddflow:begin drivers/deltas/kilo-cline ddflow=0.2.10 fmt=1 sha=049997a7403d -->
 # Delta: Kilo / Cline / Roo
 
 The driver is `templates/drivers/implement-phase.md`. Read and follow it in full.
@@ -7,8 +7,15 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
    The `/ddflow-wave` slash command (`subtask: true`) runs the `ddflow-orchestrator`
    subagent as a BACKGROUND subtask, so the wave loop runs off the operator's main chat —
    the chat stays free and async notifications surface without `ctrl+b`. Never wrap the
-   mission in a foreground session goal: `goal start` IS the loop that blocks the
-   operator chat. The orchestrator subagent is the loop and runs it as data-driven waves:
+   mission in a FOREGROUND session goal in the operator's chat: `goal start` there IS the
+   loop that blocks them. The orchestrator subagent keeps its OWN session goal open (that
+   background goal is what keeps the lane alive across waits), and heartbeat-holds every
+   claimed item through every wait — a self-scheduled wakeup a subagent leaves behind is
+   dropped at turn completion, and a claim that stops heartbeating lapses to INTERRUPTED
+   (Bbc611c0165), so the lane returns its one final result only when the scope drains (the
+   DONE report at an empty scope) — a WAIT never returns one, and a question for the
+   operator comes only after the lane releases or parks its claims. The
+   orchestrator subagent is the loop and runs it as data-driven waves:
    one read of `ddflow next --json`, claim each ready item, then fan the claimed items to
    `task` subagents — one claimed item each — mapping the `tier:fast|balanced|deep` hints
    to model choice, and after the merges land (or park, in the PR flow) re-read `next`
@@ -21,7 +28,8 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
    On a runtime with no `task`-subagent run (Roo) there is no background loop: a one-shot
    invocation does ONE item directly — claim, gate, then merge or park — and prints
    `ddflow next` and `ddflow cadence` as the handoff for the next invocation. These loop
-   facts are the `[orchestration]` record in `ddflow/harnesses/kilo.toml`; the command and
+   facts are the `[orchestration]` record in `ddflow/harnesses/kilo.toml` (loop
+   `background-subagents`, keepalive `session-goal`); the command and
    subagent are EMITTED from `ddflow/templates/` by `ddflow adopt`, not hand-written.
 2. **Subagents.** `task` tool, with worktree isolation where supported.
 3. **Asking the operator.** The `question` tool.

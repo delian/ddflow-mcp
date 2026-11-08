@@ -11,6 +11,7 @@ import ddflow.api._dedupe as DD
 from ...config import csv_list
 from ...core import ids as IDS
 from ...core import outcome as O
+from ...core.plain import plain as _plain
 from ...infra.store import Store
 from ...services import inventory as INV
 from ...services import searchcore as SC
@@ -118,6 +119,22 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
         log.append("lesson.recorded", lid, data | IDS.key_field(minted) | chk.fields)
         DD.after_add(log, cfg, lid, chk)
     return O.ok("lesson.recorded", id=lid, sites=len(sites), inventory=sites, **chk.data())
+
+
+def lesson_show(repo: Path, item: str) -> O.Outcome:
+    """One lesson in full, by id (bug B6bf97a62e0).
+
+    ``ddflow show`` answers a lesson id with ``no such item or bug`` and ``lesson`` had no
+    ``show`` verb, so a lesson's full rule/why/how was reachable only by guessing words
+    from its title. The wire body is the lesson object itself, as ``decision show`` does
+    for a decision.
+    """
+
+    _log, _cfg, st = _load(repo)
+    lsn = st.lessons.get(item)
+    if lsn is None:
+        return O.failed("lesson.show", f"no such lesson {item!r}", id=item, lesson=None)
+    return O.ok("lesson.show", id=item, lesson=_plain(lsn))
 
 
 def lessons_verify(repo: Path, *, agent: str = "") -> O.Outcome:

@@ -630,6 +630,21 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("session", "inbox"),
+        tool="ddflow_session_inbox",
+        tier="all",
+        summary="read this lane's delivered inbox messages again",
+        description="Read the lane's delivered messages again: `ddflow heartbeat` delivers and "
+        "RETAINS them for [lease].inbox_retain_s, so a piped heartbeat that lost the text can "
+        "be shown whole here, fenced as untrusted data. Local to this machine.",
+        call=lambda repo, a, agent: _api().session_inbox(repo, agent=agent),
+        payload=("messages", "count"),
+        render=lambda out, a: (
+            "\n\n".join(m["fenced"] for m in out.data["messages"]) or "no retained inbox messages"
+        ),
+        params=(),
+    ),
+    Command(
         path=("session", "note"),
         tool="ddflow_session_note",
         description="Record something that happened during a session which is neither an "

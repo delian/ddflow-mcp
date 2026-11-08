@@ -1,0 +1,239 @@
+"""Driver packs: user, project and company descriptor/model packs in layer order.
+
+Extension beyond the shipped descriptors and models, per D-DRV-5 and D-DRV-Q5: the
+single combined set loads from the D-config-layer-order layers -- packaged (the shipped
+``ddflow/harnesses``), user (``~/.config/ddflow/harnesses.d``), project
+(``.ddflow/harnesses.d``) and machine-local (``.ddflow/local/harnesses.d``) -- merged per
+descriptor with later layers winning, and models overlay the shipped catalog the same
+way (``models.toml`` under the user, project and local layers).
+
+Security split (D-DRV-Q5): a descriptor from a cloned project may add detection, paths
+and facts, but never a key that runs a process. ``[headless] argv`` and ``[probe]`` are
+operator-only: a project-layer descriptor (``.ddflow/harnesses.d``) may never set one; the
+operator's own layers -- the shipped set, the user layer (``~/.config/ddflow/harnesses.d``)
+and machine-local (``.ddflow/local/harnesses.d``, layer 5) -- may. So a merged-in cloned
+file that smuggles a launch command is refused at load, not run. A company pack is data only
+and pinned by digest (the CM-packs pattern): a bare URL without a digest is refused, a
+mismatched digest keeps the content out.
+
+Schema versioned (D-DRV-5): each file carries ``schema = N``. A newer schema is
+"unavailable: upgrade ddflow", never half-read; upgrade is the existing upgrade manifest's
+job, not a reader guessing at an unknown shape. Unknown keys stay an error.
+"""
+
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+from typing import Any
+
+from ..adapters.env import DEFAULT as ENV
+from ..adapters.http import UrllibHttpClient
+from ..core.digest import content_digest
+from . import harnessreg
+from .harnessreg import Harness
+
+#: A pack is a small set of TOML files; a larger body than this is not a descriptor pack
+#: (bounded, never an unbounded fetch).
+MAX_PACK_BYTES = 2_000_000
+
+#: The schema this code reads. A file that says a newer one is "unavailable: upgrade
+#: ddflow", never half-read.
+CURRENT_SCHEMA = 2
+
+#: Keys that run a process, operator-only (D-DRV-Q5): ``[headless] argv`` is the launch
+#: command template (E4), ``[probe]`` the read-only probe argv (E8). A non-operator layer
+#: (a cloned project, a company data pack) may never set one.
+OPERATOR_ONLY = (("headless", "argv"), ("probe",))
+
+
+class PackError(ValueError):
+    """A descriptor pack is refused: wrong layer for a key, a bare URL, a bad schema."""
+
+
+def user_dir() -> Path:
+    """The user ddflow directory: ``$XDG_CONFIG_HOME/ddflow``, else ``~/.config/ddflow``."""
+    base = ENV.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "ddflow"
+
+
+def descriptor_dirs(
+    root: Path | str, user_home: Path | str | None = None
+) -> tuple[tuple[str, Path], ...]:
+    """Each descriptor layer's directory, weakest first: packaged, user, project, local."""
+    ud = Path(user_home) if user_home is not None else user_dir()
+    root = Path(root)
+    return (
+        ("packaged", harnessreg.HARNESS_DIR),
+        ("user", ud / "harnesses.d"),
+        ("project", root / ".ddflow" / "harnesses.d"),
+        ("local", root / ".ddflow" / "local" / "harnesses.d"),
+    )
+
+
+def model_overlay_paths(root: Path | str, user_home: Path | str | None = None) -> tuple[Path, ...]:
+    """The model overlay files, weakest first: user, project, then local ``models.toml``.
+
+    Each is the shape ``modelreg.LOCAL_FILE``: ``[family] [model] [route] [class]`` tables
+    that overlay the shipped ``ddflow/models`` fact-by-fact (``modelreg._merge_row``), so a
+    layer corrects one number without restating the row.
+    """
+    ud = Path(user_home) if user_home is not None else user_dir()
+    root = Path(root)
+    return (
+        ud / "models.toml",
+        root / ".ddflow" / "models.toml",
+        root / ".ddflow" / "local" / "models.toml",
+    )
+
+
+def schema_of(text: str) -> int | None:
+    """The ``schema`` a file declares, or ``None`` when it carries none (the shipped,
+    schema-less shape this code reads as its own). Bytes that are not valid TOML are
+    refused as a ``PackError`` here, so one malformed descriptor never surfaces a raw
+    ``TOMLDecodeError``."""
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PackError("not valid TOML") from exc
+    s = data.get("schema")
+    if s is None:
+        return None
+    if type(s) is not int:
+        raise PackError(f"schema: expected int, got {type(s).__name__}")
+    return s
+
+
+def require_known_schema(text: str, supported: int = CURRENT_SCHEMA) -> None:
+    """Refuse a file newer than this code: "unavailable: upgrade ddflow", never half-read."""
+    s = schema_of(text)
+    if s is not None and s > supported:
+        raise PackError(
+            f"schema {s} is newer than this ddflow reads ({supported}): unavailable: upgrade ddflow"
+        )
+
+
+def operator_only_violations(raw: Any) -> list[str]:
+    """The process-running keys ``raw`` sets, found at any depth (a pack can name several
+    descriptors), in the order they would be refused. ``[verified].probe`` is a fact
+    string, not a process key, so only a ``probe`` table/list is operator-only."""
+    out: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            headless = node.get("headless")
+            for table in headless if isinstance(headless, list) else [headless]:
+                if isinstance(table, dict) and "argv" in table:
+                    out.append("headless.argv")
+            probe = node.get("probe")
+            if probe is not None and not isinstance(probe, str):
+                out.append("probe")
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(raw)
+    return list(dict.fromkeys(out))
+
+
+def _read_bytes_bounded(path: Path) -> bytes:
+    """One pack or descriptor file, bounded: ``read(max+1)`` ends a /dev/zero or growing
+    file instead of reading until OOM. The cap is the same one a fetched pack has."""
+    with path.open("rb") as f:
+        data = f.read(MAX_PACK_BYTES + 1)
+    if len(data) > MAX_PACK_BYTES:
+        raise PackError(f"{path.name}: larger than {MAX_PACK_BYTES} bytes, not a descriptor file")
+    return data
+
+
+def _read_bounded(path: Path) -> str:
+    """``_read_bytes_bounded`` decoded: the text of one descriptor file."""
+    try:
+        return _read_bytes_bounded(path).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PackError(f"{path.name}: not UTF-8") from exc
+
+
+def _layer_descriptors(directory: Path, layer: str) -> list[Harness]:
+    """Parse one layer's descriptors. The project layer (a clone) may not set an
+    operator-only key; the check reads the raw table so an explicit empty ``argv`` is a
+    refusal, not a default. ``local`` and ``user`` are operator layers and may set one."""
+    if not directory.is_dir():
+        return []
+    out: list[Harness] = []
+    for p in sorted(directory.glob("*.toml")):
+        if not p.is_file():
+            continue
+        text = _read_bounded(p)
+        require_known_schema(text)
+        if layer == "project":
+            bad = operator_only_violations(tomllib.loads(text))
+            if bad:
+                raise PackError(
+                    f"{p.name}: a cloned project may add detection, paths and facts, never a "
+                    f"key that runs a process; operator-only {', '.join(bad)}"
+                )
+        out.append(harnessreg.parse(text, p.stem))
+    return out
+
+
+def load_descriptors(root: Path | str, user_home: Path | str | None = None) -> tuple[Harness, ...]:
+    """Every descriptor the project sees, layers merged per id, later layers winning, in rank
+    order. Refuses a project-layer descriptor that sets an operator-only key."""
+    layers = [
+        harnessreg.load(),  # packaged: shipped, already ranked
+        tuple(_layer_descriptors(descriptor_dirs(root, user_home)[1][1], "user")),
+        tuple(_layer_descriptors(descriptor_dirs(root, user_home)[2][1], "project")),
+        tuple(_layer_descriptors(descriptor_dirs(root, user_home)[3][1], "local")),
+    ]
+    merged: dict[str, Harness] = {}
+    for group in layers:
+        for h in group:
+            merged[h.id] = h
+    ranks: dict[int, str] = {}
+    for h in merged.values():
+        if h.rank in ranks:
+            raise harnessreg.DescriptorError(f"{h.id}: rank {h.rank} is also {ranks[h.rank]}'s")
+        ranks[h.rank] = h.id
+    return tuple(sorted(merged.values(), key=lambda h: h.rank))
+
+
+def _is_url(source: str) -> bool:
+    return isinstance(source, str) and "://" in source
+
+
+def _fetch(url: str) -> bytes:
+    return UrllibHttpClient().request("GET", url, timeout=30.0, max_bytes=MAX_PACK_BYTES).body
+
+
+def load_pack(source: str | Path, *, digest: str | None = None) -> dict[str, Any]:
+    """Load a company descriptor pack: data only, pinned by digest.
+
+    A bare URL without a digest is refused (remote content is data, never instructions, and
+    never silently changed). With a digest, the fetched or read content is checked against
+    it and a mismatch keeps the content out; a newer ``schema`` is "unavailable: upgrade
+    ddflow", never half-read. A company pack is data only: a key that runs a process
+    (``[headless] argv``, ``[probe]``) is refused. Returns the raw TOML tables."""
+    if _is_url(str(source)):
+        if not digest:
+            raise PackError("a bare URL pack without a digest is refused; pin the digest first")
+        data = _fetch(str(source))
+    else:
+        data = _read_bytes_bounded(Path(source))
+    digest = digest.lower() if digest else digest
+    if digest:
+        got = content_digest(data)
+        if got != digest:
+            raise PackError(f"pack digest mismatch: pinned {digest[:12]}…, content {got[:12]}…")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PackError("not UTF-8") from exc
+    require_known_schema(text)
+    raw = tomllib.loads(text)
+    bad = operator_only_violations(raw)
+    if bad:
+        raise PackError(f"a company pack is data only; it may not set {', '.join(bad)}")
+    return raw

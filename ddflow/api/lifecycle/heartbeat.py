@@ -248,7 +248,13 @@ def _inbox(repo: Path, cfg, agent: str, *, consume: bool) -> dict[str, Any]:
     """The caller's lane inbox as `{"wake": {...}}` ({} when empty): delivered at a heartbeat, only shown
     at a release or completion. Advisory, like `_waiters`."""
     try:
-        got = IB.wake(repo, agent, ttl_s=cfg.lease.inbox_ttl_s, consume=consume)
+        got = IB.wake(
+            repo,
+            agent,
+            ttl_s=cfg.lease.inbox_ttl_s,
+            consume=consume,
+            retain_s=cfg.lease.inbox_retain_s,
+        )
         return {"wake": got} if got else {}
     except (OSError, ValueError, TypeError, AttributeError):
         return {}

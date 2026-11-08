@@ -59,3 +59,8 @@ baseline = 0
 "ddflow/services/review_keys.py:key_hints" = "DX-reviewers-list-key-hint"
 # The `pins drivers --check` mergiraf keep/drop evaluation (tests/test_merge_drivers.py pins it).
 "ddflow/services/mergedrivers.py:keep_mergiraf" = "B-mergiraf-eval"
+# The driver-pack loaders (DRV-packs): `ddflow harness list|show|doctor` reads the layered set
+# and modelreg reads the model overlays; the api wiring lands with DRV-migrate.
+"ddflow/services/driverpacks.py:model_overlay_paths" = "DRV-migrate"
+"ddflow/services/driverpacks.py:load_descriptors" = "DRV-migrate"
+"ddflow/services/driverpacks.py:load_pack" = "DRV-migrate"
