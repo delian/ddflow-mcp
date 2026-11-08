@@ -109,6 +109,12 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
     assert gate["outcome"] == "partial", gate
     ev = gate["evidence"]
     assert ev["reviewed"] == [1], ev
+    # The finished chunk's FINDING is checkpointed, not just its index (a run that kept the
+    # number 1 but dropped the `x.py` finding would still say `reviewed == [1]` yet lose it).
+    kept = [
+        fd for fd in ev.get("chunk_findings", []) if str(fd.get("location", "")).startswith("x.py")
+    ]
+    assert kept, ev
     # The resume needs the cut's identity, checkpointed when the run planned its chunks.
     assert ev.get("diff_sha"), ev
     assert ev.get("chunks_total") == 2, ev
@@ -136,3 +142,7 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
         "chunk 1 was re-sent on resume: " + repr(shown) + "\n" + got
     )
     assert gate["evidence"]["reviewed"] == [1, 2], (gate["evidence"], shown)
+    locs = {str(fd.get("location", "")) for fd in gate["evidence"].get("chunk_findings", [])}
+    assert any(loc.startswith("x.py") for loc in locs), gate[
+        "evidence"
+    ]  # chunk 1 survives the resume
