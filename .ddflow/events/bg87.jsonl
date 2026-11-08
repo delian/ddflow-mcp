@@ -4,3 +4,4 @@
 {"agent":"bg87","data":{"base":"main","base_sha":"fd704244ba804acbf360abc321c78b7c2dd7efe5","branch":"ddflow/fix-B45801fa007","path":".ddflow/worktrees/fix-B45801fa007"},"id":"e5a1f72dd29812456b546d4ad","kind":"worktree.created","lamport":156494,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:10:52.203841Z"}
 {"agent":"bg87","data":{"at":1794161452.2299445,"branch":"ddflow/fix-B45801fa007","holder":"bg87","worktree":".ddflow/worktrees/fix-B45801fa007"},"id":"e56861f7bba1c25a89d2173c3","kind":"lease.renewed","lamport":156495,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:10:54.086649Z"}
 {"agent":"bg87","data":{},"id":"edf3f0d93d8674c5b4501c6ee","kind":"item.started","lamport":156496,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:10:56.397725Z"}
+{"agent":"bg87","data":{"gate":"ci"},"id":"e0a3aa9d5c66abd2171c0fa04","kind":"gate.started","lamport":156531,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:14:58.494574Z"}
