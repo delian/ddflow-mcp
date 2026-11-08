@@ -98,9 +98,17 @@ def test_project_wide_decisions_apply_to_everything(proj):
 def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
     """B5279acad6f: a no-globs item matches nothing by path, so one project-wide row
     reads as the complete governing set; the path check skipped must be said, while the
-    project-wide decision still applies."""
+    project-wide decision still applies. A path-scoped decision that governs the item's
+    files is unreachable the same way, and the note says so."""
     run_cli(proj, "task", "add", "P1.T3", "--phase", "P1", "--title", "template")
     _add(proj, title="Restart window", decision="restart the whole host nightly")
+    _add(
+        proj,
+        title="Engines share the harness",
+        decision="one harness for every engine",
+        globs="ddflow/**",
+        by="operator",
+    )
     code, out, _ = run_cli(proj, "decision", "applicable", "P1.T3")
     assert code == OK, code
     assert "path matching could not run" in out, out
