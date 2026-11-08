@@ -170,15 +170,23 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
         src = path.read_text("utf-8")
         # A scanner (archifaces_scan) documents the calls it scans, and module docstrings
         # quote examples; a match inside a comment or string is prose, not a spawn. Keep
-        # the (row, column) spans of COMMENT/STRING tokens and only flag a match that
-        # sits in real code. `tokenize` expands tabs to its tabsize (8), so expand tabs in
-        # the text before matching too: the two column spaces must agree or a real call
-        # right after a same-line tab-bearing string would be mistaken for prose.
+        # the (row, column) spans of COMMENT/STRING tokens (and f-string literal text:
+        # FSTRING_* on 3.12+) and only flag a match that sits in real code. `tokenize`
+        # expands tabs to its tabsize (8), so expand tabs in the text before matching too:
+        # the two column spaces must agree or a real call right after a same-line
+        # tab-bearing string would be mistaken for prose.
         norm = src.expandtabs(8)
+        prose_types = {
+            tokenize.COMMENT,
+            tokenize.STRING,
+            tokenize.FSTRING_START,
+            tokenize.FSTRING_MIDDLE,
+            tokenize.FSTRING_END,
+        }
         protected = [
             (t.start, t.end)
             for t in tokenize.generate_tokens(io.StringIO(norm).readline)
-            if t.type in (tokenize.COMMENT, tokenize.STRING)
+            if t.type in prose_types
         ]
         for n, line in enumerate(norm.splitlines(), 1):
             for m in spawn.finditer(line):
