@@ -6,8 +6,28 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...config import Config
 from ...infra import git as GIT
+from ..review_exclude import _hit, patterns
 from .evidence import TreeEntries, commit_tree_entries, differing_paths
+
+
+def _gate_covered(cwd: Path, paths: list[str]) -> list[str]:
+    """The subset of ``paths`` the gate ran on: a tracked file the review did not leave out.
+
+    A git merge temporary is tracked nowhere, and a file matched by `[review].exclude_globs`
+    (a golden snapshot or transcript) or owned by `pins.toml` was never sent to the reviewer:
+    naming either is not content the gate covered, so it cannot be cleared by reviewing the
+    covered code (B-stale-mark-names-merge-temp-and-excluded-files).
+    """
+    if not paths:
+        return []
+    tracked = GIT.files(cwd, "tracked")
+    paths = [p for p in paths if tracked is None or p in tracked]
+    if paths:
+        excluded, pinned = patterns(Config.load(cwd), cwd)
+        paths = [p for p in paths if not _hit(p, excluded, pinned)]
+    return paths
 
 
 def _what_differs(
@@ -22,14 +42,13 @@ def _what_differs(
     ``own`` is given, the tree can be rebuilt, and none of the item's own paths differ.
 
     A file the note names must be content the gate ran on: an untracked file (a git merge
-    temporary, tracked nowhere) is not, so it does not count as a difference and is never
-    named (B-stale-mark-names-merge-temp-and-excluded-files).
+    temporary, tracked nowhere) is not, and neither is a tracked file the review left out --
+    neither counts as a difference, so it is never named (B-stale-mark-names-merge-temp-and-
+    excluded-files).
     """
     then = commit_tree_entries(cwd, base) if base else None
     paths = differing_paths(then, now) if then is not None and now is not None else []
-    if paths:
-        tracked = GIT.files(cwd, "tracked")
-        paths = [p for p in paths if tracked is None or p in tracked]
+    paths = _gate_covered(cwd, paths)
     if own is not None and paths:
         paths = [p for p in paths if p in set(own)]
         if not paths:
