@@ -176,7 +176,7 @@ def claim(  # noqa: PLR0913 -- the door's own flags
 
 
 def _correct_stale_package_globs(
-    repo: Path, want: list[str] | None, item_globs: list[str]
+    repo: Path, want: list[str] | None, claimed: Any
 ) -> tuple[list[str] | None, list[str]]:
     """The globs a claim is about to lease, with each stale package glob corrected, and one
     sentence per correction (B-stale-globs-after-split-wave).
@@ -188,7 +188,7 @@ def _correct_stale_package_globs(
     ``want`` is unchanged when nothing is stale, or when git could not list the files (a
     check that could not run is not "nothing to correct").
     """
-    globs = want if want is not None else list(item_globs)
+    globs = want if want is not None else list(claimed.globs if claimed is not None else [])
     if not any(g.endswith(".py") for g in globs):
         return want, []
     tracked = W.git_paths(repo, "ls-files")
@@ -271,9 +271,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
     if held_before:
         want = _widened(want, prior, claimed)
-    want, stale_notes = _correct_stale_package_globs(
-        repo, want, claimed.globs if claimed is not None else []
-    )
+    want, stale_notes = _correct_stale_package_globs(repo, want, claimed)
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
@@ -316,10 +314,9 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
     # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
     out.data.update(_reopen_stale_merge(log, claimed, item))
-    if warned := missing_globs(repo, cfg, lz.globs):
+    warned = [*missing_globs(repo, cfg, lz.globs), *stale_notes]
+    if warned:
         out.data["glob_warnings"] = warned
-    if stale_notes:
-        out.data["glob_warnings"] = out.data.get("glob_warnings", []) + stale_notes
     out.data.update(OG.claim_fields(st, cfg, item, repo))
     if bug_globs:
         out.data["globs_from_bug"] = bug_globs
