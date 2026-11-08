@@ -274,7 +274,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if cfg.flow.integration == "pr":
         return _open_request_outcome(
             repo, cfg, log, it, wt, item, gates, forced_by, pending_approval, agent,
-            message=message, model=model, dirty=dirty,
+            borrowed=borrowed, message=message, model=model, dirty=dirty,
         )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
@@ -641,13 +641,13 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
 
 
 def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
-    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, pending_approval: str, agent: str, *, message: str, model: str, dirty: list[str]
+    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, pending_approval: str, agent: str, *, borrowed: bool, message: str, model: str, dirty: list[str]
 ) -> O.Outcome:
     """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
     opening a request past unsettled required gates is never silently skipped. A forced
     request spends the approval and records a `merge.forced` event only when the request
     actually opened (the branch head is the proposed landing, `pr sync` lands it)."""
-    if not it.worktree:  # claimed --no-worktree
+    if borrowed:  # claimed --no-worktree
         return O.refused(
             "worktree.merged",
             f"{item} was claimed without a worktree, and a pull request is opened from "
