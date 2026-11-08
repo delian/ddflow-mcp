@@ -198,11 +198,9 @@ def _claim_blocker(
         return Blocked(it.id, "conflict", f"leased by {held.holder}", [it.id])
     # The globs the claim will name, when the caller says (`wait --globs`): judged on the
     # stored ones, READY was followed by a claim refused for its own globs (B7036cf788c).
-    clash = L.glob_clash(st, cfg, it, me, list(it.globs if globs is None else globs), now)
-    if clash is not None:
-        named, ids = L.clash_report(
-            L.glob_clashes(st, cfg, it, me, list(it.globs if globs is None else globs), now)
-        )
+    clashes = L.glob_clashes(st, cfg, it, me, list(it.globs if globs is None else globs), now)
+    if clashes:
+        named, ids = L.clash_report(clashes)
         return Blocked(
             it.id,
             "conflict",

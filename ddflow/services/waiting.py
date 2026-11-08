@@ -63,13 +63,14 @@ def blockers(
 
 
 def edges(state, cfg, item_id: str, holder: str, globs: list[str], now: float) -> list[dict]:
-    """``blockers`` plus the queued waiter ahead of ``item_id`` (``pair`` ``["queue", ""]``):
-    a request queued behind another waits for that waiter's turn, and the wait-for graph
-    must show it or a cycle through a queue goes unseen."""
+    """``blockers`` plus every queued waiter ahead of ``item_id`` (``pair`` ``["queue", ""]``):
+    a request queued behind several waiters for different globs waits for EACH of their
+    turns, and the wait-for graph must show every edge or a cycle through a non-first
+    queue goes unseen (B-glob-refusal-names-one-conflict)."""
     out = blockers(state, cfg, item_id, holder, globs, now)
-    ahead = queue_ahead(state, cfg, item_id, holder, globs, now)
-    if ahead is not None and all(o["item"] != ahead.item for o in out):
-        out.append({"item": ahead.item, "holder": ahead.holder, "pair": ["queue", ""]})
+    for ahead in queued_ahead(state, cfg, item_id, holder, globs, now):
+        if all(o["item"] != ahead.item for o in out):
+            out.append({"item": ahead.item, "holder": ahead.holder, "pair": ["queue", ""]})
     return out
 
 
