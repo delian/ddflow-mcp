@@ -93,8 +93,16 @@ def on_base(
     where = {"base": base, "base_sha": sha}
     # A cache entry measured before failure text was kept (old format, no text) has nothing to
     # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
-    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet).
-    todo = [i for i in ids if i not in known or (known.get(i) and i not in cached_sigs)]
+    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet). An entry whose text sits at
+    # the old cut-to-LINE_CHARS length is ambiguous -- the base's whole reason may differ past it
+    # or not -- so it is re-measured too, never guessed either way (B-baseline-red-hides-new
+    # -cause, the legacy-cache migration).
+    todo = [
+        i
+        for i in ids
+        if i not in known
+        or (known.get(i) and (i not in cached_sigs or len(cached_sigs[i]) == LINE_CHARS))
+    ]
     if not todo:
         return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
     ran = _run_chunks(repo, sha, gdef, todo, run, ttl_s, tree or repo)
@@ -129,25 +137,15 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     baseline-red. ``failed_reasons`` now keeps each FAILED reason WHOLE (its summary line is not
     cut), so two reasons that differ only past what the display used to cap to are told apart
     (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender.
-
-    A base measured BEFORE the reason was kept whole (legacy) stored it cut to ``LINE_CHARS``:
-    when the branch's whole reason is that cut text and nothing else disagrees, the base and
-    branch may be the one cause the old cap could not tell apart, so it is NOT a new offender
-    (fail open, once -- the next base measurement on this sha stores the whole reason)."""
+    A base text that is ambiguous (the legacy cut shape) is re-measured by ``on_base`` before it
+    reaches here, so this comparison is always whole-versus-whole."""
     base = (onbase or {}).get(test_id)
     if not base:
         return False
     branch = (before or {}).get(test_id)
     if not branch:
         return False
-    if branch == base:
-        return False
-    # Legacy cache-sig migration: an old cut-to-LINE_CHARS base entry is the branch's whole
-    # reason's own prefix, so a prefix match at exactly the old cap is ambiguous (same cause,
-    # or a difference past the cap the old entry never saw). Fail open: it stays baseline-red.
-    if len(base) == LINE_CHARS and branch.startswith(base):
-        return False
-    return True
+    return branch != base
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:

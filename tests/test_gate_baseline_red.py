@@ -573,22 +573,24 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
-def test_a_legacy_cut_base_reason_is_not_a_new_offender(repo) -> None:
+def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
     """B-baseline-red-hides-new-cause legacy sensitive: a base entry cached BEFORE the reason was
-    kept whole stored it cut to ``LINE_CHARS``. The branch's whole reason is that cut text and
-    the rest of the SAME message, so a prefix match at the old cap must stay baseline-red -- the
-    base and branch may share the one cause the old cap could not tell apart."""
+    kept whole stored it cut to ``LINE_CHARS``. That cut text cannot say whether the base's
+    whole reason agreed with the branch past the cut, so the id is RE-MEASURED on the base (the
+    current code stores the whole reason) instead of being trusted either way."""
     from ddflow.api import gate_baseline as GB
+    from ddflow.services.gates import baseline as BL
     from ddflow.services.gates.defs import GateDef
     from ddflow.services.flakes import LINE_CHARS
 
     _project(repo)
-    whole = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"
-    legacy_base = whole[:LINE_CHARS]  # what the pre-fix flakes.py cached: cut, not whole
-    assert len(legacy_base) == LINE_CHARS and whole.startswith(legacy_base)
+    whole = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"  # the branch's whole reason
+    cut = whole[:LINE_CHARS]  # what the pre-fix flakes.py cached: cut, past-the-cap cause lost
+    assert len(cut) == LINE_CHARS
+    sha = _sha(repo, "main")
     cfg = SimpleNamespace(
         gates=SimpleNamespace(
-            baseline_cache_ttl_s=0,
+            baseline_cache_ttl_s=3600,
             baseline_red_auto="on",
             unit_tests_max_files=100,
             unit_tests_hub_importers=100,
@@ -598,21 +600,28 @@ def test_a_legacy_cut_base_reason_is_not_a_new_offender(repo) -> None:
     )
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
     it = SimpleNamespace(id="T1", base="main")
+    # A legacy entry already measured before the reason was kept whole.
+    BL.cache_store(repo, sha, {ID: True}, 3600, gdef.command, {ID: cut})
+
+    measured = []
 
     def run(g, where=None):
+        measured.append(where)
+        # The base re-measured with the CURRENT code keeps the WHOLE reason.
         return (
             "failed",
             {
                 "exit": 1,
                 "failed_tests": [ID],
-                "failed_reasons": {ID: legacy_base},
+                "failed_reasons": {ID: whole},
                 "summary": ["1 failed in 0.1s"],
             },
         )
 
     ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: whole}}
     outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
-    assert outcome == "partial", why
+    assert measured, "a legacy cut entry is re-measured, never guessed"
+    assert outcome == "partial", why  # the base's whole reason equals the branch's: same cause
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
