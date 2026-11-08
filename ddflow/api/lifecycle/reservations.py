@@ -5,6 +5,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 from __future__ import annotations
 
 import time
+from fnmatch import fnmatch
 from pathlib import Path
 
 from ...core import clock
@@ -146,11 +147,11 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     ``held`` already covers is not a new demand, so a widening that merely re-states it is
     not judged 'queued behind' (B-update-globs-queued-refusal-vague); the refusal names
     which file instead of 'those files'."""
-    # A glob the item already holds is re-stated, not newly demanded (literal here: a glob
-    # is a pattern, and true "covered by" is unsound for globs -- intersection over-
-    # approximates and lets a broadening glob walk over an earlier queued reviewer).
+    # A requested glob already held is re-stated, not newly demanded: hold `h` covers the
+    # requested `g` when `g` matches `h` as a name matches a pattern (fnmatch one-way), so
+    # `docs/README.md` is covered by held `docs/*.md` while a broadening `docs/*` is not.
     mine_glob = set(held.globs) if held is not None else set()
-    fresh = [g for g in want if g not in mine_glob]
+    fresh = [g for g in want if not any(fnmatch(g, h) for h in mine_glob)]
     ahead = WG.queue_ahead(st, cfg, it.id, me, fresh, now)
     if ahead is None:
         return None

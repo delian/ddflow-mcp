@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable
+from fnmatch import fnmatch
 from typing import Any
 
 from ...config import Config
@@ -188,7 +189,7 @@ def plan_retarget(
         # must not be judged as queued behind an earlier waiter (B-update-globs-queued-
         # refusal-vague). Only the NEW globs contend, and the refusal names which one.
         mine_glob = set(lz.globs) if lz else set()
-        want = [g for g in accepted if g not in mine_glob]
+        want = [g for g in accepted if not any(fnmatch(g, h) for h in mine_glob)]
         ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
         if ahead is not None:
             pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
