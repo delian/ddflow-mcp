@@ -15,8 +15,9 @@ wait parks its ticket for ``[ci].suite_queue_grace_s``, so a retry keeps its pla
 
 r-lock-cycle-selfheal forbids AGENTS holding file leases while they wait; this is a bounded
 host-lock poll with a heartbeat, 0.25 s apart like the sweep of `slots.Slots.hold`, it ends
-after ``[ci].suite_wait_s`` and no lease is held. `SuiteBusy` takes the queue ``position`` as
-a third argument (default 0, unknown)."""
+after ``[ci].suite_wait_s`` (measured from when the waiter reached the head, once it has, so
+time spent advancing up the line does not bounce it) and no lease is held. `SuiteBusy` takes
+the queue ``position`` as a third argument (default 0, unknown)."""
 
 from __future__ import annotations
 
@@ -226,7 +227,10 @@ def hold(
     ``wait_s`` (new, default None) overrides the wait limit `[ci].suite_wait_s` for this
     hold only: a `ddflow ci run --timeout N` passes N, so the per-run override bounds the
     queue wait too, in either direction (a queued run used to give up at the knob whatever
-    the override said, Ba5d5d63f12)."""
+    the override said, Ba5d5d63f12). The wait limit counts time IN LINE, not progress: once
+    a waiter reaches the head its give-up budget runs fresh from that moment, so the time it
+    spent advancing up the line does not bounce it the instant it arrives
+    (B-suite-wait-expires-at-head-of-queue)."""
     directory = Path(directory) if directory else state_dir()
     limit = max(1, int(cfg.ci.max_concurrent_suites))
     wait = max(0.0, float(wait_s) if wait_s is not None else float(cfg.ci.suite_wait_s))
@@ -240,10 +244,13 @@ def hold(
     with contextlib.ExitStack() as stack:
         ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
         name = ticket.name
+        head_since: float | None = None  # monotonic when this waiter FIRST reached the head
         while True:
             line = _live(queue, stale_s, grace_s, name)
             position = (line.index(name) + 1) if name in line else len(line) + 1
             if position == 1:
+                if head_since is None:
+                    head_since = time.monotonic()
                 try:
                     slot = stack.enter_context(slots.hold(limit, 0))
                     break
@@ -252,7 +259,13 @@ def hold(
             if position != said:
                 said = position
                 say(str(SuiteBusy(_holders(directory, limit), time.monotonic() - start, position)))
-            if time.monotonic() - start >= wait:
+            # The wait limit counts time IN LINE, not progress (B-suite-wait-expires-at-head-of-queue).
+            # A waiter behind others gives up after `wait` from when it queued; a waiter at the
+            # head gives up after `wait` from when it *arrived* at the head. Otherwise a waiter
+            # that spent the whole budget advancing #7 -> #1 is bounced the instant it gets there
+            # and the suite is lost with no test run. `waited_s` still reports the whole queueing.
+            anchor = head_since if head_since is not None else start
+            if time.monotonic() - anchor >= wait:
                 ticket.park = True
                 raise SuiteBusy(_holders(directory, limit), time.monotonic() - start, position)
             time.sleep(QUEUE_POLL_S)

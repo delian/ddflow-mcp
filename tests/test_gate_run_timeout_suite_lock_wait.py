@@ -104,3 +104,46 @@ def test_the_give_up_after_the_extended_wait_parks_the_ticket(tmp_path, monkeypa
             with SL.hold(cfg, "second", tmp_path, wait_s=0.6, say=lambda _t: None):
                 raise AssertionError("the holder never freed the slot")
         assert list(queue.glob("*-second.parked")), "the give-up did not park the ticket"
+
+
+def test_a_waiter_that_reaches_the_head_restarts_its_wait_budget(tmp_path, monkeypatch):
+    """B-suite-wait-expires-at-head-of-queue: `[ci].suite_wait_s` counts time IN LINE, not
+    progress. A waiter that spent time in line behind others and THEN reaches the head must
+    not be bounced the instant it arrives: its give-up budget runs fresh from reaching the
+    head, so the line time does not eat it (a real run advanced #7 -> #1 and was bounced the
+    moment it got there, recorded UNAVAILABLE with no test run)."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    cfg = Config()
+    cfg.ci.suite_wait_s = 1.0
+    now = [0.0]
+
+    def monotonic() -> float:
+        return now[0]
+
+    def sleep(s: float) -> None:
+        now[0] += s
+
+    monkeypatch.setattr(time, "monotonic", monotonic)
+    monkeypatch.setattr(time, "sleep", sleep)
+    real_live = SL._live
+
+    def fake_live(queue, stale_s, grace_s, mine=""):
+        # OUR waiter sees a fake "ahead" in front of it for the first 0.75 s (position 2) and
+        # is only then at the head; the holder's own ticket is left alone, so the holder takes
+        # the slot at once and stays in it for the whole of "me"'s wait.
+        if "-me" in mine and now[0] < 0.75:
+            return ["ahead", mine]
+        return real_live(queue, stale_s, grace_s, mine)
+
+    monkeypatch.setattr(SL, "_live", fake_live)
+
+    with SL.hold(cfg, "holder", tmp_path, say=lambda _t: None):
+        with pytest.raises(SL.SuiteBusy) as busy:
+            with SL.hold(cfg, "me", tmp_path, say=lambda _t: None):
+                raise AssertionError("the holder never freed the slot")
+    # It gave up at the head, so the queueing time did not eat the head budget: reaching the
+    # head restarted it. Unfixed, the budget ran from queueing and it gave up at 1.0 s.
+    assert busy.value.position == 1, f"gave up at position {busy.value.position}, not the head"
+    assert busy.value.waited_s >= 1.5, (
+        f"gave up after {busy.value.waited_s:.2f}s: the line time ate the head budget"
+    )
