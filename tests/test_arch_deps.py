@@ -367,7 +367,8 @@ def _ratchet_gaps(
     grew: dict[str, list[str]] = {}
     removed: dict[str, list[str]] = {}
     for name, want in baseline.items():
-        got = set(actual[name].violations)
+        report = actual.get(name)
+        got = set(report.violations) if report is not None else set()
         if got - set(want):
             grew[name] = sorted(got - set(want))
         if set(want) - got:
@@ -387,15 +388,19 @@ def test_ratchet_violations_match_baseline():
 
 def test_ratchet_reports_every_family_at_once():
     # Two families drift at once: the report names BOTH, not just the first one the loop
-    # would hit (B068d551e89): alpha grew and beta shrank in the same census.
+    # would hit (B068d551e89): alpha grew and beta shrank in the same census. gamma is in
+    # the baseline but has NO importer left (a vanished third-party package): the report
+    # must not KeyError, and its stale entries read as removed.
     actual = {
         "alpha": A.FamilyReport("alpha", ("a",), ("home",), ("home", "stray")),
         "beta": A.FamilyReport("beta", ("b",), (), ()),
     }
-    unknown, grew, removed = _ratchet_gaps(actual, {"alpha": (), "beta": ("gone",)})
+    unknown, grew, removed = _ratchet_gaps(
+        actual, {"alpha": (), "beta": ("gone",), "gamma": ("orphan",)}
+    )
     assert unknown == []
     assert grew == {"alpha": ["stray"]}
-    assert removed == {"beta": ["gone"]}
+    assert removed == {"beta": ["gone"], "gamma": ["orphan"]}
 
 
 def test_fake_returns_the_reports_it_is_given():
