@@ -41,45 +41,59 @@ def test_a_fact_without_source_or_date_is_a_problem():
 
 
 def test_family_hints_reader_matches_the_former_table_in_order():
-    # A frozen snapshot of the FORMER `FAMILY_HINTS` literal (needle -> vendor): the catalog is
-    # now the one source, so a change to families.toml that drifts from this is a defect.
-    assert M.family_hints(M.load()) == {
-        "qwen": "alibaba",
-        "claude": "anthropic",
-        "gpt": "openai",
-        "o1": "openai",
-        "o3": "openai",
-        "codex": "openai",
-        "gemini": "google",
-        "gemma": "google",
-        "llama": "meta",
-        "mistral": "mistral",
-        "mixtral": "mistral",
-        "deepseek": "deepseek",
-        "grok": "xai",
-        "phi": "microsoft",
-        "command": "cohere",
-        "yi-": "01ai",
-        "glm": "zhipu",
-        "nemotron": "nvidia",
-        "granite": "ibm",
-        "kimi": "moonshot",
-        "minimax": "minimax",
-        "ernie": "baidu",
-    }
+    # A frozen snapshot of the FORMER `FAMILY_HINTS` literal, ORDER preserved: family resolution
+    # walks the table in order and the FIRST matching needle wins, so a families.toml that emits
+    # the same pairs in a different order (or drops one) is a defect this must catch.
+    assert list(M.family_hints(M.load()).items()) == [
+        ("qwen", "alibaba"),
+        ("claude", "anthropic"),
+        ("gpt", "openai"),
+        ("o1", "openai"),
+        ("o3", "openai"),
+        ("codex", "openai"),
+        ("gemini", "google"),
+        ("gemma", "google"),
+        ("llama", "meta"),
+        ("mistral", "mistral"),
+        ("mixtral", "mistral"),
+        ("deepseek", "deepseek"),
+        ("grok", "xai"),
+        ("phi", "microsoft"),
+        ("command", "cohere"),
+        ("yi-", "01ai"),
+        ("glm", "zhipu"),
+        ("nemotron", "nvidia"),
+        ("granite", "ibm"),
+        ("kimi", "moonshot"),
+        ("minimax", "minimax"),
+        ("ernie", "baidu"),
+    ]
 
 
 def test_presets_reader_matches_review_presets():
-    # A frozen snapshot of the former `PRESETS` table's endpoints, guarding routes.toml drift.
-    presets = M.presets(M.load())
-    assert presets["openai"]["base_url"] == "https://api.openai.com/v1"
-    assert presets["deepseek"]["base_url"] == "https://api.deepseek.com/v1"
-    assert presets["xai"]["base_url"] == "https://api.x.ai/v1"
-    assert presets["anthropic"]["base_url"] == "https://api.anthropic.com/v1"
-    assert presets["gemini"]["base_url"] == "https://generativelanguage.googleapis.com/v1beta"
-    assert presets["ollama"]["launch"]["command"] == "ollama serve"
-    assert presets["claude-cli"]["command"] == "claude -p --model {model}"
-    assert presets == review.PRESETS, "the module constant IS the reader output"
+    # A frozen snapshot of the FORMER `PRESETS` table in full, every field: routes.toml is now
+    # the one source, so any value drift (a base_url, a key env name, a launch) is a defect.
+    assert M.presets(M.load()) == {
+        "openai": {"kind": "openai", "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY", "model": "gpt-5"},
+        "deepseek": {"kind": "openai", "base_url": "https://api.deepseek.com/v1", "api_key_env": "DEEPSEEK_API_KEY", "model": "deepseek-chat"},
+        "groq": {"kind": "openai", "base_url": "https://api.groq.com/openai/v1", "api_key_env": "GROQ_API_KEY", "model": "llama-3.3-70b-versatile"},
+        "together": {"kind": "openai", "base_url": "https://api.together.xyz/v1", "api_key_env": "TOGETHER_API_KEY"},
+        "fireworks": {"kind": "openai", "base_url": "https://api.fireworks.ai/inference/v1", "api_key_env": "FIREWORKS_API_KEY"},
+        "mistral": {"kind": "openai", "base_url": "https://api.mistral.ai/v1", "api_key_env": "MISTRAL_API_KEY", "model": "mistral-large-latest"},
+        "openrouter": {"kind": "openai", "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
+        "xai": {"kind": "openai", "base_url": "https://api.x.ai/v1", "api_key_env": "XAI_API_KEY", "model": "grok-4"},
+        "anthropic": {"kind": "anthropic", "base_url": "https://api.anthropic.com/v1", "api_key_env": "ANTHROPIC_API_KEY", "model": "claude-sonnet-5"},
+        "gemini": {"kind": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta", "api_key_env": "GEMINI_API_KEY", "model": "gemini-2.5-pro"},
+        "ollama": {"kind": "openai", "base_url": "http://127.0.0.1:11434/v1", "model": "qwen3:8b", "launch": {"command": "ollama serve", "ready_url": "http://127.0.0.1:11434/v1/models"}},
+        "llamacpp": {"kind": "openai", "base_url": "http://127.0.0.1:8080/v1"},
+        "lmstudio": {"kind": "openai", "base_url": "http://127.0.0.1:1234/v1"},
+        "vllm": {"kind": "openai", "base_url": "http://127.0.0.1:8000/v1"},
+        "claude-cli": {"kind": "command", "command": "claude -p --model {model}", "model": "claude-sonnet-5", "family": "anthropic"},
+        "gemini-cli": {"kind": "command", "command": "gemini -m {model} -p", "model": "gemini-2.5-pro", "family": "google"},
+        "codex-cli": {"kind": "command", "command": "codex exec -m {model} -", "model": "gpt-5", "family": "openai"},
+        "llm-cli": {"kind": "command", "command": "llm -m {model}", "family": "unknown"},
+        "litellm": {"kind": "openai", "base_url": "http://127.0.0.1:4000/v1", "api_key_env": "LITELLM_API_KEY", "launch": {"command": "litellm --model {model} --port 4000", "ready_url": "http://127.0.0.1:4000/v1/models"}},
+    }
 
 
 def test_a_local_route_is_a_reviewer_preset_through_the_local_overlay(tmp_path):
