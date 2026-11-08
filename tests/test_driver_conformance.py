@@ -20,8 +20,9 @@ from harness_conformance import declared as D
 from harness_conformance import engines as E
 from harness_conformance import report as R
 
-from ddflow.services import facts, harnessfacts
+from ddflow.services import driver_conformance as DC
 from ddflow.services import harnessreg as HR
+from ddflow.services import hookio
 
 ENGINE_CHECKS = [c for c in D.all_checks() if c[1] != D.HOOK]
 
@@ -71,10 +72,85 @@ def test_every_fixture_on_disk_belongs_to_a_declared_check():
 @pytest.mark.parametrize("hid", C.ALL)
 def test_the_facts_overlay_is_total_and_well_formed(hid):
     h = HR.get(hid)
-    for r in harnessfacts.rows(h, absent=True):
-        assert r["status"] in facts.STATUSES, (hid, r["fact"])
-    for key, node in h.facts.items():
-        assert not facts.problems(f"{hid}.{key}", node), (hid, key)
+    # The per-descriptor checks (facts overlay, hook plan) live in the package `run`;
+    # this test calls it rather than keeping a second copy of the loop.
+    result = DC.run(h)
+    assert result["checks"]["facts"]["status"] == "ok", (hid, result)
+
+
+def test_run_reports_failed_when_a_command_hooked_agent_has_an_unresolved_normalizer(monkeypatch):
+    from types import SimpleNamespace
+
+    from ddflow.services import harnessfacts
+
+    h = SimpleNamespace(
+        id="claude",
+        facts={},
+        hooks=SimpleNamespace(
+            style="claude",  # a COMMAND_HOOK_STYLE
+            normalizer="bogus",  # no such NORMALIZERS key
+            emitter="claude",
+            inject=(),
+            events={},
+        ),
+    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [])
+    result = DC.run(h)
+    assert result["status"] == "failed", result
+    assert result["checks"]["hooks"]["status"] == "failed", result
+
+
+def test_run_resolves_the_hook_plan_from_the_given_descriptor(monkeypatch):
+    """run() builds the hook plan from the descriptor handed to it, not by re-fetching the
+    id: `plan_for(id)` reads only the shipped registry, so a local descriptor not shipped
+    there must still resolve to a passing hooks check."""
+    from types import SimpleNamespace
+
+    from ddflow.services import harnessfacts
+
+    h = SimpleNamespace(
+        id="not-a-shipped-harness",
+        facts={},
+        hooks=SimpleNamespace(
+            style="claude",
+            normalizer="claude",
+            emitter="claude",
+            inject=(),
+            events={},
+        ),
+    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [])
+    result = DC.run(h)
+    assert result["checks"]["hooks"]["status"] == "ok", result
+
+
+def test_run_reports_failed_when_a_fact_has_an_unknown_status(monkeypatch):
+    from ddflow.services import harnessfacts
+
+    h = HR.get("claude")
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [{"fact": "who", "status": "bogus"}])
+    result = DC.run(h)
+    assert result["status"] == "failed", result
+    assert result["checks"]["facts"]["status"] == "failed", result
+
+
+def test_run_reports_failed_when_a_fact_node_is_malformed(monkeypatch):
+    """A malformed fact NODE trips the `facts.problems` path of run(), the second (and
+    only other) way a fact problem is caught: no well-formed shipped descriptor ever
+    makes a real Harness produce one, so this pins that loop with a bare stand-in."""
+    from types import SimpleNamespace
+
+    from ddflow.services import harnessfacts
+
+    h = SimpleNamespace(
+        id="claude",
+        facts={"headless.argv": {"s": "bogus", "src": "u", "d": "2026-01-01"}},
+        hooks=None,
+    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [])
+    result = DC.run(h)
+    assert result["status"] == "failed", result
+    assert result["checks"]["facts"]["status"] == "failed", result
 
 
 def test_the_gap_set_only_shrinks():
