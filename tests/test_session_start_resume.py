@@ -82,3 +82,24 @@ def test_under_resume_anchors_to_the_last_exact_heading_line():
     assert out.startswith("## Resume"), out
     assert out.index("```text\n# ddflow brief\n```") < out.index("## Open workflow choices"), out
     assert out.index("## Open workflow choices") < out.rindex("# ddflow brief"), out
+
+
+def test_under_resume_ignores_a_fenced_heading_below_the_h1():
+    """A `# ddflow brief` line inside a Work-note code block AFTER the view's H1 must not
+    steal the anchor: `rfind` on the raw line kept the last match (the fenced one) and
+    spliced the choices block into the code block, hiding it (grok/deepseek critic)."""
+    from ddflow.api.lifecycle.brief import _under_resume
+
+    text = "## Resume\n```text\n# ddflow brief\n```\n# ddflow brief\n## Work\n```text\n# ddflow brief\n```\n"
+    out = _under_resume(text, "", "", "## Open workflow choices\n- pick A")
+    # The choices block lands before the view's H1 (the last heading line OUTSIDE a fence),
+    # and BOTH fenced copies stay inside their code blocks.
+    assert out.index("## Resume") < out.index("## Open workflow choices"), out
+    assert out.index("## Open workflow choices") < out.rindex("## Work"), out
+    fence = "```text\n# ddflow brief\n```"
+    assert out.count(fence) == 2, out
+    # The Work code block is still intact and the choices block precedes it, not inside it.
+    choices = out.index("## Open workflow choices")
+    work = out.index("## Work")
+    assert choices < work, out
+    assert out[work:] == "## Work\n```text\n# ddflow brief\n```\n", out

@@ -298,21 +298,38 @@ def _under_resume(text: str, reports_block: str, contest_text: str, undecided: s
     Open-workflow-choices blocks go right before the one `# ddflow brief` heading the view
     emits, not above the slice, so a restarted session still sees recoverable work first
     (B-brief-choices-above-resume). The insertion is anchored to the last exact
-    `# ddflow brief` line, not the first `# ddflow brief` prefix -- a `## ddflow brief`
-    inside RESUME, a fenced `# ddflow brief`, or a line that only starts with it would
-    otherwise match -- and Review feedback is prepended later."""
+    `# ddflow brief` line OUTSIDE a code fence, not the first `# ddflow brief` prefix -- a
+    `## ddflow brief` inside RESUME, a fenced `# ddflow brief`, or a line that only starts
+    with it would otherwise match -- and Review feedback is prepended later."""
     lead = reports_block + contest_text + (undecided + "\n" if undecided else "")
     if not lead:
         return text
     head = "# ddflow brief"
-    # The view emits ONE `# ddflow brief` H1 as its own line (briefing.head), after any
-    # RESUME slice. Anchor to the LAST exact heading line -- a RESUME-quoted or fenced
-    # `# ddflow brief` above it must not steal the anchor, and a line that only STARTS with
-    # it (a `# ddflow brief ...` note) is not the H1 -- grok critic re-review of the prefix.
-    at = text.rfind("\n" + head + "\n")
+    at = _last_heading_line(text, head)
     if at < 0:
         return lead + text  # no exact H1 line (or it is the first line): keep the blocks
-    return text[: at + 1] + lead + text[at + 1 :]
+    return text[:at] + lead + text[at:]
+
+
+def _last_heading_line(text: str, head: str) -> int:
+    """Offset of the LAST exact ``head`` line that is not inside a ```markdown``` fence.
+
+    The view emits ONE `# ddflow brief` H1 as its own line (briefing.head), after any
+    RESUME slice. A RESUME-quoted or fenced `# ddflow brief` above OR below the H1 is
+    body text, not the anchor -- ``rfind`` on the raw line let a Work-note example whose
+    code block repeats the heading after the H1 steal the anchor (grok + deepseek critic),
+    and a line that only STARTS with it (a `# ddflow brief ...` note) is not the H1.
+    """
+    at = -1
+    in_fence = False
+    i = 0
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line == head:
+            at = i
+        i += len(line) + 1
+    return at
 
 
 def brief(
