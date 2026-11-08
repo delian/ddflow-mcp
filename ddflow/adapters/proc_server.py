@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import select
 import signal
 import subprocess
 import sys
@@ -77,46 +76,44 @@ def run_piped(
     stop = threading.Event()
 
     def drain() -> None:
-        """Read stderr into ``head`` until end of file, polling so a run that has finished
-        can stop the reader: ``read1`` is called only once `select` says the pipe is
-        readable, so it never blocks behind a descendant that still holds the write end."""
+        """Read stderr into ``head`` until end of file. The read end is set non-blocking so
+        a run that has finished can stop the reader with ``stop``: ``read1`` raises
+        `BlockingIOError` instead of blocking behind a descendant that still holds the
+        write end, and the loop checks the stop flag around every read."""
         fd = p.stderr.fileno()  # type: ignore[union-attr]
+        with contextlib.suppress(OSError):  # a platform without O_NONBLOCK stays blocking
+            os.set_blocking(fd, False)
         while not stop.is_set():
             try:
-                ready, _, _ = select.select([fd], [], [], 0.2)
-            except (ValueError, OSError):
-                break  # the pipe is gone (or select cannot watch it): stop draining
-            if not ready:
-                continue  # no data yet: check the stop flag again
-            try:
                 chunk = p.stderr.read1(65536)  # type: ignore[union-attr]
+            except (BlockingIOError, InterruptedError):
+                time.sleep(0.02)  # nothing is there yet: check the stop flag again
+                continue
             except (ValueError, OSError):
-                break
+                break  # the pipe is closed: stop draining
             if not chunk:
                 break  # end of file: every write end is closed
             head.extend(chunk[: stderr_bytes - len(head)])
 
-    reader = threading.Thread(target=drain, daemon=True)
+    reader = threading.Thread(target=drain, daemon=True, name="run_piped-stderr")
     reader.start()
     clock = threading.Timer(timeout, kill_group, (p,))
     clock.start()
     try:
         answer = work(p)
         if answer is not None:
-            stop.set()
-            reader.join()
-            with contextlib.suppress(ValueError, OSError):
-                p.stderr.close()  # type: ignore[union-attr]
             return PipedEnd(answer=answer)
         code = p.wait()
         reader.join(1)
         stop.set()
         reader.join()
-        with contextlib.suppress(ValueError, OSError):
-            p.stderr.close()  # type: ignore[union-attr]
         return PipedEnd(code=code, stderr=bytes(head))
     finally:
         clock.cancel()
+        stop.set()
+        reader.join()
+        with contextlib.suppress(ValueError, OSError):
+            p.stderr.close()  # type: ignore[union-attr]
         if p.poll() is None:
             stop_group(p)
 
