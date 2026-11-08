@@ -272,7 +272,6 @@ def test_a_knob_semantics_change_is_a_note_and_keeps_the_default(repo: Path) -> 
     assert "always-run guards" in note[0]["summary"]
 
 
-
 def test_a_hook_that_could_not_be_checked_is_said_not_dropped(
     old: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
