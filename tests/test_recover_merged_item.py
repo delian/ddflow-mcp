@@ -215,6 +215,28 @@ def test_a_gone_worktree_whose_branch_could_not_be_measured_is_not_called_empty(
     assert "could not be measured" in rec.advice and "ddflow release T4" in rec.advice, rec.advice
 
 
+def test_a_fatal_git_probe_leaves_the_branch_unmeasured(repo, monkeypatch):
+    """A git that runs but fails fatally (exit 128) is "unknown" (-1), not a missing ref
+    (0): folding it to 0 would reintroduce B5b1c6272c1. Exercises the real probe."""
+    from ddflow.adapters import git as GG
+    from ddflow.services.leases import recovery as REC
+
+    monkeypatch.setattr(
+        REC.G,
+        "run",
+        lambda repo, *a, **k: GG.GitResult(128, "", "fatal: not a git repository"),
+    )
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T6", {"parent": "P1", "title": "T6", "globs": ["src/T6/*"]})
+    out = LC.claim(repo, "T6", agent="worker")
+    _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
+    (rec,) = _recs(repo, "T6")
+    assert rec.salvageable is None, rec.advice
+    assert "could not be measured" in rec.advice, rec.advice
+
+
 def test_a_gone_worktree_with_no_branch_left_is_still_nothing_to_salvage(repo):
     """The branch was deleted along with the tree: genuinely nothing left, still nil, but
     NOT an "unknown" that the sweep would keep (the empty-vs-unknown distinction)."""
