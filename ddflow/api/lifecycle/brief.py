@@ -312,14 +312,14 @@ def _under_resume(text: str, reports_block: str, contest_text: str, undecided: s
     return text[:at] + lead + text[at:]
 
 
-_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})")
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 def _fence_closes(line: str, open_marker: str) -> bool:
     """True when ``line`` closes a fence opened by ``open_marker`` (same char, at least as
     long -- a shorter same-char line inside a longer fence is content, not a close)."""
     ch = open_marker[0]
-    m = re.match(r"^\s*(" + re.escape(ch) + r"{3,})\s*$", line)
+    m = re.match(r"^ {0,3}(" + re.escape(ch) + r"{3,})\s*$", line)
     return bool(m) and len(m.group(1)) >= len(open_marker)
 
 
@@ -333,7 +333,8 @@ def _last_heading_line(text: str, head: str) -> int:
     and a line that only STARTS with it (a `# ddflow brief ...` note) is not the H1.
     Fences are tracked the way Markdown delimits them: ``` and ~~~ both delimit, and a
     fence closes only on a same-char fence at least as long, so a shorter fence line
-    inside a longer fence is content.
+    inside a longer fence is content. A fence is indented at most three spaces; four or
+    more is an indented code block, not a fence.
     """
     at = -1
     fence: str | None = None

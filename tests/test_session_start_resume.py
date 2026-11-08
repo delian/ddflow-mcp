@@ -122,3 +122,8 @@ def test_under_resume_ignores_tilde_and_longer_fences_below_the_h1():
     out = _under_resume(long_fence, "", "", lead)
     assert out.index("## Open workflow choices") < out.rindex("## Work"), out
     assert out[out.index("## Work") :] == "## Work\n````markdown\n```\n# ddflow brief\n````\n", out
+    # A four-space-indented ``` line is an indented code block, not a fence close.
+    indented = "# ddflow brief\n## Work\n```text\n    ```\n# ddflow brief\n```\n"
+    out = _under_resume(indented, "", "", lead)
+    assert out.index("## Open workflow choices") < out.rindex("## Work"), out
+    assert out[out.index("## Work") :] == "## Work\n```text\n    ```\n# ddflow brief\n```\n", out
