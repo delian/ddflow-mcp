@@ -16,8 +16,7 @@ import pytest
 from ddflow.config import MCP_TOOL_TIERS, Config
 from ddflow.surfaces import mcp as M
 from ddflow.surfaces.mcp import TOOLS, Server, _schema
-
-CORE_BUDGET = 50_000  # RAISED BY THE OPERATOR (2026-11-08, accumulated new tools)
+from tests.test_mcp_tool_budget import CORE_BUDGET
 
 
 def _size(tools: list[dict]) -> int:
