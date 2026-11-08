@@ -245,6 +245,7 @@ def launch(req: Request) -> Launched | Refused:
         return Refused((f"endpoint slot: {e}",))
     except BaseException:  # a start failure beyond the slot wait still releases the slots taken
         slots.close()
+        OC.cleanup(req.home)
         raise
     if isinstance(h, Result):
         slots.close()
