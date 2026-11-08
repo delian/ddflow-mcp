@@ -76,3 +76,42 @@ def test_a_negated_no_confirmed_phrase_next_to_a_real_defect_is_still_findings(
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "findings" and r.exit == 1
+
+
+def test_a_plain_severity_bullet_next_to_the_phrase_is_still_findings(tmp_path, monkeypatch):
+    """A defect severity in roborev's own finding shape (`- medium: ...`, not a bold
+    `**medium**` bullet) still reads findings next to 'no confirmed defects'."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Review for job 7: no confirmed defects in the helpers.\n- medium: issue here\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1
+
+
+def test_a_prose_defect_next_to_the_phrase_is_still_findings(tmp_path, monkeypatch):
+    """A defect named in prose ('a critical defect remains') still reads findings next to
+    the 'no confirmed defects' words."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Review for job 7: no confirmed defects at first, but a critical defect remains\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1
+
+
+def test_a_low_note_next_to_the_phrase_is_still_clean(tmp_path, monkeypatch):
+    """A LOW-only note ('Low -- ...: a pre-existing gap', roborev's note severity) stays
+    clean: 'low' is a note, not a defect, so it is the clean verdict the fix keeps."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Review for job 7: no confirmed defects found.\nLow — `f`: a pre-existing gap\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "clean" and r.exit == 0

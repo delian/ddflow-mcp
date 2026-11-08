@@ -264,26 +264,33 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
 
 
 def _no_confirmed_defect(text: str) -> bool:
-    """Does roborev's review body hold a CONFIRMED defect? roborev's own words are 'no
-    CONFIRMED defects' when the only findings are notes/refuted/theoretical (a note still
-    counts as a finding, so `roborev wait` exits 1 for it). A real confirmed finding -- a
-    severity bullet not marked THEORETICAL/refuted -- still reads as findings even next to
-    those words (a negation or a quoted phrase does not make a clean review)."""
+    """Does roborev's review body name NO confirmed defect? Its words are 'no CONFIRMED
+    defects' when the only findings are notes/THEORETICAL/refuted -- a LOW note still makes
+    `roborev wait` exit 1, but it is a note, not a defect. Read that verdict CLEAN only
+    when the body also carries no real defect severity (B2bd9e8b715). Fail OPEN: an
+    ambiguous body stays findings, never clean."""
     lowered = text.casefold()
-    if "no confirmed defect" not in lowered:
+    if "no confirmed defect" not in lowered and "no issues found" not in lowered:
         return False
     return not _has_confirmed_finding(text)
 
 
-_SEVERITY = re.compile(r"\*\*(?:critical|high|medium|low)\*\*", re.IGNORECASE)
+_DEFECT_SEVERITY = re.compile(r"\b(?:critical|high|medium)\b", re.IGNORECASE)
 
 
 def _has_confirmed_finding(text: str) -> bool:
-    """A severity bullet that is a confirmed defect (not marked THEORETICAL or refuted)."""
+    """A real defect among the findings: a line carrying a defect severity
+    (critical|high|medium) that is not soft-pedalled as THEORETICAL or refuted. roborev's
+    'low' is a NOTE ('minor improvement opportunity with no immediate functional impact',
+    its reviewer prompt), not a defect: a LOW-only review is exactly the clean verdict this
+    fix must stop recording `failed` over. The severity is a plain word in roborev's body
+    (`**1. high (CONFIRMED)**`, `FINDING HIGH`, `- medium: ...`), not a bold `**high**`
+    bullet, so it is matched as a bare token, not markdown."""
     for line in text.splitlines():
-        if _SEVERITY.search(line) and not (
-            "theoretical" in line.casefold() or "refuted" in line.casefold()
-        ):
+        low = line.casefold()
+        if "theoretical" in low or "refuted" in low:
+            continue
+        if _DEFECT_SEVERITY.search(line):
             return True
     return False
 
