@@ -135,7 +135,7 @@ def merge_tree(
     cutoff = time.monotonic() + deadline_s if deadline_s is not None else None
 
     def left() -> float | None:
-        return None if cutoff is None else cutoff - time.monotonic()
+        return None if cutoff is None else max(0.0, cutoff - time.monotonic())
 
     with W.scratch_tree(
         repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner,
