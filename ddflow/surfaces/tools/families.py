@@ -61,6 +61,19 @@ FAMILY_TOOLS = tuple(PREFIX + noun for noun in _LEGACY)
 #: A tool whose name IS its family noun has no verb to strip: the action says what it does.
 _SELF_NAMED_ACTION = {"doctor": "check", "workflow": "show"}
 
+#: Actions a family offers in ADDITION to its member tools: a verb served by a member tool
+#: with one of its own arguments pinned (a `via` of two, declared on the CLI verb in
+#: `surfaces/declared/records.py`). ``family tool -> action -> (member tool, selector argument)``,
+#: the selector injected as ``True``. `reopen` and `tag` have no tool of their own (the tools/list
+#: byte budget has no room); they are `ddflow_bug_invalid`/`ddflow_bug_fixed` in their reopen/tag
+#: mode, and B470534f9fd makes them visible as actions so a family-profile agent can reach them.
+_PINNED: dict[str, dict[str, tuple[str, str]]] = {
+    "ddflow_bug": {
+        "reopen": ("ddflow_bug_invalid", "reopen"),
+        "tag": ("ddflow_bug_fixed", "tag"),
+    },
+}
+
 
 class Placement(NamedTuple):
     family: str
@@ -76,11 +89,21 @@ class FamilyAlias(NamedTuple):
 
 
 class Family(NamedTuple):
-    """One advertised tool: a family with its ``action -> legacy tool`` members, or a single."""
+    """One advertised tool: a family with its ``action -> legacy tool`` members, or a single.
+
+    ``pinned`` is the extra actions a member tool serves through one of its own arguments
+    set to ``True`` (a ``via`` of two; `bug reopen` and `bug tag` are served by
+    `ddflow_bug_invalid`/`ddflow_bug_fixed` this way): ``action -> (tool, selector argument)``.
+    They are NOT in ``members``, which must stay a bijection from tool to its one action."""
 
     name: str
     members: Mapping[str, str]
+    pinned: Mapping[str, tuple[str, str]]
     single: bool
+
+    def actions(self) -> dict[str, str]:
+        """Every action to its serving tool, members and pinned selector actions alike."""
+        return {**self.members, **{a: t for a, (t, _s) in self.pinned.items()}}
 
 
 def _legacy_placements() -> dict[str, Placement]:
@@ -137,13 +160,32 @@ def placement(tool: str) -> Placement:
     return _PLACED[tool]
 
 
-def build(placed: Mapping[str, Placement]) -> dict[str, Family]:
-    """The families of a placement; two tools sharing one action of a family is an error."""
+def build(
+    placed: Mapping[str, Placement],
+    pinned: Mapping[str, Mapping[str, tuple[str, str]]] = _PINNED,
+) -> dict[str, Family]:
+    """The families of a placement; two tools sharing one action of a family is an error.
+
+    A pinned action names a member tool and one of its own arguments (its selector): it is
+    an EXTRA action, not a member, so it never joins ``members`` (which stays a bijection
+    from tool to its one action)."""
     members: dict[str, dict[str, str]] = {}
     for tool, (family, action) in placed.items():
         if members.setdefault(family, {}).setdefault(action, tool) != tool:
             raise RuntimeError(f"{family}: action {action!r} is served by two tools")
-    return {f: Family(f, m, single=f in HOT_SINGLES) for f, m in members.items()}
+    pinned_by_family: dict[str, dict[str, tuple[str, str]]] = {}
+    for family, acts in pinned.items():
+        fam_members = members.setdefault(family, {})
+        for action, (tool, selector) in acts.items():
+            if action in fam_members:
+                raise RuntimeError(f"{family}: pinned action {action!r} is already a member action")
+            if tool not in fam_members.values():
+                raise RuntimeError(f"{family}: pinned action {action!r} names no member {tool!r}")
+            pinned_by_family.setdefault(family, {})[action] = (tool, selector)
+    return {
+        f: Family(f, m, pinned_by_family.get(f, {}), single=f in HOT_SINGLES)
+        for f, m in members.items()
+    }
 
 
 #: Family tool name -> `Family`; the 9 singles and the 15 families, in tool order.
