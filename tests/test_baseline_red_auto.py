@@ -452,3 +452,50 @@ def test_a_ci_whose_always_run_guards_never_ran_is_not_baseline_red(repo, monkey
     assert "22 guard file(s)" in why
     assert "tests/test_guard_a.py" in why
     assert outcome != "partial"
+
+
+def test_an_always_run_guard_reached_by_import_does_not_block_auto_accept(
+    repo, monkeypatch
+) -> None:
+    """B-baseline-red-reach-counts-whole-tree-guards: an always-run guard (`[ci].always_tests`)
+    runs for every item, so a change that reaches it by import reaches it trivially -- the reach
+    carries no signal that this change caused the failure. When the guard is red on the base
+    with the same message (so `red` holds), it must not block auto-accept."""
+    from ddflow.services.testselect import Selected, Selection
+
+    guard = "tests/test_always_guard.py"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / guard).write_text("def test_pins():\n    pass\n")
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected(guard, "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(baseline_red_auto="on"),
+        ci=SimpleNamespace(always_tests=[guard]),
+    )
+    fid = f"{guard}::test_pins"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is True, auto
+
+
+def test_a_file_reached_by_import_that_is_not_an_always_guard_still_blocks(
+    repo, monkeypatch
+) -> None:
+    """The always-run guard exclusion must not leak to an ordinary test file reached by import:
+    reaching THIS file by import may have caused its failure, so auto-accept still declines."""
+    from ddflow.services.testselect import Selected, Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/api/family_schema.py"],
+        tests=[Selected("tests/test_family_schema.py", "imports ddflow.api.family_schema", 2)],
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_family_schema.py::test_agent_family"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True}, {})
+    assert auto["accepted"] is False, auto
+    assert "test_family_schema.py" in auto["why"]
