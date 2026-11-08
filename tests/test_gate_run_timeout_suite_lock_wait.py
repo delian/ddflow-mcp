@@ -141,9 +141,10 @@ def test_a_waiter_that_reaches_the_head_restarts_its_wait_budget(tmp_path, monke
         with pytest.raises(SL.SuiteBusy) as busy:
             with SL.hold(cfg, "me", tmp_path, say=lambda _t: None):
                 raise AssertionError("the holder never freed the slot")
-    # It gave up at the head, so the queueing time did not eat the head budget: reaching the
-    # head restarted it. Unfixed, the budget ran from queueing and it gave up at 1.0 s.
+    # It gave up at the head AFTER its full head budget (1.0 s) elapsed from reaching the head
+    # at 0.75 s (0.75 line + 1.0 head), which only holds when reaching the head RESTARTED the
+    # budget. Unfixed, the budget ran from queueing and it gave up at 1.0 s (line time alone).
     assert busy.value.position == 1, f"gave up at position {busy.value.position}, not the head"
-    assert busy.value.waited_s >= 1.5, (
-        f"gave up after {busy.value.waited_s:.2f}s: the line time ate the head budget"
+    assert busy.value.waited_s >= 1.7, (
+        f"gave up after {busy.value.waited_s:.2f}s: reaching the head did not restart the budget"
     )
