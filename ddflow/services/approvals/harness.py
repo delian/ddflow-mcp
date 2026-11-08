@@ -187,8 +187,12 @@ def _dirs(cfg: Config) -> list[Path]:
     out: list[Path] = []
     seen: set[Path] = set()
     for d in roots:
-        p = Path(d).expanduser().absolute()  # absolute, never resolve(): resolve() hits the fs and can raise
-        if p not in seen:  # the same dir named two ways (relative vs absolute, or a symlink) scans twice
+        p = Path(d).expanduser()
+        try:
+            p = p.resolve()  # collapse a symlink alias: the same dir scanned once
+        except (OSError, RuntimeError):
+            p = p.absolute()  # an untraversable component or symlink loop: keep the spelling
+        if p not in seen:
             seen.add(p)
             out.append(p)
     return out
