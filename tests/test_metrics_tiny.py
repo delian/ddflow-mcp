@@ -72,7 +72,7 @@ def run(log: Log):
 def test_tiny_cold_counts_completed_items_under_the_line_limit():
     ans = run(seeded())
     tc = ans.metrics["tiny_cold"]
-    assert tc == {"count": 1, "total": 3, "rate": pytest.approx(1 / 3)}
+    assert tc == {"count": 1, "total": 3, "unmeasured": 0, "rate": pytest.approx(1 / 3)}
 
 
 def test_a_later_bug_is_counted_against_its_size_bucket_only():
@@ -104,6 +104,22 @@ def test_the_figures_the_log_cannot_support_are_named_not_measured():
     assert "same_file_refix" in ans.metrics["not_measured"]
     assert "bundle_savings" in ans.metrics["not_measured"]
     assert "tiny_cold_files" in ans.metrics["not_measured"]
+
+
+def test_an_unmeasured_size_is_not_counted_as_failing_the_tiny_limit():
+    log = Log()
+    log.add("phase.added", "P1", "lead", T0 - 2000, title="p1", body="")
+    log.add("task.added", "A", "lead", T0 - 1000, title="A", body="", parent="P1")
+    log.claim("a1", "A", T0, "f.py")
+    log.add("gate.started", "A", "a1", T0 + 60, gate="rubber_duck")
+    log.add("gate.passed", "A", "a1", T0 + 300, gate="rubber_duck", by="a1", evidence={})  # no diff_stat
+    log.complete("a1", "A", T0 + 500)
+    log.release("a1", "A", T0 + 501)
+    ans = run(log)
+    tc = ans.metrics["tiny_cold"]
+    assert tc["total"] == 0  # its size was never measured, so it is not a failed limit
+    assert tc["unmeasured"] == 1
+    assert tc["rate"] is None  # no measured item behind the figure
 
 
 def test_the_view_reports_over_cli_and_mcp():

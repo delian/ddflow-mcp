@@ -23,8 +23,8 @@ NOT_MEASURED = {
     "lines, so the metrics view cannot name an item by its file count yet",
     "same_file_refix": "a later fix touching the same file needs the per-file change history "
     "(git numstat) the log does not fold; the later-bug rate by bucket is the log-only part",
-    "bundle_savings": "bundling has never run (FT-bundle ships it); the saved gate-seconds are "
-    "zero until the first bundle lands and are reported then, not estimated now",
+    "bundle_savings": "bundling has never run (FT-bundle ships it): the saved gate-seconds "
+    "are not known until the first bundle lands and are reported then, not estimated now",
 }
 
 
@@ -50,16 +50,17 @@ def _size_of(ctx: Context, outs: list) -> int:
 
 
 def _tiny_cold(ctx: Context, minimum: int, spans, outs_of) -> dict:
-    total = len(spans)
+    """Completed items with a MEASURED size; an unmeasured size is never a failed limit."""
+    limit = ctx.cfg.fasttrack.tiny_cold_max_source_lines
+    measured = [s for s in spans if _size_of(ctx, outs_of.get(s.item, ())) > 0]
     tiny = [
-        s
-        for s in spans
-        if 0 < _size_of(ctx, outs_of.get(s.item, ())) <= ctx.cfg.fasttrack.tiny_cold_max_source_lines
+        s for s in measured if _size_of(ctx, outs_of.get(s.item, ())) <= limit
     ]
     return {
         "count": len(tiny),
-        "total": total,
-        "rate": rate(len(tiny), total, minimum),
+        "total": len(measured),
+        "unmeasured": len(spans) - len(measured),
+        "rate": rate(len(tiny), len(measured), minimum),
     }
 
 
@@ -150,8 +151,10 @@ def text(data: dict) -> str:
         "tiny-fix fast track (derived from the event log)",
         f"  tiny-cold: {tiny['count']} of {tiny['total']} completed items met the source-line "
         f"limit ({_pct(tiny['rate'])})",
-        "time per gate",
     ]
+    if tiny.get("unmeasured"):
+        out.append(f"  {tiny['unmeasured']} completed item(s) with no measured size, not counted")
+    out.append("time per gate")
     out += [
         f"  {r['gate']:<14} n={r['n']:<5} p50 {_dur(r['p50_s'])}  p90 {_dur(r['p90_s'])}"
         f"  max {_dur(r['max_s'])}"
