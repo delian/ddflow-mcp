@@ -283,7 +283,7 @@ def _no_confirmed_defect(text: str) -> bool:
 # prose word that happens to start a line (`high water mark`).
 _DEFECT_HEAD = re.compile(
     r"(?m)^[ \t]*(?:\*\*\s*[0-9]+[.):]\s*|[-*]\s+)?"
-    r"(critical|high|medium)(?=\s*[(:—–-])"
+    r"(critical|high|medium)(?=\s*[:(\u2013\u2014-])"
     r"(?P<neg>\s*\((?:theoretical|refuted)\))?",
     re.IGNORECASE,
 )

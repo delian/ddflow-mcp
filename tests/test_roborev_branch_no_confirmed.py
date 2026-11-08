@@ -108,8 +108,8 @@ def test_a_prose_severity_word_is_not_a_defect(tmp_path, monkeypatch):
 
 def test_an_ascii_hyphen_severity_delimiter_is_still_a_finding(tmp_path, monkeypatch):
     """A finding whose severity header uses an ASCII hyphen (not the em dash) still reads
-    findings: the delimiter may be '-', '–' or '—'. The 'no confirmed defects' phrase is
-    present so the delimiter (not the phrase) is what decides."""
+    findings: the delimiter may be '-', a hyphen, en dash or em dash. The 'no confirmed
+    defects' phrase is present so the delimiter (not the phrase) is what decides."""
     repo = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
@@ -156,16 +156,13 @@ def test_a_theoretical_verdict_next_to_the_phrase_is_still_clean(tmp_path, monke
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
         "FAKE_VERDICT",
-        "Review for job 7: no confirmed defects found.\n"
-        "**1. medium (THEORETICAL) — unverified**\n",
+        "Review for job 7: no confirmed defects found.\n**1. medium (THEORETICAL) — unverified**\n",
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "clean" and r.exit == 0
 
 
-def test_a_confirmed_defect_next_to_an_unrelated_theoretical_tag_is_findings(
-    tmp_path, monkeypatch
-):
+def test_a_confirmed_defect_next_to_an_unrelated_theoretical_tag_is_findings(tmp_path, monkeypatch):
     """A '(THEORETICAL)' tag elsewhere on the line does not undo a 'high (CONFIRMED)'
     finding next to it: only the verdict right after the severity negates it."""
     repo = _setup(tmp_path, monkeypatch)
