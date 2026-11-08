@@ -64,7 +64,7 @@ def test_a_diff_is_split_to_fit_the_output_cap_before_it_is_sent(monkeypatch):
 
 def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
     """shrink on a truncation, through the review path: a chunk that ran out of output budget
-    is retried as TWO SMALLER single-file pieces, never re-sent at the size that truncated."""
+    is retried as TWO non-empty SINGLE-FILE pieces, never re-sent at the size that truncated."""
     # One two-file chunk that CAN halve: the two files fit under one budget, and a chunk lost
     # to its size splits into one piece per file.
     rev = Reviewer(name="r", base_url="http://x", model="m", max_chunk_chars=500, hedge=1)
@@ -82,8 +82,15 @@ def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
     monkeypatch.setattr(R, "_race", race)
     res = review(rev, diff, "i")
     assert len(first) == 1, "the two files fit in one chunk"
-    assert len(retried) == 2, "the truncated chunk halves into two single-file pieces"
-    assert max(len(d) for d in retried) < len(first[0]), "each half is smaller than the whole"
-    got = {ln.split(" ")[2] for d in retried for ln in d.splitlines() if ln.startswith("diff --git")}
-    assert got == {"a/f0.py", "a/f1.py"}, "both files survive the shrink; none re-sent whole"
+
+    def files(d: str) -> set[str]:
+        return {ln.split(" ")[2] for ln in d.splitlines() if ln.startswith("diff --git")}
+
+    # Each retried piece is exactly ONE non-empty file diff; together they keep both files. A
+    # path that re-sends a trimmed copy of the whole (both headers) plus an empty user names
+    # {2, 0} files, not {1, 1} -- it cannot pass.
+    retried_files = [files(d) for d in retried]
+    assert len(retried) == 2 and all(len(r) == 1 for r in retried_files), retried_files
+    assert set().union(*retried_files) == {"a/f0.py", "a/f1.py"}
+    assert all(0 < len(d) < len(first[0]) for d in retried), "each half is smaller than the whole"
     assert res.status == REVIEWED, res.reason
