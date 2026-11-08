@@ -118,7 +118,9 @@ def _is_trivial(command: str) -> bool:
         or any(w in _SHELL_OPERATORS for w in words)
     ):
         return False
-    return words[0].rsplit("/", 1)[-1] in _NO_SUITE
+    while words and (words[0] in ("uv", "run", "env") or "=" in words[0]):
+        words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off
+    return bool(words) and words[0].rsplit("/", 1)[-1] in _NO_SUITE
 
 
 def _runs_whole_suite(gdef: GateDef) -> bool:
