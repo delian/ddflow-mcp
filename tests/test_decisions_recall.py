@@ -120,7 +120,7 @@ def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
     # from "could not run" (robereview finding on the JSON/MCP surface).
     code, out, _ = run_cli(proj, "--json", "decision", "applicable", "P1.T3")
     assert code == OK, code
-    assert json.loads(out)["path_unmatched"], out
+    assert json.loads(out)["path_matching"], out
 
 
 def test_a_no_globs_item_with_no_project_wide_decision_still_reports_the_skip(proj):

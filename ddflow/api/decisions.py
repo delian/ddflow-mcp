@@ -214,9 +214,7 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
         # matched. One project-wide row then reads as the complete answer; say the path
         # check could not run instead of returning it as success. The project-wide
         # decisions still apply, so this stays O.ok -- only the warning is added.
-        data["path_unmatched"] = (
-            "the item declares no globs, so decisions governed by path cannot be matched"
-        )
+        data["path_matching"] = "unreachable"
     if not hits and not wide:
         return O.nothing(
             "decision.applicable",
