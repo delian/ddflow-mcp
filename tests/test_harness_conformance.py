@@ -47,6 +47,7 @@ def test_every_mapped_event_is_canonical_and_the_ladder_is_total(hid):
 def test_the_field_map_and_emit_variant_resolve(hid):
     plan = hookio.plan_for(hid)
     assert plan is not None
+    assert isinstance(plan.normalizer, hookio.FieldMap)
     assert plan.emitter in hookio.EMIT_VARIANTS
 
 

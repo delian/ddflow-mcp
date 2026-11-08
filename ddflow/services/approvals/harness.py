@@ -184,7 +184,14 @@ def _dirs(cfg: Config) -> list[Path]:
     for h in harnessreg.load():
         if h.transcripts:
             roots.extend(h.transcripts.root)
-    return [Path(d).expanduser() for d in roots]
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for d in roots:
+        p = Path(d).expanduser()
+        if p not in seen:  # a dir named by config and again by a descriptor scans twice
+            seen.add(p)
+            out.append(p)
+    return out
 
 
 def _files(cfg: Config, since: float) -> list[Path]:

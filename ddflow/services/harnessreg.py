@@ -217,7 +217,7 @@ class Harness:
 
 
 def _check_table(value: Any, hint: Any, where: str) -> dict:
-    """A ``dict[str, str]`` (a table of strings) or ``dict[str, list[str]]`` (a fact table)."""
+    """A ``dict[str, str]`` (a table of strings) or ``dict[str, tuple[str, ...]]`` (a fact table)."""
     if not isinstance(value, dict):
         raise DescriptorError(f"{where}: expected a table")
     args = get_args(hint)

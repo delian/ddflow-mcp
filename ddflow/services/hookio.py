@@ -92,7 +92,8 @@ def fieldmap(fields: dict[str, tuple[str, ...]] | None) -> FieldMap:
     """
     if not fields:
         return _DEFAULT
-    return FieldMap(**{name: fields.get(name, getattr(_DEFAULT, name)) for name in FIELDS})
+    empty = FieldMap()
+    return FieldMap(**{name: fields.get(name, getattr(empty, name)) for name in FIELDS})
 
 
 def normalize(normalizer: FieldMap, event: str, harness: str, stdin: str) -> HookPayload:

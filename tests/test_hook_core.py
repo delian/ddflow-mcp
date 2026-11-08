@@ -78,6 +78,22 @@ def test_no_plan_for_an_agent_without_command_hooks():
     assert hookio.plan_for("no-such-agent") is None
 
 
+def test_a_partial_fields_table_keeps_the_fieldmap_default_not_claude():
+    # DRV-migrate regression: a fact a [hooks.fields] table omits keeps FieldMap's own
+    # default (an empty path tuple), not Claude's path from _DEFAULT -- gemini reads
+    # session from session_id only and never reads model.
+    fm = hookio.fieldmap({"prompt": ("prompt",), "tool": ("tool_name",)})
+    assert fm.session == ("session_id",)
+    assert fm.model == ()
+    assert fm.tool == ("tool_name",)
+
+
+def test_an_absent_or_empty_fields_table_is_the_claude_fallback():
+    assert hookio.fieldmap(None) is hookio._DEFAULT
+    assert hookio.fieldmap({}) is hookio._DEFAULT
+
+
+
 # --- normalizers: each dialect into one payload -------------------------------------------
 
 
