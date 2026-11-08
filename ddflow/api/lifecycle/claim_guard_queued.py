@@ -21,8 +21,7 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
         return None
     return O.refused(
         "item.claimed",
-        f"{ctx.item}: those files ({WG.queued_names(mine, aheads, ctx.cfg)}) are queued "
-        f"behind earlier waiters ([lease].wait_queue), who asked for them first.",
+        f"{ctx.item}: {WG.queued_names(mine, aheads, ctx.cfg)}.",
         id=ctx.item,
         alternatives=[],
         queued_behind=aheads[0].item,

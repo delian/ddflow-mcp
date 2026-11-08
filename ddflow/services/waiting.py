@@ -248,10 +248,10 @@ def queue_ahead(
 
 def queued_names(mine: list[str], aheads: list[Waiter], cfg: Any) -> str:
     """One clause per queued waiter ahead: the ``mine`` globs it holds the place for, then
-    its holder and item -- every queued conflict named, not just the earliest waiter's
-    (B-glob-refusal-names-one-conflict)."""
+    its holder and item -- every queued conflict named with its queue place, not just the
+    earliest waiter's (B-glob-refusal-names-one-conflict)."""
     parts = [
-        f"{', '.join(queued_globs(mine, a.globs, cfg))} behind {a.holder} ({a.item})"
+        f"{', '.join(queued_globs(mine, a.globs, cfg))} queued behind {a.holder} ({a.item})"
         for a in aheads
     ]
     return "; ".join(parts)

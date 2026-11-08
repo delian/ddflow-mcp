@@ -58,9 +58,12 @@ def test_queued_behind_refusal_names_the_glob(repo):
     assert not A.claim(repo, "Z", no_worktree=True, agent=QUEUER, queue=True).ok
     run_cli(repo, "release", "X", "--agent", HOLDER)
     out = A.claim(repo, "Y", no_worktree=True, agent=WAITER)
-    assert not out.ok and "queued behind" in out.reason
-    assert "a.py" in out.reason
-    assert QUEUER in out.reason
+    assert not out.ok
+    # The refusal clause itself (before the Recorded: trailer, which also names them) must
+    # name the queued glob with its waiter, or finding them takes one claim per glob.
+    main = out.reason.split("\n\nRecorded:")[0]
+    assert "a.py queued behind" in main
+    assert QUEUER in main
 
 
 def test_queued_behind_refusal_names_every_queued_waiter(repo):

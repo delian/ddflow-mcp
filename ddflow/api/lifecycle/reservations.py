@@ -155,11 +155,7 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     aheads = WG.queued_ahead(st, cfg, it.id, me, fresh, now)
     if not aheads:
         return None
-    reason = (
-        f"those files ({WG.queued_names(fresh, aheads, cfg)}) are queued behind earlier "
-        f"waiters, who asked for them first ([lease].wait_queue)"
-    )
-    return Blocked(it.id, "conflict", reason, [aheads[0].item])
+    return Blocked(it.id, "conflict", WG.queued_names(fresh, aheads, cfg), [aheads[0].item])
 
 
 def _claim_blocker(

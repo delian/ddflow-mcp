@@ -193,11 +193,7 @@ def plan_retarget(
         if aheads:
             return (
                 lz,
-                (
-                    f"{item_id}: those globs ({WG.queued_names(want, aheads, cfg)}) are "
-                    f"queued behind earlier waiters ([lease].wait_queue), who asked for "
-                    f"them first. The globs were not changed."
-                ),
+                f"{item_id}: {WG.queued_names(want, aheads, cfg)}. The globs were not changed.",
                 None,
             )
     if resources:
