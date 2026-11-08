@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from conftest import run_cli
 from helpers import git_quiet as _git
+from helpers import item_of
 
 TRACKED = ["pkg/mod/__init__.py", "pkg/mod/a.py", "pkg/other.py", "tests/test_x.py"]
 
@@ -61,3 +62,27 @@ def test_doctor_says_so_when_git_cannot_list_the_files(repo, monkeypatch):
     assert H._stale_glob_notes(repo, fold(log.read_all())) == [
         "stale task globs not checked: git could not list the tracked files"
     ]
+
+
+def test_claim_corrects_a_glob_whose_module_is_now_a_package(repo):
+    """Claiming an item whose `x.py` glob names a now-package `x/` corrects it to the
+    package path, on the item and on the lease (B-stale-globs-after-split-wave)."""
+    (repo / "pkg" / "mod").mkdir(parents=True)
+    (repo / "pkg" / "mod" / "__init__.py").write_text("", "utf-8")
+    (repo / "pkg" / "mod" / "a.py").write_text("", "utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pkg")
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py")[
+            0
+        ]
+        == 0
+    )
+    code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="alice")
+    assert code == 0, out + err
+    assert "pkg/mod/" in out + err, out + err
+    it = item_of(repo, "T1")
+    assert it.globs == ["pkg/mod/"], it.globs
+    assert it.lease.globs == ["pkg/mod/"], it.lease.globs
