@@ -93,15 +93,51 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
     return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
+#: Command names that run NO test suite at all: POSIX no-ops and trivial shell builtins. A
+#: `unit_tests` gate whose command is one of these must not be read as a full suite
+#: (B-suite-lock-trivial-foreign-gate): `ddflow config.toml` documents the real suite
+#: spellings (`npm test`, `cargo test`, `go test ./...`, `make check`), which keep the lock.
+#: `test` and `[` are deliberately NOT here: a real suite binary named `test` (./test) must
+#: keep the lock, so the ambiguous names over-lock (the safe direction).
+_NO_SUITE = frozenset({"true", "false", ":", "echo", "printf", "date", "sleep", "pwd", "exit"})
+
+#: Any of these makes the line a compound (at least two jobs), never a lone no-op.
+_COMPOUND = ("&&", "||", "|", ";", "&", "$(", "<(", ">(", "\n", "`")
+
+#: Shell words that lead a command to another: walk them (and their flag args) off.
+_PREFIX = ("uv", "run", "env", "command", "builtin", "exec")
+
+
+def _is_trivial(command: str) -> bool:
+    """Is ``command`` a known non-suite no-op (`true`, `false`, `:`, `echo ...`)? A no-op names
+    no test file, so the naive whole-suite read would queue it on the lock although it runs
+    nothing but a shell builtin.
+
+    The WHOLE command must be the no-op: any shell compound or substitution
+    (`true; make check`, `true &&pytest`, `true <(pytest)`) still runs a suite, so it is not
+    trivial."""
+    if any(c in command for c in _COMPOUND):
+        return False
+    try:
+        words = shlex.split(command, comments=True, posix=True)
+    except ValueError:
+        return False
+    while words and (words[0] in _PREFIX or "=" in words[0] or words[0].startswith("-")):
+        words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off, plus its flag args
+    if not words:
+        return True  # a lone assignment (`A=B`) runs no command at all
+    return words[0].rsplit("/", 1)[-1] in _NO_SUITE
+
+
 def _runs_whole_suite(gdef: GateDef) -> bool:
     """Does this gate start a full test suite on this host? The `unit_tests` gate, unless its
-    command names test files (a narrowed run) or is a `ddflow ci run`, which takes the lock
-    itself (taking it here too would wait on ourselves)."""
-    return (
-        gdef.id == "unit_tests"
-        and not _runs_ddflow_ci(gdef.command)
-        and WK.count_test_files(gdef.command) is None
-    )
+    command names test files (a narrowed run), is a known no-op (`true`), or is a `ddflow ci
+    run`, which takes the lock itself (taking it here too would wait on ourselves)."""
+    if gdef.id != "unit_tests" or _runs_ddflow_ci(gdef.command):
+        return False
+    if WK.count_test_files(gdef.command) is not None:
+        return False
+    return not _is_trivial(gdef.command)
 
 
 _SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})
