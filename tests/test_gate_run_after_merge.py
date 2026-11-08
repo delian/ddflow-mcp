@@ -50,7 +50,15 @@ def _merged(repo: Path, *, passed_before: bool = False, partial_before: bool = F
         )
     if partial_before:
         run_cli(
-            repo, "gate", "record", "T1", "unit_tests", "--outcome", "partial", "--evidence", "e"
+            repo,
+            "gate",
+            "record",
+            "T1",
+            "unit_tests",
+            "--outcome",
+            "partial",
+            "--reason",
+            "baseline red",
         )
     assert run_cli(repo, "merge", "T1")[0] == 0
 
@@ -109,7 +117,7 @@ def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
     text = out + err
     assert code != 0, text
     assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
-    assert "only a person can settle" in text
+    assert "a person can settle" in text
 
 
 def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
