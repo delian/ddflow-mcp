@@ -303,19 +303,19 @@ def superseded_by(
     other: its outcome describes source that has since moved on (B27a236a534). Unknown
     commits, or ones neither of which descends from the other, are not superseded.
 
-    ``paths`` (the item's globs) scope it to content: commits that touch none of them -- other
-    agents' merges moving a shared checkout's HEAD -- leave the run's verdict standing
-    (B-e47bb1cade). Empty/None: ancestry alone. Git unable to list the diff: superseded."""
+    ``paths`` (globs) scope it to content: commits touching none leave the verdict standing
+    (B-e47bb1cade). Empty/None (a phase): superseded only by a source-file change; one touching
+    only `.ddflow/` does not (tree_identity leaves it out; B267a6b0b5e). An unlistable diff supersedes."""
     a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
     if _is_ancestor(cwd, a, b) is not True:
         return False
-    if not paths:
-        return True
     changed = W.git(cwd, "diff", "--name-only", "-z", a, b)
     if not changed.ok:
         return True
+    if not paths:
+        return any(f for f in changed.out.split("\0") if f and not is_state(f))
     return any(globs.match(f, g) for f in changed.out.split("\0") if f for g in paths)
 
 
