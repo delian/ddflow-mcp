@@ -144,7 +144,7 @@ def gate(
         return "", stamp
     return (
         f"accepting history needs a person ({who}). {decision.message} "
-        f"(or the operator accepts it in their own terminal)",
+        "(over MCP pass approval=request; or the operator accepts it in their own terminal)",
         {},
     )
 
