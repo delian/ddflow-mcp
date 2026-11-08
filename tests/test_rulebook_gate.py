@@ -404,13 +404,12 @@ def test_the_refusal_names_the_one_supported_command(forked):
 
 
 def test_the_stale_rules_remedy_names_the_item_when_the_tree_is_the_items_worktree(repo):
-    """B-sync-remedy-not-an-item-worktree: the stale-rules remedy must name the item. The bare
-    `ddflow sync --keep-local` has to resolve the item from the tree the caller stands in,
-    which a CLI caller whose identity does not match the tree's derived one fails to answer
-    from; `ddflow sync T1 --keep-local` needs no tree detection, so it resolves from anywhere.
-    FAILS before the fix (the message was always bare)."""
-    import os
-
+    """B-sync-remedy-not-an-item-worktree: the stale-rules remedy names the item. The bare
+    `ddflow sync --keep-local` resolves the item from the tree the caller stands in, which a
+    CLI caller whose identity does not match the tree's derived one fails to answer from;
+    `ddflow sync T1 --keep-local` names the item and needs no tree detection, so it works from
+    anywhere. FAILS before the fix (the message was always bare). The named command itself is
+    exercised by `ddflow sync`'s own tests (tests/test_sync_command.py)."""
     from helpers import items_of
 
     from ddflow.api import lifecycle as A
@@ -430,28 +429,3 @@ def test_the_stale_rules_remedy_names_the_item_when_the_tree_is_the_items_worktr
     _land(repo, "AGENTS.md", "# rules v2\n")
     code, msg = E.check_drift(repo, _cfg(), here=wt)
     assert code == 1 and "ddflow sync T1 --keep-local" in msg, msg
-    # ...and the named remedy is a command that resolves the item from the worktree: `sync T1`
-    # names it, so it does not need the tree detection that failed the bare command.
-    p = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "ddflow",
-            "--repo",
-            str(repo),
-            "--agent",
-            "agent-sync",
-            "sync",
-            "T1",
-            "--check",
-        ],
-        cwd=wt,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
-    )
-    assert p.returncode in (0, 2), p.stdout + p.stderr
-    assert "T1" in (p.stdout + p.stderr) and "not an item's worktree" not in (
-        p.stdout + p.stderr
-    ), p.stdout + p.stderr
