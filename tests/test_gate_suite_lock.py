@@ -73,6 +73,7 @@ def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch
     assert not R._runs_whole_suite(_gate("false")), "a non-suite builtin is not a full suite"
     assert not R._runs_whole_suite(_gate("/bin/false")), "a non-suite builtin is not a full suite"
     assert not R._runs_whole_suite(_gate("env true")), "a prefixed no-op is not a full suite"
+    assert not R._runs_whole_suite(_gate("command true")), "a command-builtin no-op is not a suite"
     assert not R._runs_whole_suite(_gate("pytest tests/test_a.py")), "a narrowed run names tests"
     # Non-pytest suite runners the config documents keep the lock (they run a real suite).
     for runner in ("pytest -q -n auto", "npm test", "cargo test", "go test ./...", "make check"):
@@ -81,6 +82,8 @@ def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch
     assert R._runs_whole_suite(_gate("echo ok && pytest"))
     assert R._runs_whole_suite(_gate("true; make check"))
     assert R._runs_whole_suite(_gate("echo $(pytest)"))  # command substitution still runs a suite
+    assert R._runs_whole_suite(_gate("true &&pytest"))  # an attached operator still runs a suite
+    assert R._runs_whole_suite(_gate("./test"))  # a real suite binary named test keeps the lock
 
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):

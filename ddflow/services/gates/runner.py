@@ -97,9 +97,12 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
 #: `unit_tests` gate whose command is one of these must not be read as a full suite
 #: (B-suite-lock-trivial-foreign-gate): `ddflow config.toml` documents the real suite
 #: spellings (`npm test`, `cargo test`, `go test ./...`, `make check`), which keep the lock.
-_NO_SUITE = frozenset(
-    {"true", "false", ":", "echo", "printf", "date", "sleep", "pwd", "exit", "test", "["}
-)  # fmt: skip
+#: `test` and `[` are deliberately NOT here: a real suite binary named `test` (./test) must
+#: keep the lock, so the ambiguous names over-lock (the safe direction).
+_NO_SUITE = frozenset({"true", "false", ":", "echo", "printf", "date", "sleep", "pwd", "exit"})
+
+#: Any of these makes the line a compound: at least two jobs, not a lone no-op.
+_COMPOUND = ("&&", "||", "|", ";", "&", "$(", "\n", "`")
 
 
 def _is_trivial(command: str) -> bool:
@@ -107,21 +110,19 @@ def _is_trivial(command: str) -> bool:
     no test file, so the naive whole-suite read would queue it on the lock although it runs
     nothing but a shell builtin.
 
-    The WHOLE command must be the no-op: a shell compound whose first word is a no-op
-    (`true; make check`, `echo ok && pytest`) still runs a suite, so it is not trivial."""
+    The WHOLE command must be the no-op: any shell compound (`true; make check`,
+    `true &&pytest` with an attached operator) still runs a suite, so it is not trivial."""
+    if any(c in command for c in _COMPOUND):
+        return False
     try:
         words = shlex.split(command, comments=True, posix=True)
     except ValueError:
         return False
-    if (
-        not words
-        or "\n" in command
-        or "$(" in command
-        or "`" in command
-        or any(w in _SHELL_OPERATORS for w in words)
-    ):
+    if not words:
         return False
-    while words and (words[0] in ("uv", "run", "env") or "=" in words[0]):
+    while words and (
+        words[0] in ("uv", "run", "env", "command", "builtin", "exec") or "=" in words[0]
+    ):
         words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off
     return bool(words) and words[0].rsplit("/", 1)[-1] in _NO_SUITE
 
