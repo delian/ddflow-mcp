@@ -496,7 +496,12 @@ def _revoke_refutation_pass(log, cfg, st, item: str, gate: str, mirrored, verdic
     """Re-triaging a finding to CONFIRMED after ``gate`` passed on refutation revives a
     confirmed, unfixed defect the pass no longer covers, so the pass is revoked: the gate is
     re-recorded failed with its `passed_on_refutation` flag dropped (bug B31e91454f8). One
-    line per revoked gate, or ""."""
+    line per revoked gate, or "".
+
+    ``st`` is the state as folded in `triage` BEFORE `_settle_chain` runs: it excludes any
+    pass that settle may record in this same call. That is the desired read — a pass recorded
+    by this very call already accounts for the just-confirmed finding — so do not re-load the
+    state after settling here."""
     if verdict != "confirmed":
         return ""
     parts: list[str] = []

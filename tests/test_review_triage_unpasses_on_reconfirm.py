@@ -40,3 +40,22 @@ def test_retriage_to_confirmed_revokes_the_pass_on_refutation(repo, tmp_path):
     assert "passed_on_refutation" not in (gate.evidence or {}), "the stale refutation flag must be dropped"
     assert gate.outcome != "passed", "a confirmed unfixed finding must unpass the gate"
     assert on_refutation(_state(repo), "critic") is None, "the display path must not show a refutation pass"
+
+
+def test_noop_retriage_keeps_the_pass_on_refutation(repo, tmp_path):
+    """A re-triage that does not grow the confirmed count is a no-op: the guard uses <= so a
+    finding re-triaged to its existing verdicts never revokes the refundation pass."""
+    _setup(repo, tmp_path)
+    _full_review(repo)
+    _tri(repo, 1)
+    _tri(repo, 2)
+    gate = _state(repo).gates["critic"]
+    assert gate.outcome == "passed"
+    assert gate.evidence["passed_on_refutation"]["confirmed"] == 0
+
+    # re-triaging an already-refuted finding again as refuted: confirmed count stays 0, no revoke.
+    again = _tri(repo, 2, "refuted", "still: no such bug on this input")
+    assert again.exit == 0, again.reason
+    gate = _state(repo).gates["critic"]
+    assert gate.outcome == "passed", "a no-op re-triage must not revoke the pass"
+    assert on_refutation(_state(repo), "critic") is not None
