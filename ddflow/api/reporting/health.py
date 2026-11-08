@@ -53,6 +53,7 @@ from ...services.guidance import ruleview as RULEVIEW
 from ...services.review import degraded_notes, load_reviewers
 from ...views import human
 from ...views.markdown import render_views
+from .. import items as _items
 from .._base import _load
 from ..lifecycle.planning import plan_for
 from ..refs import stale_references
@@ -87,8 +88,6 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list
     and each holder's lease is retargeted to the package (B-stale-globs-after-split-wave).
     Returns `(problems, notes)`: a rewrite `items.update` refused is a problem; a correction
     parts held back against another live lease is a problem that says so."""
-    from .. import items as _items
-
     if not LBR.has_py_glob(st):
         return [], []  # no `x.py` glob can name a package: do not touch git for nothing
     tracked = LBR._tree_files(repo)
