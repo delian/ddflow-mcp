@@ -289,9 +289,12 @@ def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
 
 
 def _delta_kept(it, gate: str, kind: str) -> list | None:
-    """The gate's earlier recorded findings a delta round merges into, so the round's
-    output numbers its own findings by their place in that record (bug B32ce00713b);
-    None for a full round or chunk re-run, whose own numbering is already the record's.
+    """The gate's earlier recorded findings a delta round merges into, so a delta round's
+    output numbers its own findings by their place in that record (bug B32ce00713b).
+
+    None for a full round or a chunk re-run: a full round replaces the record with its own
+    findings (a multi-reviewer full round's verdict scope is named by `_say_triage_scope`),
+    and a chunk re-run already folds the record into the result it prints.
 
     A delta with no earlier record numbers from an EMPTY list, not None: an empty input
     to ``_record_numbers`` still seeds the growing list, where None re-numbers each
