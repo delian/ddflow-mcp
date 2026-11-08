@@ -116,6 +116,48 @@ def test_nothing_configured_is_unavailable(repo):
     assert res.status == "unavailable" and "nothing to run" in res.reason
 
 
+def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
+    """B512a5d7f35: a CI command killed from outside (subprocess return code is negative,
+    e.g. -15 for SIGTERM) never reached a verdict, so the run is unavailable -- not a failed
+    check that folds the killed hook into 'exit -15' with no failing tests."""
+    from types import SimpleNamespace
+
+    from ddflow.services.cmdrunner import CommandRun
+
+    from ddflow.services.ci.runner import _result
+
+    p = CommandRun(
+        "ran",
+        code=-15,
+        out="ruff check.....................Passed\nFAILED tests/test_x.py::test_y\n",
+    )
+    res = _result(p, "", "pre-commit run", "sha0", "base0", None)
+    assert res.status == "unavailable", res.status
+    assert res.exit == 2
+    assert "signal" in res.reason, res.reason
+    assert not any(not c.ok for c in res.checks), res.checks
+    assert res.failures == {}, res.failures
+
+    # A selected-scope stage killed after the hooks passed must not read as a failed check either.
+    scope = SimpleNamespace(
+        tests=["test_x.py"],
+        always=["test_y.py"],
+        ok={"selected": False, "always": False},
+        scope="selected",
+        unran=set(),
+        evidence=lambda sha: {},
+        workers=None,
+        admission=None,
+    )
+    killed_stage = CommandRun("ran", code=-15)
+    res = _result(
+        killed_stage, "ruff check.....................Passed\n", "pre-commit run", "sha0", "base0", scope
+    )
+    assert res.status == "unavailable", res.status
+    assert not any(not c.ok for c in res.checks), res.checks
+    assert res.failures == {}, res.failures
+
+
 def test_the_scratch_worktree_is_removed_and_the_tree_untouched(repo, fake_precommit):
     _project(repo)
     _branch(repo)
