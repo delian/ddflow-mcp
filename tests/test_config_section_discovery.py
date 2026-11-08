@@ -89,6 +89,20 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
         assert set(_docs.SECTION_CLASSES) == set(section_before) | {"zzz_throwaway"}
         assert "zzz_throwaway.zzz_count" in _docs.KNOB_DOCS  # the knob manifest absorbs it
 
+        # The assembly seam, fresh: a Config built AFTER the section declared wires it from
+        # SECTION_CLASSES (the discovery), so a hand-kept field list in config/_core.py is what
+        # this catches -- the field must come from the registry, not a literal.
+        from dataclasses import dataclass
+
+        from ddflow.config import _core
+
+        @dataclass
+        class _Fresh(_core._SectionFields):
+            bookkeeping: int = 0
+
+        assert hasattr(_Fresh(), "zzz_throwaway"), "a fresh Config does not wire the new section"
+        assert isinstance(_Fresh().zzz_throwaway, module.ZzzThrowawayConfig)
+
         assert Path(C.__file__).read_bytes() == init_before, "config/__init__.py never changes"
         assert Path(_core.__file__).read_bytes() == core_before, "config/_core.py never changes"
     finally:
