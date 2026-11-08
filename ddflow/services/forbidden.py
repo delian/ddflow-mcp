@@ -188,14 +188,6 @@ def _sub_open_at(text: str, n: int, k: int) -> bool:
     return (text[k] in "$<>" and k + 1 < n and text[k + 1] == "(") or _ansi_at(text, n, k)
 
 
-def _sub_open_step(text: str, n: int, bodies: list[str], sub_close: set[int], k: int) -> int:
-    """Index one past the `$'...'` or `$(`/`<(`/`>(` substitution that opened at ``k``
-    (``_sub_open_at`` held): a substitution's body is recorded (its commands run as commands)."""
-    if _ansi_at(text, n, k):
-        return _ansi_c_end(text, n, k)
-    return _sub_body(text, n, bodies, sub_close, k)
-
-
 def _bare_word(text: str, n: int, k: int, word: str) -> bool:
     """`text[k:]` starts the bare keyword `word` -- a word boundary on each side."""
     if not text.startswith(word, k):
@@ -268,43 +260,74 @@ def _has_esac(text: str, n: int, k: int) -> bool:
     return False
 
 
+def _param_end(text: str, n: int, k: int) -> int:
+    """Index just past the `}` that closes the `${` parameter expansion at `k`. The braces
+    nest (``${x:-${y}}``), and a `)` in between is part of the expansion, never the close of a
+    `$(` / `<(` / `>(` body (B-forbidden-guard-multiline-quote-bypass critic #2)."""
+    depth = 1
+    i = k + 2
+    while i < n and depth:
+        if text[i] == "$" and i + 1 < n and text[i + 1] == "{":
+            depth += 1
+            i += 2
+        elif text[i] == "}":
+            depth -= 1
+            i += 1
+        elif text[i] == "\\" and i + 1 < n:
+            i += 2
+        else:
+            i += 1
+    return i
+
+
 def _find_body(text: str, n: int, bodies: list[str], sub_close: set[int], j: int, closer: str) -> int:
     """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes,
     substitutions and a nested `( ... )` subshell inside are navigated (so the first plain `)`
     is not taken for this body's close) but mark no newline. An escaped closer is not the end."""
     k = j
     while k < n:
-        c = text[k]
-        if c == closer:
+        if text[k] == closer:
             return k
-        if _comment(text, k, j, sub_close):
-            k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
-            k = k2 if k2 >= 0 else n
-        elif closer == ")" and c == "(":
-            # a nested ( ... ) subshell: its plain `)` (and a `#` after it) is not this body's
-            # close, so skip to one past it (groq critic: `echo $( (echo hi) )#; git push`).
-            k = _find_body(text, n, bodies, sub_close, k + 1, ")") + 1
-        elif closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
-            k = _case_end(text, n, k, bodies, sub_close)  # a case's `)` separators end patterns, not this `$(` body
-        elif c == "'":
-            k2 = text.find("'", k + 1)
-            k = k + 1 if k2 < 0 else k2 + 1
-        elif _ansi_at(text, n, k):
-            k = _ansi_c_end(text, n, k)
-        elif c == '"':
-            k = _dquote_end(text, n, bodies, sub_close, k)
-        elif c == "\\":  # an escaped closer (\) / \`) is not the end of the body
-            k += 2 if k + 1 < n else 1
-        elif c == "`" or (c in "$<>" and k + 1 < n and text[k + 1] == "("):
-            k = _sub_body(text, n, bodies, sub_close, k)
-        else:
-            k += 1
+        k = _skip_span(text, n, bodies, sub_close, k, j, closer)
     return k
+
+
+def _skip_span(text: str, n: int, bodies: list[str], sub_close: set[int], k: int, j: int, closer: str) -> int:
+    """Index after the span that starts at `k` when it is data, not `closer`: a comment (its
+    `)` is text), a nested `( ... )` subshell, a `case` statement, a quote, an escape, a
+    `${...}` parameter expansion, or a nested substitution. A plain char is not a span (one
+    past it)."""
+    if _comment(text, k, j, sub_close):
+        k2 = text.find("\n", k)
+        return k2 if k2 >= 0 else n
+    c = text[k]
+    if closer == ")" and c == "(":
+        # a nested ( ... ) subshell: its plain `)` (and a `#` after it) is not this body's
+        # close, so skip to one past it (groq critic: `echo $( (echo hi) )#; git push`).
+        return _find_body(text, n, bodies, sub_close, k + 1, ")") + 1
+    if closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
+        return _case_end(text, n, k, bodies, sub_close)  # a case's `)` separators end patterns, not this `$(` body
+    if c == "'":
+        k2 = text.find("'", k + 1)
+        return k + 1 if k2 < 0 else k2 + 1
+    if _ansi_at(text, n, k):
+        return _ansi_c_end(text, n, k)
+    if c == '"':
+        return _dquote_end(text, n, bodies, sub_close, k)
+    if c == "\\":  # an escaped closer (\) / \`) is not the end of the body
+        return k + 2 if k + 1 < n else k + 1
+    if text[k : k + 2] == "${":
+        return _param_end(text, n, k)  # a `)` inside ${...} is not this body's close
+    if c == "`" or text[k : k + 2] in ("$(", "<(", ">("):
+        return _sub_body(text, n, bodies, sub_close, k)
+    return k + 1
 
 
 def _dquote_end(text: str, n: int, bodies: list[str], sub_close: set[int], j: int) -> int:
     """The index after the `"` that opened at `j`, recursing into the `$(` / backtick bodies a
-    double-quoted span holds."""
+    double-quoted span holds. `<(` / `>(` are NOT special inside double quotes: bash prints
+    them literally and runs no command, so they stay text
+    (B-forbidden-guard-multiline-quote-bypass critic #5, dquote process substitution)."""
     k = j + 1
     while k < n:
         cc = text[k]
@@ -312,7 +335,7 @@ def _dquote_end(text: str, n: int, bodies: list[str], sub_close: set[int], j: in
             return k + 1
         if cc == "\\":
             k += 2 if k + 1 < n else 1
-        elif cc == "`" or (cc in "$<>" and k + 1 < n and text[k + 1] == "("):
+        elif cc == "`" or (cc == "$" and k + 1 < n and text[k + 1] == "("):
             k = _sub_body(text, n, bodies, sub_close, k)
         else:
             k += 1
@@ -340,9 +363,13 @@ def _sub_body(text: str, n: int, bodies: list[str], sub_close: set[int], k: int)
 def _scan(text: str) -> tuple[list[str], list[str]]:
     """Split `text` at the newlines that ARE command separators, and note the interiors of the
     `$(` ... `)` / backquoted command substitutions (whose commands run as commands). A newline
-    is data only inside a quote's literal body; a single-quoted `$(` or backtick is data."""
+    is data only inside a quote's literal body; a single-quoted `$(` or backtick is data. A
+    comment (`#` to end of line) is data too: its characters are dropped from the lines, so a
+    `;` or reserved word inside one is not a command (a `` `# ... ; git push` `` body is a
+    comment, not a command -- critic #1, backtick comment)."""
     n = len(text)
     cut = [False] * n
+    drop = [False] * n
     bodies: list[str] = []
     sub_close: set[int] = set()
 
@@ -354,7 +381,9 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
             i += 1
         elif c == "#" and _comment(text, i, 0, sub_close):
             k2 = text.find("\n", i)  # a comment: its quotes are data to the end of the line
-            i = k2 if k2 >= 0 else n
+            e = k2 if k2 >= 0 else n
+            drop[i:e] = [True] * (e - i)
+            i = e
         elif c == "'":
             k2 = text.find("'", i + 1)
             i = i + 1 if k2 < 0 else k2 + 1
@@ -365,9 +394,15 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
         elif c == "`":
             k2 = _find_body(text, n, bodies, sub_close, i + 1, "`")
             bodies.append(text[i + 1 : k2])
+            drop[i : min(k2 + 1, n)] = [True] * (min(k2 + 1, n) - i)
             i = k2 + 1
         elif _sub_open_at(text, n, i):
-            i = _sub_open_step(text, n, bodies, sub_close, i)
+            if _ansi_at(text, n, i):
+                i = _ansi_c_end(text, n, i)  # `$'...'` is data, kept inline
+            else:
+                end = _sub_body(text, n, bodies, sub_close, i)
+                drop[i:end] = [True] * (end - i)  # the body is captured in `bodies`, not inline
+                i = end
         else:
             i += 1
 
@@ -377,7 +412,7 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
         if ch == "\n" and cut[i]:
             lines.append("".join(cur))
             cur = []
-        else:
+        elif not drop[i]:
             cur.append(ch)
     if cur:
         lines.append("".join(cur))
@@ -418,27 +453,35 @@ def _split(text: str) -> list[list[str]]:
 
 def _commands(text: str) -> list[list[str]]:
     """Each command of `text` as its words, of the strings given to `sh -c`, and of the
-    `$(` ... `)` / backquoted command substitutions, descended to the cap (a deeper
-    `sh -c` chain is not flattened by the guard's fixed three levels)."""
+    `$(` ... `)` / backquoted command substitutions. The descent runs until no new command
+    string is left, keyed by the string content so a chain is descended once through whatever
+    mix of `sh -c` payloads and substitution bodies holds it (no fixed level cap to skip one
+    past -- B-forbidden-guard-multiline-quote-bypass 16-iteration cap, critic #3)."""
     cmds = _split(text)
     todo = cmds
     bodies = _substitutions(text)
-    for _ in range(16):  # bounded: deeper than the doc'd three levels, still capped
+    seen: set[str] = set()
+    while todo or bodies:
         found: list[list[str]] = []
+        new_bodies: list[str] = []
         for c in todo:
             head = _head(c)
             if head and head[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in head:
                 i = head.index("-c")
                 if i + 1 < len(head):
-                    found.extend(_split(head[i + 1]))
-                    bodies.extend(_substitutions(head[i + 1]))
+                    s = head[i + 1]
+                    if s not in seen:
+                        seen.add(s)
+                        found.extend(_split(s))
+                        new_bodies.extend(_substitutions(s))
         for b in bodies:
-            found.extend(_split(b))
+            if b not in seen:
+                seen.add(b)
+                found.extend(_split(b))
+                new_bodies.extend(_substitutions(b))
         cmds.extend(found)
         todo = found
-        bodies = [s for b in bodies for s in _substitutions(b)]
-        if not todo and not bodies:
-            break
+        bodies = new_bodies
     return cmds
 
 

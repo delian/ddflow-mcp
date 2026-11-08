@@ -74,6 +74,13 @@ def test_refused(cmd):
         "git stash show stash@{0}",
         "grep -r pkill docs",
         "echo pkill",
+        # a `#` right after an opening backtick begins a comment (the substitution body runs
+        # nothing), so `git push` inside it is not a command (critic #1, backtick comment)
+        "echo `# comment; git push origin main`",
+        # `<(` / `>(` are NOT process substitution inside double quotes: bash prints the literal
+        # and runs no command, so the body is not a command (critic #5, dquote process sub)
+        'echo "<(git push origin main)"',
+        'echo ">(git push origin main)"',
         'ddflow review X --force --reason "an extra round"',
         'ddflow review X --reason "an extra round" --force',
         "rm -rf build",
@@ -209,6 +216,23 @@ def test_refused_hash_literal_after_substitution_close(cmd):
     ],
 )
 def test_refused_substitution_body_edge_cases(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # a `)` inside a ${...} parameter expansion is part of the expansion, not the close of
+        # the enclosing $() body, so the `git push` after the `;` inside the substitution still
+        # runs and must be seen (critic #2, ${...} treated as the $() close)
+        'echo "$(echo ${x:-)}; git push origin main)"',
+        'echo "$(echo ${x:-foo)}; git push origin main)"',
+        'echo "$(echo ${x:-$(echo a)}; git push origin main)"',
+    ],
+)
+def test_refused_param_expansion_body(cmd):
     r = _check(cmd, cwd="/nonexistent")
     assert r is not None, cmd
     assert "Instead:" in r.message()
