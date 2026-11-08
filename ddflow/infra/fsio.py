@@ -10,19 +10,15 @@ the writing version and format level, so it keeps `ddflow`'s version constants a
 
 from __future__ import annotations
 
-import contextlib
 import json
-import os
 import re
-import time
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from ddflow import FORMAT_LEVEL, __version__
 from ddflow.adapters import fs as _fs
-from ddflow.adapters.fsio import *  # noqa: F401,F403  # the Fsio port's names, re-exported
+from ddflow.adapters.fsio import *  # noqa: F403  # the Fsio port's names, re-exported
 from ddflow.core.digest import content_digest
 from ddflow.core.events import is_older
 

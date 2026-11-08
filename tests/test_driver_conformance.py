@@ -22,7 +22,6 @@ from harness_conformance import report as R
 
 from ddflow.services import driver_conformance as DC
 from ddflow.services import harnessreg as HR
-from ddflow.services import hookio
 
 ENGINE_CHECKS = [c for c in D.all_checks() if c[1] != D.HOOK]
 

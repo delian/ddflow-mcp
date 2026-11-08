@@ -18,11 +18,20 @@ from helpers import items_of as _items
 from ddflow.api import items as AI
 from ddflow.api import lifecycle as A
 from ddflow.config import Config
-from ddflow.core.model import DONE
+from ddflow.core.model import DONE, fold
 from ddflow.infra.log import EventLog
 from ddflow.services import leases as L
+from ddflow.services import waiting as WG
 
 HOLDER, ME = "agent-holder", "agent-me"
+
+
+def _state(repo):
+    return fold(EventLog(repo, "reader").read_all(), strict=False)
+
+
+def _cfg(repo):
+    return Config.load(repo)
 
 
 def _setup(repo):
@@ -179,6 +188,86 @@ def test_a_queued_refusal_names_the_file_and_stays_json(repo):
     assert code != 0
     json.loads(out)
     assert "changes.toml" in (out + err), (out, err)
+
+
+def test_widening_keeps_a_held_glob_a_waiter_queued_for(repo):
+    """B-widen-refused-on-own-held-glob: red-b holds tests/test_no_agent_literals.py, red-h
+    queued for that exact glob, and red-b widens by adding an unrelated free file while
+    re-stating the held glob. The re-statement is not a new demand, so the widening is not
+    refused 'queued behind red-h', and no false wait cycle is recorded."""
+    run_cli(repo, "init")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "RB",
+        "--title",
+        "red-b",
+        "--globs",
+        "tests/test_no_agent_literals.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "RH",
+        "--title",
+        "red-h",
+        "--globs",
+        "tests/test_no_agent_literals.py",
+    )
+    assert A.claim(repo, "RB", no_worktree=True, agent="red-b").ok
+    # red-h queues for the one glob red-b holds (lease.waiting).
+    assert not A.claim(repo, "RH", no_worktree=True, agent="red-h", queue=True).ok
+    # Widening: keep the held glob, add an unrelated free file. Must not be refused.
+    ok = AI.update(
+        repo,
+        "RB",
+        AI.ItemEdit(
+            globs=["tests/test_no_agent_literals.py", "docs/ddflow/research/driver-inventory.md"]
+        ),
+        agent="red-b",
+    )
+    assert ok.ok, ok.reason
+    assert _items(repo)["RB"].globs == [
+        "tests/test_no_agent_literals.py",
+        "docs/ddflow/research/driver-inventory.md",
+    ], _items(repo)["RB"].globs
+    # No false wait cycle: red-b is not recorded waiting on red-h. red-h legitimately
+    # still waits on red-b for the held glob, so the cycle would only exist if red-b asked
+    # for something red-h holds -- it does not.
+    graph = WG.wait_for_graph(_state(repo), _cfg(repo), time.time())
+    assert "RB" not in graph, graph
+    assert graph.get("RH") == ["RB"], graph
+
+
+def test_a_widening_refused_for_a_new_glob_names_only_that_glob(repo):
+    """B-widen-refused-on-own-held-glob: a widening that re-states a HELD glob and asks for
+    one NEW glob an earlier waiter queued for first is refused naming that one contended
+    glob -- not 'those globs', and not the held glob the requester already owns."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "H1", "--title", "holder", "--globs", "changes.toml")
+    run_cli(repo, "task", "add", "Q1", "--title", "queuer", "--globs", "changes.toml")
+    run_cli(
+        repo, "task", "add", "M1", "--title", "mine", "--globs", "tests/test_no_agent_literals.py"
+    )
+    assert A.claim(repo, "H1", no_worktree=True, agent="holder").ok
+    assert A.claim(repo, "M1", no_worktree=True, agent="mine").ok
+    # Q1 queues for changes.toml, which H1 holds.
+    assert not A.claim(repo, "Q1", no_worktree=True, agent="queuer", queue=True).ok
+    # M1 re-states its held glob and asks for changes.toml. Only changes.toml contends.
+    code, out, err = run_cli(
+        repo,
+        "update",
+        "M1",
+        "--globs",
+        "tests/test_no_agent_literals.py,changes.toml",
+        agent="mine",
+    )
+    assert code != 0
+    assert "changes.toml" in (out + err), (out, err)
+    # The vague wording is gone: the refusal names the one contended glob.
+    assert "those globs" not in (out + err), (out, err)
 
 
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):

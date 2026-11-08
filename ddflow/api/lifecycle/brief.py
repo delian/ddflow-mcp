@@ -5,6 +5,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 from __future__ import annotations
 
 import math
+import re
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -293,6 +294,65 @@ def _sweep_stamp(repo: Path) -> None:
         pass  # a stamp that cannot be written only means the next brief sweeps too
 
 
+def _under_resume(text: str, reports_block: str, contest_text: str, undecided: str) -> str:
+    """``text`` with the leading blocks under the RESUME slice: the new-reports, contest and
+    Open-workflow-choices blocks go right before the one `# ddflow brief` heading the view
+    emits, not above the slice, so a restarted session still sees recoverable work first
+    (B-brief-choices-above-resume). The insertion is anchored to the last exact
+    `# ddflow brief` line OUTSIDE a code fence, not the first `# ddflow brief` prefix -- a
+    `## ddflow brief` inside RESUME, a fenced `# ddflow brief`, or a line that only starts
+    with it would otherwise match -- and Review feedback is prepended later."""
+    lead = reports_block + contest_text + (undecided + "\n" if undecided else "")
+    if not lead:
+        return text
+    head = "# ddflow brief"
+    at = _last_heading_line(text, head)
+    if at < 0:
+        return lead + text  # no exact H1 line (or it is the first line): keep the blocks
+    return text[:at] + lead + text[at:]
+
+
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}(?![^`]*`)|~{3,})")
+
+
+def _fence_closes(line: str, open_marker: str) -> bool:
+    """True when ``line`` closes a fence opened by ``open_marker`` (same char, at least as
+    long -- a shorter same-char line inside a longer fence is content, not a close)."""
+    ch = open_marker[0]
+    m = re.match(r"^ {0,3}(" + re.escape(ch) + r"{3,})\s*$", line)
+    return bool(m) and len(m.group(1)) >= len(open_marker)
+
+
+def _last_heading_line(text: str, head: str) -> int:
+    """Offset of the LAST exact ``head`` line that is not inside a Markdown code fence.
+
+    The view emits ONE `# ddflow brief` H1 as its own line (briefing.head), after any
+    RESUME slice. A RESUME-quoted or fenced `# ddflow brief` above OR below the H1 is
+    body text, not the anchor -- ``rfind`` on the raw line let a Work-note example whose
+    code block repeats the heading after the H1 steal the anchor (grok + deepseek critic),
+    and a line that only STARTS with it (a `# ddflow brief ...` note) is not the H1.
+    Fences are tracked the way Markdown delimits them: ``` and ~~~ both delimit, and a
+    fence closes only on a same-char fence at least as long, so a shorter fence line
+    inside a longer fence is content. A fence is indented at most three spaces; a
+    backtick opener whose info string contains a backtick is not a fence (a tilde
+    opener takes any info string).
+    """
+    at = -1
+    fence: str | None = None
+    i = 0
+    for line in text.split("\n"):
+        if fence is None:
+            m = _FENCE_OPEN.match(line)
+            if m is not None:
+                fence = m.group(1)
+            elif line == head:
+                at = i
+        elif _fence_closes(line, fence):
+            fence = None
+        i += len(line) + 1
+    return at
+
+
 def brief(
     repo: Path,
     *,
@@ -407,9 +467,7 @@ def brief(
         reserve=render_md._approx_tokens(prepended) if prepended else 0,
         agent=log.agent_id,
     )
-    if undecided:
-        text = undecided + "\n" + text
-    text = reports_block + contest_text + text
+    text = _under_resume(text, reports_block, contest_text, undecided)
     if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
         text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, st, cfg, held_ids)

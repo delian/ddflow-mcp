@@ -44,7 +44,7 @@ HOMES: dict[str, frozenset[str]] = {
     "os_replace": frozenset({"ddflow.adapters.fsio", "ddflow.adapters.fs"}),
     "fcntl": frozenset({"ddflow.adapters.fsio"}),
     "hashlib": frozenset({"ddflow.adapters.digest"}),
-    "tomlkit": frozenset({"ddflow.infra.tomlcfg"}),
+    "tomlkit": frozenset({"ddflow.adapters.toml"}),
     "time_parse": frozenset({"ddflow.core.clock"}),
 }
 
