@@ -274,14 +274,16 @@ def _no_confirmed_defect(text: str) -> bool:
     return not _has_confirmed_finding(text)
 
 
-# roborev writes a finding's severity at the HEAD of its line -- a numbered defect
-# `**1. high (CONFIRMED) — ...**`, a bullet `- medium: ...`, or an inline `high — ...` --
-# and `low` is its NOTE class ('minor improvement, no immediate functional impact'), which
-# is deliberately absent. Anchoring the severity to the line head is what separates a
-# finding from prose (`the high water mark`): a severity word mid-sentence is not one.
+# roborev writes a finding's severity at the HEAD of its line AND follows it with a header
+# delimiter -- a numbered defect `**1. high (CONFIRMED) — ...**`, a bullet `- medium: ...`,
+# or an inline `high — ...` -- and `low` is its NOTE class ('minor improvement, no immediate
+# functional impact'), deliberately absent. Both anchors matter: the line head separates a
+# finding from prose (`the high water mark`), and the delimiter (`(`, `:`, `—`) separates a
+# finding from a wrapped prose word that happens to start a line (`high water mark`).
 _DEFECT_HEAD = re.compile(
     r"(?m)^[ \t]*(?:\*\*\s*[0-9]+[.):]\s*|[-*]\s+)?"
-    r"(critical|high|medium)\b(?P<neg>\s*\((?:theoretical|refuted)\))?",
+    r"(critical|high|medium)(?=\s*[(:—])"
+    r"(?P<neg>\s*\((?:theoretical|refuted)\))?",
     re.IGNORECASE,
 )
 

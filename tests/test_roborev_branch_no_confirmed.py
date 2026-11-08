@@ -93,13 +93,14 @@ def test_a_plain_severity_bullet_next_to_the_phrase_is_still_findings(tmp_path, 
 
 def test_a_prose_severity_word_is_not_a_defect(tmp_path, monkeypatch):
     """A severity word mid-sentence ('the high water mark') is prose, not a finding: it
-    does not turn a 'no confirmed defects' verdict into findings."""
+    does not turn a 'no confirmed defects' verdict into findings, even when it wraps to
+    start its own line."""
     repo = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
         "FAKE_VERDICT",
         "Review for job 7: no confirmed defects found.\n"
-        "the high water mark is unchanged; the medium term is stable\n",
+        "high water mark is unchanged; the medium term is stable\n",
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "clean" and r.exit == 0
