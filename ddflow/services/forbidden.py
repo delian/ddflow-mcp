@@ -244,16 +244,13 @@ def matches(entry: str, words: list[str], *, ordered: bool = True) -> bool:
 def _git_subcommand_matches(want: list[str], args: list[str]) -> bool:
     """Does the `git` entry `want` (its words after `git`) name what `args` (the command's
     words after `git` and its global options) runs? The subcommand is the first word; the
-    GENERIC `git stash` entry matches only stash's WRITING verbs, so a read-only
-    invocation -- the `list`/`show` subcommands, or a `-h`/`--help` anywhere -- does not
-    (B-hook-blocks-read-only-stash-list). An entry that itself names `stash list` still
-    forbids it: only `want == ["stash"]` is exempt."""
+    GENERIC `git stash` entry matches only stash's WRITING verbs, so the read-only
+    `list`/`show` do not (B-hook-blocks-read-only-stash-list). An entry that itself names
+    `stash list`/`stash show` still forbids them: only `want == ["stash"]` is exempt."""
     if not want or want[0].startswith("-") or not args or args[0] != want[0]:
         return False
-    if len(want) == 1 and want[0] == "stash":
-        rest = args[1:]
-        if rest and (rest[0] in _STASH_READONLY or "-h" in rest or "--help" in rest):
-            return False
+    if len(want) == 1 and want[0] == "stash" and args[1:2] and args[1] in _STASH_READONLY:
+        return False
     return True
 
 
