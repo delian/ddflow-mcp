@@ -57,3 +57,15 @@ def test_the_brief_itself_puts_recoverable_work_before_new_work(repo):
     # not only its heading (duck #6/#7).
     assert text.index(RESUME) < text.index("**T1** (stale_running"), text
     assert text.index("**T1** (stale_running") < text.index("## Current: T9"), text
+
+
+def test_under_resume_keeps_the_choices_block_when_there_is_no_h1_heading():
+    """A brief whose text has no `# ddflow brief` H1 line (empty or RESUME-only) must still
+    carry the Open-workflow-choices block: the old prepend always emitted it, and hoisting it
+    under the RESUME slice must not DROP it when there is no H1 to anchor under."""
+    from ddflow.api.lifecycle import brief as _brief_mod
+    from ddflow.api.lifecycle.brief import _under_resume
+
+    text = _under_resume("", "", "", "## Open workflow choices\n- pick A")
+    assert text == "## Open workflow choices\n- pick A\n", text
+

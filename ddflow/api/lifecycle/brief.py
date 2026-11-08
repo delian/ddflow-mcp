@@ -306,7 +306,7 @@ def _under_resume(text: str, reports_block: str, contest_text: str, undecided: s
     head = "# ddflow brief"
     at = text.find("\n" + head)
     if at < 0:
-        return lead + text if text.startswith(head) else text
+        return lead + text  # no H1 heading to anchor under: keep the blocks (never lose them)
     return text[: at + 1] + lead + text[at + 1:]
 
 
