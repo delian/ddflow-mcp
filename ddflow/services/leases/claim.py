@@ -17,7 +17,7 @@ from ...core.schedule import plan as _plan
 from ...infra.log import EventLog
 from .. import leasebreak as LB
 from .. import leases as _leases
-from .common import _clone_field, _fold, glob_clash
+from .common import _clone_field, _fold, clash_report, glob_clash, glob_clashes
 from .model import LeaseError, Offer
 from .remote import _remote_drop, _remote_renew, _remote_take
 
@@ -266,10 +266,12 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
         # --force for the expiry alone. It must not also waive the overlap check: expiry
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
         if clash and (not force or existing is not None):
-            other_id, lease, pair = clash
+            # `clash` is what `_break_idle` left standing (a non-breakable lease): the hint
+            # must name IT, while `glob_clashes` re-lists every live clash for the message.
+            other_id, lease, _pair = clash
+            named, _ids = clash_report(glob_clashes(state, cfg, it, holder, mine, now))
             raise LeaseError(
-                f"{item_id} writes {pair[0]!r} which overlaps {pair[1]!r} "
-                f"held by {lease.holder} on {other_id}"
+                f"{item_id} writes files another live lease holds: {named}"
                 + (
                     f". {item_id}'s lease lapsed and those files were claimed since: "
                     f"--force takes over the expired lease, not another live one: "

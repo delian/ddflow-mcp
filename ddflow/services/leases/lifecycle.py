@@ -189,15 +189,13 @@ def plan_retarget(
         # refusal-vague). Only the NEW globs contend, and the refusal names which one.
         mine_glob = set(lz.globs) if lz else set()
         want = [g for g in accepted if g not in mine_glob]
-        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
-        if ahead is not None:
-            pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
-            # `queue_ahead` returned on `conflicts(want, ahead.globs, shared)` being non-empty,
-            # so `pairs` is non-empty here; fall back to the caller's own glob, never the
-            # waiter's (that would be a false refusal for a glob the caller did not ask).
-            named = pairs[0][0] if pairs else want[0]
-            reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first."
-            return (lz, f"{item_id}: {reason} The globs were not changed.", None)
+        aheads = WG.queued_ahead(state, cfg, item_id, lz.holder, want, now)
+        if aheads:
+            return (
+                lz,
+                f"{item_id}: {WG.queued_names(want, aheads, cfg)}. The globs were not changed.",
+                None,
+            )
     if resources:
         try:
             short = resource_shortfall(
