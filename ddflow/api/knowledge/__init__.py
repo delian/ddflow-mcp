@@ -28,7 +28,7 @@ from .bug_close import (  # noqa: F401
     bug_fixed,
     could_not_run_text,
 )
-from .bug_dedupe import bug_dedupe  # noqa: F401
+from .bug_dedupe import dedupe_bugs  # noqa: F401
 from .bug_repro import repro_lead  # noqa: F401
 from .bug_tags import bug_tag, found_tags, get_tags, reserved, set_tags  # noqa: F401
 from .bug_void import bug_invalid  # noqa: F401

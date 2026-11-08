@@ -56,6 +56,34 @@ def test_next_cuts_the_blocked_list_and_counts_it_exactly(repo):
     assert "--json next" in cut["all"]
 
 
+def test_next_clips_long_ready_bodies_and_says_so(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    log.append(
+        "task.added",
+        "READY",
+        {"title": "start here", "globs": ["r.py"], "body": "a long body " * 80},
+    )
+    row = _body(_call(repo, "ddflow_next"))["ready"][0]
+    assert row["id"] == "READY" and row["body"].endswith("[...]")
+    body = _body(_call(repo, "ddflow_next"))
+    assert body["truncated"]["clipped_strings"] == 1
+    assert "--json next" in body["truncated"]["all"]
+
+
+def test_next_clip_merges_with_the_blocked_cut_note(repo):
+    _blocked_queue(repo, 40)
+    log = EventLog(repo, "agent-test")
+    log.append(
+        "task.added",
+        "LONG",
+        {"title": "long body", "globs": ["lg.py"], "body": "a long body " * 80},
+    )
+    cut = _body(_call(repo, "ddflow_next"))["truncated"]
+    assert cut["blocked"] == 40 and cut["clipped_strings"] == 1
+    assert "--json next" in cut["all"]
+
+
 def test_next_is_whole_below_the_bound_and_the_cli_is_never_cut(repo):
     _blocked_queue(repo, 3)
     assert "truncated" not in _body(_call(repo, "ddflow_next"))

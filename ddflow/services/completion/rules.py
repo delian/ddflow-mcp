@@ -41,6 +41,7 @@ from ..gates import reviewers as GR
 from ..gates.evidence import commit_tree_entries, worktree_entries
 from ..gates.evidence import tree_being_completed as _tree_being_completed
 from ..gates.reviewed_paths import ignorable
+from ..gates.testcmd import coverage_of
 from ._changed import changed_paths
 
 
@@ -589,7 +590,8 @@ def _coverage_note(it, gaps: list[str]) -> str:
     """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
     one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
     ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
-    its `coverage`; a `partial_exits` gate has none, and says "coverage unknown"."""
+    its `coverage`; a `partial_exits` gate has none, and its runner's own counts (from
+    the summary lines) stand in for it (bug B-gate-status-partial-did-not-run)."""
     never = [g for g in gaps if it.gate_outcome(g) != "partial"]
     parts = [f"{', '.join(never)} never ran"] if never else []
     for g in gaps:
@@ -597,6 +599,8 @@ def _coverage_note(it, gaps: list[str]) -> str:
             # `is None`/`== ""`, not falsiness: a coverage of 0 is a figure, and the
             # most important one to show.
             coverage = it.gates[g].evidence.get("coverage")
+            if coverage is None or coverage == "":
+                coverage = coverage_of(it.gates[g].evidence or {})
             figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
             parts.append(f"{g} ran only partially (coverage{figure})")
     return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."
