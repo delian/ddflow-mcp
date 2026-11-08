@@ -218,6 +218,14 @@ def test_malformed_content_is_unreadable_never_a_partial_picture(repo):
         assert "ddflow_heartbeat" in snap.note
 
 
+def test_a_config_stamp_of_the_wrong_length_is_unreadable_not_stale(repo):
+    # `_stamp` must require exactly one entry per CONFIG_FILES entry: a torn or hand-edited
+    # stamp of the wrong length is a malformed shape (UNREADABLE), not a config edit (STALE).
+    for stamp in (["one"], ["one", "two", "three"]):
+        _write(repo, config_stamp=stamp)
+        assert H.read(repo).status == H.UNREADABLE, stamp
+
+
 def test_project_ignores_a_former_holders_late_renewal_and_foreign_release():
     leases: dict = {}
     S.project(leases, "lease.acquired", "T", {"holder": "a", "globs": ["x"], "at": 10.0}, "a")
