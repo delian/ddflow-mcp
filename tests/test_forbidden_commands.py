@@ -85,6 +85,15 @@ def test_allowed(cmd):
     assert _check(cmd) is None, cmd
 
 
+def test_an_explicit_read_only_stash_entry_still_forbids_it():
+    """The read-only exemption only narrows the GENERIC `git stash` entry: a config that
+    names `git stash list` explicitly still forbids `git stash list`."""
+    cfg = Config()
+    cfg.hooks.forbidden_commands = ["git stash list"]
+    assert FB.check("git stash list", cfg, env={}) is not None
+    assert FB.check("git stash show", cfg, env={}) is None
+
+
 def test_reset_hard_only_on_primary(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     assert _check("git reset --hard HEAD", cwd=tmp_path) is not None
