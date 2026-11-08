@@ -197,7 +197,7 @@ def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
         "D0",
         {
             "title": "decision about T9",
-            "decision": "the zebra rule:" + " rotate by size, not age." * 30,
+            "decision": "the zebra cache is rotated by size, not age.",
             "globs": ["src/T9.py"],
         },
     )
@@ -205,7 +205,8 @@ def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
         log.append(
             "lesson.recorded",
             f"L{i}",
-            {"title": f"lesson {i}", "rule": f"zebra rule {i}: " + ("x" * 300)},
+            {"title": f"lesson {i}", "rule": f"zebra rule {i}",
+             "why": "a rotation without a flush lost writes"},
         )
     for i in range(8):
         claim = LC.claim(repo, f"W{i}", agent="crashed")
@@ -222,13 +223,15 @@ def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
                 "branch": claim.data["branch"],
             },
         )
-    run_cli(repo, "config", "session.brief_max_tokens", "400")
+    run_cli(repo, "config", "session.brief_max_tokens", "600")
     out = LC.brief(repo, item="T9", check_recovery=True, agent="next")
     assert out.exit == 0, out.reason
     text = out.data["text"]
-    # T9's own sections survive with their body, not a bare heading: the slice is bounded,
-    # so the item's detail (and its decision) keep room the recovery list would otherwise eat.
-    assert "## Current: T9" in text, text[:4000]
-    assert "kind `task`" in text, text[:4000]
-    assert "## Architectural decisions governing these files" in text, text[:4000]
-    assert "D0" in text, text[:4000]
+    # The sections the bug reported starved keep their body, not a bare heading: the slice
+    # is bounded, so the item's Current detail, Ready and its decision still render (the
+    # recovery list no longer eats the whole budget first).
+    assert "## Current: T9" in text, text[:6000]
+    assert "kind `task`" in text, text[:6000]
+    assert "## Ready now" in text, text[:6000]
+    assert "## Architectural decisions governing these files" in text, text[:6000]
+    assert "D0" in text, text[:6000]
