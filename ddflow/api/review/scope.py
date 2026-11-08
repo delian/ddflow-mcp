@@ -44,7 +44,7 @@ def _resume_of_terminated(it, gate: str, revs: list, diff: str, chunk_max_tokens
     if not isinstance(total, int) or total < 1:
         return None
     reviewed = {int(c) for c in prior.get("reviewed", [])}
-    wanted = prior.get("wanted") or list(range(1, total + 1))
+    wanted = prior["wanted"] if "wanted" in prior else list(range(1, total + 1))
     missing = [n for n in wanted if n not in reviewed]
     if not missing:
         return None

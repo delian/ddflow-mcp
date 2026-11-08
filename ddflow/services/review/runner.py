@@ -508,15 +508,17 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     chunks = _split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
     res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
-    files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
     if outside:
         res.status = ERROR
         res.reason = f"no chunk {outside} -- this diff has chunks 1..{len(chunks)}"
         return res
+    # Checkpoint the cut identity BEFORE `chunk_files` (which opens files): a kill must not lose
+    # the resume plan, and neither `wanted` nor the plan line depends on the chunk-file objects.
     if on_plan:
         on_plan(res.diff_sha, res.chunks_total, res.max_chunk_chars, wanted)
+    files = [chunk_files(c) for c in chunks]
     res.requested = sorted(set(only or ()))
 
     overrides = dict(prompt_overrides or {})
