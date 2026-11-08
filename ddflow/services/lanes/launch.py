@@ -75,6 +75,7 @@ class Request:
     binary: OC.Binary | None = None
     log: Any = None  #: an event log to write the audit note to; None writes none
 
+
 def _check_template(t: T.Template, cfg: Config) -> list[str]:
     out = T.problems(t)
     cap = cfg.swarm.launch_max_budget_usd
@@ -98,9 +99,7 @@ def conformance_level(
     return report.level
 
 
-def resolved_pools(
-    cat: modelreg.Catalog, route: str, model: str, default_slots: int
-) -> tuple:
+def resolved_pools(cat: modelreg.Catalog, route: str, model: str, default_slots: int) -> tuple:
     """The endpoint `Pool` objects a lane on ``route`` takes (its own pool only; task
     ``--resources`` pools are the task's, not a lane's). Empty when the route is unreadable."""
     ep = EP.resolve(cat, route, model, require_tools=False)
@@ -142,9 +141,7 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         price_out=t.price_out,
         local=t.local,
         kinds=t.kinds,
-        level=conformance_level(
-            req.repo, req.agent, max_age_s=req.cfg.swarm.conformance_max_age_s
-        ),
+        level=conformance_level(req.repo, req.agent, max_age_s=req.cfg.swarm.conformance_max_age_s),
         pools=endpoint_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
     )
     out = score.refusals(sc_item, lane, req.world, w)
