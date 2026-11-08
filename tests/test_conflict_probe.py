@@ -276,10 +276,15 @@ def test_a_scratch_merge_past_the_deadline_is_unavailable(pair: Path, monkeypatc
     def git(path, *args, **kw):
         if args and args[0] == "-c" and "merge" in args:
             t = kw.get("timeout")
-            assert t is not None and 0 < t <= 1, "ci.merge_tree must carry the deadline into `git merge`"
+            assert t is not None and 0 < t <= 1, (
+                "ci.merge_tree must carry the deadline into `git merge`"
+            )
             return PR.G.GitResult(
-                PR.G.UNAVAILABLE, "", "git merge timed out after 1s",
-                unavailable=True, timed_out=True,
+                PR.G.UNAVAILABLE,
+                "",
+                "git merge timed out after 1s",
+                unavailable=True,
+                timed_out=True,
             )
         return real(path, *args, **kw)
 

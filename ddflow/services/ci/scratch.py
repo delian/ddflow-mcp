@@ -143,7 +143,12 @@ def merge_tree(
         return G.GIT_TIMEOUT if cutoff is None else max(0.0, cutoff - time.monotonic())
 
     with W.scratch_tree(
-        repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner,
+        repo,
+        ref,
+        detach=True,
+        prefix=SCRATCH_PREFIX,
+        quiet=True,
+        claim=_claim_owner,
         deadline_s=deadline_s,
     ) as s:
         if s.path is None:
