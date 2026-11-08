@@ -143,6 +143,30 @@ def test_a_mode_change_on_a_glob_named_file_is_not_trivial(repo):
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
 
 
+def test_a_dirty_logic_edit_on_a_glob_named_file_is_not_trivial(repo):
+    """rubber_duck: `git diff` path args are glob patterns too, so a tracked ``[a].py`` (a
+    char class) would not match its own name, the dirty fail-close would read an empty diff and
+    skip judging the uncommitted edit. An uncommitted logic edit on the ``[``-named file must
+    still fail closed, so ``_is_format_or_comment`` matches each path literally like ``_mode``."""
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    f = repo / "src/[a].py"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("x=1\n")
+    subprocess.run(["git", "-C", str(repo), "add", ":(literal)src/[a].py"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed"], check=True)
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    (tree / "src/[a].py").write_text("x = 1\n")  # committed: format-only, trivial on its own
+    subprocess.run(["git", "-C", str(tree), "add", ":(literal)src/[a].py"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "format"], check=True)
+    (tree / "src/[a].py").write_text("x = 2\n")  # UNCOMMITTED logic edit the fail-close must see
+    assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
+
+
 def test_docs_only_is_trivial_too(cfg):
     from ddflow.services.docsonly import diff_is_docs_only
 
