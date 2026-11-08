@@ -134,6 +134,24 @@ def mask_secrets(text: object, secret_patterns: Iterable[str]) -> tuple[str, int
     return p.text, p.counts.get("secret", 0)
 
 
+def _home_fill(home_dir: str, home_style: str):
+    """The replacement for the machine's own home path, or `None` for the default marker.
+
+    `home_style` "resolvable" (the committed-log profile) replaces the home prefix with
+    `$HOME`, keeping the tail, so a path the operator must recover stays addressable
+    (bug B-redaction-hides-parked-work-path) instead of turning into the opaque
+    `[REDACTED:path]`.
+    """
+    if home_style != "resolvable":
+        return None
+    n = len(home_dir)
+
+    def fill(matched: str) -> str:
+        return "$HOME" + matched[n:]
+
+    return fill
+
+
 def redact_text(
     text: object,
     *,
@@ -143,6 +161,7 @@ def redact_text(
     home: str | None = None,
     repo_root: str | None = None,
     secret_style: str = "marker",
+    home_style: str = "marker",
 ) -> Redacted:
     """Redact `text` for an upstream report. Returns the text and a count per kind.
 
@@ -158,6 +177,8 @@ def redact_text(
     config, since `core` cannot read it).
     `secret_style` "mask" keeps the surrounding words (`api_key: [REDACTED]`, the event
     log's style); "marker" (the default) replaces the match by `[REDACTED:secret]`.
+    `home_style` "resolvable" renders the machine's own home path as `$HOME` (keeping the
+    tail) instead of the `[REDACTED:path]` marker; the default "marker" is the opaque form.
     """
     p = _Pass(_coerce(text))
     _secrets(p, secret_patterns, secret_style)
@@ -175,6 +196,7 @@ def redact_text(
                 r"(?<![\w.-])" + re.escape(home_dir) + r"(?:/[^\s'\"`<>)\]},;]*)?(?![\w.-])"
             ),
             "path",
+            fill=_home_fill(home_dir, home_style),
         )
     p.sub(_HOME_PATH, "path")
     p.sub(_TILDE_PATH, "path")

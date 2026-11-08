@@ -130,6 +130,28 @@ def test_a_leaf_is_redacted_whatever_its_key() -> None:
     assert SECRET not in flat and "/home/zedd" not in flat
 
 
+def test_a_parked_work_path_stays_resolvable_in_a_note() -> None:
+    """B-redaction-hides-parked-work-path: a lease.released note says WHERE the kept work
+    lives; the machine's own home path in it must stay resolvable (`$HOME/...`), not turn
+    into the opaque `[REDACTED:path]` that hid the recovery pointer."""
+    red = R.Redactor("log", secret_patterns=[], home="/home/zedd")
+    out = R.redact_event_data(
+        "lease.released",
+        {"holder": "T", "note": "work kept in /home/zedd/patches/x", "worktree": "w"},
+        red,
+    )
+    assert out["note"] == "work kept in $HOME/patches/x"
+    assert "/home/zedd" not in out["note"] and "[REDACTED:path]" not in out["note"]
+
+
+def test_another_users_home_path_is_not_misread_as_resolvable() -> None:
+    """Only the machine's own home renders as `$HOME`; another user's home is not the
+    operator's, so it stays the opaque marker rather than mis-resolving."""
+    red = R.Redactor("log", secret_patterns=[], home="/home/zedd")
+    out = R.redact_event_data("lease.released", {"note": "see /home/bob/x"}, red)
+    assert out["note"] == "see [REDACTED:path]"
+
+
 def test_a_relative_output_file_survives_redaction() -> None:
     """What gate evidence really holds: a repo-relative file name with dots and hyphens."""
     red = R.Redactor("log", secret_patterns=[], hostname="box", home="/home/zedd")
