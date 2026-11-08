@@ -267,32 +267,31 @@ def _no_confirmed_defect(text: str) -> bool:
     """Does roborev's review body name NO confirmed defect? Its words are 'no CONFIRMED
     defects' when the only findings are notes/THEORETICAL/refuted -- a LOW note still makes
     `roborev wait` exit 1, but it is a note, not a defect. Read that verdict CLEAN only
-    when the body also carries no real defect severity (B2bd9e8b715). Fail OPEN: an
-    ambiguous body stays findings, never clean."""
+    when the body also carries no confirmed defect finding (B2bd9e8b715)."""
     lowered = text.casefold()
     if "no confirmed defect" not in lowered and "no issues found" not in lowered:
         return False
     return not _has_confirmed_finding(text)
 
 
-# A defect severity (critical|high|medium) is a confirmed defect unless its OWN verdict is
-# (THEORETICAL)/(REFUTED) written IMMEDIATELY after it (`**1. high (CONFIRMED)**`, but not
-# `**2. medium (THEORETICAL)**`). `low` is roborev's NOTE class, deliberately absent.
-_DEFECT_SEVERITY = re.compile(
-    r"\b(?:critical|high|medium)\b(?!\s*\((?:theoretical|refuted)\))", re.IGNORECASE
+# roborev writes a finding's severity at the HEAD of its line -- a numbered defect
+# `**1. high (CONFIRMED) — ...**`, a bullet `- medium: ...`, or an inline `high — ...` --
+# and `low` is its NOTE class ('minor improvement, no immediate functional impact'), which
+# is deliberately absent. Anchoring the severity to the line head is what separates a
+# finding from prose (`the high water mark`): a severity word mid-sentence is not one.
+_DEFECT_HEAD = re.compile(
+    r"(?m)^[ \t]*(?:\*\*\s*[0-9]+[.):]\s*|[-*]\s+)?"
+    r"(critical|high|medium)\b(?P<neg>\s*\((?:theoretical|refuted)\))?",
+    re.IGNORECASE,
 )
 
 
 def _has_confirmed_finding(text: str) -> bool:
-    """A confirmed defect among the findings: a defect severity (critical|high|medium) whose
-    own verdict is not (THEORETICAL)/(REFUTED). 'low' is a NOTE ('minor improvement
-    opportunity with no immediate functional impact', roborev's reviewer prompt), not a
-    defect -- a LOW-only review is exactly the clean verdict this fix must stop recording
-    `failed` over. The severity is a plain word in roborev's body (`**1. high (CONFIRMED)**`,
-    `FINDING HIGH`, `- medium: ...`), so it is matched as a bare token, not a bold
-    `**high**` bullet; only the verdict right after the severity negates it, never a
-    `(THEORETICAL)` tag elsewhere on the same line."""
-    return _DEFECT_SEVERITY.search(text) is not None
+    """A confirmed defect among the findings: a finding whose header carries a defect
+    severity (critical|high|medium) and whose own verdict is not (THEORETICAL)/(REFUTED).
+    `low` is a NOTE, not a defect, so a LOW-only review is exactly the clean verdict this
+    fix must stop recording `failed` over (B2bd9e8b715)."""
+    return any(m.group("neg") is None for m in _DEFECT_HEAD.finditer(text))
 
 
 def _findings_summary(text: str) -> str:

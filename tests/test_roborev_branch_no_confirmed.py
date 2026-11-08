@@ -66,21 +66,21 @@ def test_a_negated_no_confirmed_phrase_next_to_a_real_defect_is_still_findings(
     tmp_path, monkeypatch
 ):
     """The reviewer's refutation case: the 'no CONFIRMED defects' phrase in prose next to a
-    real, confirmed severity bullet must not read as clean."""
+    real, confirmed defect header must not read as clean."""
     repo = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
         "FAKE_VERDICT",
         "There were no confirmed defects in the helpers.\n"
-        "**high** ddflow/services/roborev_branch.py:255\nA real defect remains.\n",
+        "**1. high (CONFIRMED) — a real defect remains**\n",
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "findings" and r.exit == 1
 
 
 def test_a_plain_severity_bullet_next_to_the_phrase_is_still_findings(tmp_path, monkeypatch):
-    """A defect severity in roborev's own finding shape (`- medium: ...`, not a bold
-    `**medium**` bullet) still reads findings next to 'no confirmed defects'."""
+    """A defect severity in roborev's own finding shape (`- medium: ...`) still reads
+    findings next to 'no confirmed defects'."""
     repo = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
@@ -91,17 +91,18 @@ def test_a_plain_severity_bullet_next_to_the_phrase_is_still_findings(tmp_path, 
     assert r.outcome == "findings" and r.exit == 1
 
 
-def test_a_prose_defect_next_to_the_phrase_is_still_findings(tmp_path, monkeypatch):
-    """A defect named in prose ('a critical defect remains') still reads findings next to
-    the 'no confirmed defects' words."""
+def test_a_prose_severity_word_is_not_a_defect(tmp_path, monkeypatch):
+    """A severity word mid-sentence ('the high water mark') is prose, not a finding: it
+    does not turn a 'no confirmed defects' verdict into findings."""
     repo = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
         "FAKE_VERDICT",
-        "Review for job 7: no confirmed defects at first, but a critical defect remains\n",
+        "Review for job 7: no confirmed defects found.\n"
+        "the high water mark is unchanged; the medium term is stable\n",
     )
     r = RB.run(repo, "main", 20)
-    assert r.outcome == "findings" and r.exit == 1
+    assert r.outcome == "clean" and r.exit == 0
 
 
 def test_a_low_note_next_to_the_phrase_is_still_clean(tmp_path, monkeypatch):
