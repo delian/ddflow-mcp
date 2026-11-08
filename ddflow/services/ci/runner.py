@@ -503,11 +503,11 @@ def _run_stages(
         on_tick=on_tick,
         tick_s=tick_s,
     )
-    unran: set[str] = set()  # stages whose process never started: not a failure of the checks
+    unran: set[str] = set()  # stages whose process never started, or was killed: not a failure
     if selected:
         scope.unran = unran
         scope.ok["hooks"] = p.ran and p.code == 0
-        if not p.ran:
+        if not p.ran or (p.code or 0) < 0:  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add("hooks")
     if not (selected and p.ran and p.code == 0):
         if selected:
@@ -531,7 +531,7 @@ def _run_stages(
         )
         spent += p.elapsed_s
         scope.ok[label] = p.ran and p.code == 0
-        if not p.ran:
+        if not p.ran or (p.code or 0) < 0:  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
