@@ -225,9 +225,7 @@ def hold(
     changes (default: stderr).
 
     ``wait_s`` (new, default None) overrides the wait limit `[ci].suite_wait_s` for this
-    hold only: a `ddflow ci run --timeout N` passes N, so the per-run override bounds the
-    queue wait too, in either direction (a queued run used to give up at the knob whatever
-    the override said, Ba5d5d63f12). The default wait limit counts time IN LINE, not progress:
+    hold only. The default wait limit counts time IN LINE, not progress:
     once a waiter reaches the head its give-up budget runs fresh from that moment, so the time
     it spent advancing up the line does not bounce it the instant it arrives
     (B-suite-wait-expires-at-head-of-queue). An explicit `wait_s` override stays a hard total
@@ -246,7 +244,7 @@ def hold(
         ticket = stack.enter_context(_Ticket(queue, holder, grace_s))
         name = ticket.name
         head_since: float | None = None  # monotonic when this waiter FIRST reached the head
-        overridden = wait_s is not None  # an explicit --timeout bounds the WHOLE queue wait
+        overridden = wait_s is not None  # an explicit `wait_s` bounds the WHOLE queue wait
         while True:
             line = _live(queue, stale_s, grace_s, name)
             position = (line.index(name) + 1) if name in line else len(line) + 1
