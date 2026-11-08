@@ -248,7 +248,12 @@ def _outcome_result(
             *(k for k in _OPTIONAL_KEYS if k in out.data and k not in payload_key),
         )
     if as_text:
-        body = out.body(payload_key)
+        # A failed or refused text tool's answer IS its reason: `gate list` refused a
+        # bad flag combination carries only `reason`, no `text`, and `out.body("text")`
+        # would raise KeyError (B-mcp-gate-list-overrides-since-internal-error). Fall
+        # back to the reason instead of crashing the call; an empty body then falls
+        # through to the same reason below.
+        body = out.body(payload_key) if payload_key in out.data else out.reason
         if not isinstance(body, str):
             raise TypeError(
                 f"{out.kind}: declared `text` but its body is a {type(body).__name__}. "

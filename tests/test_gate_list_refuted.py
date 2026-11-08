@@ -61,6 +61,24 @@ def test_gate_list_without_the_flag_lists_the_defined_gates(repo):
     assert code == 0 and "critic" in out and "unit_tests" in out
 
 
+def test_overrides_with_since_is_a_visible_refusal_not_a_crash(repo):
+    """B-mcp-gate-list-overrides-since-internal-error: the MCP render of a `gate list
+    --overrides --since` refusal must deliver the CLI's message, not crash (`internal
+    error: 'text'`) on the missing prose key."""
+    run_cli(repo, "init")
+    msg = "--overrides is its own listing; give no --refuted/--since"
+    code, _out, err = run_cli(repo, "gate", "list", "--overrides", "--since", "2026-11-05")
+    assert code != 0 and msg in err
+    out = A.gate_list(repo, overrides=True, since="2026-11-05")
+    assert out.exit != 0 and out.reason == msg
+    # The MCP text path reads the outcome's `text` payload; a refused combination carries
+    # only `reason`, and reading it must be the message, not a KeyError.
+    from ddflow.surfaces.mcp._reply import _outcome_result
+
+    reply = _outcome_result(out, "text", as_text=True)
+    assert reply["content"][0]["text"] == msg
+
+
 def test_the_mcp_tool_takes_refuted(repo, tmp_path):
     _flag(repo, tmp_path)
     out = A.gate_list(repo, refuted=True)
