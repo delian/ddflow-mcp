@@ -68,25 +68,36 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
 def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
 
-    assert not R._runs_whole_suite(_gate("true")), "a no-op is not a full suite"
-    assert not R._runs_whole_suite(_gate(":")), "POSIX no-op is not a full suite"
-    assert not R._runs_whole_suite(_gate("false")), "a non-suite builtin is not a full suite"
-    assert not R._runs_whole_suite(_gate("/bin/false")), "a non-suite builtin is not a full suite"
-    assert not R._runs_whole_suite(_gate("env true")), "a prefixed no-op is not a full suite"
-    assert not R._runs_whole_suite(_gate("env -i true")), "a flagged-prefix no-op is not a suite"
-    assert not R._runs_whole_suite(_gate("command true")), "a command-builtin no-op is not a suite"
-    assert not R._runs_whole_suite(_gate("A=B")), "a lone assignment runs nothing"
+    for no_op in (
+        "true",
+        ":",
+        "false",
+        "/bin/false",
+        "env true",
+        "env -i true",
+        "command true",
+        "A=B",
+    ):
+        assert not R._runs_whole_suite(_gate(no_op)), no_op
     assert not R._runs_whole_suite(_gate("pytest tests/test_a.py")), "a narrowed run names tests"
-    # Non-pytest suite runners the config documents keep the lock (they run a real suite).
+
+
+def test_a_nontrivial_suite_command_keeps_the_lock(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    # Suite runners the config documents (pytest and non-pytest) run a real suite: they lock.
     for runner in ("pytest -q -n auto", "npm test", "cargo test", "go test ./...", "make check"):
         assert R._runs_whole_suite(_gate(runner)), runner
-    # A shell compound whose first word is a no-op still runs a suite: it keeps the lock.
-    assert R._runs_whole_suite(_gate("echo ok && pytest"))
-    assert R._runs_whole_suite(_gate("true; make check"))
-    assert R._runs_whole_suite(_gate("echo $(pytest)"))  # command substitution still runs a suite
-    assert R._runs_whole_suite(_gate("true &&pytest"))  # an attached operator still runs a suite
-    assert R._runs_whole_suite(_gate("true <(pytest)"))  # process substitution still runs a suite
-    assert R._runs_whole_suite(_gate("./test"))  # a real suite binary named test keeps the lock
+    # A shell compound whose first word is a no-op still runs a suite, so it keeps the lock.
+    for compound in (
+        "echo ok && pytest",
+        "true; make check",
+        "echo $(pytest)",
+        "true &&pytest",
+        "true <(pytest)",
+        "./test",
+    ):
+        assert R._runs_whole_suite(_gate(compound)), compound
 
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
