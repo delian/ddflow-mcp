@@ -116,6 +116,21 @@ def test_nothing_configured_is_unavailable(repo):
     assert res.status == "unavailable" and "nothing to run" in res.reason
 
 
+def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
+    """B512a5d7f35: a CI command killed from outside (subprocess return code is negative,
+    e.g. -15 for SIGTERM) never reached a verdict, so the run is unavailable -- not a failed
+    check that folds the killed hook into 'exit -15' with no failing tests."""
+    from ddflow.services.cmdrunner import CommandRun
+
+    from ddflow.services.ci.runner import _result
+
+    p = CommandRun("ran", code=-15, out="ruff check.....................Passed\n")
+    res = _result(p, "", "pre-commit run", "sha0", "base0", None)
+    assert res.status == "unavailable", res.status
+    assert res.exit == 2
+    assert "signal" in res.reason, res.reason
+
+
 def test_the_scratch_worktree_is_removed_and_the_tree_untouched(repo, fake_precommit):
     _project(repo)
     _branch(repo)
