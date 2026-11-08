@@ -297,16 +297,21 @@ def _under_resume(text: str, reports_block: str, contest_text: str, undecided: s
     """``text`` with the leading blocks under the RESUME slice: the new-reports, contest and
     Open-workflow-choices blocks go right before the one `# ddflow brief` heading the view
     emits, not above the slice, so a restarted session still sees recoverable work first
-    (B-brief-choices-above-resume). The insertion is anchored to the `# ddflow brief` H1 line,
-    not the first `# ddflow brief` substring -- which a `## ddflow brief` heading inside RESUME
-    (or `### ddflow brief`) would otherwise match -- and Review feedback is prepended later."""
+    (B-brief-choices-above-resume). The insertion is anchored to the last exact
+    `# ddflow brief` line, not the first `# ddflow brief` prefix -- a `## ddflow brief`
+    inside RESUME, a fenced `# ddflow brief`, or a line that only starts with it would
+    otherwise match -- and Review feedback is prepended later."""
     lead = reports_block + contest_text + (undecided + "\n" if undecided else "")
     if not lead:
         return text
     head = "# ddflow brief"
-    at = text.find("\n" + head)
+    # The view emits ONE `# ddflow brief` H1 as its own line (briefing.head), after any
+    # RESUME slice. Anchor to the LAST exact heading line -- a RESUME-quoted or fenced
+    # `# ddflow brief` above it must not steal the anchor, and a line that only STARTS with
+    # it (a `# ddflow brief ...` note) is not the H1 -- grok critic re-review of the prefix.
+    at = text.rfind("\n" + head + "\n")
     if at < 0:
-        return lead + text  # no H1 heading to anchor under: keep the blocks (never lose them)
+        return lead + text  # no exact H1 line (or it is the first line): keep the blocks
     return text[: at + 1] + lead + text[at + 1:]
 
 

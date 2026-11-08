@@ -69,3 +69,18 @@ def test_under_resume_keeps_the_choices_block_when_there_is_no_h1_heading():
     text = _under_resume("", "", "", "## Open workflow choices\n- pick A")
     assert text == "## Open workflow choices\n- pick A\n", text
 
+
+def test_under_resume_anchors_to_the_last_exact_heading_line():
+    """A RESUME-quoted or fenced `# ddflow brief` line must not steal the anchor: the choices
+    block lands before the view's own H1 (the LAST exact `# ddflow brief` line), keeping
+    recoverable work above it, not a fenced heading eaten by a code block."""
+    from ddflow.api.lifecycle.brief import _under_resume
+
+    text = "## Resume\n```text\n# ddflow brief\n```\n# ddflow brief\n## Work\n"
+    out = _under_resume(text, "", "", "## Open workflow choices\n- pick A")
+    # RESUME opens the pack, the choices block is above the view's own H1, and the fenced
+    # `# ddflow brief` is never used as the anchor.
+    assert out.startswith("## Resume"), out
+    assert out.index("## Open workflow choices") < out.rindex("# ddflow brief"), out
+    assert out.index("```\n# ddflow brief\n```") < out.index("## Open workflow choices"), out
+
