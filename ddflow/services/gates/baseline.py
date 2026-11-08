@@ -157,6 +157,18 @@ def test_files_of(ids: list[str]) -> list[str]:
     return sorted({i.split("::", 1)[0] for i in ids})
 
 
+def _always_guards(cfg, tree: Path) -> set[str]:
+    """The always-run guard files in ``tree`` (`[ci].always_tests` and `ALWAYS = True`): their
+    input is the whole code base, so ANY change reaches them, and their presence in the
+    selection is never evidence this change caused the failure. Lazy import: `ci_scope`
+    imports `testscope` -> `gates` (this package), so a module-level import would cycle."""
+    if getattr(cfg, "ci", None) is None:
+        return set()
+    from ..ci_scope import always_tests
+
+    return set(always_tests(cfg, tree))
+
+
 def auto_decision(
     cfg, tree: Path, base: str, ids: list[str], found: dict[str, Any], limits: dict[str, int]
 ) -> dict[str, Any]:
@@ -166,10 +178,13 @@ def auto_decision(
     only because it DECLARES it governs the changed path (a whole-tree guard such as
     `tests/test_architecture_guards.py` with ``GOVERNS = ("ddflow/**", ...)``) is reached
     trivially -- it governs the whole tree, so its presence in the selection is not itself
-    evidence this change caused its failure. Such a guard blocks only when the guard file
+    evidence this change caused its failure. Same for an always-run guard (``[ci].always_tests``
+    or ``ALWAYS = True``): it runs for every item, so reach there is trivial too. Such a guard
+    blocks only when the guard file
     itself changed; the guard's own violation sites are compared against the base separately
     in `baseline_red` (a new offender is already not ``red``), so the reach check never has to
-    look inside its output (B-baseline-reach-blocks-red-main-fix)."""
+    look inside its output (B-baseline-reach-blocks-red-main-fix, B-baseline-red-reach-counts-
+    whole-tree-guards)."""
     out: dict[str, Any] = {"accepted": False, "ids": list(ids)}
     if getattr(cfg.gates, KNOB) != "on":
         return {**out, "why": f"[gates].{KNOB} is off: a person accepts it"}
@@ -205,12 +220,17 @@ def auto_decision(
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
+    always = _always_guards(cfg, tree)
     reached = {t.path for t in (*sel.tests, *sel.cut)}
     # The non-full path has the reach guard the `full` branch lacks, so it does NOT also consult
     # `uncompared`: a failing test whose text was missing (an indeterminate "new offender") is
     # still declined here when the change reaches it, and an unreached one cannot be caused by
     # the change. The `full` branch above substitutes `uncompared` for that missing reach guard.
-    inside = [f for f in test_files_of(ids) if f in changed or (f in reached and f not in governs)]
+    inside = [
+        f
+        for f in test_files_of(ids)
+        if f in changed or (f in reached and f not in governs and f not in always)
+    ]
     if inside:
         return {
             **out,
