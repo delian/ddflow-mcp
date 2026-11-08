@@ -55,6 +55,10 @@ _COMMENT_BOUNDARY = " \t\n;|&()<>"
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
+#: `git stash` is forbidden because the stash stack is shared by every worktree, but these
+#: subcommands only READ it; the entry refuses the writing verbs alone (B-hook-blocks-read-only-stash-list).
+_STASH_READONLY = frozenset({"list", "show"})
+
 #: What to do instead, by the entry's first words.
 _INSTEAD = {
     "pkill": "kill only a process you started, by its pid (`kill <pid>`), or stop your own background job",
@@ -470,6 +474,19 @@ def matches(entry: str, words: list[str], *, ordered: bool = True) -> bool:
     return any(_matches_head(want, h, ordered) for h in heads if h)
 
 
+def _git_subcommand_matches(want: list[str], args: list[str]) -> bool:
+    """Does the `git` entry `want` (its words after `git`) name what `args` (the command's
+    words after `git` and its global options) runs? The subcommand is the first word; the
+    GENERIC `git stash` entry matches only stash's WRITING verbs, so the read-only
+    `list`/`show` do not (B-hook-blocks-read-only-stash-list). An entry that itself names
+    `stash list`/`stash show` still forbids them: only `want == ["stash"]` is exempt."""
+    if not want or want[0].startswith("-") or not args or args[0] != want[0]:
+        return False
+    if len(want) == 1 and want[0] == "stash" and args[1:2] and args[1] in _STASH_READONLY:
+        return False
+    return True
+
+
 def _matches_head(want: list[str], head: list[str], ordered: bool) -> bool:
     if want[0].startswith("-"):
         return any(_word(want[0], w) for w in head) and (
@@ -484,7 +501,7 @@ def _matches_head(want: list[str], head: list[str], ordered: bool) -> bool:
     rest = want[1:]
     if cmd == "git" and rest and not rest[0].startswith("-"):
         # git's subcommand is its first word after the global options, not any argument
-        if not args or args[0] != rest[0]:
+        if not _git_subcommand_matches(rest, args):
             return False
         args, rest = args[1:], rest[1:]
     return _inorder(rest, args) if ordered else all(any(_word(w, a) for a in args) for w in rest)

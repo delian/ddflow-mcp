@@ -43,8 +43,8 @@ INFRASTRUCTURE: dict[str, int] = {
 #: this map, so the test fails until the author decides which verb it gates and amends the row
 #: that names the function in `Site.functions`.
 MARKER_CALLS: dict[str, int] = {
-    "ddflow/api/gates.py:_agent_skip_refusal": 1,
-    "ddflow/api/gates.py:record": 1,
+    "ddflow/api/gates/_vet.py:_agent_skip_refusal": 1,
+    "ddflow/api/gates/_run.py:record": 1,
     "ddflow/services/grants.py:_agent_approval": 1,
     "ddflow/api/chore.py:chore_approve": 1,
     "ddflow/api/lifecycle/claim.py:_claim_by_approval": 1,
@@ -65,7 +65,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/services/export/select.py:gate_force": 1,
     "ddflow/services/approvals/relayed.py:gate": 1,  # upgrade.self and plan.confirm
     "ddflow/surfaces/commands/review.py:_reviewers_add": 1,
-    "ddflow/api/setup.py:configure": 1,
+    "ddflow/api/setup/config.py:configure": 1,
     "ddflow/api/pin_files.py:_regenerate_approval": 1,
     "ddflow/services/repairs/accepted.py:gate": 1,
 }
@@ -98,7 +98,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the failed review outcome and its unresolved findings",
-        ("ddflow/api/gates.py:_agent_skip_refusal", "ddflow/api/gates.py:record"),
+        ("ddflow/api/gates/_vet.py:_agent_skip_refusal", "ddflow/api/gates/_run.py:record"),
         "ddflow gate skip <id> <gate> --reason ...",
     ),
     Site(
@@ -228,7 +228,7 @@ SITES: tuple[Site, ...] = (
         T2,
         L1,
         "the key, the value and the layer this edit writes",
-        ("ddflow/api/setup.py:configure",),
+        ("ddflow/api/setup/config.py:configure",),
         "ddflow config <key> <value> [--local] --approval request|ID",
     ),
     Site(
