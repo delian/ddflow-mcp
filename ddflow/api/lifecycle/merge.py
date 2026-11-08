@@ -226,7 +226,9 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if isinstance(source, O.Outcome):
         return source
     wt, dirty, outside = source
-    if (refusal := _landing_refusal(repo, cfg, st, it, wt, dirty, item, allow_dirty, allow_empty)) is not None:
+    if (
+        refusal := _landing_refusal(repo, cfg, st, it, wt, dirty, item, allow_dirty, allow_empty)
+    ) is not None:
         return refusal
     # The require_gates check runs for EVERY integration mode (Bc6c07dfe52): under `pr` it
     # must still refuse (mode `refuse`) or name the unmet gates (mode `warn`) instead of
@@ -239,8 +241,20 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return over
     if cfg.flow.integration == "pr":
         return _open_request_outcome(
-            repo, cfg, log, it, wt, item, gates, forced_by, pending_approval, agent,
-            borrowed=borrowed, message=message, model=model, dirty=dirty,
+            repo,
+            cfg,
+            log,
+            it,
+            wt,
+            item,
+            gates,
+            forced_by,
+            pending_approval,
+            agent,
+            borrowed=borrowed,
+            message=message,
+            model=model,
+            dirty=dirty,
         )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
@@ -266,21 +280,51 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     landed_note = _landed_note(repo, wt, landed_before, branch_head, r)
-    if (failed := _failed_landing_outcome(repo, cfg, log, it, wt, item, landed_note, r, borrowed=borrowed)) is not None:
+    if (
+        failed := _failed_landing_outcome(
+            repo, cfg, log, it, wt, item, landed_note, r, borrowed=borrowed
+        )
+    ) is not None:
         return failed
     # What the base now points at: the landing. Falls back to the branch head only if
     # the base cannot be read back, which a merge that just succeeded makes unlikely.
     landed_after = W.rev(repo, wt.base)
     sha = landed_after or branch_head
     _record_landing(
-        log, item, wt, gates, borrowed=borrowed, outside=outside, sha=sha,
-        branch_head=branch_head, landed_before=landed_before, landed_after=landed_after,
+        log,
+        item,
+        wt,
+        gates,
+        borrowed=borrowed,
+        outside=outside,
+        sha=sha,
+        branch_head=branch_head,
+        landed_before=landed_before,
+        landed_after=landed_after,
     )
     return _finish_merge(
-        repo, cfg, log, st, it, wt, item, gates, forced_by, pending_approval, agent,
-        borrowed=borrowed, keep=keep, outside=outside, dirty=dirty, refreshed=refreshed,
-        sha=sha, branch_head=branch_head, landed_note=landed_note, merge_since=merge_since,
-        callers=(called_from, shell_cwd), on_progress=on_progress,
+        repo,
+        cfg,
+        log,
+        st,
+        it,
+        wt,
+        item,
+        gates,
+        forced_by,
+        pending_approval,
+        agent=agent,
+        borrowed=borrowed,
+        keep=keep,
+        outside=outside,
+        dirty=dirty,
+        refreshed=refreshed,
+        sha=sha,
+        branch_head=branch_head,
+        landed_note=landed_note,
+        merge_since=merge_since,
+        callers=(called_from, shell_cwd),
+        on_progress=on_progress,
     )
 
 
@@ -330,8 +374,17 @@ def _landing_refusal(
 
 
 def _record_landing(
-    log, item: str, wt, gates, *, borrowed: bool, outside, sha: str, branch_head: str,
-    landed_before: str, landed_after: str,
+    log,
+    item: str,
+    wt,
+    gates,
+    *,
+    borrowed: bool,
+    outside,
+    sha: str,
+    branch_head: str,
+    landed_before: str,
+    landed_after: str,
 ) -> None:
     """Record `worktree.merged`: what the base points at now, and each gate's state at landing."""
     log.append(
@@ -393,8 +446,8 @@ def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; t
     gates,
     forced_by,
     pending_approval: str,
-    agent: str,
     *,
+    agent: str,
     borrowed: bool,
     keep: bool,
     outside,
@@ -708,7 +761,21 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
 
 
 def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
-    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, pending_approval: str, agent: str, *, borrowed: bool, message: str, model: str, dirty: list[str]
+    repo: Path,
+    cfg,
+    log,
+    it,
+    wt,
+    item: str,
+    gates,
+    forced_by,
+    pending_approval: str,
+    agent: str,
+    *,
+    borrowed: bool,
+    message: str,
+    model: str,
+    dirty: list[str],
 ) -> O.Outcome:
     """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
     opening a request past unsettled required gates is never silently skipped. A forced
