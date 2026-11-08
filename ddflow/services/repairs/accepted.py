@@ -143,7 +143,8 @@ def gate(
         stamp.setdefault("keys", keys)
         return "", stamp
     return (
-        f"accepting history needs a person ({who}). {decision.message}",
+        f"accepting history needs a person ({who}). {decision.message} "
+        f"(or the operator accepts it in their own terminal)",
         {},
     )
 
