@@ -1,0 +1,2 @@
+{"agent":"fix-waitapproval","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e4cc07099ef4302cc28c923ba","kind":"ddflow.seen","lamport":155774,"schema":1,"subject":"ddflow","ts":"2026-11-08T15:49:28.488630Z"}
+{"agent":"fix-waitapproval","data":{"path":".ddflow/worktrees/fix-B-widen-refused-on-own-held-glob"},"id":"ee6742da3f2e1c689f778fecf","kind":"worktree.removed","lamport":155775,"schema":1,"subject":"fix-B-widen-refused-on-own-held-glob","ts":"2026-11-08T15:49:28.576287Z"}
