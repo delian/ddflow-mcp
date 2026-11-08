@@ -44,36 +44,38 @@ def test_family_hints_reader_matches_the_former_table_in_order():
     # A frozen snapshot of the FORMER `FAMILY_HINTS` literal, ORDER preserved: family resolution
     # walks the table in order and the FIRST matching needle wins, so a families.toml that emits
     # the same pairs in a different order (or drops one) is a defect this must catch.
-    assert list(M.family_hints(M.load()).items()) == [
-        ("qwen", "alibaba"),
-        ("claude", "anthropic"),
-        ("gpt", "openai"),
-        ("o1", "openai"),
-        ("o3", "openai"),
-        ("codex", "openai"),
-        ("gemini", "google"),
-        ("gemma", "google"),
-        ("llama", "meta"),
-        ("mistral", "mistral"),
-        ("mixtral", "mistral"),
-        ("deepseek", "deepseek"),
-        ("grok", "xai"),
-        ("phi", "microsoft"),
-        ("command", "cohere"),
-        ("yi-", "01ai"),
-        ("glm", "zhipu"),
-        ("nemotron", "nvidia"),
-        ("granite", "ibm"),
-        ("kimi", "moonshot"),
-        ("minimax", "minimax"),
-        ("ernie", "baidu"),
-    ]
+    snapshot = {
+        "qwen": "alibaba",
+        "claude": "anthropic",
+        "gpt": "openai",
+        "o1": "openai",
+        "o3": "openai",
+        "codex": "openai",
+        "gemini": "google",
+        "gemma": "google",
+        "llama": "meta",
+        "mistral": "mistral",
+        "mixtral": "mistral",
+        "deepseek": "deepseek",
+        "grok": "xai",
+        "phi": "microsoft",
+        "command": "cohere",
+        "yi-": "01ai",
+        "glm": "zhipu",
+        "nemotron": "nvidia",
+        "granite": "ibm",
+        "kimi": "moonshot",
+        "minimax": "minimax",
+        "ernie": "baidu",
+    }
+    assert FAMILY_HINTS == snapshot, "agent.FAMILY_HINTS consumes the reader, not a stale copy"
+    assert list(M.family_hints(M.load()).items()) == list(snapshot.items())
 
 
 def test_presets_reader_matches_review_presets():
     # A frozen snapshot of the FORMER `PRESETS` table in full, every field: routes.toml is now
     # the one source, so any value drift (a base_url, a key env name, a launch) is a defect.
-    assert M.presets(M.load()) == {
+    snapshot = {
         "openai": {"kind": "openai", "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY", "model": "gpt-5"},
         "deepseek": {"kind": "openai", "base_url": "https://api.deepseek.com/v1", "api_key_env": "DEEPSEEK_API_KEY", "model": "deepseek-chat"},
         "groq": {"kind": "openai", "base_url": "https://api.groq.com/openai/v1", "api_key_env": "GROQ_API_KEY", "model": "llama-3.3-70b-versatile"},
@@ -94,6 +96,8 @@ def test_presets_reader_matches_review_presets():
         "llm-cli": {"kind": "command", "command": "llm -m {model}", "family": "unknown"},
         "litellm": {"kind": "openai", "base_url": "http://127.0.0.1:4000/v1", "api_key_env": "LITELLM_API_KEY", "launch": {"command": "litellm --model {model} --port 4000", "ready_url": "http://127.0.0.1:4000/v1/models"}},
     }
+    assert review.PRESETS == snapshot, "review.PRESETS consumes the reader, not a stale copy"
+    assert M.presets(M.load()) == snapshot, "the shipped catalog is a faithful transcript"
 
 
 def test_a_local_route_is_a_reviewer_preset_through_the_local_overlay(tmp_path):
