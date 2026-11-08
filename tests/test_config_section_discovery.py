@@ -6,6 +6,7 @@ nor ``config/_core.py`` carries a per-section hand-kept list to edit."""
 from __future__ import annotations
 
 import importlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -44,7 +45,8 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
     `@declare`, and leaves config/__init__.py and config/_core.py byte-identical."""
     import ddflow.config as C
     from ddflow.config import _core
-    from ddflow.config_sections import _docs, __path__ as cs_path
+    from ddflow.config_sections import __path__ as cs_path
+    from ddflow.config_sections import _docs
 
     init_before = Path(C.__file__).read_bytes()
     core_before = Path(_core.__file__).read_bytes()
@@ -61,8 +63,12 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
     assert "zzz_throwaway" in CS.module_names(CS), "the new module is discovered by the scan"
 
     module = importlib.import_module(f"{CS.__name__}.zzz_throwaway")
-    assert _docs.SECTION_CLASSES.get("zzz_throwaway") is module.ZzzThrowawayConfig
-    assert set(_docs.SECTION_CLASSES) == baseline | {"zzz_throwaway"}  # only the throwaway added
+    try:
+        assert _docs.SECTION_CLASSES.get("zzz_throwaway") is module.ZzzThrowawayConfig
+        assert set(_docs.SECTION_CLASSES) == baseline | {"zzz_throwaway"}
 
-    assert Path(C.__file__).read_bytes() == init_before, "config/__init__.py never changes"
-    assert Path(_core.__file__).read_bytes() == core_before, "config/_core.py never changes"
+        assert Path(C.__file__).read_bytes() == init_before, "config/__init__.py never changes"
+        assert Path(_core.__file__).read_bytes() == core_before, "config/_core.py never changes"
+    finally:
+        _docs.SECTION_CLASSES.pop("zzz_throwaway", None)
+        sys.modules.pop(f"{CS.__name__}.zzz_throwaway", None)

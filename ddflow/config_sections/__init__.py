@@ -17,9 +17,14 @@ from types import ModuleType
 def module_names(package: ModuleType, skip: frozenset[str] = frozenset()) -> tuple[str, ...]:
     """The public submodule names of ``package``, sorted: the one deterministic order (no hash
     order), private modules left out. New sections are discovered by this scan, so a section
-    added to a package on ``package.__path__`` needs no edit to any shared file."""
+    added to a package on ``package.__path__`` needs no edit to any shared file. (A name offered
+    by two path entries cannot appear twice: `pkgutil.iter_modules` yields each name once.)"""
     return tuple(
-        sorted(m.name for m in pkgutil.iter_modules(package.__path__) if m.name not in skip and not m.name.startswith("_"))
+        sorted(
+            m.name
+            for m in pkgutil.iter_modules(package.__path__)
+            if m.name not in skip and not m.name.startswith("_")
+        )
     )
 
 
