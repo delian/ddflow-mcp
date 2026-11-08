@@ -248,14 +248,27 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
         if out.text
         else "(the review body could not be read: `roborev show --job` brought no text)"
     )
+    # `roborev wait` exits 1 on ANY finding, including a review that names no CONFIRMED
+    # defect (its only findings are notes/refuted/theoretical); read the severity before
+    # saying "findings" -- recording the gate `failed` over such a text overstates it
+    # (B2bd9e8b715).
+    clean = not out.note or _no_confirmed_defect(out.text)
     return Result(
-        "clean" if not out.note else "findings",
-        out.note or missing,
+        "clean" if clean else "findings",
+        "" if clean else (out.note or missing),
         job,
         head,
         out.text,
         reviewer=out.review.reviewer,
     )
+
+
+def _no_confirmed_defect(text: str) -> bool:
+    """Does roborev's review body name NO confirmed defect? Its own words are 'no CONFIRMED
+    defects' when the only findings are notes/refuted/theoretical (a note still counts as a
+    finding, so `roborev wait` exits 1 for it). Such a review reads as clean: nothing is a
+    defect to record `failed` over."""
+    return "no confirmed defect" in text.casefold()
 
 
 def _findings_summary(text: str) -> str:
