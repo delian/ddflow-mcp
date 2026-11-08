@@ -182,6 +182,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
 
         failed = _close_bugs(repo, item, pending, closed, tests, mutation, lint_exempt, agent)
         if failed is not None:
+            _remember_declared_model(st, log, cfg, model, model_source)
             return failed
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks
