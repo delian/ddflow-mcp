@@ -391,12 +391,13 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale:
     rec = it.gates.get(gate)
     if cap <= 0 or used < cap or rec is None or rec.outcome == "passed":
         return ""
-    if stale and (not counts.get("confirmed") or counts.get("refuted")):
-        # A stale round blocks a pass whenever what it records is a REFUTATION: a refuted
-        # finding says the reviewed tree is fine as it is, so it must be the tree the item
-        # holds now (B835d22b138). A gate whose finding(s) are ALL confirmed-and-fixed is
-        # different: the fix is what moved the tree, so the settle below records that
-        # (`findings_fixed`) instead of leaving a gate with no path once its budget is spent
+    if stale and not counts.get("confirmed"):
+        # A stale round blocks a pass when NOTHING on the record is a CONFIRMED-and-fixed
+        # finding: a pure refutation says the reviewed tree is fine as it is, so it must be
+        # the tree the item holds now (B835d22b138). Once a gate has a confirmed finding (all
+        # confirmed, or mixed refuted+confirmed), the fix is what moved the tree, so the
+        # settle below records it (`findings_fixed`, or `passed_on_refutation` for a mixed set)
+        # instead of leaving a gate with no path once its budget is spent
         # (B-review-round-budget-no-fix-path). Confirmed findings still hold the gate until
         # every finding has a verdict (the untriaged check just below).
         return f"{gate} stays {rec.outcome}: {stale}"

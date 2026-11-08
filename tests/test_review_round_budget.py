@@ -65,12 +65,11 @@ def test_every_confirmed_finding_settles_despite_the_fix_moving_the_tree(repo, t
     assert rec.evidence["findings_fixed"] == {"confirmed": 1, "rounds": 2, "max_rounds": 2}
 
 
-def test_a_refutation_still_blocks_over_a_moved_tree_even_mixed_with_a_confirmed_fix(
-    repo, tmp_path
-):
-    """The relaxed settle is for a fix (all confirmed) only: a refuted finding over a moved
-    tree still needs the reviewed tree (B835d22b138), so fixing finding 1's file while
-    refuting finding 2 (on an untouched file) does not pass the gate."""
+def test_mixed_refuted_and_confirmed_settle_despite_the_fix_moving_the_tree(repo, tmp_path):
+    """The relaxed settle is for any gate with a confirmed (fixed) finding, mixed included:
+    the fix moved finding 1's file (confirmed), finding 2 was refuted on an untouched file,
+    and the gate settles once its budget is spent (the B-review-round-budget scenario of a
+    gate of refuted + confirmed-and-fixed findings over a moved tree)."""
     _setup(repo, tmp_path, findings=2)
     for _ in (1, 2):
         assert api.review(repo, gate="critic", item="T1").data["outcome"] == "failed"
@@ -78,9 +77,12 @@ def test_a_refutation_still_blocks_over_a_moved_tree_even_mixed_with_a_confirmed
     first = api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="t passes")
     assert first.exit == OK and first.data["passed_on_refutation"] is False
     last = api.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="ran it: ok")
-    assert last.exit == OK and last.data["passed_on_refutation"] is False
-    assert _gate(repo).outcome == "failed", last.data["text"]
-    assert "holds other content" in last.data["text"]
+    assert last.exit == OK, last.reason
+    assert last.data["passed_on_refutation"] is True
+    rec = _gate(repo)
+    assert rec.outcome == "passed", last.data["text"]
+    flag = rec.evidence["passed_on_refutation"]
+    assert (flag["refuted"], flag["confirmed"]) == (1, 1)
 
 
 def test_refutations_over_a_moved_tree_still_do_not_pass(repo, tmp_path):
