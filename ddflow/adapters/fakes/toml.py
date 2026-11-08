@@ -92,3 +92,18 @@ class FakeTomlIo:
             return self.loads(self.files[str(path)])
         except KeyError:
             raise FileNotFoundError(str(path)) from None
+
+    def dumps(self, data: Any) -> str:
+        """``data`` as TOML in the fake's subset (tables, arrays, scalars): what `loads` reads."""
+        return "\n".join(self._lines(dict(data), ""))
+
+    def document(self, text: str) -> Any:
+        """The fake's document is its plain table: the subset has no comments to keep."""
+        return self.loads(text)
+
+    def _lines(self, table: dict[str, Any], prefix: str) -> list[str]:
+        out = [f"{k} = {json.dumps(v)}" for k, v in table.items() if not isinstance(v, dict)]
+        for key, value in table.items():
+            if isinstance(value, dict):
+                out += ["", f"[{prefix}{key}]", *self._lines(value, f"{prefix}{key}.")]
+        return out if not prefix else out

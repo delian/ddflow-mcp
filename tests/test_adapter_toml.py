@@ -28,6 +28,12 @@ def toml_cases(io) -> None:
     for bad in ("not toml", "a = ", "a = 1\na = 2"):
         with pytest.raises(TomlError):
             io.loads(bad)
+    # write side (ADP-toml-contract): dumps then loads gives the data back, a document round
+    # trips through dumps, and a bad document raises the one error family.
+    assert io.loads(io.dumps(data)) == data
+    assert io.loads(io.dumps(io.document(SAMPLE))) == data
+    with pytest.raises(TomlError):
+        io.document("a = ")
 
 
 CONFORMANCE = {"TomlIo": {"real": lambda monkeypatch: TomlLibIo(), "cases": toml_cases}}
@@ -121,3 +127,18 @@ def test_inline_comments_are_ignored_by_both_but_not_inside_strings():
     text = 'key = 1 # why\ns = "a # b"  # c\n'
     for io in (TomlLibIo(), FakeTomlIo()):
         assert io.loads(text) == {"key": 1, "s": "a # b"}
+
+
+def test_a_document_edit_keeps_comments_and_layout():
+    # tomlkit's promise, the write side exists to honour (ADP-toml-contract)
+    text = '# top\nname = "x"  # why\n\n[a]\nk = 1\n'
+    doc = TomlLibIo().document(text)
+    assert TomlLibIo().dumps(doc) == text
+    doc["a"]["k"] = 2
+    assert TomlLibIo().dumps(doc) == text.replace("k = 1", "k = 2")
+
+
+def test_a_bad_document_carries_tomlkit_position():
+    with pytest.raises(TomlError) as caught:
+        TomlLibIo().document("a = 1\nb = ]\n")
+    assert caught.value.lineno == 2 and caught.value.colno > 1

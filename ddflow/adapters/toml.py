@@ -1,9 +1,8 @@
-"""The `TomlIo` port and its default adapter: the ONE module that reads TOML.
+"""The `TomlIo` port and its default adapter: the ONE module that reads and writes TOML.
 
-Home of the `toml` family's raw I/O. This step carries the READ side (`tomllib`); the write
-side (`dumps`, `document` over `tomlkit`) and the `toml-home` import contract with its
-shrink-only baseline follow in ADP-toml-contract, because they edit shared guard files
-(.importlinter, tests/architecture_guards_support.py) that ADP-fs holds.
+Home of the `toml` family's raw I/O: the READ side (`tomllib`) and the WRITE side
+(`dumps`, `document` over `tomlkit`), plus the `toml-home` import contract with its
+shrink-only baseline (ADP-toml-contract).
 
 Why two ports: `Toml` (`ddflow.adapters.tomlcfg`, implemented today in `ddflow.infra.tomlcfg`)
 is the policy layer -- layered overlay of config paths, unknown-key rules, key upsert/remove
@@ -20,6 +19,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+import tomlkit
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -40,8 +40,9 @@ class TomlError(tomllib.TOMLDecodeError):
         self.pos = getattr(source, "pos", 0)
         # Python 3.14 gives the line and column; earlier ones only say "(at line 2, column 5)"
         at = re.search(r"at line (\d+), column (\d+)", str(source or ""))
-        self.lineno = getattr(source, "lineno", int(at[1]) if at else 1)
-        self.colno = getattr(source, "colno", int(at[2]) if at else 1)
+        # tomllib calls them lineno/colno; tomlkit (the write side) calls them line/col.
+        self.lineno = getattr(source, "lineno", getattr(source, "line", int(at[1]) if at else 1))
+        self.colno = getattr(source, "colno", getattr(source, "col", int(at[2]) if at else 1))
 
     def __str__(self) -> str:
         return self.msg
@@ -73,9 +74,15 @@ class TomlIo(Protocol):
     def read(self, path: str | Path) -> dict[str, Any]:
         """The table the file at `path` holds; `OSError` when unreadable, `TomlError` when bad."""
 
+    def dumps(self, data: Any) -> str:
+        """``data`` (or a `document` returned value) as TOML text, comments and layout kept."""
+
+    def document(self, text: str) -> Any:
+        """``text`` as an editable document (comments and layout kept); `TomlError` when bad."""
+
 
 class TomlLibIo:
-    """The default `TomlIo`: `tomllib`."""
+    """The default `TomlIo`: `tomllib` to read, `tomlkit` to write."""
 
     def loads(self, text: str) -> dict[str, Any]:
         try:
@@ -91,3 +98,12 @@ class TomlLibIo:
         except UnicodeDecodeError as exc:
             raise TomlError(f"{path}: not UTF-8: {exc}") from exc
         return self.loads(text)
+
+    def dumps(self, data: Any) -> str:
+        return tomlkit.dumps(data)
+
+    def document(self, text: str) -> Any:
+        try:
+            return tomlkit.parse(text)
+        except tomlkit.exceptions.ParseError as exc:  # one error family, as `loads` has
+            raise TomlError(str(exc), exc) from exc  # keeps the position tomlkit found
