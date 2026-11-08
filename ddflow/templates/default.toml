@@ -74,6 +74,7 @@ skip_gates = ["research", "rules", "implement", "rubber_duck", "critic", "verify
 [ci]
 command = ""
 base = ""
+ruff_autofix = true
 pins_precheck = true
 timeout_s = 3600
 workers = "auto"

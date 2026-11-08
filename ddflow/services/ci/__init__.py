@@ -59,6 +59,11 @@ _SUBMODULE_OF = {
     "executable_missing": "shell",
     "scope_to_diff": "shell",
     "tool_missing": "shell",
+    # ruff
+    "auto_fix": "ruff",
+    "changed_python": "ruff",
+    "failing_ruff": "ruff",
+    "ruff_bin": "ruff",
     # scratch
     "CC": "scratch",
     "OWNER_SUFFIX": "scratch",
