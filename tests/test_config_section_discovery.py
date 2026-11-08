@@ -147,9 +147,11 @@ def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
             f"CS.__path__ = [*CS.__path__, {str(extra)!r}]",
             # The discovery loop the package runs at startup, now with the extra path: the section
             # is loaded BY THE SCAN, not a direct import.
-            "for n in CS.module_names(CS):",
+            "names = CS.module_names(CS)",
+            "assert 'zzz_throwaway' in names, 'the scan did not discover the new section'",
+            "for n in names:",
             "    importlib.import_module(f'ddflow.config_sections.{n}')",
-            "m = importlib.import_module('ddflow.config_sections.zzz_throwaway')",
+            "m = importlib.import_module('ddflow.config_sections.zzz_throwaway')",  # cached now
             "import ddflow.config as C",  # Config is assembled now, after the section declared
             "cfg = C.Config()",
             "assert hasattr(cfg, 'zzz_throwaway'), 'Config did not wire the new section'",
