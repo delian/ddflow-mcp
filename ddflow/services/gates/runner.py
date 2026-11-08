@@ -102,12 +102,17 @@ _NO_SUITE = frozenset({"true", ":", "echo"})
 
 def _is_trivial(command: str) -> bool:
     """Is ``command`` a known non-suite no-op (`true`, `:`, `echo ...`)? A no-op names no test
-    file, so the naive whole-suite read would queue it on the lock although it runs nothing."""
+    file, so the naive whole-suite read would queue it on the lock although it runs nothing.
+
+    The WHOLE command must be the no-op: a shell compound whose first word is a no-op
+    (`true; make check`, `echo ok && pytest`) still runs a suite, so it is not trivial."""
     try:
         words = shlex.split(command, comments=True, posix=True)
     except ValueError:
         return False
-    return bool(words) and words[0].rsplit("/", 1)[-1] in _NO_SUITE
+    if not words or "\n" in command or any(w in _SHELL_OPERATORS for w in words):
+        return False
+    return words[0].rsplit("/", 1)[-1] in _NO_SUITE
 
 
 def _runs_whole_suite(gdef: GateDef) -> bool:
