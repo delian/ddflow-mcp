@@ -127,3 +127,9 @@ def test_under_resume_ignores_tilde_and_longer_fences_below_the_h1():
     out = _under_resume(indented, "", "", lead)
     assert out.index("## Open workflow choices") < out.rindex("## Work"), out
     assert out[out.index("## Work") :] == "## Work\n```text\n    ```\n# ddflow brief\n```\n", out
+    # A tilde fence may carry any info string, even one with a tilde (only a backtick
+    # opener's info string forbids a backtick); it still delimits.
+    tilde_info = "# ddflow brief\n## Work\n~~~text has~tilde\n# ddflow brief\n~~~\n"
+    out = _under_resume(tilde_info, "", "", lead)
+    assert out.index("## Open workflow choices") < out.rindex("## Work"), out
+    assert out[out.index("## Work") :] == "## Work\n~~~text has~tilde\n# ddflow brief\n~~~\n", out
