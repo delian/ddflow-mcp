@@ -262,25 +262,17 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     remote_base = f"{cfg.flow.remote}/{wt.base}"
     if (wrong := _wrong_base(st, it, wt, remote_base, item)) is not None:
         return wrong
-    if cfg.flow.integration == "pr":
-        if borrowed:
-            return O.refused(
-                "worktree.merged",
-                f"{item} was claimed without a worktree, and a pull request is opened from "
-                f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
-                f"or claim {item} with a worktree.",
-                id=item,
-                sha="",
-                dirty=[],
-            )
-        return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
-    # Last of the refusals: an agent's approval is only checked here, so no refusal above is
-    # its cost; it is spent (MF.spend) only after the git landing below actually landed.
+    # The require_gates check runs for EVERY integration mode (Bc6c07dfe52): under `pr` it
+    # must still refuse (mode `refuse`) or name the unmet gates (mode `warn`) instead of
+    # opening a request past them. An agent's approval is only checked here; the non-PR path
+    # spends it after the git landing below actually landed.
     gates, forced_by, pending_approval, over = _override(
         repo, cfg, log, st, item, force, approval, agent
     )
     if over is not None:
         return over
+    if cfg.flow.integration == "pr":
+        return _open_request_outcome(repo, cfg, log, it, wt, item, gates, message=message, model=model, dirty=dirty)
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     # The primary keeps its event shards uncommitted between doors; a branch that also
@@ -643,6 +635,25 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
         and p not in fresh
         and not any(path_in_glob(p, g) for g in it.globs)
     ]
+
+
+def _open_request_outcome(repo: Path, cfg, log, it, wt, item: str, gates, *, message: str, model: str, dirty: list[str]) -> O.Outcome:
+    """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
+    opening a request past unsettled required gates is never silently skipped."""
+    if not it.worktree:  # claimed --no-worktree
+        return O.refused(
+            "worktree.merged",
+            f"{item} was claimed without a worktree, and a pull request is opened from "
+            f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
+            f"or claim {item} with a worktree.",
+            id=item,
+            sha="",
+            dirty=[],
+        )
+    req = _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
+    if gates.unmet:
+        req.data["awaiting_gates"] = list(gates.awaiting())
+    return req
 
 
 def _open_request(
