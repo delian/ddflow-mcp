@@ -124,7 +124,8 @@ def test_a_fixed_confirmed_finding_is_not_called_refuted(repo, tmp_path):
     # refuted with its probe" when a CONFIRMED finding was cleared by a later delta (fixed,
     # not refuted). The record's own counts say "1 refuted, 1 confirmed"; the message must
     # not contradict them.
-    from test_complete_failed_review_gate import _commit, _failed_and_confirmed, _setup as _cg_setup
+    from test_complete_failed_review_gate import _commit, _failed_and_confirmed
+    from test_complete_failed_review_gate import _setup as _cg_setup
 
     import ddflow.api.review as api
     from ddflow.core.model import fold
