@@ -210,6 +210,8 @@ def triage(
     )
     extra, this_refuted = _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored)
     text = f"{text}\n{extra}" if extra else text
+    revoke = _revoke_refutation_pass(log, cfg, st, item, gate, mirrored, verdict)
+    text = f"{text}\n{revoke}" if revoke else text
     return O.ok(
         "review.triage",
         id=item,
@@ -488,6 +490,35 @@ def _settle_after_cap(
     if not refuted:
         return f"recorded {it.id}.{gate} = passed (findings fixed): {verdicts}"
     return f"recorded {it.id}.{gate} = passed ON REFUTATION (flagged): {verdicts}"
+
+
+def _revoke_refutation_pass(log, cfg, st, item: str, gate: str, mirrored, verdict: str) -> str:
+    """Re-triaging a finding to CONFIRMED after ``gate`` passed on refutation revives a
+    confirmed, unfixed defect the pass no longer covers, so the pass is revoked: the gate is
+    re-recorded failed with its `passed_on_refutation` flag dropped (bug B31e91454f8). One
+    line per revoked gate, or ""."""
+    if verdict != "confirmed":
+        return ""
+    parts: list[str] = []
+    for g in (gate, *(mirrored or [])):
+        it = st.items.get(item)
+        rec = it.gates.get(g) if it is not None else None
+        if rec is None or rec.outcome != "passed":
+            continue
+        flag = (rec.evidence or {}).get("passed_on_refutation")
+        if not isinstance(flag, dict):
+            continue
+        live = GD.triage_counts(it, g) or {}
+        if live.get("confirmed", 0) <= int(flag.get("confirmed", 0)):
+            continue
+        ev = {k: v for k, v in (rec.evidence or {}).items() if k != "passed_on_refutation"}
+        GD.record(
+            log, cfg, item, g, "failed",
+            reason="a finding was re-triaged confirmed over the refutation pass",
+            evidence=ev, by=rec.by,
+        )
+        parts.append(f"{item}.{g} reverted to failed: {live['confirmed']} confirmed finding(s)")
+    return "\n".join(parts)
 
 
 def _hold_shape(ev: dict[str, Any]) -> bool:
