@@ -19,8 +19,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
-from . import resources as R
 from . import proc as _proc
+from . import resources as R
+
 
 def spawn_stdio(
     argv: list[str],
@@ -42,6 +43,8 @@ def spawn_stdio(
         text=text,
         start_new_session=True,
     )
+
+
 @dataclass
 class PipedEnd:
     """How `run_piped` ended: ``answer`` when ``work`` ended it, else ``code`` and the head of
@@ -51,6 +54,8 @@ class PipedEnd:
     code: int | None = None
     stderr: bytes = b""
     error: OSError | None = None
+
+
 def run_piped(
     argv: list[str],
     work: Callable[[subprocess.Popen], Any],
@@ -95,6 +100,7 @@ def run_piped(
         if p.poll() is None:
             stop_group(p)
 
+
 def pump_lines(src: Any, dst: Any, note: Callable[[str, bytes], None], direction: str) -> None:
     """Copy ``src`` to ``dst`` line by line until EOF, closing ``dst``. ``note`` sees each line
     BEFORE it passes, so a line is recorded before anything can answer it. A reader that
@@ -109,6 +115,7 @@ def pump_lines(src: Any, dst: Any, note: Callable[[str, bytes], None], direction
     finally:
         with contextlib.suppress(OSError):
             dst.close()
+
 
 def relay_stdio(argv: list[str], note: Callable[[str, bytes], None], *, grace_s: float) -> NoReturn:
     """Stand between this process's own stdio and ``argv``, then END this process with the
@@ -139,6 +146,7 @@ def stop_group(p: subprocess.Popen, *, reap_s: float = 10) -> None:
     with contextlib.suppress(subprocess.TimeoutExpired):
         p.wait(timeout=reap_s)
 
+
 def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
     """Signal ``p`` AND everything it started: its whole process group (``sig``; SIGKILL when None,
     SIGTERM to ask it to stop first). SIGKILL is named only on POSIX: Windows has no such signal.
@@ -166,6 +174,7 @@ def kill_group(p: subprocess.Popen, sig: int | None = None) -> None:
             p.kill()
         else:
             p.terminate()
+
 
 @dataclass
 class ShellResult:
@@ -199,6 +208,7 @@ class ShellResult:
     @property
     def output(self) -> str:
         return self.out + self.err
+
 
 def run_shell(
     command: str,
@@ -279,10 +289,12 @@ def run_shell(
         resources=cost[0] if cost else None,
     )
 
+
 def _text(raw: Any) -> str:
     if raw is None:
         return ""
     return raw if isinstance(raw, str) else raw.decode("utf-8", "replace")
+
 
 def _shell_group(
     command: str,
@@ -363,10 +375,12 @@ def _shell_group(
         _drain(p)
         raise
 
+
 def _note_cost(cost: list[R.Resources] | None, p: subprocess.Popen, before: Any) -> None:
     """Append what the reaped ``p`` cost to ``cost`` (the caller's out-parameter), if it asked."""
     if cost is not None and p.returncode is not None:
         cost.append(R.measure(p, before))
+
 
 #: The watcher: started BY the owner BEFORE the command and told the command's process group on
 #: its stdin once that exists, so the only moment the command runs unwatched is the pipe write
@@ -400,6 +414,7 @@ _WATCHER = (
     "# ddflow-owner-watch\n"
 )
 
+
 def _start_watcher() -> subprocess.Popen | None:
     """Start the watcher of the command about to start (Ba3b7509530: a suite ran 8.3 hours after
     the gate run that started it was killed, and nothing reaped it). A SIGKILLed owner cannot
@@ -423,6 +438,7 @@ def _start_watcher() -> subprocess.Popen | None:
     threading.Thread(target=w.wait, name="owner-watch-reaper", daemon=True).start()
     return w
 
+
 def _arm_watcher(w: subprocess.Popen | None, p: subprocess.Popen | None) -> None:
     """Tell the watcher which group to guard (``p`` None: the command never started)."""
     if w is None or w.stdin is None:
@@ -433,6 +449,7 @@ def _arm_watcher(w: subprocess.Popen | None, p: subprocess.Popen | None) -> None
                 w.stdin.write(f"{p.pid}\n")
         finally:
             w.stdin.close()
+
 
 def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
     """Write ``text`` to ``p``'s stdin on a daemon thread, then close it (end of file).
@@ -465,6 +482,7 @@ def _feed_stdin(p: subprocess.Popen, text: str | bytes) -> None:
                     pipe.close()
 
     threading.Thread(target=write, name="run_shell-stdin", daemon=True).start()
+
 
 def _drain(p: subprocess.Popen) -> tuple[Any, Any]:
     """Everything ``p`` wrote (including what an earlier, timed-out `communicate` had
