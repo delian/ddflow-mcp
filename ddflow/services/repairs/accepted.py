@@ -143,8 +143,7 @@ def gate(
         stamp.setdefault("keys", keys)
         return "", stamp
     return (
-        f"accepting history needs a person ({who}). {decision.message} "
-        f"(MCP: approval=request)",
+        f"accepting history needs a person ({who}). {decision.message}",
         {},
     )
 
