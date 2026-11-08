@@ -64,7 +64,7 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
         mark = {
             "passed_on_refutation": {
                 "refuted": counts["refuted"],
-                "confirmed": 0,
+                "confirmed": counts["confirmed"],
                 "rounds": _rounds_used(it, g),
                 "max_rounds": cfg.review.max_rounds,
                 "refutations": refutations,
@@ -81,8 +81,9 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
             by=rec.by,
         )
         text = (
-            f"{text}\nrecorded {item}.{g} = passed ON REFUTATION (flagged): every one of the "
-            f"{counts['findings']} finding(s) was refuted with its probe; no hand-recording needed"
+            f"{text}\nrecorded {item}.{g} = passed ON REFUTATION (flagged): "
+            f"{counts['refuted']} refuted, {counts['confirmed']} confirmed, not refuted; "
+            f"no hand-recording needed"
         )
         if g == gate:
             passed = True
