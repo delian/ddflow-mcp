@@ -148,3 +148,41 @@ def test_a_waiter_that_reaches_the_head_restarts_its_wait_budget(tmp_path, monke
     assert busy.value.waited_s >= 1.7, (
         f"gave up after {busy.value.waited_s:.2f}s: reaching the head did not restart the budget"
     )
+
+
+def test_an_override_waiter_reaching_the_head_keeps_a_hard_total_bound(tmp_path, monkeypatch):
+    """Ba5d5d63f12 holds across the head restart: an explicit `wait_s` override is a hard
+    TOTAL bound, so a waiter that reaches the head late still gives up once the override
+    elapsed from queueing -- the B-suite-wait-expires-at-head-of-queue restart applies to the
+    default knob only."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    cfg = Config()
+    cfg.ci.suite_wait_s = 5.0
+    now = [0.0]
+
+    def monotonic() -> float:
+        return now[0]
+
+    def sleep(s: float) -> None:
+        now[0] += s
+
+    monkeypatch.setattr(time, "monotonic", monotonic)
+    monkeypatch.setattr(time, "sleep", sleep)
+    real_live = SL._live
+
+    def fake_live(queue, stale_s, grace_s, mine=""):
+        if "-me" in mine and now[0] < 0.75:
+            return ["ahead", mine]
+        return real_live(queue, stale_s, grace_s, mine)
+
+    monkeypatch.setattr(SL, "_live", fake_live)
+
+    with SL.hold(cfg, "holder", tmp_path, say=lambda _t: None):
+        with pytest.raises(SL.SuiteBusy) as busy:
+            with SL.hold(cfg, "me", tmp_path, wait_s=1.0, say=lambda _t: None):
+                raise AssertionError("the holder never freed the slot")
+    # The 1.0 s override bounds the whole queue wait even though the waiter reached the head
+    # at ~0.75 s: it gave up at ~1.0 s total, not at 0.75 + a restarted 1.0 = 1.75 s.
+    assert 0.9 <= busy.value.waited_s < 1.5, (
+        f"gave up after {busy.value.waited_s:.2f}s: the override no longer bounds the queue wait"
+    )
