@@ -83,4 +83,3 @@ def test_under_resume_anchors_to_the_last_exact_heading_line():
     assert out.startswith("## Resume"), out
     assert out.index("## Open workflow choices") < out.rindex("# ddflow brief"), out
     assert out.index("```\n# ddflow brief\n```") < out.index("## Open workflow choices"), out
-

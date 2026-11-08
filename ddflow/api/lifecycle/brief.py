@@ -312,7 +312,7 @@ def _under_resume(text: str, reports_block: str, contest_text: str, undecided: s
     at = text.rfind("\n" + head + "\n")
     if at < 0:
         return lead + text  # no exact H1 line (or it is the first line): keep the blocks
-    return text[: at + 1] + lead + text[at + 1:]
+    return text[: at + 1] + lead + text[at + 1 :]
 
 
 def brief(
