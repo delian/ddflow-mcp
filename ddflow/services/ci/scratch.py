@@ -10,11 +10,13 @@ from __future__ import annotations
 import os
 import shutil
 import signal
+import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 from ...infra import fsio
+from ...infra import git as G
 from ...infra import worktree as W
 from .. import ci_conflict as CC
 from .types import CANNOT_MERGE, CONFLICT, NOT_MERGEABLE, Failure
@@ -111,16 +113,43 @@ def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
 
 @contextmanager
 def merge_tree(
-    repo: Path, ref: str, base: str, pins: Callable[[], Iterable[str]] | None = None
+    repo: Path,
+    ref: str,
+    base: str,
+    pins: Callable[[], Iterable[str]] | None = None,
+    deadline_s: float | None = None,
 ) -> Iterator[tuple[Path | None, str]]:
     """A scratch worktree of `ref` with `base` merged in: (path, "") or (None, why not).
 
     The "why" is a ``Failure`` (a str) whose ``kind`` is "ok", "conflict" or "cannot-merge".
 
     Removed on exit. A base already contained in `ref` needs no merge; a base that
-    conflicts with `ref` is reported as the failure it is."""
+    conflicts with `ref` is reported as the failure it is. ``deadline_s`` bounds the git
+    that makes the tree and the merge inside it: past it git is killed and reported as a
+    cannot-merge failure, and the throwaway tree is removed (the probe's old-git fallback
+    passes its ``[locks].probe_timeout_s`` so the CLI never outlives it, LK-probe-scratch-deadline)."""
+    # One budget for the WHOLE scratch merge -- the worktree add AND the merge inside it --
+    # not a fresh timeout per git call: a slow `worktree add` plus a slow `merge` must not
+    # each get its own `deadline_s` and run for twice the caller's deadline
+    # (LK-probe-scratch-deadline critic/rubber_duck #1). The cutoff starts here, before the
+    # tree is made: the add spends its `deadline_s`, and the merge calls that follow take
+    # `left()` from this same cutoff, so the total is bounded by the caller's deadline.
+    cutoff = time.monotonic() + deadline_s if deadline_s is not None else None
+
+    def left() -> float:
+        # No deadline: the git runner's own default (GIT_TIMEOUT) still bounds each call --
+        # an explicit `None` would mean "no timeout", so the caller that set no deadline keeps
+        # the 300s cap the plain ci gate merge had before the deadline existed.
+        return G.GIT_TIMEOUT if cutoff is None else max(0.0, cutoff - time.monotonic())
+
     with W.scratch_tree(
-        repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner
+        repo,
+        ref,
+        detach=True,
+        prefix=SCRATCH_PREFIX,
+        quiet=True,
+        claim=_claim_owner,
+        deadline_s=deadline_s,
     ) as s:
         if s.path is None:
             yield (
@@ -133,7 +162,9 @@ def merge_tree(
         with _remove_on_signals(repo, tree, marker):
             if (
                 base
-                and not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok
+                and not W.git(
+                    repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}", timeout=left()
+                ).ok
             ):
                 yield (
                     None,
@@ -143,7 +174,10 @@ def merge_tree(
                     ),
                 )
                 return
-            if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
+            if (
+                base
+                and W.git(repo, "merge-base", "--is-ancestor", base, ref, timeout=left()).code != 0
+            ):
                 # No hook of the repository runs in the scratch merge (core.hooksPath): the
                 # post-merge hook regenerated pins by running the golden suite, which outlived
                 # the git timeout and was reported as a conflict (B36c484af97).
@@ -159,6 +193,7 @@ def merge_tree(
                     "--no-edit",
                     "--no-ff",
                     base,
+                    timeout=left(),
                 )
                 said = m.out or m.err
                 # A conflict is git's own answer: exit 1, or histories with nothing in common.
