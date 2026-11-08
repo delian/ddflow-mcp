@@ -206,6 +206,10 @@ def auto_decision(
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
     reached = {t.path for t in (*sel.tests, *sel.cut)}
+    # The non-full path has the reach guard the `full` branch lacks, so it does NOT also consult
+    # `uncompared`: a failing test whose text was missing (an indeterminate "new offender") is
+    # still declined here when the change reaches it, and an unreached one cannot be caused by
+    # the change. The `full` branch above substitutes `uncompared` for that missing reach guard.
     inside = [f for f in test_files_of(ids) if f in changed or (f in reached and f not in governs)]
     if inside:
         return {
