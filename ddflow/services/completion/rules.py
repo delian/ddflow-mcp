@@ -36,7 +36,7 @@ from .. import gates as G
 from .. import observed_globs as OG
 from .. import review_exclude as RX
 from ..cadence import phase_overdue
-from ..docsonly import diff_is_docs_only
+from ..docsonly import diff_is_docs_only, diff_is_trivial
 from ..gates import reviewers as GR
 from ..gates.evidence import commit_tree_entries, worktree_entries
 from ..gates.evidence import tree_being_completed as _tree_being_completed
@@ -84,6 +84,10 @@ class Verdict:
     #: Set when the item is a chore (`services.chore`): why it needs no reviewer. Recorded
     #: on the completion event with the approval it rests on.
     chore: str = ""
+    #: Set when the item's ACTUAL diff is trivial (format-only/docs/comment, Bbd88c54354):
+    #: the no-behavior-change declaration, recorded on the completion event so the excused
+    #: review + full-ci gates are accounted for rather than silently absent.
+    trivial: str = ""
 
     @property
     def may_complete(self) -> bool:
@@ -227,6 +231,7 @@ def needs_independent_reviewer(
         and it.kind == "task"
         and not it.promote_to
         and not diff_is_docs_only(it, cfg, paths)
+        and not diff_is_trivial(it, cfg, repo, paths)
         and not (
             not reviewed
             and repo is not None
@@ -265,7 +270,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     gdefs = G.load_gates(repo, cfg)
     # The actual diff, not the declared globs, decides whether a gate is out of scope.
-    s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it))
+    s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it), repo=repo)
     v = Verdict(
         item=item_id,
         coverage_gaps=list(s.unavailable),
@@ -380,6 +385,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     cwd, landed = _tree_being_completed(repo, it)
     own = changed_paths(repo, it)
+    v.trivial = _trivial_declaration(it, cfg, repo, own)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
     for note in refine_stale_notes(
         stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs
@@ -442,6 +448,21 @@ def refine_stale_notes(
                 replace(note, why=f"the files it reviewed or this item changes differ: {shown}")
             )
     return out
+
+
+def _trivial_declaration(it, cfg, repo, own) -> str:
+    """The no-behavior-change declaration for a TRIVIAL diff (Bbd88c54354), or "".
+
+    Kept a function, not an inline `if`, so `verdict`'s cyclomatic complexity does not grow:
+    a trivial change (format-only/docs/comment) excuses the cross-family review (rubber_duck +
+    critic) and the whole-suite ci; the record carries this note so those gates are accounted
+    for rather than silently absent."""
+    if diff_is_trivial(it, cfg, repo, own):
+        return (
+            "no behavior change: the diff is format-only/docs/comment, so rubber_duck, "
+            "critic and ci are excused and unit_tests runs the scoped tests"
+        )
+    return ""
 
 
 def _unmerged_branches(state: State, cfg: Config, phase: Item, repo: Path) -> list[str]:
