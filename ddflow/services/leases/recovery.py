@@ -267,16 +267,21 @@ def _note_landed(
 
 
 def _branch_ahead(repo: Path, facts: RepoFacts, cfg: Config, branch: str) -> int:
-    """Commits ``branch`` holds that the base lacks; -1 when it cannot be told.
+    """Commits ``branch`` holds that the base lacks, three-valued like the rest of this
+    module: N>0 unmerged · 0 the branch is genuinely gone · -1 cannot be told.
 
     Asked only when the worktree is gone: the branch may still carry unmerged work, and
-    "nothing to salvage" over it deletes real work (B5b1c6272c1). A branch that no longer
-    exists means there is genuinely nothing left, reported as 0; one git could not count is
-    -1, never folded into "empty" by `_measure`.
+    "nothing to salvage" over it deletes real work (B5b1c6272c1). `W.branch_exists` answers
+    only True/False and folds a git that could not run (code -1) into "absent", which would
+    silently map an unanswerable probe to "empty"; ask git for the ref and read its exit
+    code instead, so a missing branch (exit 1) is 0 and an unavailable git stays -1.
     """
     if not branch:
         return -1
-    if not W.branch_exists(repo, branch):
+    probe = G.run(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+    if probe.unavailable:
+        return -1
+    if not probe.ok:  # exit 1: the ref is genuinely not there
         return 0
     return G.commits_ahead(repo, facts.base(cfg.worktree.base_ref), branch)
 

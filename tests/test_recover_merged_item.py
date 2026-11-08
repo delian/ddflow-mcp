@@ -212,3 +212,18 @@ def test_a_gone_worktree_whose_branch_could_not_be_measured_is_not_called_empty(
     (rec,) = _recs(repo, "T4")
     assert rec.salvageable is None, rec.advice
     assert "could not be measured" in rec.advice and "ddflow release T4" in rec.advice, rec.advice
+
+
+def test_a_gone_worktree_with_no_branch_left_is_still_nothing_to_salvage(repo):
+    """The branch was deleted along with the tree: genuinely nothing left, still nil, but
+    NOT an "unknown" that the sweep would keep (the empty-vs-unknown distinction)."""
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T5", {"parent": "P1", "title": "T5", "globs": ["src/T5/*"]})
+    out = LC.claim(repo, "T5", agent="worker")
+    _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
+    _git("-C", str(repo), "branch", "-D", "ddflow/T5")
+    (rec,) = _recs(repo, "T5")
+    assert rec.salvageable is False, rec.advice
+    assert "ddflow release T5" in rec.advice, rec.advice
