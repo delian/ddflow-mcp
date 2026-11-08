@@ -346,6 +346,40 @@ def test_a_delta_own_new_finding_does_not_hold_the_pass():
     assert _untriaged(kept, gone=set(), carried={}, verdicts=verdicts) == 2
 
 
+def test_a_delta_round_a_re_raised_confirmed_finding_still_blocks(monkeypatch):
+    """A delta that re-raises a still-standing confirmed finding byte-identically must still
+    fail: its digest is `known`, which `blocking_findings` keeps above the floor. The delta
+    converges only on NEW below-floor findings, not on an unanswered earlier one."""
+    from types import SimpleNamespace as NS
+
+    from ddflow.config import Config
+    from ddflow.services import review as RV
+
+    prior = {
+        "review_kind": "delta",
+        "rounds": 1,
+        "chunk_findings": [
+            {
+                "severity": "MEDIUM",
+                "digest": "abc123",
+                "title": "m",
+                "location": "x.py:1",
+                "detail": "d",
+            }
+        ],
+    }
+    monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
+    repeated = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="MEDIUM", digest="abc123", title="m")]
+    )
+    it = NS(triage={"critic": {"abc123": {"verdict": "confirmed"}}})
+    cfg = Config.load(None, env={})
+    outcome, _ = api._gate_outcome(
+        repeated, [repeated], it, "T1", "critic", api._converges("delta", False), cfg, None, print
+    )
+    assert outcome == "failed"
+
+
 def test_a_refuted_prior_finding_is_not_still_standing(monkeypatch):
     """`_still_standing` drops a REFUTED prior finding (settled, no longer stands: re-raising
     it below the floor is filtered), but keeps a CONFIRMED one (still a real defect: blocks)."""
