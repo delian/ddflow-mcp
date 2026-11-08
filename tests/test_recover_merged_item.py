@@ -168,3 +168,30 @@ def test_the_advice_counts_the_blockers_it_does_not_list(repo, monkeypatch):
     monkeypatch.setattr(L, "_SHOWN_BLOCKERS", 1)
     (rec,) = _recs(repo, "T1")
     assert " (+2 more)" in rec.advice, rec.advice
+
+
+def test_a_gone_worktree_whose_branch_holds_unmerged_commits_is_salvageable(repo):
+    """B5b1c6272c1: a removed tree proves nothing about the branch that carried it.
+
+    An agent (or a merge) removed the worktree while the branch ``ddflow/T3`` still held
+    commits main lacks. ``scan`` reported "worktree is gone; nothing to salvage" and told
+    the operator to sweep it, throwing those commits away. It must count the branch's
+    commits ahead of the base and report them as salvageable instead.
+    """
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T3", {"parent": "P1", "title": "T3", "globs": ["src/T3/*"]})
+    out = LC.claim(repo, "T3", agent="worker")
+    wt = Path(out.data["worktree"])
+    (wt / "src").mkdir(parents=True, exist_ok=True)
+    (wt / "src" / "a.py").write_text("x = 1\n")
+    _git("-C", str(wt), "add", "-A")
+    ident = ["-c", "user.email=t@e.com", "-c", "user.name=T"]
+    _git("-C", str(wt), *ident, "commit", "-qm", "T3 work")
+    _git("-C", str(repo), "worktree", "remove", "--force", str(wt))
+    (rec,) = _recs(repo, "T3")
+    assert rec.salvageable is True, rec.advice
+    assert rec.unmerged_commits >= 1, rec.advice
+    assert "ddflow/T3" in rec.advice, rec.advice
+    assert "ddflow release T3" in rec.advice, rec.advice

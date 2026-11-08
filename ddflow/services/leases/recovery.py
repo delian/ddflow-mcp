@@ -13,6 +13,7 @@ from pathlib import Path
 from ...config import Config
 from ...core import schedule
 from ...core.model import REVIEW, Item, State
+from ...infra import git as G
 from ...infra import worktree as W
 from ...infra.gitbatch import RepoFacts
 from ...infra.log import EventLog
@@ -265,6 +266,21 @@ def _note_landed(
         )
 
 
+def _branch_ahead(repo: Path, facts: RepoFacts, cfg: Config, branch: str) -> int:
+    """Commits ``branch`` holds that the base lacks; -1 when it cannot be told.
+
+    Asked only when the worktree is gone: the branch may still carry unmerged work, and
+    "nothing to salvage" over it deletes real work (B5b1c6272c1). A branch that no longer
+    exists means there is genuinely nothing left, reported as 0; one git could not count is
+    -1, never folded into "empty" by `_measure`.
+    """
+    if not branch:
+        return -1
+    if not W.branch_exists(repo, branch):
+        return 0
+    return G.commits_ahead(repo, facts.base(cfg.worktree.base_ref), branch)
+
+
 def _measure(
     rec: Recovery,
     repo: Path,
@@ -288,19 +304,35 @@ def _measure(
     # Only an expired lease is still there to release. An orphan's lease is already
     # null, and telling someone to release it sends them to an exit 2 (B4f9019c0d7).
     held = rec.kind == "expired_lease"
+    facts = facts or RepoFacts(repo)
     wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
         # The tree is gone (a merge removed it), so `recover` must not name a path that
         # no longer exists (B-recover-forgets-author-model): the advice says it is gone,
-        # and the row carries no worktree at all.
+        # and the row carries no worktree at all. But a gone TREE proves nothing about
+        # the BRANCH that carried it: `merge` (or an agent) removed the tree while the
+        # branch still held commits the base lacks, and reporting those "nothing to
+        # salvage" made cleanup propose deleting real work (B5b1c6272c1). Ask the branch
+        # before declaring it empty.
         rec.worktree = ""
+        ahead = _branch_ahead(repo, facts, cfg, rec.branch)
+        if ahead > 0:
+            rec.unmerged_commits = ahead
+            rec.salvageable = True
+            base = facts.base(cfg.worktree.base_ref)
+            rec.advice = (
+                f"the worktree is gone but its branch {rec.branch} holds {ahead} "
+                f"unmerged commit(s) — salvage them before sweeping: "
+                f"`git -C {repo} log {base}..{rec.branch}`"
+                + (f", then `ddflow release {rec.item} --note salvaged`." if held else ".")
+            )
+            return
         rec.advice = "worktree is gone; nothing to salvage" + (
             f". `ddflow release {rec.item}` to clear the claim."
             if held
             else ", and no lease is held on it."
         )
         return
-    facts = facts or RepoFacts(repo)
     if budget is not None and not budget.take_tree():
         rec.salvageable = None  # not measured: unknown is never clean
         rec.advice = (
