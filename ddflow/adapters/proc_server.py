@@ -121,7 +121,7 @@ def relay_stdio(argv: list[str], note: Callable[[str, bytes], None], *, grace_s:
     pump_lines(child.stdout, sys.stdout.buffer, note, "out")
     try:
         code = child.wait(timeout=grace_s)
-    except TimeoutExpired:
+    except subprocess.TimeoutExpired:
         stop_group(child)
         code = 0
     os._exit(code)
