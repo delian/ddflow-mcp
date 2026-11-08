@@ -38,6 +38,12 @@ TAIL_CHARS = 4000
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
+def _killed(p) -> bool:
+    """Whether ``p`` ran and was killed by a signal: the OS reports a negative return code
+    (e.g. -15 for SIGTERM), which is no verdict (B512a5d7f35)."""
+    return p.code is not None and p.code < 0
+
+
 def parse_checks(output: str) -> list[Check]:
     """Per-hook results from pre-commit's report ("ruff check ......... Failed")."""
     checks = []
@@ -507,7 +513,7 @@ def _run_stages(
     if selected:
         scope.unran = unran
         scope.ok["hooks"] = p.ran and p.code == 0
-        if not p.ran or (p.code or 0) < 0:  # killed by a signal: not a verdict (B512a5d7f35)
+        if not p.ran or _killed(p):  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add("hooks")
     if not (selected and p.ran and p.code == 0):
         if selected:
@@ -531,7 +537,7 @@ def _run_stages(
         )
         spent += p.elapsed_s
         scope.ok[label] = p.ran and p.code == 0
-        if not p.ran or (p.code or 0) < 0:  # killed by a signal: not a verdict (B512a5d7f35)
+        if not p.ran or _killed(p):  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
@@ -617,7 +623,7 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
     # a verdict, so it is unavailable, never a failed check (B512a5d7f35). `p.code` is None only
     # for a run that never started, which `_unfinished` already turned away. A killed run gives
     # no verdict, so it records no hook checks either (a half-run 'Failed' line is not a verdict).
-    killed = p.code is not None and p.code < 0
+    killed = _killed(p)
     checks = parse_checks(out) if not killed else []
     if out_prefix and not killed:  # the hooks passed and the selected tests ran after them
         for label, count in (("selected", len(scope.tests)), ("always", len(scope.always))):
