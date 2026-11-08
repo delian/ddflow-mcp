@@ -47,6 +47,21 @@ def _partial_line(it, gate: str) -> str:
     return f"{gate} ran only partially (coverage: {coverage})"
 
 
+def _coverage_notes(it, s) -> list[str]:
+    """The NOTE lines for the gates that did not reach a pass: the never-ran ones apart from
+    the partial ones, whose coverage or counts stand (bug B-gate-status-partial-did-not-run)."""
+    if not s.unavailable:
+        return []
+    notes = []
+    never = [g for g in s.unavailable if g not in set(s.partial)]
+    if never:
+        notes.append(
+            f"\n  NOTE: {', '.join(never)} did not run. That is a gap in coverage, not a pass."
+        )
+    notes.extend(f"\n  NOTE: {_partial_line(it, g)}" for g in s.partial)
+    return notes
+
+
 def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
     """Record `unavailable` for every gate run whose process died before it recorded
     (B58842554a7): a killed shell, a tool timeout, a SIGKILL. The run's started-marker
@@ -175,14 +190,8 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         )
         if governing.text:
             lines.append("\n" + governing.text.rstrip())
-    if s.unavailable:
-        never = [g for g in s.unavailable if g not in set(s.partial)]
-        if never:
-            lines.append(
-                f"\n  NOTE: {', '.join(never)} did not run. That is a gap in coverage, not a pass."
-            )
-        for g in s.partial:
-            lines.append(f"\n  NOTE: {_partial_line(it, g)}")
+    _lines = _coverage_notes(it, s)
+    lines.extend(_lines)
 
     readme = readme_report(st, cfg, item, repo=repo)
     if readme:
