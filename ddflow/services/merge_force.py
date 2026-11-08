@@ -124,4 +124,4 @@ def spend(log: Any, cfg: Any, item: str, a: Assessment, approval: str) -> CN.Dec
     ``.ok`` -- a spend that fails here means another consumer took the single use (or it
     expired) between [`authorise`]'s check and this spend, and the landing must not record a
     bogus proof."""
-    return CN.spend(log, canon_of(log, item, a), approval)
+    return CN.spend(log, canon_of(log, item, a), approval, cfg=cfg)
