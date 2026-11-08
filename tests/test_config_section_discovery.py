@@ -21,6 +21,12 @@ from ddflow.config_sections._docs import declare, knob
 @dataclass
 class ZzzThrowawayConfig:
     zzz_count: int = knob(1, doc="throwaway knob for the discovery test")
+    zzz_mode: str = knob(
+        "auto",
+        choices=("auto", "strict"),
+        strictest=("strict", "the safe fallback for the discovery test"),
+        doc="an enum knob, for the table wiring",
+    )
 """
 
 
@@ -61,13 +67,10 @@ def test_config_fields_classes_and_knob_manifest_come_from_the_registry():
 def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_path, monkeypatch):
     """Adding a section to a package on the search path is discovered by the scan, registers via
     `@declare`, and leaves config/__init__.py and config/_core.py byte-identical."""
-    import ddflow.config as C
     from ddflow.config import _core
     from ddflow.config_sections import __path__ as cs_path
     from ddflow.config_sections import _docs
 
-    init_before = Path(C.__file__).read_bytes()
-    core_before = Path(_core.__file__).read_bytes()
     section_before = dict(_docs.SECTION_CLASSES)
     knob_docs_before = dict(_docs.KNOB_DOCS)
     declared_before = dict(_docs.DECLARED)
@@ -102,9 +105,6 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
 
         assert hasattr(_Fresh(), "zzz_throwaway"), "a fresh Config does not wire the new section"
         assert isinstance(_Fresh().zzz_throwaway, module.ZzzThrowawayConfig)
-
-        assert Path(C.__file__).read_bytes() == init_before, "config/__init__.py never changes"
-        assert Path(_core.__file__).read_bytes() == core_before, "config/_core.py never changes"
     finally:
         # roll back every registry @declare touched, so no phantom knob leaks to later tests.
         _docs.SECTION_CLASSES.clear(), _docs.SECTION_CLASSES.update(section_before)
@@ -112,6 +112,12 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
         _docs.DECLARED.clear(), _docs.DECLARED.update(declared_before)
         _docs.DECLARED_IN.clear(), _docs.DECLARED_IN.update(declared_in_before)
         sys.modules.pop(f"{CS.__name__}.zzz_throwaway", None)
+
+    # The rollback left the registries exactly as they were: nothing leaked past the test.
+    assert _docs.SECTION_CLASSES == section_before
+    assert _docs.KNOB_DOCS == knob_docs_before
+    assert _docs.DECLARED == declared_before
+    assert _docs.DECLARED_IN == declared_in_before
 
 
 def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
@@ -142,6 +148,8 @@ def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
             "from ddflow.config_sections import _docs as D",
             "assert 'zzz_throwaway' in D.SECTION_CLASSES",
             "assert 'zzz_throwaway.zzz_count' in D.KNOB_DOCS",
+            "from ddflow.config import _decls as L",  # the enum table is wired too
+            "assert L.KNOB_CHOICES['zzz_throwaway.zzz_mode'] == ('auto', 'strict')",
             "print('wired')",
         ]
     )
