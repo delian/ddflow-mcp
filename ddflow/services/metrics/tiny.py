@@ -185,7 +185,9 @@ def text(data: dict) -> str:
 def _dur(seconds):
     if seconds is None:
         return "n/a"
-    return f"{seconds / 60:.0f}m" if seconds >= 60 else f"{seconds:.0f}s"
+    if seconds >= 60:
+        return f"{seconds / 60:.0f}m"
+    return f"{seconds:.0f}s" if seconds >= 1 else f"{seconds:.1f}s"
 
 
 def _pct(value):
