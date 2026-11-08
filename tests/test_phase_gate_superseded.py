@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from helpers import git as _git
 
+from ddflow.api.gates import _run
 from ddflow.services import gates as G
 
 
@@ -41,3 +42,13 @@ def test_a_source_commit_supersedes_without_paths(tmp_path):
     began = _repo(tmp_path)
     _commit(tmp_path, "other.py", "2", "someone else's source")
     assert G.superseded_by(began, G.tree_identity(tmp_path), tmp_path)
+
+
+def test_found_text_names_the_verdict_and_summary():
+    # B267a6b0b5e: a superseded run's refusal must still say what it found, so the
+    # outcome is not lost. The helper carries the verdict and the suite's summary lines.
+    assert _run._found_text("failed", {"summary": ["112 passed", "3 failed"]}) == (
+        "FAILED 112 passed; 3 failed"
+    )
+    assert _run._found_text("passed", {"summary": ["10 passed"]}) == "PASSED 10 passed"
+    assert _run._found_text("passed", {}) == "PASSED"

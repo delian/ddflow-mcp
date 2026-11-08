@@ -305,10 +305,11 @@ def superseded_by(
 
     ``paths`` (the item's globs) scope it to content: commits that touch none of them -- other
     agents' merges moving a shared checkout's HEAD -- leave the run's verdict standing
-    (B-e47bb1cade). Empty/None: the whole source tree scopes it, so only a commit that
-    changed non-bookkeeping source supersedes -- an event-only commit (`.ddflow/`, ddflow's
-    own record) does not move the source the gate ran against (B267a6b0b5e). Git unable to
-    list the diff: superseded."""
+    (B-e47bb1cade). Empty/None (a phase): the whole source tree scopes it, so only a commit
+    that changed a source file supersedes -- a commit touching only ``.ddflow/`` (the ENTIRE
+    directory: events, config and rules alike) does not move the source the gate ran
+    against, because the run's own `tree_identity` leaves exactly that directory out
+    (B267a6b0b5e). Git unable to list the diff: superseded."""
     a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
