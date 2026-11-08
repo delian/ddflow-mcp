@@ -111,16 +111,24 @@ def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
 
 @contextmanager
 def merge_tree(
-    repo: Path, ref: str, base: str, pins: Callable[[], Iterable[str]] | None = None
+    repo: Path,
+    ref: str,
+    base: str,
+    pins: Callable[[], Iterable[str]] | None = None,
+    deadline_s: float | None = None,
 ) -> Iterator[tuple[Path | None, str]]:
     """A scratch worktree of `ref` with `base` merged in: (path, "") or (None, why not).
 
     The "why" is a ``Failure`` (a str) whose ``kind`` is "ok", "conflict" or "cannot-merge".
 
     Removed on exit. A base already contained in `ref` needs no merge; a base that
-    conflicts with `ref` is reported as the failure it is."""
+    conflicts with `ref` is reported as the failure it is. ``deadline_s`` bounds the git
+    that makes the tree and the merge inside it: past it git is killed and reported as a
+    cannot-merge failure, and the throwaway tree is removed (the probe's old-git fallback
+    passes its ``[locks].probe_timeout_s`` so the CLI never outlives it, LK-probe-scratch-deadline)."""
     with W.scratch_tree(
-        repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner
+        repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner,
+        deadline_s=deadline_s,
     ) as s:
         if s.path is None:
             yield (
@@ -130,10 +138,13 @@ def merge_tree(
             return
         tree = s.path
         marker = owner_marker(tree)  # written by `claim`, BEFORE the add registered the tree
+        deadline = {} if deadline_s is None else {"timeout": deadline_s}
         with _remove_on_signals(repo, tree, marker):
             if (
                 base
-                and not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok
+                and not W.git(
+                    repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}", **deadline
+                ).ok
             ):
                 yield (
                     None,
@@ -143,7 +154,7 @@ def merge_tree(
                     ),
                 )
                 return
-            if base and W.git(repo, "merge-base", "--is-ancestor", base, ref).code != 0:
+            if base and W.git(repo, "merge-base", "--is-ancestor", base, ref, **deadline).code != 0:
                 # No hook of the repository runs in the scratch merge (core.hooksPath): the
                 # post-merge hook regenerated pins by running the golden suite, which outlived
                 # the git timeout and was reported as a conflict (B36c484af97).
@@ -159,6 +170,7 @@ def merge_tree(
                     "--no-edit",
                     "--no-ff",
                     base,
+                    **deadline,
                 )
                 said = m.out or m.err
                 # A conflict is git's own answer: exit 1, or histories with nothing in common.
