@@ -187,8 +187,8 @@ def _dirs(cfg: Config) -> list[Path]:
     out: list[Path] = []
     seen: set[Path] = set()
     for d in roots:
-        p = Path(d).expanduser()
-        if p not in seen:  # a dir named by config and again by a descriptor scans twice
+        p = Path(d).expanduser().resolve()
+        if p not in seen:  # the same dir named two ways (relative vs absolute, or a symlink) scans twice
             seen.add(p)
             out.append(p)
     return out
