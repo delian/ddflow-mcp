@@ -1,0 +1,2 @@
+{"agent":"bg68","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e2530805ba700a3f2f28b3d9f","kind":"ddflow.seen","lamport":153603,"schema":1,"subject":"ddflow","ts":"2026-11-08T08:01:39.173150Z"}
+{"agent":"bg68","data":{"path":".ddflow/worktrees/fix-B-review-detach-prints-launcher-pid"},"id":"e96847f486518dbc5dc822e44","kind":"worktree.removed","lamport":153604,"schema":1,"subject":"fix-B-review-detach-prints-launcher-pid","ts":"2026-11-08T08:01:39.219956Z"}
