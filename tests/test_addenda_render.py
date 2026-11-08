@@ -60,7 +60,10 @@ def test_show_a_bug_prints_additions_links_and_the_fixing_task(proj):
     assert code == OK
     assert "additions (1)" in out and ADD1 in out and "by reporter" in out and "0.61" in out
     assert re.search(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\S* by reporter", out)
-    assert "fix task(s): P1.FIX" in out
+    # B0b1f135e37: "fix login (fixes bug B1)" in the TITLE is only a text claim -- P1.FIX has
+    # an empty `fixes` list, so `complete` refuses it as the fix task; show lists it as a
+    # mention, not under `fix task(s):`.
+    assert "mentioned by: P1.FIX" in out
     assert "linked from" in out and "B2" in out and "extends this" in out
     # ... and the other direction, from the record that was filed
     out2 = run_cli(proj, "show", "B2")[1]

@@ -14,7 +14,7 @@ from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
 from ...services import reprobundle as RB
-from ...services.completion import changed_paths
+from ...services.completion import changed_paths, fix_task_for
 from .._base import _load
 
 #: How much of one record's text a rendering carries. The record is whole in the log and
@@ -135,7 +135,7 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     defs = G.load_gates(repo, cfg)
     it = st.items.get(item)
     if it is None and item in st.bugs:
-        return _show_bug(st, st.bugs[item], repo)
+        return _show_bug(st, st.bugs[item], repo, cfg)
     if it is None and item in st.research:
         return _show_research(st, st.research[item])
     if it is None or it.removed:
@@ -173,29 +173,22 @@ def _show_research(st, note) -> O.Outcome:
     return O.ok("show", id=note.id, item=record, _render={"research": record})
 
 
-def _show_bug(st, bug, repo=None) -> O.Outcome:
-    """A bug id handed to `show` (B-show-bug-id): its record, its state, and the items
-    that fix it -- those whose title or body say "fixes bug X" (or "fixes bugs A, X",
-    "Fixing X"), the claim every fix task carries; any other mention is listed apart. The wire body (`item`, as for an item) is the record itself."""
+def _show_bug(st, bug, repo=None, cfg=None) -> O.Outcome:
+    """A bug id handed to `show` (B-show-bug-id): its record, its state, and the item that
+    REALLY fixes it -- the one `complete <task>` checks (`fix_task_for`: the bug's `fix_task`
+    field, else a live task whose `fixes` lists it or whose id follows the `fix-<bug>`
+    template). An item whose title or body only SAYS "fixes bug X" is a claim, not the link,
+    and is a mention, not a fix task (B0b1f135e37). The wire body (`item`, as for an item) is
+    the record itself."""
     named = re.compile(rf"(?<![\w-]){re.escape(bug.id)}(?![\w-])")
-    # The convention fix tasks follow: "fixes bug X", "fixes bugs A, B and X", "Fixing X"
-    # -- the verb, then the id or a list holding it, with nothing else in between. Each
-    # element before X ends in ",", ", and" or " and" (an element joined by a bare "and"
-    # was never passed over, so "fixes bugs A and X" read as a mention: Bfc863d295f).
-    claims_fix = re.compile(
-        rf"\bfix(?:es|ed|ing)?\s+(?:bugs?\s+)?(?:[\w-]+(?:\s*,\s*(?:and\s+)?|\s+and\s+))*"
-        rf"(?:and\s+)?{re.escape(bug.id)}(?![\w-])",
-        re.I,
-    )
-    fixing: list[str] = []
+    real = fix_task_for(st, bug.id, cfg) if cfg is not None else None
+    fixing: list[str] = [real.id] if real is not None and not real.removed else []
     mentions: list[str] = []
     for i in sorted(st.items.values(), key=lambda x: x.id):
         text = f"{i.title or ''}\n{i.body or ''}"
-        if i.removed or not named.search(text):
+        if i.removed or i.id in fixing or not named.search(text):
             continue
-        # "fixes bug X" in the title or body is the fix's own claim; any other mention is
-        # only that -- a task that discusses a bug is not its fix (roborev, job 954).
-        (fixing if claims_fix.search(text) else mentions).append(i.id)
+        mentions.append(i.id)
     record = {
         **plain(bug),
         "kind": "bug",
