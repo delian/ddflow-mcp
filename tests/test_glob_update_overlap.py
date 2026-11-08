@@ -195,6 +195,7 @@ def test_widening_keeps_a_held_glob_a_waiter_queued_for(repo):
     queued for that exact glob, and red-b widens by adding an unrelated free file while
     re-stating the held glob. The re-statement is not a new demand, so the widening is not
     refused 'queued behind red-h', and no false wait cycle is recorded."""
+    run_cli(repo, "init")
     run_cli(
         repo,
         "task",
@@ -244,6 +245,7 @@ def test_a_widening_refused_for_a_new_glob_names_only_that_glob(repo):
     """B-widen-refused-on-own-held-glob: a widening that re-states a HELD glob and asks for
     one NEW glob an earlier waiter queued for first is refused naming that one contended
     glob -- not 'those globs', and not the held glob the requester already owns."""
+    run_cli(repo, "init")
     run_cli(repo, "task", "add", "H1", "--title", "holder", "--globs", "changes.toml")
     run_cli(repo, "task", "add", "Q1", "--title", "queuer", "--globs", "changes.toml")
     run_cli(repo, "task", "add", "M1", "--title", "mine", "--globs", "tests/test_no_agent_literals.py")
@@ -264,6 +266,10 @@ def test_a_widening_refused_for_a_new_glob_names_only_that_glob(repo):
     assert code != 0
     json.loads(out)
     assert "changes.toml" in (out + err), (out, err)
+    # The vague wording is gone: the refusal names the one contended glob, and does not
+    # name the held glob the requester already owns.
+    assert "those globs" not in (out + err), (out, err)
+    assert "tests/test_no_agent_literals.py" not in (out + err), (out, err)
 
 
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
