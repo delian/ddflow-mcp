@@ -225,10 +225,14 @@ def test_rerunning_a_chunk_keeps_a_peer_reviewers_finding(repo, tmp_path):
     res = R.ReviewResult("b", "grok-4.7", "google", status=R.REVIEWED, requested=[2], reviewed=[2])
     res.diff_sha = "deadbeef"
     res.max_chunk_chars = 4000
+    # Reviewer b's re-run of chunk 2 raises its OWN finding (rather than none): the merged
+    # result keeps BOTH -- a's from the earlier record, b's new one -- each attributed.
+    res.findings = [R.Finding("MEDIUM", "y.py:9", chunk=2, digest="bbb222", reviewer="", family="")]
     assert R.merge_rerun(prior, res) == ""
-    # Reviewer a's finding of the re-run chunk 2 is kept, and still attributed to a.
-    assert len(res.findings) == 1
-    assert res.findings[0].reviewer == "a", res.findings
+    assert len(res.findings) == 2, res.findings
+    by_reviewer = {f.digest: f.reviewer for f in res.findings}
+    assert by_reviewer["abc123"] == "a", "reviewer a's finding of the re-run chunk is kept"
+    assert by_reviewer["bbb222"] == "b", "the re-run's own finding is attributed to b"
 
 
 def test_an_errored_rerun_with_no_reason_is_still_refused(repo, tmp_path, monkeypatch):

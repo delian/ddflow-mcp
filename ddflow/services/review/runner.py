@@ -702,6 +702,14 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
         + res.findings,
         key=lambda f: f.chunk,
     )
+    # The re-run's OWN findings carry no reviewer of their own; stamp them so the merged
+    # result is self-describing (a Finding kept from a peer already names it). A later
+    # re-run reads back this reviewer and does not mistake this finding for the peer's.
+    for f in res.findings:
+        if not f.reviewer:
+            f.reviewer = res.reviewer
+        if not f.family:
+            f.family = res.family
     res.unreviewed = sorted(
         [u for u in prior.get("unreviewed", []) if int(u.get("chunk", 0)) not in again | kept]
         + res.unreviewed,
