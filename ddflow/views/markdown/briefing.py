@@ -737,11 +737,17 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     # (The charter is separately clamped by CH.block's own reserve.) `ddflow recover` lists
     # every entry beyond the bound.
     bound = max(_SECTION_FLOOR, budget * 2)
-    body = "\n".join(reserved)
-    if len(body) > bound:
-        body = body[:bound].rsplit("\n", 1)[0] + "\n"
-        reserved = body.splitlines()
-        reserved.append(
+    if len("\n".join(reserved)) > bound:
+        kept: list[str] = []
+        used = 0
+        for line in reserved:
+            if used + len(line) + 1 > bound:
+                break
+            kept.append(line)
+            used += len(line) + 1
+        kept.append("")
+        kept.append(
             "_more recoverable entries past the slice's bound: `ddflow recover` lists them._"
         )
+        reserved = kept
     return _assemble(reserved + head, sections, budget * 4, note, charter, item)
