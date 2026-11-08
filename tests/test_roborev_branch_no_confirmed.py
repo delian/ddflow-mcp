@@ -108,12 +108,14 @@ def test_a_prose_severity_word_is_not_a_defect(tmp_path, monkeypatch):
 
 def test_an_ascii_hyphen_severity_delimiter_is_still_a_finding(tmp_path, monkeypatch):
     """A finding whose severity header uses an ASCII hyphen (not the em dash) still reads
-    findings: the delimiter may be '-', '–' or '—'."""
+    findings: the delimiter may be '-', '–' or '—'. The 'no confirmed defects' phrase is
+    present so the delimiter (not the phrase) is what decides."""
     repo = _setup(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
     monkeypatch.setenv(
         "FAKE_VERDICT",
-        "Review for job 7: confirmed defects.\nhigh - the branch deletes the wrong table\n",
+        "Review for job 7: no confirmed defects found.\n"
+        "high - the branch deletes the wrong table\n",
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "findings" and r.exit == 1
