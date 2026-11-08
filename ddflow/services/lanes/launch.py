@@ -56,8 +56,14 @@ class Launched:
     decision_note: str
     seed_dropped: tuple[str, ...] = ()
     slots: contextlib.ExitStack = field(default_factory=contextlib.ExitStack, repr=False)
-    #: the endpoint slots held for the lane's lifetime: open while the caller keeps this
-    #: object (close it after the lane stops, which releases the endpoint for the next lane)
+    #: the endpoint slots held for the lane's lifetime: open while the lane runs. The caller
+    #: closes it (``Launched.release()``) after the lane stops, which frees the endpoint for
+    #: the next lane; nothing here closes it and it never releases on garbage collection.
+
+    def release(self) -> None:
+        """Free the held endpoint slots (idempotent). Call after the lane stops and its
+        cleanup ends, so the endpoint can admit the next lane."""
+        self.slots.close()
 
 
 @dataclass(frozen=True)
@@ -237,6 +243,9 @@ def launch(req: Request) -> Launched | Refused:
         slots.close()
         OC.cleanup(req.home)
         return Refused((f"endpoint slot: {e}",))
+    except BaseException:  # a start failure beyond the slot wait still releases the slots taken
+        slots.close()
+        raise
     if isinstance(h, Result):
         slots.close()
         OC.cleanup(req.home)
