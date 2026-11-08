@@ -62,10 +62,27 @@ def test_a_diff_is_split_to_fit_the_output_cap_before_it_is_sent(monkeypatch):
     assert res.status == REVIEWED, res.reason
 
 
-def test_a_chunk_that_truncates_is_retried_shrunk_into_halves():
-    """A chunk that ran out of output budget is retried as SMALLER halves, not re-sent at the
-    size that just truncated (shrink on a truncation)."""
-    piece = _files("a" * 200, "b" * 200)
-    halves = R._halves(piece)
-    assert len(halves) == 2, "a two-file chunk halves into two single-file pieces"
-    assert all(len(h) < len(piece) for h in halves), "each half is smaller than the chunk"
+def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
+    """shrink on a truncation, through the review path: a chunk that ran out of output budget
+    is retried as MORE, SMALLER pieces, never re-sent at the size that just truncated."""
+    # One two-file chunk that CAN halve: the two files fit under one budget, and a chunk lost
+    # to its size splits into one piece per file.
+    rev = Reviewer(name="r", base_url="http://x", model="m", max_chunk_chars=500, hedge=1)
+    diff = _files("a" * 80, "b" * 80)
+    first: list[int] = []
+    retried: list[int] = []
+
+    def race(reviewer, system, users, started, **kw):
+        sizes = [len(_sent_diff(u)) for u in users]
+        if not first:
+            first.extend(sizes)
+            return [("", R.TRUNCATED)] * len(users)
+        retried.extend(sizes)
+        return [("STATUS: NO FINDINGS", "")] * len(users)
+
+    monkeypatch.setattr(R, "_race", race)
+    res = review(rev, diff, "i")
+    assert first, "the chunk was never sent"
+    assert len(retried) > len(first) > 0, "the truncated chunk was not retried in more pieces"
+    assert max(retried) < max(first), "every retried half is smaller than the truncated chunk"
+    assert res.status == REVIEWED, res.reason
