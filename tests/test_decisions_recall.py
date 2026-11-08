@@ -95,6 +95,16 @@ def test_project_wide_decisions_apply_to_everything(proj):
     assert [d["title"] for d in out["project_wide"]] == ["Use UTC everywhere"]
 
 
+def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
+    """B5279acad6f: a no-globs item matches nothing by path, so one project-wide row
+    reads as the complete governing set; say the path check could not run instead."""
+    run_cli(proj, "task", "add", "P1.T3", "--phase", "P1", "--title", "template")
+    _add(proj, title="Restart window", decision="restart the whole host nightly")
+    code, out, _ = run_cli(proj, "decision", "applicable", "P1.T3")
+    assert code == NOTHING, code
+    assert "path matching could not run" in out, out
+
+
 def test_the_brief_carries_the_governing_decisions(proj):
     _add(
         proj,

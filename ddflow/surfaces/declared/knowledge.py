@@ -87,6 +87,8 @@ def _applicable_text(out, a) -> str:
         f"  [{d['id']}] {d['title']}  (project-wide)\n      {d['decision']}"
         for d in out.data["project_wide"]
     ]
+    if out.data.get("path_unmatched"):
+        lines.append(f"\npath matching could not run: {out.data['path_unmatched']}")
     return "\n".join(lines)
 
 
