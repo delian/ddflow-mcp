@@ -5,6 +5,7 @@ nor ``config/_core.py`` carries a per-section hand-kept list to edit."""
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import sys
 from pathlib import Path
@@ -127,20 +128,28 @@ def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
     import subprocess
 
     import ddflow as _ddflow
+    from ddflow import config as _C
+    from ddflow.config import _core
 
     root = str(Path(_ddflow.__file__).parents[1])
     extra = tmp_path / "extra_sections"
     extra.mkdir()
     (extra / "__init__.py").write_text("")
     (extra / "zzz_throwaway.py").write_text(_THROWAWAY)
+    init_sha = hashlib.sha256(Path(_C.__file__).read_bytes()).hexdigest()
+    core_sha = hashlib.sha256(Path(_core.__file__).read_bytes()).hexdigest()
 
     script = "\n".join(
         [
-            "import importlib, sys",
+            "import hashlib, importlib, sys",
             f"sys.path.insert(0, {root!r})",
-            "import ddflow.config_sections as CS",  # runs discovery before ddflow.config
+            "import ddflow.config_sections as CS",  # the discovery runs before ddflow.config
             f"CS.__path__ = [*CS.__path__, {str(extra)!r}]",
-            "m = importlib.import_module('ddflow.config_sections.zzz_throwaway')",  # @declare registers
+            # The discovery loop the package runs at startup, now with the extra path: the section
+            # is loaded BY THE SCAN, not a direct import.
+            "for n in CS.module_names(CS):",
+            "    importlib.import_module(f'ddflow.config_sections.{n}')",
+            "m = importlib.import_module('ddflow.config_sections.zzz_throwaway')",
             "import ddflow.config as C",  # Config is assembled now, after the section declared
             "cfg = C.Config()",
             "assert hasattr(cfg, 'zzz_throwaway'), 'Config did not wire the new section'",
@@ -150,6 +159,9 @@ def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
             "assert 'zzz_throwaway.zzz_count' in D.KNOB_DOCS",
             "from ddflow.config import _decls as L",  # the enum table is wired too
             "assert L.KNOB_CHOICES['zzz_throwaway.zzz_mode'] == ('auto', 'strict')",
+            # the shared files were never edited: their bytes are unchanged in this fresh process
+            f"assert hashlib.sha256(open(C.__file__, 'rb').read()).hexdigest() == {init_sha!r}",
+            f"assert hashlib.sha256(open({str(Path(_core.__file__))!r}, 'rb').read()).hexdigest() == {core_sha!r}",
             "print('wired')",
         ]
     )
