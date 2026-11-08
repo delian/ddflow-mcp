@@ -620,8 +620,9 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
                 name = f"{label} tests ({count} files)"
                 checks.append(Check(name, scope.ok[label]))
     # A negative exit is a signal: the process was killed from outside before it could report
-    # a verdict, so it is unavailable, never a failed check (B512a5d7f35).
-    killed = p.code < 0
+    # a verdict, so it is unavailable, never a failed check (B512a5d7f35). `p.code` is None only
+    # for a run that never started, which `_unfinished` already turned away.
+    killed = p.code is not None and p.code < 0
     if p.code != 0 and not killed and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
     return Result(
@@ -633,6 +634,6 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
         reason="" if p.code == 0 else (f"{cmd} killed by signal {-p.code}" if killed else f"{cmd} exited {p.code}"),
         output_tail=out[-TAIL_CHARS:],
         output=out,
-        failures=failure_evidence(out) if p.code != 0 else {},
+        failures=failure_evidence(out) if p.code != 0 and not killed else {},
         scope=_scope_evidence(scope, sha),
     )
