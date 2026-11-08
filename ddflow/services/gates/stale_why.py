@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...infra import git as GIT
 from .evidence import TreeEntries, commit_tree_entries, differing_paths
 
 
@@ -18,9 +19,17 @@ def _what_differs(
     own: Sequence[str] | None = None,
 ) -> str:
     """Name the files, when the tree the gate ran on can be rebuilt (a clean commit). "" when
-    ``own`` is given, the tree can be rebuilt, and none of the item's own paths differ."""
+    ``own`` is given, the tree can be rebuilt, and none of the item's own paths differ.
+
+    A file the note names must be content the gate ran on: an untracked file (a git merge
+    temporary, tracked nowhere) is not, so it does not count as a difference and is never
+    named (B-stale-mark-names-merge-temp-and-excluded-files).
+    """
     then = commit_tree_entries(cwd, base) if base else None
     paths = differing_paths(then, now) if then is not None and now is not None else []
+    if paths:
+        tracked = GIT.files(cwd, "tracked")
+        paths = [p for p in paths if tracked is None or p in tracked]
     if own is not None and paths:
         paths = [p for p in paths if p in set(own)]
         if not paths:

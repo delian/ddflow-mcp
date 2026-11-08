@@ -99,3 +99,19 @@ def test_a_file_deleted_after_the_round_is_a_moved_path(tmp_path):
     (d / "other.py").unlink()  # the item deletes a file after the review
     (out,) = C.refine_stale_notes(_notes(), it, d, "", ["mine.py", "other.py"])
     assert "other.py" in out.why
+
+
+def test_a_merge_temporary_is_not_named(tmp_path):
+    """B-stale-mark-names-merge-temp-and-excluded-files: a git merge temporary (tracked
+    nowhere) is not content the gate covered, so a stale note must not name it; a tracked
+    file it did cover is still named."""
+    from ddflow.services.gates import stale_why as SW
+    from ddflow.services.gates.evidence import worktree_entries
+
+    d = _tree(tmp_path)
+    (d / "mine.py").write_text("2\n")  # a tracked file the gate covered changed
+    (d / ".merge_file_4zU3jH").write_text("junk\n")  # untracked, tracked nowhere
+    note = SW._what_differs(d, "HEAD", "clean", worktree_entries(d), "the working tree", None)
+    assert "mine.py" in note
+    assert ".merge_file_4zU3jH" not in note
+
