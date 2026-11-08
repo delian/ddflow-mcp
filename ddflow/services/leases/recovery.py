@@ -292,7 +292,6 @@ def _gone_tree(
     cfg: Config,
     facts: RepoFacts,
     held: bool,
-    budget: _Budget | None = None,
 ) -> None:
     """Fill the row for an item whose worktree path is gone.
 
@@ -302,16 +301,12 @@ def _gone_tree(
     agent) removed the tree while the branch still held commits the base lacks, and
     reporting those "nothing to salvage" made cleanup propose deleting real work
     (B5b1c6272c1). Ask the branch before declaring it empty.
+
+    The branch probe is two cheap git calls, not the per-tree `tree_work` the `view`
+    budget caps, so it does not spend a `take_tree()` slot: spending one here would hide
+    a PRESENT tree's real work behind a gone tree that was never "measured".
     """
     rec.worktree = ""
-    if budget is not None and not budget.take_tree():
-        rec.salvageable = None  # not measured: unknown is never clean
-        rec.advice = (
-            "worktree is gone: NOT MEASURED in this view (it measures at most "
-            f"{cfg.lease.scan_view_trees_max} trees, `lease.scan_view_trees_max`). Treat it as "
-            f"containing work until `ddflow recover` has measured it."
-        )
-        return
     ahead = _branch_ahead(repo, facts, cfg, rec.branch)
     if ahead < 0:
         # The branch could not be measured (none recorded, or git could not count): unknown
@@ -371,7 +366,7 @@ def _measure(
     facts = facts or RepoFacts(repo)
     wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
-        _gone_tree(rec, repo, cfg, facts, held, budget)
+        _gone_tree(rec, repo, cfg, facts, held)
         return
     if budget is not None and not budget.take_tree():
         rec.salvageable = None  # not measured: unknown is never clean
