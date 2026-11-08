@@ -103,3 +103,22 @@ def test_under_resume_ignores_a_fenced_heading_below_the_h1():
     work = out.index("## Work")
     assert choices < work, out
     assert out[work:] == "## Work\n```text\n# ddflow brief\n```\n", out
+
+
+def test_under_resume_ignores_tilde_and_longer_fences_below_the_h1():
+    """``` and `````` fences all delimit, and a shorter fence line inside a longer fence is
+    content, so a `# ddflow brief` inside any of them must not steal the anchor
+    (grok/deepseek critic on the fence toggle)."""
+    from ddflow.api.lifecycle.brief import _under_resume
+
+    lead = "## Open workflow choices\n- pick A"
+    # A tilde-fenced heading below the H1.
+    tilde = "## Resume\n# ddflow brief\n## Work\n~~~text\n# ddflow brief\n~~~\n"
+    out = _under_resume(tilde, "", "", lead)
+    assert out.index("## Open workflow choices") < out.rindex("## Work"), out
+    assert out[out.index("## Work") :] == "## Work\n~~~text\n# ddflow brief\n~~~\n", out
+    # A longer fence containing a shorter same-char line keeps that line inside the fence.
+    long_fence = "## Resume\n# ddflow brief\n## Work\n````markdown\n```\n# ddflow brief\n````\n"
+    out = _under_resume(long_fence, "", "", lead)
+    assert out.index("## Open workflow choices") < out.rindex("## Work"), out
+    assert out[out.index("## Work") :] == "## Work\n````markdown\n```\n# ddflow brief\n````\n", out

@@ -5,6 +5,7 @@ Part of `ddflow.api.lifecycle`, which re-exports the public names defined here."
 from __future__ import annotations
 
 import math
+import re
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -311,23 +312,41 @@ def _under_resume(text: str, reports_block: str, contest_text: str, undecided: s
     return text[:at] + lead + text[at:]
 
 
+_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})")
+
+
+def _fence_closes(line: str, open_marker: str) -> bool:
+    """True when ``line`` closes a fence opened by ``open_marker`` (same char, at least as
+    long -- a shorter same-char line inside a longer fence is content, not a close)."""
+    ch = open_marker[0]
+    m = re.match(r"^\s*(" + re.escape(ch) + r"{3,})\s*$", line)
+    return bool(m) and len(m.group(1)) >= len(open_marker)
+
+
 def _last_heading_line(text: str, head: str) -> int:
-    """Offset of the LAST exact ``head`` line that is not inside a ```markdown``` fence.
+    """Offset of the LAST exact ``head`` line that is not inside a Markdown code fence.
 
     The view emits ONE `# ddflow brief` H1 as its own line (briefing.head), after any
     RESUME slice. A RESUME-quoted or fenced `# ddflow brief` above OR below the H1 is
     body text, not the anchor -- ``rfind`` on the raw line let a Work-note example whose
     code block repeats the heading after the H1 steal the anchor (grok + deepseek critic),
     and a line that only STARTS with it (a `# ddflow brief ...` note) is not the H1.
+    Fences are tracked the way Markdown delimits them: ``` and ~~~ both delimit, and a
+    fence closes only on a same-char fence at least as long, so a shorter fence line
+    inside a longer fence is content.
     """
     at = -1
-    in_fence = False
+    fence: str | None = None
     i = 0
     for line in text.split("\n"):
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence and line == head:
-            at = i
+        if fence is None:
+            m = _FENCE_OPEN.match(line)
+            if m is not None:
+                fence = m.group(1)
+            elif line == head:
+                at = i
+        elif _fence_closes(line, fence):
+            fence = None
         i += len(line) + 1
     return at
 
