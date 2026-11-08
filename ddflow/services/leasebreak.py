@@ -243,10 +243,16 @@ def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
 
 
 def has_py_glob(st: State) -> bool:
-    """Whether any unfinished item declares a glob ending in ``.py`` -- the only glob a
-    module-became-package can stale (B-stale-globs-after-split-wave). Callers consult this
-    BEFORE listing the default branch's tree, so a repo with no such glob never touches git."""
-    return any(g.endswith(".py") for i in st.items.values() for g in i.globs)
+    """Whether any UNFINISHED item (not removed, done or abandoned) declares a glob ending in
+    ``.py`` -- the only glob a module-became-package can stale (B-stale-globs-after-split-wave).
+    Callers consult this BEFORE listing the default branch's tree, so a repo with no such glob
+    never touches git; the set matches ``stale_glob_updates``'s live filter exactly."""
+    return any(
+        g.endswith(".py")
+        for i in st.items.values()
+        if not i.removed and i.state not in (DONE, ABANDONED)
+        for g in i.globs
+    )
 
 
 def stale_glob_updates(st: State, tracked: Iterable[str]) -> list[tuple[str, list[tuple[str, str]]]]:
