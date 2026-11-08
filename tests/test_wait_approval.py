@@ -57,9 +57,9 @@ def _request(log: EventLog, cfg: Config, canon: Canon | None = None):
     return R.file(log, cfg, _state(log), canon or _canon(), reason="r")
 
 
-def _approve(log: EventLog, cfg: Config, filed, outcome="approved") -> None:
+def _approve(log: EventLog, cfg: Config, filed, outcome="approved", now=None) -> None:
     person = actors.resolve_actor(cfg, "me")
-    E.answer(log, cfg, filed.id, outcome, actor=person, digest=filed.digest, level=1)
+    E.answer(log, cfg, filed.id, outcome, actor=person, digest=filed.digest, level=1, now=now)
 
 
 def test_a_lane_waits_while_pending_then_wakes_ready_and_spends_the_approval(repo):
@@ -123,6 +123,19 @@ def test_an_answered_question_is_hopeless_not_an_approval(repo):
     )
     out = A.wait(repo, approval=asked.id, timeout_s=5, poll_s=0.05, agent="asker")
     assert out.exit == O.NOTHING and "not an approval" in out.reason
+
+
+def test_a_use_ttl_lapsed_approval_is_hopeless_not_ready(repo):
+    # An answer older than its use window (use_ttl_s) re-running the gated command cannot
+    # spend: wait must not wake READY for it (consume._problem refuses the same row).
+    cfg = Config()
+    cfg.approvals.use_ttl_s = 1
+    log = _log(repo)
+    filed = _request(log, cfg)
+    _approve(log, cfg, filed)
+    time.sleep(2)  # now past answered_at + use_ttl_s (1s)
+    out = A.wait(repo, approval=filed.id, timeout_s=5, poll_s=0.05, agent="asker")
+    assert out.exit == O.NOTHING and "more than 1s ago" in out.reason
 
 
 def test_an_unknown_approval_is_hopeless(repo):
