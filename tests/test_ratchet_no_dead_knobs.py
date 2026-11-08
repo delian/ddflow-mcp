@@ -134,10 +134,11 @@ def dead_knobs(keys: list[str] | None = None, src: str | list[str] | None = None
         files = list(src)
     keys = [k for k, *_ in Config.load().explain()] if keys is None else keys
     per_file = [_aliases(text) for text in files]
+    unique = _unique_aliases(per_file)  # hoisted: rebuilt under the loop it was N times
     dead = []
     for key in keys:
         section, knob = key.split(".", 1)
-        if _read_in_any(section, knob, files, per_file, _unique_aliases(per_file)):
+        if _read_in_any(section, knob, files, per_file, unique):
             continue
         dead.append(key)
     return dead
@@ -179,7 +180,8 @@ def test_no_knob_is_dead():
 
 
 def test_the_allowlist_only_shrinks():
-    stale = [k for k in KNOWN_UNREAD if k not in dead_knobs()]
+    dead = dead_knobs()  # computed once: the list comprehension ran the scan per entry
+    stale = [k for k in KNOWN_UNREAD if k not in dead]
     assert not stale, f"allowlisted knobs that are now read; remove them: {stale}"
 
 
@@ -214,6 +216,23 @@ def test_the_detector_can_still_see():
     ]
     # ...and one that is present must not be.
     assert dead_knobs(["lease.ttl_s"], "x = cfg.lease.ttl_s") == []
+
+
+def test_the_alias_map_is_built_once_not_once_per_key(monkeypatch):
+    """`_unique_aliases(per_file)` sat inside the `for key` loop: a scan over N knobs
+    rebuilt the whole-tree alias map N times. Hoisted out, the map is built once,
+    whatever the key count. Pre-fix this loop built it once per key."""
+    calls: list[int] = []
+    real = _unique_aliases
+
+    def counted(per_file):
+        calls.append(1)
+        return real(per_file)
+
+    monkeypatch.setattr(sys.modules[__name__], "_unique_aliases", counted)
+    # Three keys force three loop iterations; pre-fix each one rebuilt the map.
+    dead_knobs(["ui.warp", "ui.zorch", "ui.plugh"], "u = cfg.ui\n")
+    assert calls == [1]
 
 
 def test_the_scan_is_not_vacuous():
