@@ -20,7 +20,12 @@ from ....services.gates import skip_followup as SF
 from ..._base import _load_fresh
 from ...bug_reopen import refile_reported
 from .._common import _chore_base, _chore_event, _require
-from ..author import _author_event_identity, _author_model, _recorded_identity
+from ..author import (
+    _author_event_identity,
+    _author_model,
+    _recorded_identity,
+    _remember_declared_model,
+)
 from ..heartbeat import _commit_events, _inbox, _waiters
 from ..planning import plan_for
 from .approval import _ask_hint, _auto_complete_unavailable, _override_by_approval, _person_force
@@ -100,6 +105,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model, model_source = _author_model(st, log.agent_id, model, cfg)
+    _remember_declared_model(st, log, cfg, model, model_source)
     recorded, family_only = _recorded_identity(model, model_source, cfg)
     # ONE builder for both outlets -- the caller-facing `base` dict and the durable
     # event spread the SAME dict, so the two cannot drift apart (they once re-derived
