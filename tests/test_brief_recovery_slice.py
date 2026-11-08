@@ -186,10 +186,27 @@ def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
 def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
     """B027549013a: a focused brief about an item that is NOT itself recoverable must not
     let the per-band RESUME list of OTHER crashes (plus the charter) starve the item's own
-    Current section down to a bare heading. The reserved slice is bounded, so the item's
-    own detail keeps its share of the budget."""
+    Current, decisions and lessons down to bare headings. The reserved slice is bounded, so
+    the item's own detail keeps its share of the budget."""
     log = _seed(repo, ["T9", *[f"W{i}" for i in range(8)]])
-    log.append("phase.added", "P1", {"title": "Phase one"})
+    # A decision and lessons that bear on T9, and a charter of rule titles: the reports
+    # bug spent the budget on those PLUS the recovery list, so Current/decisions/lessons
+    # came back as headings with only a "more cut" line.
+    log.append(
+        "decision.recorded",
+        "D0",
+        {
+            "title": "decision about T9",
+            "decision": "the zebra rule:" + " rotate by size, not age." * 30,
+            "globs": ["src/T9.py"],
+        },
+    )
+    for i in range(4):
+        log.append(
+            "lesson.recorded",
+            f"L{i}",
+            {"title": f"lesson {i}", "rule": f"zebra rule {i}: " + ("x" * 300)},
+        )
     for i in range(8):
         claim = LC.claim(repo, f"W{i}", agent="crashed")
         wt = Path(claim.data["worktree"])
@@ -209,6 +226,9 @@ def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
     out = LC.brief(repo, item="T9", check_recovery=True, agent="next")
     assert out.exit == 0, out.reason
     text = out.data["text"]
-    # T9's own section survives with its body, not only a heading and a cut marker.
-    assert "## Current: T9" in text, text[:3000]
-    assert "- gates remaining:" in text, text[:3000]
+    # T9's own sections survive with their body, not a bare heading: the slice is bounded,
+    # so the item's detail (and its decision) keep room the recovery list would otherwise eat.
+    assert "## Current: T9" in text, text[:4000]
+    assert "kind `task`" in text, text[:4000]
+    assert "## Architectural decisions governing these files" in text, text[:4000]
+    assert "D0" in text, text[:4000]
