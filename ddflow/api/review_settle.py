@@ -82,7 +82,7 @@ def triage(repo: Path, item: str, **kw: Any) -> O.Outcome:
         )
         text = (
             f"{text}\nrecorded {item}.{g} = passed ON REFUTATION (flagged): "
-            f"{counts['refuted']} refuted, {counts['confirmed']} confirmed, not refuted; "
+            f"{counts['refuted']} refuted, {counts['confirmed']} confirmed (fixed); "
             f"no hand-recording needed"
         )
         if g == gate:

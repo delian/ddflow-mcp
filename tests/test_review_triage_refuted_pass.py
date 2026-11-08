@@ -142,7 +142,7 @@ def test_a_fixed_confirmed_finding_is_not_called_refuted(repo, tmp_path):
     assert t.exit == 0, t.reason
     assert t.data["passed_on_refutation"] is True
     assert "every one of the 2 finding(s) was refuted" not in t.data["text"], t.data["text"]
-    assert "1 refuted, 1 confirmed" in t.data["text"], t.data["text"]
+    assert "1 refuted, 1 confirmed (fixed)" in t.data["text"], t.data["text"]
     flag = _st().gates["critic"].evidence["passed_on_refutation"]
     assert flag["refuted"] == 1 and flag["confirmed"] == 1
     assert _st().gates["critic"].outcome == "passed"
