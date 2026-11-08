@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from ...core import clock
 from .providers import Context
 from .stats import rate, stat
 from .summary import completed_spans, gate_durations
@@ -186,8 +187,9 @@ def text(data: dict) -> str:
 def _dur(seconds):
     if seconds is None:
         return "n/a"
-    if seconds >= 60:
-        return f"{seconds / 60:.0f}m"
+    minute = clock.DURATION_UNITS["m"]
+    if seconds >= minute:
+        return f"{seconds / minute:.0f}m"
     return f"{seconds:.0f}s" if seconds >= 1 else f"{seconds:.1f}s"
 
 

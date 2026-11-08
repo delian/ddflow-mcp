@@ -105,7 +105,7 @@ def _tiny(ctx: Context) -> Answer:
     return Answer(ok, "" if ok else why, metrics=data, text=tiny_text(data))
 
 
-def run(
+def run(  # noqa: PLR0911 -- one return per view; the dispatcher IS the branch
     events: Sequence[Event],
     state: State,
     cfg: Config,
