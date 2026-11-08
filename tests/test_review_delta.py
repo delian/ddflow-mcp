@@ -306,11 +306,11 @@ def _setup_many(repo: Path, tmp_path: Path) -> None:
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\nn=0\n"
-        'case "$in" in *ONE*) printf \'FINDING HIGH a.py:1\\nfirst bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'case "$in" in *TWO*) printf \'FINDING MEDIUM b.py:1\\nsecond bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'case "$in" in *THREE*) printf \'FINDING LOW c.py:1\\nthird bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'case "$in" in *FOUR*) printf \'FINDING LOW d.py:1\\nfourth bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'if [ "$n" -gt 0 ]; then printf \'STATUS: FINDINGS %s\\n\' "$n"; else echo \'STATUS: NO FINDINGS\'; fi\n'
+        "case \"$in\" in *ONE*) printf 'FINDING HIGH a.py:1\\nfirst bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "case \"$in\" in *TWO*) printf 'FINDING MEDIUM b.py:1\\nsecond bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "case \"$in\" in *THREE*) printf 'FINDING LOW c.py:1\\nthird bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "case \"$in\" in *FOUR*) printf 'FINDING LOW d.py:1\\nfourth bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "if [ \"$n\" -gt 0 ]; then printf 'STATUS: FINDINGS %s\\n' \"$n\"; else echo 'STATUS: NO FINDINGS'; fi\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
@@ -362,16 +362,16 @@ def test_two_reviewers_delta_findings_are_numbered_across_the_record(repo, tmp_p
     first = tmp_path / "rev-a"
     first.write_text(
         "#!/bin/sh\nin=$(cat)\nn=0\n"
-        'case "$in" in *ONE*) printf \'FINDING HIGH a.py:1\\nfirst bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'case "$in" in *FOUR*) printf \'FINDING LOW d.py:1\\nfourth bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'if [ "$n" -gt 0 ]; then printf \'STATUS: FINDINGS %s\\n\' "$n"; else echo \'STATUS: NO FINDINGS\'; fi\n'
+        "case \"$in\" in *ONE*) printf 'FINDING HIGH a.py:1\\nfirst bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "case \"$in\" in *FOUR*) printf 'FINDING LOW d.py:1\\nfourth bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "if [ \"$n\" -gt 0 ]; then printf 'STATUS: FINDINGS %s\\n' \"$n\"; else echo 'STATUS: NO FINDINGS'; fi\n"
     )
     second = tmp_path / "rev-b"
     second.write_text(
         "#!/bin/sh\nin=$(cat)\nn=0\n"
-        'case "$in" in *ONE*) printf \'FINDING MEDIUM b.py:1\\nsecond bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'case "$in" in *FOUR*) printf \'FINDING LOW e.py:1\\nfifth bad thing\\n\\n\'; n=$((n+1));; esac\n'
-        'if [ "$n" -gt 0 ]; then printf \'STATUS: FINDINGS %s\\n\' "$n"; else echo \'STATUS: NO FINDINGS\'; fi\n'
+        "case \"$in\" in *ONE*) printf 'FINDING MEDIUM b.py:1\\nsecond bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "case \"$in\" in *FOUR*) printf 'FINDING LOW e.py:1\\nfifth bad thing\\n\\n'; n=$((n+1));; esac\n"
+        "if [ \"$n\" -gt 0 ]; then printf 'STATUS: FINDINGS %s\\n' \"$n\"; else echo 'STATUS: NO FINDINGS'; fi\n"
     )
     for cli in (first, second):
         cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
