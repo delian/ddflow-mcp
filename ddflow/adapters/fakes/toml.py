@@ -117,4 +117,4 @@ class FakeTomlIo:
         for key, value in table.items():
             if isinstance(value, dict):
                 out += ["", f"[{prefix}{key}]", *self._lines(value, f"{prefix}{key}.")]
-        return out if not prefix else out
+        return out
