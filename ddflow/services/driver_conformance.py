@@ -24,8 +24,9 @@ def run(h) -> dict:
     checks: dict[str, dict] = {}
     hid = h.id
 
+    fact_rows = harnessfacts.rows(h, absent=True)
     fact_problems: list[str] = []
-    for row in harnessfacts.rows(h, absent=True):
+    for row in fact_rows:
         if row["status"] not in facts.STATUSES:
             fact_problems.append(f"{row['fact']}: unknown status {row['status']}")
     for key, node in h.facts.items():
@@ -33,34 +34,33 @@ def run(h) -> dict:
     if fact_problems:
         checks["facts"] = {"status": "failed", "detail": "; ".join(fact_problems)}
     else:
-        checks["facts"] = {"status": "ok", "detail": f"{len(h.facts)} fact(s), all well-formed"}
+        checks["facts"] = {"status": "ok", "detail": f"{len(fact_rows)} fact(s), all well-formed"}
 
     if h.hooks is not None and h.hooks.style in HR.COMMAND_HOOK_STYLES:
-        plan = hookio.plan_for(hid)
-        if plan is None:
+        # The plan is built from the descriptor in hand, not re-fetched by id: a local
+        # descriptor (`ddflow harness add`) is not in the shipped registry, and an override
+        # is the one under test, so `plan_for(hid)` would read the wrong (or no) descriptor.
+        plan = hookio.Plan(
+            hid, h.hooks.normalizer, h.hooks.emitter, h.hooks.inject, dict(h.hooks.events)
+        )
+        unresolved = [
+            name
+            for name, table in (
+                ("normalizer", hookio.NORMALIZERS),
+                ("emitter", hookio.EMITTERS),
+            )
+            if getattr(plan, name) not in table
+        ]
+        if unresolved:
             checks["hooks"] = {
                 "status": "failed",
-                "detail": "a command-hooked agent has no hook plan",
+                "detail": f"unresolved {', '.join(unresolved)}",
             }
         else:
-            unresolved = [
-                name
-                for name, table in (
-                    ("normalizer", hookio.NORMALIZERS),
-                    ("emitter", hookio.EMITTERS),
-                )
-                if getattr(plan, name) not in table
-            ]
-            if unresolved:
-                checks["hooks"] = {
-                    "status": "failed",
-                    "detail": f"unresolved {', '.join(unresolved)}",
-                }
-            else:
-                checks["hooks"] = {
-                    "status": "ok",
-                    "detail": f"{plan.normalizer}/{plan.emitter}",
-                }
+            checks["hooks"] = {
+                "status": "ok",
+                "detail": f"{plan.normalizer}/{plan.emitter}",
+            }
 
     ok = all(c["status"] == "ok" for c in checks.values())
     return {"agent": hid, "status": "ok" if ok else "failed", "checks": checks}

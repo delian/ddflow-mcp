@@ -79,11 +79,49 @@ def test_the_facts_overlay_is_total_and_well_formed(hid):
 
 
 def test_run_reports_failed_when_a_command_hooked_agent_has_no_plan(monkeypatch):
-    h = HR.get("claude")
-    monkeypatch.setattr(hookio, "plan_for", lambda _hid: None)
+    from types import SimpleNamespace
+
+    from ddflow.services import harnessfacts
+
+    h = SimpleNamespace(
+        id="claude",
+        facts={},
+        hooks=SimpleNamespace(
+            style="claude",  # a COMMAND_HOOK_STYLE
+            normalizer="bogus",  # no such NORMALIZERS key
+            emitter="claude",
+            inject=(),
+            events={},
+        ),
+    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [])
     result = DC.run(h)
     assert result["status"] == "failed", result
     assert result["checks"]["hooks"]["status"] == "failed", result
+
+
+def test_run_resolves_the_hook_plan_from_the_given_descriptor(monkeypatch):
+    """run() builds the hook plan from the descriptor handed to it, not by re-fetching the
+    id: `plan_for(id)` reads only the shipped registry, so a local descriptor not shipped
+    there must still resolve to a passing hooks check."""
+    from types import SimpleNamespace
+
+    from ddflow.services import harnessfacts
+
+    h = SimpleNamespace(
+        id="not-a-shipped-harness",
+        facts={},
+        hooks=SimpleNamespace(
+            style="claude",
+            normalizer="claude",
+            emitter="claude",
+            inject=(),
+            events={},
+        ),
+    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [])
+    result = DC.run(h)
+    assert result["checks"]["hooks"]["status"] == "ok", result
 
 
 def test_run_reports_failed_when_a_fact_has_an_unknown_status(monkeypatch):
