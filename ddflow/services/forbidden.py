@@ -260,10 +260,12 @@ def _has_esac(text: str, n: int, k: int) -> bool:
     return False
 
 
-def _param_end(text: str, n: int, k: int) -> int:
-    """Index just past the `}` that closes the `${` parameter expansion at `k`. The braces
-    nest (``${x:-${y}}``), and a `)` in between is part of the expansion, never the close of a
-    `$(` / `<(` / `>(` body (B-forbidden-guard-multiline-quote-bypass critic #2)."""
+def _param_end(text: str, n: int, bodies: list[str], sub_close: set[int], k: int) -> int:
+    """Index just past the `}` that closes the `${` parameter expansion at `k`. The braces nest
+    (``${x:-${y}}``), and a `}` / `)` inside a quoted span, an escape or a `$(` / backtick body
+    in between is part of the expansion, never the closing `}` -- so a `)` inside the expansion
+    is not the close of an enclosing `$(` body, and a `$(` a ``${x:-...}`` holds still records
+    its body (B-forbidden-guard-multiline-quote-bypass critic #2)."""
     depth = 1
     i = k + 2
     while i < n and depth:
@@ -275,6 +277,13 @@ def _param_end(text: str, n: int, k: int) -> int:
             i += 1
         elif text[i] == "\\" and i + 1 < n:
             i += 2
+        elif text[i] == "'":
+            j = text.find("'", i + 1)
+            i = i + 1 if j < 0 else j + 1
+        elif text[i] == '"':
+            i = _dquote_end(text, n, bodies, sub_close, i)
+        elif text[i] == "`" or text[i : i + 2] in ("$(", "<(", ">("):
+            i = _sub_body(text, n, bodies, sub_close, i)
         else:
             i += 1
     return i
@@ -317,7 +326,7 @@ def _skip_span(text: str, n: int, bodies: list[str], sub_close: set[int], k: int
     if c == "\\":  # an escaped closer (\) / \`) is not the end of the body
         return k + 2 if k + 1 < n else k + 1
     if text[k : k + 2] == "${":
-        return _param_end(text, n, k)  # a `)` inside ${...} is not this body's close
+        return _param_end(text, n, bodies, sub_close, k)  # a `)` inside ${...} is not this body's close
     if c == "`" or text[k : k + 2] in ("$(", "<(", ">("):
         return _sub_body(text, n, bodies, sub_close, k)
     return k + 1
@@ -401,6 +410,8 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
                 i = _ansi_c_end(text, n, i)  # `$'...'` is data, kept inline
             else:
                 end = _sub_body(text, n, bodies, sub_close, i)
+                if end > n:  # an unclosed `$(` / `<(` / `>(` does not grow the line masks
+                    end = n
                 drop[i:end] = [True] * (end - i)  # the body is captured in `bodies`, not inline
                 i = end
         else:
@@ -466,9 +477,9 @@ def _commands(text: str) -> list[list[str]]:
         new_bodies: list[str] = []
         for c in todo:
             head = _head(c)
-            if head and head[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in head:
-                i = head.index("-c")
-                if i + 1 < len(head):
+            if head and head[0].rsplit("/", 1)[-1] in _SHELLS:
+                i = _sh_c(head) if len(head) > 1 else -1
+                if i >= 0 and i + 1 < len(head):
                     s = head[i + 1]
                     if s not in seen:
                         seen.add(s)
@@ -483,6 +494,18 @@ def _commands(text: str) -> list[list[str]]:
         todo = found
         bodies = new_bodies
     return cmds
+
+
+def _sh_c(head: list[str]) -> int:
+    """The index of the `-c` option in the shell command `head` (its value is the NEXT word),
+    whether it stands alone or is clustered with other single-letter flags -- `sh -xc 'pkill'`
+    clusters `-x` and `-c`, and its `-c` still takes the next word
+    (B-forbidden-guard-multiline-quote-bypass critic: a clustered `-c` was not descended)."""
+    for i in range(1, len(head)):
+        w = head[i]
+        if w == "-c" or (w.startswith("-") and not w.startswith("--") and "c" in w[1:]):
+            return i
+    return -1
 
 
 #: Each wrapper's options that take their value as the next word (`sudo -u root`, `nice -n 5`);

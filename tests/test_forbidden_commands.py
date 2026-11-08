@@ -230,9 +230,28 @@ def test_refused_substitution_body_edge_cases(cmd):
         'echo "$(echo ${x:-)}; git push origin main)"',
         'echo "$(echo ${x:-foo)}; git push origin main)"',
         'echo "$(echo ${x:-$(echo a)}; git push origin main)"',
+        # a quoted `}` inside a ${...} is part of the default value, not the brace's close, so
+        # the `git push` after the `;` inside the substitution still runs (critic #2 residual)
+        'echo "$(echo ${x:-"}")}; git push origin main)"',
     ],
 )
 def test_refused_param_expansion_body(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # `sh`/`bash` cluster their single-letter flags, so `-c` bundled as -xc/-exc still takes
+        # the next word as the command string (critic: a clustered -c was not descended)
+        "bash -xc 'git push origin main'",
+        "sh -exc 'pkill -f worker'",
+        "bash -ec 'git stash push'",
+    ],
+)
+def test_refused_clustered_c_flag(cmd):
     r = _check(cmd, cwd="/nonexistent")
     assert r is not None, cmd
     assert "Instead:" in r.message()
