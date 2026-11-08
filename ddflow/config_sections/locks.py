@@ -32,6 +32,15 @@ def _probe_at(value):
 class LocksConfig:
     """What a task declares it will write versus what it wrote (LK-observed-globs)."""
 
+    mode: str = knob(
+        "enforce",
+        doc="The write-time lease check (the pre-tool hook) on a write outside the agent's live lease (D-lock-lifecycle-answers): 'enforce' refuses it first, naming the holder and how to wait, send a suggestion or open a task; 'log' notes it and allows; 'off' skips it (the commit-time check still runs). Settable by file, --local, env (DDFLOW_LOCKS_MODE) and MCP; an organisation locks it.",
+        choices=("enforce", "log", "off"),
+        strictest=(
+            "enforce",
+            "a write to a file another agent's lease covers is refused, not logged",
+        ),
+    )
     undeclared_write: str = knob(
         "warn",
         doc="What `gate status`, `brief` and `complete` do about a task whose diff has files in none of its lease globs (measured: 45% of the files tasks touch are undeclared, so parallel agents cannot see the overlap). 'warn' names them and the exact call that declares them (`ddflow update <id> --globs ...`, MCP `ddflow_task action=update`), 'block' makes `complete` refuse until they are declared, 'off' disables. When git cannot say what the task changed the check could not run: a warning, never a block and never a pass. Change it for the project (`ddflow config locks.undeclared_write ...`), for this machine (add --local), per run (DDFLOW_LOCKS_UNDECLARED_WRITE), or over MCP with `ddflow_configure`.",

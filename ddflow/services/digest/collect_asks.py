@@ -99,6 +99,14 @@ def collect_force_completion(st, cfg, now, facts):
     return _entries(st, cfg, now, "force_completion")
 
 
+def collect_force_merge(st, cfg, now, facts):
+    return _entries(st, cfg, now, "force_merge")
+
+
+def collect_phase_complete(st, cfg, now, facts):
+    return _entries(st, cfg, now, "phase_complete")
+
+
 def collect_chore(st, cfg, now, facts):
     return _entries(st, cfg, now, "chore")
 

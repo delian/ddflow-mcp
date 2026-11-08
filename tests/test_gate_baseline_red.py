@@ -590,10 +590,11 @@ def _sha(repo: Path, ref: str = "HEAD") -> str:
     ).stdout.strip()
 
 
-def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
-    """B48c70b6773: the candidate forks from a red main; main then moves on and fixes the
-    failing test. The baseline is measured on the candidate's own merge-base (still red), not
-    the moved main tip (green) -- otherwise the branch's unchanged failure reads as new."""
+def test_the_baseline_is_measured_on_the_base_tip_not_the_candidates_merge_base(repo) -> None:
+    """B48c70b6773 corrected: the candidate forks from a red main; main then moves on and fixes
+    the failing test. The baseline is measured on the base tip (the commit the ci merged --
+    now green), not the candidate's own merge-base: a stale branch still failing on a commit
+    main moved past is new against that tip, not red at the fork."""
     from ddflow.services.gates import baseline_red as BR
     from ddflow.services.gates.defs import GateDef
 
@@ -624,5 +625,44 @@ def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
         )
 
     found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
+    assert found["red"] is False, found
+    assert found["base_sha"] == green, found
+
+
+def test_a_test_main_broke_since_the_fork_is_baseline_red_not_new(repo) -> None:
+    """B-ci-baseline-older-than-candidate: the candidate merges a main that BROKE a test after
+    the branch forked. The baseline is measured on the base tip the candidate merged (still
+    broken), not the candidate's own merge-base (green) -- otherwise main's breakage reads as
+    a new failure of the branch."""
+    from ddflow.services.gates import baseline_red as BR
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo, base_healthy=True)  # main passes test_a
+    fork = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-qc", "cand"], check=True)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "main"], check=True)
+    (repo / "healthy").unlink()  # main breaks test_a
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "break test_a on main"], check=True)
+    broken = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "cand"], check=True)
+    assert broken != fork  # main has moved and broken the test: the whole point of the test
+
+    gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
+
+    def run(g, where=None):
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
+        failed = got.returncode != 0
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
+
+    found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
     assert found["red"] is True, found
-    assert found["base_sha"] == red, found
+    assert found["base_sha"] == broken, found
