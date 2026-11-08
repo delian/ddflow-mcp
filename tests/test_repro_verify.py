@@ -275,7 +275,7 @@ def test_mcp_evidence_is_stored_verbatim_never_executed(proj):
     assert not result.get("isError"), body
     bug = state(proj).bugs[body["id"]]
     assert not marker.exists()  # the server-side evidence was never executed
-    assert "evidence_ran" in bug.evidence  # ... and was stored on the record instead
+    assert "evidence_ran" in bug.found_evidence  # ... stored on the record instead
     assert bug.reproduced == ""  # ... with no repro run behind it
 
 

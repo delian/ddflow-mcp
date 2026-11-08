@@ -99,7 +99,7 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
     bug.item = ev.data.get("item", "") or bug.item
     bug.summary = ev.data.get("summary", "") or bug.summary
-    bug.evidence = ev.data.get("evidence", "") or bug.evidence
+    bug.found_evidence = ev.data.get("found_evidence", "") or bug.found_evidence
     bug.title = ev.data.get("title", "") or bug.title
     bug.severity = ev.data.get("severity", "") or bug.severity
     bug.scope = ev.data.get("scope", "") or bug.scope  # absent: the default, `project`

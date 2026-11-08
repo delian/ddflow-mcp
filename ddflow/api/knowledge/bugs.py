@@ -145,7 +145,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
             {
                 "item": item,
                 "summary": summary,
-                **({"evidence": evidence} if evidence else {}),
+                **({"found_evidence": evidence} if evidence else {}),
                 **extra,
                 **linked,
                 **repro,
