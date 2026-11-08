@@ -15,8 +15,11 @@ from ._docs import declare, knob
 #: One map, in one module. There were two — this one and a richer `FAMILY_HINTS` in
 #: `reviewer.py` — with different entries AND different answers for an unrecognised
 #: name, which is the duplicate-then-drift class that has already cost this package
-#: three bugs. The reviewer config's own `family` field is how a project classifies a
-#: model this map does not know.
+#: three bugs. The model catalog (DRV-model-catalog) is the source of truth for this
+#: table; the parity test in `test_model_catalog.py` pins that `modelreg.family_hints`
+#: rebuilds exactly this table (the `config` layer cannot import `services` to ask the
+#: reader itself). The reviewer config's own `family` field is how a project classifies
+#: a model this map does not know.
 FAMILY_HINTS: dict[str, str] = {
     "qwen": "alibaba",
     "claude": "anthropic",

@@ -42,7 +42,6 @@ BASELINE: dict[str, tuple[int, str]] = {
         6,
         "the hook-style vocabulary, the legacy session variables and the title doc",
     ),
-    "ddflow/services/review/model.py": (2, "reviewer provider kinds (gemini) are not harnesses"),
     "ddflow/services/review/engine.py": (1, "reviewer provider kinds (gemini) are not harnesses"),
     "ddflow/services/leanagents.py": (
         1,
