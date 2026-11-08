@@ -152,7 +152,10 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     if ahead is None:
         return None
     pairs = WG.conflicts(fresh, ahead.globs, WG.shared_globs(cfg))
-    named = pairs[0][0] if pairs else (ahead.globs[0] if ahead.globs else "the requested files")
+    # `queue_ahead` returned on the SAME `conflicts(fresh, ahead.globs, shared)` being
+    # non-empty, so `pairs` is non-empty here; fall back to the caller's own first glob,
+    # never the waiter's (a glob the caller did not ask for would be a false refusal).
+    named = pairs[0][0] if pairs else fresh[0]
     reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first ([lease].wait_queue)"
     return Blocked(it.id, "conflict", reason, [ahead.item])
 

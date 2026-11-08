@@ -192,7 +192,10 @@ def plan_retarget(
         ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
         if ahead is not None:
             pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
-            named = pairs[0][0] if pairs else (ahead.globs[0] if ahead.globs else "the requested files")
+            # `queue_ahead` returned on `conflicts(want, ahead.globs, shared)` being non-empty,
+            # so `pairs` is non-empty here; fall back to the caller's own glob, never the
+            # waiter's (that would be a false refusal for a glob the caller did not ask).
+            named = pairs[0][0] if pairs else want[0]
             reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first."
             return (lz, f"{item_id}: {reason} The globs were not changed.", None)
     if resources:
