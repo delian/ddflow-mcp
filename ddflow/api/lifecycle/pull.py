@@ -57,7 +57,7 @@ def _source(repo: Path, cfg: Config, st: State, lane: str, now: float) -> D.Lane
         _declares_trust(path, lane),
         T.approved(st, t).ok,
         live=live,
-        level=LN.conformance_level(repo, lane),
+        level=LN.conformance_level(repo, lane, max_age_s=cfg.swarm.conformance_max_age_s, now=now),
         pools=LN.endpoint_pools(cat, t.route, t.model, cfg.lanes.endpoint_slots),
     )
 
