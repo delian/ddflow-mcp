@@ -58,6 +58,7 @@ def _steps(ctx: Context, item: str, outs: list[Outcome]) -> list[dict]:
                 "tree_sha": o.tree_sha,
                 "review_id": o.review_id,
                 "combined_gates": list(o.combined_gates),
+                "note": o.note,
             }
         )
     return steps
@@ -68,7 +69,7 @@ def _bursts(windows: list[tuple[float, float]]) -> list[dict]:
     ``(start, end)`` union with the count of runs in it and its union seconds."""
     bursts: list[dict] = []
     for start, end in sorted(windows):
-        if bursts and start <= bursts[-1]["end"]:
+        if bursts and start < bursts[-1]["end"]:
             bursts[-1]["end"] = max(bursts[-1]["end"], end)
             bursts[-1]["runs"] += 1
         else:

@@ -56,6 +56,8 @@ class Outcome:
     #: The gates merged into one recorded call (``combined_gates``), oldest first; empty for
     #: a verdict that recorded a single gate (D-path-merge-answers merges bookkeeping gates).
     combined_gates: tuple[str, ...] = ()
+    #: A merged / covered-by note the evidence carried (``note``), "" when it had none.
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -182,8 +184,11 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         round=_round_number(evidence),
         tree_sha=str(evidence.get("tree_sha") or evidence.get("reviewed_head") or ""),
         review_id=str(evidence.get("review_id") or ""),
+        note=str(evidence.get("note") or ""),
         combined_gates=tuple(
-            g for g in evidence.get("combined_gates", ()) if isinstance(g, str)
+            g
+            for g in (evidence.get("combined_gates") or ())
+            if isinstance(g, str)
         ),
     )
 
