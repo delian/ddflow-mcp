@@ -1999,7 +1999,7 @@ impact = "additive"
 kind = "knob_added"
 key = "review.fix_round_free"
 new = "true"
-why = "Whether a pure fix round is free: when commits since the head the last review covered rewrote at least one cited line and every finding of that round is rewritten or settled by the author, the next `ddflow review` is a delta over just th..."
+why = "Whether a pure fix round is free: when commits since the head the last review covered rewrote at least one cited line and every finding of that round is rewritten or settled by the author, the next `ddflow review` is a delta over just those changes (prior findings whose cited lines were rewritten are marked superseded, not re-raised) and is not counted against review.max_rounds, nor refused past it."
 impact = "additive"
 
 [[release.change]]
@@ -2373,7 +2373,7 @@ impact = "additive"
 kind = "knob_added"
 key = "review.triage_ignore_globs"
 new = "[\"tests/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
-why = "Globs of files whose change after a review round does not void a triage pass (bugs B-review-pass-on-refutation-invalidated-by-test-only-commit, B4ab42dbedb): answering a refuted finding with a regression test used to change the item's re..."
+why = "Globs of files whose change after a review round does not void a triage pass (bugs B-review-pass-on-refutation-invalidated-by-test-only-commit, B4ab42dbedb): answering a refuted finding with a regression test used to change the item's reviewed paths, so the settled round 'held other content now' and cost another round."
 impact = "additive"
 
 [[release.change]]
