@@ -278,11 +278,12 @@ def _no_confirmed_defect(text: str) -> bool:
 # delimiter -- a numbered defect `**1. high (CONFIRMED) — ...**`, a bullet `- medium: ...`,
 # or an inline `high — ...` -- and `low` is its NOTE class ('minor improvement, no immediate
 # functional impact'), deliberately absent. Both anchors matter: the line head separates a
-# finding from prose (`the high water mark`), and the delimiter (`(`, `:`, `—`) separates a
-# finding from a wrapped prose word that happens to start a line (`high water mark`).
+# finding from prose (`the high water mark`), and the delimiter (a verdict `(`, a `:`, or a
+# dash, in any of the hyphen/en-dash/em-dash spellings) separates a finding from a wrapped
+# prose word that happens to start a line (`high water mark`).
 _DEFECT_HEAD = re.compile(
     r"(?m)^[ \t]*(?:\*\*\s*[0-9]+[.):]\s*|[-*]\s+)?"
-    r"(critical|high|medium)(?=\s*[(:—])"
+    r"(critical|high|medium)(?=\s*[(:—–-])"
     r"(?P<neg>\s*\((?:theoretical|refuted)\))?",
     re.IGNORECASE,
 )

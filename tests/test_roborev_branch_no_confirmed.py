@@ -106,6 +106,19 @@ def test_a_prose_severity_word_is_not_a_defect(tmp_path, monkeypatch):
     assert r.outcome == "clean" and r.exit == 0
 
 
+def test_an_ascii_hyphen_severity_delimiter_is_still_a_finding(tmp_path, monkeypatch):
+    """A finding whose severity header uses an ASCII hyphen (not the em dash) still reads
+    findings: the delimiter may be '-', '–' or '—'."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Review for job 7: confirmed defects.\nhigh - the branch deletes the wrong table\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1
+
+
 def test_a_low_note_next_to_the_phrase_is_still_clean(tmp_path, monkeypatch):
     """A LOW-only note ('Low -- ...: a pre-existing gap', roborev's note severity) stays
     clean: 'low' is a note, not a defect, so it is the clean verdict the fix keeps."""
