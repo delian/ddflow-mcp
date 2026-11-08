@@ -181,6 +181,50 @@ def test_a_queued_refusal_names_the_file_and_stays_json(repo):
     assert "changes.toml" in (out + err), (out, err)
 
 
+def test_widening_keeps_a_held_glob_a_waiter_queued_for(repo):
+    """B-widen-refused-on-own-held-glob: red-b holds tests/test_no_agent_literals.py, red-h
+    queued for that exact glob, and red-b widens by adding an unrelated free file while
+    re-stating the held glob. The re-statement is not a new demand, so the widening is not
+    refused 'queued behind red-h', and no false wait cycle is recorded."""
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "RB",
+        "--title",
+        "red-b",
+        "--globs",
+        "tests/test_no_agent_literals.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "RH",
+        "--title",
+        "red-h",
+        "--globs",
+        "tests/test_no_agent_literals.py",
+    )
+    assert A.claim(repo, "RB", no_worktree=True, agent="red-b").ok
+    # red-h queues for the one glob red-b holds (lease.waiting).
+    assert not A.claim(repo, "RH", no_worktree=True, agent="red-h", queue=True).ok
+    # Widening: keep the held glob, add an unrelated free file. Must not be refused.
+    ok = AI.update(
+        repo,
+        "RB",
+        AI.ItemEdit(
+            globs=["tests/test_no_agent_literals.py", "docs/ddflow/research/driver-inventory.md"]
+        ),
+        agent="red-b",
+    )
+    assert ok.ok, ok.reason
+    assert _items(repo)["RB"].globs == [
+        "tests/test_no_agent_literals.py",
+        "docs/ddflow/research/driver-inventory.md",
+    ], _items(repo)["RB"].globs
+
+
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "H1", "--title", "H1 fixture", "--globs", "pkg/exact.py")
