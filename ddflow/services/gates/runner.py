@@ -93,23 +93,32 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
     return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
-#: ``pytest`` / ``py.test`` invoked as a (possibly operator-adjacent) command token.
-_PYTEST_RUN = re.compile(r"(?:^|[\s/;|&(])(?:py\.test|pytest)(?=$|[\s/;|&)])")
+#: Command names that run NO test suite at all: POSIX no-ops and a bare echo. A `unit_tests`
+#: gate whose command is one of these must not be read as a full suite (B-suite-lock-trivial-
+#: foreign-gate): `ddflow config.toml` documents the real suite spellings (`npm test`, `cargo
+#: test`, `go test ./...`, `make check`), which are left alone and keep the lock.
+_NO_SUITE = frozenset({"true", ":", "echo"})
 
 
-def _runs_pytest(command: str) -> bool:
-    """Does ``command`` invoke pytest -- a test-suite runner? A gate whose command is not a
-    test suite at all no longer reads as a whole suite just for naming no test file."""
-    return bool(_PYTEST_RUN.search(command))
+def _is_trivial(command: str) -> bool:
+    """Is ``command`` a known non-suite no-op (`true`, `:`, `echo ...`)? A no-op names no test
+    file, so the naive whole-suite read would queue it on the lock although it runs nothing."""
+    try:
+        words = shlex.split(command, comments=True, posix=True)
+    except ValueError:
+        return False
+    return bool(words) and words[0].rsplit("/", 1)[-1] in _NO_SUITE
 
 
 def _runs_whole_suite(gdef: GateDef) -> bool:
     """Does this gate start a full test suite on this host? The `unit_tests` gate, unless its
-    command names test files (a narrowed run), is not a suite at all (a `true` no-op), or is a
-    `ddflow ci run`, which takes the lock itself (taking it here too would wait on ourselves)."""
+    command names test files (a narrowed run), is a known no-op (`true`), or is a `ddflow ci
+    run`, which takes the lock itself (taking it here too would wait on ourselves)."""
     if gdef.id != "unit_tests" or _runs_ddflow_ci(gdef.command):
         return False
-    return _runs_pytest(gdef.command) and WK.count_test_files(gdef.command) is None
+    if WK.count_test_files(gdef.command) is not None:
+        return False
+    return not _is_trivial(gdef.command)
 
 
 _SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})

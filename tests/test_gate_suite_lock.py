@@ -59,9 +59,11 @@ def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
 
     assert not R._runs_whole_suite(_gate("true")), "a no-op is not a full suite"
+    assert not R._runs_whole_suite(_gate(":")), "POSIX no-op is not a full suite"
     assert not R._runs_whole_suite(_gate("pytest tests/test_a.py")), "a narrowed run names tests"
-    # a command that IS a whole pytest suite never stops running under the lock
-    assert R._runs_whole_suite(_gate("pytest -q -n auto"))
+    # Non-pytest suite runners the config documents keep the lock (they run a real suite).
+    for runner in ("pytest -q -n auto", "npm test", "cargo test", "go test ./...", "make check"):
+        assert R._runs_whole_suite(_gate(runner)), runner
 
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
