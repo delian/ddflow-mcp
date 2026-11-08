@@ -84,7 +84,8 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> list[str]:
     if tracked is None:
         return ["stale task globs not fixed: git could not list the tracked files"]
     notes = []
-    for item_id, corrected in LBR.stale_glob_updates(st, tracked):
+    for item_id, stale in LBR.stale_glob_updates(st, tracked):
+        corrected = [dict(stale).get(g, g) for g in st.items[item_id].globs]
         out = _items.update(repo, item_id, _items.ItemEdit(globs=corrected), agent=agent)
         notes.append(
             f"{item_id}: globs corrected to {', '.join(corrected)}"

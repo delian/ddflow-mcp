@@ -242,20 +242,17 @@ def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
     ]
 
 
-def stale_glob_updates(st: State, tracked: Iterable[str]) -> list[tuple[str, list[str]]]:
-    """``(item, corrected globs)`` for every unfinished item whose globs declare a module
-    that is now a package (B-stale-globs-after-split-wave): the corrected list has each such
-    ``x.py`` rewritten to the package ``x/``. Sorted by item id."""
+def stale_glob_updates(st: State, tracked: Iterable[str]) -> list[tuple[str, list[tuple[str, str]]]]:
+    """``(item, [(stale glob, its package)])`` for every unfinished item whose globs declare
+    a module that is now a package (B-stale-globs-after-split-wave). Sorted by item id."""
     live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
     if not any(g.endswith(".py") for i in live for g in i.globs):
         return []
     out = []
     for it in sorted(live, key=lambda i: i.id):
         stale = stale_package_globs(it.globs, tracked)
-        if not stale:
-            continue
-        fixed = dict(stale)
-        out.append((it.id, [fixed.get(g, g) for g in it.globs]))
+        if stale:
+            out.append((it.id, stale))
     return out
 
 
@@ -270,8 +267,8 @@ def stale_glob_notes(repo: Path, st: State) -> list[str]:
     if tracked is None:  # "could not tell" is said, never read as "nothing stale"
         return ["stale task globs not checked: git could not list the tracked files"]
     notes = []
-    for item_id, corrected in stale_glob_updates(st, tracked):
-        stale = stale_package_globs(st.items[item_id].globs, tracked)
+    for item_id, stale in stale_glob_updates(st, tracked):
+        corrected = [dict(stale).get(g, g) for g in st.items[item_id].globs]
         notes.append(
             f"{item_id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
             f"`ddflow update {item_id} --globs {quote(','.join(corrected))}`, or "
