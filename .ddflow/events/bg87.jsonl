@@ -6,3 +6,4 @@
 {"agent":"bg87","data":{},"id":"edf3f0d93d8674c5b4501c6ee","kind":"item.started","lamport":156496,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:10:56.397725Z"}
 {"agent":"bg87","data":{"gate":"ci"},"id":"e0a3aa9d5c66abd2171c0fa04","kind":"gate.started","lamport":156531,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:14:58.494574Z"}
 {"agent":"bg87","data":{"by":"bg87","evidence":{"started_tree_sha":"fd704244ba80+clean","terminated_by":"SIGTERM"},"gate":"ci","reason":"the run was terminated by SIGTERM before its command finished"},"id":"eac32a0e54948ed985f2de072","kind":"gate.unavailable","lamport":156541,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:19:35.208740Z"}
+{"agent":"bg87","data":{"by":"bg87","event":"eeef0d193ec93af2124818cb7","holder":"bg87","note":""},"id":"ed6b228b59815300f7b445037","kind":"lease.released","lamport":156551,"schema":1,"subject":"fix-B45801fa007","ts":"2026-11-08T18:23:34.775676Z"}
