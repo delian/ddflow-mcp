@@ -600,7 +600,7 @@ def _coverage_note(it, gaps: list[str]) -> str:
             # most important one to show.
             coverage = it.gates[g].evidence.get("coverage")
             if coverage is None or coverage == "":
-                coverage = coverage_of(it.gates[g].evidence or {}) or "unknown"
+                coverage = coverage_of(it.gates[g].evidence or {})
             figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
             parts.append(f"{g} ran only partially (coverage{figure})")
     return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."

@@ -42,12 +42,13 @@ class GateStatus:
     #: Pipeline gates recorded `unavailable` OR `partial` -- a coverage gap of either kind
     #: (`_coverage_note` separates the two: one never ran, one ran partly).
     unavailable: list[str]
-    #: Pipeline gates recorded `partial` (ran, but not to a pass): shown apart from the
-    #: gates that never ran, with the coverage or counts their evidence recorded
-    #: (bug B-gate-status-partial-did-not-run).
-    partial: list[str]
     skipped: list[str]
     complete: bool
+    #: Pipeline gates recorded `partial` (ran, but not to a pass): shown apart from the
+    #: gates that never ran, with the coverage or counts their evidence recorded
+    #: (bug B-gate-status-partial-did-not-run). A subset of ``unavailable`` (kept whole for
+    #: JSON callers), so it is not put on the wire itself.
+    partial: list[str] = field(default_factory=list, metadata={"internal": True})
     #: Pipeline gates with NO recorded outcome at all. Silence is its own state: it is
     #: neither a pass nor a failure, and `gates.require_outcome` decides whether it
     #: blocks completion.

@@ -41,8 +41,9 @@ def _partial_line(it, gate: str) -> str:
     ev = (it.gates[gate].evidence or {}) if it.gates.get(gate) else {}
     coverage = ev.get("coverage")
     if coverage is None or coverage == "":
-        coverage = coverage_of(ev) or "unknown"
-    return f"{gate} ran only partially (coverage: {coverage})"
+        coverage = coverage_of(ev)
+    figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
+    return f"{gate} ran only partially (coverage{figure})"
 
 
 def _coverage_notes(it, s) -> list[str]:
