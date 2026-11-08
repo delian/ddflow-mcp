@@ -59,6 +59,29 @@ class Change:
     how: str  # "added" | "superseded"
 
 
+def _tree_item(repo: Path, here: Path, cfg: Config | None = None):
+    """The live item whose worktree IS ``here``, or None.
+
+    Found by where the item's worktree resolves; a live item wins over a finished one
+    whose tree still sits at the path. An unreadable log is None: the caller then measures
+    against the default branch, which is still a check, not a pass.
+    """
+    try:
+        cfg = cfg or Config.load(repo)
+        state = fold(EventLog(repo, cfg.agent.id or "", log_cfg=cfg.log).read_all(), strict=False)
+    except Exception:
+        return None
+    here = here.resolve()
+    found = [
+        it
+        for it in state.items.values()
+        if it.worktree and not it.removed
+        if W.load_path(repo, it.worktree).resolve() == here
+    ]
+    found.sort(key=lambda it: it.state in (DONE, ABANDONED))
+    return found[0] if found else None
+
+
 def item_base(repo: Path, here: Path, cfg: Config | None = None) -> str:
     """The recorded `Item.base` of the item whose worktree IS ``here``, or "".
 
@@ -66,20 +89,20 @@ def item_base(repo: Path, here: Path, cfg: Config | None = None) -> str:
     whose tree still sits at the path. An unreadable log is "": the caller then measures
     against the default branch, which is still a check, not a pass.
     """
-    try:
-        cfg = cfg or Config.load(repo)
-        state = fold(EventLog(repo, cfg.agent.id or "", log_cfg=cfg.log).read_all(), strict=False)
-    except Exception:
-        return ""
-    here = here.resolve()
-    found = [
-        it
-        for it in state.items.values()
-        if it.worktree and it.base and not it.removed
-        if W.load_path(repo, it.worktree).resolve() == here
-    ]
-    found.sort(key=lambda it: it.state in (DONE, ABANDONED))
-    return found[0].base if found else ""
+    it = _tree_item(repo, here, cfg)
+    return it.base if it is not None and it.base else ""
+
+
+def item_id(repo: Path, here: Path, cfg: Config | None = None) -> str:
+    """The id of the item whose worktree IS ``here``, or "" (a bare branch, or no item).
+
+    The commit gate's stale-rules remedy names it: `ddflow sync <id> --keep-local` works
+    from anywhere, while the bare `ddflow sync --keep-local` has to resolve the item from
+    the tree the caller stands in -- which a CLI caller whose identity does not match the
+    tree's derived one cannot (B-sync-remedy-not-an-item-worktree).
+    """
+    it = _tree_item(repo, here, cfg)
+    return it.id if it is not None else ""
 
 
 def base_of(repo: Path, tree: Path, cfg: Config | None = None) -> str:
