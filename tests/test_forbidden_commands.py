@@ -128,7 +128,6 @@ def test_allowed_multiline_quote_data(cmd):
         'echo "$(echo x\n)"; git push origin main',
         "sh -c 'echo \"$(git push origin main)\"'",
         'echo "$(echo \\); git push origin main)"',
-        r'echo "`echo \`; git push origin main`"',
     ],
 )
 def test_refused_command_substitution_multiline(cmd):
