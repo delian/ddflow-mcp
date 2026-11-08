@@ -1,0 +1,2 @@
+{"agent":"spend-approved","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e369a866664f1f7396afb6d1a","kind":"ddflow.seen","lamport":152419,"schema":1,"subject":"ddflow","ts":"2026-11-08T03:57:36.455321Z"}
+{"agent":"spend-approved","data":{"by":"spend-approved","digest":"d8b71c08b85453c27a7898eb0694231ad475abb19bceb9c83d6b83b48be5603a","id":"Q8564fd8d96","verb":"complete.force"},"id":"ebba5790813018059eb1546b1","kind":"ask.consumed","lamport":152420,"schema":1,"subject":"Q8564fd8d96","ts":"2026-11-08T03:57:36.500269Z"}
