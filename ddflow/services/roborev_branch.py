@@ -248,14 +248,53 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
         if out.text
         else "(the review body could not be read: `roborev show --job` brought no text)"
     )
+    # `roborev wait` exits 1 on ANY finding, including a review that names no CONFIRMED
+    # defect (its only findings are notes/refuted/theoretical); read the severity before
+    # saying "findings" -- recording the gate `failed` over such a text overstates it
+    # (B2bd9e8b715).
+    clean = not out.note or _no_confirmed_defect(out.text)
     return Result(
-        "clean" if not out.note else "findings",
-        out.note or missing,
+        "clean" if clean else "findings",
+        "" if clean else (out.note or missing),
         job,
         head,
         out.text,
         reviewer=out.review.reviewer,
     )
+
+
+def _no_confirmed_defect(text: str) -> bool:
+    """Does roborev's review body name NO confirmed defect? Its words are 'no CONFIRMED
+    defects' when the only findings are notes/THEORETICAL/refuted -- a LOW note still makes
+    `roborev wait` exit 1, but it is a note, not a defect. Read that verdict CLEAN only
+    when the body also carries no confirmed defect finding (B2bd9e8b715)."""
+    lowered = text.casefold()
+    if "no confirmed defect" not in lowered and "no issues found" not in lowered:
+        return False
+    return not _has_confirmed_finding(text)
+
+
+# roborev writes a finding's severity at the HEAD of its line AND follows it with a header
+# delimiter -- a numbered defect `**1. high (CONFIRMED) — ...**`, a bullet `- medium: ...`,
+# or an inline `high — ...` -- and `low` is its NOTE class ('minor improvement, no immediate
+# functional impact'), deliberately absent. Both anchors matter: the line head separates a
+# finding from prose (`the high water mark`), and the delimiter (a verdict `(`, a `:`, or a
+# dash, in any of the hyphen/en-dash/em-dash spellings) separates a finding from a wrapped
+# prose word that happens to start a line (`high water mark`).
+_DEFECT_HEAD = re.compile(
+    r"(?m)^[ \t]*(?:\*\*\s*[0-9]+[.):]\s*|[-*]\s+)?"
+    r"(critical|high|medium)(?=\s*[:(\u2013\u2014-])"
+    r"(?P<neg>\s*\((?:theoretical|refuted)\))?",
+    re.IGNORECASE,
+)
+
+
+def _has_confirmed_finding(text: str) -> bool:
+    """A confirmed defect among the findings: a finding whose header carries a defect
+    severity (critical|high|medium) and whose own verdict is not (THEORETICAL)/(REFUTED).
+    `low` is a NOTE, not a defect, so a LOW-only review is exactly the clean verdict this
+    fix must stop recording `failed` over (B2bd9e8b715)."""
+    return any(m.group("neg") is None for m in _DEFECT_HEAD.finditer(text))
 
 
 def _findings_summary(text: str) -> str:
