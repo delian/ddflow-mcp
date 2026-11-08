@@ -86,3 +86,26 @@ def test_claim_corrects_a_glob_whose_module_is_now_a_package(repo):
     it = item_of(repo, "T1")
     assert it.globs == ["pkg/mod/"], it.globs
     assert it.lease.globs == ["pkg/mod/"], it.lease.globs
+
+
+def test_doctor_fix_stale_globs_rewrites_every_stale_item(repo):
+    """`ddflow doctor --fix-stale-globs` rewrites the stale package glob of EVERY open item
+    at once (B-stale-globs-after-split-wave): a claim corrects the item it leases, this
+    corrects the ones that just sit there."""
+    (repo / "pkg" / "mod").mkdir(parents=True)
+    (repo / "pkg" / "mod" / "__init__.py").write_text("", "utf-8")
+    (repo / "pkg" / "mod" / "a.py").write_text("", "utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pkg")
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
+    for tid in ("T1", "T2"):
+        code, _out, err = run_cli(
+            repo, "task", "add", tid, "--phase", "P1", "--title", tid, "--globs", "pkg/mod.py"
+        )
+        assert code == 0, err
+    code, out, err = run_cli(repo, "doctor", "--fix-stale-globs")
+    assert code == 0, out + err
+    assert item_of(repo, "T1").globs == ["pkg/mod/"]
+    assert item_of(repo, "T2").globs == ["pkg/mod/"]
+    assert "T1" in out + err and "T2" in out + err, out + err

@@ -65,6 +65,26 @@ from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
 
+def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> list[str]:
+    """`ddflow doctor --fix-stale-globs`: rewrite the stale package glob of every unfinished
+    item to its package path, so no open item is left leasing a module that no longer is,
+    and each holder's lease is retargeted to the package (B-stale-globs-after-split-wave)."""
+    from .. import items as _items
+
+    tracked = W.git_paths(repo, "ls-files")
+    if tracked is None:
+        return ["stale task globs not fixed: git could not list the tracked files"]
+    notes = []
+    for item_id, corrected in LBR.stale_glob_updates(st, tracked):
+        out = _items.update(repo, item_id, _items.ItemEdit(globs=corrected), agent=agent)
+        notes.append(
+            f"{item_id}: globs corrected to {', '.join(corrected)}"
+            if out.exit == O.OK
+            else f"{item_id}: stale globs not corrected: {out.reason or out.text or out.exit}"
+        )
+    return notes
+
+
 def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[str]) -> None:
     """Dependencies that can never be met, and external ones not yet observed."""
 
@@ -280,6 +300,7 @@ def doctor(
     tools: Any = None,
     accept_lost_events: bool = False,
     accept_history: bool = False,
+    fix_stale_globs: bool = False,
     history: tuple[str, str, str, str] = ("", "", "", ""),
     start_texts: Any = None,
 ) -> O.Outcome:
@@ -399,7 +420,7 @@ def doctor(
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
-    notes += _stale_glob_notes(repo, st)
+    notes += _apply_stale_globs(repo, cfg, st, agent) if fix_stale_globs else _stale_glob_notes(repo, st)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
