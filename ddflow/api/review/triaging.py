@@ -317,18 +317,17 @@ def _moved_paths(repo: Path, it, wt, recorded: dict) -> list[str] | None:
     return None if now_changed is None else RP.snapshot_differing(recorded, wt, now_changed)
 
 
-def _filtered_moved(repo: Path, it, wt, ev: dict[str, Any], cfg) -> list[str]:
+def _filtered_moved(repo: Path, it, wt, ev: dict[str, Any], cfg) -> list[str] | None:
     """The paths that differ from what the round saw, minus ones `reviewed_other_tree`
-    ignores (triage_ignore_globs); [] when none relevant differ. These are the files the
-    item's tree moved in since the reviewed head."""
+    ignores (triage_ignore_globs); [] when none differ, None when they cannot be read (an
+    older round without `reviewed_paths`, or a tree gone): the caller reads None as
+    "cannot compare" and [] as "compare, none relevant differ"."""
     moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
-    if moved:  # a test the round did not review is not new work (triage_ignore_globs)
-        seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
-        gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
-        moved = [
-            p for p in moved if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)
-        ]
-    return moved or []
+    if not moved:  # a test the round did not review is not new work (triage_ignore_globs)
+        return moved
+    seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
+    gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
+    return [p for p in moved if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)]
 
 
 def _settle_is_only_the_confirmed_fix(
@@ -344,7 +343,7 @@ def _settle_is_only_the_confirmed_fix(
     return bool(moved) and bool(confirmed) and not (set(moved) - confirmed)
 
 
-def _moved_for(repo: Path, cfg, st, item: str, gate: str) -> list[str]:
+def _moved_for(repo: Path, cfg, st, item: str, gate: str) -> list[str] | None:
     """The files the gate's recorded round saw that moved since (``_filtered_moved``), for
     checking whether a stale tree is nothing but the confirmed findings' fixes."""
     it = st.items.get(item)
