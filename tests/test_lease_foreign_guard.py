@@ -76,6 +76,12 @@ def test_a_lease_with_no_recorded_clone_is_not_foreign(tmp_path):
     assert LS.foreign_live_lease(log, Config(), "T", "bob") is None
 
 
+def test_a_lease_with_no_recorded_clone_is_not_a_peer(tmp_path):
+    log = _log(tmp_path, "aaaaaa")
+    _lease(log, clone=None, at=time.time())
+    assert LS.peer_live_lease(log, Config(), "T", "bob") is None
+
+
 def test_an_expired_foreign_lease_is_not_foreign_live(tmp_path):
     log = _log(tmp_path, "bbbbbb")
     _lease(log, clone="aaaaaa", at=time.time() - 100000, ttl=10)

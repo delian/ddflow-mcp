@@ -385,13 +385,15 @@ def peer_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "") 
     SAME clone unprotected: one lane's `release` dropped a peer lane's live lease, after
     which the peer's writes were refused. A lease is still evidence of intent, not a lock,
     so a peer lease is released only as a foreign one is -- ``--force`` and a recorded
-    ``reason``. The caller's OWN lease (``caller == lease.holder``) is never a peer's."""
+    ``reason``. The caller's OWN lease (``caller == lease.holder``) is never a peer's. A
+    lease with NO recorded clone is not a same-clone peer either: like `foreign_live_lease`,
+    it is left unchanged (operator decision D-mu-bugfix-answers)."""
     it = _fold(log).items.get(item_id)
     lease = it.lease if it else None
     if lease is None or not lease.live(_leases.time.time(), cfg.lease.grace_s):
         return None
-    if foreign(lease, log.clone_id(create=False)):
-        return None  # foreign_live_lease / foreign_guard's, not a same-clone peer's
+    if not lease.clone or foreign(lease, log.clone_id(create=False)):
+        return None  # no recorded clone: unchanged; foreign: foreign_guard's
     if lease.holder == caller:
         return None
     return lease
