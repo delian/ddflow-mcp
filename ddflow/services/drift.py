@@ -75,7 +75,7 @@ def _tree_item(repo: Path, here: Path, cfg: Config | None = None):
     found = [
         it
         for it in state.items.values()
-        if it.worktree and not it.removed
+        if it.worktree and it.base and not it.removed
         if W.load_path(repo, it.worktree).resolve() == here
     ]
     found.sort(key=lambda it: it.state in (DONE, ABANDONED))
