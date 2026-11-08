@@ -1,0 +1,8 @@
+[[change]]
+kind = "knob_changed"
+key = "approvals.transcript_dirs"
+old = '["~/.claude/projects"]'
+new = '[]'
+why = "The harness channel reads each harness descriptor's `[transcripts].root` for session transcripts; the ~/.claude/projects default was folded into the descriptor roots, so the knob now defaults empty (additive where a descriptor already points there)."
+effect = "A project with no harness descriptor no longer searches ~/.claude/projects for approval-answer transcripts unless the descriptor names it."
+impact = "additive"
