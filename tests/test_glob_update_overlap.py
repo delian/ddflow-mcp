@@ -248,7 +248,9 @@ def test_a_widening_refused_for_a_new_glob_names_only_that_glob(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "H1", "--title", "holder", "--globs", "changes.toml")
     run_cli(repo, "task", "add", "Q1", "--title", "queuer", "--globs", "changes.toml")
-    run_cli(repo, "task", "add", "M1", "--title", "mine", "--globs", "tests/test_no_agent_literals.py")
+    run_cli(
+        repo, "task", "add", "M1", "--title", "mine", "--globs", "tests/test_no_agent_literals.py"
+    )
     assert A.claim(repo, "H1", no_worktree=True, agent="holder").ok
     assert A.claim(repo, "M1", no_worktree=True, agent="mine").ok
     # Q1 queues for changes.toml, which H1 holds.
