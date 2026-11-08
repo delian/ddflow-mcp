@@ -369,3 +369,14 @@ def test_launch_reads_the_conformance_store_and_endpoint_pool(tmp_path, tree):
     assert LN.conformance_level(root, "lane-7") == 3
     pools = LN.endpoint_pools(cat(tmp_path), "lan-vllm", "", 1, tmp_path / "slots")
     assert pools and pools[0].pool == "ep-lan-vllm" and pools[0].limit == 2
+
+
+def test_conformance_level_expires_after_max_age(tmp_path, tree):
+    from ddflow.services.swarm.conformance import Report
+    from ddflow.services.swarm.conformance_io import save
+
+    root = tree[0]
+    save(root, Report("lane-7", 3, (), at=1000.0))
+    assert LN.conformance_level(root, "lane-7", max_age_s=30, now=1000.0) == 3
+    assert LN.conformance_level(root, "lane-7", max_age_s=0, now=999999.0) == 3
+    assert LN.conformance_level(root, "lane-7", max_age_s=30, now=2000.0) == 0

@@ -17,6 +17,7 @@ injectable so a test runs a stub. Approval is only ever read (``launch_template.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -82,10 +83,30 @@ def _check_template(t: T.Template, cfg: Config) -> list[str]:
     return out
 
 
-def conformance_level(repo: Path, agent: str) -> int:
-    """The lane's measured conformance level, or 0 when no run has graded it yet."""
+def conformance_level(
+    repo: Path, agent: str, *, max_age_s: int = 0, now: float | None = None
+) -> int:
+    """The lane's measured conformance level, 0 when no run has graded it yet or its report
+    is older than ``max_age_s`` (``conformance.max_age_s``: an expired run admits at no level).
+    ``now`` defaults to the wall clock."""
     report = CIO.load(repo, agent)
-    return report.level if report is not None else 0
+    if report is None:
+        return 0
+    at = time.time() if now is None else now
+    if max_age_s and at - report.at > max_age_s:
+        return 0
+    return report.level
+
+
+def resolved_pools(
+    cat: modelreg.Catalog, route: str, model: str, default_slots: int
+) -> tuple:
+    """The endpoint `Pool` objects a lane on ``route`` takes (its own pool only; task
+    ``--resources`` pools are the task's, not a lane's). Empty when the route is unreadable."""
+    ep = EP.resolve(cat, route, model, require_tools=False)
+    if isinstance(ep, EP.Result):
+        return ()
+    return CAPACITY.pools_for(ep, default_slots, {})
 
 
 def endpoint_pools(
@@ -98,11 +119,8 @@ def endpoint_pools(
     """The endpoint pool headroom a lane on ``route`` needs now: the route's ``concurrency``
     (or ``default_slots``) against the slots busy in ``directory`` (the host slot dir when
     None). Empty when the route cannot be read."""
-    ep = EP.resolve(cat, route, model, require_tools=False)
-    if isinstance(ep, EP.Result):
-        return ()
-    pools = CAPACITY.pools_for(ep, default_slots, {})
-    return CAPACITY.view(pools, CAPACITY.busy_counts(pools, directory))
+    pools = resolved_pools(cat, route, model, default_slots)
+    return CAPACITY.view(pools, CAPACITY.busy_counts(pools, directory)) if pools else ()
 
 
 def _constraints(req: Request, w: Weights) -> list[str]:
@@ -124,7 +142,9 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         price_out=t.price_out,
         local=t.local,
         kinds=t.kinds,
-        level=conformance_level(req.repo, req.agent),
+        level=conformance_level(
+            req.repo, req.agent, max_age_s=req.cfg.swarm.conformance_max_age_s
+        ),
         pools=endpoint_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
     )
     out = score.refusals(sc_item, lane, req.world, w)
@@ -199,7 +219,18 @@ def launch(req: Request) -> Launched | Refused:
     if isinstance(drv, Result):
         OC.cleanup(req.home)
         return Refused((f"{drv.status}: {drv.detail}",))
-    h = drv.start(prep.spec)
+    # hold the endpoint's slots for the lane's lifetime (capacity.acquire): the slot locks the
+    # scheduler probes are actually held while the lane runs, so a full endpoint refuses the next
+    # lane instead of oversubscribing it. An unreadable route has no pool to hold.
+    try:
+        with CAPACITY.acquire(
+            resolved_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
+            req.cfg.lanes.slot_wait_s,
+        ):
+            h = drv.start(prep.spec)
+    except TimeoutError as e:  # the endpoint pool could not fit this lane before the wait
+        OC.cleanup(req.home)
+        return Refused((f"endpoint slot: {e}",))
     if isinstance(h, Result):
         OC.cleanup(req.home)
         return Refused((f"{h.status}: {h.detail}",))

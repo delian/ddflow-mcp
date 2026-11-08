@@ -61,7 +61,7 @@ class Lane:
     cap: int = 1
     kinds: tuple[str, ...] = ()  # empty: any kind
     level: int = 0  # measured conformance level; 0 = none (never passed a run)
-    pools: tuple[CAPACITY.Headroom, ...] = ()  # endpoint/GPU pool headroom the lane needs
+    pools: tuple[CAPACITY.Headroom, ...] = ()  # endpoint pool headroom the lane needs
 
 
 @dataclass(frozen=True)
