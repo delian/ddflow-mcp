@@ -187,7 +187,7 @@ def _dirs(cfg: Config) -> list[Path]:
     out: list[Path] = []
     seen: set[Path] = set()
     for d in roots:
-        p = Path(d).expanduser().resolve()
+        p = Path(d).expanduser().absolute()  # absolute, never resolve(): resolve() hits the fs and can raise
         if p not in seen:  # the same dir named two ways (relative vs absolute, or a symlink) scans twice
             seen.add(p)
             out.append(p)

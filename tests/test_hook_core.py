@@ -80,8 +80,8 @@ def test_no_plan_for_an_agent_without_command_hooks():
 
 def test_a_partial_fields_table_keeps_the_fieldmap_default_not_claude():
     # DRV-migrate regression: a fact a [hooks.fields] table omits keeps FieldMap's own
-    # default (an empty path tuple), not Claude's path from _DEFAULT -- gemini reads
-    # session from session_id only and never reads model.
+    # default, not Claude's path from _DEFAULT -- gemini reads session from session_id
+    # only (not the conversation_id Claude adds) and never reads model.
     fm = hookio.fieldmap({"prompt": ("prompt",), "tool": ("tool_name",)})
     assert fm.session == ("session_id",)
     assert fm.model == ()
