@@ -11,22 +11,49 @@ from dataclasses import dataclass
 _FILE = re.compile(r'^diff --git "?a/(?P<a>.+?)"? "?b/(?P<b>.+?)"?$')
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
-_ESCAPE = re.compile(r"\\([0-7]{3})")
+_C_ESCAPES = {
+    "\\": "\\",
+    '"': '"',
+    "t": "\t",
+    "n": "\n",
+    "r": "\r",
+    "a": "\a",
+    "b": "\b",
+    "v": "\v",
+    "f": "\f",
+}
 
 
 def _dequote(name: str) -> str:
-    """A git `core.quotepath` name, decoded to UTF-8: each byte above 0x7f (and ``"``, ``\\``
-    and controls) is written as ``\\ooo``, so `shape` un-quotes it (a file named ``é`` is
-    ``\\303\\251``; without this `files` keeps the raw escaped text, not the decoded name)."""
-    if "\\" not in name:
-        return name
+    """A git `core.quotepath` name, decoded to UTF-8: git C-escapes ``\\``, ``"`` and the C
+    escapes, and writes bytes above 0x7f as ``\\ooo`` octal; `shape` un-quotes both (a file
+    named ``é`` is ``\\303\\251``)."""
     raw = bytearray()
-    at = 0
-    for m in _ESCAPE.finditer(name):
-        raw.extend(name[at : m.start()].encode("utf-8", "replace"))
-        raw.append(int(m[1], 8))
-        at = m.end()
-    raw.extend(name[at:].encode("utf-8", "replace"))
+    i = 0
+    while i < len(name):
+        if name[i] != "\\":
+            raw.extend(name[i].encode("utf-8", "replace"))
+            i += 1
+            continue
+        if i + 1 >= len(name):
+            raw.append(0x5C)  # a trailing lone backslash is a literal backslash
+            i += 1
+            continue
+        nxt = name[i + 1]
+        if nxt in _C_ESCAPES:
+            raw.extend(_C_ESCAPES[nxt].encode("utf-8"))
+            i += 2
+            continue
+        if (
+            i + 4 <= len(name)
+            and name[i + 1] in "0123"
+            and all(c in "01234567" for c in name[i + 1 : i + 4])
+        ):
+            raw.append(int(name[i + 1 : i + 4], 8))
+            i += 4
+            continue
+        raw.append(0x5C)
+        i += 1
     return raw.decode("utf-8", "replace")
 
 
