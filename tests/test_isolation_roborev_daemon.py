@@ -9,10 +9,8 @@ repo-wide failed with ``no such table: repos/daemon_state``.
 
 from __future__ import annotations
 
-import ctypes
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import time
@@ -32,31 +30,31 @@ def _alive(pid: int) -> bool:
     return True
 
 
-_PR_SET_PDEATHSIG = 1
-_LIBC = ctypes.CDLL("libc.so.6", use_errno=True)
-_PRCTL = _LIBC.prctl  # resolve the symbol before any fork: a dlsym in the child is not async-safe
-
-
 def _spawn(home: Path) -> subprocess.Popen:
+    """Start ``roborev daemon run`` detached, armed so the daemon dies with this process.
+
+    The daemon is spawned through a one-line launcher so ``PR_SET_PDEATHSIG`` is armed *after
+    the fork execs* the launcher, never in ``subprocess``'s ``preexec_fn`` (which runs Python
+    bytecode between fork and exec and is not thread-safe, PLW1509): a worker killed between
+    ``_spawn`` and the teardown used to orphan the daemon to init holding its unix socket over
+    a deleted database (B2d2c474d47).
+    """
     env = dict(os.environ, HOME=str(home))
     parent = os.getpid()  # the worker whose death must take the daemon with it
-
-    def _arm_parent_death_signal() -> None:
-        # Kill this child when the worker that forked it dies first, instead of orphaning it
-        # to init (or a subreaper) holding its unix socket over a deleted database.
-        _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL)
-        if os.getppid() != parent:
-            # The worker died before ``prctl`` armed the signal: a subreaper has re-parented
-            # us, so no signal will ever come -- do not even start the daemon (B2d2c474d47).
-            os._exit(1)
-
+    addr = f"unix://{home / 'roborev.sock'}"
+    launcher = (
+        "import ctypes, os, signal\n"
+        "ctypes.CDLL('libc.so.6').prctl(1, signal.SIGKILL)\n"
+        f"if os.getppid() != {parent}:\n"  # not the worker that forked us: it already died
+        "    os._exit(1)\n"
+        f"os.execvpe('roborev', ['roborev', 'daemon', 'run', '--addr', {addr!r}], os.environ)\n"
+    )
     return subprocess.Popen(
-        ["roborev", "daemon", "run", "--addr", f"unix://{home / 'roborev.sock'}"],
+        [sys.executable, "-c", launcher],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
-        preexec_fn=_arm_parent_death_signal,
     )
 
 
