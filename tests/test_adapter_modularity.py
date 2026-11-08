@@ -22,6 +22,11 @@ import pytest
 from ddflow.adapters import fakes as F
 from ddflow.adapters import ports as P
 
+#: A new family is a new module under `ddflow/adapters/` and is found by scanning that
+#: package at run time (`ports.discover`), so no import or name change reaches this test;
+#: it declares it governs the adapters tree instead (B-select-misses-adapter-discovery-tests).
+GOVERNS = ("ddflow/adapters/**",)
+
 ROOT = Path(__file__).resolve().parents[1]
 #: The four files that used to take an edit per port.
 FORMER_SHARED = (
