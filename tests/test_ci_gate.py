@@ -129,6 +129,7 @@ def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
     assert res.status == "unavailable", res.status
     assert res.exit == 2
     assert "signal" in res.reason, res.reason
+    assert not any(not c.ok for c in res.checks), res.checks
 
 
 def test_the_scratch_worktree_is_removed_and_the_tree_untouched(repo, fake_precommit):
