@@ -444,7 +444,7 @@ def test_a_victim_blocked_on_two_leases_is_told_to_wait_for_both():
     assert "`ddflow wait --item b1`" in c.remedy and "`ddflow wait --item b2`" in c.remedy
 
 
-def test_commands_for_a_hyphen_id_reach_the_item_through_the_real_parser(repo):
+def test_creating_a_hyphen_id_is_refused_and_a_valid_id_drives_end_to_end(repo):
     assert run_cli(repo, "init", agent=A)[0] == 0
     # A leading hyphen is refused at creation (B-item-id-leading-hyphen): the id would
     # then be parsed as an option by every command that names it. A remedy line still
