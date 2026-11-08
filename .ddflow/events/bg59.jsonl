@@ -8,3 +8,5 @@
 {"agent":"bg59","data":{"tags":["architecture","wave:0"]},"id":"e725137f7cd9358c2b237b9fb","kind":"task.updated","lamport":152569,"schema":1,"subject":"ADP-home-ports","ts":"2026-11-08T04:22:25.273407Z"}
 {"agent":"bg59","data":{"tags":["architecture","wave:0"]},"id":"ed41e61f5a55d63c81ed89dbc","kind":"task.updated","lamport":152570,"schema":1,"subject":"ADP-platform","ts":"2026-11-08T04:22:25.336847Z"}
 {"agent":"bg59","data":{"tags":["adapters","ratchet","audit","wave:0"]},"id":"e870223a325e3cd7249b402e4","kind":"task.updated","lamport":152571,"schema":1,"subject":"AU-fs-sweep","ts":"2026-11-08T04:22:25.399606Z"}
+{"agent":"bg59","data":{"ahead":["research","rules","implement"],"gate":"rubber_duck","policy":"warn"},"id":"efda171d09853ffb4788b3a00","kind":"gate.out_of_order","lamport":152722,"schema":1,"subject":"fix-B-recover-forgets-author-model","ts":"2026-11-08T04:41:29.625365Z"}
+{"agent":"bg59","data":{"gate":"rubber_duck"},"id":"ed5f9354c45fbd892fed59551","kind":"gate.started","lamport":152723,"schema":1,"subject":"fix-B-recover-forgets-author-model","ts":"2026-11-08T04:41:30.146638Z"}
