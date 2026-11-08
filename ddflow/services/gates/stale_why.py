@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...config import Config
+from ...infra import git as GIT
 from ..review_exclude import _hit, patterns
 from .evidence import TreeEntries, commit_tree_entries, differing_paths
 
@@ -14,16 +15,21 @@ from .evidence import TreeEntries, commit_tree_entries, differing_paths
 def _gate_covered(cwd: Path, paths: list[str], then: TreeEntries | None) -> list[str]:
     """The subset of ``paths`` the gate ran on: a tracked file the review did not leave out.
 
-    A path the gate covered is one the reviewed tree tracks: a git merge temporary is tracked
-    nowhere, so it is not a difference; but a file DELETED from the index is still tracked in
-    the reviewed tree, so it is (the index set alone would drop a deletion). A file matched by
-    `[review].exclude_globs` (a golden snapshot or transcript) or owned by `pins.toml` was never
-    sent to the reviewer, so naming it cannot be cleared by reviewing the covered code
+    A path the gate covered is one the reviewed trees track: a git MERGE temporary is tracked
+    nowhere so it is not a difference, but a file DELETED from the index is still tracked in the
+    reviewed base tree and a file ADDED is tracked in the index -- either is covered, so both
+    keep (the base-only set drops an addition, the index-only set drops a deletion). A file
+    matched by `[review].exclude_globs` (a golden snapshot/transcript) or owned by `pins.toml`
+    was never sent to the reviewer, so naming it is not cleared by reviewing the covered code
     (B-stale-mark-names-merge-temp-and-excluded-files).
     """
     if not paths:
         return []
-    paths = [p for p in paths if then is None or p in then]
+    tracked = GIT.files(cwd, "tracked")
+    paths = [
+        p for p in paths
+        if then is None or p in then or tracked is None or p in tracked
+    ]
     if paths:
         excluded, pinned = patterns(Config.load(cwd), cwd)
         paths = [p for p in paths if not _hit(p, excluded, pinned)]
