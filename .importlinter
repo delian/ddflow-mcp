@@ -104,6 +104,19 @@ forbidden_modules =
     socket
 allow_indirect_imports = True
 
+# TOML is read and written only by ddflow.adapters.toml (TomlIo); every other importer is
+# debt that moves behind the port family by family (ADP-toml-unify), so the baseline can
+# only shrink.
+[importlinter:contract:toml-home]
+name = tomllib and tomlkit are imported only by ddflow.adapters.toml
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    tomllib
+    tomlkit
+allow_indirect_imports = True
+
 # Optional extras (D-unify 2): each is imported by exactly ONE adapter module, which owns
 # the stdlib fallback and the doctor line. The task that writes an adapter adds its one
 # "home" entry to tests/guard_baselines/importlinter-extras-one-adapter.toml, e.g.
