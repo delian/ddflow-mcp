@@ -48,6 +48,10 @@ _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
+#: `git stash` is forbidden because the stash stack is shared by every worktree, but these
+#: subcommands only READ it; the entry refuses the writing verbs alone (B-hook-blocks-read-only-stash-list).
+_STASH_READONLY = frozenset({"list", "show"})
+
 #: What to do instead, by the entry's first words.
 _INSTEAD = {
     "pkill": "kill only a process you started, by its pid (`kill <pid>`), or stop your own background job",
@@ -252,6 +256,10 @@ def _matches_head(want: list[str], head: list[str], ordered: bool) -> bool:
     if cmd == "git" and rest and not rest[0].startswith("-"):
         # git's subcommand is its first word after the global options, not any argument
         if not args or args[0] != rest[0]:
+            return False
+        # A `git stash` entry refuses the writing verbs only: list/show only read the
+        # shared stack, so `git stash list` must not match it (B-hook-blocks-read-only-stash-list).
+        if rest[0] == "stash" and args[1:2] and args[1] in _STASH_READONLY:
             return False
         args, rest = args[1:], rest[1:]
     return _inorder(rest, args) if ordered else all(any(_word(w, a) for a in args) for w in rest)
