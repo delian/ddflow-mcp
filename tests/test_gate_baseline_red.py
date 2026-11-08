@@ -573,6 +573,49 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
+def test_a_legacy_cut_base_reason_is_not_a_new_offender(repo) -> None:
+    """B-baseline-red-hides-new-cause legacy sensitive: a base entry cached BEFORE the reason was
+    kept whole stored it cut to ``LINE_CHARS``. The branch's whole reason is that cut text and
+    the rest of the SAME message, so a prefix match at the old cap must stay baseline-red -- the
+    base and branch may share the one cause the old cap could not tell apart."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.gates.defs import GateDef
+    from ddflow.services.flakes import LINE_CHARS
+
+    _project(repo)
+    whole = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"
+    legacy_base = whole[:LINE_CHARS]  # what the pre-fix flakes.py cached: cut, not whole
+    assert len(legacy_base) == LINE_CHARS and whole.startswith(legacy_base)
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: legacy_base},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: whole}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "partial", why
+    assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
+
+
 def test_a_cached_base_signature_still_spots_a_new_offender(repo) -> None:
     """A base id already cached WITH its failure text is compared on later runs too: the cache
     stores the signature beside the bool, so a new offender on the same base sha is not hidden

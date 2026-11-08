@@ -25,6 +25,7 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
+from ..flakes import LINE_CHARS
 from .baseline import cache_load, cache_signatures, cache_store
 from .testcmd import counts_of
 
@@ -127,14 +128,26 @@ def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str]
     A test the base also fails, but with a DIFFERENT full reason text, is a new offender, not
     baseline-red. ``failed_reasons`` now keeps each FAILED reason WHOLE (its summary line is not
     cut), so two reasons that differ only past what the display used to cap to are told apart
-    (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender."""
+    (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender.
+
+    A base measured BEFORE the reason was kept whole (legacy) stored it cut to ``LINE_CHARS``:
+    when the branch's whole reason is that cut text and nothing else disagrees, the base and
+    branch may be the one cause the old cap could not tell apart, so it is NOT a new offender
+    (fail open, once -- the next base measurement on this sha stores the whole reason)."""
     base = (onbase or {}).get(test_id)
     if not base:
         return False
     branch = (before or {}).get(test_id)
     if not branch:
         return False
-    return branch != base
+    if branch == base:
+        return False
+    # Legacy cache-sig migration: an old cut-to-LINE_CHARS base entry is the branch's whole
+    # reason's own prefix, so a prefix match at exactly the old cap is ambiguous (same cause,
+    # or a difference past the cap the old entry never saw). Fail open: it stays baseline-red.
+    if len(base) == LINE_CHARS and branch.startswith(base):
+        return False
+    return True
 
 
 def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
