@@ -1,0 +1,2 @@
+{"agent":"bg65","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"eaa8de6ee4434a9b152486854","kind":"ddflow.seen","lamport":152806,"schema":1,"subject":"ddflow","ts":"2026-11-08T05:01:22.807502Z"}
+{"agent":"bg65","data":{"path":".ddflow/worktrees/ADP-move-ports-baseline"},"id":"ee43afce87dc2970d7180dff3","kind":"worktree.removed","lamport":152807,"schema":1,"subject":"ADP-move-ports-baseline","ts":"2026-11-08T05:01:22.906450Z"}
