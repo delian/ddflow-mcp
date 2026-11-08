@@ -50,7 +50,10 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
 
     init_before = Path(C.__file__).read_bytes()
     core_before = Path(_core.__file__).read_bytes()
-    baseline = set(_docs.SECTION_CLASSES)
+    section_before = dict(_docs.SECTION_CLASSES)
+    knob_docs_before = dict(_docs.KNOB_DOCS)
+    declared_before = dict(_docs.DECLARED)
+    declared_in_before = dict(_docs.DECLARED_IN)
 
     extra = tmp_path / "extra_sections"
     extra.mkdir()
@@ -65,10 +68,14 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
     module = importlib.import_module(f"{CS.__name__}.zzz_throwaway")
     try:
         assert _docs.SECTION_CLASSES.get("zzz_throwaway") is module.ZzzThrowawayConfig
-        assert set(_docs.SECTION_CLASSES) == baseline | {"zzz_throwaway"}
+        assert set(_docs.SECTION_CLASSES) == set(section_before) | {"zzz_throwaway"}
 
         assert Path(C.__file__).read_bytes() == init_before, "config/__init__.py never changes"
         assert Path(_core.__file__).read_bytes() == core_before, "config/_core.py never changes"
     finally:
-        _docs.SECTION_CLASSES.pop("zzz_throwaway", None)
+        # roll back every registry @declare touched, so no phantom knob leaks to later tests.
+        _docs.SECTION_CLASSES.clear(), _docs.SECTION_CLASSES.update(section_before)
+        _docs.KNOB_DOCS.clear(), _docs.KNOB_DOCS.update(knob_docs_before)
+        _docs.DECLARED.clear(), _docs.DECLARED.update(declared_before)
+        _docs.DECLARED_IN.clear(), _docs.DECLARED_IN.update(declared_in_before)
         sys.modules.pop(f"{CS.__name__}.zzz_throwaway", None)

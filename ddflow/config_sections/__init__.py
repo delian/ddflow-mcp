@@ -9,23 +9,20 @@ lists the knobs in `Config`'s field order, not in the order these modules are im
 from __future__ import annotations
 
 import importlib
-import pkgutil
 import sys
 from types import ModuleType
 
+#: The sorted package scan, shared with the adapter ports (one scanner, no drift): see
+#: `ddflow.adapters.ports.module_names`.
+from ..adapters.ports import module_names as _module_names
+
 
 def module_names(package: ModuleType, skip: frozenset[str] = frozenset()) -> tuple[str, ...]:
-    """The public submodule names of ``package``, sorted: the one deterministic order (no hash
-    order), private modules left out. New sections are discovered by this scan, so a section
-    added to a package on ``package.__path__`` needs no edit to any shared file. (A name offered
-    by two path entries cannot appear twice: `pkgutil.iter_modules` yields each name once.)"""
-    return tuple(
-        sorted(
-            m.name
-            for m in pkgutil.iter_modules(package.__path__)
-            if m.name not in skip and not m.name.startswith("_")
-        )
-    )
+    """The public submodule names of ``package``, sorted (one deterministic order, no hash
+    order), private ``_``-prefixed modules left out. This is `ports.module_names` with the
+    config-sections convention layered on: a section is a public file here, so a section added
+    to a package on ``package.__path__`` needs no edit to any shared file."""
+    return tuple(n for n in _module_names(package, skip) if not n.startswith("_"))
 
 
 #: Every section module: each public module of this package, found by convention. A new
