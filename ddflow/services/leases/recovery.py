@@ -279,11 +279,11 @@ def _branch_ahead(repo: Path, facts: RepoFacts, cfg: Config, branch: str) -> int
     if not branch:
         return -1
     probe = G.run(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
-    if probe.unavailable:
-        return -1
-    if not probe.ok:  # exit 1: the ref is genuinely not there
+    if probe.ok:
+        return G.commits_ahead(repo, facts.base(cfg.worktree.base_ref), branch)
+    if probe.code == 1:  # rev-parse --verify: the ref is genuinely not there
         return 0
-    return G.commits_ahead(repo, facts.base(cfg.worktree.base_ref), branch)
+    return -1  # git ran but failed fatally (128) or could not run: unknown, never empty
 
 
 def _gone_tree(
