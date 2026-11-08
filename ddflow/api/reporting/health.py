@@ -65,14 +65,20 @@ from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
 
-def _stale_glob_section(repo: Path, cfg, st, agent: str, fix: bool) -> tuple[list[str], list[str]]:
-    """The stale-package-glob part of `doctor`: `(problems, notes)`. The notes, or -- the
-    `--fix-stale-globs` flag -- each item's stale glob rewritten to its package path and
-    each live lease retargeted (B-stale-globs-after-split-wave). A stale glob the fix could
-    not rewrite is a PROBLEM: the caller asked for a rewrite and it did not happen."""
+def _stale_glob_section(
+    repo: Path, cfg, st, agent: str, fix: bool, problems: list[str], notes: list[str]
+) -> None:
+    """The stale-package-glob part of `doctor`, appended onto ``problems``/``notes``: the
+    notes, or -- the `--fix-stale-globs` flag -- each item's stale glob rewritten to its
+    package path and each live lease retargeted (B-stale-globs-after-split-wave). A stale
+    glob the fix could not rewrite is a PROBLEM: the caller asked for a rewrite and it did
+    not happen."""
     if fix:
-        return _apply_stale_globs(repo, cfg, st, agent)
-    return [], _stale_glob_notes(repo, st)
+        p, n = _apply_stale_globs(repo, cfg, st, agent)
+    else:
+        p, n = [], _stale_glob_notes(repo, st)
+    problems += p
+    notes += n
 
 
 def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list[str]]:
@@ -439,9 +445,7 @@ def doctor(
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
-    _fix_problems, _fix_notes = _stale_glob_section(repo, cfg, st, agent, fix_stale_globs)
-    problems += _fix_problems
-    notes += _fix_notes
+    _stale_glob_section(repo, cfg, st, agent, fix_stale_globs, problems, notes)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
