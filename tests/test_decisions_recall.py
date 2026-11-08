@@ -113,6 +113,9 @@ def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
     assert code == OK, code
     assert "path matching could not run" in out, out
     assert "Restart window" in out, out
+    # The path-scoped decision governs `ddflow/**` but cannot be matched against an
+    # empty glob set, so it is not listed as if it governed -- the note says why.
+    assert "Engines share the harness" not in out, out
 
 
 def test_the_brief_carries_the_governing_decisions(proj):
