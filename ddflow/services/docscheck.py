@@ -87,6 +87,13 @@ _REGISTERS = ("add_parser", "add_subparsers", "click.", "typer.", ".command(", "
 _DEF = re.compile(r"^\s*(?:async\s+)?def\s+([a-z][a-z0-9_]*)", re.M)
 _VERB_WORDS = 2  #: `<script> <verb>`
 
+#: The root options a tool accepts AFTER a subcommand as well as before it but mirrors
+#: onto every subparser with ``help=SUPPRESS``, so a verb's own ``--help`` never lists them
+#: (ddflow `_accept_global_options_anywhere` mirrors ``--repo``, ``--agent`` and ``--json``,
+#: B9811d8617c). A mention like `ddflow next --json` reads as a flag `ddflow next --help`
+#: omits; a global option accepted after the subcommand is not a missing flag (B1da555743c).
+_GLOBAL_FLAGS = ("--json", "--agent", "--repo")
+
 _EXT = (
     "py|md|rst|adoc|toml|json|jsonl|yml|yaml|sh|txt|cfg|ini|lock|rs|go|ts|tsx|js|jsx|html|css|"
     "c|h|cpp|hpp|java|kt|swift|php|rb|pl|lua|sql|xml|csv|tsv|log|svg|png|jpg|jpeg|gif|webp|ico|pdf|"
@@ -413,7 +420,7 @@ class _Scan:
             if flag is None or self._owned(flag):
                 continue
             self.counts["verb_flags"] += 1
-            if flag not in flags:
+            if flag not in flags and flag not in _GLOBAL_FLAGS:
                 self.report.findings.append(
                     Finding(
                         "flag",
