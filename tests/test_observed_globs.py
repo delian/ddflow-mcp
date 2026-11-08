@@ -152,7 +152,9 @@ def test_mcp_form_quotes_a_path_with_a_space():
 def test_a_comma_in_a_glob_uses_the_json_list_form():
     call = OG.update_call("T", [], ["a,b/*"])
     assert """--globs '["a,b/*"]'""" in call  # CLI half: the JSON list form
-    assert """ddflow_task action=update id=T globs='["a,b/*"]'""" in call  # MCP half (whole call, not a substring of the CLI form)
+    assert (
+        """ddflow_task action=update id=T globs='["a,b/*"]'""" in call
+    )  # MCP half (whole call, not a substring of the CLI form)
 
 
 def test_the_json_list_form_round_trips_through_the_globs_parser():
