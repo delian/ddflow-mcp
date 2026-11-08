@@ -1,2 +1,3 @@
 {"agent":"recover-f157","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e7ae2a992de04146b81756b3c","kind":"ddflow.seen","lamport":155111,"schema":1,"subject":"ddflow","ts":"2026-11-08T14:03:30.148761Z"}
 {"agent":"recover-f157","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it"},"id":"e637c63b15c7bf3e8d929a4af","kind":"job.ended","lamport":155112,"schema":1,"subject":"J49b0fc83d4","ts":"2026-11-08T14:03:30.192864Z"}
+{"agent":"recover-f157","data":{"by":"recover-f157","event":"e9423aad5d843cf6093360dea","holder":"bg68","note":"salvaged"},"id":"e549c26e51994a07270d0db1f","kind":"lease.released","lamport":155120,"schema":1,"subject":"fix-Bf157c33ba2","ts":"2026-11-08T14:04:04.073426Z"}
