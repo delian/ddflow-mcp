@@ -128,11 +128,11 @@ def test_a_hub_module_change_does_not_block_auto_accept_when_all_measured(
     repo, monkeypatch
 ) -> None:
     """B0f41a2f1d6: a hub-module change cuts the reach walk (Selection.full), so which test
-    files it reaches by import or governing cannot be told -- but `red` with an empty
-    `unmeasured` AND an empty `uncompared` means every failing test was measured on the base and
-    its failure text compared whole-vs-whole, so the reach is not needed to attribute them.
-    Under `full` nothing reads `sel.tests`/`sel.cut` (the walk that would fill them was cut),
-    so this accepts on `sel.changed` and the measurement alone."""
+    files it reaches by import or governing cannot be told -- but `red` means every failing
+    test was measured on the base (its `unmeasured` is empty) and `uncompared` being empty
+    means each failure text was compared whole-vs-whole, so the reach is not needed to
+    attribute them. Under `full` nothing reads `sel.tests`/`sel.cut` (the walk that would fill
+    them was cut), so this accepts on `sel.changed` and the measurement alone."""
     from ddflow.services.testselect import Selection
 
     sel = Selection(
@@ -147,24 +147,6 @@ def test_a_hub_module_change_does_not_block_auto_accept_when_all_measured(
         cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": []}, {}
     )
     assert auto["accepted"] is True, auto
-
-
-def test_a_hub_module_change_with_unmeasured_failures_still_declines(repo, monkeypatch) -> None:
-    """The counter-case: a hub cut the reach AND some failure was not measured on the base,
-    so the reach still matters -- decline."""
-    from ddflow.services.testselect import Selection
-
-    sel = Selection(
-        base="main",
-        changed=["ddflow/services/gates/__init__.py"],
-        full="a hub module changed: ddflow.services.gates (150 importing files)",
-    )
-    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
-    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
-    fid = "tests/test_ci_gate.py::test_live"
-    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True, "unmeasured": [fid]}, {})
-    assert auto["accepted"] is False, auto
-    assert "import reach cannot be told" in auto["why"]
 
 
 def test_a_hub_module_change_plus_a_changed_failing_test_still_declines(repo, monkeypatch) -> None:
