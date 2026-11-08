@@ -100,7 +100,9 @@ def test_a_shebang_change_is_not_trivial(repo):
     """rubber_duck/grok: a shebang (`#!...`) is a comment the AST ignores but which changes
     which interpreter runs the file, so it must never read as trivial."""
     cfg = _with_ci(Config.load(repo))
-    it = _worktree_change(repo, "src/mod.py", "#!/usr/bin/env python3\nx = 1\n", "#!/usr/bin/env python2\nx = 1\n")
+    it = _worktree_change(
+        repo, "src/mod.py", "#!/usr/bin/env python3\nx = 1\n", "#!/usr/bin/env python2\nx = 1\n"
+    )
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
 
 
@@ -134,9 +136,7 @@ def test_a_mode_change_on_a_glob_named_file_is_not_trivial(repo):
     assert code == 0, out + err
     it = _state(repo).items["T1"]
     tree = W.load_path(repo, it.worktree)
-    subprocess.run(
-        ["git", "-C", str(tree), "add", "--chmod=+x", ":(literal)src/a*.py"], check=True
-    )
+    subprocess.run(["git", "-C", str(tree), "add", "--chmod=+x", ":(literal)src/a*.py"], check=True)
     subprocess.run(
         ["git", "-C", str(tree), "commit", "-qm", "chmod +x the *-named file"], check=True
     )
@@ -245,7 +245,7 @@ def test_docs_only_is_trivial_too(cfg):
 def test_the_trivial_declaration_is_recorded_on_the_verdict(repo):
     """The no-behavior-change declaration shows on the verdict for a trivial change."""
     cfg = _with_ci(Config.load(repo))
-    it = _worktree_change(repo, "src/mod.py", "x=1\n", "x = 1\n")
+    _worktree_change(repo, "src/mod.py", "x=1\n", "x = 1\n")
     v = CO.verdict(_state(repo), cfg, "T1", repo=repo)
     assert v.trivial, "a trivial change records its no-behavior-change declaration"
 

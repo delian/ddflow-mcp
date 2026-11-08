@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Callable
+from pathlib import Path
 
 from ..config import Config
 from ..core.bookkeeping import is_state
@@ -14,7 +15,6 @@ from ..core.globs import inside
 from ..core.model import Item
 from ..infra import git as GIT
 from ..infra import worktree as W
-
 
 #: The gates a TRIVIAL change (format-only / docs / comment, hence behavior-preserving)
 #: skips: the two cross-family review gates and the whole-suite ci gate. Everything else
