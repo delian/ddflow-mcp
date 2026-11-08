@@ -147,3 +147,6 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
     assert any(loc.startswith("x.py") for loc in locs), gate[
         "evidence"
     ]  # chunk 1 survives the resume
+    assert any(loc.startswith("y.py") for loc in locs), gate[
+        "evidence"
+    ]  # chunk 2's finding is kept
