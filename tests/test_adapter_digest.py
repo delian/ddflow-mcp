@@ -25,7 +25,7 @@ def digest_cases(d) -> None:
 
 
 def _real(monkeypatch):
-    from ddflow.core import digest
+    from ddflow.adapters import digest
 
     return digest
 

@@ -83,7 +83,7 @@ def _justification(repo: Path, cfg, st, it, a: dict[str, Any]) -> tuple[bool, st
     if not cfg.review.require_new_work:
         return True, "not required ([review].require_new_work = false)"
     if a["chunks"] or a["commit"] or a["base"] or a["delta"] or a["full"] or a["force"]:
-        return True, "asked for explicitly"
+        return True, "asked for explicitly" + _repeat_of_terminated(it, a["gate"])
     gate = a["gate"]
     last = _last_review(it, gate)
     if not last.get("reviewed_head"):
@@ -102,6 +102,18 @@ def _justification(repo: Path, cfg, st, it, a: dict[str, Any]) -> tuple[bool, st
     if moved:
         return True, f"reviewed paths changed ({_name_paths(moved)})"
     return False, "reviewed paths unchanged, all findings triaged"
+
+
+def _repeat_of_terminated(it, gate: str) -> str:
+    """' (repeats the review terminated by SIGTERM)' when the gate's latest recorded run was
+    cut short by a signal, so an explicit re-review (`--force --reason`, `--full`, ...) does
+    not look like a fresh round; '' otherwise. The terminated record's `terminated_by` is
+    set by `_terminated_gate` (bug B-ddflow-review-force-duplicate-round)."""
+    runs = _review_runs(it, gate)
+    if not runs:
+        return ""
+    signame = str((runs[-1].evidence or {}).get("terminated_by") or "")
+    return f" (repeats the review terminated by {signame})" if signame else ""
 
 
 def _nothing_new(it, a: dict[str, Any], ok: bool, why: str) -> str:

@@ -21,6 +21,7 @@ from ...services.approvals import overrides as OVR
 from ...services.completion import changed_paths, readme_report, refine_stale_notes
 from ...services.gates import measured as R
 from ...services.gates import running as RUN
+from ...services.gates.testcmd import coverage_of
 from ...services.guidance import inject as GI
 from ...views.markdown import new_reports_line
 from .._base import _load
@@ -31,6 +32,33 @@ from ._timeout import _with_run_timeout
 def _recorded_since(rec, started_at: str) -> bool:
     """Does the gate record ``rec`` hold an outcome written at or after ``started_at``?"""
     return bool(rec and rec.outcome and clock.epoch(rec.at) >= clock.epoch(started_at))
+
+
+def _partial_line(it, gate: str) -> str:
+    """A partial gate's note: it RAN, so calling it "did not run" erases the part it did
+    (bug B-gate-status-partial-did-not-run). The recorded coverage, else the runner's own
+    counts from its summary lines, else "unknown"."""
+    ev = (it.gates[gate].evidence or {}) if it.gates.get(gate) else {}
+    coverage = ev.get("coverage")
+    if coverage is None or coverage == "":
+        coverage = coverage_of(ev)
+    figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
+    return f"{gate} ran only partially (coverage{figure})"
+
+
+def _coverage_notes(it, s) -> list[str]:
+    """The NOTE lines for the gates that did not reach a pass: the never-ran ones apart from
+    the partial ones, whose coverage or counts stand (bug B-gate-status-partial-did-not-run)."""
+    if not s.unavailable:
+        return []
+    notes = []
+    never = [g for g in s.unavailable if g not in set(s.partial)]
+    if never:
+        notes.append(
+            f"\n  NOTE: {', '.join(never)} did not run. That is a gap in coverage, not a pass."
+        )
+    notes.extend(f"\n  NOTE: {_partial_line(it, g)}" for g in s.partial)
+    return notes
 
 
 def sweep_dead_runs(repo: Path, agent: str, item: str = "") -> list[str]:
@@ -162,11 +190,8 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         )
         if governing.text:
             lines.append("\n" + governing.text.rstrip())
-    if s.unavailable:
-        lines.append(
-            f"\n  NOTE: {', '.join(s.unavailable)} did not run. "
-            f"That is a gap in coverage, not a pass."
-        )
+    _lines = _coverage_notes(it, s)
+    lines.extend(_lines)
 
     readme = readme_report(st, cfg, item, repo=repo)
     if readme:

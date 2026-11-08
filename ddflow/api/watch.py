@@ -163,7 +163,9 @@ def watch(  # noqa: PLR0913 -- one keyword per facet of the target and the wait
     def done(extra: dict[str, Any], reason: str = "") -> dict[str, Any]:
         """The wire body, with the wake: why this returned, the resume token, and whatever
         the lane's inbox held (delivered here, fenced)."""
-        got = IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s) or {}
+        got = (
+            IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s, retain_s=cfg.lease.inbox_retain_s) or {}
+        )
         why = reason if reason == "ready" else (got.get("reason") or reason)
         body = _report(t, started, missed, extra)
         body["wake"] = {"reason": why, "token": body["token"], "messages": got.get("messages", [])}

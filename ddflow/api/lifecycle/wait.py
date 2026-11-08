@@ -371,7 +371,7 @@ def _from_token(token: str, item: str, phase: str, kind: str, lease: str, globs)
 def _wake_data(repo: Path, me: str, cfg, v: dict[str, Any], resume: str):
     """(the delivered inbox wake or None, the `wake` block of a wait's result: why it
     returned, the resume token, the fenced messages)."""
-    got = IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s)
+    got = IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s, retain_s=cfg.lease.inbox_retain_s)
     why = (got or {}).get("reason") or {"ready": "ready", "hopeless": "hopeless"}.get(
         v["status"], "timeout"
     )

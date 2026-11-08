@@ -52,21 +52,32 @@ def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
 
 
 def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, agent: str):
-    """(assessment, stamp, refusal): a configuration problem refuses first, then what
+    """(assessment, stamp, pending, refusal): a configuration problem refuses first, then what
     `[merge].require_gates` makes of the unsettled gates.
-    The approval is spent inside `MF.authorise`, so the caller runs this after every other refusal."""
+    An agent's approval is only VALIDATED here (`MF.authorise` checks it without spending);
+    ``pending`` names the id to spend via `MF.spend` once the git landing has landed, so a
+    landing that fails on a conflict or hook does not consume a single-use approval
+    (B527b0a518c). "" for a person's force and for a standing-policy answer (already consumed)."""
     bad = F.problems(cfg)
     if bad:
-        return None, None, O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+        return (
+            None,
+            None,
+            "",
+            O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[]),
+        )
     gates = MF.assess(repo, cfg, st, item)
     if not gates.refuses:
-        return gates, None, None
-    stamp, why = MF.authorise(log, cfg, item, gates, force=force, approval=approval, agent=agent)
+        return gates, None, "", None
+    stamp, why, pending = MF.authorise(
+        log, cfg, item, gates, force=force, approval=approval, agent=agent
+    )
     if not why:
-        return gates, stamp, None
+        return gates, stamp, pending, None
     return (
         gates,
         None,
+        "",
         O.refused("worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)),
     )
 
@@ -123,6 +134,20 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+
+
+def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: str) -> dict | None:
+    """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
+    the approval id to spend, and is "" unless `authorise` validated a real `--approval <id>`;
+    a person's `--force` and a standing-policy stamp pass through untouched. A spend that fails
+    after a concurrent consumer (or expiry between validation and spend) returns a STRUCTURED
+    marker (`spend: "failed"`) -- never a valid-looking proof, and never a silent drop."""
+    if not pending:
+        return stamp
+    spent = MF.spend(log, cfg, item, gates, pending)
+    return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
+
+
 def _commit_shards_before_merge(log, cfg, item: str) -> None:
     """Commit the primary's uncommitted event shards before the git merge, unless the
     strategy is a fast-forward: landing them on the target drifts it past the branch's fork
@@ -237,22 +262,20 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     remote_base = f"{cfg.flow.remote}/{wt.base}"
     if (wrong := _wrong_base(st, it, wt, remote_base, item)) is not None:
         return wrong
-    if cfg.flow.integration == "pr":
-        if borrowed:
-            return O.refused(
-                "worktree.merged",
-                f"{item} was claimed without a worktree, and a pull request is opened from "
-                f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
-                f"or claim {item} with a worktree.",
-                id=item,
-                sha="",
-                dirty=[],
-            )
-        return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
-    # Last of the refusals: an agent's approval is spent here, so no refusal above is its cost.
-    gates, forced_by, over = _override(repo, cfg, log, st, item, force, approval, agent)
+    # The require_gates check runs for EVERY integration mode (Bc6c07dfe52): under `pr` it
+    # must still refuse (mode `refuse`) or name the unmet gates (mode `warn`) instead of
+    # opening a request past them. An agent's approval is only checked here; the non-PR path
+    # spends it after the git landing below actually landed.
+    gates, forced_by, pending_approval, over = _override(
+        repo, cfg, log, st, item, force, approval, agent
+    )
     if over is not None:
         return over
+    if cfg.flow.integration == "pr":
+        return _open_request_outcome(
+            repo, cfg, log, it, wt, item, gates, forced_by, pending_approval, agent,
+            borrowed=borrowed, message=message, model=model, dirty=dirty,
+        )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     # The primary keeps its event shards uncommitted between doors; a branch that also
@@ -319,6 +342,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
+    # Spend an agent's approval only now, once the landing landed: a person's `--force` and a
+    # standing-policy answer have no approval to spend (pending_approval == ""), and a failed
+    # landing returned above before reaching here (B527b0a518c).
+    forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
     _record_forced(log, item, sha, gates, forced_by, agent)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.
@@ -611,6 +638,36 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
         and p not in fresh
         and not any(path_in_glob(p, g) for g in it.globs)
     ]
+
+
+def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
+    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, pending_approval: str, agent: str, *, borrowed: bool, message: str, model: str, dirty: list[str]
+) -> O.Outcome:
+    """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
+    opening a request past unsettled required gates is never silently skipped. A forced
+    request spends the approval and records a `merge.forced` event only when the request
+    actually opened (the branch head is the proposed landing, `pr sync` lands it)."""
+    if borrowed:  # claimed --no-worktree
+        return O.refused(
+            "worktree.merged",
+            f"{item} was claimed without a worktree, and a pull request is opened from "
+            f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
+            f"or claim {item} with a worktree.",
+            id=item,
+            sha="",
+            dirty=[],
+        )
+    req = _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
+    if req.exit != 0:
+        return req  # a refused/unavailable open is not an override to record
+    if gates.unmet:
+        req.data["awaiting_gates"] = list(gates.awaiting())
+    if forced_by is not None:
+        if pending_approval:
+            forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
+        _record_forced(log, item, W.head_sha(wt.path) or "", gates, forced_by, agent)
+        req.data["forced"] = True
+    return req
 
 
 def _open_request(

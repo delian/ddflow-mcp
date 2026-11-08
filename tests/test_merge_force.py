@@ -141,7 +141,7 @@ def test_the_approval_is_single_use(repo, refuse):
     assert _merge(repo, force=True, approval=ask).exit == 0
     assert _asks(repo)[ask]["used"] == 1
     # same command, same agent, same gates: only the spend count differs
-    stamp, why = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    stamp, why, _pending = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
     assert stamp is None and "is spent" in why, why
     assert _asks(repo)[ask]["used"] == 1
 
@@ -193,8 +193,103 @@ def test_the_knob_reads_refuse_from_config_and_agent_force_still_refuses(repo):
     assert not _events(repo, "worktree.merged")
 
 
+def test_a_failed_git_landing_does_not_spend_the_approval(repo, refuse, monkeypatch):
+    """B527b0a518c: an agent's single-use approval is spent only when the landing lands. A
+    git landing that fails (a conflict) must leave the approval unspent, so the agent can
+    retry once the conflict is resolved, instead of the `merge --force --approval` spending
+    it before git ran."""
+    from ddflow.infra import git as G
+    from ddflow.infra import worktree as W
+
+    _claimed(repo)
+    ask = _approved_ask(repo)
+    monkeypatch.setattr(
+        W,
+        "merge",
+        lambda *_a, **_kw: G.GitResult(W.GIT_REFUSED, "", "conflict: a.py", attempted=True),
+    )
+    out = _merge(repo, force=True, approval=ask)
+    assert out.exit != 0, out.reason
+    assert not _events(repo, "worktree.merged")
+    assert _asks(repo)[ask]["used"] == 0
+
+
+def test_authorise_checks_but_spend_records_the_use(repo, refuse):
+    """B527b0a518c: `authorise` validates the approval without recording a use; the landing's
+    `spend` records the one use. Between the two a landing may still fail, which is the whole
+    point -- a spent-then-failed is what this bug forbids."""
+    from ddflow.api._base import _load
+
+    _claimed(repo)
+    ask = _approved_ask(repo)
+    log, cfg, st = _load(repo, "bot")
+    a = MF.assess(repo, cfg, st, "T1")
+    proof, why, pending = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    assert proof and not why and pending == ask
+    assert _asks(repo)[ask]["used"] == 0  # validation alone does not spend
+    assert MF.spend(log, cfg, "T1", a, ask).ok
+    assert _asks(repo)[ask]["used"] == 1  # the landing's spend records the single use
+
+
+def test_a_person_or_policy_stamp_is_returned_without_a_spend(repo, refuse):
+    """B527b0a518c regression (roborev): only a real `--approval <id>` is spent after landing;
+    a person's `--force` and a standing-policy stamp pass to `merge.forced` untouched, never
+    to `spend` (which would refuse the empty id and overwrite the proof)."""
+    from importlib import import_module
+
+    M = import_module("ddflow.api.lifecycle.merge")
+
+    person = {"by": "person"}
+    policy = {
+        "ask": "Qx",
+        "approved_by": "policy:auto-after-retries",
+        "via": "policy",
+        "digest": "d",
+    }
+    assert M._spend_after_land(None, None, "T1", None, person, "") is person
+    assert M._spend_after_land(None, None, "T1", None, policy, "") is policy
+
+
+def test_a_failed_post_landing_spend_is_not_stamped_as_a_proof(repo, refuse, monkeypatch):
+    """B527b0a518c (roborev): a spend that fails after the landing returns a structured
+    `spend: "failed"` marker -- not a valid-looking proof, and not a silent drop."""
+    from importlib import import_module
+
+    from ddflow.services.approvals import consume as CN
+
+    M = import_module("ddflow.api.lifecycle.merge")
+    monkeypatch.setattr(M.MF, "spend", lambda *a, **k: CN.Decision(False, "refusing: is spent"))
+    got = M._spend_after_land(None, None, "T1", None, "proof", "Qx")
+    assert got == {"ask": "Qx", "spend": "failed", "note": "refusing: is spent"}
+
+
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
-    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "")
+    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (
+        None,
+        "",
+        "",
+    )
     warn = MF.Assessment(mode="warn", unmet={"ci": "not run"})
-    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (None, "")
+    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (
+        None,
+        "",
+        "",
+    )
+
+
+def test_pr_mode_still_refuses_unsettled_gates_before_opening_a_request(repo, refuse, monkeypatch):
+    """Bc6c07dfe52: [merge].require_gates=refuse must refuse even under [flow].integration=pr,
+    before `_open_request` opens a request past the unsettled gates (which, unfixed, returned
+    through the PR branch ahead of the require_gates check)."""
+    from importlib import import_module
+
+    M = import_module("ddflow.api.lifecycle.merge")
+    _claimed(repo)
+    run_cli(repo, "config", "flow.integration", "pr")
+    reached = []
+    monkeypatch.setattr(M, "_open_request", lambda *a, **k: reached.append(1) or "REACHED")
+    out = _merge(repo)
+    assert out.exit == 3, out.reason
+    assert "require_gates = refuse" in out.reason
+    assert not reached  # the request path must never be entered

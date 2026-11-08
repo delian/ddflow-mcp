@@ -18,6 +18,7 @@ SAMPLE = {
     "needs": ["a"],
     "add_needs": ["b"],
     "remove_needs": ["c"],
+    "allow_unknown_needs": True,
     "add_tags": ["x"],
     "remove_tags": ["y"],
     "globs": ["g/**"],
@@ -56,7 +57,7 @@ def test_cli_and_declared_paths_build_the_same_edit(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     argv = [
         "update", "T1", "--title", "t", "--body", "b", "--append-body", "n", "--needs", "a",
-        "--add-needs", "b", "--remove-needs", "c", "--add-tags", "x",
+        "--add-needs", "b",         "--remove-needs", "c", "--allow-unknown-needs", "--add-tags", "x",
         "--remove-tags", "y", "--globs", "g/**", "--add-globs", "h/**",
         "--remove-globs", "i/**", "--tags", "z", "--priority", "7",
         "--line", "v2", "--resources", "gpu:1", "--worktree", "/w", "--queue", "--landed", "abc123",

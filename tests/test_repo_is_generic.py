@@ -40,6 +40,18 @@ EXAMPLES = {
     # a fabricated container-host address; spelled in pieces, as every address in this
     # file is, because the check scans this file too
     "tests/test_container.py": {"10.0.0" + ".5"},
+    # redaction/boundary fixtures: each test still asserts the address does NOT leak
+    # through, so the literal is a fixture here, never a committed host.
+    "tests/test_export_security.py": {"10.1.2" + ".3"},
+    "tests/test_harness_cli_drivers.py": {
+        "10.0.0" + ".5",
+        "10.1.2" + ".3",
+        "10.9.8" + ".7",
+        "192.168.0" + ".9",
+    },
+    "tests/test_model_catalog.py": {"10.0.0" + ".5"},
+    "tests/test_swarm_remote.py": {"192.168.4" + ".5"},
+    "tests/test_swarm_seedpack.py": {"192.168.77" + ".33"},
 }
 
 #: A dotted quad not glued to more digits or octets. A full stop that ENDS a sentence

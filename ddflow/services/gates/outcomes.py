@@ -10,6 +10,7 @@ from typing import Any
 from ...config import Config
 from ...core import blobref as B
 from ...core.model import OUTCOME_MARK, State
+from .. import gate_accept as GA
 from .. import logblobs as LB
 from ..docsonly import pipeline_by_diff
 from .defs import GateDef, pipeline_for, required_gates
@@ -39,9 +40,16 @@ class GateStatus:
     done: list[str]
     current: str
     blocked_by: list[str]
+    #: Pipeline gates recorded `unavailable` OR `partial` -- a coverage gap of either kind
+    #: (`_coverage_note` separates the two: one never ran, one ran partly).
     unavailable: list[str]
     skipped: list[str]
     complete: bool
+    #: Pipeline gates recorded `partial` (ran, but not to a pass): shown apart from the
+    #: gates that never ran, with the coverage or counts their evidence recorded
+    #: (bug B-gate-status-partial-did-not-run). A subset of ``unavailable`` (kept whole for
+    #: JSON callers), so it is not put on the wire itself.
+    partial: list[str] = field(default_factory=list, metadata={"internal": True})
     #: Pipeline gates with NO recorded outcome at all. Silence is its own state: it is
     #: neither a pass nor a failure, and `gates.require_outcome` decides whether it
     #: blocks completion.
@@ -320,10 +328,14 @@ def status(
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]
-    settled = {g: g in na or it.gate_satisfied(g, g in required) for g in gates}
+    settled = {
+        g: g in na or it.gate_satisfied(g, g in required) or GA.accepted(state, it, g, cfg).ok
+        for g in gates
+    }
     done = [g for g in gates if settled[g] and g not in na]
     blocked = _with_outcome(rows, "failed")
     unavail = _with_outcome(rows, "unavailable", "partial")
+    partial = _with_outcome(rows, "partial")
     skipped = _with_outcome(rows, "skipped")
     current = next((g for g in gates if not settled[g]), "")
     complete = all(settled.values())
@@ -334,6 +346,7 @@ def status(
         current=current,
         blocked_by=blocked,
         unavailable=unavail,
+        partial=partial,
         skipped=skipped,
         complete=complete,
         rows=rows,

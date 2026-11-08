@@ -1,3 +1,0 @@
-[knob]
-"ddflow/api/reporting/health.py:_DOCTOR_PAIR_CAP" = 'reporting.health.doctor_pair_cap'
-"ddflow/api/reporting/health.py:_DOCTOR_SWEEP_MAX" = 'reporting.health.doctor_sweep_max'

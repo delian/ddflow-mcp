@@ -172,12 +172,21 @@ def _file(
 
 
 def _linked(repo: Path, agent: str, ids: list[str]) -> str:
-    """The open bug whose text already names every one of ``ids`` (dedup by test id), or ""."""
+    """The open bug to link the whole failing set to, or "" when some id no open bug names.
+
+    Dedup is per id, not per set (B-baseline-red-filer-piles-up): an id already named by ANY
+    open bug is that bug's, so a run whose ids are each owned by (possibly different) open
+    bugs files nothing new. A bug naming the whole set is returned when there is one, else
+    the open bug owning the first id; each id was already linked when its own bug was filed."""
     _log, _cfg, st = _load(repo, agent)
-    for b in st.bugs.values():
-        if not (b.fixed_at or b.invalid_at) and all(_names(b.summary, i) for i in ids):
+    open_bugs = [b for b in st.bugs.values() if not (b.fixed_at or b.invalid_at)]
+    for i in ids:
+        if not any(_names(b.summary, i) for b in open_bugs):
+            return ""
+    for b in open_bugs:
+        if all(_names(b.summary, i) for i in ids):
             return b.id
-    return ""
+    return next(b.id for b in open_bugs if _names(b.summary, ids[0]))
 
 
 def _names(text: str, test_id: str) -> bool:

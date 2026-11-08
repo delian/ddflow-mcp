@@ -351,6 +351,7 @@ break_on_timeout = false
 inbox_max_chars = 2000
 inbox_max_pending = 50
 inbox_ttl_s = 86400
+inbox_retain_s = 86400
 wait_cap_s = 1800
 reclaim_policy = "report"
 resume_own = true
@@ -374,6 +375,7 @@ verify_output_lines = 12
 verify_load_ratio = 1.0
 
 [locks]
+mode = "enforce"
 undeclared_write = "warn"
 suggest_globs = true
 suggest_history = 30
