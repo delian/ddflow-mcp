@@ -141,7 +141,7 @@ def test_the_approval_is_single_use(repo, refuse):
     assert _merge(repo, force=True, approval=ask).exit == 0
     assert _asks(repo)[ask]["used"] == 1
     # same command, same agent, same gates: only the spend count differs
-    stamp, why = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    stamp, why, pending = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
     assert stamp is None and "is spent" in why, why
     assert _asks(repo)[ask]["used"] == 1
 
@@ -222,15 +222,29 @@ def test_authorise_checks_but_spend_records_the_use(repo, refuse):
     ask = _approved_ask(repo)
     log, cfg, st = _load(repo, "bot")
     a = MF.assess(repo, cfg, st, "T1")
-    proof, why = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
-    assert proof and not why
+    proof, why, pending = MF.authorise(log, cfg, "T1", a, force=True, approval=ask, agent="bot")
+    assert proof and not why and pending == ask
     assert _asks(repo)[ask]["used"] == 0  # validation alone does not spend
     assert MF.spend(log, cfg, "T1", a, ask).ok
     assert _asks(repo)[ask]["used"] == 1  # the landing's spend records the single use
 
 
+def test_a_person_or_policy_stamp_is_returned_without_a_spend(repo, refuse):
+    """B527b0a518c regression (roborev): only a real `--approval <id>` is spent after landing;
+    a person's `--force` and a standing-policy stamp pass to `merge.forced` untouched, never
+    to `spend` (which would refuse the empty id and overwrite the proof)."""
+    from importlib import import_module
+
+    M = import_module("ddflow.api.lifecycle.merge")
+
+    person = {"by": "person"}
+    policy = {"ask": "Qx", "approved_by": "policy:auto-after-retries", "via": "policy", "digest": "d"}
+    assert M._spend_after_land(None, None, "T1", None, person, "") is person
+    assert M._spend_after_land(None, None, "T1", None, policy, "") is policy
+
+
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
-    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "")
+    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "", "")
     warn = MF.Assessment(mode="warn", unmet={"ci": "not run"})
-    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (None, "")
+    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (None, "", "")
