@@ -31,15 +31,18 @@ def _trivial_pipeline(gates: list[str]) -> list[str]:
 
 def _uncommitted_not_in(tree: Path, paths: list[str]) -> bool:
     """Uncommitted work the committed-diff path list cannot name: an untracked non-state
-    file, or a dirty TRACKED file outside ``paths``. `trivial` is only a claim about a
-    clean, committed tree, so any such work fails closed (rubber_duck)."""
+    file, or a dirty TRACKED or staged file -- in ``paths`` or not. `trivial` is only a claim
+    about a clean, committed tree, so any such work fails closed (rubber_duck, critic)."""
     if any(not is_state(p) for p in (GIT.files(tree, "untracked") or ())):
         return True
     # `git diff HEAD` compares WORKTREE to HEAD and misses an index-only staged edit (git add,
-    # then restore the worktree). Compare both the worktree and the index to HEAD.
+    # then restore the worktree). Compare both the worktree and the index to HEAD. ANY path
+    # here read as differing from HEAD -- in ``paths`` or not -- is uncommitted work, so it
+    # fails closed (a staged logic edit to a file the committed change also touches must not
+    # ride a comment-only commit past the trivial tier; grok/deepseek critic).
     for args in (("--name-only",), ("--cached", "--name-only")):
         dirty = W.git(tree, "diff", "HEAD", *args)
-        if not dirty.ok or any(p for p in dirty.out.splitlines() if p and p not in paths):
+        if not dirty.ok or dirty.out.splitlines():
             return True
     return False
 

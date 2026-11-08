@@ -254,3 +254,27 @@ def test_no_readable_or_empty_diff_is_never_trivial(cfg):
     it = Item(id="X", kind="task", title="t", globs=["src/**"])
     assert not diff_is_trivial(it, cfg, None, None)
     assert not diff_is_trivial(it, cfg, None, [])
+
+
+def test_a_staged_logic_edit_on_a_committed_path_is_not_trivial(repo):
+    """critic: a staged logic edit to a file the committed comment-only change ALSO touches
+    (its path is in ``paths``) is uncommitted work and must not ride the trivial tier; the
+    earlier scan exempted paths already in ``paths``, so the logic edit was missed."""
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    _commit(repo, "src/foo.py", "x = 1\n")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    (tree / "src/foo.py").write_text("x=1\n")  # committed: format-only of "x = 1\n", trivial
+    subprocess.run(["git", "-C", str(tree), "add", "src/foo.py"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "format"], check=True)
+    (tree / "src/foo.py").write_text("x = 2\n")  # STAGED logic edit to the SAME committed path
+    subprocess.run(["git", "-C", str(tree), "add", "src/foo.py"], check=True)
+    subprocess.run(
+        ["git", "-C", str(tree), "restore", "--source=HEAD", "--worktree", "src/foo.py"],
+        check=True,
+    )
+    assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
