@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ...adapters.clock import DEFAULT as CLOCK
+from ...core import globs
 from ...core.digest import content_digest as digest
 from ...infra import fsio
 from ...infra.tomlcfg import atomic_write
@@ -157,16 +158,14 @@ def test_files_of(ids: list[str]) -> list[str]:
     return sorted({i.split("::", 1)[0] for i in ids})
 
 
-def _always_guards(cfg, tree: Path) -> set[str]:
-    """The always-run guard files in ``tree`` (`[ci].always_tests` and `ALWAYS = True`): their
-    input is the whole code base, so ANY change reaches them, and their presence in the
-    selection is never evidence this change caused the failure. Lazy import: `ci_scope`
-    imports `testscope` -> `gates` (this package), so a module-level import would cycle."""
-    if getattr(cfg, "ci", None) is None:
-        return set()
-    from ..ci_scope import always_tests
-
-    return set(always_tests(cfg, tree))
+def _always_guard_globs(cfg) -> tuple[str, ...]:
+    """The `[ci].always_tests` globs: the guard files that run for every item whatever the
+    change reaches, so their presence in the selection is never evidence this change caused
+    the failure (B-baseline-red-reach-counts-whole-tree-guards). Matching only their DECLARED
+    globs (no import of `ci_scope`: a module-level import would cycle through `gates`, a local
+    one is a deferred import the architecture ratchet forbids)."""
+    ci = getattr(cfg, "ci", None)
+    return tuple(ci.always_tests) if ci is not None else ()
 
 
 def auto_decision(
@@ -220,7 +219,7 @@ def auto_decision(
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
-    always = _always_guards(cfg, tree)
+    always = _always_guard_globs(cfg)
     reached = {t.path for t in (*sel.tests, *sel.cut)}
     # The non-full path has the reach guard the `full` branch lacks, so it does NOT also consult
     # `uncompared`: a failing test whose text was missing (an indeterminate "new offender") is
@@ -229,7 +228,8 @@ def auto_decision(
     inside = [
         f
         for f in test_files_of(ids)
-        if f in changed or (f in reached and f not in governs and f not in always)
+        if f in changed
+        or (f in reached and f not in governs and not any(globs.match(f, g) for g in always))
     ]
     if inside:
         return {
