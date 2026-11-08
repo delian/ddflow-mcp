@@ -407,6 +407,14 @@ def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
     return ordered
 
 
+def _heard_first(r) -> tuple[int, int]:
+    """A reviewer's rank as the identifying pass: one that heard part of the diff (REVIEWED
+    or PARTIAL) outranks one that could not run (UNAVAILABLE/ERROR) -- the latter says
+    nothing about the change, and naming it over a PARTIAL peer that found a finding would
+    misstate coverage and hide the finding (bug B-review-worst-reviewer-misstates-coverage)."""
+    return (0 if getattr(r, "status", None) in (RV.REVIEWED, RV.PARTIAL) else 1, r.status)
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -418,7 +426,7 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     `complete` resolves it (`[agent].family`, else the session model). The reviewer's
     family is resolved as `review_tier` resolves it (declared family, else its model).
     """
-    best = min(results, key=lambda r: r.status)
+    best = min(results, key=_heard_first)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
     if cross:
