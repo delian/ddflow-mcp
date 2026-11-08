@@ -125,6 +125,16 @@ def test_an_answered_question_is_hopeless_not_an_approval(repo):
     assert out.exit == O.NOTHING and "not an approval" in out.reason
 
 
+def test_a_pending_question_is_hopeless_not_waited_for(repo):
+    # A question never answers "approved", so waiting cannot end spendable: refuse it up
+    # front (timeout_s=0 proves it never sleeps), like an unknown id.
+    cfg = Config()
+    log = _log(repo)
+    asked = E.request(log, cfg, subject="q", kind=E.QUESTION, text="?", ttl_s=3600)
+    out = A.wait(repo, approval=asked.id, timeout_s=0, agent="asker")
+    assert out.exit == O.NOTHING and "not an approval" in out.reason
+
+
 def test_a_use_ttl_lapsed_approval_is_hopeless_not_ready(repo):
     # An answer older than its use window (use_ttl_s) re-running the gated command cannot
     # spend: wait must not wake READY for it (consume._problem refuses the same row).

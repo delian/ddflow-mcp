@@ -104,10 +104,12 @@ def _judge_approval(st, ask_id: str, now: float) -> dict[str, Any]:
     row = asks_of(st).get(ask_id)
     if row is None:
         return {**out, "status": "hopeless", "why": f"no such approval request {ask_id}"}
+    if row["type"] != E.APPROVAL:
+        # A question, even a pending one, never answers "approved": waiting on it cannot end
+        # with a spendable grant, so refuse it up front like an unknown id.
+        return {**out, "status": "hopeless", "why": f"{ask_id} is not an approval request"}
     state = E.status(row, now)
     if state == E.ANSWERED:
-        if row["type"] != E.APPROVAL:
-            return {**out, "status": "hopeless", "why": f"{ask_id} is not an approval request"}
         if row["outcome"] != E.APPROVED:
             return {
                 **out,
