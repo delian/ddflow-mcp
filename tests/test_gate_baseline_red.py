@@ -579,9 +579,9 @@ def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
     whole reason agreed with the branch past the cut, so the id is RE-MEASURED on the base (the
     current code stores the whole reason) instead of being trusted either way."""
     from ddflow.api import gate_baseline as GB
+    from ddflow.services.flakes import LINE_CHARS
     from ddflow.services.gates import baseline as BL
     from ddflow.services.gates.defs import GateDef
-    from ddflow.services.flakes import LINE_CHARS
 
     _project(repo)
     whole = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"  # the branch's whole reason
