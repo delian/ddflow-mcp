@@ -54,7 +54,8 @@ def route(ask_id: str, canon: Canon, *, new: bool, chat: bool = False) -> str:
     return (
         f"{head} ({s.tier}, level L{s.min_level}+): the operator "
         f"approves it with `ddflow approvals approve {ask_id}` from their own terminal (or answers "
-        f"it over a channel they use); then re-run this command with --approval {ask_id}. It is "
+        f"it over a channel they use); then run `ddflow wait --approval {ask_id}` to block until "
+        f"the answer, and re-run this command with --approval {ask_id}. It is "
         f"single-use, bound to this exact command and its current state, and expires."
     )
 
