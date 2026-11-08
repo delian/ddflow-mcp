@@ -98,6 +98,25 @@ def test_run_reports_failed_when_a_fact_has_an_unknown_status(monkeypatch):
     assert result["checks"]["facts"]["status"] == "failed", result
 
 
+def test_run_reports_failed_when_a_fact_node_is_malformed(monkeypatch):
+    """A malformed fact NODE trips the `facts.problems` path of run(), the second (and
+    only other) way a fact problem is caught: no well-formed shipped descriptor ever
+    makes a real Harness produce one, so this pins that loop with a bare stand-in."""
+    from types import SimpleNamespace
+
+    from ddflow.services import harnessfacts
+
+    h = SimpleNamespace(
+        id="claude",
+        facts={"headless.argv": {"s": "bogus", "src": "u", "d": "2026-01-01"}},
+        hooks=None,
+    )
+    monkeypatch.setattr(harnessfacts, "rows", lambda _h, **k: [])
+    result = DC.run(h)
+    assert result["status"] == "failed", result
+    assert result["checks"]["facts"]["status"] == "failed", result
+
+
 def test_the_gap_set_only_shrinks():
     """A descriptor lacking a fixture for a declared check fails here until it has one (or the
     baseline is knowingly regenerated); a gap that was closed must leave the baseline."""
