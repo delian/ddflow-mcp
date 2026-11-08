@@ -305,6 +305,7 @@ def status(
     *,
     diff: DiffPaths | None = None,
     stale_notes: Sequence[StaleNote] | None = None,
+    repo: Path | None = None,
 ) -> GateStatus:
     """Where is this item in its pipeline, and what is the next thing to do?
 
@@ -321,7 +322,9 @@ def status(
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
-    gates, diff = pipeline_by_diff(it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"))
+    gates, diff = pipeline_by_diff(
+        it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"), repo=repo
+    )
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]

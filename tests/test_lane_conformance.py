@@ -182,9 +182,28 @@ def test_accuracy_threshold_and_minimum_calls():
     assert grade_calls(*base).level == 7
     assert statuses(grade_calls(*base[:4]))["tool_accuracy"] == cf.UNAVAILABLE
     assert statuses(grade_calls())["tool_accuracy"] == cf.UNAVAILABLE
-    bad = grade_calls(*base, "bash", "bash")  # 5 of 7
-    assert statuses(bad)["tool_accuracy"] == cf.FAILED and bad.level == 6
+    # bash/write calls are the lane doing real work, not malformed ddflow calls, so they do
+    # not dilute the rate (B09100a25b3). They are not ddflow calls either: LEAD + two bash
+    # calls is still 3 ddflow calls, below min_calls.
+    busy = grade_calls(*base, "bash", "write")
+    assert statuses(busy)["tool_accuracy"] == cf.PASSED and busy.level == 7
     assert grade_calls(*LEAD, "bash", "bash").level == 6
+
+
+def test_a_malformed_ddflow_call_still_counts_against_accuracy():
+    calls = [*LEAD, "brief", "show", "show", {"name": "claim", "ok": False}, "bash", "write"]
+    r = grade_calls(*calls)
+    assert statuses(r)["tool_accuracy"] == cf.FAILED, statuses(r)
+
+
+def test_harness_work_calls_do_not_dilute_accuracy():
+    """B09100a25b3: a lane that edits files and runs git while calling ddflow well keeps
+    level 7 (its write/bash calls are judged neither malformed nor well formed)."""
+    calls = [*LEAD, "brief", "show", "bash", "write", "bash", {"name": "bash"}]
+    o = cf.Observed(started=True, stopped_clean=True, tool_events=True, hook=True, lease_stop=True)
+    o.calls = [{"name": c} if isinstance(c, str) else c for c in calls]
+    r = cf.grade("x", o, P)
+    assert statuses(r)["tool_accuracy"] == cf.PASSED and r.level == 7, r.outcomes
 
 
 def test_gate_call_for_another_action_is_not_a_record():
