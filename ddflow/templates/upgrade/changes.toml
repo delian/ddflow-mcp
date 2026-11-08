@@ -1917,7 +1917,7 @@ key = "lessons.test_file_globs"
 old = "[\"tests/**\", \"test/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
 new = "[\"**/tests/**\", \"**/test/**\", \"**/spec/**\", \"**/specs/**\", \"**/__tests__/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\", \"**/*.test.[jt]s\", \"**/*.test.[jt]sx\", \"**/*.test.[mc]js\", \"**/*.spec.[jt]s\", \"**/*.spec.[jt]sx\", \"**/*.spec.[mc]js\", \"**/*_test.go\", \"**/*_spec.rb\", \"**/*_test.rb\", \"**/test_*.rb\"]"
 why = "Path globs naming TEST files: the tests/, test/, spec/, specs/ and __tests__/ trees at any depth (Rust's tests/**/*.rs among them), and by name Python (test_*.py, conftest.py), JS/TS (*.test.ts, *.spec.js), Go (*_test.go) and Ruby (*_spec.rb, *_test.rb, test_*.rb)."
-effect = "Which paths a lesson treats as a TEST file: the set now also covers any-depth spec/, specs/ and __tests__ trees and JS/TS (*.test.[jt]s.etc, *.spec.[jt]s.etc), Go (*_test.go) and Ruby (*_spec.rb, *_test.rb, test_*.rb) files, not just the root tests/ and test/ trees and Python names."
+effect = "Which paths a lesson treats as a TEST file: the tests/ and test/ trees now match at any depth (was the root trees only), and the set adds the spec/, specs/ and __tests__ trees and JS/TS (*.test., *.spec.), Go (*_test.go) and Ruby (*_spec.rb, *_test.rb, test_*.rb) names."
 
 [[release.change]]
 kind = "knob_added"
