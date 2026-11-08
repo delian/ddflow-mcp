@@ -293,6 +293,20 @@ def _gone_tree(rec: Recovery, repo: Path, cfg: Config, facts: RepoFacts, held: b
     """
     rec.worktree = ""
     ahead = _branch_ahead(repo, facts, cfg, rec.branch)
+    if ahead < 0:
+        # The branch could not be measured (none recorded, or git could not count): unknown
+        # is never empty, so this must not read "nothing to salvage" (the budget path sets
+        # `salvageable = None` for the same reason).
+        rec.salvageable = None
+        ref = rec.branch or "HEAD"
+        rec.advice = (
+            f"worktree is gone and its branch could not be measured — treat it as "
+            f"containing work until you have looked: "
+            f"`git -C {repo} log {facts.base(cfg.worktree.base_ref)}..{ref}`. "
+            f"It will NOT be swept automatically."
+            + (f" `ddflow release {rec.item}` clears the claim." if held else "")
+        )
+        return
     if ahead > 0:
         rec.unmerged_commits = ahead
         rec.salvageable = True

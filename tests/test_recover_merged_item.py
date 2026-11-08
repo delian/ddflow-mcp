@@ -195,3 +195,20 @@ def test_a_gone_worktree_whose_branch_holds_unmerged_commits_is_salvageable(repo
     assert rec.unmerged_commits >= 1, rec.advice
     assert "ddflow/T3" in rec.advice, rec.advice
     assert "ddflow release T3" in rec.advice, rec.advice
+
+
+def test_a_gone_worktree_whose_branch_could_not_be_measured_is_not_called_empty(repo, monkeypatch):
+    """The ``-1`` answer (no branch recorded, or git could not count) must not read as
+    "nothing to salvage": unknown is never empty, and ``sweep`` acts on that verdict."""
+    from ddflow.services.leases import recovery as REC
+
+    monkeypatch.setattr(REC, "_branch_ahead", lambda repo, facts, cfg, branch: -1)
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "T4", {"parent": "P1", "title": "T4", "globs": ["src/T4/*"]})
+    out = LC.claim(repo, "T4", agent="worker")
+    _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
+    (rec,) = _recs(repo, "T4")
+    assert rec.salvageable is None, rec.advice
+    assert "could not be measured" in rec.advice and "ddflow release T4" in rec.advice, rec.advice
