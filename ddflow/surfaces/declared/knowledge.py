@@ -88,7 +88,9 @@ def _applicable_text(out, a) -> str:
         for d in out.data["project_wide"]
     ]
     if out.data.get("path_matching"):
-        lines.append("\npath matching could not run: the item declares no globs")
+        if lines:
+            lines.append("")
+        lines.append("path matching could not run: the item declares no globs")
         if not out.data["applicable"] and not out.data["project_wide"]:
             lines.append("no project-wide decisions recorded either")
     return "\n".join(lines)
