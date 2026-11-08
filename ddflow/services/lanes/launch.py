@@ -16,7 +16,9 @@ injectable so a test runs a stub. Approval is only ever read (``launch_template.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -24,10 +26,13 @@ from typing import Any
 from ...config import Config
 from .. import modelreg
 from ..lane_driver import LaneHandle, Result, driver_for
+from ..swarm import conformance_io as CIO
 from ..swarm import lanehooks as LH
 from ..swarm import score
 from ..swarm import seedpack as SP
 from ..swarm.score_config import Weights
+from . import capacity as CAPACITY
+from . import endpoint as EP
 from . import launch_template as T
 from . import opencode as OC
 
@@ -50,6 +55,15 @@ class Launched:
     driver: Any
     decision_note: str
     seed_dropped: tuple[str, ...] = ()
+    slots: contextlib.ExitStack = field(default_factory=contextlib.ExitStack, repr=False)
+    #: the endpoint slots held for the lane's lifetime: open while the lane runs. The caller
+    #: closes it (``Launched.release()``) after the lane stops, which frees the endpoint for
+    #: the next lane; nothing here closes it and it never releases on garbage collection.
+
+    def release(self) -> None:
+        """Free the held endpoint slots (idempotent). Call after the lane stops and its
+        cleanup ends, so the endpoint can admit the next lane."""
+        self.slots.close()
 
 
 @dataclass(frozen=True)
@@ -80,6 +94,44 @@ def _check_template(t: T.Template, cfg: Config) -> list[str]:
     return out
 
 
+def conformance_level(
+    repo: Path, agent: str, *, max_age_s: int = 0, now: float | None = None
+) -> int:
+    """The lane's measured conformance level, 0 when no run has graded it yet or its report
+    is older than ``max_age_s`` (``conformance.max_age_s``: an expired run admits at no level).
+    ``now`` defaults to the wall clock."""
+    report = CIO.load(repo, agent)
+    if report is None:
+        return 0
+    at = time.time() if now is None else now
+    if max_age_s and at - report.at > max_age_s:
+        return 0
+    return report.level
+
+
+def resolved_pools(cat: modelreg.Catalog, route: str, model: str, default_slots: int) -> tuple:
+    """The endpoint `Pool` objects a lane on ``route`` takes (its own pool only; task
+    ``--resources`` pools are the task's, not a lane's). Empty when the route is unreadable."""
+    ep = EP.resolve(cat, route, model, require_tools=False)
+    if isinstance(ep, EP.Result):
+        return ()
+    return CAPACITY.pools_for(ep, default_slots, {})
+
+
+def endpoint_pools(
+    cat: modelreg.Catalog,
+    route: str,
+    model: str,
+    default_slots: int,
+    directory: Path | str | None = None,
+) -> tuple:
+    """The endpoint pool headroom a lane on ``route`` needs now: the route's ``concurrency``
+    (or ``default_slots``) against the slots busy in ``directory`` (the host slot dir when
+    None). Empty when the route cannot be read."""
+    pools = resolved_pools(cat, route, model, default_slots)
+    return CAPACITY.view(pools, CAPACITY.busy_counts(pools, directory)) if pools else ()
+
+
 def _constraints(req: Request, w: Weights) -> list[str]:
     t, item = req.template, req.state.items[req.item]
     sc_item = score.Item(
@@ -99,6 +151,8 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         price_out=t.price_out,
         local=t.local,
         kinds=t.kinds,
+        level=conformance_level(req.repo, req.agent, max_age_s=req.cfg.swarm.conformance_max_age_s),
+        pools=endpoint_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
     )
     out = score.refusals(sc_item, lane, req.world, w)
     if not t.local and (t.price_in is None or t.price_out is None):
@@ -108,6 +162,25 @@ def _constraints(req: Request, w: Weights) -> list[str]:
     ):
         out.append(f"estimated cost {cost:.4f} USD is above the template budget {t.budget_usd}")
     return out
+
+
+def _start(req: Request, t: T.Template, drv: Any, spec: Any) -> tuple[Any, contextlib.ExitStack]:
+    """Hold the endpoint's slots for the lane's lifetime then start it. The returned stack
+    stays OPEN (the slots live until the caller closes it after the lane stops); TimeoutError
+    when the endpoint pool cannot fit the lane before ``slot_wait_s``. A start failure beyond
+    the wait still releases the slots taken before it propagates."""
+    slots = contextlib.ExitStack()
+    slots.enter_context(
+        CAPACITY.acquire(
+            resolved_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
+            req.cfg.lanes.slot_wait_s,
+        )
+    )
+    try:
+        return drv.start(spec), slots
+    except BaseException:
+        slots.close()
+        raise
 
 
 def _audit(req: Request, text: str) -> None:
@@ -172,8 +245,17 @@ def launch(req: Request) -> Launched | Refused:
     if isinstance(drv, Result):
         OC.cleanup(req.home)
         return Refused((f"{drv.status}: {drv.detail}",))
-    h = drv.start(prep.spec)
+    # hold the endpoint's slots for the lane's lifetime: the slot locks the scheduler probes
+    # are held while the lane runs (until the caller closes ``Launched.slots`` after the lane
+    # stops), so a full endpoint refuses the next lane instead of oversubscribing it. An
+    # unreadable route has no pool to hold.
+    try:
+        h, slots = _start(req, t, drv, prep.spec)
+    except TimeoutError as e:  # the endpoint pool could not fit this lane before the wait
+        OC.cleanup(req.home)
+        return Refused((f"endpoint slot: {e}",))
     if isinstance(h, Result):
+        slots.close()
         OC.cleanup(req.home)
         return Refused((f"{h.status}: {h.detail}",))
     note = json.dumps(
@@ -193,4 +275,4 @@ def launch(req: Request) -> Launched | Refused:
         _audit(req, f"lane.launched {note}")
     except Exception as e:  # the lane runs: report it, never lose the handle
         note = json.dumps({**json.loads(note), "audit_error": type(e).__name__}, sort_keys=True)
-    return Launched(t, h, prep, drv, note, seed.dropped)
+    return Launched(t, h, prep, drv, note, seed.dropped, slots)
