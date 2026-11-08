@@ -304,7 +304,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
 
 
-def _run_under_slot(  # noqa: PLR0913 -- the slot state, all already held by the caller, one per facet
+def _run_under_slot(
     cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan
 ):
     """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
