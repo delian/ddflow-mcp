@@ -93,7 +93,10 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            b = _dequote(m["b"])
+            # `core.quotepath` wraps a quoted name in `"a/..."`; decode only THEN. An unquoted
+            # name is a literal POSIX byte string (quotePath=false, e.g. a file really named
+            # `\303\251`), and decoding it would corrupt `files`.
+            b = _dequote(m["b"]) if line.startswith('diff --git "') else m["b"]
             if b not in self.files:
                 self.files.append(b)
         elif not self.files or self.in_binary:
@@ -112,10 +115,10 @@ class _Reader:
 
 def _diff_lines(patch: str) -> list[str]:
     # NOTE (LK-sg-events follow-up): the cut at the first `---` line is DELIBERATELY coarse, not a
-    # bug. A format-patch message body can itself contain a `---` line, which this over-counts as
-    # file/line content — but `shape` then sees no ``diff --git`` and reports zero files, so it
-    # FAILS CLOSED (rubber_duck #27, critic #23/#25 both refuted the "wrong count" claim). A
-    # precise cut would need git's `diffstat` marker, which is not in the text; fail-closed wins.
+    # bug. A format-patch message body can itself contain a `---` line, so the cut after it keeps a
+    # body `diff --git` snippet and OVER-COUNTs a fake file — the rejection is then by the
+    # too-many-files bound, i.e. it fails CLOSED, never under-counts (rubber_duck #27, critic
+    # #23/#25). A precise cut would need git's `diffstat` marker, which is not in the text.
     lines = patch.splitlines()
     if lines and lines[0].startswith(("From ", "Subject:", "From:")):
         # a format-patch: the message ends at the first `---` line; a diff quoted in it is text
