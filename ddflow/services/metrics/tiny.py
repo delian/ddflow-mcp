@@ -174,6 +174,7 @@ def text(data: dict) -> str:
         out += ["", "not measured (not zero):"]
         out += [f"  {k}: {why}" for k, why in sorted(data["not_measured"].items())]
     if data["unavailable"]:
+        out += ["", "unavailable (not zero):"]
         out += [f"  {k}: {why}" for k, why in sorted(data["unavailable"].items())]
     nxt = data["next"]
     out.append(f"next: {nxt['cli']}  |  {nxt['mcp']}  ({nxt['note']})")
@@ -187,4 +188,7 @@ def _dur(seconds):
 
 
 def _pct(value):
-    return "n/a" if value is None else f"{value * 100:.0f}%"
+    if value is None:
+        return "n/a"
+    pct = value * 100
+    return f"{pct:.1f}%" if 0 < pct < 1 else f"{pct:.0f}%"
