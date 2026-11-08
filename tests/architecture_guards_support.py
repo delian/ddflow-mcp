@@ -37,13 +37,13 @@ BASELINES = ROOT / "tests" / "guard_baselines"
 
 #: The one module each pattern belongs in. Sites there are the interface, not a violation.
 HOMES: dict[str, frozenset[str]] = {
-    "subprocess_calls": frozenset({"ddflow.infra.proc", "ddflow.infra.git"}),
-    "git_argv": frozenset({"ddflow.infra.git"}),
+    "subprocess_calls": frozenset({"ddflow.adapters.proc", "ddflow.adapters.proc_server"}),
+    "git_argv": frozenset({"ddflow.adapters.git"}),
     "write_text": frozenset({"ddflow.infra.fsio"}),
-    "tempfile": frozenset({"ddflow.infra.fsio"}),
-    "os_replace": frozenset({"ddflow.infra.fsio", "ddflow.adapters.fs"}),
-    "fcntl": frozenset({"ddflow.infra.fsio"}),
-    "hashlib": frozenset({"ddflow.core.digest"}),
+    "tempfile": frozenset({"ddflow.adapters.fsio"}),
+    "os_replace": frozenset({"ddflow.adapters.fsio", "ddflow.adapters.fs"}),
+    "fcntl": frozenset({"ddflow.adapters.fsio"}),
+    "hashlib": frozenset({"ddflow.adapters.digest"}),
     "tomlkit": frozenset({"ddflow.infra.tomlcfg"}),
     "time_parse": frozenset({"ddflow.core.clock"}),
 }
