@@ -114,4 +114,3 @@ def test_a_merge_temporary_is_not_named(tmp_path):
     note = SW._what_differs(d, "HEAD", "clean", worktree_entries(d), "the working tree", None)
     assert "mine.py" in note
     assert ".merge_file_4zU3jH" not in note
-
