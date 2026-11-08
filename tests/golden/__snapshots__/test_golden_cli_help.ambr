@@ -3502,7 +3502,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3515,6 +3515,8 @@
     --lease LEASE        wait for a lease instead of an item: an agent id (until it holds nothing)
                          or a path/glob (until no other agent's live lease covers it); a bare wait
                          returns the first ready item at once
+    --approval APPROVAL  wait for an operator-approval request id until it is answered; ready then
+                         means re-run the gated command with --approval ID
     --token TOKEN        resume token from an earlier wait
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks

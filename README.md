@@ -5934,6 +5934,7 @@ ddflow remove <id> [--force]    take an item out of the queue (recorded, not era
 ddflow brief [--item|--phase]   budgeted session-start pack
 ddflow board / show <id>        human views (show also takes a bug id; --json board is JSON)
 ddflow wait [--item|--phase]    sleep until something is ready  (--globs: judge the claim you will make)
+ddflow wait --approval <id>    block until the operator answers approval <id>, then re-run its gated command
 ddflow render                   regenerate docs/ddflow/*.md
 
 ddflow help [topic]             what this is, what it can do, the workflow

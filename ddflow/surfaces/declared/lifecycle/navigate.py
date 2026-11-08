@@ -329,6 +329,7 @@ COMMANDS: tuple[Command, ...] = (
             globs=a.get("globs") or None,
             lease=a.get("lease", "") or "",
             token=a.get("token", "") or "",
+            approval=a.get("approval", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -368,6 +369,13 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="wait for a lease instead of an item: an agent id (until it holds nothing) or a "
                 "path/glob (until no other agent's live lease covers it); a bare wait returns the first "
                 "ready item at once",
+                default="",
+            ),
+            Param(
+                "approval",
+                help="Wait for an APPROVAL instead of an item or lease: an operator-approval request id, until the person answers it. Ready then means re-run the gated command with --approval ID.",
+                cli_help="wait for an operator-approval request id until it is answered; ready then means "
+                "re-run the gated command with --approval ID",
                 default="",
             ),
             Param(
