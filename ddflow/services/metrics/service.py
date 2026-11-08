@@ -94,20 +94,19 @@ def parse_since(text: str, now: float) -> float | None:
 
 
 def _stages(ctx: Context, group_by: str) -> Answer:
-    try:
-        data = stages_build(ctx, group_by)
-    except ValueError as exc:
-        return Answer(False, str(exc), failed=True)
-    ok = stages_ok(data)
-    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any stage"
-    return Answer(ok, "" if ok else why, metrics=data, text=stages_text(data))
+    return _figure(
+        ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage"
+    )
 
 
 def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
-    """The shared not-enough-data figure a derived view answers: build once, one min-sample
-    gate, one text. ``_locks``, ``_tiny`` and ``_paths`` are the same body with a different
-    ``subject`` (a duplicate-code cluster the guard would otherwise count)."""
-    data = build(ctx)
+    """The shared figure a derived view answers: build once (a ``ValueError`` is a bad
+    call, not a figure), one min-sample gate, one text. Every derived view routes through
+    here so the repeated body is not a duplicate-code cluster."""
+    try:
+        data = build(ctx)
+    except ValueError as exc:
+        return Answer(False, str(exc), failed=True)
     ok = ok_of(data)
     why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any {subject}"
     return Answer(ok, "" if ok else why, metrics=data, text=text_of(data))
