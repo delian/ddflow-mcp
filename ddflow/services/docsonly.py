@@ -9,8 +9,10 @@ import ast
 from collections.abc import Callable
 
 from ..config import Config
+from ..core.bookkeeping import is_state
 from ..core.globs import inside
 from ..core.model import Item
+from ..infra import git as GIT
 from ..infra import worktree as W
 
 
@@ -27,6 +29,27 @@ def _trivial_pipeline(gates: list[str]) -> list[str]:
     return [g for g in gates if g not in excused]
 
 
+def _uncommitted_not_in(tree: Path, paths: list[str]) -> bool:
+    """Uncommitted work the committed-diff path list cannot name: an untracked non-state
+    file, or a dirty TRACKED file outside ``paths``. `trivial` is only a claim about a
+    clean, committed tree, so any such work fails closed (rubber_duck)."""
+    if any(not is_state(p) for p in (GIT.files(tree, "untracked") or ())):
+        return True
+    dirty = W.git(tree, "diff", "HEAD", "--name-only")
+    if dirty.ok and any(p for p in dirty.out.splitlines() if p and p not in paths):
+        return True
+    return False
+
+
+def _item_tree(item: Item, repo) -> Path | None:
+    """The item's worktree (or ``repo`` when it has none), or None when there is no readable
+    tree in which to check for uncommitted work."""
+    if repo is None:
+        return None
+    tree = W.load_path(repo, item.worktree) if item.worktree else repo
+    return tree if tree is not None and tree.is_dir() else None
+
+
 def diff_is_trivial(item: Item, cfg: Config, repo, paths: list[str] | None) -> bool:
     """Did this TASK change no behavior -- every changed path a document (`diff_is_docs_only`),
     else a format-only or comment-only edit? Such a change runs the TRIVIAL tier: it skips
@@ -35,16 +58,21 @@ def diff_is_trivial(item: Item, cfg: Config, repo, paths: list[str] | None) -> b
     records it). A logic change -- one whose diff changes code -- is never trivial: the
     answer is derived from the ACTUAL diff (never the declared globs), and anything git
     cannot read is "not trivial", never a guess. A promotion, a phase and a non-task never
-    qualify."""
+    qualify, and so does a tree with uncommitted work the committed-diff path list cannot
+    name (an untracked file, or a dirty tracked file outside the change)."""
     if item.kind != "task" or item.promote_to:
+        return False
+    if not paths:
+        return False
+    tree = _item_tree(item, repo)
+    if tree is None:
+        # No tree to inspect: a pure path-list judgement. Uncommitted work lives in a
+        # tree; with none there is none to fail closed on.
+        return diff_is_docs_only(item, cfg, list(paths))
+    if _uncommitted_not_in(tree, list(paths)):
         return False
     if diff_is_docs_only(item, cfg, paths):
         return True
-    if not paths or repo is None:
-        return False
-    tree = W.load_path(repo, item.worktree) if item.worktree else repo
-    if tree is None or not tree.is_dir():
-        return False
     base = item.base or W.default_branch(repo)
     return _is_format_or_comment(tree, base, paths)
 
@@ -176,6 +204,12 @@ def pipeline_by_diff(
         return gates, None
     paths = diff()
     chosen = gates
+    # A docs-only or format-only committed diff beside uncommitted work (an untracked file,
+    # or a dirty tracked file outside the change) must take the FULL pipeline, never a
+    # reduced one (rubber_duck): the reduced pipeline skips review + whole-suite ci.
+    tree = _item_tree(item, repo)
+    if tree is not None and _uncommitted_not_in(tree, list(paths or ())):
+        return chosen, lambda: paths
     if diff_is_docs_only(item, cfg, paths):
         chosen = doc_pipeline
     elif diff_is_trivial(item, cfg, repo, paths):

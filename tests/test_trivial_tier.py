@@ -190,8 +190,27 @@ def test_an_untracked_file_beside_a_docs_only_change_is_not_trivial(repo):
     assert not _is_trivial(cfg, it, tree)
 
 
+def test_a_dirty_tracked_file_outside_the_committed_change_is_not_trivial(repo):
+    """rubber_duck: `diff_is_trivial` classifies from the committed change's paths, so a
+    docs-only committed edit beside a DIRTY tracked file outside those paths (an uncommitted
+    logic edit) would read trivial. The whole-tree dirty check fails closed."""
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    _commit(repo, "docs/a.md", "old\n")
+    _commit(repo, "src/foo.py", "x = 1\n")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "docs/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    (tree / "docs/a.md").write_text("new\n")
+    subprocess.run(["git", "-C", str(tree), "add", "docs/a.md"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "docs edit"], check=True)
+    (tree / "src/foo.py").write_text("x = 2\n")  # DIRTY tracked, outside the docs change
+    assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
+
+
 def test_docs_only_is_trivial_too(cfg):
-    from ddflow.services.docsonly import diff_is_docs_only
 
     it = Item(id="X", kind="task", title="t", globs=["src/**"])
     assert diff_is_docs_only(it, cfg, ["docs/a.md", "README.md"])
