@@ -226,42 +226,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if isinstance(source, O.Outcome):
         return source
     wt, dirty, outside = source
-    if W.unreadable(dirty):
-        # Not a file list: git could not read the tree at all. Commit-or---allow-dirty is
-        # the wrong advice, and --allow-dirty must not land a tree nobody can see
-        # (Bb2f7566528). `dirty` stays a list of paths.
-        return O.refused(
-            "worktree.merged",
-            f"could not read the worktree {wt.path}: {dirty[0][len(W.UNREADABLE) :]}. "
-            f"Repair it (its .git file, permissions) or `ddflow recover`; nothing was "
-            f"merged.",
-            id=item,
-            dirty=[],
-            # Unknown, not clean: as `outside_globs_unknown`, so a caller reading `dirty`
-            # alone never takes an unread tree for an empty one.
-            dirty_unknown=True,
-            path=str(wt.path),
-        )
-    if dirty and not allow_dirty:
-        # LISTED, not just counted: half the time these are build artefacts the project
-        # forgot to gitignore, and half the time they are a source file the agent never
-        # `git add`-ed -- which would be silently dropped from the merge. The caller can
-        # only tell which by seeing the names.
-        return O.refused(
-            "worktree.merged",
-            f"{len(dirty)} uncommitted file(s) in {wt.path} would NOT be included in "
-            f"the merge.\n\nCommit them, add them to .gitignore if they are build "
-            f"output, or pass --allow-dirty to merge without them.",
-            id=item,
-            dirty=list(dirty),
-            path=str(wt.path),
-        )
-    empty = None if allow_empty else _lands_nothing(repo, it, wt)
-    if empty is not None:
-        return empty
-    remote_base = f"{cfg.flow.remote}/{wt.base}"
-    if (wrong := _wrong_base(st, it, wt, remote_base, item)) is not None:
-        return wrong
+    if (refusal := _landing_refusal(repo, cfg, st, it, wt, dirty, item, allow_dirty, allow_empty)) is not None:
+        return refusal
     # The require_gates check runs for EVERY integration mode (Bc6c07dfe52): under `pr` it
     # must still refuse (mode `refuse`) or name the unmet gates (mode `warn`) instead of
     # opening a request past them. An agent's approval is only checked here; the non-PR path
@@ -300,32 +266,74 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     (on_progress or (lambda _line: None))(f"merging {wt.branch} into {wt.base} ...")
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     landed_note = _landed_note(repo, wt, landed_before, branch_head, r)
-    if not r.ok and not landed_note:
-        # A merge that was tried and failed is a merge-gate outcome: the log-derived
-        # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
-        if r.attempted:  # a refused precondition says nothing about this branch
-            GM.record_merge(
-                log,
-                cfg,
-                repo,
-                it,
-                "failed",
-                gates=G.load_gates(repo, cfg),
-                tree=None if borrowed else wt.path,
-                reason=(r.err or r.out or "merge failed")[:500],
-                evidence={"branch": wt.branch, "git_exit": r.code},
-            )
-        out = O.Outcome(
-            kind="worktree.merged",
-            data={"id": item, "sha": "", "dirty": []},
-            exit=O.REFUSED if r.code == W.GIT_REFUSED else O.FAIL,
-            reason=(r.err or r.out) + PD.dirt_hint(repo, cfg, r.err or r.out, repo),
-        )
-        return out
+    if (failed := _failed_landing_outcome(repo, cfg, log, it, wt, item, landed_note, r, borrowed=borrowed)) is not None:
+        return failed
     # What the base now points at: the landing. Falls back to the branch head only if
     # the base cannot be read back, which a merge that just succeeded makes unlikely.
     landed_after = W.rev(repo, wt.base)
     sha = landed_after or branch_head
+    _record_landing(
+        log, item, wt, gates, borrowed=borrowed, outside=outside, sha=sha,
+        branch_head=branch_head, landed_before=landed_before, landed_after=landed_after,
+    )
+    return _finish_merge(
+        repo, cfg, log, st, it, wt, item, gates, forced_by, pending_approval, agent,
+        borrowed=borrowed, keep=keep, outside=outside, dirty=dirty, refreshed=refreshed,
+        sha=sha, branch_head=branch_head, landed_note=landed_note, merge_since=merge_since,
+        callers=(called_from, shell_cwd), on_progress=on_progress,
+    )
+
+
+def _landing_refusal(
+    repo: Path, cfg, st, it, wt: W.Worktree, dirty, item: str, allow_dirty: bool, allow_empty: bool
+) -> O.Outcome | None:
+    """None when the tree and branch can land; else the refusal that stops the landing.
+
+    The four refusals every landing must pass before git acts: an unreadable tree, an
+    uncommitted one (without --allow-dirty), a branch with nothing to land (without
+    --allow-empty), and a branch forked from the wrong base.
+    """
+    if W.unreadable(dirty):
+        # Not a file list: git could not read the tree at all. Commit-or---allow-dirty is
+        # the wrong advice, and --allow-dirty must not land a tree nobody can see
+        # (Bb2f7566528). `dirty` stays a list of paths.
+        return O.refused(
+            "worktree.merged",
+            f"could not read the worktree {wt.path}: {dirty[0][len(W.UNREADABLE) :]}. "
+            f"Repair it (its .git file, permissions) or `ddflow recover`; nothing was "
+            f"merged.",
+            id=item,
+            dirty=[],
+            # Unknown, not clean: as `outside_globs_unknown`, so a caller reading `dirty`
+            # alone never takes an unread tree for an empty one.
+            dirty_unknown=True,
+            path=str(wt.path),
+        )
+    if dirty and not allow_dirty:
+        # LISTED, not just counted: half the time these are build artefacts the project
+        # forgot to gitignore, and half the time they are a source file the agent never
+        # `git add`-ed -- which would be silently dropped from the merge. The caller can
+        # only tell which by seeing the names.
+        return O.refused(
+            "worktree.merged",
+            f"{len(dirty)} uncommitted file(s) in {wt.path} would NOT be included in "
+            f"the merge.\n\nCommit them, add them to .gitignore if they are build "
+            f"output, or pass --allow-dirty to merge without them.",
+            id=item,
+            dirty=list(dirty),
+            path=str(wt.path),
+        )
+    empty = None if allow_empty else _lands_nothing(repo, it, wt)
+    if empty is not None:
+        return empty
+    return _wrong_base(st, it, wt, f"{cfg.flow.remote}/{wt.base}", item)
+
+
+def _record_landing(
+    log, item: str, wt, gates, *, borrowed: bool, outside, sha: str, branch_head: str,
+    landed_before: str, landed_after: str,
+) -> None:
+    """Record `worktree.merged`: what the base points at now, and each gate's state at landing."""
     log.append(
         "worktree.merged",
         item,
@@ -342,9 +350,68 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
-    # Spend an agent's approval only now, once the landing landed: a person's `--force` and a
-    # standing-policy answer have no approval to spend (pending_approval == ""), and a failed
-    # landing returned above before reaching here (B527b0a518c).
+
+
+def _failed_landing_outcome(
+    repo: Path, cfg, log, it, wt, item: str, landed_note: str, r, *, borrowed: bool
+) -> O.Outcome | None:
+    """The outcome when git did not land and no note says it did; None when it landed.
+
+    A merge that was tried and failed is a merge-gate outcome: the log-derived
+    `merge_failure_rate` flow signal counts it, and without this it saw successes only.
+    """
+    if r.ok or landed_note:
+        return None
+    if r.attempted:  # a refused precondition says nothing about this branch
+        GM.record_merge(
+            log,
+            cfg,
+            repo,
+            it,
+            "failed",
+            gates=G.load_gates(repo, cfg),
+            tree=None if borrowed else wt.path,
+            reason=(r.err or r.out or "merge failed")[:500],
+            evidence={"branch": wt.branch, "git_exit": r.code},
+        )
+    return O.Outcome(
+        kind="worktree.merged",
+        data={"id": item, "sha": "", "dirty": []},
+        exit=O.REFUSED if r.code == W.GIT_REFUSED else O.FAIL,
+        reason=(r.err or r.out) + PD.dirt_hint(repo, cfg, r.err or r.out, repo),
+    )
+
+
+def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; the tail spends them
+    repo: Path,
+    cfg,
+    log,
+    st,
+    it,
+    wt,
+    item: str,
+    gates,
+    forced_by,
+    pending_approval: str,
+    agent: str,
+    *,
+    borrowed: bool,
+    keep: bool,
+    outside,
+    dirty,
+    refreshed,
+    sha: str,
+    branch_head: str,
+    landed_note: str,
+    merge_since: str,
+    callers,
+    on_progress,
+) -> O.Outcome:
+    """Everything after the landing is recorded: spend the approval, back-merge a hotfix,
+    record the merge gate, run the post-merge check and commit the events."""
+    # Spend an agent's approval only now, once the landing landed: a person's `--force` and
+    # a standing-policy answer have no approval to spend (pending_approval == ""), and a
+    # failed landing returned above before reaching here (B527b0a518c).
     forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
     _record_forced(log, item, sha, gates, forced_by, agent)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
@@ -369,7 +436,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
     )
     removed_tree, kept_reason = _dispose_tree(
-        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
+        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=callers
     )
     kept_reason = _kept_reason(kept_reason, landed_note, back_failed)
 
