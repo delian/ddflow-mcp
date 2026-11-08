@@ -269,7 +269,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             other_id, lease, _pair = clash
             named, _ids = clash_report(glob_clashes(state, cfg, it, holder, mine, now))
             raise LeaseError(
-                f"{item_id} writes {named}"
+                f"{item_id} writes files another live lease holds: {named}"
                 + (
                     f". {item_id}'s lease lapsed and those files were claimed since: "
                     f"--force takes over the expired lease, not another live one: "

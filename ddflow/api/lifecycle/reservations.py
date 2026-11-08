@@ -205,7 +205,7 @@ def _claim_blocker(
         return Blocked(
             it.id,
             "conflict",
-            f"globs overlap {named}",
+            f"globs overlap a live lease: {named}",
             ids,
         )
     short = _resource_blocker(cfg, it, live)
