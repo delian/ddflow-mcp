@@ -164,6 +164,14 @@ def _no_tree_reason(
                 f"(passed before the merge) stands and `complete` uses it.",
                 prior,
             )
+        if prior == "partial":
+            return (
+                f"{item} merged ({sha}) and {disposition}: the recorded {gate} outcome "
+                f"(partial, measured before the merge) stands — a re-run has no tree to "
+                f"measure, and recording unavailable would erase the baseline-red evidence. "
+                f"Only a person can settle it: `ddflow approve {item} {gate}`.",
+                prior,
+            )
         return (
             f"{item} merged ({sha}) and {disposition}, so {gate} cannot run now; gates are "
             f"run before `ddflow merge {item}`. Recording UNAVAILABLE; if it did pass on the "
