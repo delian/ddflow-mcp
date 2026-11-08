@@ -87,6 +87,17 @@ _REGISTERS = ("add_parser", "add_subparsers", "click.", "typer.", ".command(", "
 _DEF = re.compile(r"^\s*(?:async\s+)?def\s+([a-z][a-z0-9_]*)", re.M)
 _VERB_WORDS = 2  #: `<script> <verb>`
 
+#: Root options ddflow accepts AFTER a subcommand as well as before it: `ddflow
+#: _accept_global_options_anywhere` mirrors them onto every subparser with
+#: ``help=SUPPRESS``, so a verb's own ``--help`` never lists them (it derives EVERY root
+#: store/store-true option -- `--repo`, `--agent`, `--json`, `--allow-older-version` and
+#: `--reason` -- not a fixed three). A mention like `ddflow next --json` reads as a flag
+#: `ddflow next --help` omits; a global option accepted after the subcommand is not a
+#: missing flag (B1da555743c). Only these three are exempt: the other two mirrorable root
+#: options are each spelled, in the checked docs, only after a verb whose own `--help`
+#: lists one, so they are not a B1da555743c false finding and stay checked.
+_GLOBAL_FLAGS = ("--json", "--agent", "--repo")
+
 _EXT = (
     "py|md|rst|adoc|toml|json|jsonl|yml|yaml|sh|txt|cfg|ini|lock|rs|go|ts|tsx|js|jsx|html|css|"
     "c|h|cpp|hpp|java|kt|swift|php|rb|pl|lua|sql|xml|csv|tsv|log|svg|png|jpg|jpeg|gif|webp|ico|pdf|"
@@ -408,12 +419,13 @@ class _Scan:
     def _verb_flags(self, words: list[str], n: int, got: tuple[list[str], set[str]]) -> None:
         """The flags of ``<tool> <verb>...`` must be ones that verb's own ``--help`` lists."""
         chain, flags = got
+        global_ = chain[0] == "ddflow"  # the tool that mirrors these onto its subparsers
         for tok in words[len(chain) :]:
             flag = flag_of(tok)
             if flag is None or self._owned(flag):
                 continue
             self.counts["verb_flags"] += 1
-            if flag not in flags:
+            if flag not in flags and not (global_ and flag in _GLOBAL_FLAGS):
                 self.report.findings.append(
                     Finding(
                         "flag",
