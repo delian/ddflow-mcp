@@ -29,9 +29,6 @@ class _Stderr:
     def fileno(self) -> int:
         return self._read
 
-    def read1(self, n: int) -> bytes:
-        return b"" if self.closed else os.read(self._read, n)
-
     def close(self) -> None:
         if not self.closed:
             os.close(self._read)

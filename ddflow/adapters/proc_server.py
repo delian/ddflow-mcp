@@ -85,11 +85,11 @@ def run_piped(
             os.set_blocking(fd, False)
         while not stop.is_set():
             try:
-                chunk = p.stderr.read1(65536)  # type: ignore[union-attr]
+                chunk = os.read(fd, 65536)
             except (BlockingIOError, InterruptedError):
                 time.sleep(0.02)  # nothing is there yet: check the stop flag again
                 continue
-            except (ValueError, OSError):
+            except OSError:
                 break  # the pipe is closed: stop draining
             if not chunk:
                 break  # end of file: every write end is closed
