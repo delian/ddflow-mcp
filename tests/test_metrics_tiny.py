@@ -72,7 +72,9 @@ def run(log: Log):
 def test_tiny_cold_counts_completed_items_under_the_line_limit():
     ans = run(seeded())
     tc = ans.metrics["tiny_cold"]
-    assert tc == {"count": 1, "total": 3, "unmeasured": 0, "rate": pytest.approx(1 / 3)}
+    assert tc["count"] == 1 and tc["total"] == 3 and tc["unmeasured"] == 0
+    assert tc["rate"] == pytest.approx(1 / 3)
+    assert "source-line limit" in tc["scope"]
 
 
 def test_a_later_bug_is_counted_against_its_size_bucket_only():

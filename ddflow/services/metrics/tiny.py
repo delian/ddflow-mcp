@@ -60,6 +60,7 @@ def _tiny_cold(ctx: Context, minimum: int, spans, outs_of) -> dict:
         "count": len(tiny),
         "total": len(measured),
         "unmeasured": len(spans) - len(measured),
+        "scope": f"met the source-line limit (<= {limit} lines); the file-count limits are not_measured",
         "rate": rate(len(tiny), len(measured), minimum),
     }
 
@@ -149,8 +150,8 @@ def text(data: dict) -> str:
     tiny = data["tiny_cold"]
     out = [
         "tiny-fix fast track (derived from the event log)",
-        f"  tiny-cold: {tiny['count']} of {tiny['total']} completed items met the source-line "
-        f"limit ({_pct(tiny['rate'])})",
+        f"  tiny-cold: {tiny['count']} of {tiny['total']} measured completed items met the "
+        f"source-line limit ({_pct(tiny['rate'])})",
     ]
     if tiny.get("unmeasured"):
         out.append(f"  {tiny['unmeasured']} completed item(s) with no measured size, not counted")
@@ -190,5 +191,4 @@ def _dur(seconds):
 def _pct(value):
     if value is None:
         return "n/a"
-    pct = value * 100
-    return f"{pct:.1f}%" if 0 < pct < 1 else f"{pct:.0f}%"
+    return f"{value * 100:.1f}%"
