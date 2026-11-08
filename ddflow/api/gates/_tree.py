@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ...core.bookkeeping import STATE_EXCLUDE
 from ...infra import worktree as W
+from ...services import gate_accept as GA
 from ..lifecycle import callers_tree
 
 
@@ -162,6 +163,23 @@ def _no_tree_reason(
             return (
                 f"{item} merged ({sha}) and {disposition}: the recorded {gate} outcome "
                 f"(passed before the merge) stands and `complete` uses it.",
+                prior,
+            )
+        if prior == "partial":
+            # A partial is only what `ddflow approve` accepts when it was MEASURED
+            # baseline-red (gate_accept.refusal): a hand-recorded or partial_exits partial
+            # is not that path, so never point a person at a command that will refuse.
+            if GA.refusal(it, gate):
+                settle = (
+                    f"it was not measured baseline-red, so it is not approvable — "
+                    f"only a person's re-record of {gate} settles it."
+                )
+            else:
+                settle = f"Only a person can settle it: `ddflow approve {item} {gate}`."
+            return (
+                f"{item} merged ({sha}) and {disposition}: the recorded {gate} outcome "
+                f"(partial, before the merge) stands — a re-run has no tree to measure, "
+                f"and recording unavailable would erase its evidence. {settle}",
                 prior,
             )
         return (

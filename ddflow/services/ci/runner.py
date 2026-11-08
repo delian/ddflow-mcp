@@ -38,6 +38,12 @@ TAIL_CHARS = 4000
 TESTS_FAILED = 1  #: pytest's exit when its tests ran to the end and some failed
 
 
+def _killed(p) -> bool:
+    """Whether ``p`` ran and was killed by a signal: the OS reports a negative return code
+    (e.g. -15 for SIGTERM), which is no verdict (B512a5d7f35)."""
+    return p.code is not None and p.code < 0
+
+
 def parse_checks(output: str) -> list[Check]:
     """Per-hook results from pre-commit's report ("ruff check ......... Failed")."""
     checks = []
@@ -503,11 +509,11 @@ def _run_stages(
         on_tick=on_tick,
         tick_s=tick_s,
     )
-    unran: set[str] = set()  # stages whose process never started: not a failure of the checks
+    unran: set[str] = set()  # stages whose process never started, or was killed: not a failure
     if selected:
         scope.unran = unran
         scope.ok["hooks"] = p.ran and p.code == 0
-        if not p.ran:
+        if not p.ran or _killed(p):  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add("hooks")
     if not (selected and p.ran and p.code == 0):
         if selected:
@@ -531,7 +537,7 @@ def _run_stages(
         )
         spent += p.elapsed_s
         scope.ok[label] = p.ran and p.code == 0
-        if not p.ran:
+        if not p.ran or _killed(p):  # killed by a signal: not a verdict (B512a5d7f35)
             unran.add(label)
         if label == "always":
             scope.always_s = p.elapsed_s
@@ -613,23 +619,29 @@ def _scope_evidence(scope, sha: str) -> dict:
 
 def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
     out = out_prefix + p.output  # a shell "not found" exit is the command's verdict: it ran
-    checks = parse_checks(out)
-    if out_prefix:  # the hooks passed and the selected tests ran after them
+    # A negative exit is a signal: the process was killed from outside before it could report
+    # a verdict, so it is unavailable, never a failed check (B512a5d7f35). `p.code` is None only
+    # for a run that timed out or never started, both of which `_unfinished` already turned away.
+    # A killed run gives no verdict, so it records no hook checks either (a half-run 'Failed'
+    # line is not a verdict).
+    killed = _killed(p)
+    checks = parse_checks(out) if not killed else []
+    if out_prefix and not killed:  # the hooks passed and the selected tests ran after them
         for label, count in (("selected", len(scope.tests)), ("always", len(scope.always))):
             if label in scope.ok:
                 name = f"{label} tests ({count} files)"
                 checks.append(Check(name, scope.ok[label]))
-    if p.code != 0 and not any(not c.ok for c in checks):
+    if p.code != 0 and not killed and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
     return Result(
-        "passed" if p.code == 0 else "failed",
+        "unavailable" if killed else "passed" if p.code == 0 else "failed",
         checks=checks,
         sha=sha,
         merged_with=base,
         command=cmd,
-        reason="" if p.code == 0 else f"{cmd} exited {p.code}",
+        reason="" if p.code == 0 else (f"{cmd} killed by signal {-p.code}" if killed else f"{cmd} exited {p.code}"),
         output_tail=out[-TAIL_CHARS:],
         output=out,
-        failures=failure_evidence(out) if p.code != 0 else {},
+        failures=failure_evidence(out) if p.code != 0 and not killed else {},
         scope=_scope_evidence(scope, sha),
     )

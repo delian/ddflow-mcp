@@ -20,10 +20,14 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
     )
     if ahead is None:
         return None
+    pairs = WG.conflicts(
+        list(want if want is not None else it.globs), ahead.globs, WG.shared_globs(ctx.cfg)
+    )
+    named = f"{pairs[0][0]!r} " if pairs else ""
     return O.refused(
         "item.claimed",
-        f"{ctx.item}: those files are queued behind {ahead.holder} ({ahead.item}), who asked "
-        f"for them first ([lease].wait_queue).",
+        f"{ctx.item}: {named}is queued behind {ahead.holder} ({ahead.item}), who asked "
+        f"for it first ([lease].wait_queue).",
         id=ctx.item,
         alternatives=[],
         queued_behind=ahead.item,

@@ -141,6 +141,29 @@ def _resource_blocker(cfg, it, live):
     return Blocked(it.id, "resources", short, []) if short else None
 
 
+def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
+    """The refusal for files an earlier QUEUED waiter asked for first; None if none. A glob
+    ``held`` already covers is not a new demand, so a widening that merely re-states it is
+    not judged 'queued behind' (B-update-globs-queued-refusal-vague); the refusal names
+    which file instead of 'those files'."""
+    # A requested glob the item ALREADY HOLDS is re-stated, not newly demanded. Exact-only
+    # (a glob is a pattern; any fnmatch/overlap has an edge case -- `*`/`?`/`[..]` -- that
+    # either over-covers a broadening glob or breaks a literal re-statement). The bug is a
+    # literal re-statement: README.md held, README.md re-stated.
+    mine_glob = set(held.globs) if held is not None else set()
+    fresh = [g for g in want if g not in mine_glob]
+    ahead = WG.queue_ahead(st, cfg, it.id, me, fresh, now)
+    if ahead is None:
+        return None
+    pairs = WG.conflicts(fresh, ahead.globs, WG.shared_globs(cfg))
+    # `queue_ahead` returned on the SAME `conflicts(fresh, ahead.globs, shared)` being
+    # non-empty, so `pairs` is non-empty here; fall back to the caller's own first glob,
+    # never the waiter's (a glob the caller did not ask for would be a false refusal).
+    named = pairs[0][0] if pairs else fresh[0]
+    reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first ([lease].wait_queue)"
+    return Blocked(it.id, "conflict", reason, [ahead.item])
+
+
 def _claim_blocker(
     st,
     cfg,
@@ -190,16 +213,9 @@ def _claim_blocker(
         # `claim` turns away files an earlier QUEUED waiter asked for first
         # (`claim._refuse_if_queued`); a held item is only renewed, so it is not asked.
         # Judged here too, or `wait` says READY for a claim that is then refused (B8843d3c7bd).
-        want = list(it.globs if globs is None else globs)
-        ahead = WG.queue_ahead(st, cfg, it.id, me, want, now)
-        if ahead is not None:
-            return Blocked(
-                it.id,
-                "conflict",
-                f"those files are queued behind {ahead.holder} ({ahead.item}), who asked "
-                f"for them first ([lease].wait_queue)",
-                [ahead.item],
-            )
+        b = _queued_blocker(st, cfg, it, me, held, list(it.globs if globs is None else globs), now)
+        if b is not None:
+            return b
     if fair and repo is not None:
         # Last: the files are free, and the question is only whether someone is in line.
         want = list(it.globs if globs is None else globs)
