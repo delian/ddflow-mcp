@@ -35,11 +35,12 @@ def scoped_outcomes(ctx: Context) -> list[Outcome]:
     return [o for o in ctx.facts.outcomes if ctx.in_scope(o.item, o.at)]
 
 
-def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
-    """(outcome, seconds from its gate starting to the verdict). The start is the latest
-    ``gate.started`` since the item's previous verdict on that gate; failing that, a
-    review's own recorded ``elapsed_s``. An outcome with neither has no duration."""
-    out: list[tuple[Outcome, float]] = []
+def _timed(ctx: Context) -> list[tuple[Outcome, float | None]]:
+    """(outcome, its duration or None) for each RAN, in-scope outcome in time order: the span
+    from the latest ``gate.started`` since the item's previous verdict on that gate, else the
+    outcome's own ``elapsed_s``, else None (untimed). `gate_durations` and `gate_untimed` read
+    this ONE scan two ways, so the complement cannot drift (B28537b615d)."""
+    out: list[tuple[Outcome, float | None]] = []
     last_verdict: dict[tuple[str, str], float] = {}
     for o in sorted(ctx.facts.outcomes, key=lambda o: o.at):
         key = (o.item, o.gate)
@@ -52,7 +53,16 @@ def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
             out.append((o, o.at - max(began)))
         elif o.elapsed_s is not None:
             out.append((o, o.elapsed_s))
+        else:
+            out.append((o, None))
     return out
+
+
+def gate_durations(ctx: Context) -> list[tuple[Outcome, float]]:
+    """(outcome, seconds from its gate starting to the verdict). The start is the latest
+    ``gate.started`` since the item's previous verdict on that gate; failing that, a
+    review's own recorded ``elapsed_s``. An outcome with neither has no duration."""
+    return [(o, secs) for o, secs in _timed(ctx) if secs is not None]
 
 
 def gate_waits(ctx: Context) -> dict[str, list[float]]:
@@ -68,19 +78,12 @@ def gate_waits(ctx: Context) -> dict[str, list[float]]:
 
 def gate_untimed(ctx: Context) -> dict[str, int]:
     """gate -> RAN outcomes inside the view the log gave no duration for (no ``gate.started``
-    since the last verdict and no recorded ``elapsed_s``): the subset ``gate_durations`` drops,
+    since the last verdict and no recorded ``elapsed_s``): the subset `gate_durations` drops,
     named so the gate-time figure reads over a KNOWN sample, not a silently smaller one
     (B28537b615d)."""
-    last_verdict: dict[tuple[str, str], float] = {}
     untimed: dict[str, int] = defaultdict(int)
-    for o in sorted(ctx.facts.outcomes, key=lambda o: o.at):
-        key = (o.item, o.gate)
-        floor = last_verdict.get(key, 0.0)
-        last_verdict[key] = o.at
-        if o.kind not in RAN or not ctx.in_scope(o.item, o.at):
-            continue
-        began = [t for t in ctx.facts.starts.get(key, ()) if floor <= t <= o.at]
-        if not began and o.elapsed_s is None:
+    for o, secs in _timed(ctx):
+        if secs is None:
             untimed[o.gate] += 1
     return untimed
 

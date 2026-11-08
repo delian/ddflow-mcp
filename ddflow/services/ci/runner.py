@@ -339,7 +339,8 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
 
 def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
-    its output prefix and the seconds spent queued for the slot (None without one). ``holder``
+    its output prefix, the seconds spent queued for the slot (None without one), and the run's
+    own elapsed seconds (B28537b615d). ``holder``
     is the suite-slot holder label (`_holder`); ``full_suite`` is read once at the caller --
     an empty named command is the suite, never `not cmd.strip()` on the materialized command.
     The queue wait (`[ci].suite_wait_s`) never comes off ``budget``: the timeout budgets the run
