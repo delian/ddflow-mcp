@@ -250,25 +250,29 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
                 f" (keeps this project's value; to adopt the new default: "
                 f"ddflow config --set {key} {json.dumps(new)})"
             )
-        items.append(item)
-    # A knob whose MEANING changed while its default did not (B4116990bbd): nothing to
-    # apply -- the default is unchanged -- but the operator must know the guidance now
-    # means something different than the number does.
-    for c in changes:
-        if c.kind == "knob_semantics_changed":
-            items.append(
-                {
-                    "category": "config",
-                    "id": f"knob_semantics_changed:{c.key}",
-                    "key": c.key,
-                    "change": c.kind,
-                    "summary": f"the meaning of {c.key} changed: {c.why}".rstrip(": "),
-                    "effect": c.effect,
-                    "action": NOTE,
-                    "fix": "",
-                }
-            )
+            items.append(item)
+    items += _semantics_notes(changes)
     return items
+
+
+def _semantics_notes(changes: list[UM.Change]) -> list[dict[str, Any]]:
+    """A knob whose MEANING changed while its default did not (B4116990bbd): nothing to
+    apply -- the default is unchanged -- but the operator must know the guidance now means
+    something different than the number does."""
+    return [
+        {
+            "category": "config",
+            "id": f"knob_semantics_changed:{c.key}",
+            "key": c.key,
+            "change": c.kind,
+            "summary": f"the meaning of {c.key} changed: {c.why}".rstrip(": "),
+            "effect": c.effect,
+            "action": NOTE,
+            "fix": "",
+        }
+        for c in changes
+        if c.kind == "knob_semantics_changed"
+    ]
 
 
 def feature_items(changes: list[UM.Change]) -> list[dict[str, Any]]:
