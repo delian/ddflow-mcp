@@ -269,6 +269,12 @@ class Finding:
     chunk: int = 0
     #: Digest of the finding's FULL text; what a triage is keyed by (`finding_digest`).
     digest: str = ""
+    #: The reviewer that raised it, and its family: a panel record holds every heard
+    #: reviewer's findings, so `merge_rerun` must be able to tell a peer reviewer's
+    #: finding of a re-run chunk from the one being re-run (bug B-chunk-rerun-drops-
+    #: peer-findings).
+    reviewer: str = ""
+    family: str = ""
 
 
 #: A reply or transport error that says the REVIEWER's own quota/exhaustion wall was hit --
@@ -503,6 +509,8 @@ class ReviewResult:
                     "title": f.title,
                     "location": f.location,
                     "detail": f.detail[:FINDING_DETAIL_KEPT],
+                    "reviewer": f.reviewer,
+                    "family": f.family,
                 }
                 for f in self.findings
             ],

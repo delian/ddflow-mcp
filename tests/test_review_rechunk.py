@@ -193,6 +193,44 @@ def test_a_merge_keeps_the_earlier_off_contract_count(repo, tmp_path):
     assert "1 off-contract" in _gate(repo).evidence["coverage"], _gate(repo).evidence
 
 
+def test_rerunning_a_chunk_keeps_a_peer_reviewers_finding(repo, tmp_path):
+    """Bug B-chunk-rerun-drops-peer-findings: a --chunk re-run with the recorded reviewer
+    ``b`` dropped a HIGH that a DIFFERENT reviewer ``a`` raised in the same chunk. A panel
+    record holds every heard reviewer's findings, but a finding carried no reviewer of its
+    own, so ``merge_rerun`` dropped every finding numbered in the re-run chunks -- a false
+    pass route."""
+    from ddflow.services import review as R
+
+    prior = {
+        "reviewer": "b",
+        "diff_sha": "deadbeef",
+        "max_chunk_chars": 4000,
+        "reviewed": [1, 2],
+        "chunks_total": 2,
+        "coverage": "2/2 chunk(s) reviewed",
+        "chunk_findings": [
+            {
+                "chunk": 2,
+                "digest": "abc123",
+                "severity": "HIGH",
+                "title": "x.py:1",
+                "location": "x.py:1",
+                "detail": "bad",
+                "reviewer": "a",
+                "family": "xai",
+            }
+        ],
+        "unreviewed": [],
+    }
+    res = R.ReviewResult("b", "grok-4.7", "google", status=R.REVIEWED, requested=[2], reviewed=[2])
+    res.diff_sha = "deadbeef"
+    res.max_chunk_chars = 4000
+    assert R.merge_rerun(prior, res) == ""
+    # Reviewer a's finding of the re-run chunk 2 is kept, and still attributed to a.
+    assert len(res.findings) == 1
+    assert res.findings[0].reviewer == "a", res.findings
+
+
 def test_an_errored_rerun_with_no_reason_is_still_refused(repo, tmp_path, monkeypatch):
     """critic: the refusal keyed on the reason's truthiness, not on the ERROR status."""
     from ddflow.services import review as R

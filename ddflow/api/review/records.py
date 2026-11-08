@@ -165,7 +165,12 @@ def _reviewed_findings(results) -> list[dict[str, Any]]:
         who = getattr(r, "reviewer", "")
         fam = (getattr(r, "family", "") or "").strip().lower()
         for fd in r.evidence()["chunk_findings"]:
-            out.append({**fd, "reviewer": who, "family": fam})
+            # A `--chunk` re-run's result carries the earlier record's findings, each with
+            # its own reviewer; a finding the re-run kept from a PEER reviewer is that
+            # reviewer's, not the one re-run (bug B-chunk-rerun-drops-peer-findings).
+            out.append(
+                {**fd, "reviewer": fd.get("reviewer") or who, "family": fd.get("family") or fam}
+            )
     return out
 
 
@@ -200,8 +205,10 @@ def _finding_rows(results) -> list[dict[str, str]]:
                 "title": f.title,
                 "location": f.location,
                 "detail": f.detail,
-                "reviewer": r.reviewer,
-                "family": r.family,
+                # A re-run kept a peer reviewer's finding carries its own reviewer; a
+                # finding the reviewer raised itself falls back to that reviewer.
+                "reviewer": f.reviewer or r.reviewer,
+                "family": f.family or r.family,
             }
             for f in r.findings
         )

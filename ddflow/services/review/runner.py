@@ -642,6 +642,21 @@ def _in_rerun_cut(prior: dict[str, Any], f: dict[str, Any]) -> bool:
     )
 
 
+def _kept_over_rerun(prior: dict[str, Any], f: dict[str, Any], again: set[int], who: str) -> bool:
+    """Should finding ``f`` of the record ``prior`` survive a re-run of chunks ``again`` with
+    reviewer ``who``? A chunk that is not re-run stays; a finding numbered in an earlier cut
+    (a delta carried it) stays too (`_in_rerun_cut`); and a RE-RUN chunk's finding is replaced
+    only when the SAME reviewer raised it. A peer reviewer's finding of that chunk is the other
+    reviewer's verdict, kept -- dropping it would be a false pass route (bug
+    B-chunk-rerun-drops-peer-findings)."""
+    if int(f.get("chunk", 0)) not in again:
+        return True
+    if not _in_rerun_cut(prior, f):
+        return True
+    raiser = f.get("reviewer", "")
+    return bool(raiser) and raiser != who
+
+
 def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
     """Fold a `--chunk` re-review into the evidence of the review it re-runs part of.
 
@@ -678,9 +693,11 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
                 location=f.get("location", ""),
                 chunk=int(f.get("chunk", 0)),
                 digest=f.get("digest", ""),
+                reviewer=f.get("reviewer", ""),
+                family=f.get("family", ""),
             )
             for f in prior.get("chunk_findings", [])
-            if int(f.get("chunk", 0)) not in again or not _in_rerun_cut(prior, f)
+            if _kept_over_rerun(prior, f, again, res.reviewer)
         ]
         + res.findings,
         key=lambda f: f.chunk,
