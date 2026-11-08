@@ -52,3 +52,12 @@ def test_own_item_widening_wait_flips_to_ready_after_the_holder_releases(repo):
     run_cli(repo, "release", "X", "--agent", HOLDER)
     out = A.wait(repo, item="Y", globs="f.py", timeout_s=0, agent=WAITER)
     assert out.exit == O.OK and out.data["woke"] is True
+
+
+def test_wait_narrowed_globs_do_not_clash_on_a_glob_they_left_out(repo):
+    """`wait --item --globs` narrows: a glob the caller LEFT OUT must not be reported as
+    clashing with another lease (B-wait-globs-narrowing-ignored)."""
+    _setup(repo)  # X holds f.py; Y globs other.py
+    run_cli(repo, "task", "add", "Z", "--title", "Z", "--globs", "f.py,other.py")
+    out = A.wait(repo, item="Z", globs="other.py", timeout_s=0, agent=WAITER)
+    assert out.exit == O.OK and out.data["woke"] is True, out.reason

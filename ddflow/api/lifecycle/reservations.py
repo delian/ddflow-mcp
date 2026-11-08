@@ -186,7 +186,7 @@ def _claim_blocker(
     """
     cycles = find_cycles({i.id: i for i in st.items.values() if not i.removed})
     in_cycle = {n for c in cycles for n in c}
-    b = item_blocker(st, cfg, it, live, agent=me, now=now, in_cycle=in_cycle, cycles=cycles)
+    b = item_blocker(st, cfg, it, live, agent=me, now=now, in_cycle=in_cycle, cycles=cycles, globs=globs)
     if b is not None:
         return b
     expired = _expired_blocker(cfg, it, me, live)

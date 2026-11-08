@@ -34,6 +34,10 @@ class PlanCtx:
     in_cycle: set[str]
     cycles: list[list[str]]
     bugs: frozenset[str] = frozenset()
+    #: The globs a caller says its claim will name (`wait --globs`, `claim --globs`); None means
+    #: judge the item's own stored globs. The `globs` filter must honour this, or `wait
+    #: --item --globs` reports a clash on a glob the caller left out (B-wait-globs-narrowing-ignored).
+    globs: list[str] | None = None
 
 
 #: A readiness filter answers "why can this item not start?" -- a `Blocked` carrying the
@@ -100,7 +104,13 @@ def _f_lease(ctx: PlanCtx, it: Item) -> Blocked | None:
 
 def _f_globs(ctx: PlanCtx, it: Item) -> Blocked | None:
     clash = glob_conflict(
-        ctx.state, ctx.cfg, it, list(it.globs), ctx.agent, against="live", live=ctx.live
+        ctx.state,
+        ctx.cfg,
+        it,
+        list(it.globs) if ctx.globs is None else list(ctx.globs),
+        ctx.agent,
+        against="live",
+        live=ctx.live,
     )
     if clash is None:
         return None
@@ -157,6 +167,7 @@ def item_blocker(
     now: float,
     in_cycle: set[str],
     cycles: list[list[str]],
+    globs: list[str] | None = None,
 ) -> Blocked | None:
     """Why can this item not start? ``None`` means it can.
 
@@ -165,7 +176,7 @@ def item_blocker(
     independently and the copies disagreed: an agent refused one item was offered an
     alternative the scheduler would also refuse.
     """
-    ctx = PlanCtx(state, cfg, agent, now, live, in_cycle, cycles)
+    ctx = PlanCtx(state, cfg, agent, now, live, in_cycle, cycles, globs=globs)
     lease_policy = cfg.schedule.ready_policy == "deps_and_lease"
     for name, fn in FILTERS.items():
         if name in LEASE_FILTERS and not lease_policy:
