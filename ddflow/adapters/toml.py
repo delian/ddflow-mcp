@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import re
 import tomllib
-import tomlkit
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+import tomlkit
 
 from .ports import port
 
