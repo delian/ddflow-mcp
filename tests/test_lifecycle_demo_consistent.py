@@ -50,6 +50,14 @@ def test_act4_skips_docs_but_no_longer_passes_it():
     assert '"ddflow_gate_skip"' in src and 'gate="docs"' in src
 
 
+def test_orchestration_scenario_also_skips_docs_and_does_not_pass_it():
+    """The sibling mcp-orchestration scenario has the same pass-then-skip docs
+    contradiction; both scenarios must skip docs without recording it first."""
+    src = (ROOT / "demos" / "scenario_mcp_orchestration.py").read_text("utf-8")
+    assert '"corrections", "docs", "merge"' not in src
+    assert '"ddflow_gate_skip"' in src and 'gate="docs"' in src
+
+
 def test_act8_code_gone_filter_ignores_dotddflow():
     """The "code is genuinely gone" filter ignores `.ddflow` wherever the delete loop
     spares it, so a surviving `.ddflow` file is not reported as surviving code."""
