@@ -8,9 +8,58 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_FILE = re.compile(r'^diff --git "?a/(?P<a>.+?)"? "?b/(?P<b>.+?)"?$')
+_FILE = re.compile(
+    r"^diff --git "
+    r'(?P<a>"a/(?:[^"\\]|\\.)*"|a/.*) '
+    r'(?P<b>"b/(?:[^"\\]|\\.)*"|b/.*)$'
+)
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
+_C_ESCAPES = {
+    "\\": "\\",
+    '"': '"',
+    "t": "\t",
+    "n": "\n",
+    "r": "\r",
+    "a": "\a",
+    "b": "\b",
+    "v": "\v",
+    "f": "\f",
+}
+
+
+def _dequote(name: str) -> str:
+    """A git `core.quotepath` name, decoded to UTF-8: git C-escapes ``\\``, ``"`` and the C
+    escapes, and writes bytes above 0x7f as ``\\ooo`` octal; `shape` un-quotes both (a file
+    named ``é`` is ``\\303\\251``). Non-UTF-8 bytes decode with ``surrogateescape`` so two
+    distinct raw names stay distinct instead of both collapsing to U+FFFD."""
+    raw = bytearray()
+    i = 0
+    while i < len(name):
+        if name[i] != "\\":
+            raw.extend(name[i].encode("utf-8", "replace"))
+            i += 1
+            continue
+        if i + 1 >= len(name):
+            raw.append(0x5C)  # a trailing lone backslash is a literal backslash
+            i += 1
+            continue
+        nxt = name[i + 1]
+        if nxt in _C_ESCAPES:
+            raw.extend(_C_ESCAPES[nxt].encode("utf-8"))
+            i += 2
+            continue
+        if (
+            i + 4 <= len(name)
+            and name[i + 1] in "0123"
+            and all(c in "01234567" for c in name[i + 1 : i + 4])
+        ):
+            raw.append(int(name[i + 1 : i + 4], 8))
+            i += 4
+            continue
+        raw.append(0x5C)
+        i += 1
+    return raw.decode("utf-8", "surrogateescape")
 
 
 @dataclass(frozen=True)
@@ -76,8 +125,15 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            if m["b"] not in self.files:
-                self.files.append(m["b"])
+            # `core.quotepath` double-quotes (and C-escapes) a name only for the side that
+            # needs it, so decode that side alone (`diff --git a/foo "b/\303\251"` quotes just
+            # `b/`). An unquoted name is a literal POSIX byte string (quotePath=false), e.g.
+            # `a/foo bar.txt` or `a/café.txt`, so only a side the header actually quoted is
+            # passed to `_dequote`.
+            b_side = m["b"]
+            b = _dequote(b_side[3:-1]) if b_side[0] == '"' else b_side[2:]
+            if b not in self.files:
+                self.files.append(b)
         elif not self.files or self.in_binary:
             pass
         elif line.startswith(_BINARY):
@@ -93,6 +149,11 @@ class _Reader:
 
 
 def _diff_lines(patch: str) -> list[str]:
+    # NOTE (LK-sg-events follow-up): the cut at the first `---` line is DELIBERATELY coarse, not a
+    # bug. A format-patch message body can itself contain a `---` line, so the cut after it keeps a
+    # body `diff --git` snippet and OVER-COUNTs a fake file — the rejection is then by the
+    # too-many-files bound, i.e. it fails CLOSED, never under-counts (rubber_duck #27, critic
+    # #23/#25). A precise cut would need git's `diffstat` marker, which is not in the text.
     lines = patch.splitlines()
     if lines and lines[0].startswith(("From ", "Subject:", "From:")):
         # a format-patch: the message ends at the first `---` line; a diff quoted in it is text
