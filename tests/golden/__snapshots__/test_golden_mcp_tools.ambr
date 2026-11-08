@@ -113,7 +113,7 @@
          },
          "evidence": {
           "type": "string",
-          "description": "The probe command or test node id that showed it false."
+          "description": "What showed the bug: evidence kept with the record (agent-supplied text, stored, never run)."
          },
          "reopen": {
           "type": "boolean",
