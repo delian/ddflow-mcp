@@ -21,22 +21,17 @@ def _pipeline(repo, pipeline="implement,ci,merge"):
     run_cli(repo, "claim", "T1", "--no-worktree")
 
 
+def _record_ok(repo, *argv: str) -> tuple[int, str, str]:
+    code, out, err = run_cli(repo, "gate", "record", *argv)
+    assert code == OK, err
+    return code, out, err
+
+
 def test_a_partial_gate_is_not_said_to_have_not_run(repo):
     _pipeline(repo)
-    run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")
-    code, _o, err = run_cli(
-        repo,
-        "gate",
-        "record",
-        "T1",
-        "ci",
-        "--outcome",
-        "partial",
-        "--reason",
-        "16 failed, 572 passed",
-    )
-    assert code == OK, err
-    run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")
+    _record_ok(repo, "T1", "implement", "--outcome", "passed")
+    _record_ok(repo, "T1", "ci", "--outcome", "partial", "--reason", "16 failed, 572 passed")
+    _record_ok(repo, "T1", "merge", "--outcome", "passed")
     _code, out, _ = run_cli(repo, "gate", "status", "T1")
     # The reported note was a comma-joined "NOTE: ci, unit_tests did not run": the partial
     # gate must not be a member of the never-ran list, whatever gates surround it.
