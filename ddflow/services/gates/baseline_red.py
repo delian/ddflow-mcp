@@ -122,9 +122,11 @@ def _tally(
     onbase: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """What ``known`` says of ``ids``: red only when every one of them failed on the base with
-    the failure text the branch showed. A test the base also fails, but DIFFERENTLY, is a new
-    offender, not baseline (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to
-    ``different``, so ``still`` no longer covers it and ``red`` misses it."""
+    no id shown to differ (an id whose failure text is absent on either side is counted in
+    ``uncompared`` and still toward ``red``: "not different" then is an absence of evidence,
+    not a match). A test the base also fails, but DIFFERENTLY, is a new offender, not baseline
+    (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to ``different``, so ``still``
+    no longer covers it and ``red`` misses it."""
     different = [i for i in ids if known.get(i) and _differs(i, before, onbase)]
     still = [i for i in ids if known.get(i) and i not in different]
     #: Ids whose failure text is missing on EITHER side: `_differs` returns "not different"

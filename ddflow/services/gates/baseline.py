@@ -188,7 +188,14 @@ def auto_decision(
         # failing test FILE is itself changed. Reach is then only needed to attribute a failure
         # to a changed file (B0f41a2f1d6).
         changed = set(sel.changed)
-        if not found.get("uncompared") and not [f for f in test_files_of(ids) if f in changed]:
+        uncompared = found.get("uncompared")
+        # `uncompared` is always set on the one path that yields `red` (`_tally`), so an ABSENT
+        # list must decline rather than read as "all compared" (B0f41a2f1d6).
+        if (
+            uncompared is not None
+            and not uncompared
+            and not [f for f in test_files_of(ids) if f in changed]
+        ):
             return {
                 **out,
                 "accepted": True,
