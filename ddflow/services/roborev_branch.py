@@ -264,11 +264,28 @@ def _collect(exe: str, where: Path, job: int | None, head: str, wait_s: int) -> 
 
 
 def _no_confirmed_defect(text: str) -> bool:
-    """Does roborev's review body name NO confirmed defect? Its own words are 'no CONFIRMED
-    defects' when the only findings are notes/refuted/theoretical (a note still counts as a
-    finding, so `roborev wait` exits 1 for it). Such a review reads as clean: nothing is a
-    defect to record `failed` over."""
-    return "no confirmed defect" in text.casefold()
+    """Does roborev's review body hold a CONFIRMED defect? roborev's own words are 'no
+    CONFIRMED defects' when the only findings are notes/refuted/theoretical (a note still
+    counts as a finding, so `roborev wait` exits 1 for it). A real confirmed finding -- a
+    severity bullet not marked THEORETICAL/refuted -- still reads as findings even next to
+    those words (a negation or a quoted phrase does not make a clean review)."""
+    lowered = text.casefold()
+    if "no confirmed defect" not in lowered:
+        return False
+    return not _has_confirmed_finding(text)
+
+
+_SEVERITY = re.compile(r"\*\*(?:critical|high|medium|low)\*\*", re.IGNORECASE)
+
+
+def _has_confirmed_finding(text: str) -> bool:
+    """A severity bullet that is a confirmed defect (not marked THEORETICAL or refuted)."""
+    for line in text.splitlines():
+        if _SEVERITY.search(line) and not (
+            "theoretical" in line.casefold() or "refuted" in line.casefold()
+        ):
+            return True
+    return False
 
 
 def _findings_summary(text: str) -> str:

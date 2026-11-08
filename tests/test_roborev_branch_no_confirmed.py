@@ -60,3 +60,19 @@ def test_a_findings_exit_with_a_real_defect_is_still_findings(tmp_path, monkeypa
     monkeypatch.setenv("FAKE_VERDICT", "Review for job 7: a medium confirmed defect")
     r = RB.run(repo, "main", 20)
     assert r.outcome == "findings" and r.exit == 1
+
+
+def test_a_negated_no_confirmed_phrase_next_to_a_real_defect_is_still_findings(
+    tmp_path, monkeypatch
+):
+    """The reviewer's refutation case: the 'no CONFIRMED defects' phrase in prose next to a
+    real, confirmed severity bullet must not read as clean."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "There were no confirmed defects in the helpers.\n"
+        "**high** ddflow/services/roborev_branch.py:255\nA real defect remains.\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1
