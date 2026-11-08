@@ -55,6 +55,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     test: str = "",
     repro_cmd: str = "",
     repro_capture: str = "",
+    evidence: str = "",
     tags: str | list[str] = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
@@ -144,6 +145,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
             {
                 "item": item,
                 "summary": summary,
+                **({"evidence": evidence} if evidence else {}),
                 **extra,
                 **linked,
                 **repro,

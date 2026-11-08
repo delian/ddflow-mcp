@@ -407,7 +407,8 @@
                           is reserved)
     --no-task             file no fix task: the bug is fixed in the commit that found it
     --repro-cmd REPRO_CMD
-                          the command that shows the bug, kept in the repro bundle (never run)
+                          the command that shows the bug, run once at filing in a scratch checkout
+                          of the recorded sha (CLI only; the operator's own command)
     --test TEST           a pytest id: run once, its output tail goes in the repro bundle
     --repro-capture REPRO_CAPTURE
                           off | basic | full: how much repro bundle to store (default [bugs]
