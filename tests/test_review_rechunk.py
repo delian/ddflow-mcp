@@ -195,10 +195,10 @@ def test_a_merge_keeps_the_earlier_off_contract_count(repo, tmp_path):
 
 def test_rerunning_a_chunk_keeps_a_peer_reviewers_finding(repo, tmp_path):
     """Bug B-chunk-rerun-drops-peer-findings: a --chunk re-run with the recorded reviewer
-    ``b`` dropped a HIGH that a DIFFERENT reviewer ``a`` raised in the same chunk. A panel
-    record holds every heard reviewer's findings, but a finding carried no reviewer of its
-    own, so ``merge_rerun`` dropped every finding numbered in the re-run chunks -- a false
-    pass route."""
+    ``b`` (raising nothing) dropped a HIGH that a DIFFERENT reviewer ``a`` raised in the same
+    chunk. A panel record holds every heard reviewer's findings, but a finding carried no
+    reviewer of its own, so ``merge_rerun`` dropped every finding numbered in the re-run
+    chunks -- a false pass route."""
     from ddflow.services import review as R
 
     prior = {
@@ -222,23 +222,47 @@ def test_rerunning_a_chunk_keeps_a_peer_reviewers_finding(repo, tmp_path):
         ],
         "unreviewed": [],
     }
+    # The re-run raises NOTHING (the original probe: res.findings == []).
     res = R.ReviewResult("b", "grok-4.7", "google", status=R.REVIEWED, requested=[2], reviewed=[2])
     res.diff_sha = "deadbeef"
     res.max_chunk_chars = 4000
-    # Reviewer b's re-run of chunk 2 raises its OWN finding (rather than none): the merged
-    # result keeps BOTH -- a's from the earlier record, b's new one -- each attributed.
-    res.findings = [R.Finding("MEDIUM", "y.py:9", chunk=2, digest="bbb222", reviewer="", family="")]
     assert R.merge_rerun(prior, res) == ""
-    assert len(res.findings) == 2, res.findings
+    assert len(res.findings) == 1, res.findings
+    assert res.findings[0].digest == "abc123"
+    assert res.findings[0].reviewer == "a", "reviewer a's finding is kept, attributed to a"
+
+
+def test_a_reruns_own_finding_is_attributed_to_it(repo, tmp_path):
+    """The finding a re-run raises is the re-run reviewer's, stamped on the merged result."""
+    from ddflow.services import review as R
+
+    prior = {
+        "reviewer": "b",
+        "diff_sha": "deadbeef",
+        "max_chunk_chars": 4000,
+        "reviewed": [1, 2],
+        "chunks_total": 2,
+        "coverage": "2/2 chunk(s) reviewed",
+        "chunk_findings": [
+            {"chunk": 2, "digest": "abc123", "severity": "HIGH", "title": "x.py:1",
+             "location": "x.py:1", "detail": "bad", "reviewer": "a", "family": "xai"}
+        ],
+        "unreviewed": [],
+    }
+    res = R.ReviewResult("b", "grok-4.7", "google", status=R.REVIEWED, requested=[2], reviewed=[2])
+    res.diff_sha = "deadbeef"
+    res.max_chunk_chars = 4000
+    res.findings = [R.Finding("MEDIUM", "y.py:9", chunk=2, digest="bbb222")]
+    assert R.merge_rerun(prior, res) == ""
     by_reviewer = {f.digest: f.reviewer for f in res.findings}
     assert by_reviewer["abc123"] == "a", "reviewer a's finding of the re-run chunk is kept"
     assert by_reviewer["bbb222"] == "b", "the re-run's own finding is attributed to b"
 
 
 def test_a_rerun_keeps_a_finding_that_names_no_reviewer(repo, tmp_path):
-    """An OLD record's finding carried no reviewer; a re-run of its chunk must KEEP it, not
-    drop it -- dropping a finding nobody can attribute is the same false pass the bug is
-    about (the reviewer must be able to tell a peer's finding from the one re-run)."""
+    """An OLD record's finding carried no reviewer; a re-run of its chunk must KEEP it, and
+    keep it UNAttributed (dropping a finding nobody can attribute is the same false pass the
+    bug is about, and it is not the re-run reviewer's)."""
     from ddflow.services import review as R
 
     prior = {
@@ -266,6 +290,7 @@ def test_a_rerun_keeps_a_finding_that_names_no_reviewer(repo, tmp_path):
     assert R.merge_rerun(prior, res) == ""
     assert len(res.findings) == 1, res.findings
     assert res.findings[0].digest == "abc123"
+    assert res.findings[0].reviewer == "", "an unattributed finding is kept, not relabelled to b"
 
 
 def test_an_errored_rerun_with_no_reason_is_still_refused(repo, tmp_path, monkeypatch):
