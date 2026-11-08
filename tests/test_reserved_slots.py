@@ -94,18 +94,21 @@ def test_a_fresh_queue_offers_features_only_up_to_the_ordinary_share(log, cfg):
 
 
 def test_a_cap_hold_says_a_named_claim_is_not_capped(log, cfg):
-    """B30f9d383ba: `next` lists a cap-held item as blocked while `claim <id>` never applies
-    the cap to a NAMED item, so the detail must say a named claim grants it -- otherwise a
-    lane cannot tell a wait for a slot from an item it could claim right now."""
+    """B30f9d383ba: a cap-held item whose free slot went to a HIGHER-RANKED item (which may
+    have no lease) is listed as blocked while `claim <id>` never applies the cap to a NAMED
+    item; the detail must say a named claim grants it -- otherwise a lane cannot tell a wait
+    for a slot from an item it could claim right now."""
     _queue(log, "F1", "F2", "F3", "F4")
-    for i, who in (("F1", "x"), ("F2", "y"), ("F3", "z")):
-        _hold(log, i, who)
-    _reserve(cfg, cap=3)
+    _hold(log, "F1")
+    cfg.schedule.max_parallel_tasks = 2
+    cfg.schedule.reserved_slots = 0
     p = plan(fold(log.read_all()), cfg, agent="me")
-    assert "cap reached" in p.blocked[-1].detail
-    assert "not capped" in p.blocked[-1].detail and "grants it now" in p.blocked[-1].detail, (
-        p.blocked[-1].detail
-    )
+    goods = [b for b in p.blocked if b.item in ("F3", "F4")]
+    assert goods and p.capped == ["F3", "F4"]
+    why = goods[0].detail
+    # the free slot went to higher-ranked F2 (not "cap reached"): the branch the bug is about
+    assert "slot(s) free, offered to higher-ranked F2" in why, why
+    assert f"not capped" in why and "grants it now" in why, why
 
 
 @pytest.mark.parametrize("tag", ["bug", "bugfix", "fix", "hotfix", "ddflow-gap"])
