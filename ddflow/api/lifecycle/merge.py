@@ -52,21 +52,32 @@ def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
 
 
 def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, agent: str):
-    """(assessment, stamp, refusal): a configuration problem refuses first, then what
+    """(assessment, stamp, pending, refusal): a configuration problem refuses first, then what
     `[merge].require_gates` makes of the unsettled gates.
-    The approval is spent inside `MF.authorise`, so the caller runs this after every other refusal."""
+    An agent's approval is only VALIDATED here (`MF.authorise` checks it without spending);
+    ``pending`` names the id to spend via `MF.spend` once the git landing has landed, so a
+    landing that fails on a conflict or hook does not consume a single-use approval
+    (B527b0a518c). "" for a person's force and for a standing-policy answer (already consumed)."""
     bad = F.problems(cfg)
     if bad:
-        return None, None, O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+        return (
+            None,
+            None,
+            "",
+            O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[]),
+        )
     gates = MF.assess(repo, cfg, st, item)
     if not gates.refuses:
-        return gates, None, None
-    stamp, why = MF.authorise(log, cfg, item, gates, force=force, approval=approval, agent=agent)
+        return gates, None, "", None
+    stamp, why, pending = MF.authorise(
+        log, cfg, item, gates, force=force, approval=approval, agent=agent
+    )
     if not why:
-        return gates, stamp, None
+        return gates, stamp, pending, None
     return (
         gates,
         None,
+        "",
         O.refused("worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)),
     )
 
@@ -123,6 +134,18 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+
+
+def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: str) -> dict | None:
+    """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
+    the approval id to spend, and is "" unless `authorise` validated a real `--approval <id>`;
+    a person's `--force` and a standing-policy stamp pass through untouched. A spend that fails
+    after a concurrent consumer (or expiry between validation and spend) returns a STRUCTURED
+    marker (`spend: "failed"`) -- never a valid-looking proof, and never a silent drop."""
+    if not pending:
+        return stamp
+    spent = MF.spend(log, cfg, item, gates, pending)
+    return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
 
 
 def _commit_shards_before_merge(log, cfg, item: str) -> None:
@@ -251,8 +274,11 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
                 dirty=[],
             )
         return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
-    # Last of the refusals: an agent's approval is spent here, so no refusal above is its cost.
-    gates, forced_by, over = _override(repo, cfg, log, st, item, force, approval, agent)
+    # Last of the refusals: an agent's approval is only checked here, so no refusal above is
+    # its cost; it is spent (MF.spend) only after the git landing below actually landed.
+    gates, forced_by, pending_approval, over = _override(
+        repo, cfg, log, st, item, force, approval, agent
+    )
     if over is not None:
         return over
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
@@ -321,6 +347,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
+    # Spend an agent's approval only now, once the landing landed: a person's `--force` and a
+    # standing-policy answer have no approval to spend (pending_approval == ""), and a failed
+    # landing returned above before reaching here (B527b0a518c).
+    forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
     _record_forced(log, item, sha, gates, forced_by, agent)
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.

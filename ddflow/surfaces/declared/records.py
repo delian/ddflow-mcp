@@ -309,7 +309,7 @@ COMMANDS: tuple[Command, ...] = (
         "duplicate onto its cluster's canonical member with `ddflow link --duplicate-of` "
         "-- nothing is ever closed here; a duplicate bug is closed only once its "
         "original is fixed. Nothing close: exit 2.",
-        call=lambda repo, a, agent: _api().bug_dedupe(
+        call=lambda repo, a, agent: _api().dedupe_bugs(
             repo,
             apply=bool(a.get("apply")),
             floor=a.get("floor"),
