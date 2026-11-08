@@ -9,16 +9,18 @@ from typing import Any
 
 from ...config import Config
 from ...core import blobref as B
-from ...core.model import OUTCOME_MARK, State
+from ...core.model import OUTCOME_MARK, Item, State
 from .. import gate_accept as GA
 from .. import logblobs as LB
 from ..docsonly import pipeline_by_diff
 from .defs import GateDef, pipeline_for, required_gates
 from .evidence import (
     TreeEntries,
+    _is_ancestor,
     commit_tree_entries,
     content_id,
     differing_paths,
+    head_of,
     normal_fingerprint,
     recorded_content,
     split_identity,
@@ -472,4 +474,65 @@ def stale_evidence_detail(
         else:
             continue
         stale += _differing_note(StaleNote, gid, cwd, base, dirt, now, label, own)
+    stale += _lost_branch_notes(it, cfg, cwd, landed)
     return sorted(stale)
+
+
+def lost_branch(head: str, cwd: Path, checked: str = "") -> bool:
+    """Is commit ``head`` (a `tree_identity`/fingerprint's `head_of`) no longer in the
+    branch being checked -- neither itself nor an ancestor of it -- because that branch was
+    deleted and rebuilt (a re-claim on a new tree; bug B-gates-survive-lost-branch)?
+
+    The one gate-staleness test content drift cannot make. Content is compared only for
+    `gates.evidence_required`, because the others legitimately record before the work
+    they precede is finished: research and rules are *supposed* to name an earlier tree
+    on the SAME branch. An ancestor commit is exactly that -- earlier work, not another
+    generation of it -- so an ancestry miss is the signature of the branch having been
+    rebuilt. False when git cannot tell: "could not tell" must not read as "lost"."""
+    if not head:
+        return False
+    return _is_ancestor(cwd, head, checked or "HEAD") is False
+
+
+def _lost_branch_notes(
+    it: Item,
+    cfg: Config,
+    cwd: Path,
+    landed: str,
+) -> list[StaleNote]:
+    """Notes for passed gates that outlived the branch they were recorded on.
+
+    A gate held to no evidence can still outlive its branch (B-gates-survive-lost-branch):
+    research and rules record a pass on the committed tree they were read against, and a
+    re-claim on a new tree -- the item parked, its branch deleted, then claimed afresh --
+    keeps that pass green though nothing of the branch exists. The commit its `tree_sha`
+    names is then not an ancestor of what is being checked: mark it stale, not passed.
+    Content drift within the same branch is NOT marked here -- those gates are *supposed*
+    to precede the edits that follow them (`gates.evidence_required` handles content for
+    the gates held to it above).
+
+    Only the item's own branch is checked. `landed` is "HEAD" or "" for the worktree/
+    branch the gates were recorded on (`gate status`, `sync`, a pre-landing `complete`) --
+    there, a non-ancestor commit IS a rebuilt branch. A landed-after commit (a squash or
+    rebased landing) is skipped: its commits descend from the target, not the item's
+    branch, so the same ancestry miss would read the landing itself as a rebuilt branch
+    and fire the exact always-fires warning this module guards against.
+    """
+    if landed not in ("", "HEAD"):
+        return []
+    out = []
+    required = set(cfg.gates.evidence_required)
+    for gid, rec in sorted(it.gates.items()):
+        if gid in required or not rec or rec.outcome != "passed":
+            continue
+        was_sha = normal_fingerprint((rec.evidence or {}).get("tree_sha", "") or "")
+        head = head_of(was_sha)
+        if head and lost_branch(head, cwd, landed):
+            out.append(
+                StaleNote(
+                    gid,
+                    f"it was recorded on {head}, a commit this branch no longer descends "
+                    f"from (the branch was rebuilt, so this is not this claim's pass)",
+                )
+            )
+    return out
