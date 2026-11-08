@@ -129,6 +129,30 @@ SOURCES: tuple[Source, ...] = (
         ("complete.force",),
     ),
     _s(
+        "force_merge",
+        "a merge forced past unsettled required gates awaits approval",
+        OPERATOR,
+        "nudge",
+        "merge.force approval ask records without an answer",
+        "approve or deny the forced merge",
+        "ddflow merge <id> --force --approval request|ID",
+        APPROVAL_ASK,
+        "the item and its dependants",
+        ("merge.force",),
+    ),
+    _s(
+        "phase_complete",
+        "a phase-complete request awaits approval",
+        OPERATOR,
+        "nudge",
+        "phase.complete approval ask records without an answer",
+        "approve or deny the phase completion",
+        "ddflow phase complete <id> --approval request|ID",
+        APPROVAL_ASK,
+        "the phase (its tasks are settled; it stays open meanwhile)",
+        ("phase.complete",),
+    ),
+    _s(
         "chore",
         "a chore proposal awaits approval",
         OPERATOR,
@@ -281,6 +305,7 @@ EXEMPT_SITES: dict[str, str] = {
     "config.set": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "pins.regenerate": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "history.accept": "a pending request for it is an 'approval' entry; nothing else pends in State",
+    "token.manage": "T3 signed act; nothing pends in State",
 }
 
 

@@ -125,9 +125,8 @@ def test_a_section_is_wired_from_declare_not_a_kept_list():
     # lazily through `__getattr__`, so no section class name may be spelled there either.
     init_src = CONFIG_INIT.read_text("utf-8")
     spelled = sorted(cls.__name__ for cls in SECTION_CLASSES.values() if cls.__name__ in init_src)
-    assert not spelled, (
-        "ddflow.config re-exports section classes by hand again: "
-        + ", ".join(spelled)
+    assert not spelled, "ddflow.config re-exports section classes by hand again: " + ", ".join(
+        spelled
     )
 
 

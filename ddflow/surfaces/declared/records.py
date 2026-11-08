@@ -309,7 +309,7 @@ COMMANDS: tuple[Command, ...] = (
         "duplicate onto its cluster's canonical member with `ddflow link --duplicate-of` "
         "-- nothing is ever closed here; a duplicate bug is closed only once its "
         "original is fixed. Nothing close: exit 2.",
-        call=lambda repo, a, agent: _api().bug_dedupe(
+        call=lambda repo, a, agent: _api().dedupe_bugs(
             repo,
             apply=bool(a.get("apply")),
             floor=a.get("floor"),
@@ -628,6 +628,21 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param("item", help="Item it concerns.", cli_help="", default=""),
         ),
+    ),
+    Command(
+        path=("session", "inbox"),
+        tool="ddflow_session_inbox",
+        tier="all",
+        summary="read this lane's delivered inbox messages again",
+        description="Read the lane's delivered messages again: `ddflow heartbeat` delivers and "
+        "RETAINS them for [lease].inbox_retain_s, so a piped heartbeat that lost the text can "
+        "be shown whole here, fenced as untrusted data. Local to this machine.",
+        call=lambda repo, a, agent: _api().session_inbox(repo, agent=agent),
+        payload=("messages", "count"),
+        render=lambda out, a: (
+            "\n\n".join(m["fenced"] for m in out.data["messages"]) or "no retained inbox messages"
+        ),
+        params=(),
     ),
     Command(
         path=("session", "note"),

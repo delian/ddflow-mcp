@@ -3,46 +3,163 @@
 # set it in .ddflow/config.toml. Rewrite this file with `ddflow config defaults --write`.
 # What each knob means: `ddflow config --explain`.
 
-[lease]
-ttl_s = 1800
-heartbeat_s = 300
-renew_long_commands = true
-renew_log_min_s = 120
-grace_s = 120
-acquire_timeout_s = 30
-waiter_reservation_s = 300
-wait_max_s = 600
-wait_queue = false
-idle_max_s = 900
-hold_max_s = 3600
-release_at_merge = true
-break_on_timeout = false
-inbox_max_chars = 2000
-inbox_max_pending = 50
-inbox_ttl_s = 86400
-wait_cap_s = 1800
-reclaim_policy = "report"
-resume_own = true
-shared_globs = []
-new_file_globs = ["ddflow/templates/upgrade/unreleased/*.toml", "tests/test_*.py"]
-append_only_globs = []
-scan_view_trees_max = 16
-scan_view_verdicts_max = 0
+[agent]
+id = ""
+reviewer_family_must_differ = true
+reviewer_independence = "model"
+families = {qwen = "alibaba", claude = "anthropic", gpt = "openai", o1 = "openai", o3 = "openai", codex = "openai", gemini = "google", gemma = "google", llama = "meta", mistral = "mistral", mixtral = "mistral", deepseek = "deepseek", grok = "xai", phi = "microsoft", command = "cohere", yi- = "01ai", glm = "zhipu", nemotron = "nvidia", granite = "ibm", kimi = "moonshot", minimax = "minimax", ernie = "baidu"}
+family = ""
+routers = {hydrafusion = []}
+roles = {operator = ["*"], bot = ["read", "claim", "note", "start_lane", "approve_marked"], agent = ["read", "claim", "note"], observer = ["read"]}
+actors = {}
+default_role = "agent"
+operator_role = "operator"
+ask_ttl_s = 86400
+ask_code_length = 8
+token_ttl_h = 168
+token_max_ttl_h = 720
+pair_ttl_s = 300
+pair_code_length = 10
+pair_max_attempts = 5
+capability_verbs = {read = ["help", "brief", "next", "status", "show", "board", "progress", "history", "list", "search", "recall", "similar", "gate status", "gate list", "decision list", "decision show", "decision search", "decision applicable", "rule list", "rule show", "rule search", "lesson search", "memory list", "version show", "flow show", "job list"], claim = ["claim", "heartbeat", "release", "wait", "gate record", "gate run", "merge", "complete"], note = ["session note", "session message", "bug found"], start_lane = [], approve_marked = []}
+require_operator_token = false
 
-[worktree]
-enabled = true
-root = ".ddflow/worktrees"
-branch_prefix = "ddflow/"
-base_ref = ""
-merge_strategy = "no-ff"
-remove_on_merge = true
-dispose_finished = true
-sweep_min_age_s = 3600
-sweep_interval_s = 900
-max_parallel = 0
-sync_before_start = true
-adopt_existing = true
-local_files = []
+[approvals]
+use_ttl_s = 3600
+auto_request = true
+reason_chars = 300
+min_digest_chars = 8
+accept_harness = true
+transcript_dirs = []
+expiry_warn_s = 600
+policy = []
+policy_max_uses = 1
+policy_unavailable_runs = 3
+auto_approve_after_retries = 0
+standing_window_s = 3600
+standing_verbs = ["complete.force", "claim.force", "gate.skip.failed_review", "approve.partial"]
+accept_chat_for_t3 = false
+forbid_chat_for_t3 = false
+require_approval = []
+
+[bugs]
+file_task = true
+phase = "bugs"
+lint_checks = ["ruff", "(CI: Lint)", "format", "bandit", "(CI: Static security scan)"]
+named_scope_at = 20
+repro_capture = "full"
+repro_max_bytes = 65536
+repro_tail_bytes = 4096
+repro_events = 10
+repro_test_timeout_s = 300
+repro_runs = 1
+repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDE*", "*GATE*"]
+repro_redact_extra = []
+
+[cadence]
+integration_tests_every_tasks = 5
+architecture_review_every_phases = 2
+mutation_tests_every_phases = 3
+dedupe_sweep_every_tasks = 4
+lessons_pass_every_phases = 4
+max_missed = 1
+every_days = []
+recall_recheck_s = 1800
+recall_recheck_max = 3
+
+[chore]
+globs = [".ddflow/rules/**", ".mailmap", "DDFLOW.md", "docs/ddflow/decisions/**", "docs/ddflow/QUEUE.md", "docs/ddflow/LESSONS.md", "docs/ddflow/LESSONS-SUMMARY.md"]
+skip_gates = ["research", "rules", "implement", "rubber_duck", "critic", "verify", "standards", "ci", "unit_tests", "bug_hunt", "dedupe"]
+
+[ci]
+command = ""
+base = ""
+pins_precheck = true
+timeout_s = 3600
+workers = "auto"
+min_workers = 1
+suite_min_workers = 8
+max_workers = 48
+max_concurrent_suites = 1
+selected_lock_tests = 20
+selected_lock_s = 600
+selected_lock_min_runs = 5
+selected_lock_runs = 50
+suite_wait_s = 1800
+suite_queue_stale_s = 120
+suite_queue_grace_s = 120
+keep_env = []
+on_merge = "fast"
+tests_scope = "selected"
+always_tests = ["tests/test_constants_ratchet.py", "tests/test_layering*.py", "tests/golden/**", "tests/test_uc_surf_setup_ops_transcript.py", "tests/test_uc_surf_loop_transcript.py", "tests/test_readme_*.py", "tests/test_mcp_tool_budget.py", "tests/test_mcp_parity.py"]
+
+[companions]
+probe_cache_ttl_s = 300
+tool_probe_timeout_s = 20.0
+tool_run_timeout_s = 300.0
+
+[dedupe]
+on_match = "ask"
+show_floor = 0.35
+ask_threshold = 0.55
+max_candidates = 3
+min_words = 8
+research_task_asks = false
+kinds = ["bug", "task", "phase", "lesson", "decision", "research", "memory", "rule"]
+
+[digest]
+escalate_after = "1h, 24h"
+escalate_after_red_main = "6h"
+text_chars = 400
+spotcheck_min = 1
+
+[docs]
+severity = "warn"
+check_links = "local"
+link_timeout_s = 10
+check_paths = []
+lint_command = ""
+ignore_paths = []
+ignore_names = []
+extract = []
+count = []
+cli_command = []
+command_timeout_s = 20
+
+[enforce]
+commit_without_lease = "warn"
+install_hooks_on_setup = true
+require_item_trailer = false
+item_trailer_keys = ["Item"]
+forbidden_trailers = []
+trailer_waivers = {}
+event_secrets = "block"
+generated_views = "block"
+stale_docs = "warn"
+merge_commit_scope = "own"
+lapsed_lease = "accept"
+environment_commits = "block"
+complexity_warn_at = 18
+doc_globs = ["**/*.md", "**/*.rst", "**/*.adoc"]
+doc_exclude = ["**/CHANGELOG*", "**/HISTORY*", "**/NEWS*", ".ddflow/**", "docs/ddflow/**"]
+stale_rules = "block"
+readme_with_code = "warn"
+readme_code_globs = ["ddflow/**"]
+readme_files = ["README.md"]
+behind = "warn"
+max_behind = 50
+machine_local_keys = []
+
+[evaluation]
+max_miss_rate = 0.0
+min_fixtures = 1
+
+[export]
+documents = []
+redact = true
+max_bytes = 60000
+refresh = "off"
+tables = {}
 
 [flow]
 model = "trunk"
@@ -106,6 +223,144 @@ scrub_env = ["DDFLOW_AGENT", "DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_C
 keep_env = []
 standards_wait_s = 900
 
+[govern]
+quota_mark_1 = 0.4
+quota_mark_2 = 0.6
+quota_mark_3 = 0.8
+context_mark_1 = 0.6
+context_mark_2 = 0.75
+context_mark_3 = 0.85
+context_mark_4 = 0.95
+hysteresis = 0.05
+cooldown_s = 300
+tier_cap_1 = "balanced"
+tier_cap_2 = "fast"
+tier_cap_2_other = "balanced"
+effort_cap_1 = "medium"
+effort_cap_2 = "low"
+reviewer_floor_tier = "balanced"
+effort_floor = "low"
+deep_floor = true
+load_governs = true
+
+[grants]
+max_count = 3
+ttl_h = 48
+
+[handoff]
+max_files = 3
+max_lines = 60
+max_bytes = 65536
+max_open_per_owner_file = 5
+min_interval_s = 30
+reject_breaker = 3
+ttl_s = 86400
+kinds = ["fix", "gate_fix", "refactor", "doc"]
+
+[health]
+mode = "propose"
+stall_s = 3600
+runaway_s = 14400
+interval_s = 900
+shown = 10
+idle_s = 900
+check_budget_s = 60
+reply_s = 600
+crash_s = 300
+mode_idle = "inherit"
+mode_stalled = "inherit"
+mode_unresponsive = "inherit"
+mode_locked = "inherit"
+mode_crashed = "inherit"
+mode_runaway = "inherit"
+
+[hooks]
+forbidden_commands = ["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]
+allowed_commands = ["ddflow review --force --reason"]
+fixture_max_age_months = 6
+fixture_max_reply_bytes = 65536
+
+[ids]
+bug = "{prefix}{hash}"
+lesson = "{prefix}{hash}"
+research = "{prefix}{hash}"
+decision = "{prefix}{hash}"
+memory = "{prefix}{hash}"
+job = "{prefix}{hash}"
+session = "s{time}-{pid}"
+fix_task = "fix-{parent}"
+fix_task_followup = "fix-{parent}-{seq}"
+gate_skip_followup = "gskip-{parent}-{seq}"
+promotion = "promote-{env}-{seq}"
+ci_bug = "Bci-{slug}-{digest}"
+split_child = "{parent}.{seq}"
+imported_phase = "{user-text}"
+imported_task = "{phase}.{slug}"
+
+[importer]
+max_tasks = 200
+preview_rows = 8
+phase_slug_chars = 32
+task_slug_chars = 40
+todo_globs = []
+lesson_globs = []
+lesson_summary_globs = []
+decision_globs = []
+research_globs = []
+journal_globs = []
+memory_globs = []
+archive_globs = []
+
+[lanes]
+window_s = 86400
+stale_after_s = 0
+fleet_window_s = 0
+fleet_max_rows = 18
+fleet_items = 5
+fleet_failed_patterns = ["\\b429\\b", "rate.?limit", "spend.?limit", "quota", "overloaded", "context (window|length|exhaust)", "max.?tokens", "crash", "\\bOOM\\b"]
+fleet_reason_chars = 120
+watch_interval_s = 5
+advise_max = 10
+brief_notes = 3
+brief_text_chars = 1200
+stop_grace_s = 10
+event_buffer = 1000
+scope = "none"
+pass_env = ["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"]
+endpoint_slots = 1
+slot_wait_s = 600
+release_mode = "flag"
+release_max = 4
+release_gates = ["rubber_duck", "critic", "bug_hunt", "dedupe"]
+release_machine_gates = ["standards"]
+
+[lease]
+ttl_s = 1800
+heartbeat_s = 300
+renew_long_commands = true
+renew_log_min_s = 120
+grace_s = 120
+acquire_timeout_s = 30
+waiter_reservation_s = 300
+wait_max_s = 600
+wait_queue = false
+idle_max_s = 900
+hold_max_s = 3600
+release_at_merge = true
+break_on_timeout = false
+inbox_max_chars = 2000
+inbox_max_pending = 50
+inbox_ttl_s = 86400
+inbox_retain_s = 86400
+wait_cap_s = 1800
+reclaim_policy = "report"
+resume_own = true
+shared_globs = []
+new_file_globs = ["ddflow/templates/upgrade/unreleased/*.toml", "tests/test_*.py"]
+append_only_globs = []
+scan_view_trees_max = 16
+scan_view_verdicts_max = 0
+
 [lessons]
 search_backend = "fts5"
 max_results = 5
@@ -118,6 +373,220 @@ reflect_after_items = 3
 test_file_globs = ["**/tests/**", "**/test/**", "**/spec/**", "**/specs/**", "**/__tests__/**", "**/test_*.py", "**/*_test.py", "**/conftest.py", "**/*.test.[jt]s", "**/*.test.[jt]sx", "**/*.test.[mc]js", "**/*.spec.[jt]s", "**/*.spec.[jt]sx", "**/*.spec.[mc]js", "**/*_test.go", "**/*_spec.rb", "**/*_test.rb", "**/test_*.rb"]
 verify_output_lines = 12
 verify_load_ratio = 1.0
+
+[locks]
+mode = "enforce"
+undeclared_write = "warn"
+suggest_globs = true
+suggest_history = 30
+suggest_min_items = 2
+suggest_shown = 5
+snapshot = true
+snapshot_max_age_s = 1800
+probe = true
+probe_timeout_s = 30
+probe_at = ["claim", "gate", "merge"]
+probe_merge_tree_min_git = "2.38"
+
+[log]
+reuse_parsed = true
+max_cached_events = 200000
+redact_builtin_shapes = true
+commit_events = true
+commit_events_at = ["merge", "complete", "release", "stop"]
+commit_events_message = "events: {reason}"
+pre_push_events = "warn"
+snapshot = false
+snapshot_min_events = 5000
+snapshot_max_mb = 256
+snapshot_stale_days = 7
+snapshot_touch_s = 86400
+evidence_blobs = false
+evidence_blob_keys = ["chunk_findings", "tail", "selected_tests"]
+evidence_blob_min_bytes = 256
+
+[loops]
+max_claims_per_item = 3
+max_gate_flaps = 4
+max_reopens = 2
+max_repeated_failures = 3
+max_duplicate_items = 2
+no_progress_window = 60
+wait_cycle = true
+wait_cycle_shown = 5
+wait_alarm_s = 1200
+on_detect = "warn"
+
+[mcp]
+tools = "auto"
+worker_tools = "core"
+lane_tools = ""
+profile_lean_budget_tokens = 16000
+profile_mid_budget_tokens = 32000
+output_schemas = "off"
+next_hints = "off"
+on_upgrade = "notify"
+stale_check_every_s = 60.0
+progress_s = 20.0
+
+[memory]
+max_chars = 280
+brief_items = 12
+
+[merge]
+require_gates = "warn"
+
+[merge_queue]
+max_batch = 5
+run_unit_tests = false
+timeout_s = 0
+eta_default_s = 900
+eta_history = 5
+keep_history = 50
+auto_run = "on"
+auto_run_after_s = 120
+auto_run_max_parallel = 1
+
+[metrics]
+min_samples = 10
+top = 5
+forecast_runs = 1000
+forecast_seed = 0
+forecast_low_pct = 50
+forecast_high_pct = 90
+grid_step_s = 3600
+grid_max_folds = 24
+stage_size_small = 50
+stage_size_large = 300
+lock_probe_max = 50
+lock_red_main_window_s = 86400
+lock_falsifier_conflict_pct = 5
+lock_falsifier_red_main_pct = 10
+lock_revert_key = "locks.mode"
+lock_revert_value = "strict"
+
+[output]
+max_rows = 50
+max_chars = 30000
+non_ascii_weight = 4
+allow_full = true
+
+[pins]
+recipes_file = ".ddflow/pins.toml"
+timeout_s = 900
+after_merge_timeout_s = 120
+after_merge = "amend"
+parallel = 4
+progress_s = 30
+merge_check = "fast"
+baseline_globs = []
+mergiraf = false
+mergiraf_globs = ["*.py"]
+mergiraf_min_git = "2.44"
+mergiraf_keep_pct = 10
+
+[plan]
+warn_missing_globs = true
+
+[prompts]
+review_system = ""
+review_user = ""
+gate_instruction = ""
+session_brief_header = ""
+mcp_instructions = ""
+agent_brief = ""
+agent_report = ""
+
+[quality]
+max_file_bytes = 30000
+
+[quota]
+stale_after_s = 900
+claude_state = ""
+claude_projects = ""
+kilo_db = ""
+snapshot_path = ""
+samples_path = ""
+samples_max_bytes = 4194304
+sample_interval_s = 300
+sample_tail_bytes = 8192
+token_windows = ["5h", "day", "week"]
+token_fields = ["input", "output", "cache_read", "cache_write"]
+transcript_max_bytes = 1073741824
+kilo_timeout_s = 10.0
+
+[rag]
+command = ""
+model_dir = ""
+timeout_s = 60
+
+[reinstruct]
+enabled = true
+every_calls = 12
+every_seconds = 240
+max_items = 3
+
+[release]
+manifest_lint = "block"
+
+[review]
+max_rounds = 2
+settle_all_refuted = true
+on_exceed = "refuse"
+converge_floor = "HIGH"
+delta_default = false
+fix_round_free = true
+require_new_work = true
+combined_under_lines = 150
+triage_ignore_globs = ["tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]
+doc_globs = ["docs/**", "README*", "CHANGELOG*"]
+exclude_globs = ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"]
+manifest_max_files = 40
+exclude_pin_files = true
+chunk_max_tokens = 0
+split_rounds = 2
+degraded_cooldown_s = 3600
+
+[rules]
+max_rules = 200
+max_size_bytes = 50000
+tags_allowed = []
+scopes_allowed = ["project", "phase", "task"]
+
+[schedule]
+parallel = "auto"
+max_parallel_tasks = 4
+max_parallel_min = 2
+max_parallel_max = 8
+adapt_up_after_s = 600
+adapt_cooldown_s = 300
+signal_interval_s = 60
+signals = {enabled = ["load_per_core", "memory_pressure", "disk_pressure", "reviewer_latency_ratio", "gate_failure_rate", "gate_failure_ratio", "merge_failure_rate", "loop_findings", "independent_ready"], load_per_core = {low = 0.15, high = 0.75}, memory_pressure = {low = 0.75, high = 0.85, critical = 0.95}, disk_pressure = {low = 0.85, high = 0.9, critical = 0.97}, reviewer_latency_ratio = {low = 1.5, high = 2.0}, gate_failure_ratio = {low = 1.5, high = 2.0}}
+ready_policy = "deps_and_lease"
+docs_ignore_phase_needs = true
+cycle_policy = "error"
+unknown_dep_policy = "block"
+empty_phase = "note"
+phase_full_suite = "require"
+auto_order = "propose"
+optimizer = "greedy-v1"
+bugs_first = true
+reserved_slots = 0
+reserved_tags = ["ddflow-gap"]
+dx_priority = 8
+bug_priority = 10
+dx_tags = ["dx"]
+dx_id_prefix = "DX-"
+resources = []
+repos = []
+
+[self_assessment]
+auto_file = true
+
+[sensitivity]
+scan_at_write = true
+model_allowed = []
+egress_doors = ["search", "recall", "brief", "export"]
 
 [session]
 log_prompts = true
@@ -153,250 +622,6 @@ report_brief_chars = 200
 report_test_files = 12
 agent_brief_lessons = 3
 agent_brief_extra = ""
-
-[schedule]
-parallel = "auto"
-max_parallel_tasks = 4
-max_parallel_min = 2
-max_parallel_max = 8
-adapt_up_after_s = 600
-adapt_cooldown_s = 300
-signal_interval_s = 60
-signals = {enabled = ["load_per_core", "memory_pressure", "disk_pressure", "reviewer_latency_ratio", "gate_failure_rate", "gate_failure_ratio", "merge_failure_rate", "loop_findings", "independent_ready"], load_per_core = {low = 0.15, high = 0.75}, memory_pressure = {low = 0.75, high = 0.85, critical = 0.95}, disk_pressure = {low = 0.85, high = 0.9, critical = 0.97}, reviewer_latency_ratio = {low = 1.5, high = 2.0}, gate_failure_ratio = {low = 1.5, high = 2.0}}
-ready_policy = "deps_and_lease"
-docs_ignore_phase_needs = true
-cycle_policy = "error"
-unknown_dep_policy = "block"
-empty_phase = "note"
-phase_full_suite = "require"
-auto_order = "propose"
-optimizer = "greedy-v1"
-bugs_first = true
-reserved_slots = 0
-reserved_tags = ["ddflow-gap"]
-dx_priority = 8
-bug_priority = 10
-dx_tags = ["dx"]
-dx_id_prefix = "DX-"
-resources = []
-repos = []
-
-[bugs]
-file_task = true
-phase = "bugs"
-lint_checks = ["ruff", "(CI: Lint)", "format", "bandit", "(CI: Static security scan)"]
-named_scope_at = 20
-repro_capture = "full"
-repro_max_bytes = 65536
-repro_tail_bytes = 4096
-repro_events = 10
-repro_test_timeout_s = 300
-repro_runs = 1
-repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDE*", "*GATE*"]
-repro_redact_extra = []
-
-[importer]
-max_tasks = 200
-preview_rows = 8
-phase_slug_chars = 32
-task_slug_chars = 40
-todo_globs = []
-lesson_globs = []
-lesson_summary_globs = []
-decision_globs = []
-research_globs = []
-journal_globs = []
-memory_globs = []
-archive_globs = []
-
-[memory]
-max_chars = 280
-brief_items = 12
-
-[dedupe]
-on_match = "ask"
-show_floor = 0.35
-ask_threshold = 0.55
-max_candidates = 3
-min_words = 8
-research_task_asks = false
-kinds = ["bug", "task", "phase", "lesson", "decision", "research", "memory", "rule"]
-
-[evaluation]
-max_miss_rate = 0.0
-min_fixtures = 1
-
-[sensitivity]
-scan_at_write = true
-model_allowed = []
-egress_doors = ["search", "recall", "brief", "export"]
-
-[companions]
-probe_cache_ttl_s = 300
-tool_probe_timeout_s = 20.0
-tool_run_timeout_s = 300.0
-
-[cadence]
-integration_tests_every_tasks = 5
-architecture_review_every_phases = 2
-mutation_tests_every_phases = 3
-dedupe_sweep_every_tasks = 4
-lessons_pass_every_phases = 4
-max_missed = 1
-every_days = []
-recall_recheck_s = 1800
-recall_recheck_max = 3
-
-[reinstruct]
-enabled = true
-every_calls = 12
-every_seconds = 240
-max_items = 3
-
-[enforce]
-commit_without_lease = "warn"
-install_hooks_on_setup = true
-require_item_trailer = false
-item_trailer_keys = ["Item"]
-forbidden_trailers = []
-trailer_waivers = {}
-event_secrets = "block"
-generated_views = "block"
-stale_docs = "warn"
-merge_commit_scope = "own"
-lapsed_lease = "accept"
-environment_commits = "block"
-complexity_warn_at = 18
-doc_globs = ["**/*.md", "**/*.rst", "**/*.adoc"]
-doc_exclude = ["**/CHANGELOG*", "**/HISTORY*", "**/NEWS*", ".ddflow/**", "docs/ddflow/**"]
-stale_rules = "block"
-readme_with_code = "warn"
-readme_code_globs = ["ddflow/**"]
-readme_files = ["README.md"]
-behind = "warn"
-max_behind = 50
-machine_local_keys = []
-
-[loops]
-max_claims_per_item = 3
-max_gate_flaps = 4
-max_reopens = 2
-max_repeated_failures = 3
-max_duplicate_items = 2
-no_progress_window = 60
-wait_cycle = true
-wait_cycle_shown = 5
-wait_alarm_s = 1200
-on_detect = "warn"
-
-[locks]
-undeclared_write = "warn"
-suggest_globs = true
-suggest_history = 30
-suggest_min_items = 2
-suggest_shown = 5
-snapshot = true
-snapshot_max_age_s = 1800
-probe = true
-probe_timeout_s = 30
-probe_at = ["claim", "gate", "merge"]
-probe_merge_tree_min_git = "2.38"
-
-[lanes]
-window_s = 86400
-stale_after_s = 0
-fleet_window_s = 0
-fleet_max_rows = 18
-fleet_items = 5
-fleet_failed_patterns = ["\\b429\\b", "rate.?limit", "spend.?limit", "quota", "overloaded", "context (window|length|exhaust)", "max.?tokens", "crash", "\\bOOM\\b"]
-fleet_reason_chars = 120
-watch_interval_s = 5
-advise_max = 10
-brief_notes = 3
-brief_text_chars = 1200
-stop_grace_s = 10
-event_buffer = 1000
-scope = "none"
-pass_env = ["PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"]
-endpoint_slots = 1
-slot_wait_s = 600
-release_mode = "flag"
-release_max = 4
-release_gates = ["rubber_duck", "critic", "bug_hunt", "dedupe"]
-release_machine_gates = ["standards"]
-
-[health]
-mode = "propose"
-stall_s = 3600
-runaway_s = 14400
-interval_s = 900
-shown = 10
-idle_s = 900
-check_budget_s = 60
-reply_s = 600
-crash_s = 300
-mode_idle = "inherit"
-mode_stalled = "inherit"
-mode_unresponsive = "inherit"
-mode_locked = "inherit"
-mode_crashed = "inherit"
-mode_runaway = "inherit"
-
-[govern]
-quota_mark_1 = 0.4
-quota_mark_2 = 0.6
-quota_mark_3 = 0.8
-context_mark_1 = 0.6
-context_mark_2 = 0.75
-context_mark_3 = 0.85
-context_mark_4 = 0.95
-hysteresis = 0.05
-cooldown_s = 300
-tier_cap_1 = "balanced"
-tier_cap_2 = "fast"
-tier_cap_2_other = "balanced"
-effort_cap_1 = "medium"
-effort_cap_2 = "low"
-reviewer_floor_tier = "balanced"
-effort_floor = "low"
-deep_floor = true
-load_governs = true
-
-[metrics]
-min_samples = 10
-top = 5
-forecast_runs = 1000
-forecast_seed = 0
-forecast_low_pct = 50
-forecast_high_pct = 90
-grid_step_s = 3600
-grid_max_folds = 24
-stage_size_small = 50
-stage_size_large = 300
-lock_probe_max = 50
-lock_red_main_window_s = 86400
-lock_falsifier_conflict_pct = 5
-lock_falsifier_red_main_pct = 10
-lock_revert_key = "locks.mode"
-lock_revert_value = "strict"
-
-[review]
-max_rounds = 2
-settle_all_refuted = true
-on_exceed = "refuse"
-converge_floor = "HIGH"
-delta_default = false
-fix_round_free = true
-require_new_work = true
-combined_under_lines = 150
-triage_ignore_globs = ["tests/**", "**/test_*.py", "**/*_test.py", "**/conftest.py"]
-doc_globs = ["docs/**", "README*", "CHANGELOG*"]
-exclude_globs = ["tests/golden/**", "*transcript*.json", "uv.lock", "*.ambr"]
-manifest_max_files = 40
-exclude_pin_files = true
-chunk_max_tokens = 0
-split_rounds = 2
-degraded_cooldown_s = 3600
 
 [swarm]
 w_critical = 3.0
@@ -434,37 +659,8 @@ launch_enabled = false
 launch_templates_file = ".ddflow/local/lane-templates.toml"
 launch_max_budget_usd = 5.0
 
-[quota]
-stale_after_s = 900
-claude_state = ""
-claude_projects = ""
-kilo_db = ""
-snapshot_path = ""
-samples_path = ""
-samples_max_bytes = 4194304
-sample_interval_s = 300
-sample_tail_bytes = 8192
-token_windows = ["5h", "day", "week"]
-token_fields = ["input", "output", "cache_read", "cache_write"]
-transcript_max_bytes = 1073741824
-kilo_timeout_s = 10.0
-
-[log]
-reuse_parsed = true
-max_cached_events = 200000
-redact_builtin_shapes = true
-commit_events = true
-commit_events_at = ["merge", "complete", "release", "stop"]
-commit_events_message = "events: {reason}"
-pre_push_events = "warn"
-snapshot = false
-snapshot_min_events = 5000
-snapshot_max_mb = 256
-snapshot_stale_days = 7
-snapshot_touch_s = 86400
-evidence_blobs = false
-evidence_blob_keys = ["chunk_findings", "tail", "selected_tests"]
-evidence_blob_min_bytes = 256
+[triggers]
+max_fires_per_hour = 10
 
 [upgrade]
 skew = "refuse"
@@ -481,217 +677,23 @@ index_url = ""
 prereleases = false
 self = "ask"
 
-[pins]
-recipes_file = ".ddflow/pins.toml"
-timeout_s = 900
-after_merge_timeout_s = 120
-after_merge = "amend"
-parallel = 4
-progress_s = 30
-merge_check = "fast"
-baseline_globs = []
-mergiraf = false
-mergiraf_globs = ["*.py"]
-mergiraf_min_git = "2.44"
-mergiraf_keep_pct = 10
-
-[plan]
-warn_missing_globs = true
-
-[quality]
-max_file_bytes = 30000
-
 [waves]
 auto_stamp = true
 
-[merge]
-require_gates = "warn"
-
-[merge_queue]
-max_batch = 5
-run_unit_tests = false
-timeout_s = 0
-eta_default_s = 900
-eta_history = 5
-keep_history = 50
-auto_run = "on"
-auto_run_after_s = 120
-auto_run_max_parallel = 1
-
-[chore]
-globs = [".ddflow/rules/**", ".mailmap", "DDFLOW.md", "docs/ddflow/decisions/**", "docs/ddflow/QUEUE.md", "docs/ddflow/LESSONS.md", "docs/ddflow/LESSONS-SUMMARY.md"]
-skip_gates = ["research", "rules", "implement", "rubber_duck", "critic", "verify", "standards", "ci", "unit_tests", "bug_hunt", "dedupe"]
-
-[digest]
-escalate_after = "1h, 24h"
-escalate_after_red_main = "6h"
-text_chars = 400
-spotcheck_min = 1
-
-[output]
-max_rows = 50
-max_chars = 30000
-non_ascii_weight = 4
-allow_full = true
-
-[grants]
-max_count = 3
-ttl_h = 48
-
-[approvals]
-use_ttl_s = 3600
-auto_request = true
-reason_chars = 300
-min_digest_chars = 8
-accept_harness = true
-transcript_dirs = ["~/.claude/projects"]
-expiry_warn_s = 600
-policy = []
-policy_max_uses = 1
-policy_unavailable_runs = 3
-auto_approve_after_retries = 0
-standing_window_s = 3600
-standing_verbs = ["complete.force", "claim.force", "gate.skip.failed_review", "approve.partial"]
-accept_chat_for_t3 = false
-forbid_chat_for_t3 = false
-require_approval = []
-
-[handoff]
-max_files = 3
-max_lines = 60
-max_bytes = 65536
-max_open_per_owner_file = 5
-min_interval_s = 30
-reject_breaker = 3
-ttl_s = 86400
-kinds = ["fix", "gate_fix", "refactor", "doc"]
-
-[hooks]
-forbidden_commands = ["pkill", "killall", "git stash", "git push", "git reset --hard @primary", "rm -rf .ddflow", "--force", "--force-with-lease"]
-allowed_commands = ["ddflow review --force --reason"]
-fixture_max_age_months = 6
-fixture_max_reply_bytes = 65536
-
-[release]
-manifest_lint = "block"
-
-[mcp]
-tools = "auto"
-worker_tools = "core"
-lane_tools = ""
-profile_lean_budget_tokens = 16000
-profile_mid_budget_tokens = 32000
-output_schemas = "off"
-next_hints = "off"
-on_upgrade = "notify"
-stale_check_every_s = 60.0
-progress_s = 20.0
-
-[ci]
-command = ""
-base = ""
-pins_precheck = true
-timeout_s = 3600
-workers = "auto"
-min_workers = 1
-suite_min_workers = 8
-max_workers = 48
-max_concurrent_suites = 1
-selected_lock_tests = 20
-selected_lock_s = 600
-selected_lock_min_runs = 5
-selected_lock_runs = 50
-suite_wait_s = 1800
-suite_queue_stale_s = 120
-suite_queue_grace_s = 120
-keep_env = []
-on_merge = "fast"
-tests_scope = "selected"
-always_tests = ["tests/test_constants_ratchet.py", "tests/test_layering*.py", "tests/golden/**", "tests/test_uc_surf_setup_ops_transcript.py", "tests/test_uc_surf_loop_transcript.py", "tests/test_readme_*.py", "tests/test_mcp_tool_budget.py", "tests/test_mcp_parity.py"]
-
-[prompts]
-review_system = ""
-review_user = ""
-gate_instruction = ""
-session_brief_header = ""
-mcp_instructions = ""
-agent_brief = ""
-agent_report = ""
-
-[export]
-documents = []
-redact = true
-max_bytes = 60000
-refresh = "off"
-tables = {}
-
-[rules]
-max_rules = 200
-max_size_bytes = 50000
-tags_allowed = []
-scopes_allowed = ["project", "phase", "task"]
-
-[agent]
-id = ""
-reviewer_family_must_differ = true
-reviewer_independence = "model"
-families = {qwen = "alibaba", claude = "anthropic", gpt = "openai", o1 = "openai", o3 = "openai", codex = "openai", gemini = "google", gemma = "google", llama = "meta", mistral = "mistral", mixtral = "mistral", deepseek = "deepseek", grok = "xai", phi = "microsoft", command = "cohere", yi- = "01ai", glm = "zhipu", nemotron = "nvidia", granite = "ibm", kimi = "moonshot", minimax = "minimax", ernie = "baidu"}
-family = ""
-routers = {hydrafusion = []}
-roles = {operator = ["*"], bot = ["read", "claim", "note", "start_lane", "approve_marked"], agent = ["read", "claim", "note"], observer = ["read"]}
-actors = {}
-default_role = "agent"
-operator_role = "operator"
-ask_ttl_s = 86400
-ask_code_length = 8
-token_ttl_h = 168
-token_max_ttl_h = 720
-pair_ttl_s = 300
-pair_code_length = 10
-pair_max_attempts = 5
-capability_verbs = {read = ["help", "brief", "next", "status", "show", "board", "progress", "history", "list", "search", "recall", "similar", "gate status", "gate list", "decision list", "decision show", "decision search", "decision applicable", "rule list", "rule show", "rule search", "lesson search", "memory list", "version show", "flow show", "job list"], claim = ["claim", "heartbeat", "release", "wait", "gate record", "gate run", "merge", "complete"], note = ["session note", "session message", "bug found"], start_lane = [], approve_marked = []}
-require_operator_token = false
-
-[ids]
-bug = "{prefix}{hash}"
-lesson = "{prefix}{hash}"
-research = "{prefix}{hash}"
-decision = "{prefix}{hash}"
-memory = "{prefix}{hash}"
-job = "{prefix}{hash}"
-session = "s{time}-{pid}"
-fix_task = "fix-{parent}"
-fix_task_followup = "fix-{parent}-{seq}"
-gate_skip_followup = "gskip-{parent}-{seq}"
-promotion = "promote-{env}-{seq}"
-ci_bug = "Bci-{slug}-{digest}"
-split_child = "{parent}.{seq}"
-imported_phase = "{user-text}"
-imported_task = "{phase}.{slug}"
-
-[triggers]
-max_fires_per_hour = 10
-
-[rag]
-command = ""
-model_dir = ""
-timeout_s = 60
-
-[docs]
-severity = "warn"
-check_links = "local"
-link_timeout_s = 10
-check_paths = []
-lint_command = ""
-ignore_paths = []
-ignore_names = []
-extract = []
-count = []
-cli_command = []
-command_timeout_s = 20
-
-[self_assessment]
-auto_file = true
+[worktree]
+enabled = true
+root = ".ddflow/worktrees"
+branch_prefix = "ddflow/"
+base_ref = ""
+merge_strategy = "no-ff"
+remove_on_merge = true
+dispose_finished = true
+sweep_min_age_s = 3600
+sweep_interval_s = 900
+max_parallel = 0
+sync_before_start = true
+adopt_existing = true
+local_files = []
 
 [gate.research]
 title = "Research"

@@ -31,6 +31,7 @@ from ...core import clock
 from ...core.model import fold
 from ...infra.docindex import read_only_rows
 from .. import configwrite as CW
+from .. import harnessreg
 from ..actors import resolve_actor
 from ..ask import engine as E
 
@@ -179,7 +180,22 @@ def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
 
 
 def _dirs(cfg: Config) -> list[Path]:
-    return [Path(d).expanduser() for d in cfg.approvals.transcript_dirs]
+    roots = list(cfg.approvals.transcript_dirs)
+    for h in harnessreg.load():
+        if h.transcripts:
+            roots.extend(h.transcripts.root)
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for d in roots:
+        p = Path(d).expanduser()
+        try:
+            p = p.resolve()  # collapse a symlink alias: the same dir scanned once
+        except (OSError, RuntimeError):
+            p = p.absolute()  # an untraversable component or symlink loop: keep the spelling
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
 
 
 def _files(cfg: Config, since: float) -> list[Path]:

@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..infra.fsio import Managed, NewerContent, RegionError, replace_text
+from . import harnessreg
 from .backups import make_backup
 from .enforce import HOOK_MARKER, UnreadableYaml, hooks_dir, read_precommit_yaml
 
@@ -316,10 +317,7 @@ _TEXT_ARTIFACTS: tuple[tuple[str, str, bool], ...] = (
     ("AGENTS.md", "AGENTS.md", False),
     ("CLAUDE.md", "CLAUDE.md", False),
     ("GEMINI.md", "GEMINI.md", False),
-    (".github/copilot-instructions.md", "copilot instructions", False),
     ("docs/ddflow/drivers/**/*.md", "driver doc", False),
-    (".claude/commands/**/*.md", "slash command", False),
-    (".gemini/commands/**/*.toml", "slash command", False),
     (".ddflow/prompts/**/*.md", "ejected prompt", False),
     (".ddflow/macros.toml", "macro", False),
     (".ddflow/local/macros.toml", "macro", False),
@@ -327,7 +325,34 @@ _TEXT_ARTIFACTS: tuple[tuple[str, str, bool], ...] = (
     (".ddflow/local/config.toml", "config macro", False),
 )
 _HOOKS_SUFFIX = " (git hooks)"
-_SETTINGS = (".claude/settings.json", ".gemini/settings.json")
+
+
+def _descriptors():
+    outs = harnessreg.load()
+    return outs
+
+
+def _settings_files() -> tuple[str, ...]:
+    """The settings files a hook writer merges into, from each harness's ``[hooks].file``: the
+    settings JSON (not a dedicated hooks file) is the one ddflow edits in place."""
+    outs = sorted(h.hooks.file for h in _descriptors() if h.hooks and h.hooks.file.endswith("/settings.json"))
+    return tuple(outs)
+
+
+def _agent_artifacts() -> tuple[tuple[str, str, bool], ...]:
+    """The agent-owned paths that may name a ddflow command or tool, derived from descriptors:
+    a slash-command directory's glob (``[commands] dir`` + format) and an agent instruction
+    file (Copilot CLI's ``[instructions].reads``), never an agent name in code."""
+    outs: list[tuple[str, str, bool]] = []
+    for h in _descriptors():
+        if h.commands is not None and h.commands.dir and not h.commands.none:
+            ext = "md" if h.commands.format == "markdown" else h.commands.format
+            outs.append((f"{h.commands.dir}/**/*.{ext}", "slash command", False))
+        if h.instructions is not None:
+            for read in h.instructions.reads:
+                if "*" not in read and read.endswith("instructions.md"):
+                    outs.append((read, "copilot instructions", False))
+    return tuple(sorted(set(outs)))
 
 
 def _git_hooks(repo: Path) -> list[Path]:
@@ -510,7 +535,7 @@ def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
     order (path, line)."""
     repo = Path(repo)
     out: list[Finding] = []
-    for rel in _SETTINGS:
+    for rel in _settings_files():
         out += _settings_findings(repo, rel, vocab)
     for hook in _git_hooks(repo):
         text = _read(hook)
@@ -522,7 +547,7 @@ def scan(repo: Path, vocab: Vocabulary) -> list[Finding]:
         out += _text_findings(
             f"{hook.name}{_HOOKS_SUFFIX}", text, "git hook", vocab, code=True, whole=legacy
         )
-    for pattern, artifact, code in _TEXT_ARTIFACTS:
+    for pattern, artifact, code in (*_TEXT_ARTIFACTS, *_agent_artifacts()):
         for path in sorted(repo.glob(pattern)):
             if not path.is_file():
                 continue
@@ -629,7 +654,7 @@ def rewrite(
             continue
         try:
             new = (
-                _rewrite_settings(text, vocab) if rel in _SETTINGS else _rewrite_text(text, wanted)
+                _rewrite_settings(text, vocab) if rel in _settings_files() else _rewrite_text(text, wanted)
             )
         except (NewerContent, RegionError) as exc:
             done.append(f"kept {rel}: {exc}")

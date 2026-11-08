@@ -6,16 +6,14 @@ default adapter (D-adapters-answers):
 
 * `McpServer` -- the server transport: read newline-delimited JSON-RPC, map a bad frame and
   an escaped exception to JSON-RPC errors, write replies and notifications under one lock,
-  and answer a DECLARED tool table (`initialize`, `ping`, `tools/list`, `tools/call`). The
-  tool table itself is declared once in `surfaces/registry`; this class is handed it.
+  and answer a DECLARED tool table (`initialize`, `ping`, `tools/list`, `tools/call`).
 * `McpClient` -- start a server through an INJECTED `Starter` (this layer imports no
   `subprocess`: `infra.proc` is the one home of it), `initialize`, list and call tools, with
-  timeout and unavailable semantics. It probes the companions and tests our own server.
+  timeout and unavailable semantics.
 
 Pure standard library; imports no other ddflow layer (`.ports`, the stdlib-only marker, is
-the same layer). The shipped stand-ins are
-`FakeMcpServer` and `FakeMcpClient` in `ddflow.adapters.fakes.mcp`; the same cases run
-against both (tests/test_adapter_mcp.py).
+the same layer). Stand-ins `FakeMcpServer`/`FakeMcpClient` live in `ddflow.adapters.fakes.mcp`;
+the same cases run against both (tests/test_adapter_mcp.py).
 """
 
 from __future__ import annotations
@@ -44,9 +42,8 @@ SERVED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 POLL_S = 0.5
 #: The `detail` of an `eof` outcome when the request could not even be written.
 CLOSED_BEFORE_READ = "the server closed before reading the request"
-#: How a client reports a request: `ok` answered, `error` a JSON-RPC error answer, `timeout`
-#: no answer in time (could not tell), `eof` the stream closed, `echoed` our request came
-#: straight back (not a server), `unavailable` the server could not be started.
+#: A client reports a request: `ok` answered, `error` an error answer, `timeout` no answer,
+#: `eof` closed, `echoed` our request back, `unavailable` the server could not start.
 OK, ERROR, TIMEOUT, EOF, ECHOED, UNAVAILABLE = (
     "ok",
     "error",

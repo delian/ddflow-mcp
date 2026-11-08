@@ -35,10 +35,12 @@ from .reservations import (
 )
 
 
-def _note_cap(say, capped: bool, cap: float = WAIT_MAX_S) -> None:
-    """Tell the caller its wait was shortened to the cap."""
+def _note_cap(say, capped: bool, token: str, cap: float = WAIT_MAX_S) -> None:
+    """Tell the caller its wait was shortened to the cap, and the resume token that makes
+    the advice actionable: this line is what a text-mode caller reads, while `wake.token`
+    is all a ``--json`` caller gets (B16e0083f21)."""
     if capped:
-        say(f"waiting at most {cap}s at a time; resume with the token to wait longer")
+        say(f"waiting at most {cap}s at a time; resume with the token {token} to wait longer")
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
@@ -371,7 +373,7 @@ def _from_token(token: str, item: str, phase: str, kind: str, lease: str, globs)
 def _wake_data(repo: Path, me: str, cfg, v: dict[str, Any], resume: str):
     """(the delivered inbox wake or None, the `wake` block of a wait's result: why it
     returned, the resume token, the fenced messages)."""
-    got = IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s)
+    got = IB.wake(repo, me, ttl_s=cfg.lease.inbox_ttl_s, retain_s=cfg.lease.inbox_retain_s)
     why = (got or {}).get("reason") or {"ready": "ready", "hopeless": "hopeless"}.get(
         v["status"], "timeout"
     )
@@ -392,10 +394,11 @@ def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: f
     holders = _holders(st, cfg, v["waiting_on"])
     data["holders"] = holders
     who = f" Held: {_holders_text(holders)}." if holders else ""
+    resume = data["wake"]["token"]
     return O.nothing(
         "wait",
         f"Still blocked after {round(waited)}s: {v['why']}.{who} Try later; `ddflow wait` "
-        f"again to keep waiting.",
+        f"again, or `ddflow wait --token {resume}` to resume waiting.",
         **data,
     )
 
@@ -500,7 +503,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     ):
         return result(v, 0.0, [])
 
-    _note_cap(say, capped, cfg.lease.wait_cap_s)
+    _note_cap(say, capped, resume, cfg.lease.wait_cap_s)
     started = time.monotonic()
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`

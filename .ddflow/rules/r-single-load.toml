@@ -1,0 +1,10 @@
+id = "r-single-load"
+title = "At most one log load and fold per command"
+tags = ["performance", "architecture"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T16:30:45.114815+00:00"
+updated = "2026-11-03T16:30:45.114822+00:00"
+
+Bug B38f7effd99. RULE: a CLI or MCP command loads and folds the log once and passes the State down; a write verb re-reads only the tail. CHECK: a fold-call counter test per verb (PS-single-load). VERIFY: how many times does this command call _load_fresh?

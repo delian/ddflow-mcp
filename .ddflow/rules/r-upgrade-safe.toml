@@ -1,0 +1,10 @@
+id = "r-upgrade-safe"
+title = "Every change keeps upgrades easy and soft upgrades working for existing users"
+tags = ["architecture", "upgrade"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T15:00:08.668033+00:00"
+updated = "2026-11-03T15:00:08.668044+00:00"
+
+Operator 2026-11-03. RULE: a feature or architecture change must not make upgrading harder. Existing projects, event logs, configs, records and running MCP servers keep working across the upgrade: additive schema and event changes, migrations that are idempotent, resumable and have a dry run, new knobs with defaults that preserve old behaviour, an upgrade note in ddflow/templates/upgrade/unreleased/ for every user-visible change, and soft-upgrade compatibility (stable MCP shim, restartable worker, no forced restart for a patch). A storage, index or database change ships with an automatic migration plus a rollback path and keeps reading the old format for at least one release. CHECK: replay-old-log and upgrade-dry-run tests on fixtures from the previous release; the soft-upgrade acceptance test.

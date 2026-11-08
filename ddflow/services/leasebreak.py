@@ -29,6 +29,7 @@ from shlex import quote
 from typing import Any
 
 from ..core import clock
+from ..core.admission import conflicts, shared_globs
 from ..core.model import ABANDONED, DONE, Lease, State
 from ..core.schedule import stale_package_globs
 from ..infra import treeactivity as TA
@@ -122,12 +123,37 @@ def judge(
 
 
 def contended(st: State, cfg, now: float) -> dict[str, list[str]]:
-    """Leased item -> the items whose recorded waits name it (the wait-for graph, inverted)."""
+    """Leased item -> the items whose recorded waits name it (the wait-for graph, inverted),
+    limited to waiters whose CURRENT globs still overlap the item's LIVE lease.
+
+    The wait-for graph recomputes its edges from the globs a waiter asked for when its
+    widening was refused, and those go stale: when the waiter later narrows its globs back
+    down (gives up the file it could not get), naming it here becomes a false YIELD
+    REQUESTED -- the waiter no longer needs the holder's files (B38ebc3e392). The edge
+    survives (a recorded wait lives with its lease); a named holder that has since released
+    its lease is not leased at all and is dropped too. A waiter is named only while its
+    CURRENT globs still overlap the holder's LIVE lease (an empty want overlaps nothing)."""
+    shared = shared_globs(cfg)
     out: dict[str, list[str]] = {}
     for waiter, held in WG.wait_for_graph(st, cfg, now).items():
+        wit = st.items.get(waiter)
+        wanted = wit.globs if wit is not None else []
         for item_id in held:
-            if item_id != waiter:
-                out.setdefault(item_id, []).append(waiter)
+            if item_id == waiter:
+                continue
+            it = st.items.get(item_id)
+            if it is None or it.lease is None:
+                # The named holder is gone or no longer holds a live lease: it is not a
+                # "Leased item" and has nothing to yield, so a stale wait edge that still
+                # names it must not name it here either (a drop that fires only for a
+                # disjoint-overlap holder would let a released holder stay falsely named).
+                continue
+            if not conflicts(wanted, it.lease.globs, shared):
+                # None of the waiter's CURRENT globs overlaps the holder's lease (an
+                # empty ``wanted`` overlaps nothing): the recorded edge is stale, so the
+                # waiter no longer needs this holder's files and it is not named.
+                continue
+            out.setdefault(item_id, []).append(waiter)
     return out
 
 
@@ -216,26 +242,61 @@ def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
     ]
 
 
-def stale_glob_notes(repo: Path, st: State) -> list[str]:
-    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
-    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
-    Each is named with the corrected glob and the command that applies it."""
-    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
-    if not any(g.endswith(".py") for i in live for g in i.globs):
+def has_py_glob(st: State) -> bool:
+    """Whether any UNFINISHED item (not removed, done or abandoned) declares a glob ending in
+    ``.py`` -- the only glob a module-became-package can stale (B-stale-globs-after-split-wave).
+    Callers consult this BEFORE listing the default branch's tree, so a repo with no such glob
+    never touches git; the set matches ``stale_glob_updates``'s live filter exactly."""
+    return any(
+        g.endswith(".py")
+        for i in st.items.values()
+        if not i.removed and i.state not in (DONE, ABANDONED)
+        for g in i.globs
+    )
+
+
+def stale_glob_updates(
+    st: State, tracked: Iterable[str]
+) -> list[tuple[str, list[tuple[str, str]]]]:
+    """``(item, [(stale glob, its package)])`` for every unfinished item whose globs declare
+    a module that is now a package (B-stale-globs-after-split-wave). Sorted by item id."""
+    if not has_py_glob(st):
         return []
-    tracked = W.git_paths(repo, "ls-files")
+    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
+    out = []
+    for it in sorted(live, key=lambda i: i.id):
+        stale = stale_package_globs(it.globs, tracked)
+        if stale:
+            out.append((it.id, stale))
+    return out
+
+
+def _tree_files(repo: Path) -> list[str] | None:
+    """The default branch's tracked file paths (`git ls-tree -r --name-only <default>`), or
+    ``None`` when git could not list them. A stale package glob is judged against THIS tree
+    (B-stale-globs-after-split-wave) -- a module that became a package on the default
+    branch -- not the current index, which a branch made before/after a split would answer
+    wrong (a claim or `--fix-stale-globs` from a stale checkout must not retarget onto a
+    package main does not yet have, nor miss one main already has)."""
+    return W.git_paths(repo, "ls-tree", "-r", "--name-only", W.default_branch(repo))
+
+
+def stale_glob_notes(repo: Path, st: State) -> list[str]:
+    """Unfinished items whose `x.py` glob names a module that is now the package `x/` on the
+    default branch: a lease on it covers none of the package's files, so overlaps go unseen
+    (B56dc2baaf6). Each is named with the corrected glob and the command that applies it."""
+    if not has_py_glob(st):
+        return []  # no `x.py` glob can name a package: do not touch git for nothing
+    tracked = _tree_files(repo)
     if tracked is None:  # "could not tell" is said, never read as "nothing stale"
         return ["stale task globs not checked: git could not list the tracked files"]
     notes = []
-    for it in live:
-        stale = stale_package_globs(it.globs, tracked)
-        if not stale:
-            continue
-        fixed = dict(stale)
-        globs = ",".join(fixed.get(g, g) for g in it.globs)
+    for item_id, stale in stale_glob_updates(st, tracked):
+        corrected = [dict(stale).get(g, g) for g in st.items[item_id].globs]
         notes.append(
-            f"{it.id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
-            f"its lease covers none of those files. `ddflow update {it.id} --globs {quote(globs)}`"
+            f"{item_id} declares {', '.join(f'{o} (now the package {n})' for o, n in stale)}: "
+            f"`ddflow update {item_id} --globs {quote(','.join(corrected))}`, or "
+            f"`ddflow doctor --fix-stale-globs` for all of them"
         )
     return notes
 

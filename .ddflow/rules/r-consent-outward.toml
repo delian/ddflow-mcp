@@ -1,0 +1,10 @@
+id = "r-consent-outward"
+title = "Nothing leaves the project or crosses a repo boundary without recorded consent"
+tags = ["safety", "policy"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:14:28.742778+00:00"
+updated = "2026-11-03T14:14:28.742785+00:00"
+
+Decisions D-multirepo-answers, D-app-infra, D-upstream-reporting, D-lifecycle-answers. RULE: push, forge writes, issue or comment creation, outbound messages, installs, network calls to new hosts, deployments and writes into another repository need a recorded, scoped, expiring consent; default is proposal or dry-run, never a silent write; ddflow holds no tokens and acts under the person's login; acceptance, go/no-go, risk acceptance and release are person-only. CHECK: consent tests (MR-consent, TM-defect-forge, PO-feedback-import) and the approvals sites table. VERIFY: what would happen if this ran twice, or against the wrong target?

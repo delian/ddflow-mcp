@@ -19,7 +19,8 @@ holder of the wanted glob did the same in the other direction (three agents, 45 
 * ``queue_ahead`` is the optional FIFO (`--queue`, `[lease].wait_queue`): a later request for
   files an earlier queued waiter asked for is refused as queued behind it.
 
-Pure reads over a folded `State`; ``register`` is the only writer.
+Pure reads over a folded `State`; ``register`` (a refusal) and ``withdraw`` (the empty
+ask that cancels one) are the writers.
 """
 
 from __future__ import annotations
@@ -79,6 +80,11 @@ def standing(state, cfg, now: float) -> dict[str, dict[str, Any]]:
         it = state.items.get(item_id)
         if it is None or it.removed:
             continue
+        if not w.get("globs"):
+            # An empty ask is a withdrawal, recorded by `withdraw` when an `update --globs`
+            # cancelled the earlier ask: a refused widening the waiter no longer wants must
+            # not read as a cycle (B-update-queue-wait-not-withdrawable).
+            continue
         lease = it.lease
         held = lease is not None and lease.live(now, cfg.lease.grace_s)
         if w["lease_event"]:
@@ -120,6 +126,27 @@ class Waiter:
     since: float
     queue: bool
     on: list[dict[str, Any]]
+
+
+def withdraw(log, item_id: str, holder: str, lease_event: str, now: float) -> None:
+    """Record that ``holder`` is no longer waiting for ``item_id``: an earlier refused ask
+    is replaced by an empty one, which `standing` drops. Called after a successful
+    `update --globs` -- the waiter changed its ask, so the abandoned wait must not linger
+    as a false cycle (B-update-queue-wait-not-withdrawable)."""
+    log.append(
+        "lease.waiting",
+        item_id,
+        {
+            "holder": holder,
+            "globs": [],
+            "on": [],
+            "since": now,
+            "queue": False,
+            "ttl_s": 0,
+            "lease_event": lease_event,
+            "at": now,
+        },
+    )
 
 
 def waiters(state, cfg, now: float) -> list[Waiter]:

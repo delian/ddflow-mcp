@@ -175,9 +175,13 @@ def _terminated_gate(
             f"the review was terminated by {signame} before a reviewer finished: "
             f"{_NOTHING_REVIEWED}"
         )
+        # The record carries WHAT killed it (bug B-ddflow-review-force-duplicate-round): a
+        # later run over the same record must be able to say "this repeats an attempt whose
+        # reviewers were paid and their findings lost", not re-run it as a fresh round.
         _record(
             repo, log, cfg, st, item, gate, "unavailable", called_from, gates,
-            reason=reason, evidence={"review_kind": "delta"},
+            reason=reason,
+            evidence={"review_kind": "delta", "status": "UNAVAILABLE", "terminated_by": signame},
         )  # fmt: skip
         return reason
     evidence: dict[str, Any] = {
@@ -187,6 +191,16 @@ def _terminated_gate(
         "reviewed": reviewed,
         "chunk_findings": [fd for f in files for fd in f.findings()],
     }
+    # What a RESUME needs to skip the finished chunks (bug Bd8c4e1d8d6): the cut's identity,
+    # checkpointed by the runner the moment it knew the chunks. Without it a later run cannot
+    # tell which chunk numbers still mean something, so it re-runs every chunk from scratch.
+    plan = next((f.plan_meta() for f in files if f.plan_meta()), {})
+    for key in ("reviewer", "diff_sha", "chunks_total", "max_chunk_chars", "wanted"):
+        if key in plan:
+            evidence[key] = plan[key]
+    evidence.setdefault(
+        "coverage", f"{len(reviewed)}/{evidence.get('chunks_total') or '?'} chunk(s) reviewed"
+    )
     for f in files:
         evidence.update(f.evidence())
     reason = (

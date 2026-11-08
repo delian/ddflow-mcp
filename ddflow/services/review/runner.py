@@ -469,6 +469,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 60,
     on_chunk: Callable[[int, str], None] | None = None,
+    on_plan: Callable[[str, int, int, list[int]], None] | None = None,
     manifest: str = "",
     chunk_max_tokens: int = 0,
     split_rounds: int = 2,
@@ -507,13 +508,17 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     chunks = _split_diff(stripped, chunk_budget)
     res.chunks_total = len(chunks)
     res.diff_sha, res.max_chunk_chars = diff_digest(stripped), chunk_budget
-    files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
     if outside:
         res.status = ERROR
         res.reason = f"no chunk {outside} -- this diff has chunks 1..{len(chunks)}"
         return res
+    # Checkpoint the cut identity BEFORE `chunk_files` (which opens files): a kill must not lose
+    # the resume plan, and neither `wanted` nor the plan line depends on the chunk-file objects.
+    if on_plan:
+        on_plan(res.diff_sha, res.chunks_total, res.max_chunk_chars, wanted)
+    files = [chunk_files(c) for c in chunks]
     res.requested = sorted(set(only or ()))
 
     overrides = dict(prompt_overrides or {})
@@ -603,6 +608,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     res.raw = "\n\n---\n\n".join(all_raw)
     res.elapsed_s = time.time() - started
     _settle(res)
+    _stamp_raised_by(res, res.findings)
     return res
 
 
@@ -642,6 +648,38 @@ def _in_rerun_cut(prior: dict[str, Any], f: dict[str, Any]) -> bool:
     )
 
 
+def _kept_over_rerun(prior: dict[str, Any], f: dict[str, Any], again: set[int], who: str) -> bool:
+    """Should finding ``f`` of the record ``prior`` survive a re-run of chunks ``again`` with
+    reviewer ``who``? A chunk that is not re-run stays; a finding numbered in an earlier cut
+    (a delta carried it) stays too (`_in_rerun_cut`), whatever its reviewer, because a re-run
+    of THIS cut's chunk does not cover it -- such a finding is settled by triage or a full
+    re-review, not by a --chunk re-run; and a RE-RUN chunk's finding is replaced only when the
+    SAME reviewer raised it. A peer reviewer's finding of that chunk is the other reviewer's
+    verdict, kept -- dropping it would be a false pass route (bug B-chunk-rerun-drops-peer-
+    findings). A finding that names NO reviewer (an old record) is kept too: it cannot be
+    attributed, and dropping an unattributed finding is the same false pass."""
+    if int(f.get("chunk", 0)) not in again:
+        return True
+    if not _in_rerun_cut(prior, f):
+        return True
+    raiser = f.get("reviewer", "")
+    if not raiser:
+        return True
+    return raiser != who
+
+
+def _stamp_raised_by(res: ReviewResult, findings: list[Finding]) -> None:
+    """Name the reviewer on the findings IT raised. The absorbed ``Finding`` carries none, so
+    this is where its ``reviewer``/``family`` are set. A finding ``merge_rerun`` carried from
+    an earlier record already names its reviewer (or none, an old record: kept unattributed),
+    and must NOT be relabelled here."""
+    family = (res.family or "").strip().lower()
+    for f in findings:
+        if not f.reviewer:
+            f.reviewer = res.reviewer
+            f.family = family
+
+
 def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
     """Fold a `--chunk` re-review into the evidence of the review it re-runs part of.
 
@@ -669,6 +707,8 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
     kept = {int(n) for n in prior["reviewed"]} - again
     res.reviewed = sorted(kept | set(res.reviewed))
     res.chunks_reviewed = len(res.reviewed)
+    own = res.findings
+    _stamp_raised_by(res, own)
     res.findings = sorted(
         [
             Finding(
@@ -678,11 +718,13 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
                 location=f.get("location", ""),
                 chunk=int(f.get("chunk", 0)),
                 digest=f.get("digest", ""),
+                reviewer=f.get("reviewer", ""),
+                family=f.get("family", ""),
             )
             for f in prior.get("chunk_findings", [])
-            if int(f.get("chunk", 0)) not in again or not _in_rerun_cut(prior, f)
+            if _kept_over_rerun(prior, f, again, res.reviewer)
         ]
-        + res.findings,
+        + own,
         key=lambda f: f.chunk,
     )
     res.unreviewed = sorted(

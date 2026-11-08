@@ -85,6 +85,11 @@ class LeaseConfig:
         doc="Seconds an undelivered inbox message stays before it is dropped, so a lane that never reads cannot keep an inbox forever. 0 keeps them until read.",
         check=int_at_least(0),
     )
+    inbox_retain_s: int = knob(
+        86400,
+        doc="Seconds a DELIVERED inbox message is kept after delivery, so an agent can read it again once a piped `ddflow heartbeat` lost it (bug B-inbox-message-gone-after-heartbeat). `ddflow session inbox` shows them; 0 keeps them.",
+        check=int_at_least(0),
+    )
     wait_cap_s: int = knob(
         1800,
         doc="Longest one `wait` or `watch` call sleeps unless the caller names `--max-s`; a longer ask is cut and the caller is told to resume with the token. Below the client's idle abort, so a bounded wait is never killed silently.",

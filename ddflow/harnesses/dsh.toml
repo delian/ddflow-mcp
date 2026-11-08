@@ -17,8 +17,7 @@ claude_md = "yes"
 [hooks]
 style = "claude"
 file = ".ddflow/harness/dsh.hooks.json"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
@@ -58,3 +57,4 @@ unverified = [
   "SessionStart ordering outside headless",
   "behaviour under a real model",
 ]
+

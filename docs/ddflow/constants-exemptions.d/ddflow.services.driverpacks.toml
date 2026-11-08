@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/driverpacks.py:MAX_PACK_BYTES" = 'upper bound of one fetched descriptor pack (remote content is data, never instructions): a security bound, not a preference'

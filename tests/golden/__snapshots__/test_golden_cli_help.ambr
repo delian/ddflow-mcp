@@ -865,6 +865,16 @@
   
   '''
 # ---
+# name: test_help[ddflow digest]
+  '''
+  usage: ddflow digest [-h] [--ask ASK]
+  
+  options:
+    -h, --help  show this help message and exit
+    --ask ASK   one entry id (kind:key): render that entry alone
+  
+  '''
+# ---
 # name: test_help[ddflow docs]
   '''
   usage: ddflow docs [-h] [--diff BASE] [{check}]
@@ -880,7 +890,7 @@
 # ---
 # name: test_help[ddflow doctor]
   '''
-  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
+  usage: ddflow doctor [-h] [--full] [--upgrade] [--accept-lost-events] [--accept-history] [--fix-stale-globs] [--history-reason HISTORY_REASON] [--history-note HISTORY_NOTE] [--history-only HISTORY_ONLY] [--approval APPROVAL]
   
   options:
     -h, --help            show this help message and exit
@@ -896,6 +906,10 @@
                           accepts directly; an agent passes approval=request, the person answers in
                           chat, and the agent re-runs with the approval id. doctor then reports them
                           as accepted notes; a changed or new finding is a PROBLEM again
+    --fix-stale-globs     rewrite the stale package glob of every unfinished item to its package
+                          path (a module that became a package left `x.py` globs covering none of
+                          the package's files), and retarget each live lease; B-stale-globs-after-
+                          split-wave
     --history-reason HISTORY_REASON
                           why the history is known and accepted (required to accept it)
     --history-note HISTORY_NOTE
@@ -1710,6 +1724,18 @@
   
   '''
 # ---
+# name: test_help[ddflow lesson show]
+  '''
+  usage: ddflow lesson show [-h] id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow lesson verify]
   '''
   usage: ddflow lesson verify [-h]
@@ -1721,10 +1747,10 @@
 # ---
 # name: test_help[ddflow lesson]
   '''
-  usage: ddflow lesson [-h] {add,verify,search,list} ...
+  usage: ddflow lesson [-h] {add,verify,search,show,list} ...
   
   positional arguments:
-    {add,verify,search,list}
+    {add,verify,search,show,list}
       verify              re-scan every lesson's pattern and name the sites that reappeared
       list                list lessons, newest first: the live ones unless --all or --state
   
@@ -2914,6 +2940,15 @@
   
   '''
 # ---
+# name: test_help[ddflow session inbox]
+  '''
+  usage: ddflow session inbox [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow session list]
   '''
   usage: ddflow session list [-h] [--state STATE] [--owner OWNER] [--since SINCE] [--limit LIMIT]
@@ -2998,12 +3033,13 @@
 # ---
 # name: test_help[ddflow session]
   '''
-  usage: ddflow session [-h] {start,prompt,message,note,adopt-orphans,end,list,show} ...
+  usage: ddflow session [-h] {start,prompt,message,inbox,note,adopt-orphans,end,list,show} ...
   
   positional arguments:
-    {start,prompt,message,note,adopt-orphans,end,list,show}
+    {start,prompt,message,inbox,note,adopt-orphans,end,list,show}
       message             put a message in another lane's inbox (delivered at its next wait, watch
                           or heartbeat)
+      inbox               read this lane's delivered inbox messages again
       adopt-orphans       attach prompts/notes recorded with no session id to a session
       list                sessions, newest first: agent, span, items, prompts, state
       show                one session: every prompt and note in order, redacted
@@ -3598,13 +3634,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3722,6 +3758,7 @@
                           violations
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
+      digest              the operator queue: what waits on a person, as askable entries
       pair                a PERSON mints a one-time code for a named client with a role (`tokens
                           redeem` spends it)
       sync                merge the item's recorded base into its branch when that is safe; --check
@@ -3800,6 +3837,7 @@
     'ddflow decision search',
     'ddflow decision show',
     'ddflow decision supersede',
+    'ddflow digest',
     'ddflow docs',
     'ddflow doctor',
     'ddflow dupes',
@@ -3856,6 +3894,7 @@
     'ddflow lesson add',
     'ddflow lesson list',
     'ddflow lesson search',
+    'ddflow lesson show',
     'ddflow lesson verify',
     'ddflow link',
     'ddflow list',
@@ -3932,6 +3971,7 @@
     'ddflow session',
     'ddflow session adopt-orphans',
     'ddflow session end',
+    'ddflow session inbox',
     'ddflow session list',
     'ddflow session message',
     'ddflow session note',

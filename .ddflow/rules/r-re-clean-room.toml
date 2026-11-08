@@ -1,0 +1,10 @@
+id = "r-re-clean-room"
+title = "Clean-room: spec and implementation sides stay separate unless a person records a waiver"
+tags = ["reimpl", "off"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T23:37:21.550430+00:00"
+updated = "2026-11-03T23:37:21.550436+00:00"
+
+Strict separation by default: the implementer lease has no read access to the target or analysis paths; only a person records a waiver; ddflow records and never judges legality.

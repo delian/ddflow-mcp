@@ -481,6 +481,59 @@ def test_a_new_offender_in_an_already_red_test_is_new_not_baseline_red(repo) -> 
     assert ID in found["new_failures"]
 
 
+def test_a_new_cause_hidden_by_a_truncated_failure_text_is_not_baseline_red(repo) -> None:
+    """B-baseline-red-hides-new-cause: a FAILED reason was cut to ``LINE_CHARS`` chars when the
+    gate stored it, so a ratchet's long message displayed byte-identically on the branch and
+    the base while the offending file/site differed below the cut -- baseline-red hid the
+    branch's new offender (which turns red again once the base is fixed). The reason is now kept
+    WHOLE, so a different full reason is a new offender."""
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)  # test_a fails on the base too
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services import flakes as FK
+    from ddflow.services.flakes import LINE_CHARS
+
+    # Same display prefix each side, different cause past the cut.
+    branch_full = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"
+    base_full = "ratchet grew:" + "x" * LINE_CHARS + "hookio.py"
+    assert branch_full[:LINE_CHARS] == base_full[:LINE_CHARS]
+    # The gate keeps the WHOLE reason, so the baseline comparison sees the difference.
+    ev: dict = FK.failure_evidence(f"FAILED {ID} - {branch_full}\n1 failed in 0.1s\n")
+    assert ev["failed_reasons"][ID] == branch_full  # not cut to LINE_CHARS
+
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=0,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: base_full},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ID in why
+    found = ev["baseline"]
+    assert found["red"] is False and found["still_failing"] == [] and ID in found["different"]
+    assert ID in found["new_failures"]
+
+
 def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
     """The counterpart: a test whose failure text is byte-identical on the base stays
     baseline-red -- the text comparison must not turn a timing flake into a new offender."""
@@ -517,6 +570,58 @@ def test_the_same_failure_text_on_the_base_is_still_baseline_red(repo) -> None:
 
     outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
     assert outcome == "partial", why
+    assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
+
+
+def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
+    """B-baseline-red-hides-new-cause legacy sensitive: a base entry cached BEFORE the reason was
+    kept whole stored it cut to ``LINE_CHARS``. That cut text cannot say whether the base's
+    whole reason agreed with the branch past the cut, so the id is RE-MEASURED on the base (the
+    current code stores the whole reason) instead of being trusted either way."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.flakes import LINE_CHARS
+    from ddflow.services.gates import baseline as BL
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    whole = "ratchet grew:" + "x" * LINE_CHARS + "clients.py"  # the branch's whole reason
+    cut = whole[:LINE_CHARS]  # what the pre-fix flakes.py cached: cut, past-the-cap cause lost
+    assert len(cut) == LINE_CHARS
+    sha = _sha(repo, "main")
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=3600,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    # A legacy entry already measured before the reason was kept whole.
+    BL.cache_store(repo, sha, {ID: True}, 3600, gdef.command, {ID: cut})
+
+    measured = []
+
+    def run(g, where=None):
+        measured.append(where)
+        # The base re-measured with the CURRENT code keeps the WHOLE reason.
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: whole},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: whole}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert measured, "a legacy cut entry is re-measured, never guessed"
+    assert outcome == "partial", why  # the base's whole reason equals the branch's: same cause
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 
@@ -590,10 +695,11 @@ def _sha(repo: Path, ref: str = "HEAD") -> str:
     ).stdout.strip()
 
 
-def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
-    """B48c70b6773: the candidate forks from a red main; main then moves on and fixes the
-    failing test. The baseline is measured on the candidate's own merge-base (still red), not
-    the moved main tip (green) -- otherwise the branch's unchanged failure reads as new."""
+def test_the_baseline_is_measured_on_the_base_tip_not_the_candidates_merge_base(repo) -> None:
+    """B48c70b6773 corrected: the candidate forks from a red main; main then moves on and fixes
+    the failing test. The baseline is measured on the base tip (the commit the ci merged --
+    now green), not the candidate's own merge-base: a stale branch still failing on a commit
+    main moved past is new against that tip, not red at the fork."""
     from ddflow.services.gates import baseline_red as BR
     from ddflow.services.gates.defs import GateDef
 
@@ -624,5 +730,44 @@ def test_the_baseline_is_pinned_to_the_candidates_own_merge_base(repo) -> None:
         )
 
     found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
+    assert found["red"] is False, found
+    assert found["base_sha"] == green, found
+
+
+def test_a_test_main_broke_since_the_fork_is_baseline_red_not_new(repo) -> None:
+    """B-ci-baseline-older-than-candidate: the candidate merges a main that BROKE a test after
+    the branch forked. The baseline is measured on the base tip the candidate merged (still
+    broken), not the candidate's own merge-base (green) -- otherwise main's breakage reads as
+    a new failure of the branch."""
+    from ddflow.services.gates import baseline_red as BR
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo, base_healthy=True)  # main passes test_a
+    fork = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-qc", "cand"], check=True)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "main"], check=True)
+    (repo / "healthy").unlink()  # main breaks test_a
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "break test_a on main"], check=True)
+    broken = _sha(repo)
+    subprocess.run(["git", "-C", str(repo), "switch", "-q", "cand"], check=True)
+    assert broken != fork  # main has moved and broken the test: the whole point of the test
+
+    gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
+
+    def run(g, where=None):
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
+        failed = got.returncode != 0
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
+
+    found = BR.on_base(repo, "main", gdef, [ID], run, 0, tree=repo)
     assert found["red"] is True, found
-    assert found["base_sha"] == red, found
+    assert found["base_sha"] == broken, found

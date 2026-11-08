@@ -17,8 +17,7 @@ claude_md = "fallback"
 [hooks]
 style = "plugin"
 file = ".opencode/plugins/"
-normalizer = "opencode"
-emitter = "opencode"
+emitter = "silent"
 block = "throw"
 session_id = "sessionID"
 inject = ["session_start", "prompt"]
@@ -48,6 +47,7 @@ dir = ".opencode/agents"
 
 [orchestration]
 loop = "subtask"
+keepalive = "session-goal"
 dispatch = "opencode config/zen agent (one claimed item each)"
 wait = "background task + ddflow wait"
 persist = "printed ddflow next + cadence"
@@ -58,3 +58,4 @@ date = "2026-10-09"
 sources = ["https://github.com/anomalyco/opencode"]
 record = "R-hx-opencode"
 unverified = ["worktree dir", "session id env var"]
+

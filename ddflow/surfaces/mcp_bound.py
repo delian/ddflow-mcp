@@ -84,7 +84,8 @@ def _limit(args: dict[str, Any], default: int = ROWS_SHOWN) -> int:
 
 
 def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
-    """`ddflow_next`: the ready items, whole; the blocked list cut, its reasons counted."""
+    """`ddflow_next`: the ready items with long strings clipped and counted in
+    `truncated.clipped_strings`; the blocked list cut, its reasons counted."""
     if not isinstance(body, dict) or not isinstance(body.get("blocked"), list):
         return body, None
     if args.get("full") or "truncated" in body:
@@ -92,7 +93,8 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         return {**body, "ready": [_lean(i) for i in body.get("ready") or []]}, None
     out = dict(body)
     blocked = body["blocked"]
-    out["ready"] = [_lean(i) for i in body.get("ready") or []]
+    cut = [0]
+    out["ready"] = [_clip(_lean(i), cut) for i in body.get("ready") or []]
     if len(blocked) > NEXT_BLOCKED_SHOWN:
         reasons: dict[str, int] = {}
         for b in blocked:
@@ -104,6 +106,12 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             "blocked_by_reason": reasons,
             "all": "`ddflow --json next` lists every blocked item; ddflow_show <id> says why one is",
         }
+    if cut[0]:
+        out.setdefault("truncated", {})["clipped_strings"] = cut[0]
+        out["truncated"].setdefault(
+            "all",
+            "`ddflow --json next` has each body whole; ddflow_show <id> has one item's body whole",
+        )
     return out, None
 
 
