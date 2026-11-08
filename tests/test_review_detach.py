@@ -240,3 +240,19 @@ def test_detach_is_refused_for_verbs_that_run_no_review(repo, tmp_path):
         )  # fmt: skip
         assert p.returncode != 0, p.stdout
         assert "--detach" in p.stderr and "run no review" in p.stderr, p.stderr
+
+
+def test_detach_note_names_a_stop_command_that_reaches_the_review():
+    """`--detach` names how to STOP the review, not just a pid to `kill`. The pid it prints
+    is the setsid SESSION leader (a `/bin/sh -c` wrapper): a plain `kill <pid>` kills only
+    that wrapper and leaves the python review running, so the next `ddflow review` is
+    refused with `already being reviewed (pid <review>)`. The note must name the whole
+    process group the split detached into (bug B-review-detach-prints-launcher-pid)."""
+    from ddflow.surfaces.commands import review as CR
+
+    note = CR._detach_note(2618834, "/tmp/review.log")
+    assert "review detached" in note
+    # the stop command kills the group (negative pid), which is what `setsid` created: the
+    # printed pid is the session leader, and only the group kill reaches the review itself.
+    assert "kill -- -2618834" in note
+    assert "/tmp/review.log" in note
