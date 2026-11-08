@@ -9,9 +9,12 @@ repo-wide failed with ``no such table: repos/daemon_state``.
 
 from __future__ import annotations
 
+import ctypes
 import os
 import shutil
+import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -29,6 +32,18 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _arm_parent_death_signal() -> None:
+    """Kill the daemon if the process that forked it (the pytest worker) dies first.
+
+    ``start_new_session=True`` detaches the daemon, so a worker killed or interrupted between
+    ``_spawn`` and the teardown used to orphan it to init, where it kept holding its unix
+    socket over a deleted database (B2d2c474d47). ``PR_SET_PDEATHSIG`` makes the kernel
+    signal the daemon the moment its spawner dies, so no orphan survives teardown.
+    """
+    PR_SET_PDEATHSIG = 1
+    ctypes.CDLL("libc.so.6").prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
+
+
 def _spawn(home: Path) -> subprocess.Popen:
     env = dict(os.environ, HOME=str(home))
     return subprocess.Popen(
@@ -37,6 +52,7 @@ def _spawn(home: Path) -> subprocess.Popen:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        preexec_fn=_arm_parent_death_signal,
     )
 
 
@@ -47,6 +63,26 @@ def _pid_under(home: Path, deadline: float) -> int | None:
                 return pid
         time.sleep(0.1)
     return None
+
+
+# A worker that spawns the daemon exactly as ``_spawn`` does and then idles: it plays the
+# pytest worker whose early death must not orphan the daemon. It loads this module's
+# ``_spawn`` through a stub ``_isolation`` so the worker does not re-isolate its own
+# environment.
+_DAEMON_SPAWNER = """
+import importlib.util
+import pathlib
+import sys
+import time
+import types
+
+sys.modules["_isolation"] = types.ModuleType("_isolation")
+_spec = importlib.util.spec_from_file_location("_roborev_spawner", sys.argv[1])
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+_mod._spawn(pathlib.Path(sys.argv[2]))
+time.sleep(300)
+""".strip()
 
 
 def test_teardown_kills_a_daemon_the_suite_spawned_under_its_scratch_home(tmp_path: Path) -> None:
@@ -70,6 +106,38 @@ def test_teardown_kills_a_daemon_the_suite_spawned_under_its_scratch_home(tmp_pa
         if proc.poll() is None:
             proc.kill()
         proc.wait()
+
+
+def test_a_daemon_does_not_outlive_a_spawner_that_dies_without_teardown(tmp_path: Path) -> None:
+    """A pytest worker killed between ``_spawn`` and the teardown must take the daemon with it,
+    not orphan it to init holding its unix socket over a deleted database (B2d2c474d47)."""
+    if shutil.which("roborev") is None:
+        pytest.skip("roborev is not installed")
+    home = tmp_path / "home"
+    home.mkdir(mode=0o700)  # roborev refuses a group/world-accessible unix-socket dir
+    spawner = subprocess.Popen(
+        [sys.executable, "-c", _DAEMON_SPAWNER, str(Path(__file__).resolve()), str(home)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        daemon = _pid_under(home, time.monotonic() + 15)
+        assert daemon is not None, "the daemon wrote no runtime pidfile under the scratch HOME"
+        spawner.kill()  # the worker dies before any teardown runs
+        spawner.wait(timeout=10)
+        deadline = time.monotonic() + 10
+        while _alive(daemon) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not _alive(daemon), (
+            "the daemon outlived the worker that spawned it; a killed worker would orphan it "
+            "holding its unix socket over the deleted scratch HOME (B2d2c474d47)"
+        )
+    finally:
+        if home.exists():
+            ISO.terminate_suite_daemons(home)
+        if spawner.poll() is None:
+            spawner.kill()
+        spawner.wait()
 
 
 def test_terminate_leaves_a_home_with_no_daemon_alone(tmp_path: Path) -> None:
