@@ -101,6 +101,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     extra = {k: v for k, v in said if v}
     if globs:
         extra["globs"] = GS.parse(globs)
+    if evidence:
+        extra["found_evidence"] = evidence
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
@@ -145,7 +147,6 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
             {
                 "item": item,
                 "summary": summary,
-                **({"found_evidence": evidence} if evidence else {}),
                 **extra,
                 **linked,
                 **repro,
