@@ -103,27 +103,26 @@ def _stages(ctx: Context, group_by: str) -> Answer:
     return Answer(ok, "" if ok else why, metrics=data, text=stages_text(data))
 
 
+def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
+    """The shared not-enough-data figure a derived view answers: build once, one min-sample
+    gate, one text. ``_locks``, ``_tiny`` and ``_paths`` are the same body with a different
+    ``subject`` (a duplicate-code cluster the guard would otherwise count)."""
+    data = build(ctx)
+    ok = ok_of(data)
+    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any {subject}"
+    return Answer(ok, "" if ok else why, metrics=data, text=text_of(data))
+
+
 def _locks(ctx: Context, probes: Probes | None) -> Answer:
-    data = locks_build(ctx, probes)
-    ok = locks_ok(data)
-    why = (
-        f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any lock figure"
-    )
-    return Answer(ok, "" if ok else why, metrics=data, text=locks_text(data))
+    return _figure(ctx, lambda c: locks_build(c, probes), locks_ok, locks_text, "lock figure")
 
 
 def _tiny(ctx: Context) -> Answer:
-    data = tiny_build(ctx)
-    ok = tiny_ok(data)
-    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any figure"
-    return Answer(ok, "" if ok else why, metrics=data, text=tiny_text(data))
+    return _figure(ctx, tiny_build, tiny_ok, tiny_text, "figure")
 
 
 def _paths(ctx: Context) -> Answer:
-    data = paths_build(ctx)
-    ok = paths_ok(data)
-    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any figure"
-    return Answer(ok, "" if ok else why, metrics=data, text=paths_text(data))
+    return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
 
 
 def run(  # noqa: PLR0911, C901 -- one return per view; the dispatcher IS the branch
