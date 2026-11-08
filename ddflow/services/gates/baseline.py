@@ -179,6 +179,20 @@ def auto_decision(
     if sel is None:
         return {**out, "why": "git could not say what the item changed, so none is excluded"}
     if sel.full:
+        # A hub-module (or test-infrastructure) change cut the reach walk, so which test files
+        # it would reach by import or governing cannot be told. What IS still known is the
+        # changed-file list (`sel.changed`) and, when `red` is a full measurement (`unmeasured`
+        # is empty), that every failing test failed on the base with the SAME text. Reach is
+        # then only needed to attribute a failure to a changed file, so the one thing that
+        # still blocks is a failing test FILE the item changed itself (B0f41a2f1d6).
+        changed = set(sel.changed)
+        if not found.get("unmeasured") and not [f for f in test_files_of(ids) if f in changed]:
+            return {
+                **out,
+                "accepted": True,
+                "why": "every failing test was measured on the base "
+                f"(a hub cut the reach walk; nothing is left to attribute): {sel.full}",
+            }
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
