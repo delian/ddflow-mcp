@@ -247,7 +247,8 @@ def test_a_measured_decision_reaches_the_run(monkeypatch):
 
 def _hold(monkeypatch, *reads: float):
     """Fake the suite lock so ``_run_under_slot``/``_run_locked`` queue ``reads[-1]`` seconds
-    without touching the host-wide lock, and capture the budget ``_execute`` was handed."""
+    without touching the host-wide lock, and capture the budget ``_execute`` was handed plus
+    the `wait_s` the run passed the lock (the run timeout must never become the queue wait)."""
 
     class Hold:
         def __enter__(self):
@@ -257,23 +258,29 @@ def _hold(monkeypatch, *reads: float):
             return False
 
     got: list = []
+    waits: list = []
+
+    def fake_hold(*a, **k):
+        waits.append(k.get("wait_s"))
+        return Hold()
 
     def fake_execute(*a, **k):
         got.append(a[4])
         return NS(kind="ran", ran=True, code=0, output="", elapsed_s=0), ""
 
     monkeypatch.setattr(runner.time, "monotonic", iter(reads).__next__)
-    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
+    monkeypatch.setattr(runner.SL, "hold", fake_hold)
     monkeypatch.setattr(runner, "_execute", fake_execute)
-    return got
+    return got, waits
 
 
 def test_a_queued_suite_run_keeps_its_full_run_budget(monkeypatch):
     """B4f35548c0a: the queue wait consumed the run timeout, so under fleet load a run that
     queued near its `--timeout` limit was left ~1 s to run the actual checks and timed out
-    UNAVAILABLE. `[ci].suite_wait_s` budgets the queue alone, `--timeout` budgets the RUN alone,
-    so a run that queued 20 s still gets its whole 7200 s budget behind the slot."""
-    got = _hold(monkeypatch, 0.0, 20.0)
+    UNAVAILABLE. `[ci].suite_wait_s` budgets the queue alone, `--timeout` budgets the RUN alone:
+    a run that queued 20 s still gets its whole 7200 s budget behind the slot, and `run()` hands
+    the lock no `wait_s` (the timeout is not spent on queueing)."""
+    got, waits = _hold(monkeypatch, 0.0, 20.0)
 
     class Tree:
         def __enter__(self):
@@ -293,14 +300,16 @@ def test_a_queued_suite_run_keeps_its_full_run_budget(monkeypatch):
 
     runner.run("/repo", Config(), base="main", timeout_s=7200)
     assert got == [7200], f"the 20 s queue wait came off the run budget: {got}"
+    assert waits == [None], f"the run timeout became the queue wait cap: {waits}"
 
 
 def test_a_wait_that_used_the_whole_timeout_leaves_the_run_budget_intact(monkeypatch):
     """The wait consumes the whole `--timeout` (and more, the queue budget is `suite_wait_s`);
     the run budget stays the full timeout, never a 1 s floor."""
-    got = _hold(monkeypatch, 0.0, 7300.0)
+    got, waits = _hold(monkeypatch, 0.0, 7300.0)
     runner._run_locked(Config(), "h", runner.Path("."), "c", None, 7200, None, {}, True)
     assert got == [7200], f"the queue wait reduced the run budget: {got}"
+    assert waits == [None], f"the run timeout became the queue wait cap: {waits}"
 
 
 def test_the_item_run_reads_the_log_and_a_named_or_full_run_does_not(monkeypatch, tmp_path):
