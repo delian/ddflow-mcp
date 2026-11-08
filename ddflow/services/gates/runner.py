@@ -93,16 +93,19 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
     return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
-#: Command names that run NO test suite at all: POSIX no-ops and a bare echo. A `unit_tests`
-#: gate whose command is one of these must not be read as a full suite (B-suite-lock-trivial-
-#: foreign-gate): `ddflow config.toml` documents the real suite spellings (`npm test`, `cargo
-#: test`, `go test ./...`, `make check`), which are left alone and keep the lock.
-_NO_SUITE = frozenset({"true", ":", "echo"})
+#: Command names that run NO test suite at all: POSIX no-ops and trivial shell builtins. A
+#: `unit_tests` gate whose command is one of these must not be read as a full suite
+#: (B-suite-lock-trivial-foreign-gate): `ddflow config.toml` documents the real suite
+#: spellings (`npm test`, `cargo test`, `go test ./...`, `make check`), which keep the lock.
+_NO_SUITE = frozenset(
+    {"true", "false", ":", "echo", "printf", "date", "sleep", "pwd", "exit", "test", "["}
+)  # fmt: skip
 
 
 def _is_trivial(command: str) -> bool:
-    """Is ``command`` a known non-suite no-op (`true`, `:`, `echo ...`)? A no-op names no test
-    file, so the naive whole-suite read would queue it on the lock although it runs nothing.
+    """Is ``command`` a known non-suite no-op (`true`, `false`, `:`, `echo ...`)? A no-op names
+    no test file, so the naive whole-suite read would queue it on the lock although it runs
+    nothing but a shell builtin.
 
     The WHOLE command must be the no-op: a shell compound whose first word is a no-op
     (`true; make check`, `echo ok && pytest`) still runs a suite, so it is not trivial."""
