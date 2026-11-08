@@ -149,3 +149,10 @@ def test_the_fake_refuses_to_dump_what_it_cannot_read_back():
     for bad in ({"a.b": 1}, {"a b": 1}, {"x": None}, {"rows": [{"id": 1}]}):
         with pytest.raises(TomlError):
             FakeTomlIo().dumps(bad)
+
+
+def test_the_fake_dumps_a_scalar_after_a_table_stays_in_the_parent():
+    # a scalar that sits after a table in insertion order still belongs to the parent table
+    fake = FakeTomlIo()
+    data = {"section": {"x": 1}, "root_key": 2}
+    assert fake.loads(fake.dumps(data)) == data

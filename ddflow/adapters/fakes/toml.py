@@ -104,14 +104,17 @@ class FakeTomlIo:
         return self.loads(text)
 
     def _lines(self, table: dict[str, Any], prefix: str) -> list[str]:
-        out: list[str] = []
+        # scalars before the nested tables: once a `[header]` opens, a later scalar would join
+        # that table, not this one.
         for key, value in table.items():
             if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", key):
                 raise TomlError(f"key {key!r} is not a bare TOML key this fake knows")
             if isinstance(value, dict):
-                out += ["", f"[{prefix}{key}]", *self._lines(value, f"{prefix}{key}.")]
-            elif _is_toml_value(value):
-                out.append(f"{key} = {json.dumps(value)}")
-            else:
+                continue  # after the scalars
+            if not _is_toml_value(value):
                 raise TomlError(f"not a TOML value this fake knows: {value!r}")
+        out = [f"{k} = {json.dumps(v)}" for k, v in table.items() if not isinstance(v, dict)]
+        for key, value in table.items():
+            if isinstance(value, dict):
+                out += ["", f"[{prefix}{key}]", *self._lines(value, f"{prefix}{key}.")]
         return out if not prefix else out
