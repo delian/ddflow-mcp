@@ -225,8 +225,9 @@ def test_a_measured_decision_reaches_the_run(monkeypatch):
     calls: list[tuple] = []
     monkeypatch.setattr(runner, "_needs_suite_slot", lambda *a: calls.append(a) or False)
     monkeypatch.setattr(
-        runner, "_run_locked",
-        lambda *a, **k: (NS(kind="", ran=True, code=0, output="", elapsed_s=0.0), "", None, 0.0)
+        runner,
+        "_run_locked",
+        lambda *a, **k: (NS(kind="", ran=True, code=0, output="", elapsed_s=0.0), "", None, 0.0),
     )
     monkeypatch.setattr(runner, "_merge_base", lambda *a: ("main", None))
     monkeypatch.setattr(runner, "_stale_pins", lambda *a, **k: "")

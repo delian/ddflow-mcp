@@ -325,7 +325,14 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
         with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
             if tree is None:
                 status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
-                return None, Result(status, command=cmd, sha=sha, reason=failure), waited, cmd, None, None
+                return (
+                    None,
+                    Result(status, command=cmd, sha=sha, reason=failure),
+                    waited,
+                    cmd,
+                    None,
+                    None,
+                )
             planned = plan(tree)
             if isinstance(planned, Result):
                 return None, planned, waited, cmd, None, None
