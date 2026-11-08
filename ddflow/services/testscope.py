@@ -198,6 +198,11 @@ def _ci_not_passed_here(cfg, it, tree: Path) -> str:
 def _is_trivial(cfg, it, tree: Path) -> bool:
     """Whether ``it``'s actual diff is trivial (format-only/docs/comment; Bbd88c54354): such
     a change runs the SCOPED tests, never the whole suite, because it changes no behavior."""
+    # Untracked files are uncommitted work the committed-diff path list does not name: a
+    # docs-only tracked change beside an untracked new_feature.py would read trivial and
+    # skip the whole suite over real, unseen code (rubber_duck). Fail closed.
+    if any(not is_state(p) for p in (GIT.files(tree, "untracked") or ())):
+        return False
     try:
         repo = W.repo_root(tree)
     except W.GitError:

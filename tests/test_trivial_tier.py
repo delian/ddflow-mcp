@@ -167,6 +167,29 @@ def test_a_dirty_logic_edit_on_a_glob_named_file_is_not_trivial(repo):
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
 
 
+def test_an_untracked_file_beside_a_docs_only_change_is_not_trivial(repo):
+    """rubber_duck: ``_is_trivial`` classifies from COMMITTED changed paths, so a docs-only
+    tracked change beside an UNTRACKED new code file would read trivial and skip the whole
+    suite over real, unseen code. Untracked files fail closed."""
+    from ddflow.services.testscope import _is_trivial
+
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    _commit(repo, "docs/a.md", "old\n")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "docs/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    (tree / "docs/a.md").write_text("new\n")
+    subprocess.run(["git", "-C", str(tree), "add", "docs/a.md"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "docs edit"], check=True)
+    f = tree / "src/new_feature.py"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("x = 1\n")  # UNTRACKED logic beside the docs-only change
+    assert not _is_trivial(cfg, it, tree)
+
+
 def test_docs_only_is_trivial_too(cfg):
     from ddflow.services.docsonly import diff_is_docs_only
 
