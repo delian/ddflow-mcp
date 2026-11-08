@@ -56,7 +56,9 @@ def _tools_list(repo) -> list[dict]:
 
 
 #: The one tier a session pays for at start, so the one that keeps a ratchet (D-mcp-budget-report).
-CORE_BUDGET = 40_000
+# 50_000 (RAISED BY THE OPERATOR, 2026-11-08, accumulated new tools): core tools/list is 40,261 bytes
+# after the new digest/lesson-show/write-hook/driver-pack tools landed under the 40,000 ratchet.
+CORE_BUDGET = 50_000
 
 
 def tier_sizes(repo, monkeypatch) -> dict[str, int]:
