@@ -419,12 +419,13 @@ class _Scan:
     def _verb_flags(self, words: list[str], n: int, got: tuple[list[str], set[str]]) -> None:
         """The flags of ``<tool> <verb>...`` must be ones that verb's own ``--help`` lists."""
         chain, flags = got
+        global_ = chain[0] == "ddflow"  # the tool that mirrors these onto its subparsers
         for tok in words[len(chain) :]:
             flag = flag_of(tok)
             if flag is None or self._owned(flag):
                 continue
             self.counts["verb_flags"] += 1
-            if flag not in flags and flag not in _GLOBAL_FLAGS:
+            if flag not in flags and not (global_ and flag in _GLOBAL_FLAGS):
                 self.report.findings.append(
                     Finding(
                         "flag",
