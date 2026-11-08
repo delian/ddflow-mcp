@@ -38,8 +38,8 @@ def scoped_outcomes(ctx: Context) -> list[Outcome]:
 def _timed(ctx: Context) -> list[tuple[Outcome, float | None]]:
     """(outcome, its duration or None) for each RAN, in-scope outcome in time order: the span
     from the latest ``gate.started`` since the item's previous verdict on that gate, else the
-    outcome's own ``elapsed_s``, else None (untimed). `gate_durations` and `gate_untimed` read
-    this ONE scan two ways, so the complement cannot drift (B28537b615d)."""
+    outcome's own ``elapsed_s``, else None (untimed). `gate_durations` and `build` read this
+    ONE scan two ways (timed durations / the untimed count), so the two cannot drift (B28537b615d)."""
     out: list[tuple[Outcome, float | None]] = []
     last_verdict: dict[tuple[str, str], float] = {}
     for o in sorted(ctx.facts.outcomes, key=lambda o: o.at):
@@ -74,18 +74,6 @@ def gate_waits(ctx: Context) -> dict[str, list[float]]:
         if o.kind in RAN and o.waited_s is not None:
             out[o.gate].append(o.waited_s)
     return out
-
-
-def gate_untimed(ctx: Context) -> dict[str, int]:
-    """gate -> RAN outcomes inside the view the log gave no duration for (no ``gate.started``
-    since the last verdict and no recorded ``elapsed_s``): the subset `gate_durations` drops,
-    named so the gate-time figure reads over a KNOWN sample, not a silently smaller one
-    (B28537b615d)."""
-    untimed: dict[str, int] = defaultdict(int)
-    for o, secs in _timed(ctx):
-        if secs is None:
-            untimed[o.gate] += 1
-    return untimed
 
 
 def review_rounds(ctx: Context) -> list[int]:
