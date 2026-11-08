@@ -242,12 +242,19 @@ def doctor_notes(st: State, cfg, events: list[Any], root: Path) -> list[str]:
     ]
 
 
+def has_py_glob(st: State) -> bool:
+    """Whether any unfinished item declares a glob ending in ``.py`` -- the only glob a
+    module-became-package can stale (B-stale-globs-after-split-wave). Callers consult this
+    BEFORE listing the default branch's tree, so a repo with no such glob never touches git."""
+    return any(g.endswith(".py") for i in st.items.values() for g in i.globs)
+
+
 def stale_glob_updates(st: State, tracked: Iterable[str]) -> list[tuple[str, list[tuple[str, str]]]]:
     """``(item, [(stale glob, its package)])`` for every unfinished item whose globs declare
     a module that is now a package (B-stale-globs-after-split-wave). Sorted by item id."""
-    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
-    if not any(g.endswith(".py") for i in live for g in i.globs):
+    if not has_py_glob(st):
         return []
+    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
     out = []
     for it in sorted(live, key=lambda i: i.id):
         stale = stale_package_globs(it.globs, tracked)
@@ -270,7 +277,7 @@ def stale_glob_notes(repo: Path, st: State) -> list[str]:
     """Unfinished items whose `x.py` glob names a module that is now the package `x/` on the
     default branch: a lease on it covers none of the package's files, so overlaps go unseen
     (B56dc2baaf6). Each is named with the corrected glob and the command that applies it."""
-    if not any(g.endswith(".py") for i in st.items.values() for g in i.globs):
+    if not has_py_glob(st):
         return []  # no `x.py` glob can name a package: do not touch git for nothing
     tracked = _tree_files(repo)
     if tracked is None:  # "could not tell" is said, never read as "nothing stale"

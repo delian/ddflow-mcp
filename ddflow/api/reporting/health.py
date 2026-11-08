@@ -83,6 +83,8 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list
     parts held back against another live lease is a note that says so."""
     from .. import items as _items
 
+    if not LBR.has_py_glob(st):
+        return [], []  # no `x.py` glob can name a package: do not touch git for nothing
     tracked = LBR._tree_files(repo)
     if tracked is None:
         return ["stale task globs not fixed: git could not list the tracked files"], []
