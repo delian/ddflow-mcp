@@ -155,7 +155,12 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     aheads = WG.queued_ahead(st, cfg, it.id, me, fresh, now)
     if not aheads:
         return None
-    return Blocked(it.id, "conflict", WG.queued_names(fresh, aheads, cfg), [aheads[0].item])
+    return Blocked(
+        it.id,
+        "conflict",
+        WG.queued_names(fresh, aheads, cfg),
+        list(dict.fromkeys(a.item for a in aheads)),
+    )
 
 
 def _claim_blocker(

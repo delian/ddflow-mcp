@@ -86,6 +86,10 @@ def test_queued_behind_refusal_names_every_queued_waiter(repo):
     assert "queued behind" in main
     assert "src/a.py" in main and QUEUER in main
     assert "src/b.py" in main and "agent-queuer2" in main
+    # The structured waiting_on must name every ahead waiter too, not just the earliest:
+    # wait reports it as who Y is waiting on, and a dropped waiter breaks that edge.
+    waited = A.wait(repo, item="Y", timeout_s=0, agent=WAITER)
+    assert waited.data["waiting_on"] == ["Z", "W"]
 
 
 def test_overlapping_lease_blocks_wait_names_holder_then_ready_and_claim_succeeds(repo):
