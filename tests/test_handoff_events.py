@@ -381,3 +381,35 @@ def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg
     _send(sender, cfg, sid="C", now=time.time() + 2)
     E.move(owner, "rejected", "C", reason="no")
     _send(sender, cfg, sid="D", now=time.time() + 3)
+
+
+def test_distinct_quoted_non_utf8_names_stay_distinct() -> None:
+    # Two distinct non-UTF-8 names must not decode to the same U+FFFD (which would let the
+    # too-many-files dedup collapse them and under-count). `\200`/`\201` are bytes 0x80/0x81.
+    patch = (
+        'diff --git "a/\\200" "b/\\200"\n--- "a/\\200"\n+++ "b/\\200"\n@@ -1 +1 @@\n-x\n+y\n'
+        'diff --git "a/\\201" "b/\\201"\n--- "a/\\201"\n+++ "b/\\201"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    q = P.shape(patch)
+    assert q.files == ("\udc80", "\udc81"), q  # surrogateescape, not U+FFFD twice
+    assert not q.malformed
+
+
+def test_unquoted_name_is_a_literal_byte_string() -> None:
+    # quotePath=false leaves `\303\251` raw (a backslash + digits, not é); decoding it would
+    # corrupt `files`, so an unquoted side is kept verbatim.
+    unquoted = (
+        "diff --git a/\\303\\251 b/\\303\\251\n"
+        "--- a/\\303\\251\n+++ b/\\303\\251\n@@ -1 +1 @@\n-x\n+y\n"
+    )
+    assert P.shape(unquoted).files == ("\\303\\251",), P.shape(unquoted)
+
+
+def test_quoted_path_with_space_is_decoded() -> None:
+    quoted = (
+        'diff --git "a/my file.txt" "b/my file.txt"\n'
+        '--- "a/my file.txt"\n+++ "b/my file.txt"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    q = P.shape(quoted)
+    assert q.files == ("my file.txt",), q
+    assert not q.malformed

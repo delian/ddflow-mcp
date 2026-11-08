@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_FILE = re.compile(r'^diff --git "?a/(?P<a>.+?)"? "?b/(?P<b>.+?)"?$')
+_FILE = re.compile(r'^diff --git (?P<a>a/[^\s"]+|"a/[^"]*") (?P<b>b/[^\s"]+|"b/[^"]*")$')
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
 _C_ESCAPES = {
@@ -27,7 +27,8 @@ _C_ESCAPES = {
 def _dequote(name: str) -> str:
     """A git `core.quotepath` name, decoded to UTF-8: git C-escapes ``\\``, ``"`` and the C
     escapes, and writes bytes above 0x7f as ``\\ooo`` octal; `shape` un-quotes both (a file
-    named ``é`` is ``\\303\\251``)."""
+    named ``é`` is ``\\303\\251``). Non-UTF-8 bytes decode with ``surrogateescape`` so two
+    distinct raw names stay distinct instead of both collapsing to U+FFFD."""
     raw = bytearray()
     i = 0
     while i < len(name):
@@ -54,7 +55,7 @@ def _dequote(name: str) -> str:
             continue
         raw.append(0x5C)
         i += 1
-    return raw.decode("utf-8", "replace")
+    return raw.decode("utf-8", "surrogateescape")
 
 
 @dataclass(frozen=True)
@@ -120,10 +121,12 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            # `core.quotepath` quotes a name only for the side that needs it, so decode that
-            # side alone (`diff --git a/foo "b/\303\251"` quotes just `b/`). An unquoted name
-            # is a literal POSIX byte string (quotePath=false), and decoding it corrupts `files`.
-            b = _dequote(m["b"]) if '"b/' in line else m["b"]
+            # `core.quotepath` quotes a whole name only for the side that needs it, so decode
+            # that side alone (`diff --git a/foo "b/\303\251"` quotes just `b/`). An unquoted
+            # name is a literal POSIX byte string (quotePath=false): decoding it corrupts
+            # `files`, so only a side the header actually quoted is passed to `_dequote`.
+            b_side = m["b"]
+            b = _dequote(b_side[3:-1]) if b_side[0] == '"' else b_side[2:]
             if b not in self.files:
                 self.files.append(b)
         elif not self.files or self.in_binary:
