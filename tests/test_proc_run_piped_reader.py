@@ -1,49 +1,52 @@
 """proc_server.run_piped must not leak its stderr reader thread and pipe (bug B-run-piped-reader-outlives-child).
 
-After ``p.wait()``, ``run_piped`` joins the stderr reader for 1 s and returns. A descendant
-that left the process group can keep the pipe's write end open, so the reader blocks in
-``read1`` forever, and the daemon thread -- holding the ``Popen`` and its pipes -- lives
-until that descendant exits: one leak per such call in a long-running process. The fix
-closes the pipe from the caller side after the join, so the blocked reader stops, while the
-returned head still carries what it drained before it was cut off.
+A descendant that left the process group can keep the pipe's write end open after the direct
+child exits, so a reader blocked in ``read1`` never sees end of file and the daemon thread --
+holding the ``Popen`` and its pipes -- lives until that descendant exits. The fix poll-reads
+stderr (``select`` + a stop flag), so a finished run can stop the reader and release the read
+end instead of blocking behind the descendant.
 """
 
 from __future__ import annotations
 
-import threading
+import os
 
 from ddflow.adapters import proc_server as PS
 
 
-class _Pipe:
-    """A stderr pipe whose read end drains a click, then blocks until it is closed from the
-    caller side, as if a descendant still held the write end open. ``read1`` must return
-    ``b""`` once the caller closes the pipe (then the drain loop ends)."""
+class _Stderr:
+    """A real stderr pipe whose write end the test holds open, as a detached descendant
+    would. ``select`` sees no data and no end of file until the write end is closed, so the
+    only way the reader stops is the caller's release -- exactly the leak under test."""
 
-    def __init__(self, payload: bytes = b"noise\n"):
-        self._payload = payload
-        self._sent = False
-        self._closed = threading.Event()
+    def __init__(self) -> None:
+        self._read, self._write = os.pipe()
         self.closed = False
 
+    def fileno(self) -> int:
+        return self._read
+
     def read1(self, n: int) -> bytes:
-        if not self._sent:
-            self._sent = True
-            return self._payload
-        self._closed.wait(30.0)  # stays blocked while the write end is open elsewhere
-        return b""
+        return b"" if self.closed else os.read(self._read, n)
 
     def close(self) -> None:
-        self.closed = True
-        self._closed.set()
+        if not self.closed:
+            os.close(self._read)
+            self._read = -1
+            self.closed = True
+
+    def write(self, data: bytes) -> None:
+        os.write(self._write, data)
+
+    def close_write(self) -> None:
+        os.close(self._write)
 
 
 class _Proc:
-    """A process that already exited: ``poll`` says done, ``wait`` returns 0, and only the
-    blocked reader would keep ``stderr`` open."""
+    """A process that already exited: ``wait`` returns 0 and only ``stderr`` is left open."""
 
-    def __init__(self, payload: bytes = b"noise\n") -> None:
-        self.stderr = _Pipe(payload)
+    def __init__(self) -> None:
+        self.stderr = _Stderr()
         self.stdin = None
         self.stdout = None
 
@@ -54,57 +57,47 @@ class _Proc:
         return 0
 
 
-def _spawn(proc: _Proc):
-    def spawn(argv, **kw):
-        return proc
+def _run(proc: _Proc, timeout: float = 30, stderr_bytes: int = 4096):
+    return PS.run_piped(
+        ["true"], lambda p: None, timeout=timeout, stderr_bytes=stderr_bytes
+    )
 
-    return spawn
 
-
-def test_a_blocked_stderr_reader_does_not_leak_the_pipe(monkeypatch):
-    """The regression: once ``run_piped`` returns, the stderr pipe must be closed from the
-    caller side so the blocked reader thread ends -- left open, it keeps the Popen and its
-    pipes alive until the descendant lets go."""
+def test_a_descendant_holding_stderr_does_not_leak_the_pipe(monkeypatch):
+    """The regression: once ``run_piped`` returns, the read end must be released -- left
+    open, the daemon reader and the Popen's pipes leak until the descendant lets go."""
     proc = _Proc()
-    monkeypatch.setattr(PS, "spawn_stdio", _spawn(proc))
-
-    end = PS.run_piped(["true"], lambda p: None, timeout=30)
-
-    assert end.code == 0, end
-    assert end.stderr == b"noise\n", end  # what the reader drained before it was cut off
-    assert proc.stderr.closed, "run_piped left stderr open while the reader thread was blocked"
-
-
-def test_the_head_keeps_the_stderr_bytes_bound(monkeypatch):
-    """The close is a leak fix, not a reader change: the drained head still obeys
-    ``stderr_bytes`` before the reader is cut off."""
-    proc = _Proc(b"x" * 100)
-    monkeypatch.setattr(PS, "spawn_stdio", _spawn(proc))
-
-    end = PS.run_piped(["true"], lambda p: None, timeout=30, stderr_bytes=8)
-
-    assert end.stderr == b"x" * 8, end
-    assert proc.stderr.closed
+    monkeypatch.setattr(PS, "spawn_stdio", lambda argv, **kw: proc)
+    try:
+        end = _run(proc)
+        assert end.code == 0, end
+        assert end.stderr == b"", end  # nothing is drained while the descendant is silent
+        assert proc.stderr.closed, "run_piped left stderr open while a descendant held the write end"
+    finally:
+        proc.stderr.close_write()
 
 
-def test_a_reader_that_reaches_eof_ends_without_a_close(monkeypatch):
-    """A reader that sees end of file on its own (the child closed its pipe) already ended
-    before the join: nothing is left to close, and the drained head still comes back."""
+def test_the_head_keeps_capturing_stderr_up_to_the_bound(monkeypatch):
+    """The poll is a leak fix, not a reader change: data the child wrote before it went quiet
+    is still drained and still obeys ``stderr_bytes``."""
     proc = _Proc()
+    monkeypatch.setattr(PS, "spawn_stdio", lambda argv, **kw: proc)
+    proc.stderr.write(b"x" * 100)
+    try:
+        end = _run(proc, stderr_bytes=8)
+        assert end.stderr == b"x" * 8, end
+        assert proc.stderr.closed
+    finally:
+        proc.stderr.close_write()
 
-    class EofPipe:
-        def __init__(self):
-            self.closed = False
 
-        def read1(self, n: int) -> bytes:
-            return b""
-
-        def close(self) -> None:
-            self.closed = True
-
-    proc.stderr = EofPipe()
-    monkeypatch.setattr(PS, "spawn_stdio", _spawn(proc))
-
-    end = PS.run_piped(["true"], lambda p: None, timeout=30)
+def test_a_reader_that_sees_end_of_file_stops_on_its_own(monkeypatch):
+    """A reader that reaches end of file (the child and every descendant closed the pipe)
+    already stopped: nothing is left to close, and the drained head still comes back."""
+    proc = _Proc()
+    monkeypatch.setattr(PS, "spawn_stdio", lambda argv, **kw: proc)
+    proc.stderr.write(b"done\n")
+    proc.stderr.close_write()
+    end = _run(proc)
     assert end.code == 0, end
-    assert end.stderr == b"", end
+    assert end.stderr == b"done\n", end

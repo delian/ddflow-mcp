@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -73,13 +74,27 @@ def run_piped(
     except OSError as exc:
         return PipedEnd(error=exc)
     head = bytearray()
+    stop = threading.Event()
 
     def drain() -> None:
-        try:
-            while chunk := p.stderr.read1(65536):  # type: ignore[union-attr]
-                head.extend(chunk[: stderr_bytes - len(head)])
-        except (ValueError, OSError):
-            pass  # closed from the caller side: a descendant still holds the write end
+        """Read stderr into ``head`` until end of file, polling so a run that has finished
+        can stop the reader: ``read1`` is called only once `select` says the pipe is
+        readable, so it never blocks behind a descendant that still holds the write end."""
+        fd = p.stderr.fileno()  # type: ignore[union-attr]
+        while not stop.is_set():
+            try:
+                ready, _, _ = select.select([fd], [], [], 0.2)
+            except (ValueError, OSError):
+                break  # the pipe is gone (or select cannot watch it): stop draining
+            if not ready:
+                continue  # no data yet: check the stop flag again
+            try:
+                chunk = p.stderr.read1(65536)  # type: ignore[union-attr]
+            except (ValueError, OSError):
+                break
+            if not chunk:
+                break  # end of file: every write end is closed
+            head.extend(chunk[: stderr_bytes - len(head)])
 
     reader = threading.Thread(target=drain, daemon=True)
     reader.start()
@@ -88,12 +103,17 @@ def run_piped(
     try:
         answer = work(p)
         if answer is not None:
+            stop.set()
+            reader.join()
+            with contextlib.suppress(ValueError, OSError):
+                p.stderr.close()  # type: ignore[union-attr]
             return PipedEnd(answer=answer)
         code = p.wait()
         reader.join(1)
-        if reader.is_alive():  # a descendant holds the write end: cut the drain open now
-            with contextlib.suppress(ValueError, OSError):
-                p.stderr.close()  # type: ignore[union-attr]
+        stop.set()
+        reader.join()
+        with contextlib.suppress(ValueError, OSError):
+            p.stderr.close()  # type: ignore[union-attr]
         return PipedEnd(code=code, stderr=bytes(head))
     finally:
         clock.cancel()
