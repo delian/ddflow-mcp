@@ -358,7 +358,7 @@ def test_the_reporting_commands_keep_the_shapes_the_migration_found():
     by = reporting.BY_TOOL
     assert [c.path for c in reporting.COMMANDS] == [
         ("replay",), ("recover",), ("progress",), ("loops",), ("cleanup",), ("rebuild",),
-        ("render",), ("board",), ("show",), ("status",), ("history",),
+        ("render",), ("board",), ("show",), ("status",), ("history",), ("digest",),
     ]  # fmt: skip
     # `render` is text only with `show`: the table holds the predicate, not a flag
     entry = TOOLS["ddflow_render"]

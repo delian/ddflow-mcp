@@ -46,6 +46,18 @@ class Outcome:
     #: A review's independence tier (family | model | none), "" for an older log or a
     #: gate no reviewer judged (D-reviewer-independence-soft).
     tier: str = ""
+    #: A review round's number, when the verdict named it (``round`` or ``rounds``); None
+    #: for a gate that runs no review rounds or an older log.
+    round: int | None = None
+    #: The tree (or reviewed head) a review round covered; "" when the verdict carried none.
+    tree_sha: str = ""
+    #: A merged review's id (``review_id``), "" when the verdict recorded one gate not a merge.
+    review_id: str = ""
+    #: The gates merged into one recorded call (``combined_gates``), oldest first; empty for
+    #: a verdict that recorded a single gate (D-path-merge-answers merges bookkeeping gates).
+    combined_gates: tuple[str, ...] = ()
+    #: A merged / covered-by note the evidence carried (``note``), "" when it had none.
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -169,7 +181,22 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         waited_s=_float(evidence.get("waited_s")),
         changed_lines=_changed_lines(evidence),
         tier=str(evidence.get("independence_tier") or ""),
+        round=_round_number(evidence),
+        tree_sha=str(evidence.get("tree_sha") or evidence.get("reviewed_head") or ""),
+        review_id=str(evidence.get("review_id") or ""),
+        note=str(evidence.get("note") or ""),
+        combined_gates=tuple(
+            g for g in (evidence.get("combined_gates") or ()) if isinstance(g, str)
+        ),
     )
+
+
+def _round_number(evidence: dict) -> int | None:
+    """A review round's number from its evidence (``round`` else ``rounds``), None for none."""
+    v = _float(evidence.get("round"))
+    if v is None:
+        v = _float(evidence.get("rounds"))
+    return int(v) if v is not None else None
 
 
 def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str, Lease]) -> None:
