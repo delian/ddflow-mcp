@@ -20,7 +20,9 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
     )
     if ahead is None:
         return None
-    pairs = WG.conflicts(list(want if want is not None else it.globs), ahead.globs, WG.shared_globs(ctx.cfg))
+    pairs = WG.conflicts(
+        list(want if want is not None else it.globs), ahead.globs, WG.shared_globs(ctx.cfg)
+    )
     named = f"{pairs[0][0]!r} " if pairs else ""
     return O.refused(
         "item.claimed",
