@@ -170,10 +170,14 @@ def _probe(check: str, value: bool | None, note: str, yes: str, no: str) -> Outc
 def _accuracy(o: Observed, p: Params) -> Outcome:
     if (miss := _need_tool(o, "tool_accuracy")) is not None:
         return miss
-    n = len(o.calls)
+    # Well formed is judged over the lane's DDflow (lean-core) calls only: a call the
+    # harness makes in the course of its work (writing a file, running git) is not a ddflow
+    # call at all, so it neither counts as well formed nor dilutes the rate (B09100a25b3).
+    ddflow = [c for c in o.calls if norm_tool(c.get("name", "")) in p.tools]
+    n = len(ddflow)
     if n < p.min_calls or n == 0:
         return Outcome("tool_accuracy", UNAVAILABLE, f"{n} call(s) seen, {p.min_calls} needed")
-    good = sum(1 for c in o.calls if norm_tool(c.get("name", "")) in p.tools and _ok(c))
+    good = sum(1 for c in ddflow if _ok(c))
     rate = good / n
     status = PASSED if rate >= p.min_accuracy else FAILED
     return Outcome(
