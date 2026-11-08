@@ -16,6 +16,7 @@ from ...core.slug import safe_filename
 from ...infra import tomlcfg as TC
 from ...services import review as RV
 from ...services import review_keys
+from ...services import modelreg
 from ...services.configwrite import Block, KeyRefused, ReviewerRefusal, apply_edit
 from ...views import human
 from .._base import _load
@@ -80,6 +81,11 @@ def reviewers_add(
     reviewer added here is for THIS machine (bug B-reviewers-write-committed). A command
     reviewer is written only for a ``person`` (decision D-reviewer-trust)."""
     entry = dict(RV.PRESETS.get(preset, {}))
+    if preset and not entry:
+        # A route the operator declared in `.ddflow/local/models.toml` (e.g. a self-hosted
+        # SW-local-endpoint) is a preset too: the shipped PRESETS come from the catalog's
+        # shipped routes; the machine's own endpoints arrive here, never committed.
+        entry = dict(modelreg.presets(modelreg.load(local_dir=repo / ".ddflow" / "local")).get(preset, {}))
     if preset and not entry:
         return O.failed(
             "reviewers.add", f"unknown preset {preset!r}; `ddflow reviewers presets`", name=name

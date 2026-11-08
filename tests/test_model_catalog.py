@@ -48,6 +48,20 @@ def test_presets_reader_matches_review_presets():
     assert M.presets(M.load()) == review.PRESETS
 
 
+def test_a_local_route_is_a_reviewer_preset_through_the_local_overlay(tmp_path):
+    # A route the operator declares in the git-ignored .ddflow/local/models.toml (a self-hosted
+    # endpoint) is a reviewer preset too: the shipped PRESETS are the catalog's SHIPPED routes,
+    # and `ddflow reviewers add --preset` reads the local overlay (rule D-no-own-services-local-dir)
+    # to find the machine's own endpoint (e.g. SW-local-endpoint).
+    assert "sw-local-endpoint" not in M.presets(M.load()), "shipped routes carry no local endpoint"
+    (tmp_path / M.LOCAL_FILE).write_text(
+        '[route.sw-local-endpoint]\nendpoint = { v = { kind = "openai", base_url = "http://127.0.0.1:8899/v1" }, s = "documented", src = "op", d = "2026-11-08" }\n',
+        encoding="utf-8",
+    )
+    cat = M.load(local_dir=tmp_path)
+    assert M.presets(cat)["sw-local-endpoint"]["base_url"] == "http://127.0.0.1:8899/v1"
+
+
 def test_unknown_model_never_matches_a_neighbour():
     cat = M.load()
     for name in ("", "totally-new-model", "deepseek"[:4], "flash-9"):

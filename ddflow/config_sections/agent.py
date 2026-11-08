@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ._docs import declare, knob
+from ..services.modelreg import family_hints as _catalog_family_hints
+from ..services.modelreg import load as _load_catalog
 
 #: Model-name substring -> pretraining family, used to answer the one question the
 #: review stack rests on: "is this reviewer independent of the author?"
@@ -15,32 +17,10 @@ from ._docs import declare, knob
 #: One map, in one module. There were two — this one and a richer `FAMILY_HINTS` in
 #: `reviewer.py` — with different entries AND different answers for an unrecognised
 #: name, which is the duplicate-then-drift class that has already cost this package
-#: three bugs. The reviewer config's own `family` field is how a project classifies a
-#: model this map does not know.
-FAMILY_HINTS: dict[str, str] = {
-    "qwen": "alibaba",
-    "claude": "anthropic",
-    "gpt": "openai",
-    "o1": "openai",
-    "o3": "openai",
-    "codex": "openai",
-    "gemini": "google",
-    "gemma": "google",
-    "llama": "meta",
-    "mistral": "mistral",
-    "mixtral": "mistral",
-    "deepseek": "deepseek",
-    "grok": "xai",
-    "phi": "microsoft",
-    "command": "cohere",
-    "yi-": "01ai",
-    "glm": "zhipu",
-    "nemotron": "nvidia",
-    "granite": "ibm",
-    "kimi": "moonshot",
-    "minimax": "minimax",
-    "ernie": "baidu",
-}
+#: three bugs. The table is now READ from the model catalog (`modelreg.family_hints`,
+#: DRV-model-catalog), one source for the one question; the reviewer config's own
+#: `family` field is how a project classifies a model this table does not know.
+FAMILY_HINTS: dict[str, str] = _catalog_family_hints(_load_catalog())
 
 
 def family_for(model: str, families: dict[str, str] | None = None) -> str:
