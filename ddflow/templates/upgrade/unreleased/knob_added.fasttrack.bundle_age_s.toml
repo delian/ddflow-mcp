@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "fasttrack.bundle_age_s"
+new = "2700"
+why = "Tiny-fix fast track (D-fast-track-answers): seconds a queued tiny fix waits before the bundler may group it (45 minutes)."
+impact = "additive"

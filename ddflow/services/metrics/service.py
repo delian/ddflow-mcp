@@ -32,8 +32,11 @@ from .stages import build as stages_build
 from .stages import has_figures as stages_ok
 from .stages import text as stages_text
 from .summary import build, has_figures
+from .tiny import build as tiny_build
+from .tiny import has_figures as tiny_ok
+from .tiny import text as tiny_text
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "swarm")
+VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "tiny", "swarm")
 
 
 #: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
@@ -95,6 +98,13 @@ def _locks(ctx: Context, probes: Probes | None) -> Answer:
     return Answer(ok, "" if ok else why, metrics=data, text=locks_text(data))
 
 
+def _tiny(ctx: Context) -> Answer:
+    data = tiny_build(ctx)
+    ok = tiny_ok(data)
+    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any figure"
+    return Answer(ok, "" if ok else why, metrics=data, text=tiny_text(data))
+
+
 def run(
     events: Sequence[Event],
     state: State,
@@ -136,6 +146,8 @@ def run(
         return _stages(ctx, group_by)
     if view == "locks":
         return _locks(ctx, probes)
+    if view == "tiny":
+        return _tiny(ctx)
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))

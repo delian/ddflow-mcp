@@ -58,6 +58,17 @@ class Landing:
     head: str = ""  # the branch tip that was merged
 
 
+@dataclass(frozen=True)
+class Finding:
+    """One `review.triaged` event: a review finding and what the author did with it."""
+
+    item: str
+    gate: str
+    severity: str = ""  # HIGH | MEDIUM | LOW | "" when the reviewer did not grade it
+    verdict: str = ""  # confirmed | refuted
+    at: float = 0.0
+
+
 @dataclass
 class Lease:
     item: str
@@ -105,6 +116,8 @@ class Facts:
     merges: dict[str, list[float]] = field(default_factory=dict)
     #: item -> each `worktree.merged` with the commits it recorded (same order as ``merges``).
     landings: dict[str, list[Landing]] = field(default_factory=dict)
+    #: every `review.triaged`: a finding and its verdict, oldest first.
+    findings: list[Finding] = field(default_factory=list)
     state: State | None = None
 
     def starts_of(self, item: str) -> list[float]:
@@ -174,6 +187,17 @@ def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str,
         held.pop(ev.subject).end = at
 
 
+def _finding(at: float, ev: Event) -> Finding:
+    d = ev.data if isinstance(ev.data, dict) else {}
+    return Finding(
+        ev.subject,
+        str(d.get("gate") or ""),
+        str(d.get("severity") or ""),
+        str(d.get("verdict") or ""),
+        at,
+    )
+
+
 def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
     kind, d = ev.kind, ev.data if isinstance(ev.data, dict) else {}
     span = facts.spans.setdefault(ev.subject, Span(ev.subject))
@@ -198,6 +222,8 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
         )
     elif kind == "bug.found" and isinstance(d.get("item"), str) and d["item"]:
         facts.bugs.append((d["item"], at))
+    elif kind == "review.triaged":
+        facts.findings.append(_finding(at, ev))
     elif kind.startswith("gate."):
         out = _outcome(at, ev)
         if out is not None:
