@@ -181,3 +181,34 @@ def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
     assert "**W5**" not in region and "**W6**" not in region, region
     # The RUNNING item nobody holds is still on the list beside seven holding trees.
     assert "**T1** (stale_running" in text, text
+
+
+def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
+    """B027549013a: a focused brief about an item that is NOT itself recoverable must not
+    let the per-band RESUME list of OTHER crashes (plus the charter) starve the item's own
+    Current section down to a bare heading. The reserved slice is bounded, so the item's
+    own detail keeps its share of the budget."""
+    log = _seed(repo, ["T9", *[f"W{i}" for i in range(8)]])
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    for i in range(8):
+        claim = LC.claim(repo, f"W{i}", agent="crashed")
+        wt = Path(claim.data["worktree"])
+        (wt / "work.py").write_text("x = 1\n")
+        log.append(
+            "lease.acquired",
+            f"W{i}",
+            {
+                "holder": "crashed",
+                "at": 1900.0,
+                "ttl_s": 60,
+                "worktree": str(wt),
+                "branch": claim.data["branch"],
+            },
+        )
+    run_cli(repo, "config", "session.brief_max_tokens", "400")
+    out = LC.brief(repo, item="T9", check_recovery=True, agent="next")
+    assert out.exit == 0, out.reason
+    text = out.data["text"]
+    # T9's own section survives with its body, not only a heading and a cut marker.
+    assert "## Current: T9" in text, text[:3000]
+    assert "- gates remaining:" in text, text[:3000]

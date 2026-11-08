@@ -731,4 +731,13 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     )
     # The RESUME slice opens the pack, before even its own heading line (duck #2): a
     # session that starts after a crash must see recoverable work in the first line.
+    # B027549013a: the slice is reserved from the budget but BOUNDED to half of it -- the
+    # same bound the reports block keeps -- so a focused brief on a busy repo's per-band
+    # list of OTHER crashes (plus the charter set aside whole) never starves the item's own
+    # Current/decisions/lessons down to a bare heading. `ddflow recover` lists every entry
+    # beyond the bound.
+    bound = max(_SECTION_FLOOR, budget * 2)
+    if len("\n".join(reserved)) > bound:
+        reserved = ["\n".join(reserved)[:bound].rsplit("\n", 1)[0] + "\n"]
+        reserved.append("_more recoverable entries past the slice's bound: `ddflow recover` lists them._")
     return _assemble(reserved + head, sections, budget * 4, note, charter, item)
