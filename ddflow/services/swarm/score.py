@@ -24,6 +24,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 
 from ...core.globs import overlap
+from ..lanes import capacity as CAPACITY
 from . import ledger as L
 from .score_config import Weights
 
@@ -59,6 +60,8 @@ class Lane:
     live: int = 0
     cap: int = 1
     kinds: tuple[str, ...] = ()  # empty: any kind
+    level: int = 0  # measured conformance level; 0 = none (never passed a run)
+    pools: tuple[CAPACITY.Headroom, ...] = ()  # endpoint/GPU pool headroom the lane needs
 
 
 @dataclass(frozen=True)
@@ -134,6 +137,9 @@ def _lane_refusals(item: Item, lane: Lane, world: World, w: Weights) -> list[str
         out.append(f"trust tier {lane.trust} below the required {need}")
     if lane.window is not None and item.est_in + item.est_out > lane.window:
         out.append(f"estimate {item.est_in + item.est_out} tokens exceeds window {lane.window}")
+    if lane.level < w.conformance_min_level:
+        out.append(f"conformance level {lane.level} below the required {w.conformance_min_level}")
+    out += CAPACITY.refusals(lane.pools)  # an endpoint/GPU pool with no free slot refuses
     return out
 
 
