@@ -124,12 +124,17 @@ def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
 
     from ddflow.services.ci.runner import _result
 
-    p = CommandRun("ran", code=-15, out="ruff check.....................Passed\n")
+    p = CommandRun(
+        "ran",
+        code=-15,
+        out="ruff check.....................Passed\nFAILED tests/test_x.py::test_y\n",
+    )
     res = _result(p, "", "pre-commit run", "sha0", "base0", None)
     assert res.status == "unavailable", res.status
     assert res.exit == 2
     assert "signal" in res.reason, res.reason
     assert not any(not c.ok for c in res.checks), res.checks
+    assert res.failures == {}, res.failures
 
 
 def test_the_scratch_worktree_is_removed_and_the_tree_untouched(repo, fake_precommit):

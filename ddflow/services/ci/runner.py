@@ -614,15 +614,15 @@ def _scope_evidence(scope, sha: str) -> dict:
 def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
     out = out_prefix + p.output  # a shell "not found" exit is the command's verdict: it ran
     checks = parse_checks(out)
-    if out_prefix:  # the hooks passed and the selected tests ran after them
-        for label, count in (("selected", len(scope.tests)), ("always", len(scope.always))):
-            if label in scope.ok:
-                name = f"{label} tests ({count} files)"
-                checks.append(Check(name, scope.ok[label]))
     # A negative exit is a signal: the process was killed from outside before it could report
     # a verdict, so it is unavailable, never a failed check (B512a5d7f35). `p.code` is None only
     # for a run that never started, which `_unfinished` already turned away.
     killed = p.code is not None and p.code < 0
+    if out_prefix and not killed:  # the hooks passed and the selected tests ran after them
+        for label, count in (("selected", len(scope.tests)), ("always", len(scope.always))):
+            if label in scope.ok:
+                name = f"{label} tests ({count} files)"
+                checks.append(Check(name, scope.ok[label]))
     if p.code != 0 and not killed and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
     return Result(
