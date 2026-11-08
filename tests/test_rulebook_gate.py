@@ -408,9 +408,10 @@ def test_the_stale_rules_remedy_names_the_item_when_the_tree_is_the_items_worktr
     `ddflow sync --keep-local` has to resolve the item from the tree the caller stands in,
     which a CLI caller whose identity does not match the tree's derived one fails to do; the
     item name is unambiguous from anywhere. FAILS before the fix (the message was always bare)."""
+    from helpers import items_of
+
     from ddflow.api import lifecycle as A
     from ddflow.infra import worktree as W
-    from helpers import items_of
 
     run_cli(repo, "init")
     _config(repo)
@@ -426,3 +427,11 @@ def test_the_stale_rules_remedy_names_the_item_when_the_tree_is_the_items_worktr
     _land(repo, "AGENTS.md", "# rules v2\n")
     code, msg = E.check_drift(repo, _cfg(), here=wt)
     assert code == 1 and "ddflow sync T1 --keep-local" in msg, msg
+    # ...and the named remedy is a command that RESOLVES: `ddflow sync T1` names the item,
+    # so it needs no tree detection (which is what failed for the caller in the bug).
+    from ddflow.api.lifecycle.sync import sync
+
+    named = sync(repo, item="T1", check=True, agent="agent-sync")
+    assert named.data["item"] == "T1" and named.data["status"] in ("current", "behind"), (
+        named.reason
+    )
