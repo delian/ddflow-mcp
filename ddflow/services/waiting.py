@@ -251,12 +251,13 @@ def queue_ahead(
 def queued_names(mine: list[str], aheads: list[Waiter], cfg: Any) -> str:
     """One clause per queued waiter ahead: the ``mine`` globs it holds the place for, then
     its holder and item -- every queued conflict named with its queue place, not just the
-    earliest waiter's (B-glob-refusal-names-one-conflict)."""
+    earliest waiter's (B-glob-refusal-names-one-conflict) -- plus the FIFO note the old
+    single clause carried."""
     parts = [
         f"{', '.join(queued_globs(mine, a.globs, cfg))} queued behind {a.holder} ({a.item})"
         for a in aheads
     ]
-    return "; ".join(parts)
+    return "; ".join(parts) + ", who asked first ([lease].wait_queue)"
 
 
 def _shape(on: list[dict[str, Any]]) -> list[tuple[str, bool]]:
