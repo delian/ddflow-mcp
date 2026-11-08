@@ -90,6 +90,7 @@ def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
 
     # One piece per file, and each piece CARRIES ITS OWN BODY: a header-only re-send, or a
     # trimmed copy of the whole, names the file but drops the body and cannot pass.
+    assert len(retried) == 2, "exactly two retried pieces (a duplicate third cannot pass)"
     halves = {named(d): d for d in retried}
     assert len(halves) == 2, "the two-file chunk halves into two pieces, one per file"
     assert "content_zero_xx" in halves["a/f0.py"], "f0's body survives in its half"
