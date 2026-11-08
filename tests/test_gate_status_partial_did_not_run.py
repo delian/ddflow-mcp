@@ -36,8 +36,12 @@ def test_a_partial_gate_is_not_said_to_have_not_run(repo):
         "16 failed, 572 passed",
     )
     assert code == OK, err
+    run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")
     _code, out, _ = run_cli(repo, "gate", "status", "T1")
-    assert "ci did not run" not in out, out
+    # The reported note was a comma-joined "NOTE: ci, unit_tests did not run": the partial
+    # gate must not be a member of the never-ran list, whatever gates surround it.
+    never = [ln for ln in out.splitlines() if "NOTE:" in ln and "did not run" in ln]
+    assert not any("ci" in ln for ln in never), out
     assert "ci ran only partially" in out, out
 
 
