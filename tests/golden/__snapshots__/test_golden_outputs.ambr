@@ -600,13 +600,12 @@
           harness wrote, never from the agent's word. Tier T2 only. It cannot show
           that a person (not a script holding the session) answered or that the
           transcript was not edited by the agent's own user; `ddflow doctor` says so.
-      approvals.transcript_dirs = ['~/.claude/projects']   [default]
-          Where the harness channel looks for session transcripts that hold the answer
-          to an approval question (default ~/.claude/projects). Each entry is either a
-          directory of Claude Code `*.jsonl` transcripts or a SQLite database file
-          (Kilo's store); Kilo's own default store `~/.local/share/kilo/kilo.db` is
-          also read when it exists. Only transcripts modified since the request was
-          filed are read.
+      approvals.transcript_dirs = []   [default]
+          Extra session-transcript paths the harness channel reads for an approval
+          answer, added to each harness descriptor's `[transcripts].root` (the
+          directories of session transcripts and SQLite stores the harness writes;
+          Kilo's default store is read when it exists). Only transcripts modified
+          since the request was filed are read.
       approvals.expiry_warn_s = 600   [default]
           How many seconds before the end of its use window `ddflow approvals log`
           starts to say an approved-but-unspent request will expire unused (default
@@ -847,6 +846,19 @@
           The branch merged into the task's branch before the checks run, so an
           interaction with what the base has become is tested (a parallel merge's
           effect). Empty (default): the repository's default branch.
+      ci.ruff_autofix = True   [default]
+          Whether the `ci` gate auto-corrects ruff lint/format drift it finds on an
+          item's branch before it can merge. When a `ddflow ci run` for an item fails
+          on the PRE-COMMIT ruff hooks (`ruff check`, `ruff format --check`) and this
+          is on, the run also runs `ruff check --fix` then `ruff format` over the
+          changed Python files in the item's own worktree and records the corrections
+          (``reformatted``/``fixed`` files) in the gate evidence; the gate stays
+          failed until the agent commits them and re-runs, so a file with drift cannot
+          reach the merge (the recurring `git push` pre-commit failure, Bci-ruff-
+          format-check-ci-lint-*). Ruff is run as `uv run ruff` when the project has a
+          `uv.lock` (the pinned venv the `repo: local` hooks use), else as `ruff` when
+          it is on PATH; with neither the correction is recorded unavailable. false:
+          only report the failure.
       ci.pins_precheck = True   [default]
           Before the default CI command runs, check the project's pinned outputs
           (`ddflow pins regenerate --check`, the recipes in `[pins].recipes_file`) in
@@ -3004,14 +3016,16 @@
           refused and names the unmet gates; a person passes `--force`, an agent
           passes `--force --approval ID` (an operator approval bound to that exact
           command, single-use, not spent by a refused call) and the landing is
-          recorded as a `merge.forced` event naming the gates it overrode. A failed
-          review or failed ci gate refuses in both modes. An agent's edit of this knob
-          is a `config.set`, which needs a person's approval. An unrecognised value in
-          a config file is warned about, reported by `doctor` and falls back to
-          'refuse', the strictest (a merge with unsettled required gates needs --force
-          and an approval); `config --set`, `ddflow_configure` and the environment
-          refuse it, and so does loading ddflow's own source tree, where the file and
-          the code are one commit.
+          recorded as a `merge.forced` event naming the gates it overrode. Under
+          `[flow].integration = pr` the same check runs before the request opens
+          (Bc6c07dfe52): `refuse` refuses opening it and `warn` opens it naming the
+          unmet gates. A failed review or failed ci gate refuses in both modes. An
+          agent's edit of this knob is a `config.set`, which needs a person's
+          approval. An unrecognised value in a config file is warned about, reported
+          by `doctor` and falls back to 'refuse', the strictest (a merge with
+          unsettled required gates needs --force and an approval); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       merge_queue.max_batch = 5   [default]
           How many queue entries one `ddflow queue run` integrates before it returns
           (each merges main into its branch, regenerates the pins, runs the ci gate
@@ -4026,6 +4040,10 @@
           Trust tier a lane needs for an item that names none. A lane's tier is
           whatever the operator grants it; a lane below the item's tier is refused,
           whatever its score.
+      swarm.conformance_min_level = 0   [default]
+          Measured conformance level a lane needs before the scheduler offers it a
+          real item (a lane at level 0 has never passed a conformance run, so its tier
+          is only its own word). Zero does not enforce conformance.
       swarm.explore_share = 0.1   [default]
           Share of picks spent on under-measured (family, model) pairs (D-swarm-
           answers Q10). Zero turns exploration off.
