@@ -207,12 +207,14 @@ def build(ctx: Context, group_by: str = "gate") -> dict:
     gate_time = [
         {
             "gate": g,
-            **stat(v, minimum),
+            **stat(per_gate.get(g, []), minimum),
             # RAN outcomes this gate's duration figure left out (no started, no elapsed_s).
+            # A gate with ONLY untimed outcomes still appears (over its untimed count), so a
+            # window whose runs were all hand/ci-run recorded is named, not silently dropped.
             "untimed": untimed.get(g, 0),
             **{f"wait_{k}": x for k, x in stat(waits.get(g, []), minimum).items()},
         }
-        for g, v in sorted(per_gate.items())
+        for g in sorted(set(per_gate) | set(untimed))
     ]
     if not any(r["p50_s"] is not None for r in gate_time):
         unavailable["gate_time"] = f"no gate with {minimum} timed runs"

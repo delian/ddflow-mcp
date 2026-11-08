@@ -322,7 +322,7 @@ def test_ci_run_records_the_runs_elapsed_time(repo, monkeypatch):
     res = A.run(repo, ref="T1")
     assert res.exit == 0 and res.data["recorded"]["ok"], res.data
     ev = _ci_gate(repo)["evidence"]
-    assert "elapsed_s" in ev and ev["elapsed_s"] >= 0, ev
+    assert isinstance(ev.get("elapsed_s"), (int, float)) and ev["elapsed_s"] >= 0, ev
 
 
 def test_a_nested_ci_run_inside_the_ci_gate_does_not_record_twice(repo, monkeypatch):
