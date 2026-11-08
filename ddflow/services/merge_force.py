@@ -119,7 +119,7 @@ def authorise(
     return (d.stamp, "") if d.ok else (None, d.message)
 
 
-def spend(log: Any, cfg: Any, item: str, a: Assessment, approval: str) -> dict[str, Any]:
+def spend(log: Any, cfg: Any, item: str, a: Assessment, approval: str) -> CN.Decision:
     """Record one use of the agent's validated ``approval`` ([`authorise`]), after the landing
     landed (B527b0a518c). Returns CN's `Decision`, not just the stamp: the caller checks
     ``.ok`` -- a spend that fails here means another consumer took the single use (or it

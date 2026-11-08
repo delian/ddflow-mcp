@@ -127,7 +127,7 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
         )
 
 
-def _spend_after_land(log, cfg, item: str, gates, stamp, approval: str) -> dict:
+def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, approval: str) -> dict | None:
     """Spend an agent's approval only now the landing landed (B527b0a518c); a person's
     `--force` carries a ``{"by": "person"}`` stamp to keep. A spend that fails after a
     concurrent consumer (or expiry between validation and spend) is not stamped as valid."""
