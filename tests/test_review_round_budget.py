@@ -96,6 +96,34 @@ def test_refutations_over_a_moved_tree_still_do_not_pass(repo, tmp_path):
     assert "holds other content" in out.data["text"]
 
 
+def test_a_refutation_blocks_over_a_refuted_files_own_move_even_mixed_with_a_confirmed_fix(
+    repo, tmp_path
+):
+    """The relax is tied to the CONFIRMED findings' files only: with finding 1 confirmed and
+    fixed (f1.py) and finding 2 refuted on f2.py, a movement that includes f2.py (the
+    refuted finding's own file) is unreviewed content, not the confirmed fix, so the stale
+    block stays. The attribution check is pinned at the helper level because the
+    worktree-disabled `_setup` records no `reviewed_paths` (its item has no worktree/branch),
+    so the end-to-end settle sees `moved=None` and keeps the old fallback."""
+    from ddflow.api.review.triaging import _confirmed_files, _movement_is_confirmed_fix
+    from ddflow.services.gates import outcomes as GD
+
+    _setup(repo, tmp_path, findings=2)
+    for _ in (1, 2):
+        assert api.review(repo, gate="critic", item="T1").data["outcome"] == "failed"
+    (repo / "f1.py").write_text("x = 2  # fixed finding 1\n")
+    api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="f1 fixed")
+    api.triage(repo, "T1", gate="critic", finding=2, verdict="refuted", probe="ran it: ok")
+    st = fold(EventLog(repo).read_all(), strict=False)
+    it = st.items["T1"]
+    counts = GD.triage_counts(it, "critic") or {}
+    assert _confirmed_files(it, "critic") == {"f1.py"}
+    # The fix alone moved the tree: attributable, so the stale is explained.
+    assert _movement_is_confirmed_fix(counts, ["f1.py"], it, "critic") is True
+    # The refuted finding's own file moved too: NOT the confirmed fix, so it stays stale.
+    assert _movement_is_confirmed_fix(counts, ["f1.py", "f2.py"], it, "critic") is False
+
+
 def test_an_unsettled_finding_never_settles_a_stale_round(repo, tmp_path):
     """A confirmed finding does not bypass the untriaged hold: with a second finding left
     untriaged, the spend-budget settle still names 'findings have no verdict'."""
