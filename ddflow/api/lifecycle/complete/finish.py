@@ -105,7 +105,6 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model, model_source = _author_model(st, log.agent_id, model, cfg)
-    _remember_declared_model(st, log, cfg, model, model_source)
     recorded, family_only = _recorded_identity(model, model_source, cfg)
     # ONE builder for both outlets -- the caller-facing `base` dict and the durable
     # event spread the SAME dict, so the two cannot drift apart (they once re-derived
@@ -150,8 +149,10 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         log, cfg, item, v, hard, force, approval, agent, base
     )
     if denied is not None:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return denied
     if hard and force:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return O.refused(
             "item.completed",
             f"cannot complete {item}, and --force does not lift this:\n"
@@ -161,6 +162,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         )
     force, stamp = _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp)
     if not v.may_complete and not force:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return O.refused(
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
