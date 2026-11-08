@@ -120,7 +120,7 @@ def act8_rebuild_from_the_log(sc, alpha, repo):
     for path in sorted(repo.rglob("*.py")):
         if ".ddflow" not in path.parts and ".git" not in path.parts:
             path.unlink()
-    remaining = [p for p in repo.rglob("*.py") if ".git" not in p.parts]
+    remaining = [p for p in repo.rglob("*.py") if ".ddflow" not in p.parts and ".git" not in p.parts]
     sc.check("the code is genuinely gone", not remaining, str(remaining))
 
     sc.step("`replay` reconstructs the instruction history from the log alone")
