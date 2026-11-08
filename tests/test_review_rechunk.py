@@ -244,8 +244,16 @@ def test_a_reruns_own_finding_is_attributed_to_it(repo, tmp_path):
         "chunks_total": 2,
         "coverage": "2/2 chunk(s) reviewed",
         "chunk_findings": [
-            {"chunk": 2, "digest": "abc123", "severity": "HIGH", "title": "x.py:1",
-             "location": "x.py:1", "detail": "bad", "reviewer": "a", "family": "xai"}
+            {
+                "chunk": 2,
+                "digest": "abc123",
+                "severity": "HIGH",
+                "title": "x.py:1",
+                "location": "x.py:1",
+                "detail": "bad",
+                "reviewer": "a",
+                "family": "xai",
+            }
         ],
         "unreviewed": [],
     }
