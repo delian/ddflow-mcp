@@ -40,6 +40,26 @@ def test_a_duplicate_section_name_is_refused():
         _docs.declare(name)(type("DupConfig", (), {}))
 
 
+def test_config_fields_classes_and_knob_manifest_come_from_the_registry():
+    """The seam: `ddflow.config` assembles Config's section fields, the class re-exports and the
+    knob manifest from `SECTION_CLASSES` (the discovery), never from a per-section hand-kept
+    list. A revert to a hand list fails here."""
+    import ddflow.config as C
+    from ddflow.config_sections import _docs
+
+    assert set(C._SECTION_CLASS_BY_NAME) == {c.__name__ for c in _docs.SECTION_CLASSES.values()}
+
+    cfg = C.Config()
+    for section, cls in _docs.SECTION_CLASSES.items():
+        assert hasattr(cfg, section), f"[{section}] not wired into Config"
+        assert getattr(C, cls.__name__) is cls, f"{cls.__name__} not re-exported"
+        for f in cls.__dataclass_fields__:
+            if f in getattr(cls, "__annotations__", {}):
+                key = f"{section}.{f}"
+                if f in _docs.DECLARED_IN.values() or key in _docs.KNOB_DOCS:
+                    assert key in _docs.KNOB_DOCS, f"{key} missing from the knob manifest"
+
+
 def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_path, monkeypatch):
     """Adding a section to a package on the search path is discovered by the scan, registers via
     `@declare`, and leaves config/__init__.py and config/_core.py byte-identical."""
