@@ -127,8 +127,14 @@ def _tally(
     ``different``, so ``still`` no longer covers it and ``red`` misses it."""
     different = [i for i in ids if known.get(i) and _differs(i, before, onbase)]
     still = [i for i in ids if known.get(i) and i not in different]
+    #: Ids whose failure text is missing on EITHER side: `_differs` returns "not different"
+    #: then (it never claims a new offender when the branch or the base text is unknown), so
+    #: "still failing" for one of these is an ABSENCE of evidence, not proof it failed the same
+    #: way. A decision that rests on the comparison being whole-vs-whole (an auto-accept of a
+    #: full selection whose reach cannot be told) must treat them as not compared (B0f41a2f1d6).
+    blind = [i for i in ids if not (before or {}).get(i) or not (onbase or {}).get(i)]
     return {"red": len(still) == len(ids), "still_failing": still, "different": different,
-            "unmeasured": [i for i in ids if i not in known]}  # fmt: skip
+            "unmeasured": [i for i in ids if i not in known], "blind": blind}  # fmt: skip
 
 
 def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str] | None) -> bool:

@@ -181,12 +181,18 @@ def auto_decision(
     if sel.full:
         # A hub-module (or test-infrastructure) change cut the reach walk, so which test files
         # it would reach by import or governing cannot be told. What IS still known is the
-        # changed-file list (`sel.changed`) and, when `red` is a full measurement (`unmeasured`
-        # is empty), that every failing test failed on the base with the SAME text. Reach is
-        # then only needed to attribute a failure to a changed file, so the one thing that
-        # still blocks is a failing test FILE the item changed itself (B0f41a2f1d6).
+        # changed-file list (`sel.changed`) and the measurement itself: `red` is only a proof
+        # when every failing test was measured on the base AND its failure text was compared
+        # whole-vs-whole (`blind` is empty: a missing branch or base text is an absence of
+        # evidence, not a match). Reach is then only needed to attribute a failure to a changed
+        # file, so the one thing that still blocks is a failing test FILE the item changed
+        # itself (B0f41a2f1d6).
         changed = set(sel.changed)
-        if not found.get("unmeasured") and not [f for f in test_files_of(ids) if f in changed]:
+        if (
+            not found.get("unmeasured")
+            and not found.get("blind")
+            and not [f for f in test_files_of(ids) if f in changed]
+        ):
             return {
                 **out,
                 "accepted": True,
