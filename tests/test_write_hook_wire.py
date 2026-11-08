@@ -3,7 +3,7 @@
 The project door's pre-tool hook used to register `matcher = "Bash"` only, so it fired
 for no file write: an Edit or Write on a file another agent's lease covers slipped through
 to the commit-time check. The matcher must name the write tools, and the refusal must name
-the holder and the options (wait, send a suggestion, open a task) a D-lock-lifecycle-answers
+the holder and the options (wait, open a task) a D-lock-lifecycle-answers
 refusal promises. The check is turned by `[locks].mode = enforce|log|off`.
 """
 
@@ -30,7 +30,6 @@ def test_verdict_names_the_holder_and_the_options(repo, monkeypatch):
     assert code == CK.REFUSE
     assert "agent-2" in msg
     assert "ddflow wait" in msg
-    assert "`ddflow suggest ...`" in msg
     assert "ddflow task add" in msg
 
 

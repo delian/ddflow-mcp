@@ -212,7 +212,7 @@
   ],
   3,
   "",
-  "T2 is not ready: deps — T1 is running\nUse --force only if you mean to start it anyway.\n\nYou could take instead: T4, T5\nto ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
+  "T2 is not ready: deps — T1 is running\nUse --force only if you mean to start it anyway.\n\nYou could take instead: T4, T5\nrefusing: to ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
  ],
  [
   [
@@ -927,7 +927,7 @@
   ],
   3,
   "",
-  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\nto ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
+  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\nrefusing: to ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
  ],
  [
   [

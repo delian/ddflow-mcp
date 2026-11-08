@@ -290,6 +290,10 @@ def _measure(
     held = rec.kind == "expired_lease"
     wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
+        # The tree is gone (a merge removed it), so `recover` must not name a path that
+        # no longer exists (B-recover-forgets-author-model): the advice says it is gone,
+        # and the row carries no worktree at all.
+        rec.worktree = ""
         rec.advice = "worktree is gone; nothing to salvage" + (
             f". `ddflow release {rec.item}` to clear the claim."
             if held
