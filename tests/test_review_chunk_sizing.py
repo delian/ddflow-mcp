@@ -64,25 +64,26 @@ def test_a_diff_is_split_to_fit_the_output_cap_before_it_is_sent(monkeypatch):
 
 def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
     """shrink on a truncation, through the review path: a chunk that ran out of output budget
-    is retried as MORE, SMALLER pieces, never re-sent at the size that just truncated."""
+    is retried as TWO SMALLER single-file pieces, never re-sent at the size that truncated."""
     # One two-file chunk that CAN halve: the two files fit under one budget, and a chunk lost
     # to its size splits into one piece per file.
     rev = Reviewer(name="r", base_url="http://x", model="m", max_chunk_chars=500, hedge=1)
     diff = _files("a" * 80, "b" * 80)
-    first: list[int] = []
-    retried: list[int] = []
+    first: list[str] = []
+    retried: list[str] = []
 
     def race(reviewer, system, users, started, **kw):
-        sizes = [len(_sent_diff(u)) for u in users]
         if not first:
-            first.extend(sizes)
+            first.extend(_sent_diff(u) for u in users)
             return [("", R.TRUNCATED)] * len(users)
-        retried.extend(sizes)
+        retried.extend(_sent_diff(u) for u in users)
         return [("STATUS: NO FINDINGS", "")] * len(users)
 
     monkeypatch.setattr(R, "_race", race)
     res = review(rev, diff, "i")
-    assert first, "the chunk was never sent"
-    assert len(retried) > len(first) > 0, "the truncated chunk was not retried in more pieces"
-    assert max(retried) < max(first), "every retried half is smaller than the truncated chunk"
+    assert len(first) == 1, "the two files fit in one chunk"
+    assert len(retried) == 2, "the truncated chunk halves into two single-file pieces"
+    assert max(len(d) for d in retried) < len(first[0]), "each half is smaller than the whole"
+    got = {ln.split(" ")[2] for d in retried for ln in d.splitlines() if ln.startswith("diff --git")}
+    assert got == {"a/f0.py", "a/f1.py"}, "both files survive the shrink; none re-sent whole"
     assert res.status == REVIEWED, res.reason
