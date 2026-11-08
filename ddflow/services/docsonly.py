@@ -29,11 +29,14 @@ def _trivial_pipeline(gates: list[str]) -> list[str]:
     return [g for g in gates if g not in excused]
 
 
-def _uncommitted_not_in(tree: Path, paths: list[str]) -> bool:
+def _uncommitted_not_in(tree: Path) -> bool:
     """Uncommitted work the committed-diff path list cannot name: an untracked non-state
     file, or a dirty TRACKED or staged file -- in ``paths`` or not. `trivial` is only a claim
     about a clean, committed tree, so any such work fails closed (rubber_duck, critic)."""
-    if any(not is_state(p) for p in (GIT.files(tree, "untracked") or ())):
+    listed = GIT.files(tree, "untracked")
+    if listed is None:
+        return True  # could not list untracked: fail closed, never read as "none"
+    if any(not is_state(p) for p in listed):
         return True
     # `git diff HEAD` compares WORKTREE to HEAD and misses an index-only staged edit (git add,
     # then restore the worktree). Compare both the worktree and the index to HEAD. ANY path
@@ -75,7 +78,7 @@ def diff_is_trivial(item: Item, cfg: Config, repo, paths: list[str] | None) -> b
         # No tree to inspect: a pure path-list judgement. Uncommitted work lives in a
         # tree; with none there is none to fail closed on.
         return diff_is_docs_only(item, cfg, list(paths))
-    if _uncommitted_not_in(tree, list(paths)):
+    if _uncommitted_not_in(tree):
         return False
     if diff_is_docs_only(item, cfg, paths):
         return True
@@ -214,7 +217,7 @@ def pipeline_by_diff(
     # or a dirty tracked file outside the change) must take the FULL pipeline, never a
     # reduced one (rubber_duck): the reduced pipeline skips review + whole-suite ci.
     tree = _item_tree(item, repo)
-    if tree is not None and _uncommitted_not_in(tree, list(paths or ())):
+    if tree is not None and _uncommitted_not_in(tree):
         return chosen, lambda: paths
     if diff_is_docs_only(item, cfg, paths):
         chosen = doc_pipeline
