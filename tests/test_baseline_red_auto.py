@@ -194,6 +194,24 @@ def test_a_hub_module_change_with_an_uncompared_failure_still_declines(repo, mon
     assert "import reach cannot be told" in auto["why"]
 
 
+def test_a_hub_module_change_without_the_uncompared_field_still_declines(repo, monkeypatch) -> None:
+    """`found` that LACKS `uncompared` must decline, never read as "all compared": the
+    whole-vs-whole guarantee is absent, not empty, so the reach cannot be told."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True, "unmeasured": []}, {})
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
 def test_the_base_is_run_once_per_sha_and_shared(repo) -> None:
     _project(repo)
     calls: list[str] = []
