@@ -99,6 +99,39 @@ def test_the_merge_record_carries_each_gates_real_state(repo):
         assert out.data["post_merge_check"] == out.data["ci"]
 
 
+def test_warn_mode_still_refuses_a_person_only_baseline_red_partial(repo):
+    """B0eca409559: `[merge].require_gates=warn` landed a measured baseline-red partial only a
+    person accepts (`gate_accept.person_only`), and `complete` then refused the SAME partial on
+    the landed item -- whose tree was gone, so the fix-and-rerun remedy was impossible. Merge
+    must run the same acceptance check as complete and refuse first."""
+    tree = _claimed(repo)
+    EventLog(repo, "ddflow-gate-run").append(
+        "gate.partial",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "by": "ddflow",
+            "reason": "baseline-red: tests/test_x.py::test_x, bug B1",
+            "evidence": {
+                "baseline": {
+                    "red": True,
+                    "base": "main",
+                    "ids": ["tests/test_x.py::test_x"],
+                    "auto": {
+                        "accepted": False,
+                        "why": "failing test file(s) the item changed or reaches: tests/test_x.py",
+                    },
+                }
+            },
+        },
+    )
+    out = _merge(repo)
+    assert out.exit == 3, out.reason
+    assert "baseline-red" in out.reason
+    assert not _events(repo, "worktree.merged")
+    assert (tree / "a.py").exists()
+
+
 def test_refuse_without_force_names_the_gates_and_the_next_call(repo, refuse):
     tree = _claimed(repo)
     out = _merge(repo)
