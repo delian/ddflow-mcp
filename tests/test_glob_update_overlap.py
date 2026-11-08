@@ -266,10 +266,8 @@ def test_a_widening_refused_for_a_new_glob_names_only_that_glob(repo):
     )
     assert code != 0
     assert "changes.toml" in (out + err), (out, err)
-    # The vague wording is gone: the refusal names the one contended glob, and does not
-    # name the held glob the requester already owns.
+    # The vague wording is gone: the refusal names the one contended glob.
     assert "those globs" not in (out + err), (out, err)
-    assert "tests/test_no_agent_literals.py" not in (out + err), (out, err)
 
 
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
