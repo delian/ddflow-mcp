@@ -148,5 +148,5 @@ def test_a_required_argument_given_only_under_its_old_spelling_is_given(inited, 
 def test_an_argument_another_action_advertises_is_not_unknown(inited):
     # B34e7a7001f: the family union advertises `sources` (a recall argument), so a call that
     # sends it to `action=similar` is not refused as "unknown argument: sources".
-    text, err = _call(inited, "ddflow_memory", action="similar", text="x", sources="decisions")
+    text, _err = _call(inited, "ddflow_memory", action="similar", text="x", sources="decisions")
     assert "unknown argument" not in text
