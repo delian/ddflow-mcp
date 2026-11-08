@@ -170,14 +170,11 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
         src = path.read_text("utf-8")
         # A scanner (archifaces_scan) documents the calls it scans, and module docstrings
         # quote examples; a match inside a comment or string is prose, not a spawn. Keep
-        # the (row, column) spans of COMMENT/STRING tokens (and f-string literal text:
-        # FSTRING_* on 3.12+) and only flag a match that sits in real code. `tokenize`
-        # expands tabs to its tabsize (8), so expand tabs in the text before matching too:
-        # the two column spaces must agree or a real call right after a same-line
-        # tab-bearing string would be mistaken for prose.
-        norm = src.expandtabs(8)
-        # f-string literal text is tokenized as FSTRING_* on 3.12+; on earlier
-        # interpreters the whole f-string is a STRING token, already covered.
+        # the (row, column) spans of COMMENT/STRING tokens (and f-string literal text on
+        # 3.12+) and only flag a match that sits in real code. `tokenize` reports raw
+        # character columns (a tab is one column), so the `re` positions agree with it --
+        # no tab expansion. Match on `split("\n")`, the same line break the tokenizer sees:
+        # `splitlines()` also breaks on \f, \v, \x85, \u2028.., which the tokenizer does not.
         fstring_types = {
             getattr(tokenize, n)
             for n in ("FSTRING_START", "FSTRING_MIDDLE", "FSTRING_END")
@@ -186,14 +183,14 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
         prose_types = {tokenize.COMMENT, tokenize.STRING, *fstring_types}
         protected = [
             (t.start, t.end)
-            for t in tokenize.generate_tokens(io.StringIO(norm).readline)
+            for t in tokenize.generate_tokens(io.StringIO(src).readline)
             if t.type in prose_types
         ]
-        for n, line in enumerate(norm.splitlines(), 1):
+        for n, line in enumerate(src.split("\n"), 1):
             for m in spawn.finditer(line):
                 if any(start <= (n, m.start()) < end for start, end in protected):
                     continue
-                offenders.append(f"{path.relative_to(ROOT)}:{n}: {src.splitlines()[n - 1].strip()}")
+                offenders.append(f"{path.relative_to(ROOT)}:{n}: {line.strip()}")
                 break
     assert not offenders, (
         "these spawn a child without the stdin guard; use `from . import proc as P` "
