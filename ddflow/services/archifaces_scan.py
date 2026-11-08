@@ -123,6 +123,11 @@ _LOOP_SPAWN = (".subprocess_exec", ".subprocess_shell")  # asyncio event-loop me
 _ENVIRON = ("os.environ", "os.environb")
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?(\[[0-9a-f:.]+\]|[^/:?#\s{}\[\]]+)", re.IGNORECASE)
+#: URL hosts that only IDENTIFY a message format's schema (a ``$schema`` field another system
+#: renders -- the Adaptive Cards schema the Teams channel embeds) rather than an endpoint this
+#: project calls: not a network dependence, so left out of the network census (bug B489298dd27).
+#: Only hosts ddflow actually talks to belong there.
+_SCHEMA_HOSTS = frozenset({"adaptivecards.io"})
 
 
 @dataclass(frozen=True)
@@ -418,8 +423,7 @@ class _Scan:
         hooks = v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v
         if hooks and not m:
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
-        if m:
-            host = m.group(1).lower()
+        if m and (host := m.group(1).lower()) not in _SCHEMA_HOSTS:
             self.add("network", f"host:{host}", node, host)
 
     def _path_call(self, e: ast.AST) -> bool:
