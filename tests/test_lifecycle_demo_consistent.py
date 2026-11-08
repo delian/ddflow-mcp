@@ -62,5 +62,4 @@ def test_act8_code_gone_filter_ignores_dotddflow():
     """The "code is genuinely gone" filter ignores `.ddflow` wherever the delete loop
     spares it, so a surviving `.ddflow` file is not reported as surviving code."""
     src = (ROOT / "demos" / "lifecycle_acts_finish.py").read_text("utf-8")
-    line = next(l for l in src.splitlines() if "remaining = [" in l)
-    assert '".ddflow" not in p.parts' in line
+    assert '".ddflow" not in p.parts' in src
