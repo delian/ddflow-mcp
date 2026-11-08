@@ -115,3 +115,32 @@ def test_a_low_note_next_to_the_phrase_is_still_clean(tmp_path, monkeypatch):
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "clean" and r.exit == 0
+
+
+def test_a_defect_on_a_line_saying_not_refuted_is_still_findings(tmp_path, monkeypatch):
+    """'not refuted' is not a refutation: a medium defect on a line that says 'not refuted'
+    must still read findings. Only the (THEORETICAL)/(REFUTED) verdict sets a defect aside,
+    never the word appearing in prose."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Review for job 7: no confirmed defects.\n"
+        "- medium: not refuted — the parser drops the last record\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1
+
+
+def test_a_theoretical_verdict_next_to_the_phrase_is_still_clean(tmp_path, monkeypatch):
+    """A (THEORETICAL) defect is not a confirmed defect to fix: it reads clean even though
+    it carries a medium severity."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Review for job 7: no confirmed defects found.\n"
+        "**1. medium (THEORETICAL) — unverified**\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "clean" and r.exit == 0

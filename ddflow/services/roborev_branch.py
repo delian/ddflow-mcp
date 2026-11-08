@@ -277,20 +277,21 @@ def _no_confirmed_defect(text: str) -> bool:
 
 _DEFECT_SEVERITY = re.compile(r"\b(?:critical|high|medium)\b", re.IGNORECASE)
 
+_NEGATED = re.compile(r"\((?:theoretical|refuted)\)", re.IGNORECASE)
+
 
 def _has_confirmed_finding(text: str) -> bool:
     """A real defect among the findings: a line carrying a defect severity
-    (critical|high|medium) that is not soft-pedalled as THEORETICAL or refuted. roborev's
-    'low' is a NOTE ('minor improvement opportunity with no immediate functional impact',
-    its reviewer prompt), not a defect: a LOW-only review is exactly the clean verdict this
-    fix must stop recording `failed` over. The severity is a plain word in roborev's body
-    (`**1. high (CONFIRMED)**`, `FINDING HIGH`, `- medium: ...`), not a bold `**high**`
-    bullet, so it is matched as a bare token, not markdown."""
+    (critical|high|medium) that is not set aside by the (THEORETICAL)/(REFUTED) verdict
+    roborev writes on the finding. 'low' is a NOTE ('minor improvement opportunity with no
+    immediate functional impact', its reviewer prompt), not a defect: a LOW-only review is
+    exactly the clean verdict this fix must stop recording `failed` over. The severity is a
+    plain word in roborev's body (`**1. high (CONFIRMED)**`, `FINDING HIGH`, `- medium: ...`),
+    not a bold `**high**` bullet, so it is matched as a bare token, not markdown. Only the
+    parenthesised verdict negates a defect: the word in prose (`not refuted`, `the finding
+    was theoretical`) does NOT, or a confirmed defect quoted beside it would be dropped."""
     for line in text.splitlines():
-        low = line.casefold()
-        if "theoretical" in low or "refuted" in low:
-            continue
-        if _DEFECT_SEVERITY.search(line):
+        if _DEFECT_SEVERITY.search(line) and not _NEGATED.search(line):
             return True
     return False
 
