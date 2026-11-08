@@ -30,12 +30,16 @@ def _say_pins(repo: Path, cfg: Any, say: Any) -> None:
     """Say which pins the merge left stale or never re-recorded."""
     for line in PM.merge_lines(PM.merge_report(repo, cfg)):
         say(line)
+
+
 def _release_at_merge(log, cfg, item: str, back_failed: list[str]) -> bool:
     """End the item's lease now that its merge is recorded (LK-release-at-merge): the files
     are free for a waiter, whose `wait` reads the release as ready, and `complete` needs no
     lease. Kept when `[lease].release_at_merge` is off or a hotfix back-merge failed (it needs
     its files to retry). Only reached after a landing, so a failed merge keeps the lease."""
     return not back_failed and cfg.lease.release_at_merge and LS.release(log, item, note="merged")
+
+
 def _wrong_base(st, it, wt, remote_base: str, item: str) -> O.Outcome | None:
     """A refusal when the branch was forked from one line's base and would land on another's,
     carrying the first line's history along (RESEARCH R17 review)."""
@@ -50,6 +54,8 @@ def _wrong_base(st, it, wt, remote_base: str, item: str) -> O.Outcome | None:
             dirty=[],
         )
     return None
+
+
 def _when(cond: Any, **fields: Any) -> dict[str, Any]:
     """``fields`` when ``cond`` is truthy, else nothing: an optional part of a result."""
     return fields if cond else {}
@@ -59,14 +65,20 @@ def _kept_reason(kept: str, landed_note: str, back_failed: list[str]) -> str:
     """Why the tree was kept and what went wrong after the landing, as one line."""
     failed = ("back-merge FAILED into " + ", ".join(back_failed)) if back_failed else ""
     return "; ".join(filter(None, [kept, landed_note, failed]))
+
+
 def _say_awaiting(say, item: str, gates) -> None:
     """Say which required gates the landing left unsettled (`[merge].require_gates`)."""
     if gates.unmet:
         say(MF.warning(item, gates))
+
+
 def _ci_fields(ci_after: dict) -> dict:
     """`ci` is kept for readers of the old key; it is the BASE's post-merge check, never the ci
     gate (Bb55340e14b): `gate_states` has the gate."""
     return {"ci": ci_after, "post_merge_check": ci_after} if ci_after else {}
+
+
 def _commit_shards_before_merge(log, cfg, item: str) -> None:
     """Commit the primary's uncommitted event shards before the git merge, unless the
     strategy is a fast-forward: landing them on the target drifts it past the branch's fork
@@ -75,10 +87,14 @@ def _commit_shards_before_merge(log, cfg, item: str) -> None:
     fast-forwarded target, by the post-merge `commit_at` in `merge`."""
     if cfg.worktree.merge_strategy != "ff-only":
         EC.commit_at(log, cfg, "merge", f"merge {item}")
+
+
 def _gate_blockers(repo: Path, cfg, st, item: str) -> str:
     """The first failed-gate blocker that stops ``item`` landing, or ""."""
     found = GO.failed_review_blockers(st, cfg, item, G.load_gates(repo, cfg))
     return (found or OC.failed_ci_blockers(st, cfg, item) or [""])[0]
+
+
 def _landing_refusal(
     repo: Path, cfg, st, it, wt: W.Worktree, dirty, item: str, allow_dirty: bool, allow_empty: bool
 ) -> O.Outcome | None:
@@ -122,6 +138,8 @@ def _landing_refusal(
     if empty is not None:
         return empty
     return _wrong_base(st, it, wt, f"{cfg.flow.remote}/{wt.base}", item)
+
+
 def _record_landing(
     log,
     item: str,
@@ -152,6 +170,8 @@ def _record_landing(
             **({"borrowed": True, **_scope_fields(outside, listed=True)} if borrowed else {}),
         },
     )
+
+
 def _failed_landing_outcome(
     repo: Path, cfg, log, it, wt, item: str, landed_note: str, r, *, borrowed: bool
 ) -> O.Outcome | None:
@@ -180,6 +200,8 @@ def _failed_landing_outcome(
         exit=O.REFUSED if r.code == W.GIT_REFUSED else O.FAIL,
         reason=(r.err or r.out) + PD.dirt_hint(repo, cfg, r.err or r.out, repo),
     )
+
+
 def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
     """A refusal when ``wt.branch`` has no commits its target lacks; else None.
 
@@ -204,6 +226,8 @@ def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
         dirty=[],
         branch=wt.branch,
     )
+
+
 def _dispose_tree(
     repo: Path, cfg, log, it, wt: W.Worktree, *, borrowed: bool, keep: bool, callers
 ) -> tuple[bool, str]:
@@ -227,6 +251,8 @@ def _dispose_tree(
         )
     gone = dispose_tree(repo, cfg, log, wt, item=it)
     return (True, "") if gone.removed else (False, gone.why)
+
+
 def _scope_fields(outside: list[str] | None, *, listed: bool) -> dict[str, Any]:
     """`outside_globs` as recorded and returned: a list always, and `outside_globs_unknown`
     beside it -- true when git could not list the landing's paths, false when it did, null

@@ -76,9 +76,13 @@ def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, a
         "",
         O.refused("worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)),
     )
+
+
 def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str:
     """ "" for a clean merge; else the note `_landed_anyway` has for a failure that landed."""
     return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+
+
 def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
     """The `merge.forced` event of a landing that went over unsettled gates (no-op otherwise)."""
     if stamp is not None:
@@ -87,6 +91,8 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
         )
+
+
 def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: str) -> dict | None:
     """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
     the approval id to spend, and is "" unless `authorise` validated a real `--approval <id>`;
@@ -97,6 +103,8 @@ def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: s
         return stamp
     spent = MF.spend(log, cfg, item, gates, pending)
     return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
+
+
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
     repo: Path,
     item: str,
@@ -259,6 +267,8 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         callers=(called_from, shell_cwd),
         on_progress=on_progress,
     )
+
+
 def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; the tail spends them
     repo: Path,
     cfg,
@@ -352,6 +362,8 @@ def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; t
         **_when(refreshed, export_refresh=refreshed),
         **committed,
     )
+
+
 def _ci_notice(repo: Path, cfg) -> str:
     """The line said before the post-merge check starts: what runs and which knobs bound it."""
     try:
@@ -366,6 +378,8 @@ def _ci_notice(repo: Path, cfg) -> str:
     if not command:
         return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
     return notice
+
+
 def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
     """A note when git reported failure but the merge commit is on the base; else "".
 
@@ -389,6 +403,8 @@ def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: 
         f"git {how} after the merge commit landed on {wt.base} ({now[:12]}): recorded as "
         f"merged, from what the base holds ({(r.err or r.out or '')[:200]!r})"
     )
+
+
 def _what_to_land(
     repo: Path, cfg, st, it, target: str, branch: str, called_from: Path | None
 ) -> tuple[W.Worktree, list[str], list[str] | None] | O.Outcome:
@@ -419,6 +435,8 @@ def _what_to_land(
     wt = W.Worktree(item=it.id, path=tree or W.repo_root(repo), branch=picked, base=target)
     dirty = W.dirty(wt) if tree is not None else []
     return wt, dirty, _outside_globs(repo, it, target, picked, cfg)
+
+
 def _branch_to_land(
     repo: Path, cfg, st, it, branch: str, called_from: Path | None, target: str
 ) -> str | O.Outcome:
@@ -478,6 +496,8 @@ def _branch_to_land(
             dirty=[],
         )
     return branch
+
+
 def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] | None:
     """Paths the landing changes that the item never declared; None when git could not list
     them -- "could not tell", never "none" (B4e42502034).
@@ -508,6 +528,8 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
         and p not in fresh
         and not any(path_in_glob(p, g) for g in it.globs)
     ]
+
+
 def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
     repo: Path,
     cfg,
@@ -550,6 +572,8 @@ def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the ca
         _record_forced(log, item, W.head_sha(wt.path) or "", gates, forced_by, agent)
         req.data["forced"] = True
     return req
+
+
 def _open_request(
     repo: Path, cfg, log, it, *, message: str, model: str, dirty: list[str]
 ) -> O.Outcome:
@@ -572,4 +596,3 @@ def _open_request(
     if op.refused:
         return O.refused("worktree.merged", op.reason, **data)
     return O.ok("worktree.merged", **data)
-
