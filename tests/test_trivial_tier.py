@@ -210,6 +210,31 @@ def test_a_dirty_tracked_file_outside_the_committed_change_is_not_trivial(repo):
     assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
 
 
+def test_a_staged_logic_edit_is_not_trivial(repo):
+    """rubber_duck: `git diff HEAD` compares WORKTREE to HEAD and misses an index-only staged
+    edit; the dirty scan must also compare the INDEX to HEAD, or a staged logic change beside a
+    docs-only commit reads trivial."""
+    cfg = _with_ci(Config.load(repo))
+    run_cli(repo, "init")
+    _commit(repo, "docs/a.md", "old\n")
+    _commit(repo, "src/foo.py", "x = 1\n")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "docs/**")
+    code, out, err = run_cli(repo, "claim", "T1", agent="a1")
+    assert code == 0, out + err
+    it = _state(repo).items["T1"]
+    tree = W.load_path(repo, it.worktree)
+    (tree / "docs/a.md").write_text("new\n")
+    subprocess.run(["git", "-C", str(tree), "add", "docs/a.md"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", "docs edit"], check=True)
+    (tree / "src/foo.py").write_text("x = 2\n")  # logic edit
+    subprocess.run(["git", "-C", str(tree), "add", "src/foo.py"], check=True)  # stage it
+    subprocess.run(
+        ["git", "-C", str(tree), "restore", "--source=HEAD", "--worktree", "src/foo.py"],
+        check=True,
+    )  # worktree back to HEAD; the INDEX still holds x = 2
+    assert not diff_is_trivial(it, cfg, repo, CO.changed_paths(repo, it))
+
+
 def test_docs_only_is_trivial_too(cfg):
 
     it = Item(id="X", kind="task", title="t", globs=["src/**"])

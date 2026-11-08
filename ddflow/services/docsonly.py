@@ -35,9 +35,12 @@ def _uncommitted_not_in(tree: Path, paths: list[str]) -> bool:
     clean, committed tree, so any such work fails closed (rubber_duck)."""
     if any(not is_state(p) for p in (GIT.files(tree, "untracked") or ())):
         return True
-    dirty = W.git(tree, "diff", "HEAD", "--name-only")
-    if not dirty.ok or any(p for p in dirty.out.splitlines() if p and p not in paths):
-        return True
+    # `git diff HEAD` compares WORKTREE to HEAD and misses an index-only staged edit (git add,
+    # then restore the worktree). Compare both the worktree and the index to HEAD.
+    for args in (("--name-only",), ("--cached", "--name-only")):
+        dirty = W.git(tree, "diff", "HEAD", *args)
+        if not dirty.ok or any(p for p in dirty.out.splitlines() if p and p not in paths):
+            return True
     return False
 
 
