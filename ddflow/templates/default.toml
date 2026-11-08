@@ -162,6 +162,9 @@ max_bytes = 60000
 refresh = "off"
 tables = {}
 
+[fasttrack]
+tiny_cold_max_source_lines = 10
+
 [flow]
 model = "trunk"
 integration = "merge"
