@@ -157,6 +157,14 @@ def test_a_task_body_keeps_its_home_path_resolvable() -> None:
     assert out["body"] == "recovered from $HOME/patch/x"
 
 
+def test_a_trailing_slash_home_keeps_the_separator() -> None:
+    """A home set with a trailing slash is the same home; the resolvable fill must not drop
+    the `/` that starts the tail (`$HOMEpatches/x`), so the pointer still resolves."""
+    red = R.Redactor("log", secret_patterns=[], home="/home/zedd/")
+    out = R.redact_event_data("lease.released", {"note": "in /home/zedd/patches/x"}, red)
+    assert out["note"] == "in $HOME/patches/x"
+
+
 def test_another_users_home_path_is_not_misread_as_resolvable() -> None:
     """Only the machine's own home renders as `$HOME`; another user's home is not the
     operator's, so it stays the opaque marker rather than mis-resolving."""

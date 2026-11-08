@@ -186,7 +186,10 @@ def redact_text(
     p.sub(_EMAIL, "email")
 
     root = _coerce(repo_root)
-    home_dir = _coerce(home)
+    home_dir = _coerce(home).rstrip("/")
+    # A trailing slash is the same home (and `/` collapses to nothing); the fill measures the
+    # match from `len(home_dir)`, so it must be the same value the regex escaped or a
+    # `/`-led tail would lose its separator (roborev on the trailing-slash home).
     # The repo root keeps its tail: `<root>/ddflow/x.py` is a useful frame.
     if root not in ("", "/", "."):
         p.sub(re.compile(re.escape(root) + r"(?![\w.-])"), "path")
