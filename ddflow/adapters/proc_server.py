@@ -70,8 +70,11 @@ def run_piped(
     head = bytearray()
 
     def drain() -> None:
-        while chunk := p.stderr.read1(65536):  # type: ignore[union-attr]
-            head.extend(chunk[: stderr_bytes - len(head)])
+        try:
+            while chunk := p.stderr.read1(65536):  # type: ignore[union-attr]
+                head.extend(chunk[: stderr_bytes - len(head)])
+        except (ValueError, OSError):
+            pass  # closed from the caller side: a descendant still holds the write end
 
     reader = threading.Thread(target=drain, daemon=True)
     reader.start()
@@ -83,6 +86,9 @@ def run_piped(
             return PipedEnd(answer=answer)
         code = p.wait()
         reader.join(1)
+        if reader.is_alive():  # a descendant holds the write end: cut the drain open now
+            with contextlib.suppress(ValueError, OSError):
+                p.stderr.close()  # type: ignore[union-attr]
         return PipedEnd(code=code, stderr=bytes(head))
     finally:
         clock.cancel()

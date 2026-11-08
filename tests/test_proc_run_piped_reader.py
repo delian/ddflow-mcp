@@ -42,8 +42,8 @@ class _Proc:
     """A process that already exited: ``poll`` says done, ``wait`` returns 0, and only the
     blocked reader would keep ``stderr`` open."""
 
-    def __init__(self) -> None:
-        self.stderr = _Pipe()
+    def __init__(self, payload: bytes = b"noise\n") -> None:
+        self.stderr = _Pipe(payload)
         self.stdin = None
         self.stdout = None
 
@@ -90,7 +90,7 @@ def test_the_head_keeps_the_stderr_bytes_bound(monkeypatch):
 def test_a_reader_that_reaches_eof_ends_without_a_close(monkeypatch):
     """A reader that sees end of file on its own (the child closed its pipe) already ended
     before the join: nothing is left to close, and the drained head still comes back."""
-    proc = _Proc(b"done\n")
+    proc = _Proc()
 
     class EofPipe:
         def __init__(self):
