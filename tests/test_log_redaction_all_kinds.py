@@ -144,6 +144,19 @@ def test_a_parked_work_path_stays_resolvable_in_a_note() -> None:
     assert "/home/zedd" not in out["note"] and "[REDACTED:path]" not in out["note"]
 
 
+def test_a_task_body_keeps_its_home_path_resolvable() -> None:
+    """`ddflow show` reads the committed task body; it is redacted at write time by the log
+    profile, so its own-home path must stay resolvable there too (the second symptom of
+    B-redaction-hides-parked-work-path)."""
+    red = R.Redactor("log", secret_patterns=[], home="/home/zedd")
+    out = R.redact_event_data(
+        "task.added",
+        {"body": "recovered from /home/zedd/patch/x", "title": "t"},
+        red,
+    )
+    assert out["body"] == "recovered from $HOME/patch/x"
+
+
 def test_another_users_home_path_is_not_misread_as_resolvable() -> None:
     """Only the machine's own home renders as `$HOME`; another user's home is not the
     operator's, so it stays the opaque marker rather than mis-resolving."""
