@@ -102,6 +102,8 @@ class LaneSource:
     approved: bool
     live: int = 0
     cap: int = 1
+    level: int = 0  # measured conformance level (0 = none), from the conformance store
+    pools: tuple = ()  # endpoint/GPU pool headroom (capacity.view), from the capacity probe
 
 
 @dataclass(frozen=True)
@@ -168,6 +170,8 @@ def lane_of(name: str, src: LaneSource) -> score.Lane:
         live=src.live,
         cap=src.cap,
         kinds=t.kinds,
+        level=src.level,
+        pools=src.pools,
     )
 
 

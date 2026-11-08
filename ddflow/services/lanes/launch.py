@@ -63,6 +63,8 @@ class Request:
     state: Any  #: folded event log (approvals, item, decisions)
     cat: modelreg.Catalog
     world: score.World  #: the scheduler's snapshot of live lanes: the caps are judged on it
+    level: int = 0  #: measured conformance level (0 = none), from the conformance store
+    pools: tuple = ()  #: endpoint/GPU pool headroom (capacity.view), from the capacity probe
     cfg: Config = field(default_factory=Config)
     est_in: int = 0
     est_out: int = 0
@@ -70,7 +72,6 @@ class Request:
     handoff_by: str = ""
     binary: OC.Binary | None = None
     log: Any = None  #: an event log to write the audit note to; None writes none
-
 
 def _check_template(t: T.Template, cfg: Config) -> list[str]:
     out = T.problems(t)
@@ -99,6 +100,8 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         price_out=t.price_out,
         local=t.local,
         kinds=t.kinds,
+        level=req.level,
+        pools=req.pools,
     )
     out = score.refusals(sc_item, lane, req.world, w)
     if not t.local and (t.price_in is None or t.price_out is None):
