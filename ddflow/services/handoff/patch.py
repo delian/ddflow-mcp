@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 
 _FILE = re.compile(
-    r'^diff --git '
+    r"^diff --git "
     r'(?P<a>"a/(?:[^"\\]|\\.)*"|a/.*) '
     r'(?P<b>"b/(?:[^"\\]|\\.)*"|b/.*)$'
 )

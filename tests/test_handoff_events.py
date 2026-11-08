@@ -421,10 +421,7 @@ def test_unquoted_name_with_space_is_literal() -> None:
 
 def test_unquoted_name_with_leading_space_is_literal() -> None:
     # a name that *begins* with a space is still emitted unquoted (`a/ foo`).
-    leading = (
-        "diff --git a/ foo b/ foo\n"
-        "--- a/ foo\n+++ b/ foo\n@@ -1 +1 @@\n-x\n+y\n"
-    )
+    leading = "diff --git a/ foo b/ foo\n--- a/ foo\n+++ b/ foo\n@@ -1 +1 @@\n-x\n+y\n"
     assert P.shape(leading).files == (" foo",), P.shape(leading)
 
 
