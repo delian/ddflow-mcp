@@ -75,6 +75,7 @@ def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch
     assert not R._runs_whole_suite(_gate("env true")), "a prefixed no-op is not a full suite"
     assert not R._runs_whole_suite(_gate("env -i true")), "a flagged-prefix no-op is not a suite"
     assert not R._runs_whole_suite(_gate("command true")), "a command-builtin no-op is not a suite"
+    assert not R._runs_whole_suite(_gate("A=B")), "a lone assignment runs nothing"
     assert not R._runs_whole_suite(_gate("pytest tests/test_a.py")), "a narrowed run names tests"
     # Non-pytest suite runners the config documents keep the lock (they run a real suite).
     for runner in ("pytest -q -n auto", "npm test", "cargo test", "go test ./...", "make check"):

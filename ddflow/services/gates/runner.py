@@ -124,7 +124,9 @@ def _is_trivial(command: str) -> bool:
         return False
     while words and (words[0] in _PREFIX or "=" in words[0] or words[0].startswith("-")):
         words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off, plus its flag args
-    return bool(words) and words[0].rsplit("/", 1)[-1] in _NO_SUITE
+    if not words:
+        return True  # a lone assignment (`A=B`) runs no command at all
+    return words[0].rsplit("/", 1)[-1] in _NO_SUITE
 
 
 def _runs_whole_suite(gdef: GateDef) -> bool:
