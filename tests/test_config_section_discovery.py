@@ -134,10 +134,11 @@ def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
             f"sys.path.insert(0, {root!r})",
             "import ddflow.config_sections as CS",  # runs discovery before ddflow.config
             f"CS.__path__ = [*CS.__path__, {str(extra)!r}]",
-            "importlib.import_module('ddflow.config_sections.zzz_throwaway')",  # @declare registers
+            "m = importlib.import_module('ddflow.config_sections.zzz_throwaway')",  # @declare registers
             "import ddflow.config as C",  # Config is assembled now, after the section declared
             "cfg = C.Config()",
             "assert hasattr(cfg, 'zzz_throwaway'), 'Config did not wire the new section'",
+            "assert getattr(C, 'ZzzThrowawayConfig') is m.ZzzThrowawayConfig, 'class not re-exported'",
             "from ddflow.config_sections import _docs as D",
             "assert 'zzz_throwaway' in D.SECTION_CLASSES",
             "assert 'zzz_throwaway.zzz_count' in D.KNOB_DOCS",
