@@ -27,13 +27,18 @@ def _remember_declared_model(st: State, log, cfg, model: str, model_source: str)
     `complete --model X` used the flag only in-memory, and a REFUSAL recorded nothing, so
     a later `recover`/`lanes` had no session record to read and reported "the author's
     model is unknown". Record the flag model as a session declaration -- the one carrier
-    `open_session_model` and the lanes ledger already read -- deduped against the agent's
-    latest session record. A `[agent].family` or a session model is already durable."""
+    `open_session_model` and the lanes ledger already read -- MERGED into the agent's
+    latest session rather than a new one: a brand-new, never-ended session would re-point
+    the lanes ledger's `session`/`ended` signal and make a finished lane read as still
+    open (roborev 4245). Deduped against that same record; a `[agent].family` or a
+    session model is already durable."""
     if model_source != "flag" or not model:
         return
-    if _session_model(st, log.agent_id) == model:
+    own = [s for s in st.sessions.values() if s.agent == log.agent_id]
+    current = max(own, key=lambda s: s.started_at) if own else None
+    if current is not None and current.model == model:
         return
-    sessions.start(log, cfg, model=model)
+    sessions.start(log, cfg, model=model, session_id=current.id if current else "")
 
 
 def _author_model(st: State, agent: str, model: str, cfg) -> tuple[str, str]:

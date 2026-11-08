@@ -78,3 +78,19 @@ def test_recover_omits_a_worktree_a_merge_removed(repo):
     (rec,) = _recs(repo, "T1")
     assert rec.kind == "expired_lease"
     assert rec.worktree == "", rec.worktree
+
+
+def test_a_refused_complete_merges_the_model_into_the_existing_session(repo):
+    """The declared model is merged into the agent's CURRENT session record, not a fresh
+    never-ended one, so an ended session keeps its `ended` signal in the lanes ledger."""
+    _merged(repo, "T1", "src/T1/a.py")
+    log = EventLog(repo, "worker")
+    log.append("session.started", "s1", {"model": "opus"})
+    log.append("session.ended", "s1", {})
+    out = LC.complete(repo, "T1", agent="worker", model=DECLARED)
+    assert out.exit != 0
+    state = fold(EventLog(repo, "scanner").read_all(), strict=False)
+    own = [s for s in state.sessions.values() if s.agent == "worker"]
+    assert len(own) == 1, "the declaration merges into s1, it does not open a second session"
+    assert L.open_session_model(state, "worker") == DECLARED
+    assert own[0].ended_at != "", "the ended signal must survive the declaration"
