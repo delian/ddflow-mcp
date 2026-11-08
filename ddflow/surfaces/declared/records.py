@@ -190,7 +190,7 @@ COMMANDS: tuple[Command, ...] = (
             no_task=bool(a.get("no_task")),
             answer=_answer(a),
             agent=agent,
-            repro_cmd=a.get("evidence", "") or "",
+            evidence=a.get("evidence", "") or "",
         ),
         payload=("id", "offer", "fix_task", "fix_task_filed"),
         params=(
@@ -203,7 +203,8 @@ COMMANDS: tuple[Command, ...] = (
             Param("summary", help="What is wrong, in one line.", cli_help="", required=True),
             Param(
                 "evidence",
-                help="What showed the bug: a command.",
+                help="What showed the bug: evidence kept with the record (agent-supplied "
+                "text, stored, never run).",
                 mcp_only=True,
                 default="",
             ),
@@ -244,7 +245,8 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "repro_cmd",
                 cli_only=True,
-                cli_help="the command that shows the bug, kept in the repro bundle (never run)",
+                cli_help="the command that shows the bug, run once at filing in a scratch "
+                "checkout of the recorded sha (CLI only; the operator's own command)",
                 default="",
             ),
             Param(
