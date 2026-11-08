@@ -34,7 +34,12 @@ JSON_GROUPS = frozenset({"claude", "gemini"})
 #: Descriptor styles written as ``flat-list``.
 FLAT_LIST = frozenset(flatlist.LAYOUTS)
 #: The canonical events ddflow installs a hook for; the others have no work to do yet.
-INSTALLED = ("session_start", "prompt", "pre_compact")
+#: ``pre_tool`` carries the write-tool matcher for the PreToolUse event (the Claude Code
+#: json-groups dialect); flat-list layouts have no matcher (the hook fires for every tool).
+INSTALLED = ("session_start", "prompt", "pre_compact", "pre_tool")
+#: The native pre_tool event name whose group takes the write-tool matcher. Gemini's
+#: BeforeTool carries no matcher, so it keeps none and falls back to the commit-time check.
+PRETOOL_WRITE_EVENT = "PreToolUse"
 
 
 def unsupported(h: Harness) -> str:
@@ -75,7 +80,7 @@ def specs(h: Harness) -> tuple[CH.HookSpec, ...]:
             f"{event.replace('_', '-')}-{h.id}",
             hk.events[event],
             hk.file,
-            None,
+            CH.PRETOOL_MATCHER if event == "pre_tool" and hk.events[event] == PRETOOL_WRITE_EVENT else None,
             f"the {event.replace('_', ' ')} event reaches ddflow",
             run=f"run {event} --harness {h.id}",
         )

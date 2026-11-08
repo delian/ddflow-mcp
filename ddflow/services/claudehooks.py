@@ -48,6 +48,11 @@ PROMPT_EVENT = "UserPromptSubmit"
 GEMINI_PROMPT_EVENT = "BeforeAgent"
 GEMINI_SETTINGS = ".gemini/settings.json"
 CLAUDE_SETTINGS = ".claude/settings.json"
+#: The Claude Code tools that write files. The project pre-tool hook matches them (beside
+#: ``Bash``) so a write outside the agent's own live lease is refused before it runs; the
+#: ``Bash`` matcher keeps refusing the forbidden commands (LK-write-hook-wire).
+WRITE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
+PRETOOL_MATCHER = f"Bash|{WRITE_MATCHER}"
 
 
 @dataclass(frozen=True)
@@ -130,9 +135,10 @@ HOOKS: tuple[HookSpec, ...] = (
         "pre-tool",
         "PreToolUse",
         CLAUDE_SETTINGS,
-        "Bash",
+        PRETOOL_MATCHER,
         "commands an agent is told never to run (pkill, git stash, git push, force flags) are "
-        "refused before they run ([hooks].forbidden_commands)",
+        "refused before they run, and a file write outside its lease ([hooks].forbidden_commands "
+        "and [locks].mode)",
         run="run pre_tool --harness claude",
     ),
     HookSpec(

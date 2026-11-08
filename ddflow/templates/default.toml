@@ -375,6 +375,7 @@ verify_output_lines = 12
 verify_load_ratio = 1.0
 
 [locks]
+mode = "enforce"
 undeclared_write = "warn"
 suggest_globs = true
 suggest_history = 30

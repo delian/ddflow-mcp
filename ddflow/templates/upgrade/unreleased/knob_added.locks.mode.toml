@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.mode"
+new = '"enforce"'
+why = "The write-time lease check refuses a write to a held file, logs it, or is off (D-lock-lifecycle-answers)."
+impact = "additive"
