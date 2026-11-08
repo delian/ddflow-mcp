@@ -304,9 +304,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
 
 
-def _run_under_slot(
-    cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan
-):
+def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan):
     """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
     before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
     B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
