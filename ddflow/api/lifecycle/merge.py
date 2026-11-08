@@ -133,12 +133,12 @@ def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: s
     """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
     the approval id to spend, and is "" unless `authorise` validated a real `--approval <id>`;
     a person's `--force` and a standing-policy stamp pass through untouched. A spend that fails
-    after a concurrent consumer (or expiry between validation and spend) returns None, so a
-    refusal is never stamped into `merge.forced` as a valid proof."""
+    after a concurrent consumer (or expiry between validation and spend) returns a STRUCTURED
+    marker (`spend: "failed"`) -- never a valid-looking proof, and never a silent drop."""
     if not pending:
         return stamp
     spent = MF.spend(log, cfg, item, gates, pending)
-    return spent.stamp if spent.ok else None
+    return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
 
 
 def _commit_shards_before_merge(log, cfg, item: str) -> None:
