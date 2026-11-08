@@ -171,8 +171,8 @@ def _no_tree_reason(
             # is not that path, so never point a person at a command that will refuse.
             if GA.refusal(it, gate):
                 settle = (
-                    f"`ddflow approve` does not accept it (not a measured baseline-red "
-                    f"partial), so only a person's re-record of {gate} settles it."
+                    f"it was not measured baseline-red, so it is not approvable — "
+                    f"only a person's re-record of {gate} settles it."
                 )
             else:
                 settle = f"Only a person can settle it: `ddflow approve {item} {gate}`."
