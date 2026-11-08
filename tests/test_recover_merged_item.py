@@ -140,6 +140,7 @@ def test_an_unmerged_item_is_still_only_advised_to_release(repo):
     out = LC.claim(repo, "T2", agent="worker")
     _git("-C", str(repo), "worktree", "remove", "--force", out.data["worktree"])
     (rec,) = _recs(repo, "T2")
+    assert rec.salvageable is False, rec.advice
     assert "complete" not in rec.advice and "ddflow release T2" in rec.advice, rec.advice
 
 

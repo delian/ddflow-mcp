@@ -313,11 +313,15 @@ def _gone_tree(
         # is never empty, so this must not read "nothing to salvage" (the budget path sets
         # `salvageable = None` for the same reason).
         rec.salvageable = None
-        ref = rec.branch or "HEAD"
+        base = facts.base(cfg.worktree.base_ref)
+        look = (
+            f"`git -C {repo} log {base}..{rec.branch}`"
+            if rec.branch
+            else f"`git -C {repo} log {base}` (no branch was recorded to measure)"
+        )
         rec.advice = (
             f"worktree is gone and its branch could not be measured — treat it as "
-            f"containing work until you have looked: "
-            f"`git -C {repo} log {facts.base(cfg.worktree.base_ref)}..{ref}`. "
+            f"containing work until you have looked: {look}. "
             f"It will NOT be swept automatically."
             + (f" `ddflow release {rec.item}` clears the claim." if held else "")
         )
