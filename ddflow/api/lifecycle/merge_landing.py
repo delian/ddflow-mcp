@@ -1,8 +1,10 @@
 """The landing and recording helpers behind `merge` (Bf157c33ba2).
 
 Split out of `merge.py` so no one area module grows back into a monolith:
-`merge.py` keeps the public `merge()`, the PR/branch path and the test-patched
-recording names; this module holds the landing refusals and the shared helpers."""
+`merge.py` keeps the public `merge()`, the PR/branch path and the names several
+tests monkeypatch on `ddflow.api.lifecycle.merge`; this module holds the landing
+refusals and the shared recording helpers (`_landing_refusal`, `_record_landing`,
+`_failed_landing_outcome`, `_dispose_tree`, ...)."""
 
 from __future__ import annotations
 
