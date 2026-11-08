@@ -39,3 +39,4 @@
 {"agent":"recover-5c","data":{"at":1794163733.114878,"holder":"recover-5c"},"id":"e25c241b81c0ecc7d65de8847","kind":"lease.renewed","lamport":156727,"schema":1,"subject":"fix-B-review-round-budget-no-fix-path","ts":"2026-11-08T18:48:53.230547Z"}
 {"agent":"recover-5c","data":{"at":1794163749.8772361,"holder":"recover-5c"},"id":"e456021a134a883ebbe3ecfaf","kind":"lease.renewed","lamport":156728,"schema":1,"subject":"fix-B2880a1fc44","ts":"2026-11-08T18:49:09.994954Z"}
 {"agent":"recover-5c","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ebb6e918e63f09a238d01599b","kind":"cadence.ran","lamport":156730,"schema":1,"subject":"recall_recheck:fix-B2880a1fc44","ts":"2026-11-08T18:49:16.513780Z"}
+{"agent":"recover-5c","data":{"gate":"critic"},"id":"e888fd7cd6db48f1b082bb8ca","kind":"gate.started","lamport":156731,"schema":1,"subject":"fix-B-review-round-budget-no-fix-path","ts":"2026-11-08T18:49:35.204787Z"}
