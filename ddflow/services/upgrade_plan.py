@@ -165,7 +165,7 @@ def _net(changes: list[UM.Change]) -> dict[str, tuple[str, UM.Change, Any, Any]]
     a changed default, and a knob changed back to what it was is no change."""
     chain: dict[str, list[UM.Change]] = {}
     for c in changes:
-        if c.kind.startswith("knob_"):
+        if c.kind.startswith("knob_") and c.kind != "knob_semantics_changed":
             chain.setdefault(c.key, []).append(c)
     out: dict[str, tuple[str, UM.Change, Any, Any]] = {}
     for key, cs in chain.items():
@@ -251,6 +251,23 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
                 f"ddflow config --set {key} {json.dumps(new)})"
             )
         items.append(item)
+    # A knob whose MEANING changed while its default did not (B4116990bbd): nothing to
+    # apply -- the default is unchanged -- but the operator must know the guidance now
+    # means something different than the number does.
+    for c in changes:
+        if c.kind == "knob_semantics_changed":
+            items.append(
+                {
+                    "category": "config",
+                    "id": f"knob_semantics_changed:{c.key}",
+                    "key": c.key,
+                    "change": c.kind,
+                    "summary": f"the meaning of {c.key} changed: {c.why}".rstrip(": "),
+                    "effect": c.effect,
+                    "action": NOTE,
+                    "fix": "",
+                }
+            )
     return items
 
 

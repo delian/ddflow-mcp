@@ -252,6 +252,25 @@ def test_a_knob_removed_then_added_back_is_a_changed_default_not_a_new_knob() ->
     assert UP._net([*seq, _change("knob_added", "0.4.0", new=1, has_new=True)]) == {}
 
 
+def test_a_knob_semantics_change_is_a_note_and_keeps_the_default(repo: Path) -> None:
+    """B4116990bbd: a knob whose meaning changed while its default did not must consolidate
+    as its default change (never a phantom 'default 20 -> 20') and still reach the
+    operator as a note."""
+    added = _change("knob_added", "0.1.1", new=20, has_new=True)
+    semantics = _change(
+        "knob_semantics_changed",
+        "0.1.2",
+        why="the default no longer counts always-run guards",
+        effect="a project gets fewer locked tests",
+    )
+    kind, _c, old, new = UP._net([added, semantics])["s.k"]
+    assert (kind, old, new) == ("knob_added", None, 20)
+    note = [i for i in UP.config_items([added, semantics], Config.load(repo)) if i["change"] == "knob_semantics_changed"]
+    assert note and note[0]["action"] == UP.NOTE
+    assert "always-run guards" in note[0]["summary"]
+
+
+
 def test_a_hook_that_could_not_be_checked_is_said_not_dropped(
     old: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
