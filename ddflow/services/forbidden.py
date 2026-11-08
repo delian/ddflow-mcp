@@ -496,6 +496,10 @@ def _commands(text: str) -> list[list[str]]:
     return cmds
 
 
+#: Bash long options that take their value as the next word (`bash --rcfile FILE -c 'x'`).
+_VALUED_LONG = frozenset({"--rcfile", "--init-file"})
+
+
 def _sh_c(head: list[str]) -> int:
     """The index of the `-c` option's word in the shell command `head` (its value is the NEXT
     word), or -1. Bash reads its single-letter options until `--` or the first non-option
@@ -503,23 +507,30 @@ def _sh_c(head: list[str]) -> int:
     and `-c` and still takes the next word (B-forbidden-guard-multiline-quote-bypass critic
     #3). A `-c` after a script operand, and the `c` a `-o`/`-O` optname swallows, is NOT the
     shell's `-c`: `bash ./tool.sh -cache 'pkill'` runs `./tool.sh` (not `pkill`) and
-    `bash -ocpipefail 'pkill'` runs no `pkill` (critic #5)."""
+    `bash -ocpipefail 'pkill'` runs no `pkill` (critic #5). An `-o`/`-O` that CLOSES a cluster
+    (``bash -xo pipefail -c 'pkill'``) and a valued long option (`--rcfile FILE`) consume their
+    value, and the `-c` after them is still the shell's (critic: `-o NAME` two-word, `--rcfile`)."""
     i = 1
     while i < len(head):
         w = head[i]
         if w == "--" or not w.startswith("-"):
             return -1  # `--` ends options; a non-option is the script operand
         if w.startswith("--"):
-            i += 1  # a long option has no `-c` spelling
+            i += 2 if w in _VALUED_LONG else 1  # a valued long option consumes its word
             continue
-        if w[1:] in ("o", "O"):
-            i += 2  # `-o NAME` / `-O NAME`: skip the optname word too
-            continue
-        for ch in w[1:]:
+        body = w[1:]
+        j = 0
+        while j < len(body):
+            ch = body[j]
             if ch == "c":
                 return i
             if ch in "oO":
-                break  # the rest of this token is the optname; no `-c` flag in it
+                # `-o`/`-O` optname takes the rest of THIS token, or the NEXT word when
+                # `o`/`O` CLOSES it (`-xo pipefail`): both are the option's value, not `-c`.
+                if j == len(body) - 1:
+                    i += 1
+                break
+            j += 1
         i += 1
     return -1
 

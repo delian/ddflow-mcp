@@ -258,6 +258,12 @@ def test_refused_param_expansion_body(cmd):
         "bash -xc 'git push origin main'",
         "sh -exc 'pkill -f worker'",
         "bash -ec 'git stash push'",
+        # an -o/-O optname that closes a cluster takes its value as the next word, and a
+        # valued long option its word too: the -c AFTER them is still the shell's (critic:
+        # `-o NAME` two-word, `--rcfile`)
+        "bash -xo pipefail -c 'git push origin main'",
+        "bash -xO extglob -c 'git push origin main'",
+        "bash --rcfile /tmp/rc -c 'git push origin main'",
     ],
 )
 def test_refused_clustered_c_flag(cmd):
