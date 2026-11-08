@@ -199,7 +199,7 @@ def test_git_probes_read_files_and_conflicts_through_infra_git(tmp_path):
     (tmp_path / ".ddflow" / "e").write_text("x")
     _git(tmp_path, "add", "-f", "."), _git(tmp_path, "commit", "-qm", "main")
     main = _git(tmp_path, "rev-parse", "HEAD")
-    p = GitProbes(tmp_path)
+    p = GitProbes(tmp_path, 30, "2.38")
     assert p.files(base, main) == ["f.txt"]  # ddflow's own state is not a written file
     assert p.conflicts(main, side) is True and p.conflicts(base, side) is False
     assert p.conflicts(main, "0" * 40) is None and p.files("", main) is None

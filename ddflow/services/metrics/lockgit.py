@@ -28,7 +28,9 @@ class Probes(Protocol):
 
 
 class GitProbes:
-    def __init__(self, repo: Path, timeout_s: float = 30, min_git: str = "2.38") -> None:
+    def __init__(self, repo: Path, timeout_s: float, min_git: str) -> None:
+        # Both knobs are REQUIRED so GitProbes has no private copy of a config default that could
+        # drift from [locks].probe_timeout_s / probe_merge_tree_min_git (the caller passes them).
         self.repo = repo
         self.timeout_s = timeout_s
         self.min_git = min_git
