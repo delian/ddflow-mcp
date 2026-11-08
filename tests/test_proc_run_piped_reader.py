@@ -78,7 +78,9 @@ def test_a_descendant_holding_stderr_does_not_leak_the_reader(monkeypatch):
         end = _run(proc)
         assert end.code == 0, end
         assert end.stderr == b"", end  # nothing is drained while the descendant is silent
-        assert proc.stderr.closed, "run_piped left stderr open while a descendant held the write end"
+        assert proc.stderr.closed, (
+            "run_piped left stderr open while a descendant held the write end"
+        )
         assert not _reader_alive(), "the stderr reader thread was left alive"
     finally:
         proc.stderr.close_write()
