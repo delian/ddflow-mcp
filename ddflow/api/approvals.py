@@ -29,8 +29,10 @@ PS.register("config.set", CS.config_set_provider)
 
 
 def _commands(st, now: float) -> list[dict[str, Any]]:
-    rows = [r for r in asks_of(st).values() if r["verb"]]
-    return sorted(rows, key=lambda r: r["requested_at"])
+    """Every ask, oldest first: a command approval (``verb``) and an open question (empty
+    ``verb``) alike -- a question still needs a surface a person can read (B-question-ask-
+    unreachable)."""
+    return sorted(asks_of(st).values(), key=lambda r: r["requested_at"])
 
 
 def _status(row: dict[str, Any], now: float) -> str:
@@ -42,7 +44,8 @@ def _status(row: dict[str, Any], now: float) -> str:
 
 
 def _line(row: dict[str, Any], now: float) -> str:
-    return f"{row['id']}  {_status(row, now):<14} {row['requested_by']:<14} {row['subject'][:70]}"
+    word = "question" if row["type"] == "question" else "approval"
+    return f"{row['id']}  {_status(row, now):<14} {word:<9} {row['requested_by']:<14} {row['subject'][:70]}"
 
 
 def approvals_list(repo: Path, *, all_rows: bool = False, agent: str = "") -> O.Outcome:
@@ -79,7 +82,11 @@ def approvals_pending(repo: Path, *, agent: str = "") -> O.Outcome:
 
 
 def _pending_line(r: dict[str, Any], now: float) -> str:
-    form = f"ddflow approvals approve {r['id']}"
+    if r["type"] == "question":
+        # A question is answered in chat, with free text, after `ddflow approvals ask <id>`.
+        form = f"ddflow approvals ask {r['id']}"
+    else:
+        form = f"ddflow approvals approve {r['id']}"
     return (
         f"{r['id']}  {r['verb']}  for {r['requested_by']}  ({_pending_status(r, now)})\n"
         f"  digest : {r['digest']}\n"
@@ -98,8 +105,8 @@ def _row(r: dict[str, Any], now: float) -> dict[str, Any]:
 def approvals_show(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
     _log, cfg, st = _load(repo, agent)
     row = asks_of(st).get(ask_id)
-    if row is None or not row["verb"]:
-        return O.failed("approvals.show", f"no approval request {ask_id}")
+    if row is None:
+        return O.failed("approvals.show", f"no ask {ask_id}")
     now = time.time()
     tail = f"\n  status  : {_status(row, now)}  (expires {row['expires_at']})"
     if row["state"] == "answered":

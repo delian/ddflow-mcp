@@ -29,10 +29,22 @@ def withdraw(log, ask_id: str, *, actor: Actor, now: float | None = None) -> Non
 
 
 def waiting_for_a_person(state, now: float | None = None) -> list[dict[str, Any]]:
-    """The command approvals still waiting for a person to answer (oldest first)."""
+    """The asks still waiting for a person to answer (oldest first): the command approvals AND
+    the open questions (a question has an empty verb and is answered with free text,
+    B-question-ask-unreachable)."""
     now = time.time() if now is None else now
-    rows = [r for r in asks_of(state).values() if r["verb"] and E.status(r, now) == "pending"]
+    rows = [r for r in asks_of(state).values() if E.status(r, now) == "pending"]
     return sorted(rows, key=lambda r: r["requested_at"])
+
+
+def _answer_form(r: dict[str, Any]) -> str:
+    """The form a person answers ``r`` with: by id for an approval, in chat for a question."""
+    if r["type"] == E.QUESTION:
+        return f"{r['id']} (question from {r['requested_by']})"
+    return (
+        f"{r['id']} ({r['verb']} for {r['requested_by']}, digest {r['digest'][:12]}, "
+        f"answer `ddflow approvals approve {r['id']}`)"
+    )
 
 
 def pending_line(state, shown: int = 3) -> str:
@@ -43,14 +55,11 @@ def pending_line(state, shown: int = 3) -> str:
     rows = waiting_for_a_person(state)
     if not rows:
         return ""
-    names = ", ".join(
-        f"{r['id']} ({r['verb']} for {r['requested_by']}, digest {r['digest'][:12]}, "
-        f"answer `ddflow approvals approve {r['id']}`)"
-        for r in rows[:shown]
-    )
+    names = ", ".join(_answer_form(r) for r in rows[:shown])
     more = f" (+{len(rows) - shown} more)" if len(rows) > shown else ""
     return (
-        f"{len(rows)} approval request(s) wait for the operator: {names}{more}. "
-        "`ddflow approvals pending` lists them with their digests; a person answers with "
-        "`ddflow approvals approve ID`."
+        f"{len(rows)} ask(s) wait for the operator: {names}{more}. "
+        "`ddflow approvals pending` lists them with their digests; a person answers an "
+        "approval with `ddflow approvals approve ID`, a question in chat (`ddflow approvals "
+        "ask ID`)."
     )
