@@ -186,11 +186,14 @@ def operator_gate(
     if approval_id != REQUEST and (stamp := PO.apply(log, cfg, state, canon, reason=reason)):
         return Decision(True, stamp=stamp, ask_id=stamp["ask"])
     if not approval_id and not auto:
+        # `operator_gate` owns the 'refusing: ' prefix on EVERY refusal, this steering
+        # message included (B-consume-refusal-prefix-owner): callers pass the message
+        # through untouched instead of re-deriving it from prose.
         return Decision(
             False,
-            f"to ask the operator to approve '{canon.verb}' for {canon.item or 'this'}, "
-            f"re-run with `--approval {REQUEST}`: a request id comes back and the operator "
-            "answers it in chat.",
+            f"refusing: to ask the operator to approve '{canon.verb}' for "
+            f"{canon.item or 'this'}, re-run with `--approval {REQUEST}`: a request id comes "
+            "back and the operator answers it in chat.",
         )
 
     filed = R.file(
