@@ -704,7 +704,8 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         cfg,
         extra_evidence,
         say,
-        author_model,
+        author_model=author_model,
+        kind=kind,
     )
     named = _failing_reviewer(
         results, it, gate, _converges(kind, fix), cfg, identifying, author_model

@@ -43,7 +43,9 @@ def test_every_knob_entry_says_why_and_every_changed_default_its_effect():
     cut = [
         f"{c.version} {c.key}: {c.why}"
         for c in changes
-        if re.search(r"\b(e\.g|i\.e)\.$", c.why) or c.why.count("(") != c.why.count(")")
+        if re.search(r"\b(e\.g|i\.e)\.$", c.why)
+        or c.why.count("(") != c.why.count(")")
+        or c.why.rstrip().endswith("...")
     ]
     assert not cut, f"a why cut mid-sentence: {cut}"
     blank = [
