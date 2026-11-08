@@ -45,10 +45,12 @@ from .gate import (
 )
 from .records import (
     PROGRESS_EVERY_S,
+    _blocking_findings,
     _finding_rows,
     _gate_outcome,
     _item_intent,
     _lease_ticker,
+    _prior_evidence,
     _record,
     _say_result,
 )
@@ -286,6 +288,26 @@ def _rounds_for(it, gate: str, ev: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _delta_kept(it, gate: str, kind: str) -> list | None:
+    """The gate's earlier recorded findings a delta round merges into, so a delta round's
+    output numbers its own findings by their place in that record (bug B32ce00713b).
+
+    None for a full round or a chunk re-run: a full round replaces the record with its own
+    findings (a multi-reviewer full round's verdict scope is named by `_say_triage_scope`),
+    and a chunk re-run already folds the record into the result it prints.
+
+    A delta with no earlier record numbers from an EMPTY list, not None: an empty input
+    to ``_record_numbers`` still seeds the growing list, where None re-numbers each
+    reviewer from #1 (a delta round with two reviewers printed the second's finding #1)."""
+    if kind != "delta" or it is None:
+        return None
+    prior = _prior_evidence(it.gates.get(gate))
+    kept = prior.get("chunk_findings")
+    if isinstance(kept, list):
+        return list(kept)
+    return [] if kept is None else None
+
+
 def _review_each(asked: list[str], args: dict[str, Any]) -> O.Outcome:
     """One review per gate, one after the other: the event log's read caches and its
     transaction guard are per process and unlocked, so two reviews in threads could fold
@@ -385,6 +407,14 @@ def _order_cross_family_first(revs, author_model: str, cfg, say) -> list:
     return ordered
 
 
+def _heard_first(r) -> tuple[int, int]:
+    """A reviewer's rank as the identifying pass: one that heard part of the diff (REVIEWED
+    or PARTIAL) outranks one that could not run (UNAVAILABLE/ERROR) -- the latter says
+    nothing about the change, and naming it over a PARTIAL peer that found a finding would
+    misstate coverage and hide the finding (bug B-review-worst-reviewer-misstates-coverage)."""
+    return (0 if getattr(r, "status", None) in (RV.REVIEWED, RV.PARTIAL) else 1, r.status)
+
+
 def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     """The review recorded as the gate's identifying pass.
 
@@ -393,15 +423,56 @@ def _identifying_reviewer(results, author_model: str, cfg) -> Any:
     case -- a reviewer from a DIFFERENT family than the author is the one named, so a
     clean cross-family review is not discarded when a same-family reviewer also ran
     clean and happened to be listed first (bug Be2bb7ea786). The author is resolved as
-    `complete` resolves it (`[agent].family`, else the session model); when that is
-    unknown here the first tied reviewer is named, but the panel's other families are
-    carried in `reviewer_families` so a clean cross-family round is still seen (bug
-    B1a30dc3303).
+    `complete` resolves it (`[agent].family`, else the session model). The reviewer's
+    family is resolved as `review_tier` resolves it (declared family, else its model).
     """
-    best = min(results, key=lambda r: r.status)
+    best = min(results, key=_heard_first)
     tied = [r for r in results if r.status == best.status]
     cross = [r for r in tied if GD.review_tier(cfg, author_model, r.model, r.family) == "family"]
-    return cross[0] if cross else best
+    if cross:
+        return cross[0]
+    # When the author cannot be named here (`[agent].family` and the session model are
+    # both empty) `review_tier` returns `none` for every reviewer, so `cross` is empty
+    # and the first tied reviewer would be the author's own family when the lane also
+    # serves its model (bug B2e5ca93520). The author then has exactly ONE family, so
+    # when the clean reviewers span two or more distinct families, name a reviewer whose
+    # family differs from the tied-first one. This is a heuristic: with the author
+    # unknown no choice provably names the cross-family reviewer, and `reviewer_families`
+    # still carries every family so `complete` reads the cross-family panel either way
+    # (bug B1a30dc3303).
+    first = _fam(tied[0]) or GD.family_of(tied[0].model, cfg).strip().lower()
+    fams = {_fam(r) or GD.family_of(r.model, cfg).strip().lower() for r in tied}
+    fams.discard("")
+    if len(fams) > 1:
+        for r in tied:
+            fam = _fam(r) or GD.family_of(r.model, cfg).strip().lower()
+            if fam and fam != first:
+                return r
+    return best
+
+
+def _fam(r) -> str:
+    """A reviewer's family as `review_tier` resolves it: a declared family, `unknown`
+    normalised to ``""`` so the model's family is consulted, stripped and lowercased."""
+    fam = (getattr(r, "family", "") or "").strip().lower()
+    return "" if fam == "unknown" else fam
+
+
+def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_model: str = ""):
+    """The reviewer whose finding blocked the gate (bug B3113b1f522), else ``identifying``.
+    A failed review must name the reviewer that found the blocking defect, not a clean peer
+    that ranked first (or the author's own family, listed first), and must not re-purpose a
+    PARTIAL reviewer as the identifying pass (which would flip the run's exit code). The
+    findings `_blocking_findings` returns are the SAME objects each reviewer's ``findings``
+    held (matched by identity), so the return is one of ``results`` or ``identifying``. The
+    same ``author_model`` as `_gate_outcome` decides the discount (bug B7dbf432caa): a
+    same-family finding discounted over a clean cross-family verdict must not make the
+    same-family reviewer the named failing one on a passed gate."""
+    blocking = _blocking_findings(results, it, gate, converging, cfg, author_model)[0]
+    for r in results:
+        if any(b is f for b in blocking for f in r.findings):
+            return r
+    return identifying
 
 
 def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
@@ -558,6 +629,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         return _intent_missing(item, gate, how)
 
     revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
+    delta_kept = _delta_kept(it, gate, kind)
     context = dispatch.pack(
         context,
         [
@@ -600,6 +672,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
             tick_s=tick_s,
             only=only,
             on_chunk=keep.add if item else None,
+            on_plan=keep.plan if item else None,
             manifest=RM.for_review(diff, skipped, cfg),
             chunk_max_tokens=cfg.review.chunk_max_tokens,
             split_rounds=cfg.review.split_rounds,
@@ -617,17 +690,29 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
                     kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
                 )
         results.append(res)
-        _say_result(say, res)
+        _say_result(say, res, delta_kept)
         _note_degraded(res, r, gate, cfg.review.degraded_cooldown_s, extra_evidence, say)
 
-    best = _identifying_reviewer(results, author_model, cfg)
+    identifying = _identifying_reviewer(results, author_model, cfg)
     outcome, extra_evidence = _gate_outcome(
-        best, results, it, item, gate, _converges(kind, fix), cfg, extra_evidence, say
+        identifying,
+        results,
+        it,
+        item,
+        gate,
+        _converges(kind, fix),
+        cfg,
+        extra_evidence,
+        say,
+        author_model,
+    )
+    named = _failing_reviewer(
+        results, it, gate, _converges(kind, fix), cfg, identifying, author_model
     )
     if item:
         outcome = _record_review(
             repo, log, cfg, st, it, item, gate, outcome,
-            called_from=called_from, gates=gates, say=say, best=best, results=results, keeps=keeps, extra_evidence=extra_evidence,
+            called_from=called_from, gates=gates, say=say, best=identifying, named=named, results=results, keeps=keeps, extra_evidence=extra_evidence,
             scope=(taken, kind, done, forced, how, len(diff), snapshot),
         )  # fmt: skip
 
@@ -636,9 +721,9 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         "gate": gate,
         "outcome": outcome,
         "how": how,
-        "reviewer": best.reviewer,
-        "family": best.family,
-        "findings": _finding_rows(best),
+        "reviewer": named.reviewer,
+        "family": named.family,
+        "findings": _finding_rows(results),
         "text": "\n".join(transcript),
     }
     exit_code = {
@@ -646,12 +731,12 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         RV.PARTIAL: O.REFUSED,
         RV.UNAVAILABLE: O.NOTHING,
         RV.ERROR: O.FAIL,
-    }[best.status]
+    }[identifying.status]
     if exit_code == O.OK:
         return O.ok("review", **data)
     return O.Outcome(
         kind="review",
         data=data,
         exit=exit_code,
-        reason=best.reason or f"{len(best.findings)} finding(s)",
+        reason=identifying.reason or f"{len(identifying.findings)} finding(s)",
     )

@@ -28,7 +28,7 @@ from .bug_close import (  # noqa: F401
     bug_fixed,
     could_not_run_text,
 )
-from .bug_dedupe import bug_dedupe  # noqa: F401
+from .bug_dedupe import dedupe_bugs  # noqa: F401
 from .bug_repro import repro_lead  # noqa: F401
 from .bug_tags import bug_tag, found_tags, get_tags, reserved, set_tags  # noqa: F401
 from .bug_void import bug_invalid  # noqa: F401
@@ -42,7 +42,13 @@ from .bugs import (  # noqa: F401
     severity_rank,
     upstream_offer,
 )
-from .lessons import LessonDraft, lesson_add, lesson_search, lessons_verify  # noqa: F401
+from .lessons import (  # noqa: F401
+    LessonDraft,
+    lesson_add,
+    lesson_search,
+    lesson_show,
+    lessons_verify,
+)
 from .memory import memory_add, memory_forget, memory_list  # noqa: F401
 from .pairs import dupes, link_record, pair_records, pairs_from  # noqa: F401
 from .regression import regression_arg_refusal  # noqa: F401
@@ -53,6 +59,7 @@ from .sessions import (  # noqa: F401
     history,
     session_adopt_orphans,
     session_end,
+    session_inbox,
     session_known,
     session_message,
     session_note,

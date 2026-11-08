@@ -17,11 +17,17 @@ claude_md = "no"
 [hooks]
 style = "cascade"
 file = ".devin/hooks.json"
-normalizer = "cascade"
-emitter = "cascade"
+emitter = "silent"
 block = "exit2"
 session_id = "trajectory_id"
 inject = []
+
+[hooks.fields]
+session = ["trajectory_id"]
+prompt = ["tool_info.user_prompt"]
+source = []
+model = ["model_name"]
+cwd = ["tool_info.cwd"]
 
 [hooks.events]
 prompt = "pre_user_prompt"
@@ -46,3 +52,4 @@ date = "2026-10-09"
 sources = ["https://docs.devin.ai/desktop/cascade/hooks"]
 record = "R-hx-windsurf"
 unverified = ["project MCP file"]
+

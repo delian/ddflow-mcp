@@ -14,7 +14,7 @@ from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.digest import content_digest
 from ...core.model import REVIEW, fold
-from ...core.schedule import needs_tree
+from ...core.schedule import needs_tree, stale_package_globs
 from ...infra import worktree as W
 from ...services import approval as AP
 from ...services import choices as CHO
@@ -175,6 +175,37 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     return _claim_by_approval(repo, item, out, approval, note, kw)
 
 
+def _correct_stale_package_globs(
+    repo: Path, want: list[str] | None, claimed: Any
+) -> tuple[list[str] | None, list[str]]:
+    """The globs a claim is about to lease, with each stale package glob corrected, and one
+    sentence per correction (B-stale-globs-after-split-wave).
+
+    A module split into a package leaves open items declaring ``x.py`` where ``x/`` now is;
+    a lease on ``x.py`` covers none of the package's files, so overlaps with another task
+    editing those files go unseen. Claim corrects such a glob on the way in -- the lease and
+    the item both take the package path -- instead of leasing a path that protects nothing.
+    ``want`` is unchanged when nothing is stale; a git listing that could not run returns a
+    note saying the check could not run (a check that could not run is said, never read as
+    "nothing to correct").
+    """
+    globs = want if want is not None else list(claimed.globs if claimed is not None else [])
+    if not any(g.endswith(".py") for g in globs):
+        return want, []
+    tracked = W.git_paths(repo, "ls-tree", "-r", "--name-only", W.default_branch(repo))
+    if tracked is None:
+        return want, ["stale package globs not checked: git could not list the tracked files"]
+    stale = stale_package_globs(globs, tracked)
+    if not stale:
+        return want, []
+    fixed = dict(stale)
+    corrected = [fixed.get(g, g) for g in globs]
+    return corrected, [
+        f"{g!r} names the package {pkg} (its module was split into one); claimed as {pkg}"
+        for g, pkg in stale
+    ]
+
+
 def _agent_marker_of(agent: str) -> str:
     """Why this claim is an agent's ("" for a person): only a person's `--force` is honoured."""
     return AP.agent_marker(agent)
@@ -241,6 +272,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
     if held_before:
         want = _widened(want, prior, claimed)
+    want, stale_notes = _correct_stale_package_globs(repo, want, claimed)
     early, notes = _early_refusal(
         repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
@@ -283,7 +315,8 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
     # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
     out.data.update(_reopen_stale_merge(log, claimed, item))
-    if warned := missing_globs(repo, cfg, lz.globs):
+    warned = [*missing_globs(repo, cfg, lz.globs), *stale_notes]
+    if warned:
         out.data["glob_warnings"] = warned
     out.data.update(OG.claim_fields(st, cfg, item, repo))
     if bug_globs:

@@ -80,6 +80,45 @@ def _self_managed(rel: str) -> bool:
     return any(rel.startswith(m) if m.endswith("/") else rel == m for m in SELF_MANAGED)
 
 
+def _holder(repo: Path, agent: str, rel: str) -> str:
+    """The agent whose live lease covers ``rel`` (never ``agent`` itself), or "" when none is
+    in the snapshot or it cannot be read. Cheap: it reads only the snapshot. Fails open: a
+    holder it cannot name drops that clause, never the whole refusal."""
+    try:
+        snap = hooksnap.read(repo)
+        if snap.status != hooksnap.OK:
+            return ""
+        now = time.time()
+        for lz in snap.leases.values():
+            if lz.get("holder") == agent:
+                continue
+            if now - float(lz.get("renewed_at", 0)) > int(lz.get("ttl_s", 0)) + snap.grace_s:
+                continue
+            if any(inside(rel, g) for g in lz.get("globs", [])):
+                return str(lz.get("holder", ""))
+    except Exception:  # a holder hint is never worth stopping the refusal over
+        return ""
+    return ""
+
+
+def _first_holder(repo: Path, agent: str, bad: list[str]) -> tuple[str, str]:
+    """(the held path, its holder) of the first refused path another agent's live lease covers,
+    or ("", "") -- enough for a refusal to say whom to wait for. A multi-file write may name
+    files held by different agents; the first held one is enough."""
+    for rel in bad:
+        holder = _holder(repo, agent, rel)
+        if holder:
+            return rel, holder
+    return "", ""
+
+
+#: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
+OPTIONS = (
+    "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), or open a task "
+    "(`ddflow task add ...` / MCP `ddflow_task action=add`)"
+)
+
+
 def verdict(
     repo: Path, agent: str, paths: list[str], cwd: Path, root: Path | None = None
 ) -> tuple[int, str]:
@@ -105,9 +144,11 @@ def verdict(
         else:
             bad.append(rel)
     if bad:
+        held, holder = _first_holder(repo, agent, bad)
+        held_clause = f" and {holder} holds {held}" if holder else ""
         return REFUSE, (
             f"lane {agent}: {', '.join(bad)} is outside the item's lease globs "
-            f"({', '.join(mine)}); do not edit it, or ask the lead to widen the globs"
+            f"({', '.join(mine)}){held_clause}; {OPTIONS}"
         )
     return 0, ""
 

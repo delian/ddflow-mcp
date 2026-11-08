@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "merge.require_gates"
+new = '"warn"'
+why = "What `ddflow merge` does about unsettled required gates: warn (land, name them) or refuse (needs --force and, for an agent, an approval)."
+impact = "additive"

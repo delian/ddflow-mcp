@@ -67,8 +67,9 @@ def _problem(
     ask_id = row["id"]
     if row["verb"] != canon.verb:
         return f"{ask_id} is an approval for '{row['verb']}', not '{canon.verb}'"
-    if row["requested_by"] != canon.agent:
-        return f"{ask_id} was requested by {row['requested_by']}; only that agent may spend it"
+    # Not owner-gated: the digest binds the ACTION (verb, item, target, args, state), not the
+    # actor, and `judge` below re-verifies the answer. A successor lane re-running the same act
+    # may spend a predecessor's granted answer, so a dead agent does not orphan it (B86be969daf).
     if row["state"] != ANSWERED:
         state = E.status(row, now)
         return f"{ask_id} is {state}" + (
@@ -76,12 +77,16 @@ def _problem(
         )
     if row["outcome"] != E.APPROVED:
         return f"{ask_id} was denied by {row['answered_by']}"
-    if row["digest"] != canon.digest():
+    # The digest binds the action without the actor. A pre-existing approval's stored digest
+    # was computed over the legacy record that signed ``requested_by``; accept it too so an
+    # already-granted, unspent answer is not stranded when the actor leaves the digest.
+    stored = row["digest"]
+    if stored != canon.digest() and stored != canon.digest_named(row["requested_by"]):
         return (
             f"{ask_id} is of other state than this command acts on now (the command, its "
             "arguments, the gate's outcome or the findings changed): request a new approval"
         )
-    verdict = E.judge(row, canon.digest())
+    verdict = E.judge(row, stored)
     if not verdict.ok:
         return verdict.reason
     if level < row["min_level"] and not H.typed_t3(row, cfg or Config(), level):
@@ -98,28 +103,18 @@ def _problem(
     return ""
 
 
-def spend(
-    log, canon: Canon, ask_id: str, *, now: float | None = None, cfg: Config | None = None
-) -> Decision:
-    """Check ``ask_id`` against ``canon`` and, if it holds, record one use. All under the lock."""
-    with log.transaction():
-        # read the clock INSIDE the lock: waiting for it must not make an expiry look earlier
-        now = clock.now_utc().timestamp() if now is None else now
-        row = asks_of(fold(log.read_all(), strict=False)).get(ask_id)
-        # once: the level of a harness answer depends on a file outside the lock
-        level = E.verified_level(row, cfg) if row is not None else 0
-        if why := _problem(row, canon, now, level, cfg):
-            return Decision(False, f"refusing: {why}.", ask_id=ask_id)
-        assert row is not None
-        grade = H.GRADE_T3_CHAT if H.typed_t3(row, cfg or Config(), level) else ""
-        log.append(
-            "ask.consumed",
-            ask_id,
-            {
-                "id": ask_id, "by": canon.agent, "verb": canon.verb, "digest": row["digest"],
-                **({"grade": grade} if grade else {}),
-            },
-        )  # fmt: skip
+def _checked(log, canon: Canon, ask_id: str, *, now: float, cfg: Config | None) -> Decision:
+    """Validate ``ask_id`` against ``canon`` with no side effect: the spendable proof, or the
+    refusal. `spend` records the use (under the lock); `check` returns this WITHOUT recording
+    one, so a caller can refuse before a side effect and `spend` only once it landed
+    (B527b0a518c)."""
+    row = asks_of(fold(log.read_all(), strict=False)).get(ask_id)
+    # once: the level of a harness answer depends on a file outside the lock
+    level = E.verified_level(row, cfg) if row is not None else 0
+    if why := _problem(row, canon, now, level, cfg):
+        return Decision(False, f"refusing: {why}.", ask_id=ask_id)
+    assert row is not None
+    grade = H.GRADE_T3_CHAT if H.typed_t3(row, cfg or Config(), level) else ""
     return Decision(
         True,
         stamp={
@@ -133,6 +128,36 @@ def spend(
         },
         ask_id=ask_id,
     )
+
+
+def check(
+    log, canon: Canon, ask_id: str, *, now: float | None = None, cfg: Config | None = None
+) -> Decision:
+    """Like [`spend`], but validate WITHOUT recording a use (no lock, no `ask.consumed`). Spend
+    the validated approval only once the caller's side effect has succeeded; a refused spend
+    here has already cost it (B527b0a518c)."""
+    now = clock.now_utc().timestamp() if now is None else now
+    return _checked(log, canon, ask_id, now=now, cfg=cfg)
+
+
+def spend(
+    log, canon: Canon, ask_id: str, *, now: float | None = None, cfg: Config | None = None
+) -> Decision:
+    """Check ``ask_id`` against ``canon`` and, if it holds, record one use. All under the lock."""
+    with log.transaction():
+        # read the clock INSIDE the lock: waiting for it must not make an expiry look earlier
+        now = clock.now_utc().timestamp() if now is None else now
+        d = _checked(log, canon, ask_id, now=now, cfg=cfg)
+        if d.ok:
+            log.append(
+                "ask.consumed",
+                ask_id,
+                {
+                    "id": ask_id, "by": canon.agent, "verb": canon.verb, "digest": d.stamp["digest"],
+                    **({"grade": d.stamp["grade"]} if "grade" in d.stamp else {}),
+                },
+            )  # fmt: skip
+    return d
 
 
 #: `--approval request`: the agent asks for the approval now (sites that must not file one on
@@ -161,11 +186,14 @@ def operator_gate(
     if approval_id != REQUEST and (stamp := PO.apply(log, cfg, state, canon, reason=reason)):
         return Decision(True, stamp=stamp, ask_id=stamp["ask"])
     if not approval_id and not auto:
+        # `operator_gate` owns the 'refusing: ' prefix on EVERY refusal, this steering
+        # message included (B-consume-refusal-prefix-owner): callers pass the message
+        # through untouched instead of re-deriving it from prose.
         return Decision(
             False,
-            f"to ask the operator to approve '{canon.verb}' for {canon.item or 'this'}, "
-            f"re-run with `--approval {REQUEST}`: a request id comes back and the operator "
-            "answers it in chat.",
+            f"refusing: to ask the operator to approve '{canon.verb}' for "
+            f"{canon.item or 'this'}, re-run with `--approval {REQUEST}`: a request id comes "
+            "back and the operator answers it in chat.",
         )
 
     filed = R.file(

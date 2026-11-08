@@ -44,8 +44,8 @@ class ApprovalsConfig:
         doc="Accept an approval answered in the agent's own chat (default true; D-RA-Q5): the agent puts `ddflow approvals ask ID` to the person with AskUserQuestion and `ddflow approvals attest ID` reads the answer from the transcript the harness wrote, never from the agent's word. Tier T2 only. It cannot show that a person (not a script holding the session) answered or that the transcript was not edited by the agent's own user; `ddflow doctor` says so.",
     )
     transcript_dirs: list[str] = knob(
-        factory=lambda: ["~/.claude/projects"],
-        doc="Where the harness channel looks for session transcripts that hold the answer to an approval question (default ~/.claude/projects). Each entry is either a directory of Claude Code `*.jsonl` transcripts or a SQLite database file (Kilo's store); Kilo's own default store `~/.local/share/kilo/kilo.db` is also read when it exists. Only transcripts modified since the request was filed are read.",
+        factory=list,
+        doc="Extra session-transcript paths the harness channel reads for an approval answer, added to each harness descriptor's `[transcripts].root` (the directories of session transcripts and SQLite stores the harness writes; Kilo's default store is read when it exists). Only transcripts modified since the request was filed are read.",
     )
     expiry_warn_s: int = knob(
         600,

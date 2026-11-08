@@ -25,7 +25,8 @@ from typing import Any
 from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
-from .baseline import cache_load, cache_store
+from ..flakes import LINE_CHARS
+from .baseline import cache_load, cache_signatures, cache_store
 from .testcmd import counts_of
 
 GATES = ("ci", "unit_tests")
@@ -60,18 +61,6 @@ def candidate_ids(gate: str, command: str, ev: dict[str, Any], fail_fast: bool) 
     return list(ev.get("failed_tests") or [])
 
 
-def _pinned_base(repo: Path, base: str, sha: str, tree: Path) -> str:
-    """The base to measure against: the candidate's own merge-base with ``base``, not the live
-    tip of ``base`` (which may have moved past the commit the candidate was merged with, so a
-    test ``base`` just fixed reads as new there: B48c70b6773). The checkout ``tree`` heads the
-    candidate; when git cannot say (no HEAD, no merge-base) the tip stands."""
-    head = W.rev(tree, "HEAD")
-    if not head:
-        return sha
-    mb = W.git(repo, "merge-base", base, head)
-    return mb.out if mb.ok and mb.out else sha
-
-
 def on_base(
     repo: Path,
     base: str,
@@ -80,39 +69,91 @@ def on_base(
     run: Callable[[Any, Path], tuple],
     ttl_s: int = 0,
     tree: Path | None = None,
+    before: dict[str, str] | None = None,
 ) -> dict:
     """Run ``ids`` alone on ``base``: ``{"red": bool, ...}``. ``run(gdef, cwd)`` executes a
     command gate and returns (outcome, evidence). With ``ttl_s`` > 0 what was measured on this
     base sha is kept (`services.gates.baseline`): ids already measured are not run again.
     ``tree`` is the checkout that failed them (default ``repo``): what it has and the base has
-    not is the branch's own."""
+    not is the branch's own.     ``before`` is the branch's own failure text per id
+    (`_failure_sigs(ev)`): a test the base also fails, but differently, is a new offender, not
+    baseline-red (B-baseline-red-hides-new-offender-in-red-ratchet)."""
     if not ids:  # all() of nothing is True: no named test is no attribution
         return {"red": False, "why": "no failing test id to run on the base"}
     sha = W.rev(repo, base)
     if not sha:
         why = f"base {base} does not resolve"
         return {"red": False, "why": why, "unmeasured": ids, "still_failing": []}
-    sha = _pinned_base(repo, base, sha, tree or repo)
+    # The commit to measure against IS ``base``'s tip -- what the ci merge just used --
+    # not the candidate's own merge-base with ``base`` (the fork point is older, so a test
+    # ``base`` broke since the fork reads as a new failure there: B-ci-baseline-older-than-
+    # candidate; B48c70b6773's earlier merge-base pin had this wrong).
     known = cache_load(repo, sha, ttl_s, None, gdef.command)
+    cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
-    todo = [i for i in ids if i not in known]
+    # A cache entry measured before failure text was kept (old format, no text) has nothing to
+    # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
+    # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet). An entry whose text sits at
+    # the old cut-to-LINE_CHARS length is ambiguous -- the base's whole reason may differ past it
+    # or not -- so it is re-measured too, never guessed either way (B-baseline-red-hides-new
+    # -cause, the legacy-cache migration).
+    todo = [
+        i
+        for i in ids
+        if i not in known
+        or (known.get(i) and (i not in cached_sigs or len(cached_sigs[i]) == LINE_CHARS))
+    ]
     if not todo:
-        return {**_tally(ids, known), **where, "cached": True, "ids": ids}
+        return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
     ran = _run_chunks(repo, sha, gdef, todo, run, ttl_s, tree or repo)
     if isinstance(ran, str):  # why nothing could be measured
-        return _not_run(ran, _tally(ids, known), where)
-    outcomes, cmds, seen = ran
-    found = _tally(ids, {**known, **seen})
+        return _not_run(ran, _tally(ids, known, before, cached_sigs), where)
+    outcomes, cmds, seen, base_sigs = ran
+    found = _tally(ids, {**known, **seen}, before, {**cached_sigs, **base_sigs})
     last = outcomes[-1] if outcomes else ""
     return {**found, **where, "isolation": ISOLATION, "command": "; ".join(cmds), "ids": ids,
             "outcome": "failed" if found["red"] or "failed" in outcomes else last}  # fmt: skip
 
 
-def _tally(ids: list[str], known: dict[str, bool]) -> dict[str, Any]:
-    """What ``known`` says of ``ids``: red only when every one of them failed on the base."""
-    still = [i for i in ids if known.get(i)]
-    return {"red": len(still) == len(ids), "still_failing": still,
+def _tally(
+    ids: list[str],
+    known: dict[str, bool],
+    before: dict[str, str] | None = None,
+    onbase: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """What ``known`` says of ``ids``: red only when every one of them failed on the base with
+    the failure text the branch showed. A test the base also fails, but DIFFERENTLY, is a new
+    offender, not baseline (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to
+    ``different``, so ``still`` no longer covers it and ``red`` misses it."""
+    different = [i for i in ids if known.get(i) and _differs(i, before, onbase)]
+    still = [i for i in ids if known.get(i) and i not in different]
+    return {"red": len(still) == len(ids), "still_failing": still, "different": different,
             "unmeasured": [i for i in ids if i not in known]}  # fmt: skip
+
+
+def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str] | None) -> bool:
+    """Does the failure text the BRANCH showed for ``test_id`` differ from what the base showed?
+    A test the base also fails, but with a DIFFERENT full reason text, is a new offender, not
+    baseline-red. ``failed_reasons`` now keeps each FAILED reason WHOLE (its summary line is not
+    cut), so two reasons that differ only past what the display used to cap to are told apart
+    (B-baseline-red-hides-new-cause); a base whose text is unknown never claims a new offender.
+    A base text that is ambiguous (the legacy cut shape) is re-measured by ``on_base`` before it
+    reaches here, so this comparison is always whole-versus-whole."""
+    base = (onbase or {}).get(test_id)
+    if not base:
+        return False
+    branch = (before or {}).get(test_id)
+    if not branch:
+        return False
+    return branch != base
+
+
+def _failure_sigs(ev: dict[str, Any]) -> dict[str, str]:
+    """The branch's own failure text per id ({} when the evidence kept none): what ``on_base``
+    compares against the base's text to spot a new offender in an already-red test. Each FAILED
+    reason is kept WHOLE so a new cause past the old display cap is told apart
+    (B-baseline-red-hides-new-cause)."""
+    return dict(ev.get("failed_reasons") or {})
 
 
 def _not_run(why: str, found: dict[str, Any], where: dict[str, str]) -> dict[str, Any]:
@@ -123,12 +164,14 @@ def _not_run(why: str, found: dict[str, Any], where: dict[str, str]) -> dict[str
 
 
 def _run_chunks(repo: Path, sha: str, gdef, todo: list[str], run, ttl_s: int, branch: Path):
-    """``(outcomes, commands, {id: failed on the base})`` of running ``todo`` on a scratch
-    checkout of ``sha`` in chunks under the evidence cap on listed failures (a run's list is
-    never cut); or the reason it could not. An id the dict lacks was not measured."""
+    """``(outcomes, commands, {id: failed on the base}, {id: failure text on the base})`` of
+    running ``todo`` on a scratch checkout of ``sha`` in chunks under the evidence cap on
+    listed failures (a run's list is never cut); or the reason it could not. An id the dict
+    lacks was not measured."""
     outcomes: list[str] = []
     cmds: list[str] = []
     known: dict[str, bool] = {}
+    base_sigs: dict[str, str] = {}
     with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-base.", quiet=True) as tree:
         if tree.path is None:
             return "no scratch worktree of the base could be made"
@@ -139,12 +182,13 @@ def _run_chunks(repo: Path, sha: str, gdef, todo: list[str], run, ttl_s: int, br
             ran = _probe(gdef, tree.path, rest[start : start + CHUNK], run)
             if isinstance(ran, str):
                 return ran
-            outcome, tried, seen = ran
+            outcome, tried, seen, sigs = ran
             outcomes.append(outcome)
             cmds += tried
             known.update(seen)
-            cache_store(repo, sha, seen, ttl_s, gdef.command)
-    return outcomes, cmds, known
+            base_sigs.update(sigs)
+            cache_store(repo, sha, seen, ttl_s, gdef.command, sigs)
+    return outcomes, cmds, known, base_sigs
 
 
 def _branch_only(root: Path, branch: Path, test_id: str) -> bool:
@@ -155,12 +199,13 @@ def _branch_only(root: Path, branch: Path, test_id: str) -> bool:
 
 
 def _probe(gdef, root: Path, part: list[str], run):
-    """``(outcome, commands, {id: failed on the base})`` of one chunk, or why it could not be
-    run. A run that executed nothing is asked which ids the base lacks and repeated without
-    them; an id left out of the dict was not measured."""
+    """``(outcome, commands, {id: failed on the base}, {id: failure text on the base})`` of one
+    chunk, or why it could not be run. A run that executed nothing is asked which ids the base
+    lacks and repeated without them; an id left out of the dict was not measured."""
     outcome = ""
     cmds: list[str] = []
     seen: dict[str, bool] = {}
+    sigs: dict[str, str] = {}
     for _round in range(ROUNDS):
         cmd = TS.run_command(gdef.command, part, root)
         if not cmd:
@@ -169,7 +214,15 @@ def _probe(gdef, root: Path, part: list[str], run):
         probe = replace(gdef, command=cmd)
         outcome, ev = run(probe, root)
         if not _no_verdict(outcome, ev, len(part)):
-            return outcome, cmds, {**seen, **_verdicts(probe, part, outcome, ev)}
+            return (
+                outcome,
+                cmds,
+                {**seen, **_verdicts(probe, part, outcome, ev)},
+                {
+                    **sigs,
+                    **_base_signatures(ev, part),
+                },
+            )
         lacking, unsure = _lacking(probe, root, part, ev, run)
         seen.update(dict.fromkeys(lacking, False))
         for test_id in unsure:  # alone, what pytest names can only be this id
@@ -177,10 +230,17 @@ def _probe(gdef, root: Path, part: list[str], run):
             if not isinstance(alone, str):
                 cmds += alone[1]
                 seen.update(alone[2])
+                sigs.update(alone[3])
         part = [i for i in part if i not in lacking and i not in unsure]
         if not part or not (lacking or unsure):
             break
-    return outcome, cmds, seen
+    return outcome, cmds, seen, sigs
+
+
+def _base_signatures(ev: dict[str, Any], part: list[str]) -> dict[str, str]:
+    """The base run's own failure text per id ({} for ids whose text it kept none of)."""
+    reasons = ev.get("failed_reasons") or {}
+    return {i: reasons[i] for i in part if reasons.get(i)}
 
 
 def _no_verdict(outcome: str, ev: dict[str, Any], asked: int) -> bool:

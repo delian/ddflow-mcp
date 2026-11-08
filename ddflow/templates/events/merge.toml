@@ -1,0 +1,5 @@
+# Event kinds owned by merge. One [[kind]] per kind.
+
+[[kind]]
+name = "merge.forced"
+doc = "A merge landed over unsettled required gates under [merge].require_gates = refuse: names the gates and the approval."

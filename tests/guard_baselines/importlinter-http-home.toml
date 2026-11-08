@@ -19,7 +19,6 @@ ignore_imports = [
     # not HTTP, still to move (a pure URL/host home for them is a follow-up task)
     "ddflow.infra.hostinfo -> socket",
     "ddflow.infra.release_index -> urllib",
-    "ddflow.services.approvals.harness -> urllib",
     "ddflow.services.docscheck -> urllib",
     "ddflow.services.doctypes.rule_content -> urllib",
     "ddflow.services.install_info -> urllib",

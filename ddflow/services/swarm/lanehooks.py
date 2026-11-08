@@ -161,7 +161,7 @@ def _need_consent(harness: str, state: Any) -> Consent | None:
 def check_argv(repo: Path, agent: str, worktree: Path | None = None) -> list[str]:
     """The command every lane hook runs: the lane's own identity and the project root."""
     return [sys.executable, "-m", "ddflow.services.swarm.lanehooks_check", "--repo", str(repo),
-            "--agent", agent, *(["--worktree", str(worktree)] if worktree else [])]  # fmt: skip
+            f"--agent={agent}", *(["--worktree", str(worktree)] if worktree else [])]  # fmt: skip
 
 
 def _plan(s: Strength, home: Path, repo: Path, agent: str, worktree: Path) -> _Plan:

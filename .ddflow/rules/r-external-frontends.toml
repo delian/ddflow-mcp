@@ -1,0 +1,10 @@
+id = "r-external-frontends"
+title = "Every feature is reachable by an external TUI, GUI or board through the stable machine interface"
+tags = ["architecture", "integration"]
+scope = "project"
+priority = 100
+globs = ["ddflow/**"]
+created = "2026-11-03T14:50:10.015620+00:00"
+updated = "2026-11-03T14:50:10.015632+00:00"
+
+Decision D-external-frontends. RULE: a feature is not done until a third-party front end can read its state and invoke its actions without scraping text: a versioned JSON schema (schema id) for every view and result, structured refusals with the next call, a way to follow changes (event feed or subscription) instead of polling the whole log, ids and links that are stable, pagination and size caps, and approvals, consent and identity that work for a human client as well as an agent. Presentation (colour, tables, prose) is a thin layer over the data and never the only form. ddflow ships no GUI of its own. CHECK: a surface-parity test that every CLI/MCP view has a registered JSON schema and a version; a conformance suite a third-party client can run.

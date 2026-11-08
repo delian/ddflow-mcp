@@ -101,16 +101,17 @@ from .knowledge import (
 )
 from .knowledge import (
     LessonDraft,
-    bug_dedupe,
     bug_file_tasks,
     bug_fixed,
     bug_found,
     bug_invalid,
     bug_tag,
+    dedupe_bugs,
     dupes,
     history,
     lesson_add,
     lesson_search,
+    lesson_show,
     lessons_verify,
     link_record,
     memory_add,
@@ -120,6 +121,7 @@ from .knowledge import (
     research_add,
     session_adopt_orphans,
     session_end,
+    session_inbox,
     session_message,
     session_note,
     session_prompt,
@@ -216,6 +218,7 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
+from .threads import cap_blas_threads
 from .verify import refuse_sweep_args, verify_sweep, verify_tool
 from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
@@ -252,13 +255,13 @@ __all__ = [
     "block",
     "board",
     "brief",
-    "bug_dedupe",
     "bug_file_tasks",
     "bug_fixed",
     "bug_found",
     "bug_invalid",
     "bug_tag",
     "cadence",
+    "cap_blas_threads",
     "ci_tool",
     "claim",
     "cleanup",
@@ -275,6 +278,7 @@ __all__ = [
     "decision_search",
     "decision_show",
     "decision_supersede",
+    "dedupe_bugs",
     "dedupe_check_add",
     "def_list",
     "def_merge",
@@ -314,6 +318,7 @@ __all__ = [
     "lanes_watch",
     "lesson_add",
     "lesson_search",
+    "lesson_show",
     "lessons_verify",
     "link_record",
     "loops",
@@ -378,6 +383,7 @@ __all__ = [
     "run_review",
     "session_adopt_orphans",
     "session_end",
+    "session_inbox",
     "session_message",
     "session_note",
     "session_prompt",

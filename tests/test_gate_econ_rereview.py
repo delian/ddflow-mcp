@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import append_config, run_cli
 from helpers import git as _git
 
 import ddflow.api.review as api
@@ -139,3 +139,39 @@ def test_the_cli_help_and_the_tool_schema_say_a_plain_re_review_is_full(repo):
     assert "A plain re-review is a full round with the previous findings" in flat, flat
     assert "this is the default once" not in flat
     assert "else a delta" not in TOOLS["ddflow_review"]["properties"]["full"][1]
+
+
+def _confirm(repo: Path) -> None:
+    """Finding #1 of T1.critic confirmed fixed, with the fix a NEW file -- not the cited
+    x.py:1 line, so the finding stays confirmed instead of being superseded."""
+    run_cli(
+        repo, "review", "triage", "T1", "--gate", "critic", "--finding", "1",
+        "--confirmed", "--probe", "added fix.py to guard the value",
+    )  # fmt: skip
+    (repo / "fix.py").write_text("ok = 1\n")
+    _git(repo, "add", "fix.py")
+    _git(repo, "commit", "-qm", "fix")
+
+
+def test_a_confirmed_finding_cleared_by_a_delta_is_not_re_sent_in_a_later_delta(repo, tmp_path):
+    """B2e1f4aedb5: once a delta re-checked a confirmed fix, a later delta must not re-send
+    the finding -- its fix sits before that delta's base, so the delta cannot see it and the
+    reviewer reports it again as unfixed."""
+    prompts = _setup(repo, tmp_path)
+    append_config(repo, "[review]\nmax_rounds = 0\n")
+
+    _review(repo)  # round 1 (full): finding #1 "bad line"
+    _confirm(repo)
+    # Round 2 (delta) shows the fix, so the still-unrechecked confirmed finding is sent...
+    first_delta = _prompts_of(prompts, lambda: _review(repo, delta=True))
+    assert "bad line" in first_delta
+    assert "triage: confirmed" in first_delta
+
+    # ...and does not raise it again: the finding is cleared. A second delta's base is now
+    # past the fix, so it cannot see the fix and must not send the finding at all.
+    (repo / "more.py").write_text("more = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "more")
+    second_delta = _prompts_of(prompts, lambda: _review(repo, delta=True))
+    assert "bad line" not in second_delta
+    assert "Previous findings" not in second_delta

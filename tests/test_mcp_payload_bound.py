@@ -56,6 +56,34 @@ def test_next_cuts_the_blocked_list_and_counts_it_exactly(repo):
     assert "--json next" in cut["all"]
 
 
+def test_next_clips_long_ready_bodies_and_says_so(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    log.append(
+        "task.added",
+        "READY",
+        {"title": "start here", "globs": ["r.py"], "body": "a long body " * 80},
+    )
+    row = _body(_call(repo, "ddflow_next"))["ready"][0]
+    assert row["id"] == "READY" and row["body"].endswith("[...]")
+    body = _body(_call(repo, "ddflow_next"))
+    assert body["truncated"]["clipped_strings"] == 1
+    assert "--json next" in body["truncated"]["all"]
+
+
+def test_next_clip_merges_with_the_blocked_cut_note(repo):
+    _blocked_queue(repo, 40)
+    log = EventLog(repo, "agent-test")
+    log.append(
+        "task.added",
+        "LONG",
+        {"title": "long body", "globs": ["lg.py"], "body": "a long body " * 80},
+    )
+    cut = _body(_call(repo, "ddflow_next"))["truncated"]
+    assert cut["blocked"] == 40 and cut["clipped_strings"] == 1
+    assert "--json next" in cut["all"]
+
+
 def test_next_is_whole_below_the_bound_and_the_cli_is_never_cut(repo):
     _blocked_queue(repo, 3)
     assert "truncated" not in _body(_call(repo, "ddflow_next"))
@@ -257,6 +285,112 @@ def test_a_triage_record_without_location_or_title_is_not_reported_as_cut():
     for rec in ({"note": "x"}, {"verdict": "open", "title": "", "location": ""}):
         body = {"state": "open", "triage": {"g": {"f1": rec}}}
         assert B.bound_show(body, {})[0] == body, rec
+
+
+def test_show_caps_gate_findings_and_triage_and_counts_what_it_left_out():
+    """A review that found hundreds still stays under the surface budget: one gate's
+    evidence `chunk_findings` list and each gate's triage keep the first findings and the
+    rest are counted, never echoed (B-show-mcp-result-over-ceiling)."""
+    findings = [
+        {"chunk": i, "title": f"t{i:03d}", "detail": "d" * 200, "location": f"l{i:03d}"}
+        for i in range(150)
+    ]
+    body = {
+        "state": "open",
+        "gates": {
+            "critic": {
+                "outcome": "passed",
+                "evidence": {"chunk_findings": [dict(f) for f in findings]},
+            }
+        },
+        "triage": {"critic": {f"f{i:03d}": dict(f) for i, f in enumerate(findings)}},
+    }
+    out, _ = B.bound_show(body, {})
+    kept_ev = out["gates"]["critic"]["evidence"]["chunk_findings"]
+    assert [f["title"] for f in kept_ev] == [f"t{i:03d}" for i in range(B.FINDINGS_SHOWN)]
+    assert set(out["triage"]["critic"]) == {f"f{i:03d}" for i in range(B.FINDINGS_SHOWN)}
+    cut = out["truncated"]
+    assert cut["findings_cut"] == (150 - B.FINDINGS_SHOWN) * 2
+    assert "--json show" in cut["all"]
+    assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
+
+
+def test_show_caps_a_leaf_map_the_string_clip_leaves_under_the_threshold():
+    """A leaf-map of scalars (a `unit_tests` `baseline`/`failed_reasons` map, or a
+    pathological evidence dict) is capped too: its strings sit under `TEXT_SHOWN`, so the
+    string clip alone would not shrink it (B-show-mcp-result-over-ceiling)."""
+    body = {
+        "state": "open",
+        "gates": {
+            "critic": {"outcome": "passed", "evidence": {f"k{i}": "x" * 160 for i in range(200)}}
+        },
+    }
+    out, _ = B.bound_show(body, {})
+    kept = out["gates"]["critic"]["evidence"]
+    assert set(kept) == {f"k{i}" for i in range(B.FINDINGS_SHOWN)}
+    assert out["truncated"]["findings_cut"] == 200 - B.FINDINGS_SHOWN
+    assert len(json.dumps(out)) < 20_000, len(json.dumps(out))
+
+
+def test_show_stays_under_the_budget_for_a_nested_shape_the_caps_miss():
+    """A homogeneous dict-of-dicts keyed by id (`_homogeneous`) or a deep nesting that no
+    single cap bounds is cut until `ddflow_show` serialises under `SHOW_MAX_CHARS`
+    (B-show-mcp-result-over-ceiling)."""
+    body = {
+        "state": "open",
+        "gates": {
+            "critic": {
+                "outcome": "passed",
+                "evidence": {
+                    f"g{i}": {f"k{j}": "x" * 160 for j in range(B.FINDINGS_SHOWN)}
+                    for i in range(40)
+                },
+            }
+        },
+    }
+    out, _ = B.bound_show(body, {})
+    assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
+    assert out["truncated"]["findings_cut"] > 0
+
+
+def test_show_bounds_a_flat_string_list_in_gate_evidence():
+    """A gate-evidence LIST OF BARE STRINGS is bounded too: a `ci` gate's `baseline.ids`
+    (and `failed_tests`) is a flat list of test ids, not a list of finding dicts, and its
+    50 KB of ids alone once pushed `ddflow_show` past the tool-result cap
+    (B-show-result-over-mcp-cap). Each id is short, so the string clip leaves it alone; the
+    list itself must be capped and counted, like the findings lists are."""
+    ids = [f"tests/test_x{i:04d}.py::test_thing" for i in range(5_000)]
+    body = {
+        "state": "running",
+        "gates": {
+            "ci": {
+                "outcome": "partial",
+                "evidence": {
+                    "baseline": {"ids": list(ids), "still_failing": list(ids), "red": True},
+                    "failed_tests": list(ids),
+                },
+            }
+        },
+    }
+    out, _ = B.bound_show(body, {})
+    ev = out["gates"]["ci"]["evidence"]
+    assert len(ev["baseline"]["ids"]) <= B.FINDINGS_SHOWN
+    assert len(ev["baseline"]["still_failing"]) <= B.FINDINGS_SHOWN
+    assert len(ev["failed_tests"]) <= B.FINDINGS_SHOWN
+    assert out["truncated"]["findings_cut"] >= 3 * (5_000 - B.FINDINGS_SHOWN)
+    assert len(json.dumps(out)) <= B.SHOW_MAX_CHARS, len(json.dumps(out))
+
+
+def test_a_gates_map_with_more_names_than_the_cap_stays_whole():
+    """The root `gates` map NAMES the gates, so a project with more than `FINDINGS_SHOWN`
+    gates must keep every gate record -- the series-map cap must not truncate it."""
+    body = {
+        "state": "open",
+        "gates": {f"g{i}": {"outcome": "passed", "note": "kept"} for i in range(14)},
+    }
+    out, _ = B.bound_show(body, {})
+    assert set(out["gates"]) == {f"g{i}" for i in range(14)}, list(out["gates"])
+    assert (out.get("truncated") or {}).get("findings_cut", 0) == 0
 
 
 def test_a_string_just_over_the_cut_is_left_whole_because_cutting_would_not_shrink_it():

@@ -21,11 +21,17 @@ native_why = "Cline reads .clinerules/, not AGENTS.md"
 [hooks]
 style = "cline"
 file = ".cline/hooks/"
-normalizer = "cline"
-emitter = "cline"
+emitter = "context_modification"
 block = "cancel"
 session_id = "taskId"
 inject = ["prompt"]
+
+[hooks.fields]
+session = ["taskId"]
+prompt = ["userPromptSubmit.prompt", "prompt"]
+source = []
+cwd = ["workspaceRoots.0"]
+tool = ["preToolUse.toolName"]
 
 [hooks.events]
 session_start = "agent_start"
@@ -56,3 +62,4 @@ date = "2026-10-09"
 sources = ["https://docs.cline.bot", "https://github.com/cline/cline/tree/main/sdk/examples/hooks"]
 record = "R-hx-cline"
 unverified = ["project MCP file", "extension payload differs from CLI"]
+

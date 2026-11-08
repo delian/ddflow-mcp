@@ -66,6 +66,9 @@ def test_refused(cmd):
         'git commit -m "git stash is banned"',
         "git commit -m push",
         "git stash-ish",
+        "git stash list",
+        "git stash show",
+        "git stash show stash@{0}",
         "grep -r pkill docs",
         "echo pkill",
         'ddflow review X --force --reason "an extra round"',
@@ -80,6 +83,22 @@ def test_refused(cmd):
 )
 def test_allowed(cmd):
     assert _check(cmd) is None, cmd
+
+
+def test_an_explicit_read_only_stash_entry_still_forbids_it():
+    """The read-only exemption only narrows the GENERIC `git stash` entry: a config that
+    names `git stash list` explicitly still forbids `git stash list`."""
+    cfg = Config()
+    cfg.hooks.forbidden_commands = ["git stash list"]
+    assert FB.check("git stash list", cfg, env={}) is not None
+    assert FB.check("git stash show", cfg, env={}) is None
+
+
+def test_a_stash_write_verb_is_still_refused_even_with_a_help_looking_arg():
+    """Only the `list`/`show` subcommands are read-only: `--help`/`--message` as a VALUE or
+    pathspec are not a help flag, so `git stash push` with them still writes and is refused."""
+    assert _check("git stash push -m --help") is not None
+    assert _check("git stash push -- --help") is not None
 
 
 def test_reset_hard_only_on_primary(tmp_path):

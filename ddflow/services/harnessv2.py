@@ -41,6 +41,24 @@ ORCHESTRATION_LOOPS = frozenset(
     }
 )
 
+#: Loop primitives whose lane CAN complete (return a final result and end its turn). A
+#: resume a completing lane schedules for after that turn is dropped by the harness at
+#: completion, so such a loop MUST name an ``orchestration.keepalive`` -- how the lane keeps
+#: its own session alive across waits -- instead of relying on a self-scheduled wakeup
+#: (Bbc611c0165). ``self-paced-command`` and ``second-window`` run until they stop
+#: themselves (the loop primitive is its own keepalive), so they are exempt.
+COMPLETABLE_LOOPS = ("background-subagents", "subtask")
+
+#: How a lane keeps its OWN session alive across a completable loop's waits, so it never
+#: completes prematurely and its claim lease cannot lapse while work or a wait is in flight.
+ORCHESTRATION_KEEPALIVES = frozenset(
+    {
+        "session-goal",  # the lane wraps the wave loop in its own session goal (alive across turns)
+        "in-process-wait",  # the lane blocks in a live `ddflow wait` process until the scope drains
+        "persistent-process",  # a persistent background process (inherit/persistent lifetime)
+    }
+)
+
 
 @dataclass(frozen=True)
 class Detect:
@@ -94,6 +112,7 @@ class Orchestration:
     loop: str = ""  #: one of ORCHESTRATION_LOOPS — always a BACKGROUND primitive
     dispatch: str = ""  #: the subagent fan-out primitive (one claimed item per ready id)
     wait: str = ""  #: the wait primitive (background process + `ddflow wait`)
+    keepalive: str = ""  #: how the lane stays alive across waits (one of ORCHESTRATION_KEEPALIVES)
     persist: str = ""  #: where the wave position persists and resumes
     stop: str = ""  #: the ONLY stops: empty scope, or the question/ask/approval operator gates
 
@@ -194,8 +213,13 @@ def check_table(table: Any, name: str, where: str) -> None:
         name, table.get("mechanism"), "continuation.mechanism", CONTINUATION_MECHANISMS, where
     )
     _membership(name, table.get("loop"), "orchestration.loop", ORCHESTRATION_LOOPS, where)
+    _membership(
+        name, table.get("keepalive"), "orchestration.keepalive", ORCHESTRATION_KEEPALIVES, where
+    )
     if name == "orchestration" and keys and table.get("loop") is None:
         raise DescriptorError(f"{where}: orchestration.loop names the wave loop primitive")
+    if name == "orchestration":
+        _require_orchestration_keepalive(table, where)
     if name == "headless" and table.get("autonomy") == "":
         raise DescriptorError(f"{where}: headless.autonomy must name an [autonomy].profiles id")
     if "none" in table and table["none"] is True and keys:
@@ -206,6 +230,20 @@ def check_table(table: Any, name: str, where: str) -> None:
                 f"{where}: continuation.cap, goal_command and loop_guard need a mechanism"
                 " other than none"
             )
+
+
+def _require_orchestration_keepalive(table: dict, where: str) -> None:
+    """A BACKGROUND ``[orchestration]`` loop runs a lane that can complete (return a final
+    result); a resume that lane schedules for after its turn is dropped at completion, so it
+    must name a keepalive that keeps its own session alive across waits -- or its claim
+    lapses to INTERRUPTED (Bbc611c0165)."""
+    loop = table.get("loop")
+    if loop in COMPLETABLE_LOOPS and not table.get("keepalive"):
+        raise DescriptorError(
+            f"{where}: orchestration.keepalive names how its {loop!r} loop keeps the "
+            "lane's own session alive across waits; without one the lane can complete and "
+            "its self-scheduled resume is dropped, lapsed its claim (Bbc611c0165)"
+        )
 
 
 def _membership(name: str, value: Any, field: str, vocab: frozenset, where: str) -> None:

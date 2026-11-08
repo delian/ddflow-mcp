@@ -36,6 +36,19 @@ def _drop_fix_task(
     return removed, why
 
 
+def _finished(t, mine: bool) -> bool:
+    """The fix task has nothing for a bug close to remove: done or abandoned; not open
+    and not the closer's own (it ran under someone else); or already landed through
+    ddflow's own merge (B-bug-fixed-removes-merged-fix-task) -- releasing at merge puts
+    it back to OPEN, so the first two miss it. `merged_sha` is the one marker merge (and
+    PR sync) sets, so it alone names a landed task; `landed_after` is NOT such a marker
+    for THIS "should a bug close remove it" question (a task definition may carry one
+    without a merge -- `_fixing_item` answers a different question and may still read it).
+    A finished task is kept, not removed."""
+
+    return t.terminal or (t.state != OPEN and not mine) or bool(t.merged_sha)
+
+
 def _drop_fix_task_unchecked(
     log, st, rec, *, reason: str = "", closed: str = "as invalid"
 ) -> tuple[str, str]:
@@ -60,7 +73,7 @@ def _drop_fix_task_unchecked(
     mine = bool(t.lease) and t.lease.holder == log.agent_id
     if t.lease and not mine:  # before the state: a claimed task is RUNNING, and held is the point
         return "", "held"
-    if t.terminal or (t.state != OPEN and not mine):
+    if _finished(t, mine):
         return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
         return "", "shared"

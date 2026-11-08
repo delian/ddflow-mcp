@@ -18,17 +18,7 @@ from typing import Any
 from ...core import outcome as O
 from ...services import bugsim
 from .._base import _load
-from .pairs import link_record
-
-
-def _settled(a: str, b: str, st) -> bool:
-    """Whether the pair (a, b) is already answered, in either direction: a recorded link or
-    a `distinct` dismissal. A pair answered once is never re-offered or re-linked."""
-    for x, y in ((a, b), (b, a)):
-        lk = st.links.get(x)
-        if lk is not None and (y in lk.linked() or y in lk.dismissed()):
-            return True
-    return False
+from .pairs import _settled, link_record
 
 
 def _dupe_entry(canonical: str, did: str, scores, fl: float) -> dict[str, Any]:
@@ -37,7 +27,7 @@ def _dupe_entry(canonical: str, did: str, scores, fl: float) -> dict[str, Any]:
     return {"id": did, "score": scores.get(k, fl)}
 
 
-def bug_dedupe(
+def dedupe_bugs(
     repo: Path,
     *,
     apply: bool = False,
@@ -76,7 +66,7 @@ def bug_dedupe(
         canonical = group[0]
         dupes = []
         for did in group[1:]:
-            if _settled(canonical, did, st):
+            if _settled(st, canonical, did):
                 continue  # already linked or dismissed: reported once, never linked twice
             dupes.append(_dupe_entry(canonical, did, scores, fl))
         if not dupes:

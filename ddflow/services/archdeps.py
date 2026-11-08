@@ -49,18 +49,22 @@ STDLIB_FAMILIES: dict[str, tuple[str, ...]] = {
 # members. A family absent here has no home contract yet -- every current importer is the
 # baseline, and the ADP-* task that moves the family behind a port declares a home here.
 STDLIB_HOMES: dict[str, tuple[str, ...]] = {
-    "subprocess": ("ddflow.infra.proc", "ddflow.infra.git"),
-    "fsio": ("ddflow.infra.fsio",),
+    "subprocess": ("ddflow.adapters.proc", "ddflow.adapters.proc_server"),
+    "fsio": ("ddflow.adapters.fsio",),
     "shutil": ("ddflow.infra.fsio",),
-    "hashlib": ("ddflow.core.digest",),
+    "hashlib": ("ddflow.adapters.digest",),
     "http": ("ddflow.adapters.http",),
+    "tomllib": ("ddflow.adapters.toml",),
 }
 
 # A third-party package's declared home: the one module allowed to import the package.
 THIRD_PARTY_HOMES: dict[str, tuple[str, ...]] = {
     "rapidfuzz": ("ddflow.core.fuzzy",),
     "model2vec": ("ddflow.services.embed",),
-    "tomlkit": ("ddflow.infra.tomlcfg",),
+    # ADP-toml made `ddflow.adapters.toml` the single wrapper for TOML I/O: `tomllib` to
+    # read and `tomlkit` to write (`TomlLibIo.dumps`/`document`). Until `infra.tomlcfg`
+    # delegates to it (ADP-toml-unify), BOTH are the declared home for tomlkit.
+    "tomlkit": ("ddflow.infra.tomlcfg", "ddflow.adapters.toml"),
 }
 
 

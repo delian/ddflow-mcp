@@ -38,6 +38,7 @@ from __future__ import annotations
 from .baseline import (  # noqa: F401
     auto_decision,
     cache_load,
+    cache_signatures,
     cache_store,
     only_tests_failed,
     read_full,
@@ -128,6 +129,7 @@ from .outcomes import (  # noqa: F401
     StaleNote,
     is_triageable,
     local_command_notes,
+    lost_branch,
     on_refutation,
     refuted_line,
     refuted_passes,
@@ -203,6 +205,7 @@ from .testcmd import (  # noqa: F401
     MAX_SUMMARY_LINES,
     Runner,
     counts_of,
+    coverage_of,
     declares_xdist,
     detect,
     file_text,

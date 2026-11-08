@@ -116,13 +116,13 @@ def test_a_changed_gate_state_needs_a_new_approval(proj):
     assert code == 3 and "other state" in err
 
 
-def test_another_agent_and_an_unapproved_id_do_not_get_through(proj):
+def test_an_unapproved_id_does_not_get_through_but_a_successor_agent_can(proj):
     ask_id = _refusal_id(run_cli(proj, *SKIP, agent="bot")[2])
     pending = run_cli(proj, *SKIP, "--approval", ask_id, agent="bot")
     assert pending[0] == 3 and "not answered" in pending[2]
     _approve(proj, ask_id)
-    thief = run_cli(proj, *SKIP, "--approval", ask_id, agent="thief")
-    assert thief[0] == 3 and _skipped(proj) is None
+    successor = run_cli(proj, *SKIP, "--approval", ask_id, agent="thief")
+    assert successor[0] == 0 and _skipped(proj) is not None  # B86be969daf: a successor may spend
 
 
 def test_an_agent_cannot_approve_its_own_request_to_get_through(proj):

@@ -29,6 +29,11 @@ class WorktreeConfig:
     base_ref: str = knob(
         "",
         doc="Branch new worktrees fork from. Empty means auto-detect the default branch (origin/HEAD, else main, else master) — hardcoding 'main' breaks every 'master' repo.",
+        check=lambda v: (
+            ""
+            if isinstance(v, str) and not v.startswith("-")
+            else "must be a branch name; a value starting with '-' is a CLI flag, not a ref"
+        ),
     )
     merge_strategy: str = knob(
         "no-ff",

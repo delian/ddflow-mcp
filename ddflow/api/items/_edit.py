@@ -20,6 +20,7 @@ from ...core import globspec as GS
 from ...core import outcome as O
 from ...core import schedule as SCH
 from ...core.flow import line_order
+from ...core.globs import overlap as globs_overlap
 from ...infra import worktree as W
 from ...services import items as IT
 from ...services import landed as LD
@@ -432,6 +433,12 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, accepted, resources)
+            _withdraw_stale_wait(log, it, lease, globs, withheld)
+    overtook = (
+        _overtaken_waiters(log, cfg, _held_globs(it), accepted)
+        if globs is not None and lease is not None
+        else []
+    )
     return O.ok(
         "item.updated",
         id=it.id,
@@ -440,11 +447,54 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         lease_retargeted=lease is not None,
         globs_dropped=_dropped(it, accepted),
         globs_withheld=withheld,
+        globs_overtook=overtook,
         needs_dropped=[n for n in it.needs if n not in fields["needs"]]
         if "needs" in fields
         else [],
         tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
+
+
+def _withdraw_stale_wait(log, it, lease, globs: list[str] | None, withheld: list[str]) -> None:
+    """Remove a stale prior wait after a successful glob retarget.
+
+    A successful `--globs` retarget is the caller deciding the ask differently: a refused
+    widening made earlier is abandoned, or `standing` reads it as a cycle forever. A
+    just-`withheld` ask is not stale -- the caller still wants those files -- so it stays
+    (B-update-queue-wait-not-withdrawable).
+    """
+    if globs is None or withheld:
+        return
+    waiting = L._fold(log).waiting.get(it.id)
+    if waiting and waiting.get("globs"):
+        WG.withdraw(log, it.id, lease.holder, lease.event, time.time())
+
+
+def _overtaken_waiters(
+    log, cfg, old_globs: list[str], accepted: list[str] | None
+) -> list[dict[str, Any]]:
+    """The standing waiters a just-applied widening overtook (B-widen-over-standing-wait-silent).
+
+    Only a waiter is "overtaken" that a NEWLY-granted glob now blocks and that the item's
+    OLD globs did not already block for that same ask: a waiter already waiting on a held
+    glob, or one a wider glob would only re-state, is not. ``new_globs`` is ``accepted``
+    minus the exact held strings; the overlap test below then drops a "new" directory that
+    merely subsumes a held file the waiter had already asked for."""
+    if accepted is None:
+        return []
+    new_globs = [g for g in accepted if g not in old_globs]
+    if not new_globs:
+        return []
+    waiters = WG.waiters(L._fold(log), cfg, time.time())
+    blocked_before = {
+        w.item for w in waiters if any(globs_overlap(g, x) for g in old_globs for x in w.globs)
+    }
+    return [
+        {"item": w.item, "holder": w.holder, "globs": list(w.globs)}
+        for w in waiters
+        if w.item not in blocked_before
+        and any(globs_overlap(g, x) for g in new_globs for x in w.globs)
+    ]
 
 
 def _waiting(log, cfg, it, lease, globs: list[str] | None, queue: bool) -> str:

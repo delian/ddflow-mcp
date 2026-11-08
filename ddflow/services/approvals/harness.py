@@ -31,6 +31,7 @@ from ...core import clock
 from ...core.model import fold
 from ...infra.docindex import read_only_rows
 from .. import configwrite as CW
+from .. import harnessreg
 from ..actors import resolve_actor
 from ..ask import engine as E
 
@@ -179,7 +180,22 @@ def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
 
 
 def _dirs(cfg: Config) -> list[Path]:
-    return [Path(d).expanduser() for d in cfg.approvals.transcript_dirs]
+    roots = list(cfg.approvals.transcript_dirs)
+    for h in harnessreg.load():
+        if h.transcripts:
+            roots.extend(h.transcripts.root)
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for d in roots:
+        p = Path(d).expanduser()
+        try:
+            p = p.resolve()  # collapse a symlink alias: the same dir scanned once
+        except (OSError, RuntimeError):
+            p = p.absolute()  # an untraversable component or symlink loop: keep the spelling
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
 
 
 def _files(cfg: Config, since: float) -> list[Path]:
@@ -469,6 +485,24 @@ def attest(
             else:
                 tail = f"; enabled the standing window for {WINDOW_CHOICE_HOURS}h (generic policy rules on)"
     return True, f"{ask_id} {outcome} by the person who answered in {hit.file} ({hit.at}){tail}"
+
+
+def attest_pending(
+    log, cfg: Config, *, repo: Path | None = None, now: float | None = None
+) -> list[dict[str, Any]]:
+    """Auto-attest every pending request whose canonical question already has an accepted
+    answer in a transcript (B3068414423). The agent couriers the canonical `ask` payload to
+    the person, the person answers in chat, and ONE call here attests each answered request
+    from the harness-written transcript -- a chat answer alone flips it to answered, with no
+    terminal and no `approve --all`. Each result is ``{"id", "ok", "message"}`` for one
+    request that `attest` considered (nothing is invented: unanswered requests come back
+    ``ok: False`` with `attest`'s waiting message)."""
+    state = fold(log.read_all(), strict=False)
+    done: list[dict[str, Any]] = []
+    for row in E.pending(state, now):
+        ok, message = attest(log, cfg, row["id"], repo=repo, now=now)
+        done.append({"id": row["id"], "ok": ok, "message": message})
+    return done
 
 
 E.LEVEL_VERIFIERS[VIA] = verify

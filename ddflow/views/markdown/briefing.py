@@ -28,13 +28,44 @@ from ...services.pipeline_diff import effective_pipeline
 from .report import _HOLDING, _RECOVERY_SHOWN, _UNHELD, _UNMEASURED, recovery_band
 
 
+def _own_recovery(bands: dict[str, list], item: str) -> list:
+    """The focused item's recovery entries, in band order (usually one: a stale_running
+    item is exactly the crash this brief resumes)."""
+    own = []
+    for what, band in bands.items():
+        for r in band:
+            if r.item == item:
+                own.append((what, r))
+    return own
+
+
+def _append_entry(out: list[str], what: str, r, state: State | None, cfg: Config | None) -> None:
+    """One recovery entry's name line and, with a live state, its resume status line."""
+    out.append(f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}")
+    if state is not None:
+        out.append(_resume_line(state, cfg, r, what))
+
+
 def _brief_recovery(
-    out: list[str], recovery: list, *, state: State | None = None, cfg: Config | None = None
+    out: list[str],
+    recovery: list,
+    *,
+    state: State | None = None,
+    cfg: Config | None = None,
+    item: str = "",
 ) -> list[str]:
-    """The RESUME block: every recoverable entry, with what was interrupted and whether
-    ddflow has resumed it -- rendered OUTSIDE the budget, so `brief_max_tokens` never
-    cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns only the
-    lines THIS call appended (not the lines ``out`` already held: duck #1)."""
+    """The RESUME block: the recoverable entries, with what was interrupted and whether
+    ddflow has resumed it -- reserved from the section-trimming pass, but capped to half the
+    budget by `brief()` (B027549013a), which names the overflow here with a `ddflow recover`
+    note (folded B-res-brief-recovery-link). Returns only the lines THIS call appended (not
+    the lines ``out`` already held: duck #1).
+
+    When a brief is ABOUT one item AND that item is itself among the recoverable
+    entries, the item's own entry renders FIRST and every OTHER entry collapses to one
+    count line, so reserving the slice cannot crowd the focused item's own "Current"
+    detail into a ``[N more cut]`` (B-brief-recover-eats-budget). An item that has no
+    recovery entry of its own keeps the per-band list: those are OTHER items' crashes,
+    and warning about them first is the slice's job (DX-recover-brief-slice)."""
     start = len(out)
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
@@ -60,14 +91,26 @@ def _brief_recovery(
         "holds finished work that exists nowhere else.",
         "",
     ]
-    for what, band in bands.items():
-        for r in band[:_RECOVERY_SHOWN]:
-            out.append(f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}")
-            if state is not None:
-                out.append(_resume_line(state, cfg, r, what))
-        if len(band) > _RECOVERY_SHOWN:
-            more = len(band) - _RECOVERY_SHOWN
-            out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
+    own = _own_recovery(bands, item)
+    if own:
+        # A brief about the crashed item itself: its own entry first, the rest counted.
+        # The item's own entries are capped too (a stray/repeated scan could yield several
+        # for one item): the same _RECOVERY_SHOWN bound the every-band loop applies.
+        for what, r in own[:_RECOVERY_SHOWN]:
+            _append_entry(out, what, r, state, cfg)
+        # "other" = entries for a DIFFERENT item: subtract every own entry, not the shown
+        # slice, so a repeated own scan is never relabelled as an unrelated recovery.
+        others = sum(len(band) for band in bands.values()) - len(own)
+        if others:
+            label = "entry" if others == 1 else "entries"
+            out.append(f"- _{others} other recoverable {label}: `ddflow recover` lists them._")
+    else:
+        for what, band in bands.items():
+            for r in band[:_RECOVERY_SHOWN]:
+                _append_entry(out, what, r, state, cfg)
+            if len(band) > _RECOVERY_SHOWN:
+                more = len(band) - _RECOVERY_SHOWN
+                out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
     if count:
         out.append(f"- _{count}_")
     out.append("")
@@ -640,8 +683,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
 
     Ordered by what an agent must not miss: anything needing rescue first, then what
     it is doing, then what it may do next, then the lessons that bear on it. The RESUME
-    slice (recoverable work) is RESERVED and never cut by the budget; when the rest does
-    not fit, each section is cut to its share of the budget
+    slice (recoverable work) is reserved from the section-trimming pass but capped to half
+    the budget (``B027549013a``), with the overflow named by a ``ddflow recover`` note;
+    when the rest does not fit, each section is cut to its share of the budget
     (``_SECTION_SHARE``, B1472311a63) and says what it left out and where it is; what a
     short section does not use goes to the ones after it, head first, so the
     safety-critical head still survives a squeeze -- and no section ahead of them can
@@ -655,7 +699,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     sections.pop(0)
     part = dict(sections)
     reserved: list[str] = []
-    _brief_recovery(reserved, recovery or [], state=state, cfg=cfg)
+    _brief_recovery(reserved, recovery or [], state=state, cfg=cfg, item=item)
     _brief_jobs(part["jobs"], state, item, agent)
     if item:
         _brief_current(
@@ -689,4 +733,24 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     )
     # The RESUME slice opens the pack, before even its own heading line (duck #2): a
     # session that starts after a crash must see recoverable work in the first line.
+    # B027549013a: the slice is reserved from the budget, but BOUNDED to half of it -- the
+    # bound the reports block keeps -- so a focused brief on a busy repo's per-band list of
+    # OTHER crashes cannot starve the item's own Current/decisions/lessons down to nothing.
+    # (The charter is separately clamped by CH.block's own reserve.) `ddflow recover` lists
+    # every entry beyond the bound.
+    bound = max(_SECTION_FLOOR, budget * 2)
+    if len("\n".join(reserved)) > bound:
+        kept: list[str] = []
+        used = 0
+        for line in reserved:
+            if used + len(line) + 1 > bound:
+                break
+            kept.append(line)
+            used += len(line) + 1
+        kept.append("")
+        kept.append(
+            "_more recoverable entries past the slice's bound: `ddflow recover` lists them._"
+        )
+        kept.append("")
+        reserved = kept
     return _assemble(reserved + head, sections, budget * 4, note, charter, item)

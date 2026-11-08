@@ -53,6 +53,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.similar",
     ),
     "tomllib": (
+        "ddflow.adapters.tools",
         "ddflow.api.harness_drv",
         "ddflow.api.plan",
         "ddflow.api.record_lifecycle",
@@ -70,6 +71,8 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.context_families",
         "ddflow.services.docscheck",
         "ddflow.services.doctypes.spec",
+        "ddflow.services.driverpacks",
+        "ddflow.services.driverplugins",
         "ddflow.services.gates.drift",
         "ddflow.services.guidance.fileformat",
         "ddflow.services.harness",
@@ -88,12 +91,14 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.upgrade_manifest",
     ),
     "shutil": (
+        "ddflow.adapters.fs",
         "ddflow.api.chore",
         "ddflow.api.operations",
         "ddflow.infra.forge",
         "ddflow.infra.paths",
         "ddflow.infra.signals",
         "ddflow.infra.worktree",
+        "ddflow.infra.worktree._create",
         "ddflow.services.adopt._launch",
         "ddflow.services.backups",
         "ddflow.services.ci.scratch",
@@ -108,6 +113,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.lane_headless",
         "ddflow.services.lanes.opencode",
         "ddflow.services.launchers",
+        "ddflow.services.mergedrivers",
         "ddflow.services.repro_facts",
         "ddflow.services.roborev",
         "ddflow.services.roborev_branch",
@@ -119,6 +125,19 @@ BASELINE: dict[str, tuple[str, ...]] = {
     "fsio": (),
     "hashlib": (),
     "clock-env": (
+        "ddflow.adapters.acp",
+        "ddflow.adapters.clock",
+        "ddflow.adapters.entropy",
+        "ddflow.adapters.env",
+        "ddflow.adapters.fakes.entropy",
+        "ddflow.adapters.fs",
+        "ddflow.adapters.fsio",
+        "ddflow.adapters.git",
+        "ddflow.adapters.mcp",
+        "ddflow.adapters.notify",
+        "ddflow.adapters.proc",
+        "ddflow.adapters.proc_server",
+        "ddflow.adapters.resources",
         "ddflow.api._base",
         "ddflow.api._dedupe",
         "ddflow.api.approvals",
@@ -128,7 +147,8 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.api.cirun",
         "ddflow.api.firstcall",
         "ddflow.api.healthwatch",
-        "ddflow.api.items",
+        "ddflow.api.items._edit",
+        "ddflow.api.items._resolve",
         "ddflow.api.jobs",
         "ddflow.api.lane_views",
         "ddflow.api.lifecycle._common",
@@ -141,40 +161,52 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.api.lifecycle.heartbeat",
         "ddflow.api.lifecycle.reservations",
         "ddflow.api.lifecycle.wait",
+        "ddflow.api.mergequeue_start",
         "ddflow.api.metrics",
         "ddflow.api.operations",
+        "ddflow.api.reporting.digest",
         "ddflow.api.reporting.overview",
         "ddflow.api.reporting.recovery",
         "ddflow.api.reporting.recovery_notes",
         "ddflow.api.reporting.views",
-        "ddflow.api.reporting.waitcycles",
+        "ddflow.api.reporting.vigil",
         "ddflow.api.review.gate",
+        "ddflow.api.review.run",
         "ddflow.api.surf_mcp",
         "ddflow.api.watch",
         "ddflow.api.workflow_state",
         "ddflow.config._core",
         "ddflow.core.clock",
         "ddflow.core.ids",
+        "ddflow.core.leasesnap",
         "ddflow.core.progress.models",
         "ddflow.core.schedule._plan",
         "ddflow.infra.claimref",
         "ddflow.infra.container",
-        "ddflow.infra.fsio",
-        "ddflow.infra.git",
         "ddflow.infra.harness_identity",
         "ddflow.infra.localstore",
         "ddflow.infra.log",
+        "ddflow.infra.log._agent",
+        "ddflow.infra.log._eventlog",
+        "ddflow.infra.log._guard",
+        "ddflow.infra.log._lock",
+        "ddflow.infra.log._read",
+        "ddflow.infra.log._tier",
         "ddflow.infra.paths",
-        "ddflow.infra.proc",
         "ddflow.infra.signals",
+        "ddflow.infra.store._fingerprint",
         "ddflow.infra.store._projection",
         "ddflow.infra.store._schema",
+        "ddflow.infra.threads",
         "ddflow.infra.treeactivity",
         "ddflow.infra.worktree",
+        "ddflow.infra.worktree._diff",
+        "ddflow.infra.worktree._paths",
         "ddflow.mcpshim.probe_server",
         "ddflow.services.approvals.audit",
         "ddflow.services.approvals.harness",
         "ddflow.services.approvals.view",
+        "ddflow.services.auth",
         "ddflow.services.backups",
         "ddflow.services.bisect",
         "ddflow.services.branchsync",
@@ -195,6 +227,7 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.enforce.hooks",
         "ddflow.services.enforce.leasecheck",
         "ddflow.services.engines.probe",
+        "ddflow.services.export.ops",
         "ddflow.services.export.write",
         "ddflow.services.flakes",
         "ddflow.services.flowstate",
@@ -209,11 +242,12 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.grants",
         "ddflow.services.healthwatch",
         "ddflow.services.identity",
-        "ddflow.services.importer",
+        "ddflow.services.importer._plan",
         "ddflow.services.inbox",
         "ddflow.services.install_info",
         "ddflow.services.jobs",
         "ddflow.services.lane_headless",
+        "ddflow.services.lanerelease",
         "ddflow.services.lanes.capacity",
         "ddflow.services.lanes.endpoint",
         "ddflow.services.lanes.opencode",
@@ -224,25 +258,29 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.leases",
         "ddflow.services.logfixture",
         "ddflow.services.mergequeue",
+        "ddflow.services.meters",
         "ddflow.services.metrics.forecast",
         "ddflow.services.model_stamp",
         "ddflow.services.onboard_tests",
         "ddflow.services.onboard_verify",
         "ddflow.services.orphan_suites",
+        "ddflow.services.perf.env",
         "ddflow.services.pins",
         "ddflow.services.pins_merge",
+        "ddflow.services.probe",
         "ddflow.services.quota",
         "ddflow.services.redact_report",
         "ddflow.services.repro_facts",
         "ddflow.services.reprocheck",
         "ddflow.services.review.engine",
+        "ddflow.services.review.model",
         "ddflow.services.review.runner",
         "ddflow.services.review_keys",
         "ddflow.services.roborev",
         "ddflow.services.schedule",
         "ddflow.services.search",
         "ddflow.services.selfupgrade",
-        "ddflow.services.sessions",
+        "ddflow.services.sessions._record",
         "ddflow.services.shardmarks",
         "ddflow.services.slots",
         "ddflow.services.startcost",
@@ -268,7 +306,11 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.surfaces.commands.setup",
         "ddflow.surfaces.context",
         "ddflow.surfaces.ifacesnap",
-        "ddflow.surfaces.mcp",
+        "ddflow.surfaces.mcp._handlers",
+        "ddflow.surfaces.mcp._instructions",
+        "ddflow.surfaces.mcp._offload",
+        "ddflow.surfaces.mcp._serve",
+        "ddflow.surfaces.mcp._server",
         "ddflow.surfaces.mcp_heartbeat",
         "ddflow.surfaces.mcp_protocol",
         "ddflow.surfaces.mcp_upgrade",
@@ -302,28 +344,63 @@ def test_default_scan_reports_every_family():
 
 def test_violations_are_importers_outside_the_home():
     reports = _families(A.scan(ROOT))
-    assert reports["subprocess"].home == ("ddflow.infra.proc", "ddflow.infra.git")
+    assert reports["subprocess"].home == ("ddflow.adapters.proc", "ddflow.adapters.proc_server")
     assert reports["subprocess"].violations == ()
-    assert reports["fsio"].home == ("ddflow.infra.fsio",)
-    assert reports["hashlib"].home == ("ddflow.core.digest",)
-    assert reports["tomlkit"].home == ("ddflow.infra.tomlcfg",)
+    assert reports["fsio"].home == ("ddflow.adapters.fsio",)
+    assert reports["hashlib"].home == ("ddflow.adapters.digest",)
+    assert reports["tomllib"].home == ("ddflow.adapters.toml",)
+    assert reports["tomlkit"].home == ("ddflow.infra.tomlcfg", "ddflow.adapters.toml")
     assert reports["http"].home == ("ddflow.adapters.http",)
     assert "ddflow.adapters.http" in reports["http"].importers
     assert "ddflow.adapters.http" not in reports["http"].violations
 
 
+def _ratchet_gaps(
+    actual: dict[str, A.FamilyReport],
+    baseline: dict[str, tuple[str, ...]],
+) -> tuple[list[str], dict[str, list[str]], dict[str, list[str]]]:
+    """Every family's ratchet drift at once: names not in the baseline, families that GREW
+    (a new importer outside the home) and families that SHRANK (a baseline entry no longer
+    imports). One pass over the whole census, so a failure names every drifted family, not
+    just the first one the loop hits (B068d551e89)."""
+    unknown = sorted(set(actual) - set(baseline))
+    grew: dict[str, list[str]] = {}
+    removed: dict[str, list[str]] = {}
+    for name, want in baseline.items():
+        report = actual.get(name)
+        got = set(report.violations) if report is not None else set()
+        if got - set(want):
+            grew[name] = sorted(got - set(want))
+        if set(want) - got:
+            removed[name] = sorted(set(want) - got)
+    return unknown, grew, removed
+
+
 def test_ratchet_violations_match_baseline():
-    actual = _families(A.scan(ROOT))
-    unknown = set(actual) - set(BASELINE)
-    assert not unknown, f"new dependency family not in the committed baseline: {sorted(unknown)}"
-    for name, base in BASELINE.items():
-        got = set(actual[name].violations)
-        want = set(base)
-        if got != want:
-            grew = sorted(got - want)
-            removed = sorted(want - got)
-            assert not grew, f"{name}: NEW importer(s) outside its declared home: {grew}"
-            assert not removed, f"{name}: lower its baseline by removing {removed}"
+    unknown, grew, removed = _ratchet_gaps(_families(A.scan(ROOT)), BASELINE)
+    assert not (unknown or grew or removed), (
+        "ratchet drift reported for EVERY family at once — "
+        f"not-in-baseline={unknown}; "
+        f"grew (NEW importer outside its declared home)={grew}; "
+        f"shrank (lower the baseline by removing)={removed}"
+    )
+
+
+def test_ratchet_reports_every_family_at_once():
+    # Two families drift at once: the report names BOTH, not just the first one the loop
+    # would hit (B068d551e89): alpha grew and beta shrank in the same census. gamma is in
+    # the baseline but has NO importer left (a vanished third-party package): the report
+    # must not KeyError, and its stale entries read as removed.
+    actual = {
+        "alpha": A.FamilyReport("alpha", ("a",), ("home",), ("home", "stray")),
+        "beta": A.FamilyReport("beta", ("b",), (), ()),
+    }
+    unknown, grew, removed = _ratchet_gaps(
+        actual, {"alpha": (), "beta": ("gone",), "gamma": ("orphan",)}
+    )
+    assert unknown == []
+    assert grew == {"alpha": ["stray"]}
+    assert removed == {"beta": ["gone"], "gamma": ["orphan"]}
 
 
 def test_fake_returns_the_reports_it_is_given():

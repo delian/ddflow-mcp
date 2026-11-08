@@ -85,7 +85,7 @@ def test_an_old_index_of_other_code_is_collected_on_rebuild(log, repo, cfg):
 def test_the_read_snapshot_is_per_version(repo, monkeypatch):
     log = L.EventLog(repo / ".ddflow" / "events")
     here = log._snapshot_path()
-    monkeypatch.setattr(L, "running_version", lambda: "9.9.9")
+    monkeypatch.setattr(L._read, "running_version", lambda: "9.9.9")
     there = log._snapshot_path()
     assert here != there and here.parent == there.parent
     assert here.name.startswith("read-snapshot-") and here.suffix == ".bin"

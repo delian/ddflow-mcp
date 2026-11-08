@@ -7,6 +7,7 @@ unchanged; these tests only ever answer as a person at a terminal.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ import pytest
 
 from ddflow.config import Config
 from ddflow.core import clock
+from ddflow.core.digest import content_digest
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
@@ -124,17 +126,61 @@ def test_an_approval_cannot_be_widened_to_another_item_gate_agent_or_verb(log):
     assert asks_of(_state(log))[filed.id]["used"] == 0  # none of them spent it
 
 
-def test_another_agent_cannot_spend_my_approval(log, repo):
+def test_an_approval_binds_the_action_not_the_agent(log, repo):
+    """B86be969daf: the digest binds the command (verb, item, target, args, state), never the
+    agent, so a different agent re-running the SAME action still cannot decide for itself --
+    and yet a WIDENED action (a different item/gate/args/verb) is refused even by a same-named
+    process. The spend is recorded under whoever ran it."""
     cfg = Config()
     filed = _approved(log, cfg)
     thief = EventLog(repo, "thief")
-    got = C.operator_gate(thief, cfg, _canon(agent="thief"), approval_id=filed.id, now=T0 + 1)
-    assert not got.ok  # the digest binds the agent, and the request was asker's
-    got = C.spend(thief, _canon(agent="asker"), filed.id, now=T0 + 1)
-    # Agent names are self-declared (`--agent`), so a process that NAMES itself asker is asker:
-    # the binding stops one agent spending another's approval by accident, not impersonation.
-    assert got.ok is True
-    assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "asker"
+    got = C.spend(thief, _canon(agent="thief"), filed.id, now=T0 + 1)
+    assert got.ok is True  # the same action (item+target+state), a different agent: allowed
+    assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "thief"
+
+
+def test_a_successor_lane_spends_a_predecessors_unspent_approval(log, repo):
+    """B86be969daf: a lane files, is approved, then dies unnamed; a successor lane re-claiming
+    the SAME item+state may spend the already-granted answer instead of the answer being
+    owner-gated to the dead agent and expiring unused."""
+    cfg = Config()
+    filed = _approved(log, cfg)  # requested by "asker" (the dead lane)
+    successor = EventLog(repo, "successor")
+    # the same verb/item/target/state, filed by a DIFFERENT agent: the digest matches and
+    # the answer is spent, so the successor is not stranded behind a dead agent's answer.
+    got = C.operator_gate(
+        successor, cfg, _canon(agent="successor"), approval_id=filed.id, now=T0 + 1
+    )
+    assert got.ok and asks_of(_state(log))[filed.id]["used"] == 1
+    assert asks_of(_state(log))[filed.id]["consumed"][0]["by"] == "successor"
+
+
+def test_a_pre_fix_agent_bound_approval_is_still_spent_by_a_successor(log, repo):
+    """B86be969daf migration: an approval filed BEFORE the fix stored its digest over the
+    requesting agent (the legacy v1 record signed ``agent``). After the fix the actor is out of
+    the digest, but the legacy digest must still match, or the already-granted answer strands.
+
+    The legacy digest is built from a hardcoded pre-fix record literal (the actor present), not
+    from the new ``canon.digest_named`` helper, so the test pins the old byte format itself."""
+    cfg = Config()
+    canon = _canon()  # agent="asker", the pre-fix requester
+    legacy_rec = {
+        "v": 1, "verb": canon.verb, "agent": "asker", "item": canon.item,
+        "target": canon.target, "args": dict(canon.args), "state": canon.state,
+    }  # fmt: skip
+    legacy = content_digest(json.dumps(legacy_rec, sort_keys=True, separators=(",", ":")))
+    asked = E.request(
+        log, cfg, subject=canon.subject(), digest=legacy, command=R.command_of(canon, cfg)
+    )  # fmt: skip
+    E.answer(
+        log, cfg, asked.id, "approved", actor=A.resolve_actor(cfg, "me"),
+        digest=legacy, level=0, now=T0,
+    )  # fmt: skip
+    successor = EventLog(repo, "successor")
+    got = C.operator_gate(
+        successor, cfg, _canon(agent="successor"), approval_id=asked.id, now=T0 + 1
+    )  # fmt: skip
+    assert got.ok and asks_of(_state(log))[asked.id]["used"] == 1
 
 
 def test_the_state_changing_since_the_request_needs_a_new_approval(log):
@@ -274,3 +320,40 @@ def test_a_row_without_a_recorded_level_still_counts_as_a_terminals_word():
     assert E.verified_level({"level": 0, "via": "cli"}) == 1
     assert E.verified_level({"level": -1, "via": ""}) == 1
     assert E.verified_level({}) == 1
+
+
+def test_complete_approval_request_reason_names_one_refusal(log):
+    """B-approval-refusal-doubled-prefix: `complete --approval request` once read
+    'refusing: refusing: ...' -- `consume.operator_gate` already prefixes its refusal and
+    `api/lifecycle/complete/approval._approved_force` prefixed it again. The refusal an
+    operator acts on carries exactly one prefix, on BOTH refusal paths `_approved_force`
+    hands back: a filed request (`--approval request`) and a refused spend (a real id), and
+    it names the conditions the approval would override (they live only in ``blockers``)."""
+    from ddflow.api.lifecycle.complete.approval import _approved_force
+
+    cfg = Config()
+    blockers = ["a required gate is not passed"]
+    # "request" files a request (`operator_gate` -> `R.file` -> "refusing: " + route);
+    # "Qnope" is a real id the spend refuses (`spend` -> "refusing: {why}."). The old caller
+    # prepended "refusing: " to either, stacking the prefix.
+    for approval in ("request", "Qnope"):
+        ok, _stamp, why = _approved_force(log, cfg, "fix-X", blockers, approval, "bot")
+        assert not ok, approval
+        assert why.startswith("refusing: "), (approval, why)
+        assert not why.startswith("refusing: refusing: "), (approval, why)
+        assert blockers[0] in why, (approval, why)
+
+
+def test_operator_gate_owns_the_refusing_prefix_on_the_steering_refusal(log):
+    """B-consume-refusal-prefix-owner: `operator_gate` is the single owner of the
+    'refusing: ' prefix on every refused Decision, including the no-approval steering
+    message (`auto` False, no `--approval request`). That path used to come back
+    unprefixed, so callers recovered the refusal/prompt distinction from prose: config.set
+    passed it through verbatim while phase_complete sniffed `startswith('refusing: ')` --
+    the contract encoded two different ways. Now every refusal is prefixed exactly once
+    and callers pass the message through untouched."""
+    cfg = Config()
+    steer = C.operator_gate(log, cfg, _canon(), auto=False)
+    assert not steer.ok
+    assert steer.message.startswith("refusing: "), steer.message
+    assert not steer.message.startswith("refusing: refusing: "), steer.message

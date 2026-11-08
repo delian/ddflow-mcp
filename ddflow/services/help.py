@@ -128,6 +128,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "lanes",
             "health",
+            "vigil",
             "metrics",
             "docs",
             "board",
@@ -145,6 +146,10 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "When something is wrong",
         ("doctor", "upgrade", "recover", "loops", "rebuild", "replay", "cadence", "bisect"),
+    ),
+    (
+        "Reading the queue",
+        ("waves", "digest"),
     ),
     ("Help", ("help",)),
 )

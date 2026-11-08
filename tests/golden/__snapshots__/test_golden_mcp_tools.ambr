@@ -480,7 +480,7 @@
     'ddflow_memory': '''
       {
        "name": "ddflow_memory",
-       "description": "Lessons, memories, recall and record links. Set `action`; required arguments in brackets: lesson_verify, lesson_add(title), lesson_search(query), recall(query), similar(text), dupes, link(subject,relation,target), add(text), list, forget(id,reason).",
+       "description": "Lessons, memories, recall and record links. Set `action`; required arguments in brackets: lesson_verify, lesson_add(title), lesson_search(query), recall(query), similar(text), dupes, link(subject,relation,target), add(text), list, forget(id,reason), lesson_show(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -604,7 +604,8 @@
            "link",
            "add",
            "list",
-           "forget"
+           "forget",
+           "lesson_show"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -650,6 +651,14 @@
          "allow_empty": {
           "type": "boolean",
           "description": "Land a branch with no commits ahead of its target (refused by default: usually the wrong tree; rebind with ddflow_update worktree)."
+         },
+         "force": {
+          "type": "boolean",
+          "description": "With [merge].require_gates = refuse: land although required gates are unsettled; recorded as a merge.forced event naming them. An agent also needs `approval`."
+         },
+         "approval": {
+          "type": "string",
+          "description": "An agent's way past [merge].require_gates = refuse with `force`: 'request' asks the operator, then the approval id they answered (bound to this exact merge, single-use, not spent by a refused call)."
          },
          "branch": {
           "type": "string",
@@ -818,7 +827,7 @@
     'ddflow_session': '''
       {
        "name": "ddflow_session",
-       "description": "The session log. Set `action`; required arguments in brackets: note(text), end(session), prompt(text), start, ask(verb), asks, withdraw(id), message(to,text).",
+       "description": "The session log. Set `action`; required arguments in brackets: note(text), end(session), prompt(text), start, ask(verb), asks, withdraw(id), message(to,text), inbox.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -864,7 +873,7 @@
          },
          "reason": {
           "type": "string",
-          "description": "Why (shown to the person as untrusted)."
+          "description": "ask: Why (shown to the person as untrusted). message: Why it wakes the receiver."
          },
          "all": {
           "type": "boolean",
@@ -888,7 +897,8 @@
            "ask",
            "asks",
            "withdraw",
-           "message"
+           "message",
+           "inbox"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -1151,7 +1161,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, digest, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1313,7 +1323,7 @@
          },
          "view": {
           "type": "string",
-          "description": "state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane)."
+          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks or swarm."
          },
          "lane": {
           "type": "string",
@@ -1343,6 +1353,10 @@
           "type": "boolean",
           "description": "With interfaces: print the ratchet baseline text instead of the report."
          },
+         "ask": {
+          "type": "string",
+          "description": "One entry id (kind:key) to render alone, as the ask to put to the person."
+         },
          "stamp": {
           "type": "boolean",
           "description": "Write the derived wave:N tags."
@@ -1365,6 +1379,8 @@
            "health",
            "docs",
            "archdeps",
+           "vigil",
+           "digest",
            "waves"
           ],
           "description": "What to do; see the tool description for each action's arguments."

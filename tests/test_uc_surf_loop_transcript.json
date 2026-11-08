@@ -212,7 +212,7 @@
   ],
   3,
   "",
-  "T2 is not ready: deps — T1 is running\nUse --force only if you mean to start it anyway.\n\nYou could take instead: T4, T5\nto ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
+  "T2 is not ready: deps — T1 is running\nUse --force only if you mean to start it anyway.\n\nYou could take instead: T4, T5\nrefusing: to ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
  ],
  [
   [
@@ -633,7 +633,7 @@
   ],
   2,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,pair,tokens,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
+  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
  ],
  [
   [
@@ -842,7 +842,7 @@
   ],
   0,
   "merged T3 (<hex>) into main\n",
-  "merging ddflow/T3 into main ...\nmerged T3 into main (<hex>); the merge is done and recorded\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n"
+  "merging ddflow/T3 into main ...\nmerged T3 into main (<hex>); the merge is done and recorded\nmerged T3 with required gates unsettled: implement=not run, unit_tests=not run. The item is merged, awaiting gates; settle them (`ddflow gate status T3`), then `ddflow complete T3`.\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n  merged, awaiting gates: implement=not run, unit_tests=not run\n"
  ],
  [
   [
@@ -909,7 +909,7 @@
   ],
   0,
   "merged T5 (<hex>) into main\n",
-  "merging ddflow/T5 into main ...\nmerged T5 into main (<hex>); the merge is done and recorded\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n  refusing to remove <repo>/.ddflow/worktrees/T5: 1 uncommitted file(s), 0 unmerged commit(s). Inspect with `git -C <repo>/.ddflow/worktrees/T5 diff main`; pass --force once you are certain.\n"
+  "merging ddflow/T5 into main ...\nmerged T5 into main (<hex>); the merge is done and recorded\nmerged T5 with required gates unsettled: implement=not run, unit_tests=not run. The item is merged, awaiting gates; settle them (`ddflow gate status T5`), then `ddflow complete T5`.\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n  refusing to remove <repo>/.ddflow/worktrees/T5: 1 uncommitted file(s), 0 unmerged commit(s). Inspect with `git -C <repo>/.ddflow/worktrees/T5 diff main`; pass --force once you are certain.\n  merged, awaiting gates: implement=not run, unit_tests=not run\n"
  ],
  [
   [
@@ -927,7 +927,7 @@
   ],
   3,
   "",
-  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\nto ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
+  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\nrefusing: to ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
  ],
  [
   [
@@ -1033,8 +1033,8 @@
    "--keep"
   ],
   0,
-  "{\n  \"schema\": \"merge@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"branch_head\": \"<hex>\",\n  \"base\": \"main\",\n  \"pr\": \"\",\n  \"branch\": \"ddflow/T9\",\n  \"outside_globs\": [],\n  \"outside_globs_unknown\": null,\n  \"merge_gate_human\": false,\n  \"worktree\": \"<repo>/.ddflow/worktrees/T9\",\n  \"worktree_removed\": false,\n  \"queued\": null,\n  \"state\": null,\n  \"position\": null,\n  \"eta_s\": null\n}\n",
-  "merging ddflow/T9 into main ...\nmerged T9 into main (<hex>); the merge is done and recorded\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n"
+  "{\n  \"schema\": \"merge@1\",\n  \"id\": \"T9\",\n  \"sha\": \"<hex>\",\n  \"branch_head\": \"<hex>\",\n  \"base\": \"main\",\n  \"pr\": \"\",\n  \"branch\": \"ddflow/T9\",\n  \"outside_globs\": [],\n  \"outside_globs_unknown\": null,\n  \"merge_gate_human\": false,\n  \"worktree\": \"<repo>/.ddflow/worktrees/T9\",\n  \"worktree_removed\": false,\n  \"awaiting_gates\": [\n    \"implement=not run\",\n    \"unit_tests=not run\"\n  ],\n  \"gate_states\": {\n    \"implement\": \"not run\",\n    \"unit_tests\": \"not run\"\n  },\n  \"forced\": false,\n  \"queued\": null,\n  \"state\": null,\n  \"position\": null,\n  \"eta_s\": null\n}\n",
+  "merging ddflow/T9 into main ...\nmerged T9 into main (<hex>); the merge is done and recorded\nmerged T9 with required gates unsettled: implement=not run, unit_tests=not run. The item is merged, awaiting gates; settle them (`ddflow gate status T9`), then `ddflow complete T9`.\npost-merge check: nothing to run (no [ci].command and no .pre-commit-config.yaml: there is nothing to run)\npost-merge check finished (nothing to check); committing the event log\n  merged, awaiting gates: implement=not run, unit_tests=not run\n"
  ],
  [
   [

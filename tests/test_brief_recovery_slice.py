@@ -181,3 +181,60 @@ def test_many_entries_keep_the_slice_bounded_and_its_cap_named(repo):
     assert "**W5**" not in region and "**W6**" not in region, region
     # The RUNNING item nobody holds is still on the list beside seven holding trees.
     assert "**T1** (stale_running" in text, text
+
+
+def test_a_focused_brief_keeps_its_own_sections_with_many_other_crashes(repo):
+    """B027549013a: a focused brief about an item that is NOT itself recoverable must not
+    let the per-band RESUME list of OTHER crashes (plus the charter) starve the item's own
+    Current, decisions and lessons down to bare headings. The reserved slice is bounded, so
+    the item's own detail keeps its share of the budget."""
+    log = _seed(repo, ["T9", *[f"W{i}" for i in range(8)]])
+    # A decision and lessons that bear on T9, and a charter of rule titles: the reports
+    # bug spent the budget on those PLUS the recovery list, so Current/decisions/lessons
+    # came back as headings with only a "more cut" line.
+    log.append(
+        "decision.recorded",
+        "D0",
+        {
+            "title": "decision about T9",
+            "decision": "the zebra cache is rotated by size, not age.",
+            "globs": ["src/T9.py"],
+        },
+    )
+    for i in range(4):
+        log.append(
+            "lesson.recorded",
+            f"L{i}",
+            {
+                "title": f"lesson {i}",
+                "rule": f"zebra rule {i}",
+                "why": "a rotation without a flush lost writes",
+            },
+        )
+    for i in range(8):
+        claim = LC.claim(repo, f"W{i}", agent="crashed")
+        wt = Path(claim.data["worktree"])
+        (wt / "work.py").write_text("x = 1\n")
+        log.append(
+            "lease.acquired",
+            f"W{i}",
+            {
+                "holder": "crashed",
+                "at": 1900.0,
+                "ttl_s": 60,
+                "worktree": str(wt),
+                "branch": claim.data["branch"],
+            },
+        )
+    run_cli(repo, "config", "session.brief_max_tokens", "600")
+    out = LC.brief(repo, item="T9", check_recovery=True, agent="next")
+    assert out.exit == 0, out.reason
+    text = out.data["text"]
+    # The sections the bug reported starved keep their body, not a bare heading: the slice
+    # is bounded, so the item's Current detail, Ready and its decision still render (the
+    # recovery list no longer eats the whole budget first).
+    assert "## Current: T9" in text, text[:6000]
+    assert "kind `task`" in text, text[:6000]
+    assert "## Ready now" in text, text[:6000]
+    assert "## Architectural decisions governing these files" in text, text[:6000]
+    assert "D0" in text, text[:6000]

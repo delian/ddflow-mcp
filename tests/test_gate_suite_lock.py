@@ -31,8 +31,16 @@ def test_a_full_suite_unit_tests_gate_queues_behind_the_holder(tmp_path, monkeyp
 
 def test_a_free_lock_runs_the_gate_and_records_the_wait(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    outcome, ev = R.run_command_gate(_gate("true"), tmp_path, cfg=_cfg())
+    outcome, ev = R.run_command_gate(_gate("touch ran"), tmp_path, cfg=_cfg())
     assert outcome == "passed" and "waited_s" in ev, ev
+
+
+def test_a_noop_unit_tests_gate_runs_while_another_holds_the_lock(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    with SL.hold(_cfg(0.0), "other-agent"):
+        outcome, ev = R.run_command_gate(_gate("true"), tmp_path, cfg=_cfg(0.0))
+    assert outcome == "passed", ev
+    assert "blocked on" not in ev.get("reason", "")
 
 
 def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
@@ -57,6 +65,41 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
         assert R._runs_whole_suite(_gate(locked)), locked
 
 
+def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    for no_op in (
+        "true",
+        ":",
+        "false",
+        "/bin/false",
+        "env true",
+        "env -i true",
+        "command true",
+        "A=B",
+    ):
+        assert not R._runs_whole_suite(_gate(no_op)), no_op
+    assert not R._runs_whole_suite(_gate("pytest tests/test_a.py")), "a narrowed run names tests"
+
+
+def test_a_nontrivial_suite_command_keeps_the_lock(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    # Suite runners the config documents (pytest and non-pytest) run a real suite: they lock.
+    for runner in ("pytest -q -n auto", "npm test", "cargo test", "go test ./...", "make check"):
+        assert R._runs_whole_suite(_gate(runner)), runner
+    # A shell compound whose first word is a no-op still runs a suite, so it keeps the lock.
+    for compound in (
+        "echo ok && pytest",
+        "true; make check",
+        "echo $(pytest)",
+        "true &&pytest",
+        "true <(pytest)",
+        "./test",
+    ):
+        assert R._runs_whole_suite(_gate(compound)), compound
+
+
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     # a host far over its load mark: the clamp alone would give one worker
@@ -64,7 +107,7 @@ def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
         R.WK.S.HostSignals, "sample", lambda self: {"load": 9.0, "memory_free_frac": 0.9}
     )
     cfg = _cfg()
-    suite = R.run_command_gate(_gate("true -n {workers}"), tmp_path, cfg=cfg)[1]
+    suite = R.run_command_gate(_gate("pytest -n {workers} --version"), tmp_path, cfg=cfg)[1]
     other = R.run_command_gate(_gate("true -n {workers}", "lint"), tmp_path, cfg=cfg)[1]
     assert suite["workers"]["n"] == cfg.ci.suite_min_workers > 1, suite
     assert other["workers"]["n"] == 1, other

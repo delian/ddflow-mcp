@@ -175,9 +175,13 @@ def _terminated_gate(
             f"the review was terminated by {signame} before a reviewer finished: "
             f"{_NOTHING_REVIEWED}"
         )
+        # The record carries WHAT killed it (bug B-ddflow-review-force-duplicate-round): a
+        # later run over the same record must be able to say "this repeats an attempt whose
+        # reviewers were paid and their findings lost", not re-run it as a fresh round.
         _record(
             repo, log, cfg, st, item, gate, "unavailable", called_from, gates,
-            reason=reason, evidence={"review_kind": "delta"},
+            reason=reason,
+            evidence={"review_kind": "delta", "status": "UNAVAILABLE", "terminated_by": signame},
         )  # fmt: skip
         return reason
     evidence: dict[str, Any] = {
@@ -187,6 +191,16 @@ def _terminated_gate(
         "reviewed": reviewed,
         "chunk_findings": [fd for f in files for fd in f.findings()],
     }
+    # What a RESUME needs to skip the finished chunks (bug Bd8c4e1d8d6): the cut's identity,
+    # checkpointed by the runner the moment it knew the chunks. Without it a later run cannot
+    # tell which chunk numbers still mean something, so it re-runs every chunk from scratch.
+    plan = next((f.plan_meta() for f in files if f.plan_meta()), {})
+    for key in ("reviewer", "diff_sha", "chunks_total", "max_chunk_chars", "wanted"):
+        if key in plan:
+            evidence[key] = plan[key]
+    evidence.setdefault(
+        "coverage", f"{len(reviewed)}/{evidence.get('chunks_total') or '?'} chunk(s) reviewed"
+    )
     for f in files:
         evidence.update(f.evidence())
     reason = (
@@ -241,10 +255,16 @@ def _terminated(args: dict[str, Any], signame: str, started_at: str) -> O.Outcom
 
 def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
     repo, log, cfg, st, it, item: str, gate: str, outcome: str,
-    *, called_from, gates, say, best, results, keeps, extra_evidence, scope,
+    *, called_from, gates, say, best, results, keeps, extra_evidence, scope, named=None,
 ) -> str:  # fmt: skip
     """Write the review's outcome against ``it`` and say so; the outcome recorded (a pass
-    over untriaged findings of an earlier round is held, see `_hold`)."""
+    over untriaged findings of an earlier round is held, see `_hold`).
+
+    ``best`` is the identifying pass -- its status/coverage/kept reply -- while ``named`` is
+    the reviewer the record NAMES: for a failed gate, the one whose finding blocked it (bug
+    B3113b1f522), else ``best``. Naming the failing reviewer must not re-purpose a PARTIAL
+    reviewer as the identifying pass (which would misstate the round's coverage)."""
+    named = best if named is None else named
     taken, kind, done, forced, how, diff_chars, snapshot = scope
     evidence = {
         **best.evidence(),
@@ -256,6 +276,11 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         **(extra_evidence or {}),
         **snapshot,
     }
+    if named is not best:
+        # Attribution only: the identifying pass's status/coverage stay `best`'s.
+        evidence["reviewer"] = named.reviewer
+        evidence["model"] = named.model
+        evidence["family"] = named.family
     reviewed = (
         _reviewed_findings(results) if results is not None else best.evidence()["chunk_findings"]
     )
@@ -283,7 +308,7 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
         evidence["held_pass"] = True
     _record(
         repo, log, cfg, st, item, gate, outcome, called_from, gates,
-        reason=reason, evidence=evidence, by=best.model,
+        reason=reason, evidence=evidence, by=named.model,
     )  # fmt: skip
     if linked:
         say(
@@ -291,8 +316,8 @@ def _record_review(  # noqa: PLR0913 -- everything the run knew when it finished
             f"refuted triage (bug B74d5c39e6e): the claim was already refuted, its probe "
             "stands on this gate too"
         )
-    say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})")
-    _say_triage_scope(say, results, best)
+    say(f"\nrecorded {item}.{gate} = {outcome} (reviewer {named.reviewer}, family {named.family})")
+    _say_triage_scope(say, results, named)
     return outcome
 
 

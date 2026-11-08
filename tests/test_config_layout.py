@@ -14,6 +14,7 @@ import ast
 import dataclasses
 import importlib
 import pkgutil
+import re
 from pathlib import Path
 
 import ddflow.config as C
@@ -85,6 +86,60 @@ def test_every_section_comes_from_its_module_and_is_re_exported():
         assert cls.__module__.startswith(config_sections.__name__ + "."), (section, cls)
         assert getattr(C, cls.__name__) is cls, f"ddflow.config.{cls.__name__} is not re-exported"
     assert len(set(_section_types().values())) == len(SECTION_MODULES)
+
+
+def test_a_section_modules_public_tables_are_re_exported():
+    """B-config-reexport-lost-export-table-keys: the package split dropped a public
+    name of `config.py`. `config_sections` states `ddflow.config` re-exports every name
+    it defines; a pre-split public table must stay importable from `ddflow.config`."""
+    from ddflow.config_sections import export
+
+    assert hasattr(C, "EXPORT_TABLE_KEYS"), "ddflow.config dropped EXPORT_TABLE_KEYS"
+    assert C.EXPORT_TABLE_KEYS is export.EXPORT_TABLE_KEYS
+
+
+def test_a_section_is_wired_from_declare_not_a_kept_list():
+    """B-config-section-needs-hub-edit: a section is named only by its own `@declare()`.
+
+    `Config` assembles its fields, and `ddflow.config` its re-exports, from the
+    `SECTION_CLASSES` registry `declare()` populates -- `_core.py` no longer hand-lists a
+    field per section and `config/__init__.py` no longer re-exports a `*Config` name per
+    section, so a new section no longer takes a lease on either hub file. On the unfixed
+    code `_core.py` still hand-listed each field, so this test's source (`SECTION_CLASSES`)
+    did not exist and it failed to import."""
+    from ddflow.config_sections._docs import SECTION_CLASSES
+
+    assert _section_types() == dict(SECTION_CLASSES)
+    for cls in SECTION_CLASSES.values():
+        assert getattr(C, cls.__name__) is cls
+    # The mechanism, not just the mapping it yields: `_core.py` must not hand-list a field
+    # per section (the hub edit this bug removes). Its bookkeeping fields read
+    # `field(default_factory=list/dict/...)`; a hand-kept section field would read
+    # `<name>: <Something>Config = field(`.
+    core_src = (CONFIG_DIR / "_core.py").read_text("utf-8")
+    assert not re.search(r":\s*\w+Config\s*=\s*field\(", core_src), (
+        "_core.py hand-lists a section field again; Config must assemble its fields from "
+        "SECTION_CLASSES"
+    )
+    # The other hub file: `config/__init__.py` re-exports each `<Something>Config` class
+    # lazily through `__getattr__`, so no section class name may be spelled there either.
+    init_src = CONFIG_INIT.read_text("utf-8")
+    spelled = sorted(cls.__name__ for cls in SECTION_CLASSES.values() if cls.__name__ in init_src)
+    assert not spelled, "ddflow.config re-exports section classes by hand again: " + ", ".join(
+        spelled
+    )
+
+
+def test_a_star_import_binds_the_section_classes():
+    """B-config-section-needs-hub-edit: `from ddflow.config import *` binds the section
+    classes, which lazy `__getattr__` alone would not (a star-import reads `__dict__` or
+    `__all__`, never `__getattr__`; `__all__` must name them)."""
+    from ddflow.config_sections._docs import SECTION_CLASSES
+
+    namespace: dict[str, object] = {}
+    exec("from ddflow.config import *", namespace)
+    assert namespace["AgentConfig"] is SECTION_CLASSES["agent"]
+    assert namespace["LeaseConfig"] is SECTION_CLASSES["lease"]
 
 
 def test_the_knob_docs_are_one_registry():

@@ -27,7 +27,7 @@ from ddflow.adapters import ports as P
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
 PORTS_PATH = PKG / "adapters" / "ports.py"
-BASELINES = PKG.parent / "tests" / "ports_without_fake"
+BASELINES = PKG.parent / "tests" / "guard_baselines" / "ports_without_fake"
 
 
 def _ports() -> dict[str, type]:
@@ -222,7 +222,7 @@ def test_a_single_adapter_family_has_no_name_and_a_multi_adapter_family_has_one(
 
 #: The ceiling the baseline may never exceed: the ports still without a fake when the ratchet
 #: began. A SHRINK-ONLY ratchet (D-unify 4): a fake lands with the task that migrates its
-#: home and its file in `tests/ports_without_fake/` is deleted in the same
+#: home and its file in `tests/guard_baselines/ports_without_fake/` is deleted in the same
 #: change; a file for any other port fails here, so a new port cannot be excused.
 _CEILING = frozenset({"Proc", "Git", "Fsio", "Toml", "Forge"})
 
@@ -247,7 +247,7 @@ def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
     )
     assert not (baseline & have), (
         f"{sorted(baseline & have)} now have a fake: delete their files in "
-        "tests/ports_without_fake/ so the ratchet shrinks."
+        "tests/guard_baselines/ports_without_fake/ so the ratchet shrinks."
     )
     assert have <= ports, f"a fake for no port: {sorted(have - ports)}"
 

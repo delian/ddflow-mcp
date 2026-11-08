@@ -72,8 +72,13 @@ def complete_phase(
         )
         decided = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
         if not decided.ok:
+            # `operator_gate` owns the 'refusing: ' prefix on every refusal, steering
+            # message included (B-consume-refusal-prefix-owner): pass it through untouched.
             return O.refused(
-                KIND, "refusing: " + decided.message, id=phase_id, approval=decided.ask_id
+                KIND,
+                decided.message,
+                id=phase_id,
+                approval=decided.ask_id,
             )
         stamp = {"approval": decided.stamp}
     by = agent or "operator"

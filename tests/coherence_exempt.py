@@ -12,6 +12,7 @@ _CONFIG = "who changed a setting or approved a tool; the setting itself lives in
 #: Every other kind, and why it is not duplicate-checked. The gate records of an item
 #: (`GATE_RECORDS`, state) are exempt by name below.
 EXEMPT: dict[str, str] = {
+    "merge.forced": "gate names and an approval stamp only; no claim about code to check",
     "token.revoked": "records a credential's end; its reason is the operator's note, not a checkable claim",
     "token.issued": "records who holds a credential; it carries no checkable project text",
     "probe.recorded": "a machine record of a conflict probe: refs, shas and paths, no authored text",
