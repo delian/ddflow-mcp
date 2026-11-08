@@ -66,6 +66,25 @@ def gate_waits(ctx: Context) -> dict[str, list[float]]:
     return out
 
 
+def gate_untimed(ctx: Context) -> dict[str, int]:
+    """gate -> RAN outcomes inside the view the log gave no duration for (no ``gate.started``
+    since the last verdict and no recorded ``elapsed_s``): the subset ``gate_durations`` drops,
+    named so the gate-time figure reads over a KNOWN sample, not a silently smaller one
+    (B28537b615d)."""
+    last_verdict: dict[tuple[str, str], float] = {}
+    untimed: dict[str, int] = defaultdict(int)
+    for o in sorted(ctx.facts.outcomes, key=lambda o: o.at):
+        key = (o.item, o.gate)
+        floor = last_verdict.get(key, 0.0)
+        last_verdict[key] = o.at
+        if o.kind not in RAN or not ctx.in_scope(o.item, o.at):
+            continue
+        began = [t for t in ctx.facts.starts.get(key, ()) if floor <= t <= o.at]
+        if not began and o.elapsed_s is None:
+            untimed[o.gate] += 1
+    return untimed
+
+
 def review_rounds(ctx: Context) -> list[int]:
     """Review verdicts per item completed inside the view, over its whole life (0 for an item whose reviews were all skipped)."""
     counts: Counter[str] = Counter(
@@ -184,10 +203,13 @@ def build(ctx: Context, group_by: str = "gate") -> dict:
     for o, secs in gate_durations(ctx):
         per_gate[o.gate].append(secs)
     waits = gate_waits(ctx)
+    untimed = gate_untimed(ctx)
     gate_time = [
         {
             "gate": g,
             **stat(v, minimum),
+            # RAN outcomes this gate's duration figure left out (no started, no elapsed_s).
+            "untimed": untimed.get(g, 0),
             **{f"wait_{k}": x for k, x in stat(waits.get(g, []), minimum).items()},
         }
         for g, v in sorted(per_gate.items())

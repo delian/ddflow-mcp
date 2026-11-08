@@ -314,6 +314,17 @@ def test_ci_run_records_the_ci_gate_with_the_commit_it_ran_against(repo, monkeyp
     assert res.data["sha"][:12] in json.dumps(gate)
 
 
+def test_ci_run_records_the_runs_elapsed_time(repo, monkeypatch):
+    """Bug B28537b615d: `ddflow ci run` recorded the ci gate with no elapsed_s (and no
+    gate.started), so `ddflow metrics` dropped the run for the gate-time figure. The run's
+    own elapsed time is now recorded on the gate."""
+    _item_with_ci(repo, monkeypatch)
+    res = A.run(repo, ref="T1")
+    assert res.exit == 0 and res.data["recorded"]["ok"], res.data
+    ev = _ci_gate(repo)["evidence"]
+    assert "elapsed_s" in ev and ev["elapsed_s"] >= 0, ev
+
+
 def test_a_nested_ci_run_inside_the_ci_gate_does_not_record_twice(repo, monkeypatch):
     _item_with_ci(repo, monkeypatch)
     monkeypatch.setenv(A.IN_GATE_ENV, "ci")

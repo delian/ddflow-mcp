@@ -184,14 +184,17 @@ def _merged_once(repo, cfg, sha, base, cmd, decide):
         return _busy_result(cmd, sha, busy)
 
 
-def _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used) -> Result:
+def _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used) -> Result:
     """The settled `Result` of a run past its verdict: a timeout or a run that never started is its
-    own Result, anything else is the command's Result, in both cases with the seconds it queued."""
+    own Result, anything else is the command's Result, in both cases with the seconds it queued and
+    the seconds the command itself ran."""
     if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
         unfinished.waited_s = waited
+        unfinished.elapsed_s = round(elapsed, 1)
         return unfinished
     res = _result(p, out_prefix, cmd, sha, base, scope)
     res.waited_s = waited
+    res.elapsed_s = round(elapsed, 1)
     if scope is None and used:
         res.scope = {"workers": used}
     return res
@@ -244,7 +247,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     def without_slot(tree, cmd, scope):
         if stale := _stale_pins(tree, cfg, base, custom=override):
             return Result("failed", command=cmd, sha=sha, reason=stale)
-        p, out_prefix, waited = _run_locked(
+        p, out_prefix, waited, elapsed = _run_locked(
             cfg,
             holder,
             tree,
@@ -255,7 +258,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             used,
             False,
         )
-        return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
+        return _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
 
     def scoped_run(tree):
         # A selected run plans the scope now: run without the slot if it fits, else return None so
@@ -284,7 +287,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
         return _merged_once(repo, cfg, sha, base, cmd, terse_run)
 
     try:
-        p, out_prefix, waited, cmd, scope = _run_under_slot(
+        p, out_prefix, waited, cmd, scope, elapsed = _run_under_slot(
             cfg,
             holder,
             repo,
@@ -301,7 +304,7 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     if p is None:  # the fresh merge refused the run: a conflict, or stale pins
         out_prefix.waited_s = waited
         return out_prefix
-    return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
+    return _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
 
 
 def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan):
@@ -309,9 +312,10 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
     before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
     B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
     returns the tree's (scoped command, scope) or the Result that refuses it. Returns
-    ``(run, out_prefix, waited, cmd, scope)``: ``run`` is the process, or None with ``out_prefix``
-    the Result that refused the fresh merge. The queue wait (`[ci].suite_wait_s`) is separate from
-    ``budget``: the run keeps its whole budget however long it queued (B4f35548c0a)."""
+    ``(run, out_prefix, waited, cmd, scope, elapsed)``: ``run`` is the process, or None with
+    ``out_prefix`` the Result that refused the fresh merge and ``elapsed`` None (no command ran).
+    The queue wait (`[ci].suite_wait_s`) is separate from ``budget``: the run keeps its whole
+    budget however long it queued (B4f35548c0a)."""
     waited = None
     queued_at = time.monotonic()
     with SL.hold(cfg, holder):
@@ -319,15 +323,15 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
         with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
             if tree is None:
                 status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
-                return None, Result(status, command=cmd, sha=sha, reason=failure), waited, cmd, None
+                return None, Result(status, command=cmd, sha=sha, reason=failure), waited, cmd, None, None
             planned = plan(tree)
             if isinstance(planned, Result):
-                return None, planned, waited, cmd, None
+                return None, planned, waited, cmd, None, None
             cmd, scope = planned
-            p, out_prefix = _execute(
+            p, out_prefix, elapsed = _execute(
                 cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used
             )
-            return p, out_prefix, waited, cmd, scope
+            return p, out_prefix, waited, cmd, scope, elapsed
     raise AssertionError("unreachable: SL.hold raises SuiteBusy instead of yielding past here")
 
 
@@ -343,10 +347,10 @@ def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
     with SL.hold(cfg, holder) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
-        p, out_prefix = _execute(
+        p, out_prefix, elapsed = _execute(
             cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
         )
-    return p, out_prefix, waited
+    return p, out_prefix, waited, elapsed
 
 
 def _unfinished(p, cmd: str, sha: str, scope) -> Result | None:
@@ -535,6 +539,7 @@ def _run_stages(
         on_tick=on_tick,
         tick_s=tick_s,
     )
+    spent = p.elapsed_s  # the run's own wall time, summed across its stages (B28537b615d)
     unran: set[str] = set()  # stages whose process never started, or was killed: not a failure
     if selected:
         scope.unran = unran
@@ -544,8 +549,8 @@ def _run_stages(
     if not (selected and p.ran and p.code == 0):
         if selected:
             _say_what_ran(scope, unran)
-        return p, ""
-    before, spent = p.output, p.elapsed_s
+        return p, "", spent
+    before = p.output
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
     red = None  # the selection, when it ran and failed: the guards still run after it
@@ -574,7 +579,7 @@ def _run_stages(
     if red is not None:
         p = _selection_verdict(red, p, unran)
     _say_what_ran(scope, unran)
-    return p, before
+    return p, before, spent
 
 
 def _selection_verdict(red, guards, unran: set[str]):

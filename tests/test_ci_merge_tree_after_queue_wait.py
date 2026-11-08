@@ -28,6 +28,7 @@ def test_the_fresh_merge_happens_inside_the_suite_slot(monkeypatch):
         lambda cfg, tree, cmd, scope, budget, tick, **kw: (
             NS(kind="", ran=True, code=0, output=""),
             "",
+            0.0,
         ),
     )
 

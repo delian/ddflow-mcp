@@ -56,6 +56,7 @@ def test_the_run_timeout_does_not_override_the_suite_wait(monkeypatch):
         lambda cfg=None, tree=None, cmd=None, scope=None, budget=None, tick=None, holding_suite=False, used=None: (
             NS(kind="", ran=True),
             "",
+            0.0,
         ),
     )
     CI._run_locked(Config(), CI._holder(None, "HEAD"), None, "", None, 7200, None, {}, True)
