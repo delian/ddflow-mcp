@@ -212,7 +212,8 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
         # B5279acad6f: an item that declares no globs matches nothing by path, so the
         # glob-governed decisions (the ones that actually overlap the work) are never
         # matched. One project-wide row then reads as the complete answer; say the path
-        # check could not run instead of returning it as success.
+        # check could not run instead of returning it as success. The project-wide
+        # decisions still apply, so this stays O.ok -- only the warning is added.
         data["path_unmatched"] = (
             "the item declares no globs, so decisions governed by path cannot be matched"
         )
@@ -221,13 +222,6 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
             "decision.applicable",
             f"No architectural decisions govern {item}'s files "
             f"({', '.join(it.globs) or 'no globs declared'}).",
-            **data,
-        )
-    if no_globs:
-        return O.nothing(
-            "decision.applicable",
-            f"{item} declares no globs: decisions governed by path cannot be matched, "
-            f"so the listed project-wide decisions are not the complete governing set.",
             **data,
         )
     return O.ok("decision.applicable", **data)

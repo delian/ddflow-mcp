@@ -97,12 +97,14 @@ def test_project_wide_decisions_apply_to_everything(proj):
 
 def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
     """B5279acad6f: a no-globs item matches nothing by path, so one project-wide row
-    reads as the complete governing set; say the path check could not run instead."""
+    reads as the complete governing set; the path check skipped must be said, while the
+    project-wide decision still applies."""
     run_cli(proj, "task", "add", "P1.T3", "--phase", "P1", "--title", "template")
     _add(proj, title="Restart window", decision="restart the whole host nightly")
     code, out, _ = run_cli(proj, "decision", "applicable", "P1.T3")
-    assert code == NOTHING, code
+    assert code == OK, code
     assert "path matching could not run" in out, out
+    assert "Restart window" in out, out
 
 
 def test_the_brief_carries_the_governing_decisions(proj):
