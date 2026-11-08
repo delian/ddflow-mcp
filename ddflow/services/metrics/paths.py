@@ -56,19 +56,38 @@ def _steps(ctx: Context, item: str, outs: list[Outcome]) -> list[dict]:
                 "elapsed_s": o.elapsed_s,
                 "round": o.round,
                 "tree_sha": o.tree_sha,
+                "review_id": o.review_id,
+                "combined_gates": list(o.combined_gates),
             }
         )
     return steps
 
 
+def _bursts(windows: list[tuple[float, float]]) -> list[dict]:
+    """The maximal sets of (transitively) overlapping process windows: each burst is one
+    ``(start, end)`` union with the count of runs in it and its union seconds."""
+    bursts: list[dict] = []
+    for start, end in sorted(windows):
+        if bursts and start <= bursts[-1]["end"]:
+            bursts[-1]["end"] = max(bursts[-1]["end"], end)
+            bursts[-1]["runs"] += 1
+        else:
+            bursts.append({"start": start, "end": end, "runs": 1})
+    for b in bursts:
+        b["seconds"] = b["end"] - b["start"]
+    return bursts
+
+
 def _item(ctx: Context, item: str, outs: list, durations: list[tuple[Outcome, float]]) -> dict:
-    """One item's path: its ordered process windows and the summed/union process time."""
+    """One item's path: ordered process windows, their bursts, and the summed/union time."""
     outs = sorted(outs, key=lambda o: o.at)
+    windows = [(o.at - secs, o.at) for o, secs in durations]
     return {
         "item": item,
         "process_sum_s": sum(secs for _, secs in durations),
-        "process_union_s": _union_s([(o.at - secs, o.at) for o, secs in durations]),
+        "process_union_s": _union_s(windows),
         "n_process": len(durations),
+        "bursts": _bursts(windows),
         "steps": _steps(ctx, item, outs),
     }
 
@@ -122,7 +141,8 @@ def text(data: dict) -> str:
     if data["unavailable"]:
         out += ["", "unavailable (not zero):"]
         out += [f"  {k}: {why}" for k, why in sorted(data["unavailable"].items())]
-    out.append(f"next: {data['next']['cli']}")
+    nxt = data["next"]
+    out.append(f"next: {nxt['cli']}  |  {nxt['mcp']}")
     return "\n".join(out)
 
 

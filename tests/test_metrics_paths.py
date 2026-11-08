@@ -78,3 +78,23 @@ def test_the_union_correction_is_reported():
     assert u["union"]["p50_s"] == pytest.approx(150)
     assert u["saved_by_union"]["p50_s"] == pytest.approx(50)
     assert "paths" in M.VIEWS
+
+
+def test_a_merged_gate_keeps_review_id_combined_gates_and_bursts():
+    log = Log()
+    log.add("phase.added", "P1", "lead", T0 - 2000, title="p1", body="")
+    log.add("task.added", "A", "lead", T0 - 1000, title="A", body="", parent="P1")
+    log.claim("a1", "A", T0, "f.py")
+    log.add(
+        "gate.passed", "A", "a1", T0 + 100, gate="rubber_duck", by="r1",
+        evidence={"model": "m", "elapsed_s": 10, "round": 2, "tree_sha": "abc",
+                  "review_id": "rev-9", "combined_gates": ["ci", "unit_tests"]},
+    )  # fmt: skip
+    log.complete("a1", "A", T0 + 300)
+    log.release("a1", "A", T0 + 301)
+    ans = run(log)
+    (path,) = ans.metrics["paths"]
+    (step,) = [s for s in path["steps"] if s["gate"] == "rubber_duck"]
+    assert step["review_id"] == "rev-9"
+    assert step["combined_gates"] == ["ci", "unit_tests"]
+    assert path["bursts"][0]["runs"] == 1  # the lone process is one burst

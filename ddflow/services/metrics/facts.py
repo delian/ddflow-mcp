@@ -51,6 +51,11 @@ class Outcome:
     round: int | None = None
     #: The tree (or reviewed head) a review round covered; "" when the verdict carried none.
     tree_sha: str = ""
+    #: A merged review's id (``review_id``), "" when the verdict recorded one gate not a merge.
+    review_id: str = ""
+    #: The gates merged into one recorded call (``combined_gates``), oldest first; empty for
+    #: a verdict that recorded a single gate (D-path-merge-answers merges bookkeeping gates).
+    combined_gates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -176,6 +181,10 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         tier=str(evidence.get("independence_tier") or ""),
         round=_round_number(evidence),
         tree_sha=str(evidence.get("tree_sha") or evidence.get("reviewed_head") or ""),
+        review_id=str(evidence.get("review_id") or ""),
+        combined_gates=tuple(
+            g for g in evidence.get("combined_gates", ()) if isinstance(g, str)
+        ),
     )
 
 
