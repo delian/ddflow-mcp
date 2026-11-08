@@ -234,14 +234,15 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
 
 
 def _detach_stop(pid: int) -> str:
-    """The shell command that stops the WHOLE detached review: `kill -- -{pid}`.
+    """The shell command that stops the WHOLE detached review: `kill -TERM -{pid}`.
 
     `pid` is the detached SESSION leader the job launcher reported -- a `/bin/sh -c` wrapper
     under `setsid` (bug B-review-detach-prints-launcher-pid). A plain `kill <pid>` stops only
     that wrapper and leaves the python review running; killing the process GROUP (a negative
-    pid) reaches the review itself.
+    pid, signal named so `--` is not needed and no shell reads `-{pid}` as an option) reaches
+    the review itself.
     """
-    return f"kill -- -{pid}"
+    return f"kill -TERM -{pid}"
 
 
 def _detach_note(pid: int, log: str) -> str:

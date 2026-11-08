@@ -254,7 +254,7 @@ def test_detach_note_names_a_stop_command_that_reaches_the_review():
     assert "review detached" in note
     # the stop command kills the group (negative pid), which is what `setsid` created: the
     # printed pid is the session leader, and only the group kill reaches the review itself.
-    assert "kill -- -2618834" in note
+    assert "kill -TERM -2618834" in note
     assert "/tmp/review.log" in note
 
 
@@ -287,5 +287,26 @@ def test_detach_emits_a_stop_command_in_the_prose_and_the_data(monkeypatch):
         out=out,
     )
     assert CR._detach(a, c) == CR.OK
-    assert "kill -- -2618834" in captured["human"]
-    assert captured["data"]["stop"] == "kill -- -2618834"
+    assert "kill -TERM -2618834" in captured["human"]
+    assert captured["data"]["stop"] == "kill -TERM -2618834"
+
+
+def test_detach_stop_command_stops_the_process_group(tmp_path):
+    """The stop command `_detach_stop` returns must STOP a live process GROUP -- the pid is
+    the setsid session leader, and only a group kill reaches the review (bug B-review-
+    detach-prints-launcher-pid). Spawn a setsid session leader like the launcher does, run
+    the returned command from a shell, and assert the leader was SIGTERMed."""
+    from ddflow.surfaces.commands import review as CR
+
+    leader = subprocess.Popen(
+        ["setsid", "sleep", "60"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        subprocess.run(["bash", "-c", CR._detach_stop(leader.pid)], check=True, timeout=30)
+        leader.wait(timeout=5)
+        assert leader.returncode == -signal.SIGTERM
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(leader.pid, signal.SIGKILL)
