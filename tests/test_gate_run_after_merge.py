@@ -106,9 +106,9 @@ def test_a_forced_gate_run_after_merge_takes_the_fresh_measurement(repo):
 def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
     """B-merged-partial-rerun-records-unavailable: a merged item whose base moved on has no
     tree, so `gate run` re-measures nothing and `_no_tree_reason` recorded UNAVAILABLE over
-    the measured partial -- erasing baseline-red, the only evidence `ddflow approve` accepts.
-    A measured partial must be kept like a pass, and the message must say only a person can
-    settle it."""
+    the partial -- erasing the evidence. A partial must be kept like a pass. The hand-recorded
+    partial here is NOT a measured baseline-red, so the advice must not point at an `approve`
+    that would refuse it (rubber_duck round 1)."""
     _merged(repo, partial_before=True)
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
@@ -117,7 +117,53 @@ def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
     text = out + err
     assert code != 0, text
     assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
-    assert "a person can settle" in text
+    assert "only a person's re-record" in text
+
+
+def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
+    """The `ddflow approve` advice is real only for a MEASURED baseline-red partial: that is
+    the one gate_accept accepts, so it alone may say "a person can settle it" with the
+    approve command (rubber_duck round 1)."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "cfg")
+    run_cli(repo, "task", "add", "T1", "--title", "t")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "t.txt").write_text("x\n")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "-qm", "work")
+    log = EventLog(repo, "ddflow-gate-run")
+    log.append(
+        "gate.partial",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "by": "ddflow",
+            "reason": "baseline-red: tests/t.py::test_x, bug B1",
+            "evidence": {
+                "baseline": {
+                    "red": True,
+                    "base": "main",
+                    "ids": ["tests/t.py::test_x"],
+                    "auto": {"accepted": False, "why": "failing test file the item changes"},
+                }
+            },
+        },
+    )
+    assert run_cli(repo, "merge", "T1")[0] == 0
+    (repo / "later.txt").write_text("later\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "later work on main")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
+    assert "a person can settle it" in text
+    assert "ddflow approve" in text
 
 
 def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
