@@ -122,9 +122,8 @@ def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
     check that folds the killed hook into 'exit -15' with no failing tests."""
     from types import SimpleNamespace
 
-    from ddflow.services.cmdrunner import CommandRun
-
     from ddflow.services.ci.runner import _result
+    from ddflow.services.cmdrunner import CommandRun
 
     p = CommandRun(
         "ran",
@@ -151,7 +150,12 @@ def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
     )
     killed_stage = CommandRun("ran", code=-15)
     res = _result(
-        killed_stage, "ruff check.....................Passed\n", "pre-commit run", "sha0", "base0", scope
+        killed_stage,
+        "ruff check.....................Passed\n",
+        "pre-commit run",
+        "sha0",
+        "base0",
+        scope,
     )
     assert res.status == "unavailable", res.status
     assert not any(not c.ok for c in res.checks), res.checks

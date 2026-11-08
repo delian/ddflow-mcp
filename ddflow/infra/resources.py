@@ -4,7 +4,7 @@ This shim stays until its import sites import `ddflow.adapters.resources` direct
 deleted.
 """
 
-from ddflow.adapters.resources import *  # noqa: F401,F403  # re-export the whole module
+from ddflow.adapters.resources import *  # noqa: F403  # re-export the whole module
 from ddflow.adapters.resources import (  # noqa: F401  # the historical names
     DELTA,
     UNAVAILABLE,
