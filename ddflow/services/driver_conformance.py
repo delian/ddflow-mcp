@@ -34,7 +34,7 @@ def run(h) -> dict:
     if fact_problems:
         checks["facts"] = {"status": "failed", "detail": "; ".join(fact_problems)}
     else:
-        checks["facts"] = {"status": "ok", "detail": f"{len(fact_rows)} fact(s), all well-formed"}
+        checks["facts"] = {"status": "ok", "detail": f"{len(fact_rows)} fact row(s), all well-formed"}
 
     if h.hooks is not None and h.hooks.style in HR.COMMAND_HOOK_STYLES:
         # The plan is built from the descriptor in hand, not re-fetched by id: a local

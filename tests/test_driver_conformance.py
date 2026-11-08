@@ -78,7 +78,7 @@ def test_the_facts_overlay_is_total_and_well_formed(hid):
     assert result["checks"]["facts"]["status"] == "ok", (hid, result)
 
 
-def test_run_reports_failed_when_a_command_hooked_agent_has_no_plan(monkeypatch):
+def test_run_reports_failed_when_a_command_hooked_agent_has_an_unresolved_normalizer(monkeypatch):
     from types import SimpleNamespace
 
     from ddflow.services import harnessfacts
