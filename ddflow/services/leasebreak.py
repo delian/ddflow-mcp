@@ -256,11 +256,21 @@ def stale_glob_updates(st: State, tracked: Iterable[str]) -> list[tuple[str, lis
     return out
 
 
+def _tree_files(repo: Path) -> list[str] | None:
+    """The default branch's tracked file paths (`git ls-tree -r --name-only <default>`), or
+    ``None`` when git could not list them. A stale package glob is judged against THIS tree
+    (B-stale-globs-after-split-wave) -- a module that became a package on the default
+    branch -- not the current index, which a branch made before/after a split would answer
+    wrong (a claim or `--fix-stale-globs` from a stale checkout must not retarget onto a
+    package main does not yet have, nor miss one main already has)."""
+    return W.git_paths(repo, "ls-tree", "-r", "--name-only", W.default_branch(repo))
+
+
 def stale_glob_notes(repo: Path, st: State) -> list[str]:
-    """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
-    lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
-    Each is named with the corrected glob and the command that applies it."""
-    tracked = W.git_paths(repo, "ls-files")
+    """Unfinished items whose `x.py` glob names a module that is now the package `x/` on the
+    default branch: a lease on it covers none of the package's files, so overlaps go unseen
+    (B56dc2baaf6). Each is named with the corrected glob and the command that applies it."""
+    tracked = _tree_files(repo)
     if tracked is None:  # "could not tell" is said, never read as "nothing stale"
         return ["stale task globs not checked: git could not list the tracked files"]
     notes = []

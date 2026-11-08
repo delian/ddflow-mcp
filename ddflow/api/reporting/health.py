@@ -83,7 +83,7 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list
     parts held back against another live lease is a note that says so."""
     from .. import items as _items
 
-    tracked = W.git_paths(repo, "ls-files")
+    tracked = LBR._tree_files(repo)
     if tracked is None:
         return ["stale task globs not fixed: git could not list the tracked files"], []
     problems: list[str] = []
@@ -96,7 +96,7 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list
             continue
         withheld = out.data.get("globs_withheld") or []
         if withheld:
-            notes.append(f"{item_id}: globs partly corrected; withheld: {', '.join(withheld)}")
+            problems.append(f"{item_id}: globs partly corrected; withheld: {', '.join(withheld)}")
         else:
             notes.append(f"{item_id}: globs corrected to {', '.join(corrected)}")
     return problems, notes

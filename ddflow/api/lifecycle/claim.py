@@ -192,7 +192,7 @@ def _correct_stale_package_globs(
     globs = want if want is not None else list(claimed.globs if claimed is not None else [])
     if not any(g.endswith(".py") for g in globs):
         return want, []
-    tracked = W.git_paths(repo, "ls-files")
+    tracked = W.git_paths(repo, "ls-tree", "-r", "--name-only", W.default_branch(repo))
     if tracked is None:
         return want, ["stale package globs not checked: git could not list the tracked files"]
     stale = stale_package_globs(globs, tracked)
