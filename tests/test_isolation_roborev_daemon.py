@@ -33,26 +33,23 @@ def _alive(pid: int) -> bool:
 
 
 _PR_SET_PDEATHSIG = 1
-_LIBC = ctypes.CDLL("libc.so.6", use_errno=True)  # loaded here: dlopen is not fork-safe
-
-
-def _arm_parent_death_signal() -> None:
-    """Kill the daemon if the process that forked it (the pytest worker) dies first.
-
-    ``start_new_session=True`` detaches the daemon, so a worker killed or interrupted between
-    ``_spawn`` and the teardown used to orphan it to init, where it kept holding its unix
-    socket over a deleted database (B2d2c474d47). ``PR_SET_PDEATHSIG`` makes the kernel
-    signal the daemon the moment its spawner dies, so no orphan survives teardown.
-    """
-    _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)
-    if os.getppid() == 1:
-        # The worker died before exec re-parented us to init: the armed signal will never
-        # come, so do not even start the daemon (the fork-to-prctl window B2d2c474d47 kept).
-        os._exit(1)
+_LIBC = ctypes.CDLL("libc.so.6", use_errno=True)
+_PRCTL = _LIBC.prctl  # resolve the symbol before any fork: a dlsym in the child is not async-safe
 
 
 def _spawn(home: Path) -> subprocess.Popen:
     env = dict(os.environ, HOME=str(home))
+    parent = os.getpid()  # the worker whose death must take the daemon with it
+
+    def _arm_parent_death_signal() -> None:
+        # Kill this child when the worker that forked it dies first, instead of orphaning it
+        # to init (or a subreaper) holding its unix socket over a deleted database.
+        _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL)
+        if os.getppid() != parent:
+            # The worker died before ``prctl`` armed the signal: a subreaper has re-parented
+            # us, so no signal will ever come -- do not even start the daemon (B2d2c474d47).
+            os._exit(1)
+
     return subprocess.Popen(
         ["roborev", "daemon", "run", "--addr", f"unix://{home / 'roborev.sock'}"],
         env=env,
