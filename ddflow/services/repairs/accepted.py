@@ -145,7 +145,7 @@ def gate(
     return (
         f"accepting history needs a person ({who}): re-run with `--approval request` "
         f"(MCP: approval=request) and the person answers in chat; or run it yourself in your own "
-        f"terminal. {decision.message}",
+        f"terminal.\n{decision.message}",
         {},
     )
 
