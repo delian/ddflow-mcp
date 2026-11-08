@@ -664,6 +664,7 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
             tick_s=tick_s,
             only=only,
             on_chunk=keep.add if item else None,
+            on_plan=keep.plan if item else None,
             manifest=RM.for_review(diff, skipped, cfg),
             chunk_max_tokens=cfg.review.chunk_max_tokens,
             split_rounds=cfg.review.split_rounds,
