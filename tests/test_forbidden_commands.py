@@ -168,6 +168,10 @@ def test_refused_comment_quote_spans_lines(cmd):
         "cat <(echo hi)#; git stash -q",
         # a `$((...))` arithmetic expansion's outer `)` keeps the `#` literal too
         "echo $((1+2))#; git push origin main",
+        # a nested `( ... )` subshell (or nested parens) inside the substitution must not make
+        # `_find_body` take the first `)` for the close, so `git push` after `)#;` is still seen
+        "echo $( (echo hi) )#; git push origin main",
+        "echo $(((1+1)))#; pkill -f myserver",
         # nested: the `#` after the inner <(...) is literal inside the outer $() body, so
         # `git push` runs there and must still be refused
         'echo "$(cat <(echo hi)#; git push origin main)"',

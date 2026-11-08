@@ -269,8 +269,9 @@ def _has_esac(text: str, n: int, k: int) -> bool:
 
 
 def _find_body(text: str, n: int, bodies: list[str], sub_close: set[int], j: int, closer: str) -> int:
-    """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
-    substitutions inside are navigated but mark no newline. An escaped closer is not the end."""
+    """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes,
+    substitutions and a nested `( ... )` subshell inside are navigated (so the first plain `)`
+    is not taken for this body's close) but mark no newline. An escaped closer is not the end."""
     k = j
     while k < n:
         c = text[k]
@@ -279,6 +280,10 @@ def _find_body(text: str, n: int, bodies: list[str], sub_close: set[int], j: int
         if _comment(text, k, j, sub_close):
             k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
             k = k2 if k2 >= 0 else n
+        elif closer == ")" and c == "(":
+            # a nested ( ... ) subshell: its plain `)` (and a `#` after it) is not this body's
+            # close, so skip to one past it (groq critic: `echo $( (echo hi) )#; git push`).
+            k = _find_body(text, n, bodies, sub_close, k + 1, ")") + 1
         elif closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
             k = _case_end(text, n, k, bodies, sub_close)  # a case's `)` separators end patterns, not this `$(` body
         elif c == "'":
