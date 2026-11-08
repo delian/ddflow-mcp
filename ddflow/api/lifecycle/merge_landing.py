@@ -233,9 +233,9 @@ def _dispose_tree(
 ) -> tuple[bool, str]:
     """(removed, why it was kept) for a landed item's tree.
 
-    NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it is
-    the caller's, or whoever's has that branch checked out. Nor the one the caller stands
-    in: its shell would be left in a deleted directory (B1172da8c35).
+    NEVER remove an ADOPTED tree (another harness created it; ddflow only adopted it). Nor
+    a borrowed one: it is the caller's, or whoever's has that branch checked out. Nor the
+    one the caller stands in: its shell would be left in a deleted directory (B1172da8c35).
     """
     if borrowed:
         return False, f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
