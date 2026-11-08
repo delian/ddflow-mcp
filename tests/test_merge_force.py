@@ -243,6 +243,18 @@ def test_a_person_or_policy_stamp_is_returned_without_a_spend(repo, refuse):
     assert M._spend_after_land(None, None, "T1", None, policy, "") is policy
 
 
+def test_a_failed_post_landing_spend_is_not_stamped_as_a_proof(repo, refuse, monkeypatch):
+    """B527b0a518c (roborev): a spend that fails after the landing returns None, so a refusal
+    text is never recorded under `merge.forced`'s `approval` field as if it were a proof."""
+    from importlib import import_module
+
+    from ddflow.services.approvals import consume as CN
+
+    M = import_module("ddflow.api.lifecycle.merge")
+    monkeypatch.setattr(M.MF, "spend", lambda *a, **k: CN.Decision(False, "refusing: is spent"))
+    assert M._spend_after_land(None, None, "T1", None, "proof", "Qx") is None
+
+
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
     assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "", "")
