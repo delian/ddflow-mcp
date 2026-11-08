@@ -10,8 +10,8 @@ gate evidence. The gate it recorded stays failed: the agent commits the correcti
 re-runs, so a changed file cannot reach the merge with lint drift.
 
 Ruff is run as `uv run ruff` when the project is a uv project with a lockfile (the pinned
-venv the `repo: local` pre-commit hooks use), else the bare `ruff` on PATH -- never a bare
-binary when the project pins a version, so the fix formats with the version the check uses.
+venv the `repo: local` pre-commit hooks use), else the bare `ruff` on PATH -- the pinned venv
+when available, so the fix formats with the version the check uses.
 """
 
 from __future__ import annotations

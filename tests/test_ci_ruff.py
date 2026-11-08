@@ -118,3 +118,14 @@ def test_ruff_autofix_off_leaves_the_drift_for_the_agent(repo, monkeypatch, tmp_
     assert res.data["status"] == "failed", res.data
     assert "corrections" not in res.data, res.data
     assert (wt / "src/a.py").read_text() == "value=1\n", "autofix off must not rewrite the file"
+
+
+def test_safe_files_keeps_only_the_worktrees_own_python_files(tmp_path):
+    """A path that escapes the worktree or reads as a flag is never handed to ruff."""
+    from ddflow.services.ci import ruff
+
+    root = tmp_path / "wt"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "a.py").write_text("x=1\n")
+    kept = ruff._safe_files(root, ["src/a.py", "../etc/x.py", "/abs/x.py", "--flag.py", "README.md"])  # fmt: skip
+    assert kept == ["src/a.py"]
