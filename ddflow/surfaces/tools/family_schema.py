@@ -229,17 +229,20 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     if OP in rest and ACTION in TOOLS[tool]["properties"]:
         rest[ACTION] = rest.pop(OP)
     routed = Routed(tool, rest, f"{name} action={action}")
-    return _problem(routed) or routed
+    return _problem(routed, family) or routed
 
 
-def _problem(routed: Routed) -> str:
+def _problem(routed: Routed, family: Family) -> str:
     """Why the routed call lacks what its member needs ("" when it has it): a required argument
-    missing, or one the member does not take, each said with the action it was asked of."""
+    missing, or one NO action of the family takes (an argument some other action advertises is
+    not unknown -- the union schema offered it, so refusing it here would teach the caller to
+    distrust the schema; B34e7a7001f), each said with the action it was asked of."""
     if missing := missing_required(routed):
         return f"{routed.display}: missing required argument(s): {', '.join(missing)}"
     known = set(member_props(routed.tool))
     known |= set(TOOLS[routed.tool].get("deprecated") or {})
     known |= set(TOOLS[routed.tool].get("arg_aliases") or {})
+    known |= set(_union(family)) - {OP}  # B34e7a7001f: an argument ANY action advertises is known
     if unknown := sorted(set(routed.args) - known):
         return (
             f"{routed.display}: unknown argument(s): {', '.join(unknown)}. "
