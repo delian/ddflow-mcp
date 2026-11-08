@@ -21,7 +21,7 @@ from ...services.approvals import overrides as OVR
 from ...services.completion import changed_paths, readme_report, refine_stale_notes
 from ...services.gates import measured as R
 from ...services.gates import running as RUN
-from ...services.gates.testcmd import counts_of
+from ...services.gates.testcmd import coverage_of
 from ...services.guidance import inject as GI
 from ...views.markdown import new_reports_line
 from .._base import _load
@@ -41,9 +41,7 @@ def _partial_line(it, gate: str) -> str:
     ev = (it.gates[gate].evidence or {}) if it.gates.get(gate) else {}
     coverage = ev.get("coverage")
     if coverage is None or coverage == "":
-        summary = ev.get("summary") or []
-        counts = counts_of(str(summary[-1])) if summary else {}
-        coverage = ", ".join(f"{n} {k}" for k, n in sorted(counts.items())) or "unknown"
+        coverage = coverage_of(ev) or "unknown"
     return f"{gate} ran only partially (coverage: {coverage})"
 
 

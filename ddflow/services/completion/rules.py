@@ -41,7 +41,7 @@ from ..gates import reviewers as GR
 from ..gates.evidence import commit_tree_entries, worktree_entries
 from ..gates.evidence import tree_being_completed as _tree_being_completed
 from ..gates.reviewed_paths import ignorable
-from ..gates.testcmd import counts_of
+from ..gates.testcmd import coverage_of
 from ._changed import changed_paths
 
 
@@ -600,9 +600,7 @@ def _coverage_note(it, gaps: list[str]) -> str:
             # most important one to show.
             coverage = it.gates[g].evidence.get("coverage")
             if coverage is None or coverage == "":
-                summary = it.gates[g].evidence.get("summary") or []
-                counts = counts_of(str(summary[-1])) if summary else {}
-                coverage = ", ".join(f"{n} {k}" for k, n in sorted(counts.items())) or "unknown"
+                coverage = coverage_of(it.gates[g].evidence or {}) or "unknown"
             figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
             parts.append(f"{g} ran only partially (coverage{figure})")
     return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."
