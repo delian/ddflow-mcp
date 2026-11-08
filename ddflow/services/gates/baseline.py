@@ -183,14 +183,14 @@ def auto_decision(
         # it would reach by import or governing cannot be told. What IS still known is the
         # changed-file list (`sel.changed`) and the measurement itself: `red` is only a proof
         # when every failing test was measured on the base AND its failure text was compared
-        # whole-vs-whole (`blind` is empty: a missing branch or base text is an absence of
+        # whole-vs-whole (`uncompared` is empty: a missing branch or base text is an absence of
         # evidence, not a match). Reach is then only needed to attribute a failure to a changed
         # file, so the one thing that still blocks is a failing test FILE the item changed
         # itself (B0f41a2f1d6).
         changed = set(sel.changed)
         if (
             not found.get("unmeasured")
-            and not found.get("blind")
+            and not found.get("uncompared")
             and not [f for f in test_files_of(ids) if f in changed]
         ):
             return {
