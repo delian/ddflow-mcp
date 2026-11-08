@@ -105,3 +105,17 @@ def test_an_unsettled_finding_never_settles_a_stale_round(repo, tmp_path):
     assert out.exit == OK and out.data["passed_on_refutation"] is False
     assert "have no verdict" in out.data["text"]
     assert _gate(repo).outcome == "failed"
+
+
+def test_a_move_outside_the_confirmed_fix_still_blocks_an_all_confirmed_gate(repo, tmp_path):
+    """The relaxation is for the confirmed fix only: an all-confirmed gate whose OTHER file
+    also moved (content no reviewer saw) still does not settle -- the moved file is not the
+    confirmed finding's fix location."""
+    _setup(repo, tmp_path, findings=1)
+    for _ in (1, 2):
+        assert api.review(repo, gate="critic", item="T1").data["outcome"] == "failed"
+    (repo / "f2.py").write_text("y = 1  # unrelated, not the confirmed finding's file\n")
+    out = api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="t passes")
+    assert out.exit == OK and out.data["passed_on_refutation"] is False
+    assert _gate(repo).outcome == "failed", out.data["text"]
+    assert "holds other content" in out.data["text"]

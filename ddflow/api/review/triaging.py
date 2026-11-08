@@ -242,15 +242,7 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
     if not now:
         return f"the tree {item} holds now cannot be read to compare with the round's; {redo}"
     if was != now:
-        moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
-        if moved:  # a test the round did not review is not new work (triage_ignore_globs)
-            seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
-            gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
-            moved = [
-                p
-                for p in moved
-                if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)
-            ]
+        moved = _filtered_moved(repo, it, wt, ev, cfg)
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
@@ -316,13 +308,65 @@ def _reviewed_snapshot(repo: Path, cfg, st, it, called_from) -> dict[str, Any]:
     return {} if snap is None else {RP.REVIEWED_PATHS_FIELD: snap}
 
 
-def _moved_paths(repo: Path, it, wt, recorded) -> list[str] | None:
+def _moved_paths(repo: Path, it, wt, recorded: dict) -> list[str] | None:
     """The changed-set paths whose content differs from the round's `reviewed_paths`; None
     when the round has none (an older round: the whole tree stands) or they cannot be read."""
     if not isinstance(recorded, dict) or wt is None or not wt.exists():
         return None
     now_changed = changed_paths(repo, it)
     return None if now_changed is None else RP.snapshot_differing(recorded, wt, now_changed)
+
+
+def _filtered_moved(repo: Path, it, wt, ev: dict[str, Any], cfg) -> list[str]:
+    """The paths that differ from what the round saw, minus ones `reviewed_other_tree`
+    ignores (triage_ignore_globs); [] when none relevant differ. These are the files the
+    item's tree moved in since the reviewed head."""
+    moved = _moved_paths(repo, it, wt, ev.get(RP.REVIEWED_PATHS_FIELD))
+    if moved:  # a test the round did not review is not new work (triage_ignore_globs)
+        seen, ignore = ev.get(RP.REVIEWED_PATHS_FIELD), cfg.review.triage_ignore_globs or []
+        gone = {p for p in moved if not (wt / p).exists()} if wt is not None else set()
+        moved = [
+            p for p in moved if not RP.ignorable(p, seen, ignore, cfg.review.doc_globs or [], gone)
+        ]
+    return moved or []
+
+
+def _settle_is_only_the_confirmed_fix(
+    counts: dict[str, int], moved: list[str] | None, it, gate: str
+) -> bool:
+    """Whether a stale tree is explained by the fix alone: every finding confirmed (no
+    refutation -- B835d22b138 keeps guarding those) and every moved file cited by a
+    confirmed finding. An all-confirmed gate the fix alone moved can still settle; one any
+    other file moved in cannot (B-review-round-budget-no-fix-path)."""
+    if not counts.get("confirmed") or counts.get("refuted"):
+        return False
+    confirmed = _confirmed_files(it, gate)
+    return bool(moved) and bool(confirmed) and not (set(moved) - confirmed)
+
+
+def _moved_for(repo: Path, cfg, st, item: str, gate: str) -> list[str]:
+    """The files the gate's recorded round saw that moved since (``_filtered_moved``), for
+    checking whether a stale tree is nothing but the confirmed findings' fixes."""
+    it = st.items.get(item)
+    rec = it.gates.get(gate) if it else None
+    if rec is None:
+        return []
+    wt, _held = item_tree(repo, cfg, st, it, None)
+    return _filtered_moved(repo, it, wt, rec.evidence or {}, cfg)
+
+
+def _confirmed_files(it, gate: str) -> set[str]:
+    """The files a gate's CONFIRMED findings cite (their fix locations): a confirmed finding
+    was fixed, so a tree move confined to these files is the fix (B-review-round-budget-
+    no-fix-path), whereas a move outside them is unreviewed content."""
+    files: set[str] = set()
+    for verdict in (it.triage.get(gate, {}) if it is not None else {}).values():
+        if verdict.get("verdict") != "confirmed":
+            continue
+        loc = (verdict.get("location") or "").split(":", 1)[0].strip()
+        if loc:
+            files.add(str(loc))
+    return files
 
 
 def _name_paths(paths: list[str], cap: int = 5) -> str:
@@ -352,8 +396,9 @@ def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str
     if mirrored:
         parts.append(f"(also recorded for {', '.join(mirrored)}: the same finding)")
     it = st.items[item]
+    moved = _moved_for(repo, cfg, st, item, gate)
     settled = _settle_after_cap(
-        log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate)
+        log, cfg, it, gate, counts, stale=reviewed_other_tree(repo, cfg, st, item, gate), moved=moved
     )
     if settled:
         parts.append(settled)
@@ -365,13 +410,16 @@ def _settle_chain(log, cfg, st, repo, item, gate, counts, mirrored) -> tuple[str
             g2,
             GD.triage_counts(it, g2) or {},
             stale=reviewed_other_tree(repo, cfg, st, item, g2),
+            moved=moved,
         )
         if settled2:
             parts.append(settled2)
     return "\n".join(parts), "ON REFUTATION" in settled
 
 
-def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "") -> str:
+def _settle_after_cap(
+    log, cfg, it, gate: str, counts: dict[str, int], *, stale: str = "", moved: list[str] | None = None
+) -> str:
     """What the triage means for a gate whose review budget is spent (decision
     D-gate-economy 2, D-unify 5): "" while rounds remain (a re-review settles it).
 
@@ -386,14 +434,15 @@ def _settle_after_cap(log, cfg, it, gate: str, counts: dict[str, int], *, stale:
     rec = it.gates.get(gate)
     if cap <= 0 or used < cap or rec is None or rec.outcome == "passed":
         return ""
-    if stale and (not counts.get("confirmed") or counts.get("refuted")):
-        # A stale round blocks a pass whenever what it records is a REFUTATION: a refuted
-        # finding says the reviewed tree is fine as it is, so it must be the tree the item
-        # holds now (B835d22b138). A gate whose finding(s) are ALL confirmed-and-fixed is
-        # different: the fix is what moved the tree, so the settle below records that
-        # (`findings_fixed`) instead of leaving a gate with no path once its budget is spent
-        # (B-review-round-budget-no-fix-path). Confirmed findings still hold the gate until
-        # every finding has a verdict (the untriaged check just below).
+    if stale and not _settle_is_only_the_confirmed_fix(counts, moved, it, gate):
+        # A stale round blocks a pass whenever what it records is a REFUTATION, or the
+        # moved files are anything but the confirmed findings' own fixes: a refuted finding
+        # says the reviewed tree is fine as it is, so it must be the tree the item holds now
+        # (B835d22b138), and a move to a file no confirmed finding cites is content no
+        # reviewer saw. An all-confirmed gate whose ONLY moved files are its confirmed
+        # findings' locations is different: the fix is what moved the tree, so the settle
+        # below records that (`findings_fixed`) instead of leaving a gate with no path once
+        # its budget is spent (B-review-round-budget-no-fix-path).
         return f"{gate} stays {rec.outcome}: {stale}"
     if counts.get("untriaged", 1):
         return (
