@@ -240,7 +240,9 @@ def _detach_stop(pid: int) -> str:
     under `setsid` (bug B-review-detach-prints-launcher-pid). A plain `kill <pid>` stops only
     that wrapper and leaves the python review running; killing the process GROUP (a negative
     pid, signal named so `--` is not needed and no shell reads `-{pid}` as an option) reaches
-    the review itself.
+    the review itself. The group kill is correct only on the `setsid` path (the Linux this
+    project runs on); `services/jobs._LAUNCH` falls back to `nohup` where `setsid` is absent,
+    and there the reported pid leads no group, so a group kill would stop nothing.
     """
     return f"kill -TERM -{pid}"
 

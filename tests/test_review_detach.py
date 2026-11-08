@@ -260,7 +260,7 @@ def test_detach_note_names_a_stop_command_that_reaches_the_review():
 
 def test_detach_emits_a_stop_command_in_the_prose_and_the_data(monkeypatch):
     """The real `--detach` flow, not just `_detach_note`: the prose AND the structured record
-    both carry `kill -- -<pid>` (bug B-review-detach-prints-launcher-pid). A consumer that
+    both carry `kill -TERM -<pid>` (bug B-review-detach-prints-launcher-pid). A consumer that
     reads the `pid` field and runs plain `kill` on it still stops only the `/bin/sh -c`
     wrapper, so the stop command has to travel with the record, not only in a sentence."""
     from types import SimpleNamespace
