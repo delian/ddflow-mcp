@@ -351,13 +351,10 @@ def _movement_is_confirmed_fix(
     confirmed finding, and every moved file is cited by a confirmed finding. A refuted
     finding's file that also moved is NOT a confirmed fix's, so it keeps the stale block
     (fail closed); an all-refuted round has no confirmed files and never counts. A `moved`
-    of None (no `reviewed_paths` on the round, so the moved set cannot be compared -- the
-    worktree-disabled flow) falls back to the confirmation alone: the fix is all we can see
-    moved the tree, and the confirmed findings' holds still apply below."""
-    if not counts.get("confirmed"):
+    of None (no `reviewed_paths` on the round, so the moved set cannot be compared) is not
+    a verified fix either: cannot compare, so the stale block stays (fail closed)."""
+    if not counts.get("confirmed") or not moved:
         return False
-    if moved is None:
-        return True
     confirmed = _confirmed_files(it, gate)
     return bool(confirmed) and not (set(moved) - confirmed)
 
