@@ -75,6 +75,8 @@ _SUBMODULE_OF = {
     "release": "lifecycle",
     "foreign_live_lease": "lifecycle",
     "foreign_guard": "lifecycle",
+    "peer_live_lease": "lifecycle",
+    "peer_guard": "lifecycle",
     "expire": "lifecycle",
     # recovery
     "scan": "recovery",
