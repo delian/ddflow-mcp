@@ -259,6 +259,12 @@ def _hold(monkeypatch, *reads: float):
 
     got: list = []
     waits: list = []
+    seq = list(reads) or [0.0]
+    at = [0]
+
+    def monotonic():  # return each canned sample in turn, then clamp at the last: no StopIteration
+        at[0] += 1
+        return seq[min(at[0] - 1, len(seq) - 1)]
 
     def fake_hold(*a, **k):
         waits.append(k.get("wait_s"))
@@ -268,7 +274,7 @@ def _hold(monkeypatch, *reads: float):
         got.append(a[4])
         return NS(kind="ran", ran=True, code=0, output="", elapsed_s=0), ""
 
-    monkeypatch.setattr(runner.time, "monotonic", iter(reads).__next__)
+    monkeypatch.setattr(runner.time, "monotonic", monotonic)
     monkeypatch.setattr(runner.SL, "hold", fake_hold)
     monkeypatch.setattr(runner, "_execute", fake_execute)
     return got, waits
