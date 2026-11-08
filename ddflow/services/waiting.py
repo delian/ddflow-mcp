@@ -242,7 +242,8 @@ def queue_ahead(
     state, cfg, item_id: str, holder: str, globs: list[str], now: float
 ) -> Waiter | None:
     """The earliest standing QUEUED waiter, not ``holder``, that asked for files ``globs``
-    overlap and asked first -- ahead of ``item_id`` in the FIFO -- or None."""
+    overlap and asked first -- ahead of ``item_id`` in the FIFO -- or None. The singular
+    shim over `queued_ahead`; every refusal names ALL of them through `queued_names`."""
     aheads = queued_ahead(state, cfg, item_id, holder, globs, now)
     return aheads[0] if aheads else None
 
