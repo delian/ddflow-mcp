@@ -112,3 +112,39 @@ def test_a_new_section_module_is_discovered_without_editing_shared_files(tmp_pat
         _docs.DECLARED.clear(), _docs.DECLARED.update(declared_before)
         _docs.DECLARED_IN.clear(), _docs.DECLARED_IN.update(declared_in_before)
         sys.modules.pop(f"{CS.__name__}.zzz_throwaway", None)
+
+
+def test_a_new_section_wires_into_a_fresh_config_process(tmp_path):
+    """Definitive seam proof: in a fresh process, the section module registered on the search
+    path BEFORE `ddflow.config` imports is wired into the real `Config`, its class re-export and
+    the knob manifest -- without editing config/__init__.py or config/_core.py."""
+    import subprocess
+
+    import ddflow as _ddflow
+
+    root = str(Path(_ddflow.__file__).parents[1])
+    extra = tmp_path / "extra_sections"
+    extra.mkdir()
+    (extra / "__init__.py").write_text("")
+    (extra / "zzz_throwaway.py").write_text(_THROWAWAY)
+
+    script = "\n".join(
+        [
+            "import importlib, sys",
+            f"sys.path.insert(0, {root!r})",
+            "import ddflow.config_sections as CS",  # runs discovery before ddflow.config
+            f"CS.__path__ = [*CS.__path__, {str(extra)!r}]",
+            "importlib.import_module('ddflow.config_sections.zzz_throwaway')",  # @declare registers
+            "import ddflow.config as C",  # Config is assembled now, after the section declared
+            "cfg = C.Config()",
+            "assert hasattr(cfg, 'zzz_throwaway'), 'Config did not wire the new section'",
+            "from ddflow.config_sections import _docs as D",
+            "assert 'zzz_throwaway' in D.SECTION_CLASSES",
+            "assert 'zzz_throwaway.zzz_count' in D.KNOB_DOCS",
+            "print('wired')",
+        ]
+    )
+    ran = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=180
+    )
+    assert ran.returncode == 0, ran.stderr
