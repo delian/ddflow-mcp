@@ -433,6 +433,7 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         log.append(f"{it.family}.updated", it.id, fields)
         if lease is not None:
             L.retarget(log, it.id, lease, accepted, resources)
+            _withdraw_stale_wait(log, it, lease, globs, withheld)
     overtook = (
         _overtaken_waiters(log, cfg, _held_globs(it), accepted)
         if globs is not None and lease is not None
@@ -452,6 +453,21 @@ def _record_update(log, cfg, it, fields: dict[str, Any], *, queue: bool = False)
         else [],
         tags_dropped=[n for n in it.tags if n not in fields["tags"]] if "tags" in fields else [],
     )
+
+
+def _withdraw_stale_wait(log, it, lease, globs: list[str] | None, withheld: list[str]) -> None:
+    """Remove a stale prior wait after a successful glob retarget.
+
+    A successful `--globs` retarget is the caller deciding the ask differently: a refused
+    widening made earlier is abandoned, or `standing` reads it as a cycle forever. A
+    just-`withheld` ask is not stale -- the caller still wants those files -- so it stays
+    (B-update-queue-wait-not-withdrawable).
+    """
+    if globs is None or withheld:
+        return
+    waiting = L._fold(log).waiting.get(it.id)
+    if waiting and waiting.get("globs"):
+        WG.withdraw(log, it.id, lease.holder, lease.event, time.time())
 
 
 def _overtaken_waiters(
