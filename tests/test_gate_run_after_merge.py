@@ -31,9 +31,7 @@ def _a_person_records_by_hand(monkeypatch):
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
 
 
-def _merged(
-    repo: Path, *, passed_before: bool = False, partial_before: bool = False
-) -> None:
+def _merged(repo: Path, *, passed_before: bool = False, partial_before: bool = False) -> None:
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
