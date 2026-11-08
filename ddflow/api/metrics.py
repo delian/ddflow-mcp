@@ -40,7 +40,7 @@ def run_metrics(
         phase=phase or "",
         since=since or "",
         group_by=group_by or "",
-        probes=GitProbes(repo) if view == "locks" else None,
+        probes=GitProbes(repo, cfg.locks.probe_timeout_s) if view == "locks" else None,
     )
     data = {
         "view": view or "summary",

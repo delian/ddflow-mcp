@@ -13,6 +13,7 @@ from typing import Protocol
 
 from ...core import bookkeeping
 from ...infra import git as G
+from ..probe import CLEAN, CONFLICT, run as probe_run
 
 
 class Probes(Protocol):
@@ -24,8 +25,9 @@ class Probes(Protocol):
 
 
 class GitProbes:
-    def __init__(self, repo: Path) -> None:
+    def __init__(self, repo: Path, timeout_s: float = 30) -> None:
         self.repo = repo
+        self.timeout_s = timeout_s
 
     def files(self, before: str, after: str) -> list[str] | None:
         if not (before and after):
@@ -36,11 +38,12 @@ class GitProbes:
     def conflicts(self, base: str, head: str) -> bool | None:
         if not (base and head):
             return None
-        r = G.run(self.repo, "merge-tree", "--write-tree", base, head)
-        if r.unavailable or r.code not in (0, 1):  # other codes: an error, not a verdict
-            return None
-        # An unknown object also exits 1; only a real verdict starts with the result tree id.
-        tree = r.out.splitlines()[0] if r.out else ""
-        if len(tree) not in (40, 64) or any(c not in "0123456789abcdef" for c in tree):
-            return None
-        return r.code == 1
+        # One source for the conflict verdict: probe.run (clean -> False, conflict -> True,
+        # unavailable -> None) so lockgit and the probe cannot drift. probe.run adds a rev-parse
+        # and a --version call per pair before its merge-tree.
+        probe = probe_run(self.repo, base, head, timeout_s=self.timeout_s)
+        if probe.result == CLEAN:
+            return False
+        if probe.result == CONFLICT:
+            return True
+        return None
