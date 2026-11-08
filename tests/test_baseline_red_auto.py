@@ -124,6 +124,94 @@ def test_a_whole_tree_guard_the_item_changed_still_blocks_auto_accept(repo, monk
     assert "test_architecture_guards.py" in auto["why"]
 
 
+def test_a_hub_module_change_does_not_block_auto_accept_when_all_measured(
+    repo, monkeypatch
+) -> None:
+    """B0f41a2f1d6: a hub-module change cuts the reach walk (Selection.full), so which test
+    files it reaches by import or governing cannot be told -- but `red` means every failing
+    test was measured on the base (its `unmeasured` is empty) and `uncompared` being empty
+    means each failure text was compared whole-vs-whole, so the reach is not needed to
+    attribute them. Under `full` nothing reads `sel.tests`/`sel.cut` (the walk that would fill
+    them was cut), so this accepts on `sel.changed` and the measurement alone."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(
+        cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": []}, {}
+    )
+    assert auto["accepted"] is True, auto
+
+
+def test_a_hub_module_change_plus_a_changed_failing_test_still_declines(repo, monkeypatch) -> None:
+    """A hub cut the reach AND the item changed a failing test FILE itself -- the changed-file
+    list is still known under `full`, so auto-accept must still decline, exactly as the reach
+    check would if it could run."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=[
+            "ddflow/services/gates/__init__.py",
+            "tests/test_ci_gate.py",
+        ],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(
+        cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": []}, {}
+    )
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
+def test_a_hub_module_change_with_an_uncompared_failure_still_declines(repo, monkeypatch) -> None:
+    """A failing id whose failure text is missing on one side is treated by `_differs` as
+    "not different" (an absence of evidence, not a match), so under `full` it must still
+    decline: `red` alone cannot prove it failed the same way (roborev finding on B0f41a2f1d6)."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(
+        cfg, repo, "main", [fid], {"red": True, "unmeasured": [], "uncompared": [fid]}, {}
+    )
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
+def test_a_hub_module_change_without_the_uncompared_field_still_declines(repo, monkeypatch) -> None:
+    """`found` that LACKS `uncompared` must decline, never read as "all compared": the
+    whole-vs-whole guarantee is absent, not empty, so the reach cannot be told."""
+    from ddflow.services.testselect import Selection
+
+    sel = Selection(
+        base="main",
+        changed=["ddflow/services/gates/__init__.py"],
+        full="a hub module changed: ddflow.services.gates (150 importing files)",
+    )
+    monkeypatch.setattr(BL.TS, "select", lambda tree, base, **kw: sel)
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_red_auto="on"))
+    fid = "tests/test_ci_gate.py::test_live"
+    auto = BL.auto_decision(cfg, repo, "main", [fid], {"red": True, "unmeasured": []}, {})
+    assert auto["accepted"] is False, auto
+    assert "import reach cannot be told" in auto["why"]
+
+
 def test_the_base_is_run_once_per_sha_and_shared(repo) -> None:
     _project(repo)
     calls: list[str] = []
