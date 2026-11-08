@@ -93,6 +93,21 @@ def test_a_fresh_queue_offers_features_only_up_to_the_ordinary_share(log, cfg):
     assert _ready(p) == ["F1", "F2"] and p.capped == ["F3"]
 
 
+def test_a_cap_hold_says_a_named_claim_is_not_capped(log, cfg):
+    """B30f9d383ba: `next` lists a cap-held item as blocked while `claim <id>` never applies
+    the cap to a NAMED item, so the detail must say a named claim grants it -- otherwise a
+    lane cannot tell a wait for a slot from an item it could claim right now."""
+    _queue(log, "F1", "F2", "F3", "F4")
+    for i, who in (("F1", "x"), ("F2", "y"), ("F3", "z")):
+        _hold(log, i, who)
+    _reserve(cfg, cap=3)
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert "cap reached" in p.blocked[-1].detail
+    assert "not capped" in p.blocked[-1].detail and "grants it now" in p.blocked[-1].detail, (
+        p.blocked[-1].detail
+    )
+
+
 @pytest.mark.parametrize("tag", ["bug", "bugfix", "fix", "hotfix", "ddflow-gap"])
 def test_each_reserved_kind_of_tag_may_use_the_slot(log, cfg, tag):
     _queue(log, "F1", "F2")
