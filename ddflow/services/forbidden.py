@@ -289,19 +289,26 @@ def _param_end(text: str, n: int, bodies: list[str], sub_close: set[int], k: int
     return i
 
 
-def _find_body(text: str, n: int, bodies: list[str], sub_close: set[int], j: int, closer: str) -> int:
+def _find_body(
+    text: str, n: int, bodies: list[str], sub_close: set[int], j: int, closer: str, case_ok: bool = True
+) -> int:
     """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes,
     substitutions and a nested `( ... )` subshell inside are navigated (so the first plain `)`
-    is not taken for this body's close) but mark no newline. An escaped closer is not the end."""
+    is not taken for this body's close) but mark no newline. An escaped closer is not the end.
+    ``case_ok`` is False inside a `$((` arithmetic body, whose `case`/`esac` are arithmetic
+    tokens, not a shell case statement (B-forbidden-guard-multiline-quote-bypass critic: a
+    post-arithmetic `esac` must not swallow a later command)."""
     k = j
     while k < n:
         if text[k] == closer:
             return k
-        k = _skip_span(text, n, bodies, sub_close, k, j, closer)
+        k = _skip_span(text, n, bodies, sub_close, k, j, closer, case_ok)
     return k
 
 
-def _skip_span(text: str, n: int, bodies: list[str], sub_close: set[int], k: int, j: int, closer: str) -> int:
+def _skip_span(
+    text: str, n: int, bodies: list[str], sub_close: set[int], k: int, j: int, closer: str, case_ok: bool = True
+) -> int:
     """Index after the span that starts at `k` when it is data, not `closer`: a comment (its
     `)` is text), a nested `( ... )` subshell, a `case` statement, a quote, an escape, a
     `${...}` parameter expansion, or a nested substitution. A plain char is not a span (one
@@ -313,8 +320,8 @@ def _skip_span(text: str, n: int, bodies: list[str], sub_close: set[int], k: int
     if closer == ")" and c == "(":
         # a nested ( ... ) subshell: its plain `)` (and a `#` after it) is not this body's
         # close, so skip to one past it (groq critic: `echo $( (echo hi) )#; git push`).
-        return _find_body(text, n, bodies, sub_close, k + 1, ")") + 1
-    if closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
+        return _find_body(text, n, bodies, sub_close, k + 1, ")", case_ok) + 1
+    if case_ok and closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
         return _case_end(text, n, k, bodies, sub_close)  # a case's `)` separators end patterns, not this `$(` body
     if c == "'":
         k2 = text.find("'", k + 1)
@@ -359,7 +366,7 @@ def _sub_body(text: str, n: int, bodies: list[str], sub_close: set[int], k: int)
     is_arith = text[k] == "$" and k + 2 < n and text[k + 1] == "(" and text[k + 2] == "("
     closer = "`" if text[k] == "`" else ")"
     start = k + 3 if is_arith else (k + 2 if text[k] != "`" else k + 1)
-    k2 = _find_body(text, n, bodies, sub_close, start, closer)
+    k2 = _find_body(text, n, bodies, sub_close, start, closer, case_ok=not is_arith)
     if is_arith:
         sub_close.add(k2 + 1)  # the outer `)` of `$((...))`: bash glues a following `#` to it
         return k2 + 2
@@ -502,37 +509,44 @@ _VALUED_LONG = frozenset({"--rcfile", "--init-file"})
 
 def _sh_c(head: list[str]) -> int:
     """The index of the `-c` option's word in the shell command `head` (its value is the NEXT
-    word), or -1. Bash reads its single-letter options until `--` or the first non-option
-    operand (a script name); a `c` inside a cluster is `-c` -- `sh -xc 'pkill'` clusters `-x`
-    and `-c` and still takes the next word (B-forbidden-guard-multiline-quote-bypass critic
-    #3). A `-c` after a script operand, and the `c` a `-o`/`-O` optname swallows, is NOT the
-    shell's `-c`: `bash ./tool.sh -cache 'pkill'` runs `./tool.sh` (not `pkill`) and
-    `bash -ocpipefail 'pkill'` runs no `pkill` (critic #5). An `-o`/`-O` that CLOSES a cluster
-    (``bash -xo pipefail -c 'pkill'``) and a valued long option (`--rcfile FILE`) consume their
-    value, and the `-c` after them is still the shell's (critic: `-o NAME` two-word, `--rcfile`)."""
+    word), or -1. Bash reads its single-letter options (``+`` forms too: `bash +x -c 'pkill'`)
+    until `--` or the first non-option operand (a script name); a `c` inside a cluster is `-c`
+    -- `sh -xc 'pkill'` clusters `-x` and `-c` and still takes the next word
+    (B-forbidden-guard-multiline-quote-bypass critic #3). A `-c` after a script operand, and
+    the `c` a `-o`/`-O`/`+o`/`+O` optname swallows, is NOT the shell's `-c` (critic #5); an
+    optname that CLOSES a cluster (`bash -xo pipefail -c 'pkill'`) and a valued long option
+    (`--rcfile FILE`) consume their value, and the `-c` after them is still the shell's; the
+    LAST `-c` before an operand wins (`bash -co pipefail -c 'pkill'` runs the `-c`)."""
     i = 1
+    last = -1
     while i < len(head):
         w = head[i]
-        if w == "--" or not w.startswith("-"):
-            return -1  # `--` ends options; a non-option is the script operand
+        if w == "--" or (not w.startswith("-") and not w.startswith("+")):
+            break  # `--` ends options; a non-option is the script operand
+        if w == "-" or w == "+":
+            i += 1
+            continue
         if w.startswith("--"):
             i += 2 if w in _VALUED_LONG else 1  # a valued long option consumes its word
             continue
         body = w[1:]
+        if not body:
+            i += 1
+            continue
         j = 0
         while j < len(body):
             ch = body[j]
             if ch == "c":
-                return i
+                last = i  # a `-c` flag; a later `-c` before an operand overrides it
             if ch in "oO":
-                # `-o`/`-O` optname takes the rest of THIS token, or the NEXT word when
-                # `o`/`O` CLOSES it (`-xo pipefail`): both are the option's value, not `-c`.
+                # `-o`/`-O`/`+o`/`+O` optname takes the rest of THIS token, or the NEXT word
+                # when `o`/`O` CLOSES it (`-xo pipefail`): both are the option's value.
                 if j == len(body) - 1:
                     i += 1
                 break
             j += 1
         i += 1
-    return -1
+    return last
 
 
 #: Each wrapper's options that take their value as the next word (`sudo -u root`, `nice -n 5`);

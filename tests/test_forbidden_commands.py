@@ -54,6 +54,9 @@ def _check(cmd: str, env: dict | None = None, **kw):
         # a `\r` is not a shell blank: `push\r#` is one word, so the `#` is not a comment
         # and the `;` still separates a forbidden `git push` (B-...-critic #1, `\r` boundary)
         "git push\r#; git push origin main",
+        # a `case` inside a `$((` arithmetic body is an arithmetic token, not a shell case, so
+        # a later `esac` must not swallow the real `git push` after the arithmetic (critic)
+        "echo $((case 0)); git push origin main; echo esac",
     ],
 )
 def test_refused(cmd):
@@ -264,6 +267,12 @@ def test_refused_param_expansion_body(cmd):
         "bash -xo pipefail -c 'git push origin main'",
         "bash -xO extglob -c 'git push origin main'",
         "bash --rcfile /tmp/rc -c 'git push origin main'",
+        # a `+` form is an option too (`bash +x -c`), and the LAST `-c` before an operand wins
+        # over an earlier `-c` whose value an `-o`/`-O` consumes (`bash -co pipefail -c`)
+        "bash +x -c 'git push origin main'",
+        "bash +o pipefail -c 'git push origin main'",
+        "bash -co pipefail -c 'git push origin main'",
+        "bash -cO extglob -c 'git push origin main'",
     ],
 )
 def test_refused_clustered_c_flag(cmd):
