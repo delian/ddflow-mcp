@@ -511,10 +511,18 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     # The waiter's OWN leases stay alive while it waits (Bf81c097a89): hours of waiting once
     # lapsed the very claim the wait was for.
     keep_alive = _keep_alive(log, cfg, st)
+    inbox_ttl_s = cfg.lease.inbox_ttl_s
     try:
-        for cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent):
-            if IB.has_pending(repo, me, ttl_s=cfg.lease.inbox_ttl_s):
-                return result(v, time.monotonic() - started, [])
+        for cfg, st in _poll(
+            log,
+            deadline,
+            poll,
+            keep_alive,
+            repo,
+            agent,
+            time,
+            wake_check=lambda: IB.has_pending(repo, me, ttl_s=inbox_ttl_s),
+        ):
             was = v
             v = _judge(st, cfg, me, item, phase, kind, want, repo, lease)
             if v["status"] != "blocked":
@@ -526,7 +534,8 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
             if v["why"] != was["why"]:
                 say(f"still waiting: {v['why']}")
                 WT.update(w, waiting_on=v["waiting_on"], reason=v["why"])
-        return result(v, time.monotonic() - started, [])  # the deadline passed still blocked
+        # The deadline passed, or the inbox woke us: both end the wait the same way.
+        return result(v, time.monotonic() - started, [])
     finally:
         _end_wait(WT, w, keep, cfg)
 

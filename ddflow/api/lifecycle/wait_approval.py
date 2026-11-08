@@ -63,26 +63,32 @@ def _keep_alive(log, cfg, st):
     return paced
 
 
-def _poll(log, deadline: float, poll: float, keep_alive, repo: Path, agent: str):
+def _poll(
+    log, deadline: float, poll: float, keep_alive, repo: Path, agent: str, timer, wake_check=None
+):
     """Yield a FRESH ``(cfg, st)`` each time the event log changes or the re-check cadence
-    is up, until the deadline passes. Exhaustion means the deadline passed.
+    is up, until the deadline passes. Exhaustion means the caller should stop: either the
+    deadline passed or ``wake_check`` (run EVERY cycle, unthrottled) turned truthy.
 
     Shared by the item wait and the approval wait: the sleep-keepalive-fingerprint-reload
     skeleton is one loop, not two copies (the architecture guard counts duplicates).
+    ``timer`` is the caller's ``time`` MODULE (tests patch `wait.time` to skew the clock).
     """
     seen = None  # the first pass always re-judges: whatever landed since the load above
-    checked = time.monotonic()
+    checked = timer.monotonic()
     while True:
-        left = deadline - time.monotonic()
+        left = deadline - timer.monotonic()
         if left <= 0:
             return
-        time.sleep(min(poll, left))
+        timer.sleep(min(poll, left))
         keep_alive()
+        if wake_check is not None and wake_check():
+            return
         # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
         ext = log.mark(clock=False)
-        if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
+        if ext == seen and timer.monotonic() - checked < WT.RECHECK_S:
             continue
-        seen, checked = ext, time.monotonic()
+        seen, checked = ext, timer.monotonic()
         log, cfg, st = _load(repo, agent)
         yield cfg, st
 
@@ -242,7 +248,7 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
     # The lane's OWN leases stay alive while it waits on its approval (the same keepalive
     # the item-wait uses): hours of waiting must not lapse the very claim the answer is for.
     keep_alive = _keep_alive(log, cfg, st)
-    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent):
+    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent, time):
         was = v
         v = _judge_approval(st, approval, time.time())
         if v["status"] != "blocked":
