@@ -256,3 +256,36 @@ def test_detach_note_names_a_stop_command_that_reaches_the_review():
     # printed pid is the session leader, and only the group kill reaches the review itself.
     assert "kill -- -2618834" in note
     assert "/tmp/review.log" in note
+
+
+def test_detach_emits_a_stop_command_in_the_prose_and_the_data(monkeypatch):
+    """The real `--detach` flow, not just `_detach_note`: the prose AND the structured record
+    both carry `kill -- -<pid>` (bug B-review-detach-prints-launcher-pid). A consumer that
+    reads the `pid` field and runs plain `kill` on it still stops only the `/bin/sh -c`
+    wrapper, so the stop command has to travel with the record, not only in a sentence."""
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import review as CR
+
+    captured: dict = {}
+
+    def fake_detach(repo, item, command, *, cwd="", log_file="", agent=""):
+        return SimpleNamespace(
+            exit=0, data={"id": "j", "pid": 2618834, "log": "/tmp/review.log"}, reason=""
+        )
+
+    monkeypatch.setattr(CR.AJ, "job_detach", fake_detach)
+
+    def out(human, data=None):
+        captured.update(human=human, data=data)
+
+    a = SimpleNamespace(_argv=["--detach", "T1", "--gate", "critic"], id=["T1"])
+    c = SimpleNamespace(
+        repo=Path("."),
+        called_from=Path("."),
+        log=SimpleNamespace(agent_id="role"),
+        out=out,
+    )
+    assert CR._detach(a, c) == CR.OK
+    assert "kill -- -2618834" in captured["human"]
+    assert captured["data"]["stop"] == "kill -- -2618834"

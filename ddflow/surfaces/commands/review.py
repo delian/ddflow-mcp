@@ -233,18 +233,23 @@ def _detach_argv(raw: list[str], agent: str) -> list[str]:
     return ["--agent=" + agent, *kept, *raw[cut:]]
 
 
-def _detach_note(pid: int, log: str) -> str:
-    """What `--detach` tells the operator: how to STOP the review, not just a pid to `kill`.
+def _detach_stop(pid: int) -> str:
+    """The shell command that stops the WHOLE detached review: `kill -- -{pid}`.
 
     `pid` is the detached SESSION leader the job launcher reported -- a `/bin/sh -c` wrapper
     under `setsid` (bug B-review-detach-prints-launcher-pid). A plain `kill <pid>` stops only
-    that wrapper and leaves the python review running; the note must name the whole process
-    group the review split into, so a group kill actually reaches the review itself.
+    that wrapper and leaves the python review running; killing the process GROUP (a negative
+    pid) reaches the review itself.
     """
+    return f"kill -- -{pid}"
+
+
+def _detach_note(pid: int, log: str) -> str:
+    """What `--detach` tells the operator: how to STOP the review, not just a pid to `kill`."""
     return (
         f"review detached as process group {pid}; it runs in its own session and outlives "
         f"this command\n"
-        f"  stop it: kill -- -{pid}   (kills the whole detached review, not just its "
+        f"  stop it: {_detach_stop(pid)}   (kills the whole detached review, not just its "
         f"/bin/sh launcher)\n"
         f"  its progress streams to {log}  (read it: tail -f {log})"
     )
@@ -275,7 +280,10 @@ def _detach(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     pid, log = out.data["pid"], out.data["log"]
-    c.out(_detach_note(pid, log), {"id": out.data["id"], "pid": pid, "log": log})
+    c.out(
+        _detach_note(pid, log),
+        {"id": out.data["id"], "pid": pid, "log": log, "stop": _detach_stop(pid)},
+    )
     return OK
 
 
