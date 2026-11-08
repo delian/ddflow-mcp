@@ -18,8 +18,35 @@ from ..review_findings import _rows as _numbered_findings
 from ..review_supersede import superseded_digests
 from .delta import _NOTHING_CHANGED, _delta_diff, _head_of, _kind, _last_head, _pick_diff
 from .findings import _SETTLED
-from .records import _last_review, _review_runs
+from .records import _last_review, _prior_evidence, _review_runs
 from .triaging import _moved_paths, _name_paths, _rerun_scope
+
+
+def _resume_of_terminated(it, gate: str, revs: list, diff: str, chunk_max_tokens: int = 0):
+    """(reviewer, the record, the chunks) to resume a review a signal cut short, or None.
+
+    A review killed mid-run leaves a PARTIAL record (bug B982d306cc8) whose evidence carries
+    its `reviewed` chunks and, since DX-review-chunk-checkpoint, the cut's `chunks_total` and
+    `diff_sha`. This resumes from the next unreviewed chunk of the SAME cut instead of paying
+    every chunk twice; `_rerun_scope` does the validation (the diff, chunk size and reviewer
+    must all match, or a resume would merge chunk numbers that mean something else).
+
+    Lives here (scope, not triaging) so the resume does not need a file another lane may hold.
+    """
+    if it is None:
+        return None
+    prior = _prior_evidence(it.gates.get(gate))
+    if prior.get("terminated_by") is None or prior.get("status") != "PARTIAL":
+        return None
+    total = prior.get("chunks_total")
+    if not isinstance(total, int) or total < 1:
+        return None
+    reviewed = {int(c) for c in prior.get("reviewed", [])}
+    missing = [n for n in range(1, total + 1) if n not in reviewed]
+    if not missing:
+        return None
+    ok = _rerun_scope(it, gate, revs, diff, missing, chunk_max_tokens)
+    return None if isinstance(ok, str) else ok
 
 
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
@@ -226,6 +253,10 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     if a["chunks"] and diff.strip():
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"], cfg.review.chunk_max_tokens)
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
+    if rerun is None and it is not None and diff.strip():
+        # A review cut short by a signal resumes from the next chunk: the SAME cut's unreviewed
+        # chunks merge into the partial record the kill left (DX-review-chunk-checkpoint).
+        rerun = _resume_of_terminated(it, gate, revs, diff, cfg.review.chunk_max_tokens)
     return kind, done, forced, diff, how, why, rerun
 
 

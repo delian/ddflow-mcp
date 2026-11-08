@@ -191,6 +191,16 @@ def _terminated_gate(
         "reviewed": reviewed,
         "chunk_findings": [fd for f in files for fd in f.findings()],
     }
+    # What a RESUME needs to skip the finished chunks (bug Bd8c4e1d8d6): the cut's identity,
+    # checkpointed by the runner the moment it knew the chunks. Without it a later run cannot
+    # tell which chunk numbers still mean something, so it re-runs every chunk from scratch.
+    plan = next((f.plan_meta() for f in files if f.plan_meta()), {})
+    for key in ("reviewer", "diff_sha", "chunks_total", "max_chunk_chars"):
+        if key in plan:
+            evidence[key] = plan[key]
+    evidence.setdefault(
+        "coverage", f"{len(reviewed)}/{evidence.get('chunks_total') or '?'} chunk(s) reviewed"
+    )
     for f in files:
         evidence.update(f.evidence())
     reason = (

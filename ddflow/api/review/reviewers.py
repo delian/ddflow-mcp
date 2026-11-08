@@ -225,10 +225,52 @@ class _ReplyFile:
         self.repo = repo
         self.item = item
         self.gate = gate
+        self.reviewer = reviewer
         self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
         self._lock = threading.Lock()
         self._started = False
         _ACTIVE.append(self)
+
+    def plan(self, diff_sha: str, chunks_total: int, max_chunk_chars: int) -> None:
+        """Checkpoint the cut's identity the moment it is known, so a killed review's record
+        can RESUME from the next chunk instead of re-running every chunk (bug Bd8c4e1d8d6).
+        A chunk number means nothing across two cuts, so a resume must name the same diff,
+        the same chunk size and the same reviewer -- this one line carries all four."""
+        with self._lock:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open("a", encoding="utf-8") as fh:
+                    fh.write(
+                        json.dumps(
+                            {
+                                "plan": {
+                                    "reviewer": self.reviewer,
+                                    "diff_sha": diff_sha,
+                                    "chunks_total": chunks_total,
+                                    "max_chunk_chars": max_chunk_chars,
+                                }
+                            }
+                        )
+                        + "\n"
+                    )
+                self._started = True
+            except OSError:
+                pass
+
+    def plan_meta(self) -> dict[str, Any]:
+        """The ``plan`` line this run checkpointed, or ``{}`` when it never got one."""
+        try:
+            lines = self.path.read_text("utf-8").splitlines()
+        except OSError:
+            return {}
+        for line in reversed(lines):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if "plan" in row:
+                return row["plan"]
+        return {}
 
     def add(self, chunk: int, reply: str) -> None:
 
