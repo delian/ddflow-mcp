@@ -94,7 +94,9 @@ class FakeTomlIo:
             raise FileNotFoundError(str(path)) from None
 
     def dumps(self, data: Any) -> str:
-        """``data`` as TOML in the fake's subset (tables, arrays, scalars): what `loads` reads."""
+        """``data`` as TOML in the fake's subset (bare keys, tables, arrays, scalars): what
+        `loads` reads back. A key or value outside that subset (a dotted or spaced key,
+        `null`, a table inside an array) raises `TomlError`, never an unparsable document."""
         return "\n".join(self._lines(dict(data), ""))
 
     def document(self, text: str) -> Any:
@@ -102,8 +104,14 @@ class FakeTomlIo:
         return self.loads(text)
 
     def _lines(self, table: dict[str, Any], prefix: str) -> list[str]:
-        out = [f"{k} = {json.dumps(v)}" for k, v in table.items() if not isinstance(v, dict)]
+        out: list[str] = []
         for key, value in table.items():
+            if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", key):
+                raise TomlError(f"key {key!r} is not a bare TOML key this fake knows")
             if isinstance(value, dict):
                 out += ["", f"[{prefix}{key}]", *self._lines(value, f"{prefix}{key}.")]
+            elif _is_toml_value(value):
+                out.append(f"{key} = {json.dumps(value)}")
+            else:
+                raise TomlError(f"not a TOML value this fake knows: {value!r}")
         return out if not prefix else out

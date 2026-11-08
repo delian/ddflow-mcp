@@ -142,3 +142,10 @@ def test_a_bad_document_carries_tomlkit_position():
     with pytest.raises(TomlError) as caught:
         TomlLibIo().document("a = 1\nb = ]\n")
     assert caught.value.lineno == 2 and caught.value.colno > 1
+
+
+def test_the_fake_refuses_to_dump_what_it_cannot_read_back():
+    # outside the fake's subset -> TomlError, never an unparsable/lying document
+    for bad in ({"a.b": 1}, {"a b": 1}, {"x": None}, {"rows": [{"id": 1}]}):
+        with pytest.raises(TomlError):
+            FakeTomlIo().dumps(bad)
