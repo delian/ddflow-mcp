@@ -26,10 +26,11 @@ def _gate_covered(cwd: Path, paths: list[str], then: TreeEntries | None) -> list
     if not paths:
         return []
     tracked = GIT.files(cwd, "tracked")
-    paths = [
-        p for p in paths
-        if then is None or p in then or tracked is None or p in tracked
-    ]
+    # ``then`` is not None here: `_what_differs` builds ``paths`` empty when it is, and this
+    # returns early on an empty ``paths``. ``tracked is None`` (the index could not be
+    # listed) keeps the path rather than reading None as covered: the base tree still names
+    # it, and a merge temporary is dropped only when the index listing succeeds.
+    paths = [p for p in paths if p in then or tracked is None or p in tracked]
     if paths:
         excluded, pinned = patterns(Config.load(cwd), cwd)
         paths = [p for p in paths if not _hit(p, excluded, pinned)]
