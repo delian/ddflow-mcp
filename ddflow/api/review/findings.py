@@ -321,7 +321,14 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
     return _untriaged(kept, gone, carried, verdicts, new=new)
 
 
-def _untriaged(kept: list[dict], gone, carried: dict, verdicts: dict, *, new: set[str] | frozenset[str] = frozenset()) -> int:
+def _untriaged(
+    kept: list[dict],
+    gone,
+    carried: dict,
+    verdicts: dict,
+    *,
+    new: set[str] | frozenset[str] = frozenset(),
+) -> int:
     """Findings of the merged record still without a settled verdict. A carried digest's
     triage is a fresh `review.triaged` `_carry_delta_verdicts` appends, not one the folded
     ``verdicts`` held, so it is excluded per finding and never over-subtracted.

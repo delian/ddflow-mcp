@@ -289,7 +289,9 @@ def test_a_delta_round_converges_on_a_new_below_floor_finding(monkeypatch):
         ],
     }
     monkeypatch.setattr(api.records, "_last_review", lambda it, gate: prior)
-    nit = NS(status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="new nit", digest="xyz")])
+    nit = NS(
+        status=RV.REVIEWED, findings=[RV.Finding(severity="LOW", title="new nit", digest="xyz")]
+    )
     cfg = Config.load(None, env={})
     outcome, ev = api._gate_outcome(
         nit, [nit], object(), "T1", "critic", api._converges("delta", False), cfg, None, print
