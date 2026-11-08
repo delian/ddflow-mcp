@@ -361,7 +361,7 @@ def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg
         'diff --git "a/\\303\\251" "b/\\303\\251"\n'
         '--- "a/\\303\\251"\n'
         '+++ "b/\\303\\251"\n'
-        '@@ -1 +1,2 @@\n x\n+y\n'
+        "@@ -1 +1,2 @@\n x\n+y\n"
     )
     q = P.shape(quoted)
     assert q.files == ("\u00e9",), q  # the decoded name, not the raw \303\251 escape
