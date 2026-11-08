@@ -46,3 +46,26 @@ def test_a_flag_the_verbs_help_does_not_list_is_still_flagged(tmp_path):
     refs = {f.ref for f in rep.findings if f.kind == "flag"}
     assert "ddflow next --bogus" in refs  # a genuine missing flag still fails the check
     assert not any(ref.endswith(" --json") for ref in refs)  # the global flag stays exempt
+
+
+def test_the_exempt_set_has_not_drifted_from_the_mirrored_root_options():
+    """A root option mirrored onto every subparser but left out of `_GLOBAL_FLAGS` is a
+    silent false finding the moment a doc spells it after a subcommand. `_accept_global_
+    options_anywhere` mirrors every root store/store-true option, so only `--allow-older-
+    version` and `--reason` (deliberately not exempt: every checked doc spells them after a
+    verb that defines its own copy) may sit outside `_GLOBAL_FLAGS`; anything else is a new
+    root option that drifted in and must be added here (B1da555743c)."""
+    import argparse
+
+    from ddflow.surfaces.cli import build_parser
+
+    root = build_parser()
+    mirrored = {
+        option
+        for action in root._actions
+        if not isinstance(action, (argparse._HelpAction, argparse._SubParsersAction))
+        and type(action) in (argparse._StoreAction, argparse._StoreTrueAction)
+        for option in action.option_strings
+    }
+    free = mirrored - set(D._GLOBAL_FLAGS)
+    assert free <= {"--allow-older-version", "--reason"}, sorted(free)
