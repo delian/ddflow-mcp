@@ -56,9 +56,7 @@ def _tiny_cold(ctx: Context, minimum: int, spans, outs_of) -> dict:
     """Completed items with a MEASURED size; an unmeasured size is never a failed limit."""
     limit = ctx.cfg.fasttrack.tiny_cold_max_source_lines
     measured = [s for s in spans if _size_of(ctx, outs_of.get(s.item, ())) > 0]
-    tiny = [
-        s for s in measured if _size_of(ctx, outs_of.get(s.item, ())) <= limit
-    ]
+    tiny = [s for s in measured if _size_of(ctx, outs_of.get(s.item, ())) <= limit]
     return {
         "count": len(tiny),
         "total": len(measured),
@@ -72,7 +70,9 @@ def _confirmation(ctx: Context, minimum: int) -> dict:
     """Confirmed HIGH/MEDIUM findings over every triaged finding: do lightened reviews miss a
     finding the author confirms? (D-fast-track-answers' falsifier the operator watches.)"""
     triaged = [f for f in ctx.facts.findings if ctx.in_scope(f.item, f.at)]
-    confirmed = [f for f in triaged if f.verdict == "confirmed" and f.severity in ("HIGH", "MEDIUM")]
+    confirmed = [
+        f for f in triaged if f.verdict == "confirmed" and f.severity in ("HIGH", "MEDIUM")
+    ]
     return {
         "triaged": len(triaged),
         "confirmed_high_medium": len(confirmed),
@@ -131,9 +131,7 @@ def build(ctx: Context) -> dict:
         "next": {
             "cli": "ddflow metrics tiny",
             "mcp": "ddflow_metrics view=tiny",
-            "note": (
-                "fallback rate by tier stays separate: ddflow metrics --group-by tier"
-            ),
+            "note": ("fallback rate by tier stays separate: ddflow metrics --group-by tier"),
         },
     }
 
