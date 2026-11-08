@@ -18,7 +18,7 @@ from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
 from ddflow.services import completion as CO
 from ddflow.services import gates as G
-from ddflow.services.docsonly import TRIVIAL_EXCUSED_GATES, diff_is_trivial
+from ddflow.services.docsonly import TRIVIAL_EXCUSED_GATES, diff_is_docs_only, diff_is_trivial
 
 
 def _state(repo):

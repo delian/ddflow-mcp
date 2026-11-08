@@ -36,7 +36,7 @@ def _uncommitted_not_in(tree: Path, paths: list[str]) -> bool:
     if any(not is_state(p) for p in (GIT.files(tree, "untracked") or ())):
         return True
     dirty = W.git(tree, "diff", "HEAD", "--name-only")
-    if dirty.ok and any(p for p in dirty.out.splitlines() if p and p not in paths):
+    if not dirty.ok or any(p for p in dirty.out.splitlines() if p and p not in paths):
         return True
     return False
 
