@@ -13,7 +13,10 @@ from ...core.admission import new_file_globs
 from ...core.schedule import path_in_glob
 from ...infra import worktree as W
 from ...services import changes as CH
+from ...services import ci as CI
+from ...services import eventcommit as EC
 from ...services import flow as FS
+from ...services import gates as G
 from ...services import leases as LS
 from ...services import merge_force as MF
 from ...services.cleanup import (  # noqa: F401  (re-exported)
@@ -21,20 +24,25 @@ from ...services.cleanup import (  # noqa: F401  (re-exported)
     record_item_removed,
 )
 from ...services.enforce import SELF_MANAGED
+from ...services.gates import measured as GM
 from .._base import _load
+from ..ci import check_after_merge
 from ._common import _require
 from .claim import callers_tree
 from .merge_landing import (
+    _ci_fields,
     _commit_shards_before_merge,
+    _dispose_tree,
     _failed_landing_outcome,
-    _finish_merge,
     _gate_blockers,
-    _landed_note,
+    _kept_reason,
     _landing_refusal,
-    _record_forced,
     _record_landing,
-    _scope_fields,  # noqa: F401  (re-exported for tests/test_merge_scope_paths.py)
-    _spend_after_land,
+    _release_at_merge,
+    _say_awaiting,
+    _say_pins,
+    _scope_fields,
+    _when,
 )
 from .merge_refresh import _refresh_documents
 
@@ -68,8 +76,27 @@ def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, a
         "",
         O.refused("worktree.merged", why, id=item, sha="", dirty=[], unmet_gates=list(gates.unmet)),
     )
-
-
+def _landed_note(repo: Path, wt, landed_before: str, branch_head: str, r) -> str:
+    """ "" for a clean merge; else the note `_landed_anyway` has for a failure that landed."""
+    return "" if r.ok else _landed_anyway(repo, wt, landed_before, branch_head, r)
+def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
+    """The `merge.forced` event of a landing that went over unsettled gates (no-op otherwise)."""
+    if stamp is not None:
+        log.append(
+            "merge.forced",
+            item,
+            {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
+        )
+def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: str) -> dict | None:
+    """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
+    the approval id to spend, and is "" unless `authorise` validated a real `--approval <id>`;
+    a person's `--force` and a standing-policy stamp pass through untouched. A spend that fails
+    after a concurrent consumer (or expiry between validation and spend) returns a STRUCTURED
+    marker (`spend: "failed"`) -- never a valid-looking proof, and never a silent drop."""
+    if not pending:
+        return stamp
+    spent = MF.spend(log, cfg, item, gates, pending)
+    return spent.stamp if spent.ok else {"ask": pending, "spend": "failed", "note": spent.message}
 def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
     repo: Path,
     item: str,
@@ -232,8 +259,136 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         callers=(called_from, shell_cwd),
         on_progress=on_progress,
     )
+def _finish_merge(  # noqa: PLR0913 -- the landing already cost each of these; the tail spends them
+    repo: Path,
+    cfg,
+    log,
+    st,
+    it,
+    wt,
+    item: str,
+    gates,
+    forced_by,
+    pending_approval: str,
+    *,
+    agent: str,
+    borrowed: bool,
+    keep: bool,
+    outside,
+    dirty,
+    refreshed,
+    sha: str,
+    branch_head: str,
+    landed_note: str,
+    merge_since: str,
+    callers,
+    on_progress,
+) -> O.Outcome:
+    """Everything after the landing is recorded: spend the approval, back-merge a hotfix,
+    record the merge gate, run the post-merge check and commit the events."""
+    # Spend an agent's approval only now, once the landing landed: a person's `--force` and
+    # a standing-policy answer have no approval to spend (pending_approval == ""), and a
+    # failed landing returned above before reaching here (B527b0a518c).
+    forced_by = _spend_after_land(log, cfg, item, gates, forced_by, pending_approval)
+    _record_forced(log, item, sha, gates, forced_by, agent)
+    # A gitflow hotfix lands on production AND develop. A failure here is reported, not
+    # rolled back: production has the fix, which was the urgent half.
+    back_merged, back_failed = [], []
+    for extra in F.back_merge_targets(it, cfg, W.default_branch(repo), F.effective_line(st, it)):
+        br = W.merge_into(repo, cfg, extra, wt.branch, message=f"back-merge {item} into {extra}")
+        (back_merged if br.ok else back_failed).append(
+            extra if br.ok else f"{extra}: {br.err or br.out}"
+        )
+    # After the back-merges: a hotfix whose back-merge failed still needs its files to retry.
+    freed = _release_at_merge(log, cfg, item, back_failed)
+    human_gate = GM.record_merge(
+        log,
+        cfg,
+        repo,
+        it,
+        "passed",
+        gates=G.load_gates(repo, cfg),
+        tree=None if borrowed else wt.path,
+        reason=landed_note,
+        evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
+    )
+    removed_tree, kept_reason = _dispose_tree(
+        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=callers
+    )
+    kept_reason = _kept_reason(kept_reason, landed_note, back_failed)
 
+    say = on_progress or (lambda _line: None)
+    say(f"merged {item} into {wt.base} ({sha[:12]}); the merge is done and recorded")
+    _say_awaiting(say, item, gates)
+    say(_ci_notice(repo, cfg))
+    ci_after = check_after_merge(repo, sha=sha, item=item, agent=agent, since=merge_since)
+    say(
+        f"post-merge check finished ({ci_after.get('status', 'nothing to check')}); committing the event log"
+    )
+    _say_pins(repo, cfg, say)
+    # Last: the after-merge check may record a result of its own.
+    committed = EC.commit_at(log, cfg, "merge", f"merge {item}")
+    return O.ok(
+        "worktree.merged",
+        id=item,
+        **_ci_fields(ci_after),
+        gate_states=gates.states,
+        awaiting_gates=gates.awaiting(),
+        forced=forced_by is not None,
+        sha=sha,
+        branch_head=branch_head,
+        base=wt.base,
+        dirty=list(dirty),
+        worktree=str(wt.path),
+        worktree_removed=removed_tree,
+        kept_reason=kept_reason,
+        back_merged=back_merged,
+        pr="",
+        branch=wt.branch,
+        **_scope_fields(outside, listed=borrowed),
+        # The merge gate is a person's to clear here; nothing was recorded for it.
+        merge_gate_human=human_gate,
+        lease_released=freed,
+        **_when(refreshed, export_refresh=refreshed),
+        **committed,
+    )
+def _ci_notice(repo: Path, cfg) -> str:
+    """The line said before the post-merge check starts: what runs and which knobs bound it."""
+    try:
+        command, why = CI.main_command(repo, cfg)
+        notice = (
+            f"post-merge check starting: [ci].on_merge={cfg.ci.on_merge}, at most "
+            f"{cfg.ci.timeout_s}s ([ci].timeout_s); a timeout is recorded unavailable, never "
+            f"as a failure"
+        )
+    except Exception:  # a line of progress never stops a merge that has landed
+        return "post-merge check starting"
+    if not command:
+        return f"post-merge check: nothing to run ({why or 'no CI command in this project'})"
+    return notice
+def _landed_anyway(repo: Path, wt: W.Worktree, landed_before: str, branch_head: str, r) -> str:
+    """A note when git reported failure but the merge commit is on the base; else "".
 
+    git can be killed at its timeout AFTER it committed: the post-merge hook, which runs
+    inside `git merge`, takes minutes under load. Reporting that as a refusal left the
+    merge gate failed for a branch the base already held, and the next `merge` said "no
+    commits ahead" (B04bab3d1b3). The base having moved to a head that contains the branch
+    is what happened, whatever git's exit status said.
+    """
+    if not r.attempted:
+        return ""
+    now = W.rev(repo, wt.base)
+    # The head this run tried to land, not the branch ref: an item's tree can be ahead of it.
+    contained = (
+        bool(branch_head) and W.git(repo, "merge-base", "--is-ancestor", branch_head, wt.base).ok
+    )
+    if not now or now == landed_before or not contained:
+        return ""
+    how = "timed out" if r.timed_out else f"exited {r.code}"
+    return (
+        f"git {how} after the merge commit landed on {wt.base} ({now[:12]}): recorded as "
+        f"merged, from what the base holds ({(r.err or r.out or '')[:200]!r})"
+    )
 def _what_to_land(
     repo: Path, cfg, st, it, target: str, branch: str, called_from: Path | None
 ) -> tuple[W.Worktree, list[str], list[str] | None] | O.Outcome:
@@ -264,8 +419,6 @@ def _what_to_land(
     wt = W.Worktree(item=it.id, path=tree or W.repo_root(repo), branch=picked, base=target)
     dirty = W.dirty(wt) if tree is not None else []
     return wt, dirty, _outside_globs(repo, it, target, picked, cfg)
-
-
 def _branch_to_land(
     repo: Path, cfg, st, it, branch: str, called_from: Path | None, target: str
 ) -> str | O.Outcome:
@@ -325,8 +478,6 @@ def _branch_to_land(
             dirty=[],
         )
     return branch
-
-
 def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] | None:
     """Paths the landing changes that the item never declared; None when git could not list
     them -- "could not tell", never "none" (B4e42502034).
@@ -357,8 +508,6 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
         and p not in fresh
         and not any(path_in_glob(p, g) for g in it.globs)
     ]
-
-
 def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
     repo: Path,
     cfg,
@@ -401,8 +550,6 @@ def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the ca
         _record_forced(log, item, W.head_sha(wt.path) or "", gates, forced_by, agent)
         req.data["forced"] = True
     return req
-
-
 def _open_request(
     repo: Path, cfg, log, it, *, message: str, model: str, dirty: list[str]
 ) -> O.Outcome:
@@ -425,3 +572,4 @@ def _open_request(
     if op.refused:
         return O.refused("worktree.merged", op.reason, **data)
     return O.ok("worktree.merged", **data)
+
