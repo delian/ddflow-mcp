@@ -121,7 +121,9 @@ HOOK_FIELDS = frozenset({"session", "prompt", "source", "model", "cwd", "tool"})
 class Hooks:
     style: str
     file: str = ""  #: where the hook config lives, relative to the repo (or `~/`)
-    fields: dict[str, tuple[str, ...]] = field(default_factory=dict)  #: [hooks.fields], stdin field paths by fact
+    fields: dict[str, tuple[str, ...]] = field(
+        default_factory=dict
+    )  #: [hooks.fields], stdin field paths by fact
     emitter: str = ""  #: the stdout emit VARIANT (resolved by the hook core's closed list)
     inject: tuple[str, ...] = ()  #: canonical events at which a hook's output reaches the model
     block: str = "none"  #: how a hook blocks: one of BLOCK_MODES
@@ -170,7 +172,9 @@ class Worktrees:
 
 @dataclass(frozen=True)
 class Transcripts:
-    root: tuple[str, ...] = ()  #: session transcript root dir(s) the harness writes, e.g. ~/.claude/projects
+    root: tuple[
+        str, ...
+    ] = ()  #: session transcript root dir(s) the harness writes, e.g. ~/.claude/projects
 
 
 @dataclass(frozen=True)
@@ -216,12 +220,18 @@ class Harness:
     given: tuple[str, ...] = ()  #: `section.key` of every key the file wrote, even a zero
 
 
+#: A ``dict[str, V]`` hint spells its value type as the second subscript arg (the key is always
+#: ``str``); ``_TABLE_HINT_ARITY`` is that two-parameter form, ``_TABLE_VALUE_INDEX`` where V sits.
+_TABLE_VALUE_INDEX = 1
+_TABLE_HINT_ARITY = 2
+
+
 def _check_table(value: Any, hint: Any, where: str) -> dict:
     """A ``dict[str, str]`` (a table of strings) or ``dict[str, tuple[str, ...]]`` (a fact table)."""
     if not isinstance(value, dict):
         raise DescriptorError(f"{where}: expected a table")
     args = get_args(hint)
-    value_type = args[1] if len(args) == 2 else str
+    value_type = args[_TABLE_VALUE_INDEX] if len(args) == _TABLE_HINT_ARITY else str
     if get_origin(value_type) is not tuple:
         if not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
             raise DescriptorError(f"{where}: expected a table of strings")

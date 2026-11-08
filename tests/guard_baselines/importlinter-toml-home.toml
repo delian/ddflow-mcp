@@ -1,0 +1,53 @@
+# The `ignore_imports` allowlist of the .importlinter contract `toml-home` (tomllib and tomlkit
+# are imported only by ddflow.adapters.toml), which tests/test_architecture_import_contracts.py
+# joins back into the contract before it runs import-linter.
+#
+# Each entry is an import that breaks the contract TODAY. An entry may only be removed,
+# never added: a new violation fails the contract, and an entry that no longer matches
+# any import fails too. When a refactor moves an import, edit its entry in the same
+# change; never add one to make a new import pass. An entry marked "home" is permanent:
+# the one module allowed to own that import. The rest move behind `TomlIo`
+# (ddflow.adapters.toml) family by family, ADP-toml-unify.
+ignore_imports = [
+    # home
+    "ddflow.adapters.toml -> tomlkit",
+    "ddflow.adapters.toml -> tomllib",
+    # still to move behind the port
+    "ddflow.adapters.tools -> tomllib",
+    "ddflow.api.harness_drv -> tomllib",
+    "ddflow.api.plan -> tomllib",
+    "ddflow.api.record_lifecycle -> tomllib",
+    "ddflow.api.setup.config -> tomllib",
+    "ddflow.config_sections._layers -> tomllib",
+    "ddflow.core.eventkinds -> tomllib",
+    "ddflow.core.kinddata -> tomllib",
+    "ddflow.core.sensitivity -> tomllib",
+    "ddflow.infra.tomlcfg -> tomlkit",
+    "ddflow.infra.tomlcfg -> tomllib",
+    "ddflow.services.configwrite._edits -> tomllib",
+    "ddflow.services.configwrite._keys -> tomllib",
+    "ddflow.services.configwrite._problems -> tomllib",
+    "ddflow.services.configwrite._write -> tomllib",
+    "ddflow.services.constants_audit -> tomllib",
+    "ddflow.services.context_families -> tomllib",
+    "ddflow.services.docscheck -> tomllib",
+    "ddflow.services.doctypes.spec -> tomllib",
+    "ddflow.services.driverpacks -> tomllib",
+    "ddflow.services.driverplugins -> tomllib",
+    "ddflow.services.gates.drift -> tomllib",
+    "ddflow.services.guidance.fileformat -> tomllib",
+    "ddflow.services.harness -> tomllib",
+    "ddflow.services.harnessreg -> tomllib",
+    "ddflow.services.install_info -> tomllib",
+    "ddflow.services.lanes.endpoint -> tomllib",
+    "ddflow.services.lanes.launch_template -> tomllib",
+    "ddflow.services.legacy -> tomllib",
+    "ddflow.services.mcpconfig -> tomllib",
+    "ddflow.services.modelreg -> tomllib",
+    "ddflow.services.overlay -> tomllib",
+    "ddflow.services.pins -> tomllib",
+    "ddflow.services.shared_files -> tomllib",
+    "ddflow.services.tomldir -> tomllib",
+    "ddflow.services.upgrade_apply._appliers -> tomllib",
+    "ddflow.services.upgrade_manifest -> tomllib",
+]

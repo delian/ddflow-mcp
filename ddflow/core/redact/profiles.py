@@ -32,6 +32,10 @@ class Profile:
     home: str | None
     repo_root: str | None
     secrets: str = "marker"
+    #: How the machine's own home path is rendered: "marker" replaces it with the opaque
+    #: `[REDACTED:path]`; "resolvable" replaces it with `$HOME`, keeping the tail, so a path
+    #: an operator must recover stays addressable (bug B-redaction-hides-parked-work-path).
+    home_style: str = "marker"
 
 
 #: `repo_root` is empty where the repository's own directory name is the project's and stays.
@@ -40,7 +44,7 @@ PROFILES: Mapping[str, Profile] = {
     for p in (
         # The committed event log: the machine's own hostname and $HOME go as well, and
         # secrets keep their context.
-        Profile("log", None, None, "", secrets="mask"),
+        Profile("log", None, None, "", secrets="mask", home_style="resolvable"),
         # A committed view: byte-identical on every machine (roborev on 9b6db6bc).
         Profile("view", "", "", ""),
         # An exported document: the rendering machine's hostname and $HOME also go.
@@ -75,6 +79,7 @@ class Redactor:
         self.hostname = base.hostname if hostname is None else hostname
         self.home = base.home if home is None else home
         self.repo_root = base.repo_root if repo_root is None else repo_root
+        self.home_style = base.home_style
 
     def text(self, text: object) -> Redacted:
         return redact_text(
@@ -85,6 +90,7 @@ class Redactor:
             home=self.home,
             repo_root=self.repo_root,
             secret_style=self.profile.secrets,
+            home_style=self.home_style,
         )
 
 

@@ -20,7 +20,12 @@ from ....services.gates import skip_followup as SF
 from ..._base import _load_fresh
 from ...bug_reopen import refile_reported
 from .._common import _chore_base, _chore_event, _require
-from ..author import _author_event_identity, _author_model, _recorded_identity
+from ..author import (
+    _author_event_identity,
+    _author_model,
+    _recorded_identity,
+    _remember_declared_model,
+)
 from ..heartbeat import _commit_events, _inbox, _waiters
 from ..planning import plan_for
 from .approval import _ask_hint, _auto_complete_unavailable, _override_by_approval, _person_force
@@ -144,8 +149,10 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         log, cfg, item, v, hard, force, approval, agent, base
     )
     if denied is not None:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return denied
     if hard and force:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return O.refused(
             "item.completed",
             f"cannot complete {item}, and --force does not lift this:\n"
@@ -155,6 +162,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
         )
     force, stamp = _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp)
     if not v.may_complete and not force:
+        _remember_declared_model(st, log, cfg, model, model_source)
         return O.refused(
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
@@ -174,6 +182,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
 
         failed = _close_bugs(repo, item, pending, closed, tests, mutation, lint_exempt, agent)
         if failed is not None:
+            _remember_declared_model(st, log, cfg, model, model_source)
             return failed
         base["bugs_closed"] = closed
     # BEFORE the completion event: a crash between the two leaves the reports with tasks

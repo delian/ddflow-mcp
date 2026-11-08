@@ -91,6 +91,12 @@ def _concludes_merge_of(here: Path, base: str) -> bool:
     return line.ok and head.out in line.out.split()
 
 
+def _sync_remedy(item: str) -> str:
+    """`    ddflow sync {item} --keep-local`, the stale-rules remedy: it names the item when
+    ``here`` is its worktree (`ddflow sync <id>` works from anywhere), else is bare."""
+    return f"    ddflow sync {item} --keep-local" if item else "    ddflow sync --keep-local"
+
+
 def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = None) -> Verdict:
     """(exit_code, message) for B23: refuse a commit on a branch whose base changed the
     rules since it forked, and warn when it has fallen far behind.
@@ -140,6 +146,7 @@ def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = No
         return Verdict(OK, "")
     code, parts = 0, []
     if d.rules and e.stale_rules != "off":
+        sync_remedy = _sync_remedy(D.item_id(repo, here, cfg=cfg))
         c, m = _verdict(
             e.stale_rules,
             [
@@ -155,7 +162,7 @@ def check_drift(repo: Path, cfg: Config | None = None, *, here: Path | None = No
                 "",
                 "A session loads its rules once; edits landing on the base afterwards are",
                 "silently ignored here. Merge the base, then RE-READ the files named above:",
-                "    ddflow sync --keep-local",
+                sync_remedy,
                 "(merges the base even with uncommitted work, which it sets aside and puts",
                 f"back; or `git merge {shlex.quote(d.base)}` on a clean tree. The commit",
                 "concluding that merge is never refused)",
