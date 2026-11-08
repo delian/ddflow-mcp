@@ -22,15 +22,25 @@ def _gate(command: str, gid: str = "unit_tests") -> GateDef:
 
 def test_a_full_suite_unit_tests_gate_queues_behind_the_holder(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    marker = tmp_path / "ran"
     with SL.hold(_cfg(), "other-agent"):
-        outcome, ev = R.run_command_gate(_gate("pytest -q -n auto"), tmp_path, cfg=_cfg(0.0))
+        outcome, ev = R.run_command_gate(_gate(f"touch {marker}"), tmp_path, cfg=_cfg(0.0))
     assert outcome == "unavailable" and "blocked on" in ev["reason"], ev
+    assert not marker.exists(), "the suite started while another held the lock"
 
 
 def test_a_free_lock_runs_the_gate_and_records_the_wait(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    outcome, ev = R.run_command_gate(_gate("pytest --version"), tmp_path, cfg=_cfg())
+    outcome, ev = R.run_command_gate(_gate("touch ran"), tmp_path, cfg=_cfg())
     assert outcome == "passed" and "waited_s" in ev, ev
+
+
+def test_a_noop_unit_tests_gate_runs_while_another_holds_the_lock(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    with SL.hold(_cfg(0.0), "other-agent"):
+        outcome, ev = R.run_command_gate(_gate("true"), tmp_path, cfg=_cfg(0.0))
+    assert outcome == "passed", ev
+    assert "blocked on" not in ev.get("reason", "")
 
 
 def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
