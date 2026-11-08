@@ -497,14 +497,30 @@ def _commands(text: str) -> list[list[str]]:
 
 
 def _sh_c(head: list[str]) -> int:
-    """The index of the `-c` option in the shell command `head` (its value is the NEXT word),
-    whether it stands alone or is clustered with other single-letter flags -- `sh -xc 'pkill'`
-    clusters `-x` and `-c`, and its `-c` still takes the next word
-    (B-forbidden-guard-multiline-quote-bypass critic: a clustered `-c` was not descended)."""
-    for i in range(1, len(head)):
+    """The index of the `-c` option's word in the shell command `head` (its value is the NEXT
+    word), or -1. Bash reads its single-letter options until `--` or the first non-option
+    operand (a script name); a `c` inside a cluster is `-c` -- `sh -xc 'pkill'` clusters `-x`
+    and `-c` and still takes the next word (B-forbidden-guard-multiline-quote-bypass critic
+    #3). A `-c` after a script operand, and the `c` a `-o`/`-O` optname swallows, is NOT the
+    shell's `-c`: `bash ./tool.sh -cache 'pkill'` runs `./tool.sh` (not `pkill`) and
+    `bash -ocpipefail 'pkill'` runs no `pkill` (critic #5)."""
+    i = 1
+    while i < len(head):
         w = head[i]
-        if w == "-c" or (w.startswith("-") and not w.startswith("--") and "c" in w[1:]):
-            return i
+        if w == "--" or not w.startswith("-"):
+            return -1  # `--` ends options; a non-option is the script operand
+        if w.startswith("--"):
+            i += 1  # a long option has no `-c` spelling
+            continue
+        if w[1:] in ("o", "O"):
+            i += 2  # `-o NAME` / `-O NAME`: skip the optname word too
+            continue
+        for ch in w[1:]:
+            if ch == "c":
+                return i
+            if ch in "oO":
+                break  # the rest of this token is the optname; no `-c` flag in it
+        i += 1
     return -1
 
 

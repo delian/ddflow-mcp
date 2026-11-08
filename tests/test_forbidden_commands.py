@@ -81,6 +81,15 @@ def test_refused(cmd):
         # and runs no command, so the body is not a command (critic #5, dquote process sub)
         'echo "<(git push origin main)"',
         'echo ">(git push origin main)"',
+        # a `-c` AFTER a script operand is an argument to the script, not the shell's own -c
+        # (`bash ./tool.sh -cache 'x'` runs ./tool.sh), and `-o`/`-O` swallow their optname, so
+        # a `c` inside `-ocpipefail` is not a -c flag that runs the quoted word (critic #5)
+        "bash ./tool.sh -cache 'git push origin main'",
+        "bash -ocpipefail 'git push origin main'",
+        # a `case` word whose `esac` is only literal text is not a case statement: bash closes
+        # the $() at its `)` and merely prints `git push` inside the quote, never runs it
+        # (critic #2 / #4: an `esac` a quote swallows must not extend the $() body to it)
+        'echo "$(echo case x); git push origin main; esac"',
         'ddflow review X --force --reason "an extra round"',
         'ddflow review X --reason "an extra round" --force',
         "rm -rf build",
