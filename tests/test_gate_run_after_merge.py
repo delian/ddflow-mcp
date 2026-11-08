@@ -31,7 +31,9 @@ def _a_person_records_by_hand(monkeypatch):
     monkeypatch.delenv("DDFLOW_AGENT", raising=False)
 
 
-def _merged(repo: Path, *, passed_before: bool = False) -> None:
+def _merged(
+    repo: Path, *, passed_before: bool = False, partial_before: bool = False
+) -> None:
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
@@ -47,6 +49,10 @@ def _merged(repo: Path, *, passed_before: bool = False) -> None:
     if passed_before:
         run_cli(
             repo, "gate", "record", "T1", "unit_tests", "--outcome", "passed", "--evidence", "e"
+        )
+    if partial_before:
+        run_cli(
+            repo, "gate", "record", "T1", "unit_tests", "--outcome", "partial", "--evidence", "e"
         )
     assert run_cli(repo, "merge", "T1")[0] == 0
 
@@ -89,6 +95,23 @@ def test_a_forced_gate_run_after_merge_takes_the_fresh_measurement(repo):
     text = out + err
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed"
+
+
+def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
+    """B-merged-partial-rerun-records-unavailable: a merged item whose base moved on has no
+    tree, so `gate run` re-measures nothing and `_no_tree_reason` recorded UNAVAILABLE over
+    the measured partial -- erasing baseline-red, the only evidence `ddflow approve` accepts.
+    A measured partial must be kept like a pass, and the message must say only a person can
+    settle it."""
+    _merged(repo, partial_before=True)
+    (repo / "later.txt").write_text("later\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "later work on main")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
+    text = out + err
+    assert code != 0, text
+    assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
+    assert "only a person can settle" in text
 
 
 def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
