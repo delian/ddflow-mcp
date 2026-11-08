@@ -265,7 +265,9 @@ def test_a_knob_semantics_change_is_a_note_and_keeps_the_default(repo: Path) -> 
     )
     kind, _c, old, new = UP._net([added, semantics])["s.k"]
     assert (kind, old, new) == ("knob_added", None, 20)
-    note = [i for i in UP.config_items([added, semantics], Config.load(repo)) if i["change"] == "knob_semantics_changed"]
+    items = UP.config_items([added, semantics], Config.load(repo))
+    assert any(i["change"] == "knob_added" for i in items), "the default change is still announced"
+    note = [i for i in items if i["change"] == "knob_semantics_changed"]
     assert note and note[0]["action"] == UP.NOTE
     assert "always-run guards" in note[0]["summary"]
 

@@ -250,7 +250,7 @@ def config_items(changes: list[UM.Change], cfg: Config) -> list[dict[str, Any]]:
                 f" (keeps this project's value; to adopt the new default: "
                 f"ddflow config --set {key} {json.dumps(new)})"
             )
-            items.append(item)
+        items.append(item)
     items += _semantics_notes(changes)
     return items
 
