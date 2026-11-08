@@ -124,7 +124,7 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
     )
     finish.chmod(finish.stat().st_mode | stat.S_IXUSR)
 
-    code, shown, _err = run_cli(
+    _code, shown, _err = run_cli(
         repo, "review", "T1", "--gate", "critic", "--full", "--branch", "feat"
     )
     gate = _gate(repo)
