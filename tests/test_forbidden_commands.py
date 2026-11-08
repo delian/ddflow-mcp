@@ -176,6 +176,9 @@ def test_refused_comment_quote_spans_lines(cmd):
         'echo "$(case x in x) $(echo esac); git push origin main;; esac)"',
         # a <(...) process substitution's `)` is not the outer $()'s close, so `git push` is seen
         'echo "$(cat <(echo ); git push origin main)"',
+        # a bare `case` argument is a word, not a case statement: the `)` after it closes the
+        # $(), so `git push` after the real newline is still seen (bare-case bypass)
+        "echo $(echo case)\ngit push origin main",
         # a top-level <(...) process substitution body runs as a command too (not only nested)
         "cat <(git push origin main)",
     ],

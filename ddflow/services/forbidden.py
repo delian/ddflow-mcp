@@ -127,7 +127,11 @@ def _strip_continuations(text: str) -> str:
     i, n = 0, len(text)
     while i < n:
         c = text[i]
-        if c == "'":
+        if c == "$" and i + 1 < n and text[i + 1] == "'":
+            j = _ansi_c_end(text, n, i)
+            out.append(text[i:j])
+            i = j
+        elif c == "'":
             j = text.find("'", i + 1)
             out.append(text[i:] if j < 0 else text[i : j + 1])
             i = n if j < 0 else j + 1
@@ -221,6 +225,18 @@ def _comment(text: str, k: int, j: int) -> bool:
     return text[k] == "#" and (k == j or text[k - 1] in _COMMENT_BOUNDARY)
 
 
+def _has_esac(text: str, n: int, k: int) -> bool:
+    """A `case` at `k` opens a case STATEMENT, whose `)` separators are pattern terminators,
+    only if a bare `esac` closes it somewhere ahead; a bare `case` WORD (`echo case`) has none
+    and is just a word (B-forbidden-guard-multiline-quote-bypass bare-case)."""
+    j = text.find("esac", k + 4)
+    while j >= 0:
+        if _bare_word(text, n, j, "esac"):
+            return True
+        j = text.find("esac", j + 1)
+    return False
+
+
 def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int:
     """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes and
     substitutions inside are navigated but mark no newline. An escaped closer is not the end."""
@@ -232,7 +248,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
         if _comment(text, k, j):
             k2 = text.find("\n", k)  # a comment: its `)` is text, and its text runs no command
             k = k2 if k2 >= 0 else n
-        elif closer == ")" and _bare_word(text, n, k, "case"):
+        elif closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
             k = _case_end(text, n, k, bodies)  # a case's `)` separators end patterns, not this `$(` body
         elif c == "'":
             k2 = text.find("'", k + 1)
@@ -298,6 +314,8 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
         elif c == "'":
             k2 = text.find("'", i + 1)
             i = i + 1 if k2 < 0 else k2 + 1
+        elif c == "$" and i + 1 < n and text[i + 1] == "'":
+            i = _ansi_c_end(text, n, i)
         elif c == '"':
             i = _dquote_end(text, n, bodies, i)
         elif c == "\\":
