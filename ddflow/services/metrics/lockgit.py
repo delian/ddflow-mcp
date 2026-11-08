@@ -15,7 +15,8 @@ from typing import Protocol
 
 from ...core import bookkeeping
 from ...infra import git as G
-from ..probe import CLEAN, CONFLICT, run as probe_run
+from ..probe import CLEAN, CONFLICT
+from ..probe import run as probe_run
 
 
 class Probes(Protocol):
