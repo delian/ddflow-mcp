@@ -7,9 +7,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ._docs import declare, knob
 from ..services.modelreg import family_hints as _catalog_family_hints
 from ..services.modelreg import load as _load_catalog
+from ._docs import declare, knob
 
 #: Model-name substring -> pretraining family, used to answer the one question the
 #: review stack rests on: "is this reviewer independent of the author?"
