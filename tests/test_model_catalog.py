@@ -68,7 +68,7 @@ def test_family_hints_reader_matches_the_former_table_in_order():
         "minimax": "minimax",
         "ernie": "baidu",
     }
-    assert FAMILY_HINTS == snapshot, "agent.FAMILY_HINTS consumes the reader, not a stale copy"
+    assert list(FAMILY_HINTS.items()) == list(snapshot.items()), "agent.FAMILY_HINTS keeps the order"
     assert list(M.family_hints(M.load()).items()) == list(snapshot.items())
 
 
