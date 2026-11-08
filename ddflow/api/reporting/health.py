@@ -65,6 +65,15 @@ from .waitcycles import wait_findings, wait_order, wait_report, wait_rows
 _stale_glob_notes = LBR.stale_glob_notes  # B56dc2baaf6 pin; moved, keep the name here
 
 
+def _stale_glob_section(repo: Path, cfg, st, agent: str, fix: bool) -> list[str]:
+    """The stale-package-glob part of `doctor`: the notes, or -- the `--fix-stale-globs`
+    flag -- each item's stale glob rewritten to its package path and each live lease
+    retargeted (B-stale-globs-after-split-wave)."""
+    if fix:
+        return _apply_stale_globs(repo, cfg, st, agent)
+    return _stale_glob_notes(repo, st)
+
+
 def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> list[str]:
     """`ddflow doctor --fix-stale-globs`: rewrite the stale package glob of every unfinished
     item to its package path, so no open item is left leasing a module that no longer is,
@@ -420,7 +429,7 @@ def doctor(
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
-    notes += _apply_stale_globs(repo, cfg, st, agent) if fix_stale_globs else _stale_glob_notes(repo, st)
+    notes += _stale_glob_section(repo, cfg, st, agent, fix_stale_globs)
     # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
     # shared generated file with no merge strategy at all.
     # the rendered views tell a quoted conflict block from a conflict (B-viewmarkers)
