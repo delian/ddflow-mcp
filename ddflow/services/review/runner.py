@@ -646,12 +646,13 @@ def _in_rerun_cut(prior: dict[str, Any], f: dict[str, Any]) -> bool:
 def _kept_over_rerun(prior: dict[str, Any], f: dict[str, Any], again: set[int], who: str) -> bool:
     """Should finding ``f`` of the record ``prior`` survive a re-run of chunks ``again`` with
     reviewer ``who``? A chunk that is not re-run stays; a finding numbered in an earlier cut
-    (a delta carried it) stays too (`_in_rerun_cut`); and a RE-RUN chunk's finding is replaced
-    only when the SAME reviewer raised it. A peer reviewer's finding of that chunk is the other
-    reviewer's verdict, kept -- dropping it would be a false pass route (bug
-    B-chunk-rerun-drops-peer-findings). A finding that names NO reviewer (an old record) is
-    kept too: it cannot be attributed, and dropping an unattributed finding is the same false
-    pass."""
+    (a delta carried it) stays too (`_in_rerun_cut`), whatever its reviewer, because a re-run
+    of THIS cut's chunk does not cover it -- such a finding is settled by triage or a full
+    re-review, not by a --chunk re-run; and a RE-RUN chunk's finding is replaced only when the
+    SAME reviewer raised it. A peer reviewer's finding of that chunk is the other reviewer's
+    verdict, kept -- dropping it would be a false pass route (bug B-chunk-rerun-drops-peer-
+    findings). A finding that names NO reviewer (an old record) is kept too: it cannot be
+    attributed, and dropping an unattributed finding is the same false pass."""
     if int(f.get("chunk", 0)) not in again:
         return True
     if not _in_rerun_cut(prior, f):
