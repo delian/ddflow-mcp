@@ -17,8 +17,7 @@ claude_md = "yes"
 [hooks]
 style = "claude"
 file = ".github/hooks/ddflow.json"
-normalizer = "vscode"
-emitter = "vscode"
+emitter = "json_context"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start"]
@@ -57,3 +56,4 @@ date = "2026-10-09"
 sources = ["https://code.visualstudio.com/docs/copilot/customization/mcp-servers"]
 record = "R-hx-copilot"
 unverified = ["headless", "worktree dir"]
+

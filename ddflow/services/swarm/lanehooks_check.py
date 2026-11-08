@@ -114,8 +114,7 @@ def _first_holder(repo: Path, agent: str, bad: list[str]) -> tuple[str, str]:
 
 #: The options a refuse-write names, in the CLI and MCP form the harnesses accept.
 OPTIONS = (
-    "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), send a suggestion "
-    "(`ddflow suggest ...` / MCP `ddflow_suggest`), or open a task "
+    "wait (`ddflow wait --lease <glob>` / MCP `ddflow_wait`), or open a task "
     "(`ddflow task add ...` / MCP `ddflow_task action=add`)"
 )
 

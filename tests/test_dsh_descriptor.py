@@ -29,11 +29,10 @@ def test_family_is_the_mcp_client_key_not_a_model_family():
 
 def test_hooks_are_the_claude_bridge_with_only_the_events_it_has():
     hk = _dsh().hooks
-    assert (hk.style, hk.block, hk.normalizer, hk.emitter) == (
+    assert (hk.style, hk.block, hk.emitter) == (
         "claude",
         "exit2",
-        "claude",
-        "claude",
+        "plain",
     )
     assert set(hk.events) == {"session_start", "prompt", "pre_tool", "post_tool", "stop"}
     assert "pre_compact" not in hk.events and "session_end" not in hk.events

@@ -230,8 +230,8 @@ def test_config_and_phase_approval_refusals_name_one_refusal(proj):
     assert code == 3, err
     assert "refusing: " in err and "refusing: refusing: " not in err, err
 
-    # The no-`--approval` steering refusal is the one `operator_gate` path it does NOT
-    # prefix, so it must still carry exactly one 'refusing: ' (added here, never doubled).
+    # `operator_gate` owns the 'refusing: ' prefix on every refusal, steering included
+    # (B-consume-refusal-prefix-owner), so it still carries exactly one, never doubled.
     code, _o, err = run_cli(proj, "phase", "complete", "P9", agent="bot")
     assert code == 3, err
     assert "refusing: " in err and "refusing: refusing: " not in err, err

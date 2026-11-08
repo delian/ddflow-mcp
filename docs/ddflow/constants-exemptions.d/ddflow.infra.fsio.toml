@@ -1,4 +1,2 @@
 [exempt]
-"ddflow/infra/fsio.py:LOCK_POLL_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
-"ddflow/infra/fsio.py:MAX_LEVEL" = 'a format fact derived from MAX_LEVEL_DIGITS (a level above any real one), not a preference'
 "ddflow/infra/fsio.py:MAX_LEVEL_DIGITS" = 'syntax arity of a parsed form (how many parts a split has), a format fact, not a preference'

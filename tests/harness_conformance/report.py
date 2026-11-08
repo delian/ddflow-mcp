@@ -57,20 +57,18 @@ def baseline() -> list[str]:
 
 
 def zero_python() -> dict:
-    """The D-DRV-2 metric. An agent needs per-agent Python when its hook normalizer or emitter
-    is used by no other descriptor; one with no command hooks needs none. A proxy, stated."""
+    """The D-DRV-2 metric. An agent needs per-agent Python when its hook emit variant is used
+    by no other descriptor; one with no command hooks needs none. A proxy, stated: the field
+    map is descriptor DATA, not Python, so only the emit variant is counted."""
     hs = HR.load()
     use: Counter = Counter()
     for h in hs:
         if h.hooks is not None:
-            use.update({("n", h.hooks.normalizer), ("e", h.hooks.emitter)})
+            use[h.hooks.emitter] += 1
     bespoke = sorted(
         h.id
         for h in hs
-        if h.hooks is not None
-        and any(
-            use[k] < SHARE_MIN for k in (("n", h.hooks.normalizer), ("e", h.hooks.emitter)) if k[1]
-        )
+        if h.hooks is not None and h.hooks.emitter and use[h.hooks.emitter] < SHARE_MIN
     )
     return {
         "agents": len(hs),

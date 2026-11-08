@@ -21,11 +21,14 @@ native_why = "Tabnine Agent reads .tabnine/guidelines/*.md, not AGENTS.md"
 [hooks]
 style = "gemini"
 file = ".tabnine/agent/settings.json"
-normalizer = "gemini"
-emitter = "gemini"
+emitter = "json_context"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
+
+[hooks.fields]
+prompt = ["prompt"]
+tool = ["tool_name"]
 
 [hooks.events]
 session_start = "SessionStart"
@@ -40,3 +43,4 @@ session_end = "SessionEnd"
 date = "2026-10-09"
 sources = ["https://docs.tabnine.com/main/getting-started/tabnine-cli.md"]
 unverified = ["native AGENTS.md"]
+

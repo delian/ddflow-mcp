@@ -324,7 +324,11 @@ def verify_regression_test(
             "runner), so the named test could not be run here."
         }
     run = GateDef(id="regression_check", title="regression test", command=command)
-    fix_outcome, fix_ev = run_command_gate(run, tree)
+    # The caller's config, never the scratch tree's: a historical commit checked out for
+    # a pre-fix/fixed run can carry a committed config this ddflow refuses to load
+    # (B20cfd41344: `base_ref = "--local"`), and the child env must come from the project's
+    # own config anyway. `run_command_gate` otherwise reloads it from `tree`.
+    fix_outcome, fix_ev = run_command_gate(run, tree, cfg=cfg)
     if fix_outcome == "unavailable":
         why, extra = describe_run(fix_outcome, fix_ev, cfg, where="the fixed tree")
         return REGRESSION_COULD_NOT_RUN, {
@@ -400,7 +404,7 @@ def _prefix_check(
         # and can differ from the fixed-tree `command` (roborev LOW), so evidence that
         # kept only `command` would misreport what the pre-fix run was.
         evidence["prefix_command"] = pre_command
-        pre_outcome, pre_ev = run_command_gate(pre_run, ptree)
+        pre_outcome, pre_ev = run_command_gate(pre_run, ptree, cfg=cfg)
     evidence["prefix_outcome"] = pre_outcome
     if pre_outcome == "unavailable":
         pre_why, pre_extra = describe_run(pre_outcome, pre_ev, cfg, where="the pre-fix tree")
