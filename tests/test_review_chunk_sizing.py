@@ -64,11 +64,12 @@ def test_a_diff_is_split_to_fit_the_output_cap_before_it_is_sent(monkeypatch):
 
 def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
     """shrink on a truncation, through the review path: a chunk that ran out of output budget
-    is retried as TWO non-empty SINGLE-FILE pieces, never re-sent at the size that truncated."""
+    is retried as TWO non-empty SINGLE-FILE pieces that carry their own bodies, never re-sent
+    at the size that truncated (a bare header or a trimmed whole is not a half)."""
     # One two-file chunk that CAN halve: the two files fit under one budget, and a chunk lost
     # to its size splits into one piece per file.
     rev = Reviewer(name="r", base_url="http://x", model="m", max_chunk_chars=500, hedge=1)
-    diff = _files("a" * 80, "b" * 80)
+    diff = _files("content_zero_xx", "content_one_yy")
     first: list[str] = []
     retried: list[str] = []
 
@@ -83,14 +84,15 @@ def test_a_chunk_that_truncates_is_retried_shrunk_into_halves(monkeypatch):
     res = review(rev, diff, "i")
     assert len(first) == 1, "the two files fit in one chunk"
 
-    def files(d: str) -> set[str]:
-        return {ln.split(" ")[2] for ln in d.splitlines() if ln.startswith("diff --git")}
+    def named(d: str) -> str:
+        heads = [ln for ln in d.splitlines() if ln.startswith("diff --git")]
+        return next(iter({ln.split(" ")[2] for ln in heads})) if len(heads) == 1 else ""
 
-    # Each retried piece is exactly ONE non-empty file diff; together they keep both files. A
-    # path that re-sends a trimmed copy of the whole (both headers) plus an empty user names
-    # {2, 0} files, not {1, 1} -- it cannot pass.
-    retried_files = [files(d) for d in retried]
-    assert len(retried) == 2 and all(len(r) == 1 for r in retried_files), retried_files
-    assert set().union(*retried_files) == {"a/f0.py", "a/f1.py"}
+    # One piece per file, and each piece CARRIES ITS OWN BODY: a header-only re-send, or a
+    # trimmed copy of the whole, names the file but drops the body and cannot pass.
+    halves = {named(d): d for d in retried}
+    assert len(halves) == 2, "the two-file chunk halves into two pieces, one per file"
+    assert "content_zero_xx" in halves["a/f0.py"], "f0's body survives in its half"
+    assert "content_one_yy" in halves["a/f1.py"], "f1's body survives in its half"
     assert all(0 < len(d) < len(first[0]) for d in retried), "each half is smaller than the whole"
     assert res.status == REVIEWED, res.reason
