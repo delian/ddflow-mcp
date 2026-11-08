@@ -101,8 +101,11 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
 #: keep the lock, so the ambiguous names over-lock (the safe direction).
 _NO_SUITE = frozenset({"true", "false", ":", "echo", "printf", "date", "sleep", "pwd", "exit"})
 
-#: Any of these makes the line a compound: at least two jobs, not a lone no-op.
-_COMPOUND = ("&&", "||", "|", ";", "&", "$(", "\n", "`")
+#: Any of these makes the line a compound (at least two jobs), never a lone no-op.
+_COMPOUND = ("&&", "||", "|", ";", "&", "$(", "<(", ">(", "\n", "`")
+
+#: Shell words that lead a command to another: walk them (and their flag args) off.
+_PREFIX = ("uv", "run", "env", "command", "builtin", "exec")
 
 
 def _is_trivial(command: str) -> bool:
@@ -110,20 +113,17 @@ def _is_trivial(command: str) -> bool:
     no test file, so the naive whole-suite read would queue it on the lock although it runs
     nothing but a shell builtin.
 
-    The WHOLE command must be the no-op: any shell compound (`true; make check`,
-    `true &&pytest` with an attached operator) still runs a suite, so it is not trivial."""
+    The WHOLE command must be the no-op: any shell compound or substitution
+    (`true; make check`, `true &&pytest`, `true <(pytest)`) still runs a suite, so it is not
+    trivial."""
     if any(c in command for c in _COMPOUND):
         return False
     try:
         words = shlex.split(command, comments=True, posix=True)
     except ValueError:
         return False
-    if not words:
-        return False
-    while words and (
-        words[0] in ("uv", "run", "env", "command", "builtin", "exec") or "=" in words[0]
-    ):
-        words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off
+    while words and (words[0] in _PREFIX or "=" in words[0] or words[0].startswith("-")):
+        words = words[1:]  # the same prefix `_runs_ddflow_ci` walks off, plus its flag args
     return bool(words) and words[0].rsplit("/", 1)[-1] in _NO_SUITE
 
 
