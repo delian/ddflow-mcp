@@ -35,17 +35,48 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
     return LK.ticker(log, cfg, it, tick_s)
 
 
-def _say_result(say: Callable[[str], None], res) -> None:
-    """One reviewer's verdict, then each finding with its detail."""
+def _say_result(say: Callable[[str], None], res, kept=None) -> None:
+    """One reviewer's verdict, then each finding with its detail.
+
+    ``kept`` is the gate's earlier recorded findings (a delta's): a finding is numbered by
+    its place in the RECORD -- the list `review triage --finding N` addresses -- not by this
+    round alone, so a delta's new finding keeps the number #5 it has on the record instead
+    of renumbering to #1 and making a triage mark a different finding (bug B32ce00713b).
+    """
     say(
         f"  {res.reviewer} {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
         f"{res.elapsed_s:.1f}s" + (f" — {res.reason}" if res.reason else "")
     )
-    for n, f in enumerate(res.findings, 1):
+    for n, f in _record_numbers(res, kept):
         say(f"\n  #{n} [{f.severity}] {f.location or f.title}")
         for line in f.detail.splitlines():
             if line.strip():
                 say(f"      {line.strip()}")
+
+
+def _record_numbers(res, kept):
+    """(record number, finding) pairs: a round's findings numbered #1..#K as a full round
+    numbers them, or each delta finding numbered where its digest stands in ``kept`` (the
+    earlier findings a byte-identical one stays bound to; a new one is the next place).
+
+    ``kept`` is the caller's growing list of the findings seen before, extended here as
+    each finding is emitted, so a second reviewer's delta finding is numbered after the
+    first's (bug B32ce00713b, raised two reviewers a delta round numbers the same)."""
+    if kept is None:
+        return list(enumerate(res.findings, 1))
+    have = {str(f.get("digest") or ""): n for n, f in enumerate(kept, 1)}
+    numbered: list[tuple[int, Any]] = []
+    for f in res.findings:
+        digest = str(getattr(f, "digest", "") or "")
+        if digest and digest in have:
+            n = have[digest]
+        else:
+            kept.append({"digest": digest})
+            n = len(kept)
+            if digest:
+                have[digest] = n
+        numbered.append((n, f))
+    return numbered
 
 
 def _prior_evidence(rec) -> dict[str, Any]:
