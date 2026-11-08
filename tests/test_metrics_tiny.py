@@ -9,7 +9,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from helpers import rpc_call, tool_json
 from lanes_fixture import T0, Log
 from metrics_fixture import frozen
 
@@ -90,7 +89,9 @@ def test_confirmed_high_or_medium_findings_are_counted_not_low_or_refuted():
     ans = run(seeded())
     fr = ans.metrics["finding_rate"]
     assert fr["triaged"] == 3
-    assert fr["confirmed_high_medium"] == 2  # A HIGH confirmed + B MEDIUM confirmed, not A's LOW refuted
+    assert (
+        fr["confirmed_high_medium"] == 2
+    )  # A HIGH confirmed + B MEDIUM confirmed, not A's LOW refuted
     assert fr["rate"] == pytest.approx(2 / 3)
 
 
@@ -114,7 +115,9 @@ def test_an_unmeasured_size_is_not_counted_as_failing_the_tiny_limit():
     log.add("task.added", "A", "lead", T0 - 1000, title="A", body="", parent="P1")
     log.claim("a1", "A", T0, "f.py")
     log.add("gate.started", "A", "a1", T0 + 60, gate="rubber_duck")
-    log.add("gate.passed", "A", "a1", T0 + 300, gate="rubber_duck", by="a1", evidence={})  # no diff_stat
+    log.add(
+        "gate.passed", "A", "a1", T0 + 300, gate="rubber_duck", by="a1", evidence={}
+    )  # no diff_stat
     log.complete("a1", "A", T0 + 500)
     log.release("a1", "A", T0 + 501)
     ans = run(log)
