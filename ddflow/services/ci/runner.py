@@ -145,10 +145,55 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     if refused is not None:
         return refused
     return _settle(
-        cfg, repo, sha, base, cmd,
-        command=command, ref=ref, timeout_s=timeout_s, tick=tick,
-        changed_from=changed_from, full=full, for_item=for_item, rates=rates,
+        cfg,
+        repo,
+        sha,
+        base,
+        cmd,
+        command=command,
+        ref=ref,
+        timeout_s=timeout_s,
+        tick=tick,
+        changed_from=changed_from,
+        full=full,
+        for_item=for_item,
+        rates=rates,
     )
+
+
+def _busy_result(cmd: str, sha: str, busy) -> Result:
+    """The Result for a run the host suite slot could not take: a busy slot is a wasted wait, not
+    a failed run, and it carries the seconds spent queued before giving up."""
+    return Result(
+        "unavailable", command=cmd, sha=sha, reason=str(busy),
+        waited_s=round(busy.waited_s, 6),
+    )  # fmt: skip
+
+
+def _merged_once(repo, cfg, sha, base, cmd, decide):
+    """Merge ``sha`` with ``base`` in a scratch tree and let ``decide(tree)`` say the outcome:
+    a `Result` to return, or `None` for "take the suite slot". A refused merge and a busy suite
+    slot become their `Result`s here, so no caller repeats that mapping."""
+    try:
+        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+            if tree is None:
+                return _merge_refused(cmd, sha, failure)
+            return decide(tree)
+    except SL.SuiteBusy as busy:
+        return _busy_result(cmd, sha, busy)
+
+
+def _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used) -> Result:
+    """The settled `Result` of a run past its verdict: a timeout or a run that never started is its
+    own Result, anything else is the command's Result, in both cases with the seconds it queued."""
+    if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
+        unfinished.waited_s = waited
+        return unfinished
+    res = _result(p, out_prefix, cmd, sha, base, scope)
+    res.waited_s = waited
+    if scope is None and used:
+        res.scope = {"workers": used}
+    return res
 
 
 def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
@@ -178,8 +223,16 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
 
     def plan(tree):
         return _plan(
-            cfg, repo, cmd, tree, sha, base, changed_from,
-            full=full, override=override, for_item=for_item,
+            cfg,
+            repo,
+            cmd,
+            tree,
+            sha,
+            base,
+            changed_from,
+            full=full,
+            override=override,
+            for_item=for_item,
         )
 
     def merged(tree):
@@ -187,87 +240,74 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             return Result("failed", command=cmd, sha=sha, reason=stale)
         return plan(tree)
 
-    def finish(p, out_prefix, waited, cmd, scope):
-        if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
-            unfinished.waited_s = waited
-            return unfinished
-        res = _result(p, out_prefix, cmd, sha, base, scope)
-        res.waited_s = waited
-        if scope is None and used:
-            res.scope = {"workers": used}
-        return res
-
     def without_slot(tree, cmd, scope):
         if stale := _stale_pins(tree, cfg, base, custom=override):
             return Result("failed", command=cmd, sha=sha, reason=stale)
-        return finish(
-            *_run_locked(
-                cfg, holder, tree, cmd, scope, budget, tick, used, False,
-                lock_wait=_lock_wait(timeout_s),
-            ),
-            cmd, scope,
+        p, out_prefix, waited = _run_locked(
+            cfg,
+            holder,
+            tree,
+            cmd,
+            scope,
+            budget,
+            tick,
+            used,
+            False,
+            lock_wait=_lock_wait(timeout_s),
         )
+        return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
+
+    def scoped_run(tree):
+        # A selected run plans the scope now: run without the slot if it fits, else return None so
+        # the caller merges afresh INSIDE the slot for the full-suite run.
+        nonlocal cmd
+        cmd, scope = plan(tree)
+        return None if _needs_suite_slot(cfg, cmd, scope, rates) else without_slot(tree, cmd, scope)
+
+    def override_run(tree):
+        # A named command merges once and takes no slot; it never falls through to the slot path.
+        name, scope = plan(tree)
+        return without_slot(tree, name, scope)
+
+    def terse_run(tree):
+        return without_slot(tree, *plan(tree))
 
     # Only a selected run merges a tree to plan its scope before it knows whether it slots; a
     # full-suite run has no scope to plan and merges afresh INSIDE the slot, so its conflict (if
     # any) is decided there, not before the wait; a named command merges once and takes no slot.
-    scope = None
     if for_item and not override:
-        try:
-            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                if tree is None:
-                    return _merge_refused(cmd, sha, failure)
-                cmd, scope = plan(tree)
-                if not _needs_suite_slot(cfg, cmd, scope, rates):
-                    return without_slot(tree, cmd, scope)
-        except SL.SuiteBusy as busy:
-            return Result(
-                "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 6),
-            )  # fmt: skip
-
+        if (settled := _merged_once(repo, cfg, sha, base, cmd, scoped_run)) is not None:
+            return settled
     elif override:
-        try:
-            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                if tree is None:
-                    return _merge_refused(cmd, sha, failure)
-                cmd, scope = plan(tree)
-                return without_slot(tree, cmd, scope)
-        except SL.SuiteBusy as busy:
-            return Result(
-                "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 6),
-            )  # fmt: skip
-
+        return _merged_once(repo, cfg, sha, base, cmd, override_run)
     elif not _needs_suite_slot(cfg, cmd, None, rates):
-        try:
-            with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
-                if tree is None:
-                    return _merge_refused(cmd, sha, failure)
-                return without_slot(tree, *plan(tree))
-        except SL.SuiteBusy as busy:
-            return Result(
-                "unavailable", command=cmd, sha=sha, reason=str(busy),
-                waited_s=round(busy.waited_s, 6),
-            )  # fmt: skip
+        return _merged_once(repo, cfg, sha, base, cmd, terse_run)
 
     try:
         p, out_prefix, waited, cmd, scope = _run_under_slot(
-            cfg, holder, repo, sha, base, cmd, budget, tick, used,
-            lock_wait=_lock_wait(timeout_s), plan=merged,
+            cfg,
+            holder,
+            repo,
+            sha,
+            base,
+            cmd,
+            budget,
+            tick,
+            used,
+            lock_wait=_lock_wait(timeout_s),
+            plan=merged,
         )
     except SL.SuiteBusy as busy:
-        return Result(
-            "unavailable", command=cmd, sha=sha, reason=str(busy),
-            waited_s=round(busy.waited_s, 6),
-        )  # fmt: skip
+        return _busy_result(cmd, sha, busy)
     if p is None:  # the fresh merge refused the run: a conflict, or stale pins
         out_prefix.waited_s = waited
         return out_prefix
-    return finish(p, out_prefix, waited, cmd, scope)
+    return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
 
 
-def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, lock_wait, plan):
+def _run_under_slot(  # noqa: PLR0913 -- the slot state, all already held by the caller, one per facet
+    cfg, holder, repo, sha, base, cmd, budget, tick, used, *, lock_wait, plan
+):
     """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
     before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
     B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
@@ -288,7 +328,9 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, lo
             if isinstance(planned, Result):
                 return None, planned, waited, cmd, None
             cmd, scope = planned
-            p, out_prefix = _execute(cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used)
+            p, out_prefix = _execute(
+                cfg, tree, cmd, scope, budget, tick, holding_suite=True, used=used
+            )
             return p, out_prefix, waited, cmd, scope
     raise AssertionError("unreachable: SL.hold raises SuiteBusy instead of yielding past here")
 
@@ -639,7 +681,9 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
         sha=sha,
         merged_with=base,
         command=cmd,
-        reason="" if p.code == 0 else (f"{cmd} killed by signal {-p.code}" if killed else f"{cmd} exited {p.code}"),
+        reason=""
+        if p.code == 0
+        else (f"{cmd} killed by signal {-p.code}" if killed else f"{cmd} exited {p.code}"),
         output_tail=out[-TAIL_CHARS:],
         output=out,
         failures=failure_evidence(out) if p.code != 0 and not killed else {},

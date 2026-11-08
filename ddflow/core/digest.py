@@ -4,7 +4,7 @@ This shim stays until the import-linter baselines are empty, then it is deleted;
 import `ddflow.adapters.digest` directly. See `ddflow.adapters.digest` for the functions.
 """
 
-from ddflow.adapters.digest import *  # noqa: F401,F403  # re-export the whole family
+from ddflow.adapters.digest import *  # noqa: F403  # re-export the whole family
 from ddflow.adapters.digest import (  # noqa: F401  # the historical names, for `import *` and isinstance
     MARKER,
     NOT_FOR_SECURITY,

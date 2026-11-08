@@ -22,8 +22,13 @@ Three shapes of output, one function:
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from . import fsio
+from . import proc as P
 from .ports import port
 
 
@@ -44,13 +49,6 @@ class Git(Protocol):
     def unmerged(self, repo: Path | str, timeout: float | None = None) -> list[str] | None:
         """The unmerged paths of an in-progress merge; None when git could not answer."""
 
-
-import os
-from dataclasses import dataclass
-from pathlib import Path
-
-from . import fsio
-from . import proc as P
 
 #: Seconds a git call may run unless the caller says otherwise.
 GIT_TIMEOUT = P.TIMEOUTS["git"]
@@ -505,4 +503,3 @@ def changed_paths(
 def init_repo(path: Path | str) -> bool:
     """Make ``path`` a git repository; False when git could not."""
     return run(path, "init", "-q").ok
-

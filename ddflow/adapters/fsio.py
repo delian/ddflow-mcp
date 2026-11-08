@@ -18,11 +18,11 @@ import stat
 import tempfile
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from .ports import port
+
 
 @port
 @runtime_checkable
