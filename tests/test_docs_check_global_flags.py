@@ -60,11 +60,14 @@ def test_the_exempt_set_has_not_drifted_from_the_mirrored_root_options():
     from ddflow.surfaces.cli import build_parser
 
     root = build_parser()
+    # Mirror the CLI's own filter (`_accept_global_options_anywhere`): a `_StoreTrueAction`
+    # (by isinstance) and a bare `_StoreAction` (by exact type) are mirrored; every other
+    # action (`--version`'s `_PrintVersion`, help, subparsers) is not.
     mirrored = {
         option
         for action in root._actions
         if not isinstance(action, (argparse._HelpAction, argparse._SubParsersAction))
-        and type(action) in (argparse._StoreAction, argparse._StoreTrueAction)
+        and (isinstance(action, argparse._StoreTrueAction) or type(action) is argparse._StoreAction)
         for option in action.option_strings
     }
     free = mirrored - set(D._GLOBAL_FLAGS)
