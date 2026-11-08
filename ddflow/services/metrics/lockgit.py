@@ -1,9 +1,11 @@
 """The git half of ``ddflow metrics locks``: what a merge changed, and whether it conflicted.
 
-Behind one small port so the report is pure and a test passes a fake. The default asks git
-through ``infra.git`` only. Every answer is ``None`` when git could not give it (not installed,
-timed out, an object gone, git older than 2.38 for ``merge-tree --write-tree``): "could not
-tell", which the report counts as unavailable and never as clean.
+Behind one small port so the report is pure and a test passes a fake. The conflict verdict is
+``probe.run``'s (clean -> False, conflict -> True, unavailable -> None) so this report and the
+probe cannot drift; an older git falls back to a scratch merge, never "could not tell" for a
+version reason. Every answer is ``None`` when git truly could not answer (not installed, timed
+out, an object gone): "could not tell", which the report counts as unavailable and never as
+clean.
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ from typing import Protocol
 
 from ...core import bookkeeping
 from ...infra import git as G
+from ..probe import CLEAN, CONFLICT
+from ..probe import run as probe_run
 
 
 class Probes(Protocol):
@@ -24,8 +28,12 @@ class Probes(Protocol):
 
 
 class GitProbes:
-    def __init__(self, repo: Path) -> None:
+    def __init__(self, repo: Path, timeout_s: float, min_git: str) -> None:
+        # Both knobs are REQUIRED so GitProbes has no private copy of a config default that could
+        # drift from [locks].probe_timeout_s / probe_merge_tree_min_git (the caller passes them).
         self.repo = repo
+        self.timeout_s = timeout_s
+        self.min_git = min_git
 
     def files(self, before: str, after: str) -> list[str] | None:
         if not (before and after):
@@ -36,11 +44,12 @@ class GitProbes:
     def conflicts(self, base: str, head: str) -> bool | None:
         if not (base and head):
             return None
-        r = G.run(self.repo, "merge-tree", "--write-tree", base, head)
-        if r.unavailable or r.code not in (0, 1):  # other codes: an error, not a verdict
-            return None
-        # An unknown object also exits 1; only a real verdict starts with the result tree id.
-        tree = r.out.splitlines()[0] if r.out else ""
-        if len(tree) not in (40, 64) or any(c not in "0123456789abcdef" for c in tree):
-            return None
-        return r.code == 1
+        # One source for the conflict verdict: probe.run (clean -> False, conflict -> True,
+        # unavailable -> None) so lockgit and the probe cannot drift. probe.run adds a rev-parse
+        # and a --version call per pair before its merge-tree.
+        probe = probe_run(self.repo, base, head, timeout_s=self.timeout_s, min_git=self.min_git)
+        if probe.result == CLEAN:
+            return False
+        if probe.result == CONFLICT:
+            return True
+        return None
