@@ -8,3 +8,4 @@
 {"agent":"recover-brh","data":{},"id":"e2979e2e8d0b3af1ed2a3f670","kind":"item.started","lamport":152465,"schema":1,"subject":"fix-B-baseline-red-hides-new-cause","ts":"2026-11-08T04:03:04.796400Z"}
 {"agent":"recover-brh","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e3876124004da314030253ebf","kind":"cadence.ran","lamport":152468,"schema":1,"subject":"recall_recheck:fix-B-baseline-red-hides-new-cause","ts":"2026-11-08T04:04:42.958681Z"}
 {"agent":"recover-brh","data":{"gate":"rubber_duck"},"id":"ebad9f946897419f433ca9110","kind":"gate.started","lamport":152481,"schema":1,"subject":"fix-B-baseline-red-hides-new-cause","ts":"2026-11-08T04:08:34.951497Z"}
+{"agent":"recover-brh","data":{"at":1794111458.5939476,"holder":"recover-brh"},"id":"e1f1ca05bfeed69c7a7ed4ad6","kind":"lease.renewed","lamport":152537,"schema":1,"subject":"fix-B-baseline-red-hides-new-cause","ts":"2026-11-08T04:17:38.687454Z"}
