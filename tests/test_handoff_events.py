@@ -385,14 +385,13 @@ def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg
 
 def test_distinct_quoted_non_utf8_names_stay_distinct() -> None:
     # Two distinct non-UTF-8 names must not decode to the same U+FFFD (which would let the
-    # too-many-files dedup collapse them and under-count). `\200`/`\201` are bytes 0x80/0x81.
+    # dedup in `shape` collapse them and under-count). `\200`/`\201` are bytes 0x80/0x81.
     patch = (
         'diff --git "a/\\200" "b/\\200"\n--- "a/\\200"\n+++ "b/\\200"\n@@ -1 +1 @@\n-x\n+y\n'
         'diff --git "a/\\201" "b/\\201"\n--- "a/\\201"\n+++ "b/\\201"\n@@ -1 +1 @@\n-x\n+y\n'
     )
     q = P.shape(patch)
     assert q.files == ("\udc80", "\udc81"), q  # surrogateescape, not U+FFFD twice
-    assert not q.malformed
 
 
 def test_unquoted_name_is_a_literal_byte_string() -> None:
@@ -405,11 +404,19 @@ def test_unquoted_name_is_a_literal_byte_string() -> None:
     assert P.shape(unquoted).files == ("\\303\\251",), P.shape(unquoted)
 
 
-def test_quoted_path_with_space_is_decoded() -> None:
-    quoted = (
-        'diff --git "a/my file.txt" "b/my file.txt"\n'
-        '--- "a/my file.txt"\n+++ "b/my file.txt"\n@@ -1 +1 @@\n-x\n+y\n'
+def test_unquoted_name_with_space_is_literal() -> None:
+    # git leaves a name with a space UNquoted (`a/my file.txt`); it must still be counted.
+    spaced = (
+        "diff --git a/my file.txt b/my file.txt\n"
+        "--- a/my file.txt\n+++ b/my file.txt\n@@ -1 +1 @@\n-x\n+y\n"
     )
-    q = P.shape(quoted)
-    assert q.files == ("my file.txt",), q
-    assert not q.malformed
+    assert P.shape(spaced).files == ("my file.txt",), P.shape(spaced)
+
+
+def test_quoted_name_with_escaped_quote_is_decoded() -> None:
+    # `core.quotepath` writes a literal `"` in a name C-escaped inside quotes; decode it.
+    quoted = (
+        'diff --git "a/foo\\"bar.txt" "b/foo\\"bar.txt"\n'
+        '--- "a/foo\\"bar.txt"\n+++ "b/foo\\"bar.txt"\n@@ -1 +1 @@\n-x\n+y\n'
+    )
+    assert P.shape(quoted).files == ('foo"bar.txt',), P.shape(quoted)

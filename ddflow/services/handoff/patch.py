@@ -8,7 +8,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_FILE = re.compile(r'^diff --git (?P<a>a/[^\s"]+|"a/[^"]*") (?P<b>b/[^\s"]+|"b/[^"]*")$')
+_FILE = re.compile(
+    r'^diff --git '
+    r'(?P<a>a/[^\s"]+(?:\s+[^\s"]+)*|"a/(?:[^"\\]|\\.)*") '
+    r'(?P<b>b/[^\s"]+(?:\s+[^\s"]+)*|"b/(?:[^"\\]|\\.)*")$'
+)
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
 _C_ESCAPES = {
@@ -121,10 +125,10 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            # `core.quotepath` quotes a whole name only for the side that needs it, so decode
-            # that side alone (`diff --git a/foo "b/\303\251"` quotes just `b/`). An unquoted
-            # name is a literal POSIX byte string (quotePath=false): decoding it corrupts
-            # `files`, so only a side the header actually quoted is passed to `_dequote`.
+            # `core.quotepath` quotes (double quotes + C-escapes) a name only for the side
+            # that needs it, so decode that side alone (`diff --git a/foo "b/\303\251"` quotes
+            # just `b/`). An unquoted name is a literal POSIX byte string (quotePath=false),
+            # e.g. `a/foo bar.txt`, so only a side the header actually quoted is dequoted.
             b_side = m["b"]
             b = _dequote(b_side[3:-1]) if b_side[0] == '"' else b_side[2:]
             if b not in self.files:
