@@ -96,17 +96,32 @@ def canon_of(log: Any, item: str, a: Assessment) -> Canon:
 
 def authorise(
     log: Any, cfg: Any, item: str, a: Assessment, *, force: bool, approval: str, agent: str
-) -> tuple[dict[str, Any] | None, str]:
-    """(stamp, refusal): the override's authority. A person's `--force` needs none; an agent
-    spends ``approval`` here, so the caller must run this AFTER every other refusal."""
+) -> tuple[dict[str, Any] | None, str, str]:
+    """(proof, refusal, pending): the override's authority WITHOUT spending an agent's approval.
+    ``pending`` names an approval id the caller must spend AFTER its landing landed -- only for
+    the real ``--approval <id>`` case; it is "" for a person's `--force` (`{"by": "person"}`)
+    and for a standing-policy answer, which `operator_gate` already recorded (B527b0a518c)."""
     if not a.refuses:
-        return None, ""  # nothing is unsettled, or the mode only warns: no override is needed
+        return None, "", ""  # nothing is unsettled, or the mode only warns: no override is needed
     by_agent = bool(AP.agent_marker(agent))
     if not force:
-        return None, refusal(item, a, by_agent=by_agent)
+        return None, refusal(item, a, by_agent=by_agent), ""
     if not by_agent:
-        return {"by": "person"}, ""
+        return {"by": "person"}, "", ""
+    if approval and approval != CN.REQUEST:
+        # a real approval id: VALIDATE without spending; [`spend`] records the use only after
+        # the caller's landing landed, so a landing that fails leaves it unspent (B527b0a518c).
+        d = CN.check(log, canon_of(log, item, a), approval, cfg=cfg)
+        return (d.stamp, "", approval) if d.ok else (None, d.message, "")
+    # no id, or `--approval request`: file the request / a standing policy answers (never a spend).
     d = CN.operator_gate(log, cfg, canon_of(log, item, a), approval_id=approval, auto=False)
-    if not d.ok:
-        return None, d.message
-    return d.stamp, ""
+    return (d.stamp, "", "") if d.ok else (None, d.message, "")
+
+
+def spend(log: Any, cfg: Any, item: str, a: Assessment, approval: str) -> CN.Decision:
+    """Record one use of the agent's validated ``approval`` ([`authorise`]), after the landing
+    landed (B527b0a518c). Returns CN's `Decision`, not just the stamp: the caller checks
+    ``.ok`` -- a spend that fails here means another consumer took the single use (or it
+    expired) between [`authorise`]'s check and this spend, and the landing must not record a
+    bogus proof."""
+    return CN.spend(log, canon_of(log, item, a), approval, cfg=cfg)
