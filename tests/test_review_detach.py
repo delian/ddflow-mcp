@@ -307,17 +307,27 @@ def test_detach_stop_command_kills_the_review_child_not_only_the_leader(tmp_path
     )
     review = -1
     try:
+        # `>` creates the file before `echo` writes it, so poll until it holds the pid (not
+        # merely until it exists): an empty file would `int()` to ValueError.
         deadline = time.monotonic() + 10
-        while not childpid.exists() and time.monotonic() < deadline:
+        while time.monotonic() < deadline:
+            raw = childpid.read_text() if childpid.exists() else ""
+            if raw.strip().isdigit():
+                review = int(raw)
+                break
             time.sleep(0.05)
-        assert childpid.exists(), "the review child never started"
-        review = int(childpid.read_text())
+        assert review > 0, "the review child never started"
         assert _alive(review), "the review child was not running"
         subprocess.run(["bash", "-c", CR._detach_stop(leader.pid)], check=True, timeout=30)
         leader.wait(timeout=5)
         assert leader.returncode == -signal.SIGTERM
         # A plain `kill <leader>` would stop only the wrapper; the group kill must also
         # reach the review child, which proves it is a group kill and not the bug's shape.
+        # The child is reaped by init after its parent dies, so poll rather than assert at
+        # once: the leader exiting first is not the child outliving the group kill.
+        deadline = time.monotonic() + 5
+        while _alive(review) and time.monotonic() < deadline:
+            time.sleep(0.05)
         assert _alive(review) is False
     finally:
         with contextlib.suppress(ProcessLookupError):
