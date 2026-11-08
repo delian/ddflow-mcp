@@ -645,7 +645,7 @@ COMMANDS: tuple[Command, ...] = (
         "writing the code, without them having to know it exists. Returns "
         "project-wide decisions too.",
         call=lambda repo, a, agent: _api().decision_applicable(repo, a["id"]),
-        payload=("applicable", "project_wide"),
+        payload=("applicable", "project_wide", "path_unmatched"),
         params=(Param("id", help="Item id.", cli_help="", positional=True),),
     ),
     Command(

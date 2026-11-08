@@ -116,6 +116,11 @@ def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
     # The path-scoped decision governs `ddflow/**` but cannot be matched against an
     # empty glob set, so it is not listed as if it governed -- the note says why.
     assert "Engines share the harness" not in out, out
+    # The note reaches the wire body too, so an MCP caller can tell "ran, nothing"
+    # from "could not run" (robereview finding on the JSON/MCP surface).
+    code, out, _ = run_cli(proj, "--json", "decision", "applicable", "P1.T3")
+    assert code == OK, code
+    assert json.loads(out)["path_unmatched"], out
 
 
 def test_the_brief_carries_the_governing_decisions(proj):
