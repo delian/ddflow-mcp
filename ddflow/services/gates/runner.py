@@ -110,7 +110,13 @@ def _is_trivial(command: str) -> bool:
         words = shlex.split(command, comments=True, posix=True)
     except ValueError:
         return False
-    if not words or "\n" in command or any(w in _SHELL_OPERATORS for w in words):
+    if (
+        not words
+        or "\n" in command
+        or "$(" in command
+        or "`" in command
+        or any(w in _SHELL_OPERATORS for w in words)
+    ):
         return False
     return words[0].rsplit("/", 1)[-1] in _NO_SUITE
 

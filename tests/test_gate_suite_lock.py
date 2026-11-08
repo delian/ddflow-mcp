@@ -77,6 +77,7 @@ def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch
     # A shell compound whose first word is a no-op still runs a suite: it keeps the lock.
     assert R._runs_whole_suite(_gate("echo ok && pytest"))
     assert R._runs_whole_suite(_gate("true; make check"))
+    assert R._runs_whole_suite(_gate("echo $(pytest)"))  # command substitution still runs a suite
 
 
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
