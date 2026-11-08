@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ...infra import fsio
+from ...infra import git as G
 from ...infra import worktree as W
 from .. import ci_conflict as CC
 from .types import CANNOT_MERGE, CONFLICT, NOT_MERGEABLE, Failure
@@ -131,11 +132,15 @@ def merge_tree(
     # not a fresh timeout per git call: a slow `worktree add` plus a slow `merge` must not
     # each get its own `deadline_s` and run for twice the caller's deadline
     # (LK-probe-scratch-deadline critic/rubber_duck #1). The cutoff starts here, before the
-    # tree is made, and every git call takes the time left.
+    # tree is made: the add spends its `deadline_s`, and the merge calls that follow take
+    # `left()` from this same cutoff, so the total is bounded by the caller's deadline.
     cutoff = time.monotonic() + deadline_s if deadline_s is not None else None
 
-    def left() -> float | None:
-        return None if cutoff is None else max(0.0, cutoff - time.monotonic())
+    def left() -> float:
+        # No deadline: the git runner's own default (GIT_TIMEOUT) still bounds each call --
+        # an explicit `None` would mean "no timeout", so the caller that set no deadline keeps
+        # the 300s cap the plain ci gate merge had before the deadline existed.
+        return G.GIT_TIMEOUT if cutoff is None else max(0.0, cutoff - time.monotonic())
 
     with W.scratch_tree(
         repo, ref, detach=True, prefix=SCRATCH_PREFIX, quiet=True, claim=_claim_owner,
