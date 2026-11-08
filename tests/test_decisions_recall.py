@@ -123,6 +123,14 @@ def test_an_item_with_no_globs_says_the_path_check_could_not_run(proj):
     assert json.loads(out)["path_unmatched"], out
 
 
+def test_a_no_globs_item_with_no_project_wide_decision_still_reports_the_skip(proj):
+    run_cli(proj, "task", "add", "P1.T4", "--phase", "P1", "--title", "orphan")
+    code, out, _ = run_cli(proj, "decision", "applicable", "P1.T4")
+    assert code == NOTHING, code
+    assert "path matching could not run" in out, out
+    assert "no project-wide decisions recorded either" in out, out
+
+
 def test_the_brief_carries_the_governing_decisions(proj):
     _add(
         proj,
