@@ -69,6 +69,8 @@ def test_refused(cmd):
         "git stash list",
         "git stash show",
         "git stash show stash@{0}",
+        "git stash -h",
+        "git stash --help",
         "grep -r pkill docs",
         "echo pkill",
         'ddflow review X --force --reason "an extra round"',

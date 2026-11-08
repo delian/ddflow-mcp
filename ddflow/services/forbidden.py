@@ -49,8 +49,8 @@ _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
 #: `git stash` is forbidden because the stash stack is shared by every worktree, but these
-#: subcommands only READ it; the entry refuses the writing verbs alone (B-hook-blocks-read-only-stash-list).
-_STASH_READONLY = frozenset({"list", "show"})
+#: words after it only READ it; the entry refuses the writing verbs alone (B-hook-blocks-read-only-stash-list).
+_STASH_READONLY = frozenset({"list", "show", "-h", "--help"})
 
 #: What to do instead, by the entry's first words.
 _INSTEAD = {
