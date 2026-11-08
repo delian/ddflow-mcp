@@ -41,11 +41,45 @@ def test_a_fact_without_source_or_date_is_a_problem():
 
 
 def test_family_hints_reader_matches_the_former_table_in_order():
-    assert list(M.family_hints(M.load()).items()) == list(FAMILY_HINTS.items())
+    # A frozen snapshot of the FORMER `FAMILY_HINTS` literal (needle -> vendor): the catalog is
+    # now the one source, so a change to families.toml that drifts from this is a defect.
+    assert M.family_hints(M.load()) == {
+        "qwen": "alibaba",
+        "claude": "anthropic",
+        "gpt": "openai",
+        "o1": "openai",
+        "o3": "openai",
+        "codex": "openai",
+        "gemini": "google",
+        "gemma": "google",
+        "llama": "meta",
+        "mistral": "mistral",
+        "mixtral": "mistral",
+        "deepseek": "deepseek",
+        "grok": "xai",
+        "phi": "microsoft",
+        "command": "cohere",
+        "yi-": "01ai",
+        "glm": "zhipu",
+        "nemotron": "nvidia",
+        "granite": "ibm",
+        "kimi": "moonshot",
+        "minimax": "minimax",
+        "ernie": "baidu",
+    }
 
 
 def test_presets_reader_matches_review_presets():
-    assert M.presets(M.load()) == review.PRESETS
+    # A frozen snapshot of the former `PRESETS` table's endpoints, guarding routes.toml drift.
+    presets = M.presets(M.load())
+    assert presets["openai"]["base_url"] == "https://api.openai.com/v1"
+    assert presets["deepseek"]["base_url"] == "https://api.deepseek.com/v1"
+    assert presets["xai"]["base_url"] == "https://api.x.ai/v1"
+    assert presets["anthropic"]["base_url"] == "https://api.anthropic.com/v1"
+    assert presets["gemini"]["base_url"] == "https://generativelanguage.googleapis.com/v1beta"
+    assert presets["ollama"]["launch"]["command"] == "ollama serve"
+    assert presets["claude-cli"]["command"] == "claude -p --model {model}"
+    assert presets == review.PRESETS, "the module constant IS the reader output"
 
 
 def test_a_local_route_is_a_reviewer_preset_through_the_local_overlay(tmp_path):
