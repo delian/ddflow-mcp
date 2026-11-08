@@ -164,6 +164,25 @@ def _constraints(req: Request, w: Weights) -> list[str]:
     return out
 
 
+def _start(req: Request, t: T.Template, drv: Any, spec: Any) -> tuple[Any, contextlib.ExitStack]:
+    """Hold the endpoint's slots for the lane's lifetime then start it. The returned stack
+    stays OPEN (the slots live until the caller closes it after the lane stops); TimeoutError
+    when the endpoint pool cannot fit the lane before ``slot_wait_s``. A start failure beyond
+    the wait still releases the slots taken before it propagates."""
+    slots = contextlib.ExitStack()
+    slots.enter_context(
+        CAPACITY.acquire(
+            resolved_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
+            req.cfg.lanes.slot_wait_s,
+        )
+    )
+    try:
+        return drv.start(spec), slots
+    except BaseException:
+        slots.close()
+        raise
+
+
 def _audit(req: Request, text: str) -> None:
     if req.log is not None:
         req.log.append(
@@ -230,23 +249,11 @@ def launch(req: Request) -> Launched | Refused:
     # are held while the lane runs (until the caller closes ``Launched.slots`` after the lane
     # stops), so a full endpoint refuses the next lane instead of oversubscribing it. An
     # unreadable route has no pool to hold.
-    slots = contextlib.ExitStack()
     try:
-        slots.enter_context(
-            CAPACITY.acquire(
-                resolved_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
-                req.cfg.lanes.slot_wait_s,
-            )
-        )
-        h = drv.start(prep.spec)
+        h, slots = _start(req, t, drv, prep.spec)
     except TimeoutError as e:  # the endpoint pool could not fit this lane before the wait
-        slots.close()
         OC.cleanup(req.home)
         return Refused((f"endpoint slot: {e}",))
-    except BaseException:  # a start failure beyond the slot wait still releases the slots taken
-        slots.close()
-        OC.cleanup(req.home)
-        raise
     if isinstance(h, Result):
         slots.close()
         OC.cleanup(req.home)
