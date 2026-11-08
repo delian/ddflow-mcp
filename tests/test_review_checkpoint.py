@@ -131,5 +131,7 @@ def test_a_killed_review_resumes_from_the_next_chunk(repo, tmp_path):
     got = seen.read_text()
     # The resumed run must not re-pay chunk 1: the finished chunk is kept, only y.py re-ran.
     assert "y_marker_zz" in got, "chunk 2 was never sent: " + repr(shown) + "\n" + got
-    assert got.count("x_marker_zz") == 1, "chunk 1 was re-sent on resume: " + repr(shown) + "\n" + got
+    assert got.count("x_marker_zz") == 1, (
+        "chunk 1 was re-sent on resume: " + repr(shown) + "\n" + got
+    )
     assert gate["evidence"]["reviewed"] == [1, 2], (gate["evidence"], shown)
