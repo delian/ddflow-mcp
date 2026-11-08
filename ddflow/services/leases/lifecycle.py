@@ -398,7 +398,13 @@ def peer_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "") 
 
 
 def peer_guard(
-    log: EventLog, cfg: Config, item_id: str, *, force: bool, reason: str, what: str,
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    *,
+    force: bool,
+    reason: str,
+    what: str,
     caller: str = "",
 ) -> tuple[str, str]:
     """(refusal, forced-by) for an act that would overwrite a SAME-clone PEER agent's
