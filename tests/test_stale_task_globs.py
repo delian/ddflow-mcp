@@ -109,3 +109,26 @@ def test_doctor_fix_stale_globs_rewrites_every_stale_item(repo):
     assert item_of(repo, "T1").globs == ["pkg/mod/"]
     assert item_of(repo, "T2").globs == ["pkg/mod/"]
     assert "T1" in out + err and "T2" in out + err, out + err
+
+
+def test_doctor_fix_stale_globs_retargets_a_live_lease(repo):
+    """`ddflow doctor --fix-stale-globs` retargets the LIVE lease of a claimed item back to
+    the package path, not just the unclaimed items (B-stale-globs-after-split-wave)."""
+    (repo / "pkg" / "mod").mkdir(parents=True)
+    (repo / "pkg" / "mod" / "__init__.py").write_text("", "utf-8")
+    (repo / "pkg" / "mod" / "a.py").write_text("", "utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pkg")
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
+    assert (
+        run_cli(repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py")[0]
+        == 0
+    )
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="alice")[0] == 0
+    # The claim path already corrected the lease; put a stale glob back on the live lease.
+    assert run_cli(repo, "update", "T1", "--globs", "pkg/mod.py")[0] == 0
+    assert item_of(repo, "T1").lease.globs == ["pkg/mod.py"]
+    code, out, err = run_cli(repo, "doctor", "--fix-stale-globs")
+    assert code == 0, out + err
+    assert item_of(repo, "T1").lease.globs == ["pkg/mod/"], item_of(repo, "T1").lease.globs

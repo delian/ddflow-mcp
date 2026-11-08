@@ -87,11 +87,17 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> list[str]:
     for item_id, stale in LBR.stale_glob_updates(st, tracked):
         corrected = [dict(stale).get(g, g) for g in st.items[item_id].globs]
         out = _items.update(repo, item_id, _items.ItemEdit(globs=corrected), agent=agent)
-        notes.append(
-            f"{item_id}: globs corrected to {', '.join(corrected)}"
-            if out.exit == O.OK
-            else f"{item_id}: stale globs not corrected: {out.reason or out.text or out.exit}"
-        )
+        if out.exit != O.OK:
+            notes.append(f"{item_id}: stale globs not corrected: {out.reason or out.exit}")
+            continue
+        withheld = out.data.get("globs_withheld") or []
+        if withheld:
+            notes.append(
+                f"{item_id}: globs partly corrected to {', '.join(out.data.get('fields', {}).get('globs', corrected))}; "
+                f"withheld (held by another lease): {', '.join(withheld)}"
+            )
+        else:
+            notes.append(f"{item_id}: globs corrected to {', '.join(corrected)}")
     return notes
 
 

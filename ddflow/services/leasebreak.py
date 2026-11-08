@@ -260,9 +260,6 @@ def stale_glob_notes(repo: Path, st: State) -> list[str]:
     """Unfinished items whose `x.py` glob names a module that is now the package `x/`: a
     lease on it covers none of the package's files, so overlaps go unseen (B56dc2baaf6).
     Each is named with the corrected glob and the command that applies it."""
-    live = [i for i in st.items.values() if not i.removed and i.state not in (DONE, ABANDONED)]
-    if not any(g.endswith(".py") for i in live for g in i.globs):
-        return []
     tracked = W.git_paths(repo, "ls-files")
     if tracked is None:  # "could not tell" is said, never read as "nothing stale"
         return ["stale task globs not checked: git could not list the tracked files"]
