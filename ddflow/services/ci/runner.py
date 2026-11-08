@@ -190,7 +190,9 @@ def _settled_result(p, elapsed, out_prefix, waited, cmd, scope, sha, base, used)
     the seconds the command itself ran."""
     if (unfinished := _unfinished(p, cmd, sha, scope)) is not None:
         unfinished.waited_s = waited
-        unfinished.elapsed_s = round(elapsed, 1)
+        # A run that never started "ran for 0 s" would read as a finished run with no
+        # cost; only a TIMEOUT ran (for this many seconds). None means "no run" (B28537b615d).
+        unfinished.elapsed_s = round(elapsed, 1) if p.kind == TIMEOUT else None
         return unfinished
     res = _result(p, out_prefix, cmd, sha, base, scope)
     res.waited_s = waited
