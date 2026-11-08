@@ -313,11 +313,17 @@ def status(
     it = state.items.get(item_id)
     if it is None:
         raise KeyError(item_id)
+    # deferred: outcomes is imported by gates.__init__, which gate_accept also needs
+    from .. import gate_accept as GA
+
     gates, diff = pipeline_by_diff(it, cfg, pipeline_for(it, cfg), diff, kind_pipeline(cfg, "doc"))
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]
-    settled = {g: g in na or it.gate_satisfied(g, g in required) for g in gates}
+    settled = {
+        g: g in na or it.gate_satisfied(g, g in required) or GA.accepted(state, it, g, cfg).ok
+        for g in gates
+    }
     done = [g for g in gates if settled[g] and g not in na]
     blocked = _with_outcome(rows, "failed")
     unavail = _with_outcome(rows, "unavailable", "partial")
