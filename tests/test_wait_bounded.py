@@ -52,3 +52,17 @@ def test_the_cli_flag_is_declared(proj):
 def test_a_negative_max_s_is_refused_not_read_as_zero(proj):
     out = A.wait(proj, item="T2", max_s=-1, agent=WAITER)
     assert out.exit != 0 and "max-s" in out.reason
+
+
+def test_a_capped_wait_hands_back_the_token_its_advice_names(proj, monkeypatch):
+    """Text mode says "resume with the token" and "run `ddflow wait` again" -- both must
+    NAME the token, because `wake.token` is the only copy a non-json caller ever sees
+    (B16e0083f21)."""
+    monkeypatch.setenv("DDFLOW_LEASE_WAIT_CAP_S", "1")
+    said: list[str] = []
+    out = A.wait(proj, item="T2", timeout_s=5, poll_s=0.05, agent=WAITER, on_progress=said.append)
+    assert out.exit == 2
+    token = out.data["wake"]["token"]
+    assert token, "a capped wait must carry a resume token"
+    assert any(token in m for m in said), f"the cap note never names its token: {said}"
+    assert token in out.reason, f"the exit-2 follow-up never names its token: {out.reason}"
