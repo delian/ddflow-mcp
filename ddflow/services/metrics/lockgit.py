@@ -1,9 +1,11 @@
 """The git half of ``ddflow metrics locks``: what a merge changed, and whether it conflicted.
 
-Behind one small port so the report is pure and a test passes a fake. The default asks git
-through ``infra.git`` only. Every answer is ``None`` when git could not give it (not installed,
-timed out, an object gone, git older than 2.38 for ``merge-tree --write-tree``): "could not
-tell", which the report counts as unavailable and never as clean.
+Behind one small port so the report is pure and a test passes a fake. The conflict verdict is
+``probe.run``'s (clean -> False, conflict -> True, unavailable -> None) so this report and the
+probe cannot drift; an older git falls back to a scratch merge, never "could not tell" for a
+version reason. Every answer is ``None`` when git truly could not answer (not installed, timed
+out, an object gone): "could not tell", which the report counts as unavailable and never as
+clean.
 """
 
 from __future__ import annotations
@@ -25,9 +27,10 @@ class Probes(Protocol):
 
 
 class GitProbes:
-    def __init__(self, repo: Path, timeout_s: float = 30) -> None:
+    def __init__(self, repo: Path, timeout_s: float = 30, min_git: str = "2.38") -> None:
         self.repo = repo
         self.timeout_s = timeout_s
+        self.min_git = min_git
 
     def files(self, before: str, after: str) -> list[str] | None:
         if not (before and after):
@@ -41,7 +44,7 @@ class GitProbes:
         # One source for the conflict verdict: probe.run (clean -> False, conflict -> True,
         # unavailable -> None) so lockgit and the probe cannot drift. probe.run adds a rev-parse
         # and a --version call per pair before its merge-tree.
-        probe = probe_run(self.repo, base, head, timeout_s=self.timeout_s)
+        probe = probe_run(self.repo, base, head, timeout_s=self.timeout_s, min_git=self.min_git)
         if probe.result == CLEAN:
             return False
         if probe.result == CONFLICT:

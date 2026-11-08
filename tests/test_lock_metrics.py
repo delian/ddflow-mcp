@@ -355,13 +355,13 @@ def test_gitprobes_conflicts_routes_through_the_probe(monkeypatch):
     from ddflow.services import probe as P
     from ddflow.services.metrics import lockgit
 
-    def fake_run(repo, item, against, *, timeout_s):
-        fake_run.calls.append((item, against, timeout_s))
+    def fake_run(repo, item, against, *, timeout_s, min_git="2.38"):
+        fake_run.calls.append((item, against, timeout_s, min_git))
         return P.Probe(fake_run.verdict, P.MERGE_TREE, (), item, against)
 
     fake_run.calls = []
     monkeypatch.setattr(lockgit, "probe_run", fake_run)
-    gp = lockgit.GitProbes(Path("."), timeout_s=7)
+    gp = lockgit.GitProbes(Path("."), timeout_s=7, min_git="2.43")
 
     fake_run.verdict = P.CLEAN
     assert gp.conflicts("b", "h") is False
@@ -369,7 +369,7 @@ def test_gitprobes_conflicts_routes_through_the_probe(monkeypatch):
     assert gp.conflicts("b", "h") is True
     fake_run.verdict = P.UNAVAILABLE
     assert gp.conflicts("b", "h") is None
-    assert fake_run.calls == [("b", "h", 7)] * 3
+    assert fake_run.calls == [("b", "h", 7, "2.43")] * 3
 
     fake_run.calls = []
     assert gp.conflicts("", "h") is None and gp.conflicts("b", "") is None
