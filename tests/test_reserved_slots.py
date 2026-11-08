@@ -108,7 +108,7 @@ def test_a_cap_hold_says_a_named_claim_is_not_capped(log, cfg):
     why = goods[0].detail
     # the free slot went to higher-ranked F2 (not "cap reached"): the branch the bug is about
     assert "slot(s) free, offered to higher-ranked F2" in why, why
-    assert f"not capped" in why and "grants it now" in why, why
+    assert "not capped" in why and "grants it now" in why, why
 
 
 @pytest.mark.parametrize("tag", ["bug", "bugfix", "fix", "hotfix", "ddflow-gap"])
