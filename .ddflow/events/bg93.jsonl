@@ -32,3 +32,4 @@
 {"agent":"bg93","data":{"path":".ddflow/worktrees/fix-B0420ccf8a6"},"id":"e8b17bdcfaae0a32b795cb51b","kind":"worktree.removed","lamport":157100,"schema":1,"subject":"fix-B0420ccf8a6","ts":"2026-11-08T20:24:12.347504Z"}
 {"agent":"bg93","data":{"path":".ddflow/worktrees/fix-B30f9d383ba"},"id":"eeab2c43d7db72a4f483c4af3","kind":"worktree.removed","lamport":157101,"schema":1,"subject":"fix-B30f9d383ba","ts":"2026-11-08T20:24:14.943984Z"}
 {"agent":"bg93","data":{"by":"bg93","evidence":{"started_tree_sha":"6a472254f813+clean","terminated_by":"SIGTERM"},"gate":"ci","reason":"the run was terminated by SIGTERM before its command finished"},"id":"eec7d69d78b53554ddb38d2d3","kind":"gate.unavailable","lamport":157103,"schema":1,"subject":"fix-B2d2c474d47","ts":"2026-11-08T20:24:18.759393Z"}
+{"agent":"bg93","data":{"gate":"ci"},"id":"e676395f3cdb42a7b59d24cfd","kind":"gate.started","lamport":157113,"schema":1,"subject":"fix-B2d2c474d47","ts":"2026-11-08T20:27:13.653496Z"}
