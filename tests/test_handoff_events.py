@@ -366,6 +366,11 @@ def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg
     q = P.shape(quoted)
     assert q.files == ("\u00e9",), q  # the decoded name, not the raw \303\251 escape
     assert q.added == 1 and not q.malformed
+    # A rename quotes only the side that needs it: ASCII `foo` -> `é` quotes just `b/`.
+    rename = (
+        'diff --git a/foo "b/\\303\\251"\n--- a/foo\n+++ "b/\\303\\251"\n@@ -1 +1,2 @@\n x\n+y\n'
+    )
+    assert P.shape(rename).files == ("\u00e9",), rename
     over = "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n a\ndiff --git a/y b/y\n@@ -1 +1 @@\n-b\n+c\n"
     assert P.shape(over).malformed
     cfg.handoff.reject_breaker = 2

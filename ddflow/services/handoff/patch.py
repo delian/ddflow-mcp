@@ -120,10 +120,10 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            # `core.quotepath` wraps a quoted name in `"a/..."`; decode only THEN. An unquoted
-            # name is a literal POSIX byte string (quotePath=false, e.g. a file really named
-            # `\303\251`), and decoding it would corrupt `files`.
-            b = _dequote(m["b"]) if line.startswith('diff --git "') else m["b"]
+            # `core.quotepath` quotes a name only for the side that needs it, so decode that
+            # side alone (`diff --git a/foo "b/\303\251"` quotes just `b/`). An unquoted name
+            # is a literal POSIX byte string (quotePath=false), and decoding it corrupts `files`.
+            b = _dequote(m["b"]) if '"b/' in line else m["b"]
             if b not in self.files:
                 self.files.append(b)
         elif not self.files or self.in_binary:
