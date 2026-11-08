@@ -97,8 +97,9 @@ def _judge_approval(st, ask_id: str, now: float) -> dict[str, Any]:
     """`wait --approval`'s verdict: the one thing another agent's progress CAN end.
 
     Pending means waiting can help (the person may answer): blocked. Answered and approved
-    means resume the gated command: ready. Denied, withdrawn, expired or unknown is what no
-    further waiting ends -- the wait is refused up front with the move that WOULD help.
+    means resume the gated command: ready. Not an approval (a question, which never answers
+    "approved"), or denied, withdrawn, expired or unknown, is what no further waiting ends --
+    refused up front with the move that WOULD help.
     """
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
     row = asks_of(st).get(ask_id)
