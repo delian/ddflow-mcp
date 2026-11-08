@@ -75,9 +75,9 @@ def test_claim_corrects_a_glob_whose_module_is_now_a_package(repo):
     assert run_cli(repo, "init")[0] == 0
     assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
     assert (
-        run_cli(repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py")[
-            0
-        ]
+        run_cli(
+            repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py"
+        )[0]
         == 0
     )
     code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="alice")
@@ -122,7 +122,9 @@ def test_doctor_fix_stale_globs_retargets_a_live_lease(repo):
     assert run_cli(repo, "init")[0] == 0
     assert run_cli(repo, "phase", "add", "P1", "--title", "p")[0] == 0
     assert (
-        run_cli(repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py")[0]
+        run_cli(
+            repo, "task", "add", "T1", "--phase", "P1", "--title", "t", "--globs", "pkg/mod.py"
+        )[0]
         == 0
     )
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent="alice")[0] == 0

@@ -255,7 +255,9 @@ def has_py_glob(st: State) -> bool:
     )
 
 
-def stale_glob_updates(st: State, tracked: Iterable[str]) -> list[tuple[str, list[tuple[str, str]]]]:
+def stale_glob_updates(
+    st: State, tracked: Iterable[str]
+) -> list[tuple[str, list[tuple[str, str]]]]:
     """``(item, [(stale glob, its package)])`` for every unfinished item whose globs declare
     a module that is now a package (B-stale-globs-after-split-wave). Sorted by item id."""
     if not has_py_glob(st):
