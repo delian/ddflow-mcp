@@ -92,7 +92,8 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         return {**body, "ready": [_lean(i) for i in body.get("ready") or []]}, None
     out = dict(body)
     blocked = body["blocked"]
-    out["ready"] = [_lean(i) for i in body.get("ready") or []]
+    cut = [0]
+    out["ready"] = [_clip(_lean(i), cut) for i in body.get("ready") or []]
     if len(blocked) > NEXT_BLOCKED_SHOWN:
         reasons: dict[str, int] = {}
         for b in blocked:
@@ -104,6 +105,8 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             "blocked_by_reason": reasons,
             "all": "`ddflow --json next` lists every blocked item; ddflow_show <id> says why one is",
         }
+    if cut[0]:
+        out.setdefault("truncated", {})["clipped_strings"] = cut[0]
     return out, None
 
 
