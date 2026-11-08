@@ -77,8 +77,8 @@ def test_under_resume_anchors_to_the_last_exact_heading_line():
 
     text = "## Resume\n```text\n# ddflow brief\n```\n# ddflow brief\n## Work\n"
     out = _under_resume(text, "", "", "## Open workflow choices\n- pick A")
-    # RESUME opens the pack, the choices block is above the view's own H1, and the fenced
-    # `# ddflow brief` is never used as the anchor.
+    # RESUME opens the pack, the fenced `# ddflow brief` stays inside its code block, and the
+    # choices block lands between it and the view's own H1 (the last exact `# ddflow brief`).
     assert out.startswith("## Resume"), out
+    assert out.index("```text\n# ddflow brief\n```") < out.index("## Open workflow choices"), out
     assert out.index("## Open workflow choices") < out.rindex("# ddflow brief"), out
-    assert out.index("```\n# ddflow brief\n```") < out.index("## Open workflow choices"), out
