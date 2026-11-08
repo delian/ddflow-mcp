@@ -127,7 +127,7 @@ def _strip_continuations(text: str) -> str:
     i, n = 0, len(text)
     while i < n:
         c = text[i]
-        if c == "$" and i + 1 < n and text[i + 1] == "'":
+        if _ansi_at(text, n, i):
             j = _ansi_c_end(text, n, i)
             out.append(text[i:j])
             i = j
@@ -176,6 +176,26 @@ def _ansi_c_end(text: str, n: int, k: int) -> int:
     return n
 
 
+def _ansi_at(text: str, n: int, k: int) -> bool:
+    """Does `text[k]` open a `$'...'` (bash ANSI-C quote)?"""
+    return text[k] == "$" and k + 1 < n and text[k + 1] == "'"
+
+
+def _sub_open_at(text: str, n: int, k: int) -> bool:
+    """Does `text[k]` open a `$(` / `<(` / `>(` substitution or a `$'...'` quote?"""
+    return (text[k] in "$<>" and k + 1 < n and text[k + 1] == "(") or _ansi_at(text, n, k)
+
+
+def _sub_open_step(text: str, n: int, bodies: list[str], k: int) -> int:
+    """Index one past the `$'...'` or `$(`/`<(`/`>(` substitution that opened at ``k``
+    (``_sub_open_at`` held): a substitution's body is recorded (its commands run as commands)."""
+    if _ansi_at(text, n, k):
+        return _ansi_c_end(text, n, k)
+    k2 = _find_body(text, n, bodies, k + 2, ")")
+    bodies.append(text[k + 2 : k2])
+    return k2 + 1
+
+
 def _bare_word(text: str, n: int, k: int, word: str) -> bool:
     """`text[k:]` starts the bare keyword `word` -- a word boundary on each side."""
     if not text.startswith(word, k):
@@ -200,7 +220,7 @@ def _case_end(text: str, n: int, k: int, bodies: list[str]) -> int:
         elif text[k] == "'":
             k2 = text.find("'", k + 1)
             k = k + 1 if k2 < 0 else k2 + 1
-        elif text[k] == "$" and k + 1 < n and text[k + 1] == "'":
+        elif _ansi_at(text, n, k):
             k = _ansi_c_end(text, n, k)
         elif text[k] == '"':
             k = _dquote_end(text, n, bodies, k)
@@ -253,7 +273,7 @@ def _find_body(text: str, n: int, bodies: list[str], j: int, closer: str) -> int
         elif c == "'":
             k2 = text.find("'", k + 1)
             k = k + 1 if k2 < 0 else k2 + 1
-        elif c == "$" and k + 1 < n and text[k + 1] == "'":
+        elif _ansi_at(text, n, k):
             k = _ansi_c_end(text, n, k)
         elif c == '"':
             k = _dquote_end(text, n, bodies, k)
@@ -314,8 +334,6 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
         elif c == "'":
             k2 = text.find("'", i + 1)
             i = i + 1 if k2 < 0 else k2 + 1
-        elif c == "$" and i + 1 < n and text[i + 1] == "'":
-            i = _ansi_c_end(text, n, i)
         elif c == '"':
             i = _dquote_end(text, n, bodies, i)
         elif c == "\\":
@@ -324,10 +342,8 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
             k2 = _find_body(text, n, bodies, i + 1, "`")
             bodies.append(text[i + 1 : k2])
             i = k2 + 1
-        elif c in "$<>" and i + 1 < n and text[i + 1] == "(":
-            k2 = _find_body(text, n, bodies, i + 2, ")")
-            bodies.append(text[i + 2 : k2])
-            i = k2 + 1
+        elif _sub_open_at(text, n, i):
+            i = _sub_open_step(text, n, bodies, i)
         else:
             i += 1
 
