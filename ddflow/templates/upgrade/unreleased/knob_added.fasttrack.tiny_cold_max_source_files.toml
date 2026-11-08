@@ -1,8 +1,0 @@
-# One unreleased change; cutting a version folds it into that release.
-
-[[change]]
-kind = "knob_added"
-key = "fasttrack.tiny_cold_max_source_files"
-new = "2"
-why = "Tiny-fix fast track (D-fast-track-answers): the source-file limit a tiny-cold change may touch, of tiny_cold_max_files."
-impact = "additive"

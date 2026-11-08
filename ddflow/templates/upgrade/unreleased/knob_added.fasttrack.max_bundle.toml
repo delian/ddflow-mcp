@@ -1,8 +1,0 @@
-# One unreleased change; cutting a version folds it into that release.
-
-[[change]]
-kind = "knob_added"
-key = "fasttrack.max_bundle"
-new = "10"
-why = "Tiny-fix fast track (D-fast-track-answers): most path-disjoint tiny fixes one task, branch, ci run and merge may bundle."
-impact = "additive"

@@ -18,9 +18,9 @@ from .summary import completed_spans, gate_durations
 #: Figures the log does not support yet, and what would give them (the same honest form
 #: `metrics stages` uses): named, never zeroed.
 NOT_MEASURED = {
-    "tiny_cold_files": "the file-count limits (tiny_cold_max_files / tiny_cold_max_source_files) "
-    "are judged over the actual diff by git numstat (FT-guard); the log records only changed "
-    "lines, so the metrics view cannot name an item by its file count yet",
+    "tiny_cold_files": "the file-count limits of a tiny-cold change are judged over the actual "
+    "diff by git numstat (FT-guard); the log records only changed lines, so the metrics view "
+    "cannot name an item by its file count yet",
     "same_file_refix": "a later fix touching the same file needs the per-file change history "
     "(git numstat) the log does not fold; the later-bug rate by bucket is the log-only part",
     "bundle_savings": "bundling has never run (FT-bundle ships it): the saved gate-seconds "
@@ -45,8 +45,11 @@ def _size_bucket(lines: int, ctx: Context) -> str:
 
 
 def _size_of(ctx: Context, outs: list) -> int:
-    """The lines an item's gate evidence recorded as changed, 0 when none ever did."""
-    return max((o.changed_lines or 0 for o in outs), default=0)
+    """The size an item shipped as: the last gate verdict's recorded changed lines (the size
+    nearest completion), 0 when none ever did. An item that shrank between verdicts is
+    bucketed by its last recorded size, not its largest (roborev standards finding)."""
+    sizes = [o.changed_lines for o in sorted(outs, key=lambda o: o.at) if o.changed_lines]
+    return sizes[-1] if sizes else 0
 
 
 def _tiny_cold(ctx: Context, minimum: int, spans, outs_of) -> dict:

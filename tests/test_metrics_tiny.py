@@ -137,5 +137,3 @@ def test_the_limits_are_fasttrack_knobs():
 
     cfg = Config()
     assert cfg.fasttrack.tiny_cold_max_source_lines == 10
-    assert cfg.fasttrack.tiny_cold_max_files == 6
-    assert cfg.fasttrack.max_bundle == 10
