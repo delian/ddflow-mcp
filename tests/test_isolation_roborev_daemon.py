@@ -32,6 +32,10 @@ def _alive(pid: int) -> bool:
     return True
 
 
+_PR_SET_PDEATHSIG = 1
+_LIBC = ctypes.CDLL("libc.so.6", use_errno=True)  # loaded here: dlopen is not fork-safe
+
+
 def _arm_parent_death_signal() -> None:
     """Kill the daemon if the process that forked it (the pytest worker) dies first.
 
@@ -40,8 +44,11 @@ def _arm_parent_death_signal() -> None:
     socket over a deleted database (B2d2c474d47). ``PR_SET_PDEATHSIG`` makes the kernel
     signal the daemon the moment its spawner dies, so no orphan survives teardown.
     """
-    PR_SET_PDEATHSIG = 1
-    ctypes.CDLL("libc.so.6").prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
+    _LIBC.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)
+    if os.getppid() == 1:
+        # The worker died before exec re-parented us to init: the armed signal will never
+        # come, so do not even start the daemon (the fork-to-prctl window B2d2c474d47 kept).
+        os._exit(1)
 
 
 def _spawn(home: Path) -> subprocess.Popen:
