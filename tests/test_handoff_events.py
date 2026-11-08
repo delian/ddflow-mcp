@@ -394,14 +394,20 @@ def test_distinct_quoted_non_utf8_names_stay_distinct() -> None:
     assert q.files == ("\udc80", "\udc81"), q  # surrogateescape, not U+FFFD twice
 
 
-def test_unquoted_name_is_a_literal_byte_string() -> None:
-    # quotePath=false leaves `\303\251` raw (a backslash + digits, not é); decoding it would
-    # corrupt `files`, so an unquoted side is kept verbatim.
+def test_unquoted_name_is_not_decoded() -> None:
+    # An UNquoted side is a literal byte string: `\303\251` here is a name that already
+    # contains a backslash + digits, and must NOT be decoded to é.
     unquoted = (
         "diff --git a/\\303\\251 b/\\303\\251\n"
         "--- a/\\303\\251\n+++ b/\\303\\251\n@@ -1 +1 @@\n-x\n+y\n"
     )
     assert P.shape(unquoted).files == ("\\303\\251",), P.shape(unquoted)
+
+
+def test_unquoted_raw_utf8_name_is_kept() -> None:
+    # core.quotePath=false emits the raw UTF-8 bytes for é (U+00e9), not a C-escape.
+    raw = "diff --git a/caf\u00e9.txt b/caf\u00e9.txt\n--- a/caf\u00e9.txt\n+++ b/caf\u00e9.txt\n@@ -1 +1 @@\n-x\n+y\n"
+    assert P.shape(raw).files == ("caf\u00e9.txt",), P.shape(raw)
 
 
 def test_unquoted_name_with_space_is_literal() -> None:
@@ -411,6 +417,15 @@ def test_unquoted_name_with_space_is_literal() -> None:
         "--- a/my file.txt\n+++ b/my file.txt\n@@ -1 +1 @@\n-x\n+y\n"
     )
     assert P.shape(spaced).files == ("my file.txt",), P.shape(spaced)
+
+
+def test_unquoted_name_with_leading_space_is_literal() -> None:
+    # a name that *begins* with a space is still emitted unquoted (`a/ foo`).
+    leading = (
+        "diff --git a/ foo b/ foo\n"
+        "--- a/ foo\n+++ b/ foo\n@@ -1 +1 @@\n-x\n+y\n"
+    )
+    assert P.shape(leading).files == (" foo",), P.shape(leading)
 
 
 def test_quoted_name_with_escaped_quote_is_decoded() -> None:

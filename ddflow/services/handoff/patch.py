@@ -9,9 +9,7 @@ import re
 from dataclasses import dataclass
 
 _FILE = re.compile(
-    r'^diff --git '
-    r'(?P<a>a/[^\s"]+(?:\s+[^\s"]+)*|"a/(?:[^"\\]|\\.)*") '
-    r'(?P<b>b/[^\s"]+(?:\s+[^\s"]+)*|"b/(?:[^"\\]|\\.)*")$'
+    r'^diff --git (?P<aq>"?)a/(?P<a>.+?)(?P=aq) (?P<bq>"?)b/(?P<b>.+?)(?P=bq)$'
 )
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
@@ -125,12 +123,12 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            # `core.quotepath` quotes (double quotes + C-escapes) a name only for the side
-            # that needs it, so decode that side alone (`diff --git a/foo "b/\303\251"` quotes
-            # just `b/`). An unquoted name is a literal POSIX byte string (quotePath=false),
-            # e.g. `a/foo bar.txt`, so only a side the header actually quoted is dequoted.
-            b_side = m["b"]
-            b = _dequote(b_side[3:-1]) if b_side[0] == '"' else b_side[2:]
+            # `core.quotepath` double-quotes (and C-escapes) a name only for the side that
+            # needs it, so decode that side alone (`diff --git a/foo "b/\303\251"` quotes just
+            # `b/`). An unquoted name is a literal POSIX byte string (quotePath=false), e.g.
+            # `a/foo bar.txt` or `a/café.txt`, so only a side the header actually quoted is
+            # passed to `_dequote`.
+            b = _dequote(m["b"]) if m["bq"] == '"' else m["b"]
             if b not in self.files:
                 self.files.append(b)
         elif not self.files or self.in_binary:
