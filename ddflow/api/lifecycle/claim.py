@@ -185,15 +185,16 @@ def _correct_stale_package_globs(
     a lease on ``x.py`` covers none of the package's files, so overlaps with another task
     editing those files go unseen. Claim corrects such a glob on the way in -- the lease and
     the item both take the package path -- instead of leasing a path that protects nothing.
-    ``want`` is unchanged when nothing is stale, or when git could not list the files (a
-    check that could not run is not "nothing to correct").
+    ``want`` is unchanged when nothing is stale; a git listing that could not run returns a
+    note saying the check could not run (a check that could not run is said, never read as
+    "nothing to correct").
     """
     globs = want if want is not None else list(claimed.globs if claimed is not None else [])
     if not any(g.endswith(".py") for g in globs):
         return want, []
     tracked = W.git_paths(repo, "ls-files")
     if tracked is None:
-        return want, []
+        return want, ["stale package globs not checked: git could not list the tracked files"]
     stale = stale_package_globs(globs, tracked)
     if not stale:
         return want, []
