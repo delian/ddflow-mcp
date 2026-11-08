@@ -184,12 +184,19 @@ def plan_retarget(
         if refusal:
             return lz, refusal, None
     if globs is not None and accepted:
-        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, accepted, now)
+        # A glob this item ALREADY HOLDS is not a new demand: re-stating it in `update`
+        # must not be judged as queued behind an earlier waiter (B-update-globs-queued-
+        # refusal-vague). Only the NEW globs contend, and the refusal names which one.
+        mine_glob = set(lz.globs) if lz else set()
+        want = [g for g in accepted if g not in mine_glob]
+        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
         if ahead is not None:
+            pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
+            named = f"{pairs[0][0]!r} " if pairs else ""
             return (
                 lz,
                 (
-                    f"{item_id}: those globs are queued behind {ahead.holder} ({ahead.item}), who "
+                    f"{item_id}: {named}is queued behind {ahead.holder} ({ahead.item}), who "
                     f"asked for them first. The globs were not changed."
                 ),
                 None,

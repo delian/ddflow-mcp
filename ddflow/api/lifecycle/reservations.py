@@ -190,14 +190,22 @@ def _claim_blocker(
         # `claim` turns away files an earlier QUEUED waiter asked for first
         # (`claim._refuse_if_queued`); a held item is only renewed, so it is not asked.
         # Judged here too, or `wait` says READY for a claim that is then refused (B8843d3c7bd).
-        want = list(it.globs if globs is None else globs)
+        # A glob this item ALREADY HOLDS is not a new demand: re-stating it in `update`
+        # must not be judged as queued behind an earlier waiter (B-update-globs-queued-
+        # refusal-vague). Only the NEW globs contend.
+        mine_glob = set(held.globs) if held is not None else set()
+        want = [g for g in (it.globs if globs is None else globs) if g not in mine_glob]
         ahead = WG.queue_ahead(st, cfg, it.id, me, want, now)
         if ahead is not None:
+            pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
+            named = f" {pairs[0][0]!r}" if pairs else ""
             return Blocked(
                 it.id,
                 "conflict",
-                f"those files are queued behind {ahead.holder} ({ahead.item}), who asked "
-                f"for them first ([lease].wait_queue)",
+                f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked "
+                f"for it first ([lease].wait_queue)" if named
+                else f"those files are queued behind {ahead.holder} ({ahead.item}), who "
+                f"asked for them first ([lease].wait_queue)",
                 [ahead.item],
             )
     if fair and repo is not None:
