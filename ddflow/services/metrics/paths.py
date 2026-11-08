@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from ...core import clock
 from .facts import Outcome
 from .providers import Context
 from .stats import stat
@@ -154,4 +155,5 @@ def text(data: dict) -> str:
 def _dur(seconds):
     if seconds is None:
         return "n/a"
-    return f"{seconds / 60:.0f}m" if seconds >= 60 else f"{seconds:.0f}s"
+    minute = clock.DURATION_UNITS["m"]
+    return f"{seconds / minute:.0f}m" if seconds >= minute else f"{seconds:.0f}s"
