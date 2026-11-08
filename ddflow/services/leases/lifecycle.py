@@ -12,7 +12,6 @@ from collections.abc import Callable
 from typing import Any
 
 from ...config import Config
-from ...core.admission import queued_globs
 from ...core.model import Item, Lease, State
 from ...core.schedule import capacities, resource_shortfall
 from ...infra.log import EventLog
@@ -190,15 +189,14 @@ def plan_retarget(
         # refusal-vague). Only the NEW globs contend, and the refusal names which one.
         mine_glob = set(lz.globs) if lz else set()
         want = [g for g in accepted if g not in mine_glob]
-        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
-        if ahead is not None:
-            queued = queued_globs(want, ahead.globs, cfg)
+        aheads = WG.queued_ahead(state, cfg, item_id, lz.holder, want, now)
+        if aheads:
             return (
                 lz,
                 (
-                    f"{item_id}: those globs ({', '.join(queued)}) are queued behind "
-                    f"{ahead.holder} ({ahead.item}), who asked for them first. The globs "
-                    f"were not changed."
+                    f"{item_id}: those globs ({WG.queued_names(want, aheads, cfg)}) are "
+                    f"queued behind earlier waiters ([lease].wait_queue), who asked for "
+                    f"them first. The globs were not changed."
                 ),
                 None,
             )

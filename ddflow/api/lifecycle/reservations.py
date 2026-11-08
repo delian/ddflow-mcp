@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from ...core import clock
-from ...core.admission import glob_conflict, queued_globs
+from ...core.admission import glob_conflict
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.schedule import (
     Blocked,
@@ -152,15 +152,14 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     # literal re-statement: README.md held, README.md re-stated.
     mine_glob = set(held.globs) if held is not None else set()
     fresh = [g for g in want if g not in mine_glob]
-    ahead = WG.queue_ahead(st, cfg, it.id, me, fresh, now)
-    if ahead is None:
+    aheads = WG.queued_ahead(st, cfg, it.id, me, fresh, now)
+    if not aheads:
         return None
-    queued = queued_globs(fresh, ahead.globs, cfg)
     reason = (
-        f"those files ({', '.join(queued)}) are queued behind {ahead.holder} "
-        f"({ahead.item}), who asked for them first ([lease].wait_queue)"
+        f"those files ({WG.queued_names(fresh, aheads, cfg)}) are queued behind earlier "
+        f"waiters, who asked for them first ([lease].wait_queue)"
     )
-    return Blocked(it.id, "conflict", reason, [ahead.item])
+    return Blocked(it.id, "conflict", reason, [aheads[0].item])
 
 
 def _claim_blocker(

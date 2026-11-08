@@ -63,6 +63,28 @@ def test_queued_behind_refusal_names_the_glob(repo):
     assert QUEUER in out.reason
 
 
+def test_queued_behind_refusal_names_every_queued_waiter(repo):
+    # Two queued waiters on two different globs must both be named in ONE refusal, not
+    # just the earliest (`queue_ahead` returned one waiter, B-glob-refusal-names-one-conflict).
+    _proj(
+        repo,
+        ("X", "src/a.py,src/b.py"),
+        ("Z", "src/a.py"),
+        ("W", "src/b.py"),
+        ("Y", "src/a.py,src/b.py"),
+    )
+    assert A.claim(repo, "X", no_worktree=True, agent=HOLDER).ok
+    assert not A.claim(repo, "Z", no_worktree=True, agent=QUEUER, queue=True).ok
+    assert not A.claim(repo, "W", no_worktree=True, agent="agent-queuer2", queue=True).ok
+    run_cli(repo, "release", "X", "--agent", HOLDER)
+    out = A.claim(repo, "Y", no_worktree=True, agent=WAITER)
+    assert not out.ok
+    main = out.reason.split("\n\nRecorded:")[0]
+    assert "queued behind" in main
+    assert "src/a.py" in main and QUEUER in main
+    assert "src/b.py" in main and "agent-queuer2" in main
+
+
 def test_overlapping_lease_blocks_wait_names_holder_then_ready_and_claim_succeeds(repo):
     _proj(repo, ("X", "src/**"), ("Y", "src/a.py"))
     assert A.claim(repo, "X", no_worktree=True, agent=HOLDER).ok

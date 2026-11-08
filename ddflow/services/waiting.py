@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..core.admission import conflicts, glob_conflict, shared_globs
+from ..core.admission import conflicts, glob_conflict, queued_globs, shared_globs
 from ..core.globs import overlap as globs_overlap
 
 
@@ -206,11 +206,13 @@ def advice_text(item_id: str, advice: dict[str, Any], keep: list[str]) -> str:
     )
 
 
-def queue_ahead(
+def queued_ahead(
     state, cfg, item_id: str, holder: str, globs: list[str], now: float
-) -> Waiter | None:
-    """The earliest standing QUEUED waiter, not ``holder``, that asked for files ``globs``
-    overlap and asked first -- ahead of ``item_id`` in the FIFO -- or None."""
+) -> list[Waiter]:
+    """Every standing QUEUED waiter, not ``holder``, that asked for files ``globs``
+    overlap and asked first -- ahead of ``item_id`` in the FIFO -- oldest first. All of
+    them, not just the earliest: a refusal names one per queued conflict, so finding every
+    held glob with its queue place is one refusal (B-glob-refusal-names-one-conflict)."""
     held = standing(state, cfg, now)
     mine = held.get(item_id)
     # Its place is its recorded ask -- but only while it is the same ask: a changed request
@@ -221,6 +223,7 @@ def queue_ahead(
     # for it is not "ahead" of a request that merely re-states it (B-update-queue-ignores-
     # shared-globs): judge the overlap as `conflicts` does, shared globs excluded.
     shared = shared_globs(cfg)
+    out = []
     for other, w in sorted(held.items(), key=lambda kv: (kv[1]["since"], kv[0])):
         if not w["queue"] or w["holder"] == holder or other == item_id or w["since"] >= cutoff:
             continue
@@ -230,8 +233,28 @@ def queue_ahead(
         # they free up (the time it needs to come back and take them).
         held_by = blockers(state, cfg, other, w["holder"], w["globs"], now)
         if held_by or now - w["at"] <= cfg.lease.waiter_reservation_s:
-            return Waiter(other, w["holder"], list(w["globs"]), w["since"], True, held_by)
-    return None
+            out.append(Waiter(other, w["holder"], list(w["globs"]), w["since"], True, held_by))
+    return out
+
+
+def queue_ahead(
+    state, cfg, item_id: str, holder: str, globs: list[str], now: float
+) -> Waiter | None:
+    """The earliest standing QUEUED waiter, not ``holder``, that asked for files ``globs``
+    overlap and asked first -- ahead of ``item_id`` in the FIFO -- or None."""
+    aheads = queued_ahead(state, cfg, item_id, holder, globs, now)
+    return aheads[0] if aheads else None
+
+
+def queued_names(mine: list[str], aheads: list[Waiter], cfg: Any) -> str:
+    """One clause per queued waiter ahead: the ``mine`` globs it holds the place for, then
+    its holder and item -- every queued conflict named, not just the earliest waiter's
+    (B-glob-refusal-names-one-conflict)."""
+    parts = [
+        f"{', '.join(queued_globs(mine, a.globs, cfg))} behind {a.holder} ({a.item})"
+        for a in aheads
+    ]
+    return "; ".join(parts)
 
 
 def _shape(on: list[dict[str, Any]]) -> list[tuple[str, bool]]:
