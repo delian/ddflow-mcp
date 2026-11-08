@@ -9,7 +9,6 @@ from pathlib import Path
 
 from ...core import clock
 from ...core.admission import glob_conflict
-from ...core.globs import overlap
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.schedule import (
     Blocked,
@@ -147,8 +146,11 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     ``held`` already covers is not a new demand, so a widening that merely re-states it is
     not judged 'queued behind' (B-update-globs-queued-refusal-vague); the refusal names
     which file instead of 'those files'."""
-    mine_glob = list(held.globs) if held is not None else []
-    fresh = [g for g in want if not any(overlap(g, h) for h in mine_glob)]
+    # A glob the item already holds is re-stated, not newly demanded (literal here: a glob
+    # is a pattern, and true "covered by" is unsound for globs -- intersection over-
+    # approximates and lets a broadening glob walk over an earlier queued reviewer).
+    mine_glob = set(held.globs) if held is not None else set()
+    fresh = [g for g in want if g not in mine_glob]
     ahead = WG.queue_ahead(st, cfg, it.id, me, fresh, now)
     if ahead is None:
         return None
