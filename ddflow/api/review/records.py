@@ -411,7 +411,7 @@ def _blocking_findings(
     return blocking, discounted, converged_round
 
 
-def _gate_outcome(
+def _gate_outcome(  # noqa: PLR0913 -- the identifying pass + results + item + cfg + evidence + say
     best,
     results,
     it,
@@ -421,6 +421,7 @@ def _gate_outcome(
     cfg,
     extra_evidence,
     say,
+    *,
     author_model: str = "",
     kind: str = "",
 ) -> tuple[str, dict | None]:
@@ -459,8 +460,10 @@ def _gate_outcome(
     # cleared -- so only a full round applies the guard (bug
     # B-review-delta-rounds-do-not-converge). A same-family confirmed finding is discounted
     # over a clean cross-family verdict inside `_confirmed_unrechecked` (bug B7dbf432caa).
-    if converged_round and kind != "delta" and _confirmed_unrechecked(
-        it, gate, results, cfg, author_model
+    if (
+        converged_round
+        and kind != "delta"
+        and _confirmed_unrechecked(it, gate, results, cfg, author_model)
     ):
         return "failed", extra_evidence
     # A same-family reviewer's finding does not hold the pass open when a cross-family
