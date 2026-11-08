@@ -130,7 +130,9 @@ def _checked(log, canon: Canon, ask_id: str, *, now: float, cfg: Config | None) 
     )
 
 
-def check(log, canon: Canon, ask_id: str, *, now: float | None = None, cfg: Config | None = None) -> Decision:
+def check(
+    log, canon: Canon, ask_id: str, *, now: float | None = None, cfg: Config | None = None
+) -> Decision:
     """Like [`spend`], but validate WITHOUT recording a use (no lock, no `ask.consumed`). Spend
     the validated approval only once the caller's side effect has succeeded; a refused spend
     here has already cost it (B527b0a518c)."""

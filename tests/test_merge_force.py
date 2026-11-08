@@ -204,7 +204,9 @@ def test_a_failed_git_landing_does_not_spend_the_approval(repo, refuse, monkeypa
     _claimed(repo)
     ask = _approved_ask(repo)
     monkeypatch.setattr(
-        W, "merge", lambda *_a, **_kw: G.GitResult(W.GIT_REFUSED, "", "conflict: a.py", attempted=True)
+        W,
+        "merge",
+        lambda *_a, **_kw: G.GitResult(W.GIT_REFUSED, "", "conflict: a.py", attempted=True),
     )
     out = _merge(repo, force=True, approval=ask)
     assert out.exit != 0, out.reason
@@ -238,7 +240,12 @@ def test_a_person_or_policy_stamp_is_returned_without_a_spend(repo, refuse):
     M = import_module("ddflow.api.lifecycle.merge")
 
     person = {"by": "person"}
-    policy = {"ask": "Qx", "approved_by": "policy:auto-after-retries", "via": "policy", "digest": "d"}
+    policy = {
+        "ask": "Qx",
+        "approved_by": "policy:auto-after-retries",
+        "via": "policy",
+        "digest": "d",
+    }
     assert M._spend_after_land(None, None, "T1", None, person, "") is person
     assert M._spend_after_land(None, None, "T1", None, policy, "") is policy
 
@@ -258,6 +265,14 @@ def test_a_failed_post_landing_spend_is_not_stamped_as_a_proof(repo, refuse, mon
 
 def test_authorise_needs_nothing_when_nothing_refuses():
     a = MF.Assessment(mode="refuse", unmet={})
-    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (None, "", "")
+    assert MF.authorise(None, None, "T1", a, force=False, approval="", agent="bot") == (
+        None,
+        "",
+        "",
+    )
     warn = MF.Assessment(mode="warn", unmet={"ci": "not run"})
-    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (None, "", "")
+    assert MF.authorise(None, None, "T1", warn, force=False, approval="", agent="bot") == (
+        None,
+        "",
+        "",
+    )

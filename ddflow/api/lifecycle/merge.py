@@ -60,11 +60,18 @@ def _override(repo: Path, cfg, log, st, item: str, force: bool, approval: str, a
     (B527b0a518c). "" for a person's force and for a standing-policy answer (already consumed)."""
     bad = F.problems(cfg)
     if bad:
-        return None, None, "", O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+        return (
+            None,
+            None,
+            "",
+            O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[]),
+        )
     gates = MF.assess(repo, cfg, st, item)
     if not gates.refuses:
         return gates, None, "", None
-    stamp, why, pending = MF.authorise(log, cfg, item, gates, force=force, approval=approval, agent=agent)
+    stamp, why, pending = MF.authorise(
+        log, cfg, item, gates, force=force, approval=approval, agent=agent
+    )
     if not why:
         return gates, stamp, pending, None
     return (
@@ -269,7 +276,9 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
     # Last of the refusals: an agent's approval is only checked here, so no refusal above is
     # its cost; it is spent (MF.spend) only after the git landing below actually landed.
-    gates, forced_by, pending_approval, over = _override(repo, cfg, log, st, item, force, approval, agent)
+    gates, forced_by, pending_approval, over = _override(
+        repo, cfg, log, st, item, force, approval, agent
+    )
     if over is not None:
         return over
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
