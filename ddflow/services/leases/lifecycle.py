@@ -192,14 +192,8 @@ def plan_retarget(
         ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
         if ahead is not None:
             pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
-            named = pairs[0][0] if pairs else None
-            reason = (
-                f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked "
-                f"for it first."
-                if named is not None
-                else f"those files are queued behind {ahead.holder} ({ahead.item}), who "
-                f"asked for them first."
-            )
+            named = pairs[0][0] if pairs else (ahead.globs[0] if ahead.globs else "the requested files")
+            reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first."
             return (lz, f"{item_id}: {reason} The globs were not changed.", None)
     if resources:
         try:
