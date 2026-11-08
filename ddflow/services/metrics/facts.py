@@ -186,9 +186,7 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         review_id=str(evidence.get("review_id") or ""),
         note=str(evidence.get("note") or ""),
         combined_gates=tuple(
-            g
-            for g in (evidence.get("combined_gates") or ())
-            if isinstance(g, str)
+            g for g in (evidence.get("combined_gates") or ()) if isinstance(g, str)
         ),
     )
 

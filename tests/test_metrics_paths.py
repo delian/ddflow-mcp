@@ -13,7 +13,6 @@ from lanes_fixture import T0, Log
 from metrics_fixture import frozen
 
 from ddflow.services import metrics as M
-from ddflow.core import clock
 
 
 def seeded() -> Log:

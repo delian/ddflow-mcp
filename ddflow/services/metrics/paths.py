@@ -105,7 +105,9 @@ def build(ctx: Context) -> dict:
     outs_of: dict[str, list[Outcome]] = defaultdict(list)
     for o in ctx.facts.outcomes:
         outs_of[o.item].append(o)
-    paths = [_item(ctx, s.item, outs_of[s.item], runs_of.get(s.item, ())) for s in completed_spans(ctx)]
+    paths = [
+        _item(ctx, s.item, outs_of[s.item], runs_of.get(s.item, ())) for s in completed_spans(ctx)
+    ]
     unions = [p["process_union_s"] for p in paths]
     saved = [p["process_sum_s"] - p["process_union_s"] for p in paths]
     unavailable: dict[str, str] = {}

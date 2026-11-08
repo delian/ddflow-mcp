@@ -20,6 +20,9 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
+from .paths import build as paths_build
+from .paths import has_figures as paths_ok
+from .paths import text as paths_text
 from .providers import Context, register
 from .render import forecast as text_forecast
 from .render import lanes as text_lanes
@@ -35,11 +38,19 @@ from .summary import build, has_figures
 from .tiny import build as tiny_build
 from .tiny import has_figures as tiny_ok
 from .tiny import text as tiny_text
-from .paths import build as paths_build
-from .paths import has_figures as paths_ok
-from .paths import text as paths_text
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "tiny", "paths", "swarm")
+VIEWS = (
+    "summary",
+    "forecast",
+    "retro",
+    "skips",
+    "lanes",
+    "stages",
+    "locks",
+    "tiny",
+    "paths",
+    "swarm",
+)
 
 
 #: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
