@@ -87,6 +87,18 @@ def test_undeclared_report_drops_shared_globs():
     assert "tests/t.py" in mixed
 
 
+def test_untouched_report_shared_only_writes_say_nothing():
+    # B38c3ac0f60: when every declared glob went untouched and the only writes are shared
+    # pins, there is nothing to declare OR narrow -- never a degenerate `--globs ''`.
+    st = _state(_task("T", ["a/**"]))
+    cfg = Config()
+    cfg.lease.shared_globs = ["README.md"]
+    assert (
+        OG.untouched_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["README.md"]}))
+        == ""
+    )
+
+
 def test_block_blocks_only_a_known_write_never_unknown():
     st = _state(_task("T", ["a/**"]))
     cfg = Config()

@@ -129,6 +129,10 @@ def untouched_report(
         return ""
     keep = [g for g in it.globs if g not in untouched]
     wrote = [] if keep else directory_globs(split(changed, [], shared=shared_globs(cfg))[0])
+    if not keep and not wrote:
+        # Every non-.ddflow write was a shared pin and every declared glob was untouched:
+        # there is nothing the task can usefully declare or narrow (B38c3ac0f60).
+        return ""
     if wrote:  # nothing was written inside any glob: replace the declaration by what was
         return (
             f"declared but never written: {_list(untouched, cfg.locks.suggest_shown)}; "
