@@ -76,12 +76,12 @@ def run_piped(
     stop = threading.Event()
 
     def drain() -> None:
-        """Read stderr into ``head`` until end of file. The read end is set non-blocking so
-        a run that has finished can stop the reader with ``stop``: ``read1`` raises
+        """Read stderr into ``head`` until end of file. The read end is made non-blocking so
+        a finished run can stop the reader with ``stop`` (``os.read`` raises
         `BlockingIOError` instead of blocking behind a descendant that still holds the
-        write end, and the loop checks the stop flag around every read."""
+        write end); where the platform cannot un-block the pipe it ends on end of file."""
         fd = p.stderr.fileno()  # type: ignore[union-attr]
-        with contextlib.suppress(OSError):  # a platform without O_NONBLOCK stays blocking
+        with contextlib.suppress(OSError):  # no O_NONBLOCK (e.g. a Windows pipe): stay blocking
             os.set_blocking(fd, False)
         while not stop.is_set():
             try:
@@ -106,12 +106,12 @@ def run_piped(
         code = p.wait()
         reader.join(1)
         stop.set()
-        reader.join()
+        reader.join(1)
         return PipedEnd(code=code, stderr=bytes(head))
     finally:
         clock.cancel()
         stop.set()
-        reader.join()
+        reader.join(1)  # bounded: never hang on a reader the platform cannot stop
         with contextlib.suppress(ValueError, OSError):
             p.stderr.close()  # type: ignore[union-attr]
         if p.poll() is None:
