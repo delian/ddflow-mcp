@@ -29,6 +29,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_bug_dedupe": [
+  "ddflow_bug action=dedupe",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_bug_file_tasks": [
   "ddflow_bug action=file_tasks",
   "0.2.8",
@@ -106,6 +111,11 @@
  ],
  "ddflow_decision_supersede": [
   "ddflow_decision action=supersede",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_digest": [
+  "ddflow_view action=digest",
   "0.2.8",
   "1.0"
  ],
@@ -229,6 +239,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_lesson_show": [
+  "ddflow_memory action=lesson_show",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_lesson_verify": [
   "ddflow_memory action=lesson_verify",
   "0.2.8",
@@ -311,6 +326,11 @@
  ],
  "ddflow_precommit": [
   "ddflow_doctor action=precommit",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_probe": [
+  "ddflow_lease action=probe",
   "0.2.8",
   "1.0"
  ],
@@ -469,6 +489,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_session_inbox": [
+  "ddflow_session action=inbox",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_session_message": [
   "ddflow_session action=message",
   "0.2.8",
@@ -561,6 +586,11 @@
  ],
  "ddflow_version_show": [
   "ddflow_ship action=version_show",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_vigil": [
+  "ddflow_view action=vigil",
   "0.2.8",
   "1.0"
  ],
