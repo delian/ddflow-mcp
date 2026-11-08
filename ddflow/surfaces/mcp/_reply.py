@@ -253,7 +253,7 @@ def _outcome_result(
         # would raise KeyError (B-mcp-gate-list-overrides-since-internal-error). Fall
         # back to the reason instead of crashing the call; an empty body then falls
         # through to the same reason below.
-        body = out.body(payload_key) if payload_key in out.data else out.reason
+        body = out.data.get(payload_key, out.reason)
         if not isinstance(body, str):
             raise TypeError(
                 f"{out.kind}: declared `text` but its body is a {type(body).__name__}. "
