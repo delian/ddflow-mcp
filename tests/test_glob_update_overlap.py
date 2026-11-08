@@ -8,6 +8,7 @@ holder's own changes do not include; and a finished holder's lease holds nothing
 
 from __future__ import annotations
 
+import json
 import re
 import time
 
@@ -142,6 +143,42 @@ def test_rereating_a_shared_glob_is_not_queued_behind_a_waiter(repo):
     ok = AI.update(repo, "M1", AI.ItemEdit(globs=["README.md", "other.py"]), agent=ME)
     assert ok.ok, ok.reason
     assert _items(repo)["M1"].globs == ["README.md", "other.py"], _items(repo)["M1"].globs
+
+
+def test_re_stating_a_held_glob_is_not_queued_behind_a_waiter(repo):
+    """B-update-globs-queued-refusal-vague: re-stating a NON-shared glob the item already
+    holds must not be refused as 'queued behind' an earlier waiter that also asked for it.
+    The refusal must name which file, not 'those files', and `--json` must stay JSON."""
+    run_cli(repo, "task", "add", "H1", "--title", "holder", "--globs", "changes.toml")
+    run_cli(repo, "task", "add", "Q1", "--title", "queuer", "--globs", "changes.toml,README.md")
+    run_cli(repo, "task", "add", "M1", "--title", "mine", "--globs", "README.md")
+    assert A.claim(repo, "H1", no_worktree=True, agent=HOLDER).ok
+    assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
+    # Q1's claim is queued: changes.toml is held by HOLDER.
+    assert not A.claim(repo, "Q1", no_worktree=True, agent="agent-queuer", queue=True).ok
+    # M1 ALREADY HOLDS README.md: re-stating it is not a new demand, the widening takes
+    # the new glob.
+    ok = AI.update(repo, "M1", AI.ItemEdit(globs=["README.md", "other.py"]), agent=ME)
+    assert ok.ok, ok.reason
+    assert _items(repo)["M1"].globs == ["README.md", "other.py"], _items(repo)["M1"].globs
+
+
+def test_a_queued_refusal_names_the_file_and_stays_json(repo):
+    """The queued-behind refusal must name the file it refuses and keep `--json` parseable
+    (B-update-globs-queued-refusal-vague)."""
+    run_cli(repo, "task", "add", "H1", "--title", "holder", "--globs", "changes.toml")
+    run_cli(repo, "task", "add", "Q1", "--title", "queuer", "--globs", "changes.toml")
+    run_cli(repo, "task", "add", "M1", "--title", "mine", "--globs", "other.py")
+    assert A.claim(repo, "H1", no_worktree=True, agent=HOLDER).ok
+    assert A.claim(repo, "M1", no_worktree=True, agent=ME).ok
+    assert not A.claim(repo, "Q1", no_worktree=True, agent="agent-queuer", queue=True).ok
+    # M1 asks for changes.toml, which Q1 already queued for: refused, named, JSON.
+    code, out, err = run_cli(
+        repo, "update", "M1", "--globs", "other.py,changes.toml", "--json", agent=ME
+    )
+    assert code != 0
+    json.loads(out)
+    assert "changes.toml" in (out + err), (out, err)
 
 
 def test_an_exact_file_the_holder_claimed_is_never_free(repo, monkeypatch):
