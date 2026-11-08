@@ -161,7 +161,12 @@ def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
     assert code != 0, text
-    assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
+    rec = _gate(repo, "unit_tests")
+    assert rec.outcome == "partial", rec
+    # The no-tree keep must not rewrite the record: the measured baseline-red evidence
+    # `ddflow approve` reads has to SURVIVE, else the destruction this bug is about remains
+    # (rubber_duck round 1).
+    assert (rec.evidence or {}).get("baseline", {}).get("red") is True, rec.evidence
     assert "a person can settle it" in text
     assert "ddflow approve" in text
 
