@@ -333,6 +333,7 @@ def _gone_tree(
             + (f", then `ddflow release {rec.item} --note salvaged`." if held else ".")
         )
         return
+    rec.salvageable = False  # measured (the branch is gone or fully merged): genuinely empty
     rec.advice = "worktree is gone; nothing to salvage" + (
         f". `ddflow release {rec.item}` to clear the claim."
         if held
