@@ -144,3 +144,20 @@ def test_a_theoretical_verdict_next_to_the_phrase_is_still_clean(tmp_path, monke
     )
     r = RB.run(repo, "main", 20)
     assert r.outcome == "clean" and r.exit == 0
+
+
+def test_a_confirmed_defect_next_to_an_unrelated_theoretical_tag_is_findings(
+    tmp_path, monkeypatch
+):
+    """A '(THEORETICAL)' tag elsewhere on the line does not undo a 'high (CONFIRMED)'
+    finding next to it: only the verdict right after the severity negates it."""
+    repo = _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_WAIT_EXIT", "1")
+    monkeypatch.setenv(
+        "FAKE_VERDICT",
+        "Author text: no confirmed defects in the helpers.\n"
+        "**1. high (CONFIRMED)** — the old (THEORETICAL) tag does not apply; "
+        "the branch deletes the wrong table.\n",
+    )
+    r = RB.run(repo, "main", 20)
+    assert r.outcome == "findings" and r.exit == 1

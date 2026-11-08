@@ -275,25 +275,24 @@ def _no_confirmed_defect(text: str) -> bool:
     return not _has_confirmed_finding(text)
 
 
-_DEFECT_SEVERITY = re.compile(r"\b(?:critical|high|medium)\b", re.IGNORECASE)
-
-_NEGATED = re.compile(r"\((?:theoretical|refuted)\)", re.IGNORECASE)
+# A defect severity (critical|high|medium) is a confirmed defect unless its OWN verdict is
+# (THEORETICAL)/(REFUTED) written IMMEDIATELY after it (`**1. high (CONFIRMED)**`, but not
+# `**2. medium (THEORETICAL)**`). `low` is roborev's NOTE class, deliberately absent.
+_DEFECT_SEVERITY = re.compile(
+    r"\b(?:critical|high|medium)\b(?!\s*\((?:theoretical|refuted)\))", re.IGNORECASE
+)
 
 
 def _has_confirmed_finding(text: str) -> bool:
-    """A real defect among the findings: a line carrying a defect severity
-    (critical|high|medium) that is not set aside by the (THEORETICAL)/(REFUTED) verdict
-    roborev writes on the finding. 'low' is a NOTE ('minor improvement opportunity with no
-    immediate functional impact', its reviewer prompt), not a defect: a LOW-only review is
-    exactly the clean verdict this fix must stop recording `failed` over. The severity is a
-    plain word in roborev's body (`**1. high (CONFIRMED)**`, `FINDING HIGH`, `- medium: ...`),
-    not a bold `**high**` bullet, so it is matched as a bare token, not markdown. Only the
-    parenthesised verdict negates a defect: the word in prose (`not refuted`, `the finding
-    was theoretical`) does NOT, or a confirmed defect quoted beside it would be dropped."""
-    for line in text.splitlines():
-        if _DEFECT_SEVERITY.search(line) and not _NEGATED.search(line):
-            return True
-    return False
+    """A confirmed defect among the findings: a defect severity (critical|high|medium) whose
+    own verdict is not (THEORETICAL)/(REFUTED). 'low' is a NOTE ('minor improvement
+    opportunity with no immediate functional impact', roborev's reviewer prompt), not a
+    defect -- a LOW-only review is exactly the clean verdict this fix must stop recording
+    `failed` over. The severity is a plain word in roborev's body (`**1. high (CONFIRMED)**`,
+    `FINDING HIGH`, `- medium: ...`), so it is matched as a bare token, not a bold
+    `**high**` bullet; only the verdict right after the severity negates it, never a
+    `(THEORETICAL)` tag elsewhere on the same line."""
+    return _DEFECT_SEVERITY.search(text) is not None
 
 
 def _findings_summary(text: str) -> str:
