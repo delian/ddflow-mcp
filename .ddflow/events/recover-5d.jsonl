@@ -1,0 +1,2 @@
+{"agent":"recover-5d","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ef948a7743a0b5c004ec44282","kind":"ddflow.seen","lamport":157355,"schema":1,"subject":"ddflow","ts":"2026-11-08T21:09:13.186758Z"}
+{"agent":"recover-5d","data":{"by":"recover-5d","event":"e3b858bc7567e8c76484c2a95","holder":"bg91","note":"salvaged"},"id":"efbe961e6bc8b45d80915edd8","kind":"lease.released","lamport":157356,"schema":1,"subject":"fix-B-review-delta-rounds-do-not-converge","ts":"2026-11-08T21:09:13.234343Z"}
