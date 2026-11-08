@@ -11,6 +11,23 @@ from dataclasses import dataclass
 _FILE = re.compile(r'^diff --git "?a/(?P<a>.+?)"? "?b/(?P<b>.+?)"?$')
 _HUNK = re.compile(r"^@@ -\d+(?:,(?P<old>\d+))? \+\d+(?:,(?P<new>\d+))? @@")
 _BINARY = ("GIT binary patch", "Binary files ")
+_ESCAPE = re.compile(r"\\([0-7]{3})")
+
+
+def _dequote(name: str) -> str:
+    """A git `core.quotepath` name, decoded to UTF-8: each byte above 0x7f (and ``"``, ``\\``
+    and controls) is written as ``\\ooo``, so `shape` un-quotes it (a file named ``é`` is
+    ``\\303\\251``; without this `files` keeps the raw escaped text, not the decoded name)."""
+    if "\\" not in name:
+        return name
+    raw = bytearray()
+    at = 0
+    for m in _ESCAPE.finditer(name):
+        raw.extend(name[at : m.start()].encode("utf-8", "replace"))
+        raw.append(int(m[1], 8))
+        at = m.end()
+    raw.extend(name[at:].encode("utf-8", "replace"))
+    return raw.decode("utf-8", "replace")
 
 
 @dataclass(frozen=True)
@@ -76,8 +93,9 @@ class _Reader:
             return True
         if m := _FILE.match(line):
             self.header, self.in_binary = True, False
-            if m["b"] not in self.files:
-                self.files.append(m["b"])
+            b = _dequote(m["b"])
+            if b not in self.files:
+                self.files.append(b)
         elif not self.files or self.in_binary:
             pass
         elif line.startswith(_BINARY):
@@ -93,6 +111,11 @@ class _Reader:
 
 
 def _diff_lines(patch: str) -> list[str]:
+    # NOTE (LK-sg-events follow-up): the cut at the first `---` line is DELIBERATELY coarse, not a
+    # bug. A format-patch message body can itself contain a `---` line, which this over-counts as
+    # file/line content — but `shape` then sees no ``diff --git`` and reports zero files, so it
+    # FAILS CLOSED (rubber_duck #27, critic #23/#25 both refuted the "wrong count" claim). A
+    # precise cut would need git's `diffstat` marker, which is not in the text; fail-closed wins.
     lines = patch.splitlines()
     if lines and lines[0].startswith(("From ", "Subject:", "From:")):
         # a format-patch: the message ends at the first `---` line; a diff quoted in it is text

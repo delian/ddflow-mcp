@@ -357,9 +357,15 @@ def test_a_reason_that_is_not_text_is_no_reason(sender, owner, cfg) -> None:
 
 
 def test_quoted_paths_overstated_headers_and_countered_resets(sender, owner, cfg) -> None:
-    quoted = 'diff --git "a/\\303\\251" "b/\\303\\251"\n--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n x\n+y\n'
+    quoted = (
+        'diff --git "a/\\303\\251" "b/\\303\\251"\n'
+        '--- "a/\\303\\251"\n'
+        '+++ "b/\\303\\251"\n'
+        '@@ -1 +1,2 @@\n x\n+y\n'
+    )
     q = P.shape(quoted)
-    assert q.added == 1 and len(q.files) == 1 and not q.malformed
+    assert q.files == ("\u00e9",), q  # the decoded name, not the raw \303\251 escape
+    assert q.added == 1 and not q.malformed
     over = "diff --git a/x b/x\n@@ -1,2 +1,2 @@\n a\ndiff --git a/y b/y\n@@ -1 +1 @@\n-b\n+c\n"
     assert P.shape(over).malformed
     cfg.handoff.reject_breaker = 2
