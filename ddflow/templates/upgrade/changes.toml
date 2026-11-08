@@ -1917,6 +1917,7 @@ key = "lessons.test_file_globs"
 old = "[\"tests/**\", \"test/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\"]"
 new = "[\"**/tests/**\", \"**/test/**\", \"**/spec/**\", \"**/specs/**\", \"**/__tests__/**\", \"**/test_*.py\", \"**/*_test.py\", \"**/conftest.py\", \"**/*.test.[jt]s\", \"**/*.test.[jt]sx\", \"**/*.test.[mc]js\", \"**/*.spec.[jt]s\", \"**/*.spec.[jt]sx\", \"**/*.spec.[mc]js\", \"**/*_test.go\", \"**/*_spec.rb\", \"**/*_test.rb\", \"**/test_*.rb\"]"
 why = "Path globs naming TEST files: the tests/, test/, spec/, specs/ and __tests__/ trees at any depth (Rust's tests/**/*.rs among them), and by name Python (test_*.py, conftest.py), JS/TS (*.test.ts, *.spec.js), Go (*_test.go) and Ruby (*_spec.rb, *_test.rb, test_*.rb)."
+effect = "A bug whose fix is confined to a file matching the wider set of globs (specs/ and __tests__ trees, JS/TS/Go/Ruby test files) is now verified against it instead of being treated as code to review."
 
 [[release.change]]
 kind = "knob_added"
@@ -2254,6 +2255,7 @@ key = "ci.always_tests"
 old = "[\"tests/test_constants_ratchet.py\", \"tests/test_layering*.py\", \"tests/golden/**\", \"tests/test_uc_surf_setup_ops_transcript.py\", \"tests/test_uc_surf_loop_transcript.py\", \"tests/test_readme_*.py\", \"tests/test_mcp_tool_budget.py\"]"
 new = "[\"tests/test_constants_ratchet.py\", \"tests/test_layering*.py\", \"tests/golden/**\", \"tests/test_uc_surf_setup_ops_transcript.py\", \"tests/test_uc_surf_loop_transcript.py\", \"tests/test_readme_*.py\", \"tests/test_mcp_tool_budget.py\", \"tests/test_mcp_parity.py\"]"
 why = "Test-file globs a selected `ddflow ci run` (see `tests_scope`) runs for EVERY item in addition to the tests its change reaches, plus any test file declaring `ALWAYS = True` at module level."
+effect = "A selected `ddflow ci run` now also runs tests/test_mcp_parity.py for every item, so an MCP parity break is caught in a selected run regardless of what the change reaches."
 
 [[release.change]]
 kind = "knob_added"
