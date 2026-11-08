@@ -140,7 +140,7 @@ def test_every_family_has_its_four_per_family_homes():
             f"{name}: write docs/ddflow/adapters/{family}.md (what it is, home, how to fake it)"
         )
         have_fake = name in F.FAKES
-        baseline = ROOT / "tests" / "ports_without_fake" / f"{name}.txt"
+        baseline = ROOT / "tests" / "guard_baselines" / "ports_without_fake" / f"{name}.txt"
         assert have_fake != baseline.is_file(), (
             f"{name}: exactly one of a fake in ddflow/adapters/fakes/ or a baseline file {baseline}"
         )
