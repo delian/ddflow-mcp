@@ -119,6 +119,7 @@ def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
     assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
     assert "only a person's re-record" in text
     assert "ddflow approve" not in text  # a non-baseline-red partial is not approvable
+    assert "gate record" not in text  # nor a hand-record `--outcome passed` it did not earn
 
 
 def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
@@ -170,6 +171,7 @@ def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
     assert (rec.evidence or {}).get("baseline", {}).get("red") is True, rec.evidence
     assert "a person can settle it" in text
     assert "ddflow approve" in text
+    assert "ddflow gate run" not in text  # no rerun advice that would overwrite the evidence
 
 
 def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
