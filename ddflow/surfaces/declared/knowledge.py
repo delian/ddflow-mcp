@@ -89,6 +89,8 @@ def _applicable_text(out, a) -> str:
     ]
     if out.data.get("path_unmatched"):
         lines.append(f"\npath matching could not run: {out.data['path_unmatched']}")
+        if not out.data["applicable"] and not out.data["project_wide"]:
+            lines.append("no project-wide decisions recorded either")
     return "\n".join(lines)
 
 
