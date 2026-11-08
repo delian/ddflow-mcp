@@ -7,23 +7,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...config import Config
-from ...infra import git as GIT
 from ..review_exclude import _hit, patterns
 from .evidence import TreeEntries, commit_tree_entries, differing_paths
 
 
-def _gate_covered(cwd: Path, paths: list[str]) -> list[str]:
+def _gate_covered(cwd: Path, paths: list[str], then: TreeEntries | None) -> list[str]:
     """The subset of ``paths`` the gate ran on: a tracked file the review did not leave out.
 
-    A git merge temporary is tracked nowhere, and a file matched by `[review].exclude_globs`
-    (a golden snapshot or transcript) or owned by `pins.toml` was never sent to the reviewer:
-    naming either is not content the gate covered, so it cannot be cleared by reviewing the
-    covered code (B-stale-mark-names-merge-temp-and-excluded-files).
+    A path the gate covered is one the reviewed tree tracks: a git merge temporary is tracked
+    nowhere, so it is not a difference; but a file DELETED from the index is still tracked in
+    the reviewed tree, so it is (the index set alone would drop a deletion). A file matched by
+    `[review].exclude_globs` (a golden snapshot or transcript) or owned by `pins.toml` was never
+    sent to the reviewer, so naming it cannot be cleared by reviewing the covered code
+    (B-stale-mark-names-merge-temp-and-excluded-files).
     """
     if not paths:
         return []
-    tracked = GIT.files(cwd, "tracked")
-    paths = [p for p in paths if tracked is None or p in tracked]
+    paths = [p for p in paths if then is None or p in then]
     if paths:
         excluded, pinned = patterns(Config.load(cwd), cwd)
         paths = [p for p in paths if not _hit(p, excluded, pinned)]
@@ -48,7 +48,7 @@ def _what_differs(
     """
     then = commit_tree_entries(cwd, base) if base else None
     paths = differing_paths(then, now) if then is not None and now is not None else []
-    paths = _gate_covered(cwd, paths)
+    paths = _gate_covered(cwd, paths, then)
     if own is not None and paths:
         paths = [p for p in paths if p in set(own)]
         if not paths:
