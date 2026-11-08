@@ -118,6 +118,7 @@ def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
     assert code != 0, text
     assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
     assert "only a person's re-record" in text
+    assert "ddflow approve" not in text  # a non-baseline-red partial is not approvable
 
 
 def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
