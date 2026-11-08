@@ -518,9 +518,14 @@ def _revoke_refutation_pass(log, cfg, st, item: str, gate: str, mirrored, verdic
             continue
         ev = {k: v for k, v in (rec.evidence or {}).items() if k != "passed_on_refutation"}
         GD.record(
-            log, cfg, item, g, "failed",
+            log,
+            cfg,
+            item,
+            g,
+            "failed",
             reason="a finding was re-triaged confirmed over the refutation pass",
-            evidence=ev, by=rec.by,
+            evidence=ev,
+            by=rec.by,
         )
         parts.append(f"{item}.{g} reverted to failed: {live['confirmed']} confirmed finding(s)")
     return "\n".join(parts)

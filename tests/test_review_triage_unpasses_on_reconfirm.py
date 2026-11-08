@@ -37,9 +37,13 @@ def test_retriage_to_confirmed_revokes_the_pass_on_refutation(repo, tmp_path):
     redone = _tri(repo, 1, "confirmed", "reproduced: a.py:1 is really wrong on this input")
     assert redone.exit == 0, redone.reason
     gate = _state(repo).gates["critic"]
-    assert "passed_on_refutation" not in (gate.evidence or {}), "the stale refutation flag must be dropped"
+    assert "passed_on_refutation" not in (gate.evidence or {}), (
+        "the stale refutation flag must be dropped"
+    )
     assert gate.outcome != "passed", "a confirmed unfixed finding must unpass the gate"
-    assert on_refutation(_state(repo), "critic") is None, "the display path must not show a refutation pass"
+    assert on_refutation(_state(repo), "critic") is None, (
+        "the display path must not show a refutation pass"
+    )
 
 
 def test_noop_retriage_keeps_the_pass_on_refutation(repo, tmp_path):
