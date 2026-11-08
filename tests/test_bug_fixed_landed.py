@@ -44,35 +44,39 @@ def _landed_elsewhere(repo: Path, test_src: str = FAILS_FIRST, name: str = "test
 
 def _landed_with_invalid_committed_base_ref(repo: Path) -> str:
     """A landing commit whose COMMITTED config leaks a flag into `[worktree].base_ref`,
-    exactly the historical `--local` leak B20cfd41344 is about. The base has since moved on
-    with a valid config, so only the LANDING commit's checkout carries the value `Config.load`
-    refuses. `bug fixed --landed` must not reload config FROM that checkout, but run under
-    the project's own config."""
+    exactly the historical `--local` leak B20cfd41344 is about. Both the landing commit AND
+    its first parent (the pre-fix source) carry the value `Config.load` refuses, so the test
+    exercises BOTH scratch checkouts ddflow builds. The base has since moved on with a valid
+    config, so only those checkouts still carry the value."""
     run_cli(repo, "init")
     (repo / "src.py").write_text("def f():\n    return 1\n")
     run_cli(repo, "config", "--set", "gate.unit_tests.command", f"{sys.executable} -m pytest -q")
     _commit(repo, "src, and a runner that can run a node id")
     run_cli(repo, "bug", "found", "--id", "B1", "--summary", "f returns 1")
+    cfgp = repo / ".ddflow" / "config.toml"
+    before = cfgp.read_text()
+    injected = before.replace(
+        "[worktree]\nenabled = true\n",
+        '[worktree]\nenabled = true\nbase_ref = "--local"\n',
+    )
+    assert injected != before and 'base_ref = "--local"' in injected, (
+        "expected the scaffold's [worktree].enabled = true block to inject the broken base_ref"
+    )
+    cfgp.write_text(injected)
+    # The PRE-FIX source carries the broken config: the parent of the landing commit.
+    _commit(repo, "leak a flag into [worktree].base_ref")
     (repo / "src.py").write_text("def f():\n    return 2\n")
     (repo / "tests").mkdir(exist_ok=True)
     (repo / "tests" / "test_f.py").write_text(FAILS_FIRST)
-    cfgp = repo / ".ddflow" / "config.toml"
-    before = cfgp.read_text()
-    cfgp.write_text(
-        before.replace(
-            "[worktree]\nenabled = true\n",
-            '[worktree]\nenabled = true\nbase_ref = "--local"\n',
-        )
-    )
-    _commit(repo, "fix f, elsewhere (its committed config leaks a flag into base_ref)")
+    _commit(repo, "fix f, elsewhere (its committed config still leaks the flag)")
     sha = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
     ).stdout.strip()
-    # The base moves on with a valid config again: only the LANDING commit's checkout
-    # (and its parent's) carries the broken value, as the project's history actually does.
+    # The base moves on with a valid config again: only the LANDING commit and its parent
+    # carry the broken value, as this project's history actually does.
     cfgp.write_text(before)
     (repo / "later.txt").write_text("unrelated\n")
-    _commit(repo, "a later commit: the base has moved on")
+    _commit(repo, "a later commit: the base has moved on with a valid config again")
     return sha
 
 
