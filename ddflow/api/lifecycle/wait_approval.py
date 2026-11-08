@@ -1,9 +1,10 @@
-"""`wait --approval`: block until an operator-approval request is answered (DX-wait-approval).
+"""The wait loop's shared plumbing (bounded waits, lease keepalive) and the
+`wait --approval` verdict + polling loop (DX-wait-approval).
 
 Kept out of `wait.py` so that module does not grow back toward the monolith
-(`tests/test_lifecycle_layout.py` counts it under 600 lines): the approval wait is its own
-verdict and its own polling loop, sharing `wait`'s `_bounded` and `_keep_alive` (imported
-lazily -- this module is imported BY `wait`, so a module import here would cycle).
+(`tests/test_lifecycle_layout.py` counts it under 600 lines). `wait` imports the shared
+helpers and `_wait_approval` HERE; this module imports nothing back from `wait`, so the
+edge is one-way.
 """
 
 from __future__ import annotations
@@ -13,11 +14,77 @@ from pathlib import Path
 from typing import Any
 
 from ...core import outcome as O
+from ...core.clock import WAIT_MAX_S
 from ...core.clock import epoch as _epoch
+from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.handlers.asks import WITHDRAWN, asks_of
+from ...services import leasekeep as LK
 from ...services import waits as WT
 from ...services.ask import engine as E
 from .._base import _load
+
+
+def _note_cap(say, capped: bool, token: str, cap: float = WAIT_MAX_S) -> None:
+    """Tell the caller its wait was shortened to the cap, and the resume token that makes
+    the advice actionable: this line is what a text-mode caller reads, while `wake.token`
+    is all a ``--json`` caller gets (B16e0083f21)."""
+    if capped:
+        say(f"waiting at most {cap}s at a time; resume with the token {token} to wait longer")
+
+
+def _bounded(
+    timeout_s: float | None, max_s: float | None, cap: float = WAIT_MAX_S
+) -> tuple[float, bool]:
+    """(seconds to wait, which a text-mode caller reads cutting the cap). ``max_s`` is the
+    caller's own bound and is honoured whole: it is the wait's length when no ``timeout_s``
+    is given (B-wait-lease-max-s-ignored) and the wait never outlasts it."""
+    if timeout_s is None:
+        timeout = DEFAULT_WAIT_TIMEOUT_S if max_s is None else float(max_s)
+    else:
+        timeout = float(timeout_s)
+    if max_s is not None:
+        return min(timeout, float(max_s)), False  # negative: refused by the caller
+    return min(timeout, float(cap)), timeout > cap
+
+
+def _keep_alive(log, cfg, st):
+    """A tick renewing every live lease the waiter holds once per `[lease].heartbeat_s`; a
+    no-op when it holds none or `[lease].renew_long_commands` is off."""
+    tick, every = LK.for_holder(log, cfg, st)
+    if tick is None:
+        return lambda: None
+    last = [time.monotonic()]
+
+    def paced() -> None:
+        if time.monotonic() - last[0] >= every:
+            last[0] = time.monotonic()
+            tick()
+
+    return paced
+
+
+def _poll(log, deadline: float, poll: float, keep_alive, repo: Path, agent: str):
+    """Yield a FRESH ``(cfg, st)`` each time the event log changes or the re-check cadence
+    is up, until the deadline passes. Exhaustion means the deadline passed.
+
+    Shared by the item wait and the approval wait: the sleep-keepalive-fingerprint-reload
+    skeleton is one loop, not two copies (the architecture guard counts duplicates).
+    """
+    seen = None  # the first pass always re-judges: whatever landed since the load above
+    checked = time.monotonic()
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return
+        time.sleep(min(poll, left))
+        keep_alive()
+        # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
+        ext = log.mark(clock=False)
+        if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
+            continue
+        seen, checked = ext, time.monotonic()
+        log, cfg, st = _load(repo, agent)
+        yield cfg, st
 
 
 def _judge_approval(st, ask_id: str, now: float) -> dict[str, Any]:
@@ -144,11 +211,6 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
             "token: give one",
             **empty_v({"status": "blocked", "ready": [], "waiting_on": [], "blocked": []}),
         )
-    from .wait import (
-        _bounded,
-        _keep_alive,
-    )  # lazy: that module imports THIS, so a module import would cycle
-
     log, cfg, st = _load(repo, agent)
     timeout, _capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
     poll = WT.POLL_S if poll_s is None else float(poll_s)
@@ -180,26 +242,11 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
     # The lane's OWN leases stay alive while it waits on its approval (the same keepalive
     # the item-wait uses): hours of waiting must not lapse the very claim the answer is for.
     keep_alive = _keep_alive(log, cfg, st)
-    seen = None  # an EventLog.mark() once taken
-    checked = started
-    try:
-        while True:
-            left = deadline - time.monotonic()
-            if left <= 0:
-                return result(v, time.monotonic() - started, [])
-            time.sleep(min(poll, left))
-            keep_alive()
-            ext = log.mark(clock=False)
-            if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
-                continue
-            seen, checked = ext, time.monotonic()
-            log, cfg, st = _load(repo, agent)
-            was = v
-            v = _judge_approval(st, approval, time.time())
-            if v["status"] != "blocked":
-                return result(v, time.monotonic() - started, [f"{approval}: {v['status']}"])
-            if v["why"] != was["why"]:
-                say(f"still waiting: {v['why']}")
-    finally:
-        # No waiter registration for an approval: nothing to mark woken or unregister.
-        pass
+    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent):
+        was = v
+        v = _judge_approval(st, approval, time.time())
+        if v["status"] != "blocked":
+            return result(v, time.monotonic() - started, [f"{approval}: {v['status']}"])
+        if v["why"] != was["why"]:
+            say(f"still waiting: {v['why']}")
+    return result(v, time.monotonic() - started, [])  # the deadline passed still pending
