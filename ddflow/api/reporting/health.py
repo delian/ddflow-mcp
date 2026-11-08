@@ -80,7 +80,7 @@ def _apply_stale_globs(repo: Path, cfg, st, agent: str) -> tuple[list[str], list
     item to its package path, so no open item is left leasing a module that no longer is,
     and each holder's lease is retargeted to the package (B-stale-globs-after-split-wave).
     Returns `(problems, notes)`: a rewrite `items.update` refused is a problem; a correction
-    parts held back against another live lease is a note that says so."""
+    parts held back against another live lease is a problem that says so."""
     from .. import items as _items
 
     if not LBR.has_py_glob(st):
