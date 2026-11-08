@@ -1,0 +1,2 @@
+{"agent":"recover-3g","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ea0a5fe424b9017eb74a9fd7a","kind":"ddflow.seen","lamport":157257,"schema":1,"subject":"ddflow","ts":"2026-11-08T20:54:19.656003Z"}
+{"agent":"recover-3g","data":{"path":".ddflow/worktrees/fix-B-claim-glob-warning-ignores-item-tree"},"id":"ed7005e974f14abb1eb16343c","kind":"worktree.removed","lamport":157258,"schema":1,"subject":"fix-B-claim-glob-warning-ignores-item-tree","ts":"2026-11-08T20:54:19.698439Z"}
