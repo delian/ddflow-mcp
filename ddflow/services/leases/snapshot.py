@@ -238,7 +238,7 @@ def _discard(store: LocalStore) -> None:
         with contextlib.suppress(Exception):
             store.write(
                 H.NAME,
-                {"written_at": 0, "leases": {}, "config_stamp": ["discarded"]},
+                {"written_at": 0, "leases": {}, "config_stamp": ["discarded"] * len(H.CONFIG_FILES)},
                 schema=H.DOC_SCHEMA,
                 derived=True,
             )
