@@ -87,11 +87,15 @@ _REGISTERS = ("add_parser", "add_subparsers", "click.", "typer.", ".command(", "
 _DEF = re.compile(r"^\s*(?:async\s+)?def\s+([a-z][a-z0-9_]*)", re.M)
 _VERB_WORDS = 2  #: `<script> <verb>`
 
-#: The root options a tool accepts AFTER a subcommand as well as before it but mirrors
-#: onto every subparser with ``help=SUPPRESS``, so a verb's own ``--help`` never lists them
-#: (ddflow `_accept_global_options_anywhere` mirrors ``--repo``, ``--agent`` and ``--json``,
-#: B9811d8617c). A mention like `ddflow next --json` reads as a flag `ddflow next --help`
-#: omits; a global option accepted after the subcommand is not a missing flag (B1da555743c).
+#: Root options ddflow accepts AFTER a subcommand as well as before it: `ddflow
+#: _accept_global_options_anywhere` mirrors them onto every subparser with
+#: ``help=SUPPRESS``, so a verb's own ``--help`` never lists them (it derives EVERY root
+#: store/store-true option -- `--repo`, `--agent`, `--json`, `--allow-older-version` and
+#: `--reason` -- not a fixed three). A mention like `ddflow next --json` reads as a flag
+#: `ddflow next --help` omits; a global option accepted after the subcommand is not a
+#: missing flag (B1da555743c). Only these three are exempt: the other two mirrorable root
+#: options are each spelled, in the checked docs, only after a verb whose own `--help`
+#: lists one, so they are not a B1da555743c false finding and stay checked.
 _GLOBAL_FLAGS = ("--json", "--agent", "--repo")
 
 _EXT = (
