@@ -303,13 +303,9 @@ def superseded_by(
     other: its outcome describes source that has since moved on (B27a236a534). Unknown
     commits, or ones neither of which descends from the other, are not superseded.
 
-    ``paths`` (the item's globs) scope it to content: commits that touch none of them -- other
-    agents' merges moving a shared checkout's HEAD -- leave the run's verdict standing
-    (B-e47bb1cade). Empty/None (a phase): the whole source tree scopes it, so only a commit
-    that changed a source file supersedes -- a commit touching only ``.ddflow/`` (the ENTIRE
-    directory: events, config and rules alike) does not move the source the gate ran
-    against, because the run's own `tree_identity` leaves exactly that directory out
-    (B267a6b0b5e). Git unable to list the diff: superseded."""
+    ``paths`` (globs) scope it to content: commits touching none leave the verdict standing
+    (B-e47bb1cade). Empty/None (a phase): superseded only by a source-file change; one touching
+    only `.ddflow/` does not (tree_identity leaves it out; B267a6b0b5e). An unlistable diff supersedes."""
     a, b = head_of(started_on), head_of(newer)
     if not a or not b or a == b:
         return False
