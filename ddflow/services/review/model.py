@@ -509,11 +509,8 @@ class ReviewResult:
                     "title": f.title,
                     "location": f.location,
                     "detail": f.detail[:FINDING_DETAIL_KEPT],
-                    # A finding a re-run carried from an earlier record keeps its own
-                    # reviewer; one the reviewer raised itself is stamped here (its own
-                    # Finding has no reviewer of its own).
-                    "reviewer": f.reviewer or self.reviewer,
-                    "family": f.family or self.family,
+                    "reviewer": f.reviewer,
+                    "family": f.family,
                 }
                 for f in self.findings
             ],

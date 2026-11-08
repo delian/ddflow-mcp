@@ -235,6 +235,39 @@ def test_rerunning_a_chunk_keeps_a_peer_reviewers_finding(repo, tmp_path):
     assert by_reviewer["bbb222"] == "b", "the re-run's own finding is attributed to b"
 
 
+def test_a_rerun_keeps_a_finding_that_names_no_reviewer(repo, tmp_path):
+    """An OLD record's finding carried no reviewer; a re-run of its chunk must KEEP it, not
+    drop it -- dropping a finding nobody can attribute is the same false pass the bug is
+    about (the reviewer must be able to tell a peer's finding from the one re-run)."""
+    from ddflow.services import review as R
+
+    prior = {
+        "reviewer": "b",
+        "diff_sha": "deadbeef",
+        "max_chunk_chars": 4000,
+        "reviewed": [1, 2],
+        "chunks_total": 2,
+        "coverage": "2/2 chunk(s) reviewed",
+        "chunk_findings": [
+            {
+                "chunk": 2,
+                "digest": "abc123",
+                "severity": "HIGH",
+                "title": "x.py:1",
+                "location": "x.py:1",
+                "detail": "bad",
+            }
+        ],
+        "unreviewed": [],
+    }
+    res = R.ReviewResult("b", "grok-4.7", "google", status=R.REVIEWED, requested=[2], reviewed=[2])
+    res.diff_sha = "deadbeef"
+    res.max_chunk_chars = 4000
+    assert R.merge_rerun(prior, res) == ""
+    assert len(res.findings) == 1, res.findings
+    assert res.findings[0].digest == "abc123"
+
+
 def test_an_errored_rerun_with_no_reason_is_still_refused(repo, tmp_path, monkeypatch):
     """critic: the refusal keyed on the reason's truthiness, not on the ERROR status."""
     from ddflow.services import review as R

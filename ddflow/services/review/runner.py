@@ -603,6 +603,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     res.raw = "\n\n---\n\n".join(all_raw)
     res.elapsed_s = time.time() - started
     _settle(res)
+    _stamp_raised_by(res, res.findings)
     return res
 
 
@@ -648,13 +649,29 @@ def _kept_over_rerun(prior: dict[str, Any], f: dict[str, Any], again: set[int], 
     (a delta carried it) stays too (`_in_rerun_cut`); and a RE-RUN chunk's finding is replaced
     only when the SAME reviewer raised it. A peer reviewer's finding of that chunk is the other
     reviewer's verdict, kept -- dropping it would be a false pass route (bug
-    B-chunk-rerun-drops-peer-findings)."""
+    B-chunk-rerun-drops-peer-findings). A finding that names NO reviewer (an old record) is
+    kept too: it cannot be attributed, and dropping an unattributed finding is the same false
+    pass."""
     if int(f.get("chunk", 0)) not in again:
         return True
     if not _in_rerun_cut(prior, f):
         return True
     raiser = f.get("reviewer", "")
-    return bool(raiser) and raiser != who
+    if not raiser:
+        return True
+    return raiser != who
+
+
+def _stamp_raised_by(res: ReviewResult, findings: list[Finding]) -> None:
+    """Name the reviewer on the findings IT raised. The absorbed ``Finding`` carries none, so
+    this is where its ``reviewer``/``family`` are set. A finding ``merge_rerun`` carried from
+    an earlier record already names its reviewer (or none, an old record: kept unattributed),
+    and must NOT be relabelled here."""
+    family = (res.family or "").strip().lower()
+    for f in findings:
+        if not f.reviewer:
+            f.reviewer = res.reviewer
+            f.family = family
 
 
 def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
@@ -684,6 +701,8 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
     kept = {int(n) for n in prior["reviewed"]} - again
     res.reviewed = sorted(kept | set(res.reviewed))
     res.chunks_reviewed = len(res.reviewed)
+    own = res.findings
+    _stamp_raised_by(res, own)
     res.findings = sorted(
         [
             Finding(
@@ -699,17 +718,9 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
             for f in prior.get("chunk_findings", [])
             if _kept_over_rerun(prior, f, again, res.reviewer)
         ]
-        + res.findings,
+        + own,
         key=lambda f: f.chunk,
     )
-    # The re-run's OWN findings carry no reviewer of their own; stamp them so the merged
-    # result is self-describing (a Finding kept from a peer already names it). A later
-    # re-run reads back this reviewer and does not mistake this finding for the peer's.
-    for f in res.findings:
-        if not f.reviewer:
-            f.reviewer = res.reviewer
-        if not f.family:
-            f.family = res.family
     res.unreviewed = sorted(
         [u for u in prior.get("unreviewed", []) if int(u.get("chunk", 0)) not in again | kept]
         + res.unreviewed,
