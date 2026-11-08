@@ -99,6 +99,32 @@ def test_an_answered_denial_is_hopeless_not_waited_for(repo):
     assert out.exit == O.NOTHING and "denied" in out.reason
 
 
+def test_a_spent_approval_is_hopeless_not_ready(repo):
+    cfg = Config()
+    log = _log(repo)
+    filed = _request(log, cfg)
+    _approve(log, cfg, filed)
+    assert C.operator_gate(log, cfg, _canon(), approval_id=filed.id).ok  # spent once
+    out = A.wait(repo, approval=filed.id, timeout_s=5, poll_s=0.05, agent="asker")
+    assert out.exit == O.NOTHING and "spent" in out.reason
+
+
+def test_an_answered_question_is_hopeless_not_an_approval(repo):
+    cfg = Config()
+    log = _log(repo)
+    asked = E.request(log, cfg, subject="q", kind=E.QUESTION, text="?", ttl_s=3600)
+    E.answer(
+        log,
+        cfg,
+        asked.id,
+        E.ANSWERED_WORD,
+        actor=actors.resolve_actor(cfg, "me"),
+        text="yes",
+    )
+    out = A.wait(repo, approval=asked.id, timeout_s=5, poll_s=0.05, agent="asker")
+    assert out.exit == O.NOTHING and "not an approval" in out.reason
+
+
 def test_an_unknown_approval_is_hopeless(repo):
     out = A.wait(repo, approval="Qdeadbeefdeadbeef", timeout_s=5, agent="asker")
     assert out.exit == O.NOTHING and "no such approval" in out.reason

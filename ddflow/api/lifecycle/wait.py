@@ -215,11 +215,19 @@ def _judge_approval(st, ask_id: str, now: float) -> dict[str, Any]:
         return {**out, "status": "hopeless", "why": f"no such approval request {ask_id}"}
     state = E.status(row, now)
     if state == E.ANSWERED:
+        if row["type"] != E.APPROVAL:
+            return {**out, "status": "hopeless", "why": f"{ask_id} is not an approval request"}
         if row["outcome"] != E.APPROVED:
             return {
                 **out,
                 "status": "hopeless",
                 "why": f"{ask_id} was denied by {row['answered_by']}",
+            }
+        if row["uses"] and row["used"] >= row["uses"]:
+            return {
+                **out,
+                "status": "hopeless",
+                "why": f"{ask_id} is spent ({row['used']} of {row['uses']} use(s))",
             }
         return {
             **out,
