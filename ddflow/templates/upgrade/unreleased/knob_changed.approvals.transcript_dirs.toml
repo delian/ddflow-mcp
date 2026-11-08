@@ -3,6 +3,5 @@ kind = "knob_changed"
 key = "approvals.transcript_dirs"
 old = '["~/.claude/projects"]'
 new = '[]'
-why = "The harness channel reads each harness descriptor's `[transcripts].root` for session transcripts; the ~/.claude/projects default was folded into the descriptor roots, so the knob now defaults empty (additive where a descriptor already points there)."
-effect = "A project with no harness descriptor no longer searches ~/.claude/projects for approval-answer transcripts unless the descriptor names it."
-impact = "additive"
+why = "The ~/.claude/projects search path moved out of this default into the bundled claude harness descriptor ([transcripts].root in ddflow/harnesses/claude.toml), so the knob default no longer names a path only that harness uses."
+effect = "A project using the bundled claude harness still searches ~/.claude/projects (its descriptor names it). A project with a custom descriptor that does not name it no longer searches it; set approvals.transcript_dirs = [\"~/.claude/projects\"] (or add the root to the descriptor) to restore the old search."
