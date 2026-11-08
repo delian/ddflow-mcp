@@ -38,9 +38,7 @@ def test_split_names_undeclared_and_untouched_ignoring_own_log():
 def test_split_drops_shared_globs():
     # B38c3ac0f60: a shared, regenerated pin (README.md) is never the task's to declare,
     # while a genuinely undeclared file beside it still is.
-    undeclared, _ = OG.split(
-        ["a/x.py", "README.md", "tests/t.py"], ["a/**"], shared=["README.md"]
-    )
+    undeclared, _ = OG.split(["a/x.py", "README.md", "tests/t.py"], ["a/**"], shared=["README.md"])
     assert undeclared == ["tests/t.py"]
 
 
@@ -93,10 +91,7 @@ def test_untouched_report_shared_only_writes_say_nothing():
     st = _state(_task("T", ["a/**"]))
     cfg = Config()
     cfg.lease.shared_globs = ["README.md"]
-    assert (
-        OG.untouched_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["README.md"]}))
-        == ""
-    )
+    assert OG.untouched_report(st, cfg, "T", repo=REPO, read=_reader({"T": ["README.md"]})) == ""
 
 
 def test_block_blocks_only_a_known_write_never_unknown():
