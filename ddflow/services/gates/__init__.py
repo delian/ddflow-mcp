@@ -129,6 +129,7 @@ from .outcomes import (  # noqa: F401
     StaleNote,
     is_triageable,
     local_command_notes,
+    lost_branch,
     on_refutation,
     refuted_line,
     refuted_passes,
