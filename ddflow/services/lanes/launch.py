@@ -16,6 +16,7 @@ injectable so a test runs a stub. Approval is only ever read (``launch_template.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -54,6 +55,9 @@ class Launched:
     driver: Any
     decision_note: str
     seed_dropped: tuple[str, ...] = ()
+    slots: contextlib.ExitStack = field(default_factory=contextlib.ExitStack, repr=False)
+    #: the endpoint slots held for the lane's lifetime: open while the caller keeps this
+    #: object (close it after the lane stops, which releases the endpoint for the next lane)
 
 
 @dataclass(frozen=True)
@@ -216,19 +220,25 @@ def launch(req: Request) -> Launched | Refused:
     if isinstance(drv, Result):
         OC.cleanup(req.home)
         return Refused((f"{drv.status}: {drv.detail}",))
-    # hold the endpoint's slots for the lane's lifetime (capacity.acquire): the slot locks the
-    # scheduler probes are actually held while the lane runs, so a full endpoint refuses the next
-    # lane instead of oversubscribing it. An unreadable route has no pool to hold.
+    # hold the endpoint's slots for the lane's lifetime: the slot locks the scheduler probes
+    # are held while the lane runs (until the caller closes ``Launched.slots`` after the lane
+    # stops), so a full endpoint refuses the next lane instead of oversubscribing it. An
+    # unreadable route has no pool to hold.
+    slots = contextlib.ExitStack()
     try:
-        with CAPACITY.acquire(
-            resolved_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
-            req.cfg.lanes.slot_wait_s,
-        ):
-            h = drv.start(prep.spec)
+        slots.enter_context(
+            CAPACITY.acquire(
+                resolved_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
+                req.cfg.lanes.slot_wait_s,
+            )
+        )
+        h = drv.start(prep.spec)
     except TimeoutError as e:  # the endpoint pool could not fit this lane before the wait
+        slots.close()
         OC.cleanup(req.home)
         return Refused((f"endpoint slot: {e}",))
     if isinstance(h, Result):
+        slots.close()
         OC.cleanup(req.home)
         return Refused((f"{h.status}: {h.detail}",))
     note = json.dumps(
@@ -248,4 +258,4 @@ def launch(req: Request) -> Launched | Refused:
         _audit(req, f"lane.launched {note}")
     except Exception as e:  # the lane runs: report it, never lose the handle
         note = json.dumps({**json.loads(note), "audit_error": type(e).__name__}, sort_keys=True)
-    return Launched(t, h, prep, drv, note, seed.dropped)
+    return Launched(t, h, prep, drv, note, seed.dropped, slots)
