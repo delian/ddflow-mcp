@@ -22,16 +22,14 @@ def _gate(command: str, gid: str = "unit_tests") -> GateDef:
 
 def test_a_full_suite_unit_tests_gate_queues_behind_the_holder(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    marker = tmp_path / "ran"
     with SL.hold(_cfg(), "other-agent"):
-        outcome, ev = R.run_command_gate(_gate(f"touch {marker}"), tmp_path, cfg=_cfg(0.0))
+        outcome, ev = R.run_command_gate(_gate("pytest -q -n auto"), tmp_path, cfg=_cfg(0.0))
     assert outcome == "unavailable" and "blocked on" in ev["reason"], ev
-    assert not marker.exists(), "the suite started while another held the lock"
 
 
 def test_a_free_lock_runs_the_gate_and_records_the_wait(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    outcome, ev = R.run_command_gate(_gate("true"), tmp_path, cfg=_cfg())
+    outcome, ev = R.run_command_gate(_gate("pytest --version"), tmp_path, cfg=_cfg())
     assert outcome == "passed" and "waited_s" in ev, ev
 
 
@@ -57,6 +55,15 @@ def test_a_gate_that_is_not_a_full_suite_never_queues(tmp_path, monkeypatch):
         assert R._runs_whole_suite(_gate(locked)), locked
 
 
+def test_a_trivial_unit_tests_command_is_not_a_whole_suite(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    assert not R._runs_whole_suite(_gate("true")), "a no-op is not a full suite"
+    assert not R._runs_whole_suite(_gate("pytest tests/test_a.py")), "a narrowed run names tests"
+    # a command that IS a whole pytest suite never stops running under the lock
+    assert R._runs_whole_suite(_gate("pytest -q -n auto"))
+
+
 def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     # a host far over its load mark: the clamp alone would give one worker
@@ -64,7 +71,7 @@ def test_the_holder_floor_reaches_the_gates_worker_count(tmp_path, monkeypatch):
         R.WK.S.HostSignals, "sample", lambda self: {"load": 9.0, "memory_free_frac": 0.9}
     )
     cfg = _cfg()
-    suite = R.run_command_gate(_gate("true -n {workers}"), tmp_path, cfg=cfg)[1]
+    suite = R.run_command_gate(_gate("pytest -n {workers} --version"), tmp_path, cfg=cfg)[1]
     other = R.run_command_gate(_gate("true -n {workers}", "lint"), tmp_path, cfg=cfg)[1]
     assert suite["workers"]["n"] == cfg.ci.suite_min_workers > 1, suite
     assert other["workers"]["n"] == 1, other

@@ -93,15 +93,23 @@ def _cost_evidence(p: Any) -> dict[str, Any]:
     return p.resources.evidence() if getattr(p, "resources", None) is not None else {}
 
 
+#: ``pytest`` / ``py.test`` invoked as a (possibly operator-adjacent) command token.
+_PYTEST_RUN = re.compile(r"(?:^|[\s/;|&(])(?:py\.test|pytest)(?=$|[\s/;|&)])")
+
+
+def _runs_pytest(command: str) -> bool:
+    """Does ``command`` invoke pytest -- a test-suite runner? A gate whose command is not a
+    test suite at all no longer reads as a whole suite just for naming no test file."""
+    return bool(_PYTEST_RUN.search(command))
+
+
 def _runs_whole_suite(gdef: GateDef) -> bool:
     """Does this gate start a full test suite on this host? The `unit_tests` gate, unless its
-    command names test files (a narrowed run) or is a `ddflow ci run`, which takes the lock
-    itself (taking it here too would wait on ourselves)."""
-    return (
-        gdef.id == "unit_tests"
-        and not _runs_ddflow_ci(gdef.command)
-        and WK.count_test_files(gdef.command) is None
-    )
+    command names test files (a narrowed run), is not a suite at all (a `true` no-op), or is a
+    `ddflow ci run`, which takes the lock itself (taking it here too would wait on ourselves)."""
+    if gdef.id != "unit_tests" or _runs_ddflow_ci(gdef.command):
+        return False
+    return _runs_pytest(gdef.command) and WK.count_test_files(gdef.command) is None
 
 
 _SHELL_OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")"})
