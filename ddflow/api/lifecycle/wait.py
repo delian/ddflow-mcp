@@ -12,6 +12,7 @@ from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.admission import conflicts, shared_globs
 from ...core.clock import WAIT_MAX_S
+from ...core.clock import epoch as _epoch
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.handlers.asks import WITHDRAWN, asks_of
 from ...core.model import ABANDONED, DONE, REVIEW
@@ -228,6 +229,16 @@ def _judge_approval(st, ask_id: str, now: float) -> dict[str, Any]:
                 **out,
                 "status": "hopeless",
                 "why": f"{ask_id} is spent ({row['used']} of {row['uses']} use(s))",
+            }
+        answered = _epoch(row["answered_at"], default=0.0)
+        if row["use_ttl_s"] > 0 and now > answered + row["use_ttl_s"]:
+            return {
+                **out,
+                "status": "hopeless",
+                "why": (
+                    f"{ask_id} was answered more than {row['use_ttl_s']}s ago: "
+                    "request a new approval"
+                ),
             }
         return {
             **out,
