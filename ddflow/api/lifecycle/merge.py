@@ -272,7 +272,10 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if over is not None:
         return over
     if cfg.flow.integration == "pr":
-        return _open_request_outcome(repo, cfg, log, it, wt, item, gates, message=message, model=model, dirty=dirty)
+        return _open_request_outcome(
+            repo, cfg, log, it, wt, item, gates, forced_by, agent,
+            message=message, model=model, dirty=dirty,
+        )
     refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     # The primary keeps its event shards uncommitted between doors; a branch that also
@@ -637,9 +640,13 @@ def _outside_globs(repo: Path, it, target: str, branch: str, cfg) -> list[str] |
     ]
 
 
-def _open_request_outcome(repo: Path, cfg, log, it, wt, item: str, gates, *, message: str, model: str, dirty: list[str]) -> O.Outcome:
+def _open_request_outcome(  # noqa: PLR0913 -- each arg is distinct state the caller already holds
+    repo: Path, cfg, log, it, wt, item: str, gates, forced_by, agent: str, *, message: str, model: str, dirty: list[str]
+) -> O.Outcome:
     """The PR branch, reached only after `_override` ran the require_gates check (Bc6c07dfe52):
-    opening a request past unsettled required gates is never silently skipped."""
+    opening a request past unsettled required gates is never silently skipped. A forced
+    request records a `merge.forced` event just as a forced landing does (the branch head is
+    the proposed landing, `pr sync` lands it)."""
     if not it.worktree:  # claimed --no-worktree
         return O.refused(
             "worktree.merged",
@@ -653,6 +660,9 @@ def _open_request_outcome(repo: Path, cfg, log, it, wt, item: str, gates, *, mes
     req = _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
     if gates.unmet:
         req.data["awaiting_gates"] = list(gates.awaiting())
+    if forced_by is not None:
+        _record_forced(log, item, W.head_sha(wt.path) or "", gates, forced_by, agent)
+        req.data["forced"] = True
     return req
 
 
