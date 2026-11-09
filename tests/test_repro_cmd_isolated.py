@@ -63,16 +63,22 @@ def test_a_poisoned_clone_config_cannot_steer_a_later_run_onto_the_operator_repo
     poison = repr(str(proj))
     evil = (
         f"{shlex.quote(sys.executable)} -c "
-        f"{shlex.quote('import subprocess; subprocess.run([\"git\",\"config\",\"core.worktree\",' + poison + ']); subprocess.run([\"git\",\"commit\",\"--allow-empty\",\"-m\",\"steal\"])')}"
+        f"{shlex.quote('import subprocess; subprocess.run(["git","config","core.worktree",' + poison + ']); subprocess.run(["git","commit","--allow-empty","-m","steal"])')}"
     )
     out = K.bug_found(proj, summary="poisoned clone config", agent="a1", repro_cmd=evil)
     assert out.ok, out.reason
-    assert subprocess.run(
-        ["git", "-C", str(proj), "rev-parse", "HEAD"], capture_output=True, text=True
-    ).stdout.strip() == head0  # the operator checkout was never the commit's target
+    assert (
+        subprocess.run(
+            ["git", "-C", str(proj), "rev-parse", "HEAD"], capture_output=True, text=True
+        ).stdout.strip()
+        == head0
+    )  # the operator checkout was never the commit's target
     # ... and the empty commit did not land in the real log either.
-    assert subprocess.run(
-        ["git", "-C", str(proj), "log", "--oneline", "--all"],
-        capture_output=True,
-        text=True,
-    ).stdout.count("steal") == 0
+    assert (
+        subprocess.run(
+            ["git", "-C", str(proj), "log", "--oneline", "--all"],
+            capture_output=True,
+            text=True,
+        ).stdout.count("steal")
+        == 0
+    )

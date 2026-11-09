@@ -33,8 +33,9 @@ import contextlib
 import os
 import secrets
 import shlex
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from ..infra import fsio as F
 from ..infra import git as G
