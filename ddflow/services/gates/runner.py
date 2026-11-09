@@ -237,6 +237,17 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
         timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
+        if timeout_s > 0 and _runs_ddflow_ci(command):
+            # A `ddflow ci run` command queues for the host suite lock ITSELF (this runner
+            # never takes it: `_runs_whole_suite` leaves `ci` alone, and taking it here too
+            # would wait on ourselves) and budgets the run after the wait alone, printing its
+            # queue time as `ddflow-suite-wait` (B4f35548c0a). The queue wait is bounded by
+            # `[ci].suite_wait_s` and never comes off the run budget, so the wrapping gate
+            # timeout must ADD that wait to the budget it enforces: a run that queued near
+            # the gate's own limit was killed at 3600s before it started, and
+            # `[ci].suite_wait_s`/`DDFLOW_CI_SUITE_WAIT_S` was unreachable past that
+            # (B83c7a5eb50). A `0`/negative budget stays unlimited.
+            timeout_s += int(cfg.ci.suite_wait_s)
         ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
