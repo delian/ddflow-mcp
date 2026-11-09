@@ -3203,6 +3203,26 @@
       perf_metrics.aggregate_min_samples = 3   [default]
           Fewest samples a daily aggregate needs before its p50/p90/max are reported;
           below it the count is reported and the percentiles are None, never zero.
+      perf_metrics.detect_min_samples = 8   [default]
+          Fewest samples a series needs before the regression detector will call a
+          change; a smaller window says not-enough-data, never an alert.
+      perf_metrics.detect_relative_threshold = 0.2   [default]
+          The relative step a drift detector must exceed to fire -- the change is at
+          least this fraction above the baseline median (D-perf-metrics-answers
+          default +20%).
+      perf_metrics.detect_absolute_floor_s = 5.0   [default]
+          The absolute step (seconds) a drift detector must also exceed; a +20% change
+          smaller than this is noise, so microseconds do not alert.
+      perf_metrics.detect_persistence_windows = 2   [default]
+          How many consecutive windows must exceed both thresholds before a change
+          becomes a finding (a one-window spike is not a regression).
+      perf_metrics.detect_creep_alpha = 0.1   [default]
+          The EWMA alpha for slow creep that a fixed threshold never sees (1% a week
+          is invisible step-wise); the detector flags an EWMA that drifted past the
+          relative threshold across the window.
+      perf_metrics.detect_creep_threshold = 0.1   [default]
+          The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar
+          never catches 1% a week; the creep bar does, accumulated over the window).
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the

@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.detect_relative_threshold"
+new = "0.20"
+why = "Perf drift detector (D-perf-metrics-answers): relative step a drift detector must exceed."
+impact = "additive"

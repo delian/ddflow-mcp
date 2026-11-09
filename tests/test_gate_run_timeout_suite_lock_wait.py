@@ -17,6 +17,8 @@ from ddflow.config import Config
 from ddflow.services import ci as CI
 from ddflow.services import suitelock as SL
 from ddflow.services.ci import runner
+from ddflow.services.gates import runner as gates_runner
+from ddflow.services.gates.defs import GateDef
 
 
 def test_a_wait_override_extends_the_suite_wait_knob(tmp_path, monkeypatch):
@@ -60,6 +62,29 @@ def test_the_run_timeout_does_not_override_the_suite_wait(monkeypatch):
         ),
     )
     CI._run_locked(Config(), CI._holder(None, "HEAD"), None, "", None, 7200, None, {}, True)
+    assert seen == {"wait_s": None}, seen
+
+
+def test_the_gate_run_path_budgets_the_run_only_too(monkeypatch, tmp_path):
+    """Bbe5f98b150: the `gate run <id> unit_tests --timeout N` path (`_run_holding_the_suite_lock`)
+    holds the suite lock with NO `wait_s` override, exactly like `_run_locked` above, so a large
+    `--timeout` budgets the RUN only and the queue wait stays `[ci].suite_wait_s` (B4f35548c0a).
+    Without it the ci path and the unit_tests path would disagree about what `--timeout` means."""
+    seen: dict[str, float | None] = {}
+
+    @contextlib.contextmanager
+    def fake_hold(cfg, holder, *, say=None, wait_s=None):
+        seen["wait_s"] = wait_s
+        yield
+
+    monkeypatch.setattr(gates_runner.SL, "hold", fake_hold)
+    monkeypatch.setattr(
+        gates_runner.cmdrunner.CommandRunner,
+        "run",
+        lambda self, *a, **kw: NS(kind="", ran=True),
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q -n auto", timeout_s=6900)
+    gates_runner._run_holding_the_suite_lock(gdef, tmp_path, Config(), {}, None, 0)
     assert seen == {"wait_s": None}, seen
 
 
