@@ -324,6 +324,13 @@ class Store:
         run's samples (the numbers that ride in gate evidence), never the whole ring."""
         return [(day, daily_aggregate(self.repo, series, day, self.cfg)) for day in days]
 
+    def read_series(
+        self, series: str, rollups: Iterable[tuple[float, Rollup]]
+    ) -> list[dict[str, Any]]:
+        """The one series API the detectors use: the log's per-run rollups merged with the
+        COMMITTED daily aggregates (so a lost raw ring still leaves the p50/p90/max)."""
+        return merge_series(rollups, read_aggregates(self.repo, series), series)
+
 
 __all__ = [
     "PerfMetricsConfig",

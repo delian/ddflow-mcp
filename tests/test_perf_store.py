@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ddflow.services.perf.store import (
     PerfMetricsConfig,
     Sample,
+    Store,
     _read_ring,
     append,
     daily_aggregate,
@@ -139,6 +140,13 @@ def test_the_daily_aggregate_is_written_committed_and_reads_back(repo: Path):
     append(repo, "rss", Sample(day + 2, "env:a", 6.0))
     write_aggregate(repo, "rss", day, PerfMetricsConfig(aggregate_min_samples=1))
     path = aggregate_path(repo, "rss", day)
-    assert ".ddflow/metrics/perf" in str(path) and path.exists()  # committed, not .ddflow/local
+    assert str(path).replace("\\", "/").endswith(f".ddflow/metrics/perf/rss/{int(day)}.json")
+    assert path.exists()  # committed, not under .ddflow/local
     back = read_aggregates(repo, "rss")
     assert back == [(day, {"env:a": {"count": 2, "p50": 5.5, "p90": 5.9, "max": 6.0}})]
+    store = Store(repo)
+    merged = store.read_series("rss", [(day + 3, rollup([Sample(day, "env:a", 7.0)], 1))])
+    assert [r["kind"] for r in merged] == [
+        "aggregate",
+        "rollup",
+    ]  # committed aggregate reached the API
