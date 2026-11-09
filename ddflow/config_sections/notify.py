@@ -57,10 +57,21 @@ class NotifyConfig:
         doc="Unusable answers the terminal takes before it gives up on a question.",
         check=int_at_least(1),
     )
-    email_host: str = knob("", doc="The SMTP host mail is sent through (an address here in a committed layer makes the email adapter unavailable).")
+    email_host: str = knob(
+        "",
+        doc="The SMTP host mail is sent through (an address here in a committed layer makes the email adapter unavailable).",
+    )
     email_port: int = knob(587, doc="The SMTP port.", check=int_at_least(1))
-    email_from: str = knob("", doc="The envelope sender (an address here in a committed layer makes the email adapter unavailable).")
-    email_to: str = knob("", doc="The recipient (an address here in a committed layer makes the email adapter unavailable).")
+    email_from: str = knob(
+        "",
+        doc="The envelope sender (an address here in a committed layer makes the email adapter unavailable).",
+    )
+    email_to: str = knob(
+        "",
+        doc="The recipient (an address here in a committed layer makes the email adapter unavailable).",
+    )
     email_user: str = knob("", doc="The SMTP login (a secret; keep it in the local layer).")
     email_password_env: str = knob("", doc="The variable holding the SMTP password.")
-    email_tls: bool = knob(True, doc="STARTTLS on the SMTP connection; a host that cannot do it fails the send.")
+    email_tls: bool = knob(
+        True, doc="STARTTLS on the SMTP connection; a host that cannot do it fails the send."
+    )

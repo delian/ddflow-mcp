@@ -120,7 +120,10 @@ SITES: tuple[Site, ...] = (
         "the channel kind and its consent digest (once per kind, D7e0d117ba5)",
         (),  # no marker call here: the refusal lives in approval.grant, which this relays to
         "ddflow approvals consent <kind> --reason ...",
-        anchor=("ddflow/services/ask/channels.py", "A person consents to one kind of network channel"),
+        anchor=(
+            "ddflow/services/ask/channels.py",
+            "A person consents to one kind of network channel",
+        ),
     ),
     Site(
         "approve.partial",

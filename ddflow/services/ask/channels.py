@@ -158,9 +158,20 @@ def settings_from(cfg: Config) -> Settings:
     from a committed layer, so an address there makes its adapter unavailable (r-secrets)."""
     n = cfg.notify
     fields = (
-        "channel", "ask_channel", "endpoints", "token_env", "send_timeout_s", "ask_timeout_s",
-        "ask_attempts", "email_host", "email_port", "email_from", "email_to", "email_user",
-        "email_password_env", "email_tls",
+        "channel",
+        "ask_channel",
+        "endpoints",
+        "token_env",
+        "send_timeout_s",
+        "ask_timeout_s",
+        "ask_attempts",
+        "email_host",
+        "email_port",
+        "email_from",
+        "email_to",
+        "email_user",
+        "email_password_env",
+        "email_tls",
     )
     committed = frozenset(f for f in fields if cfg.sources.get(f"notify.{f}") == "file")
     return Settings(
