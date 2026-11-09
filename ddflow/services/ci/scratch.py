@@ -128,12 +128,19 @@ def _regen_after_merge(tree: Path) -> None:
         # The merged tree's own config and recipes decide what to re-record (a pin the base added
         # is only in the merged tree), and a config that cannot load or a re-record that fails
         # must not be what stops the checks it was there to help (reviewer finding #1,#2).
-        regenerate_pins(tree, Config.load(tree), after_merge=True, bounded=True)
+        rep = regenerate_pins(tree, Config.load(tree), after_merge=True, bounded=True)
     except Exception as exc:
         print(
             f"ci: after-merge pin regen could not run ({type(exc).__name__}: {exc})",
             file=sys.stderr,
         )
+        return
+    # A recipe that could not run is not the same as one that had nothing to do: say so, never
+    # let "could not run" read as silence.
+    if rep.problem:
+        print(f"ci: after-merge pin regen: {rep.problem}", file=sys.stderr)
+    for p in rep.unavailable:
+        print(f"ci: after-merge pin regen: {p.name}: unavailable ({p.unavailable})", file=sys.stderr)
 
 
 @contextmanager
