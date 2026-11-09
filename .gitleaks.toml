@@ -46,6 +46,10 @@ useDefault = true
     # names them in task bodies, and the generic-api-key rule reads one that follows an
     # `api` word as the key. The `.N-` slice part is what no credential format has.
     '''^[A-Za-z]+(?:-[A-Za-z0-9]+)+\.[0-9]+(?:-[A-Za-z0-9]+)+[.,;:]?$''',
+    # ddflow's own decision id that follows the `auth-token` inside its neighbour
+    # `D-auth-token-defaults` in a recorded-decision list: a specific value, not the id
+    # shape, because no regex separates a decision slug from a credential shape safely.
+    '''D-swarm-pilot-2026-11-05''',
   ]
   # The context7 key that leaked into the PARENT repository is deliberately NOT listed.
   # It does not appear in ddflow's history, and if it ever does, this scan must fire.
@@ -63,18 +67,6 @@ useDefault = true
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
   regexes = ['''^[0-9a-f]{40}$''']
 
-[[allowlists]]
-  # A recorded-decision list in the event log lists several decision ids next to each
-  # other; one id's own name embeds what a scanner reads as a credential keyword, and the
-  # generic-api-key rule then reads the next id as the secret. ddflow ids start with an
-  # uppercase prefix and their slug is whole lowercase words and plain numbers, so a
-  # lowercase-named key body (prod-9820...-style) of the same shape still fires. Scoped to
-  # ONE rule, ONLY the event logs.
-  description = "plain ddflow slugs in the committed event logs are not generic api keys"
-  targetRules = ["generic-api-key"]
-  condition = "AND"
-  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
-  regexes = ['''^[A-Z](?:-[a-z]+)+(?:-[0-9]+)*[.,;:]?$''']
 
 [[allowlists]]
   # The committed docs quote git commit shas too (RESEARCH.md reproduces a `ddflow ci run`
