@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_pins_regenerate import ddflow_cli, git
+from test_pins_regenerate import approve, ddflow_cli, git
 from test_pins_regenerate import repo as pins_repo
 
 from ddflow.config import Config
@@ -28,7 +28,7 @@ def _verdict(repo: Path):
 
 def _stale(repo: Path) -> None:
     (repo / "knobs.txt").write_text("a\nb\n")
-    assert ddflow_cli(repo, "pins", "regenerate").returncode == 0
+    assert ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo)).returncode == 0
 
 
 def test_a_regenerated_pin_commits_without_a_lease(repo: Path) -> None:
@@ -81,7 +81,7 @@ def test_a_pin_regenerated_in_a_linked_worktree_commits_there(
     tree = tmp_path / "tree"
     git(repo, "worktree", "add", "-q", "-b", "side", str(tree))
     (tree / "knobs.txt").write_text("a\nb\n")
-    done = ddflow_cli(tree, "pins", "regenerate")
+    done = ddflow_cli(tree, "pins", "regenerate", person=True)
     assert done.returncode == 0, done.stderr
     git(tree, "add", "pin.txt")
     monkeypatch.chdir(tree)
@@ -119,7 +119,7 @@ def test_the_attributes_line_a_regeneration_adds_commits_without_a_lease(repo: P
     (repo / ".gitattributes").write_text("README.md merge=pinsregen\n")
     git(repo, "add", ".gitattributes")
     git(repo, "commit", "-qm", "attrs")
-    done = ddflow_cli(repo, "pins", "regenerate")
+    done = ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
     assert done.returncode == 0, done.stderr
     assert "pin.txt merge=pinsregen" in (repo / ".gitattributes").read_text()
     git(repo, "add", ".gitattributes")
@@ -131,7 +131,7 @@ def test_a_later_edit_of_the_attributes_still_needs_a_lease(repo: Path) -> None:
     (repo / ".gitattributes").write_text("README.md merge=pinsregen\n")
     git(repo, "add", ".gitattributes")
     git(repo, "commit", "-qm", "attrs")
-    assert ddflow_cli(repo, "pins", "regenerate").returncode == 0
+    assert ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo)).returncode == 0
     with (repo / ".gitattributes").open("a") as f:
         f.write("*.json -diff\n")
     git(repo, "add", ".gitattributes")

@@ -98,6 +98,13 @@ def cat(tmp_path):
     return modelreg.load(local_dir=tmp_path)
 
 
+def cat_unverified(tmp_path):
+    """The example catalog AS SHIPPED: the lane route's tool_call fact is `unverified`
+    (its note says it becomes verified only after the live probe)."""
+    (tmp_path / "models.toml").write_text(EXAMPLE.read_text())
+    return modelreg.load(local_dir=tmp_path)
+
+
 def cat_route(tmp_path, model):
     """A catalog whose lane route serves ``model``. The shipped `families.toml` already maps
     a family id to its vendor (claude -> anthropic, deepseek -> deepseek); this puts the
@@ -352,6 +359,18 @@ def test_a_binary_of_another_harness_than_the_approved_one_is_refused(tmp_path, 
     r = LN.launch(request(tmp_path, tree, binary=other))
     assert isinstance(r, LN.Refused) and "approved template's harness" in r.reasons[0]
     assert not (tmp_path / "record.json").exists()
+
+
+def test_a_probe_route_with_unverified_tool_calls_launches(tmp_path, tree):
+    """Bc64f9048f5: a route whose tool_call is only `unverified` must still launch —
+    the launch IS the live probe that verifies it. launch() refuses it today because
+    it calls prepare() on its require_tools=True default while its own slot checks
+    already resolve the endpoint with require_tools=False."""
+    req = request(tmp_path, tree, cat=cat_unverified(tmp_path))
+    r = LN.launch(req)
+    assert isinstance(r, LN.Launched), r
+    r.driver.stop(r.handle)
+    LN.OC.cleanup(tree[2])
 
 
 def test_hostile_template_values_are_notes_not_crashes_or_loopholes(tmp_path):
