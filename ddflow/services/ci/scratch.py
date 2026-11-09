@@ -129,7 +129,10 @@ def _regen_after_merge(tree: Path, cfg: Config | None) -> None:
     try:
         regenerate_pins(tree, cfg, after_merge=True, bounded=True)
     except Exception as exc:  # a re-record must not be what stops the checks it was there to help
-        print(f"ci: after-merge pin regen could not run ({type(exc).__name__}: {exc})", file=sys.stderr)
+        print(
+            f"ci: after-merge pin regen could not run ({type(exc).__name__}: {exc})",
+            file=sys.stderr,
+        )
 
 
 @contextmanager
