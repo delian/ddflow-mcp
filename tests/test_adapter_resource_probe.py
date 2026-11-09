@@ -33,5 +33,9 @@ def test_sample_defaults_to_the_stdlib_ladder_and_a_fake_short_circuits_it():
     assert got.rss_kb == 777
 
 
-def test_network_is_named_not_collected():
+def test_no_sampler_returns_a_network_field_and_unavailable_is_the_marker():
+    from ddflow.adapters.resource_probe import ResourceSample
+
+    # the ResourceSample has no network field; the not-collected contract is the marker above
+    assert not any("net" in f for f in ResourceSample.__dataclass_fields__)
     assert "not collected" in NETWORK_NOT_COLLECTED

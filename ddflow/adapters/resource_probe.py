@@ -15,9 +15,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-#: The degrade ladder, in the order the sampler tries it (D-perf-metrics-answers: cgroup and
-#: psutil are optional adapters; /proc and ps are stdlib).
-LADDER = ("cgroup", "psutil", "proc", "ps")
+#: The default stdlib ladder is proc then ps; a host prepends its OPTIONAL cgroup/psutil
+#: adapters in the cgroup -> psutil -> proc -> ps degrade order and passes the list to ``sample``.
 UNAVAILABLE = "unavailable"
 #: after the comm (state + its preceding space) the stat rest starts at field 3; rss (field 24)
 #: is index 21 of the rest. 22 ensures index 21 exists.
@@ -107,7 +106,7 @@ def degrade(probes: list[ResourceProbe], pid: int) -> ResourceSample:
 
 def stdlib_ladder() -> list[ResourceProbe]:
     """The default stdlib-only ladder (proc then ps); a host adds the optional cgroup and
-    psutil adapters/implementations in front (the ``LADDER`` order) and passes the list to
+    psutil adapters/implementations in front (cgroup -> psutil -> proc -> ps) and passes the list to
     ``sample`` so the degrade preserves the cgroup -> psutil -> proc -> ps contract."""
     return [ProcProbe(), PsProbe()]
 
@@ -126,7 +125,6 @@ NETWORK_NOT_COLLECTED = (
 
 
 __all__ = [
-    "LADDER",
     "NETWORK_NOT_COLLECTED",
     "ProcProbe",
     "PsProbe",
