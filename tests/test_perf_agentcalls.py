@@ -27,6 +27,7 @@ def test_a_failed_call_is_counted_not_dropped(tmp_path: Path):
     assert row["count"] == 1 and row["ok"] == 0 and row["failed"] == 1
     assert row["timed"] == 0  # no duration: the -1 sentinel, not a timed run
 
+
 def test_a_duration_is_timed_separately_from_a_plain_count(tmp_path: Path):
     record(tmp_path, "hook", ToolCall("a", "l", "i", "shell", True, 2.5))
     record(tmp_path, "hook", ToolCall("a", "l", "i", "shell", True))  # no duration
