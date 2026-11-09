@@ -62,7 +62,6 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
     models: dict[str, list[str]] = defaultdict(list)
     reviewers: dict[str, list[str]] = defaultdict(list)
     for o in ctx.facts.outcomes:
-        key = (o.item, o.gate)
         models[o.model or "(unknown model)"].append(o.kind)
         if o.by:
             reviewers[o.by].append(o.kind)
