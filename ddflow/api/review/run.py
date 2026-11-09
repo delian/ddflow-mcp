@@ -475,7 +475,7 @@ def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_mo
     return identifying
 
 
-def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",

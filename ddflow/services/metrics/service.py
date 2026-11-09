@@ -94,9 +94,7 @@ def parse_since(text: str, now: float) -> float | None:
 
 
 def _stages(ctx: Context, group_by: str) -> Answer:
-    return _figure(
-        ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage"
-    )
+    return _figure(ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage")
 
 
 def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
@@ -143,7 +141,7 @@ def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None
     return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
 
 
-def run(  # noqa: PLR0911, C901 -- one return per view; the dispatcher IS the branch
+def run(
     events: Sequence[Event],
     state: State,
     cfg: Config,

@@ -564,17 +564,25 @@ def _run_stages(
         if selected:
             _say_what_ran(scope, unran)
         return p, "", spent
-    return _run_test_stages(
-        cfg, tree, scope, budget, used, on_tick, tick_s, p, spent, unran, holding_suite
-    )
+    return _run_test_stages(cfg, tree, scope, budget, used, tick, p, spent, unran, holding_suite)
 
 
 def _run_test_stages(
-    cfg: Config, tree: Path, scope, budget: int, used, on_tick, tick_s, p, spent, unran: set[str], holding_suite
+    cfg: Config,
+    tree: Path,
+    scope,
+    budget: int,
+    used,
+    tick,
+    p,
+    spent,
+    unran: set[str],
+    holding_suite,
 ):
     """Run the selected-then-always test stages after the hooks passed, and fold the verdict
     into ``scope``. Extracted from `_run_stages` so the stage fan-out stays under the
     complexity ratchet."""
+    on_tick, tick_s = tick or (None, 0)
     before = p.output
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
