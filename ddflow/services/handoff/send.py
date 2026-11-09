@@ -58,7 +58,7 @@ def resolve_patch(
         if at < 0:
             raise SuggestError(
                 f"{commit}: git show gives no replayable patch (an empty or merge commit); "
-                "name the change's diff with --diff FILE, or the parent with --commit COMMIT^"
+                f"replay a merge as `git diff {commit}^1 {commit}` and send it with --diff FILE"
             )
         # a signed commit may lead with `gpg: Signature ...`; slice to the first diff header.
         return show.out[at:]

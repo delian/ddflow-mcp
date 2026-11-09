@@ -27,6 +27,8 @@ def _owner_tip(repo: Path, item: str, st: Any) -> str:
     r = git.run(repo, "rev-parse", "--verify", "--quiet", ref)
     if r.ok:
         return r.out.strip()
+    if r.unavailable:
+        return ""  # fail closed: an unverifiable tip means no ref, never a stale base
     return getattr(it, "base", "") if it is not None else ""
 
 
