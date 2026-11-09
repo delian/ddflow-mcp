@@ -204,6 +204,20 @@ def test_agent_identity_is_required(tmp_path, tree):
     assert isinstance(r, ld.Result) and "identity" in r.detail
 
 
+def test_mcp_entry_points_the_server_at_the_lane_worktree_not_the_primary(tmp_path, tree):
+    """The regression for bug B7d091d0f35: the lane's ddflow MCP server must see the lane's
+    WORKTREE as its spawn location, not the primary. Pinning `--repo` to the primary made
+    `claim` answer `here=false` and create a second worktree instead of adopting the one the
+    lane was launched in, because callers resolve the shared event log through the primary but
+    keep `called_from` = the spawn location for worktree adoption."""
+    repo, wt, _home = tree
+    argv = OC.mcp_entry(repo, "lane-7", worktree=wt)["command"]
+    assert "--repo" in argv, argv
+    tree_arg = argv[argv.index("--repo") + 1]
+    assert tree_arg == str(wt), argv  # the spawned tree, resolved to the primary + kept as called_from
+    assert tree_arg != str(repo), argv  # the primary alone hides the lane's tree from claim
+
+
 # --- running it: stub binary, stub endpoint -------------------------------------------------
 
 
