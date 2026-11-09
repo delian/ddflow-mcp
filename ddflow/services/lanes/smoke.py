@@ -87,20 +87,33 @@ def is_guard_refusal(text: str) -> bool:
 
 
 def _refusal(output: Any) -> str:
-    """The reason of a ddflow refusal at the head of a tool's output, or "". A heartbeat that
-    renewed nothing is one: it exits 2, not 3, but the lane has no lease to go on with."""
-    if not isinstance(output, str) or not output.lstrip().startswith("{"):
+    """The reason of a ddflow refusal in a tool's output, or "". A heartbeat that renewed nothing
+    is one: it exits 2, not 3, but the lane has no lease to go on with. The refusal JSON may
+    follow leading prose (a warning line, braces in prose included) or sit behind an earlier,
+    non-refusal object; only its own text matters."""
+    if not isinstance(output, str):
         return ""
-    try:
-        head, _ = json.JSONDecoder().raw_decode(output.lstrip())
-    except ValueError:
-        return ""
-    if not isinstance(head, dict):
-        return ""
-    if head.get("renewed") is False:
-        return NOT_RENEWED
-    got = head.get("refusal")
-    return str(got.get("reason") or "refused") if isinstance(got, dict) else ""
+    text = output.lstrip()
+    decoder = json.JSONDecoder()
+    while True:
+        first = text.find("{")
+        if first < 0:
+            return ""
+        try:
+            head, end = decoder.raw_decode(text[first:])
+        except ValueError:  # a '{' in prose, not JSON: scan past it
+            text = text[first + 1 :]
+            continue
+        if isinstance(head, dict):
+            if head.get("renewed") is False:
+                return NOT_RENEWED
+            got = head.get("refusal")
+            if isinstance(got, dict):
+                return str(got.get("reason") or "refused")
+        # a real object, but not a refusal: scan past it. `raw_decode` always consumes at
+        # least one character of a value it decoded; the `max` keeps progress guaranteed
+        # even if a pathological decoder ever reported none.
+        text = text[first + max(end, 1) :]
 
 
 def _call(part: dict[str, Any], step: int) -> Call:
@@ -196,27 +209,34 @@ def _stop(calls: Sequence[Call], past: list[Any], exit_code: int | None) -> Chec
 
 def judge(
     stream: Stream,
-    events: Iterable[Any],
+    events: Iterable[Any] | None,
     *,
     item: str,
     lane: str,
     commits: int | None,
     exit_code: int | None,
 ) -> Verdict:
-    """One run. ``events`` is the event log, ``commits`` the branch's count ahead of its base
-    (None when unread), ``exit_code`` the lane's (None when it was not seen to end)."""
-    own = [e for e in events if e.subject == item and e.agent == lane]
+    """One run. ``events`` is the event log (``None`` when it could not be read), ``commits`` the
+    branch's count ahead of its base (``None`` when unread), ``exit_code`` the lane's (``None``
+    when it was not seen to end). An unreadable log grades the claim and gate-record steps
+    unavailable, not failed: a torn or missing log never reads as a failed run."""
+    own = [e for e in events if e.subject == item and e.agent == lane] if events is not None else []
 
     def of(*kinds: str) -> list[Any]:
         return [e for e in own if e.kind in kinds]
 
+    def logged(step: str, hits: list[Any], what: str) -> Check:
+        if events is None:
+            return Check(step, UNAVAILABLE, "the event log could not be read")
+        return _logged(step, hits, what)
+
     return Verdict(
         (
-            _logged("claim", of("lease.acquired"), "lease.acquired"),
+            logged("claim", of("lease.acquired"), "lease.acquired"),
             _edit(stream.calls),
             _commit(commits),
             _heartbeat(stream.calls),
-            _logged("gate_record", of(*_GATE_KINDS), "gate outcome"),
+            logged("gate_record", of(*_GATE_KINDS), "gate outcome"),
             _stop(stream.calls, of(*PAST_THE_LEASE), exit_code),
         ),
         reliability(stream.calls),

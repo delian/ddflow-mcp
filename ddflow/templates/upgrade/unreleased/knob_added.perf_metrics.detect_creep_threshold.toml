@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.detect_creep_threshold"
+new = "0.10"
+why = "Perf drift detector (D-perf-metrics-answers): the lower relative bar a slow-creep EWMA must cross, so 1% a week is caught even though a +20% step never fires."
+impact = "additive"

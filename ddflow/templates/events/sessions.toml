@@ -3,39 +3,70 @@
 [[kind]]
 name = "ci.result"
 doc = "The result of a CI stage on a commit."
+fields = { "checks" = ["list"], "ok" = ["bool"], "sha" = ["str"], "stage" = ["str"], "status" = ["str"] }
+text = ["checks"]
+lookup = { "stage" = "a stage word", "status" = "a status word" }
+exempt = "a machine observation or run record, not authored text"
 
 [[kind]]
 name = "ddflow.capabilities"
 doc = "The log capabilities a ddflow version writes with."
+fields = { "capability" = ["str"], "kinds" = ["list"], "version" = ["str"] }
+lookup = { "capability" = "a capability name", "kinds" = "kind words", "version" = "a version" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "ddflow.seen"
 doc = "A ddflow version and install touched this log."
+fields = { "format_level" = ["int"], "install" = ["str"], "version" = ["str"] }
+lookup = { "format_level" = "a format level", "install" = "an install kind", "version" = "a version" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "repair.applied"
 doc = "A versioned data repair ran and settled its findings."
+exempt = "a versioned data repair's own record of the findings it settled (services.repairs): no authored text"
 
 [[kind]]
 name = "session.ended"
 doc = "An agent session ended, with its summary."
+fields = { "summary" = ["str"] }
+text = ["summary"]
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "session.note"
 doc = "A note was recorded in a session."
+fields = { "at" = ["str"], "item" = ["str"], "source" = ["str"], "text" = ["str"] }
+text = ["text", "source"]
+lookup = { "at" = "a timestamp", "item" = "an item id" }
+exempt = "a journal entry of what happened, verbatim (D-no-duplicates)"
 
 [[kind]]
 name = "session.prompt"
 doc = "The operator's words were recorded verbatim (redacted)."
+fields = { "item" = ["str"], "redactions" = ["int"], "text" = ["str"] }
+text = ["text"]
+lookup = { "item" = "an item id" }
+exempt = "the operator's words, verbatim: never refused or merged (D-no-duplicates)"
 
 [[kind]]
 name = "session.started"
 doc = "An agent session started."
+fields = { "cwd" = ["str"], "implicit" = ["bool"], "model" = ["str"], "tool" = ["str"] }
+text = ["cwd"]
+lookup = { "model" = "a model id", "tool" = "a harness name" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "skew.overridden"
 doc = "A version-skew refusal was overridden, with the reason."
+fields = { "log_format" = ["int"], "log_version" = ["str"], "reason" = ["str"], "running" = ["str"], "session" = ["str"] }
+text = ["reason"]
+lookup = { "log_format" = "a format level", "log_version" = "a version", "running" = "a version", "session" = "a session id" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "upgrade.applied"
 doc = "A project upgrade was applied."
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
