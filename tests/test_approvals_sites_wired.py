@@ -177,13 +177,15 @@ def test_a_refused_forced_claim_does_not_spend_the_operators_approval(proj, monk
             return O.refused(
                 "item.claimed",
                 f"{item} is in review; --force to take it back anyway.",
-                id=item, alternatives=[],
+                id=item,
+                alternatives=[],
             )
         # the forced claim STILL refuses: a live lease overlap `--force` cannot break
         return O.refused(
             "item.claimed",
             f"{item} overlaps sw-fleet's live lease on DX-fleet-registry.",
-            id=item, alternatives=[],
+            id=item,
+            alternatives=[],
         )
 
     monkeypatch.setattr(C, "_claim_once", once)
@@ -193,8 +195,8 @@ def test_a_refused_forced_claim_does_not_spend_the_operators_approval(proj, monk
     out = CL(proj, "T1", no_worktree=True, agent="bot", approval=ask_id)
     assert out.exit == 3, out.reason
     row = asks_of(_state(proj))[ask_id]
-    assert row["used"] == 0, row          # the refused forced claim spent nothing
-    assert not row.get("consumed"), row   # no `ask.consumed` was recorded
+    assert row["used"] == 0, row  # the refused forced claim spent nothing
+    assert not row.get("consumed"), row  # no `ask.consumed` was recorded
     assert "was NOT consumed" in out.reason, out.reason
 
 
@@ -213,7 +215,8 @@ def test_a_standing_policy_claim_force_over_an_empty_approval_still_lands(proj, 
 
     cfgfile = proj / ".ddflow" / "config.toml"
     cfgfile.write_text(
-        cfgfile.read_text() + '\n[approvals]\npolicy = ["claim_unavailable"]\npolicy_max_uses = 99\n'
+        cfgfile.read_text()
+        + '\n[approvals]\npolicy = ["claim_unavailable"]\npolicy_max_uses = 99\n'
     )
     EventLog(proj, "seed").append(
         "lease.acquired",
@@ -229,7 +232,8 @@ def test_a_standing_policy_claim_force_over_an_empty_approval_still_lands(proj, 
             return O.refused(
                 "item.claimed",
                 f"{item} is in review; --force to take it back anyway.",
-                id=item, alternatives=[],
+                id=item,
+                alternatives=[],
             )
         return O.ok("item.claimed", id=item)
 

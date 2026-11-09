@@ -239,7 +239,8 @@ def _claim_by_approval(repo: Path, item: str, refused: O.Outcome, approval: str,
                 "item.claimed",
                 f"{out.reason}\nrefusing: the operator approval {stamp['ask']} was NOT consumed "
                 "(the forced claim still refused); run again once it can land.",
-                id=item, alternatives=[],
+                id=item,
+                alternatives=[],
             )
         spent = CN.spend(log, canon, approval, cfg=cfg)
         if not spent.ok:
