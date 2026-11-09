@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from ddflow.config import Config
+from ddflow.core import clock
 
 from . import store
 from .store import PerfMetricsConfig, ring_path
@@ -28,8 +29,6 @@ from .store import PerfMetricsConfig, ring_path
 #: The only keys a raw sample may carry. Anything else was not written by the sampler and is
 #: dropped with a doctor note, never stored (r-no-secrets).
 ALLOWED_FIELDS = frozenset({"t", "env", "value", "gate", "digest"})
-#: Seconds in a UTC day (the aggregate's grain).
-DAY_S = 86400
 
 
 @dataclass(frozen=True)
@@ -136,9 +135,9 @@ def _complete_days(repo: Path, series: str, now: float) -> list[float]:
     sample can still arrive, so the daily aggregate is final)."""
     return sorted(
         {
-            int(s.t // DAY_S) * DAY_S
+            int(s.t // clock.DURATION_UNITS["d"]) * clock.DURATION_UNITS["d"]
             for s in store._read_ring(repo, series)
-            if int(s.t // DAY_S) * DAY_S + DAY_S <= now
+            if int(s.t // clock.DURATION_UNITS["d"]) * clock.DURATION_UNITS["d"] + clock.DURATION_UNITS["d"] <= now
         }
     )
 
