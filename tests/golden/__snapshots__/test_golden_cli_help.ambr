@@ -3067,15 +3067,16 @@
 # ---
 # name: test_help[ddflow similar]
   '''
-  usage: ddflow similar [-h] [--kind KIND] text
+  usage: ddflow similar [-h] [--kind KIND] [--floor FLOOR] text
   
   positional arguments:
-    text         the title or summary of the record you are about to file
+    text           the title or summary of the record you are about to file
   
   options:
-    -h, --help   show this help message and exit
-    --kind KIND  comma-separated subset of [dedupe].kinds:
-                 bug,task,phase,lesson,decision,research,memory (default: all of them)
+    -h, --help     show this help message and exit
+    --kind KIND    comma-separated subset of [dedupe].kinds:
+                   bug,task,phase,lesson,decision,research,memory (default: all of them)
+    --floor FLOOR  minimum score to report (default: [dedupe].show_floor)
   
   '''
 # ---
