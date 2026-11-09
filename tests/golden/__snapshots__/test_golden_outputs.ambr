@@ -3163,6 +3163,54 @@
           mode under another name.
       metrics.lock_revert_value = 'strict'   [default]
           The value of `lock_revert_key` that is the strict mode.
+      notify.channel = 'terminal'   [default]
+          Where notifications go. 'terminal' writes to the operator's terminal; each
+          other choice is one network channel, reach outward (r-consent-outward), and
+          needs a grant before any adapter will send. An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to
+          'terminal', the strictest (a typo across clones is local, never a network
+          send); `config --set`, `ddflow_configure` and the environment refuse it, and
+          so does loading ddflow's own source tree, where the file and the code are
+          one commit.
+      notify.ask_channel = 'harness'   [default]
+          Where questions and approvals go. 'harness' is the in-band agent chat; each
+          other choice is one network channel and needs a grant first. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'harness', the strictest (a typo across clones stays local, never a
+          network send); `config --set`, `ddflow_configure` and the environment refuse
+          it, and so does loading ddflow's own source tree, where the file and the
+          code are one commit.
+      notify.endpoints = {}   [default]
+          Adapter -> its whole hook URL. A URL here in a committed layer makes that
+          adapter unavailable.
+      notify.token_env = {}   [default]
+          Adapter -> the variable holding its token (a secret; keep it in the local
+          layer).
+      notify.send_timeout_s = 10.0   [default]
+          How long one notification send may take (a webhook POST, a mail exchange, a
+          desktop command) before it is dropped.
+      notify.ask_timeout_s = 300.0   [default]
+          How long the terminal waits for one line of an answer before it gives up
+          that attempt.
+      notify.ask_attempts = 3   [default]
+          Unusable answers the terminal takes before it gives up on a question.
+      notify.email_host = ''   [default]
+          The SMTP host mail is sent through (an address here in a committed layer
+          makes the email adapter unavailable).
+      notify.email_port = 587   [default]
+          The SMTP port.
+      notify.email_from = ''   [default]
+          The envelope sender (an address here in a committed layer makes the email
+          adapter unavailable).
+      notify.email_to = ''   [default]
+          The recipient (an address here in a committed layer makes the email adapter
+          unavailable).
+      notify.email_user = ''   [default]
+          The SMTP login (a secret; keep it in the local layer).
+      notify.email_password_env = ''   [default]
+          The variable holding the SMTP password.
+      notify.email_tls = True   [default]
+          STARTTLS on the SMTP connection; a host that cannot do it fails the send.
       output.max_rows = 50   [default]
           Rows a list shows by default in `board`, `doctor`, `recover`, `next` and
           `status` (CLI and MCP, text and `--json`). The rest is counted: the answer
