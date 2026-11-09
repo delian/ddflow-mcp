@@ -55,14 +55,13 @@ def _sequence(rows: list) -> list[str]:
 
 
 def directly_follows(ctx: Context) -> list[dict]:
-    """gate -> gate transition counts over the items, and the median gap between the two."""
+    """gate -> gate transition counts over the items, and the median gap of each ADJACENT
+    occurrence (a re-run or an out-of-order pass keeps its own gap, never a min-of-all)."""
     pairs: dict[tuple[str, str], list[float]] = defaultdict(list)
     for _item, rows in _items(ctx).items():
-        seq = _sequence(rows)
-        for a, b in itertools.pairwise(seq):
-            a_at = min(o.at for o in rows if o.gate == a)
-            b_at = min(o.at for o in rows if o.gate == b)
-            pairs[(a, b)].append(b_at - a_at)
+        for a, b in itertools.pairwise(rows):
+            if a.gate != b.gate:
+                pairs[(a.gate, b.gate)].append(b.at - a.at)
     return [
         {"a": a, "b": b, "n": len(gaps), "median_gap_s": median(gaps) if gaps else None}
         for (a, b), gaps in sorted(pairs.items())
@@ -154,7 +153,9 @@ def text(data: dict) -> str:
     out += [f"  {' -> '.join(r['sequence'])}: {r['n']}" for r in data["variants"][:8]]
     ov = data["overlap"]
     if ov.get("burst_share") is not None:
-        out.append(f"  burst overlap: union {_d(ov['union_p50_s'])} of sum {_d(ov['sum_p50_s'])} ({ov['burst_share']:.0%})")
+        out.append(
+            f"  burst overlap: union {_d(ov['union_p50_s'])} of sum {_d(ov['sum_p50_s'])} ({ov['burst_share']:.0%})"
+        )
     out.append(f"  superseded passes: {len(data['superseded_passes'])}")
     out.append(f"  out-of-order runs: {len(data['out_of_order'])}")
     out.append(f"next: {data['next']['cli']}  |  {data['next']['mcp']}")
