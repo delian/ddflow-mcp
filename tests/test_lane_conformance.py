@@ -206,6 +206,18 @@ def test_harness_work_calls_do_not_dilute_accuracy():
     assert statuses(r)["tool_accuracy"] == cf.PASSED and r.level == 7, r.outcomes
 
 
+def test_a_refused_call_carried_in_the_output_is_not_a_success():
+    """B6eaa5f27c2: a ddflow refusal arrives as a COMPLETED tool call with the refusal only in
+    its output ({"refusal": {..., "exit": 3}}). `_ok` saw no `error` field and counted it ok, so
+    a lane whose claim/heartbeat/gate_record were all refused still passed levels 2-4. A
+    heartbeat answering `renewed: false` is the same refusal shape (~exit 2)."""
+    refused = {"name": "claim", "output": json.dumps({"refusal": {"reason": "held elsewhere"}})}
+    assert cf._ok(refused) is False
+    flat = {"name": "heartbeat", "output": json.dumps({"renewed": False})}
+    assert cf._ok(flat) is False
+    assert grade_calls(refused, flat).level == 1  # a lane that only REFUSED climbs no further
+
+
 def test_gate_call_for_another_action_is_not_a_record():
     listing = {"name": "gate", "action": "list"}
     r = grade_calls("claim", "heartbeat", listing)
