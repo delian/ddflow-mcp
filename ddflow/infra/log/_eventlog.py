@@ -33,6 +33,31 @@ _STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND, CAPABILITIES_KIND})
 
 T = TypeVar("T")
 
+
+def _reviewer_redact_names(root: Path) -> list[str]:
+    """The configured reviewers' service names and model strings.
+
+    A reviewer's endpoint, model name and key variable belong in the git-ignored
+    reviewer config, so its service name and model are none of a secret, a host, a path
+    or the machine's own name: the committed-log name pass must learn them or they leak
+    into the pushed shards as review evidence (bug B8ef0d325ed). The reviewer loader is
+    imported lazily (services <-> infra) and any of it being unreadable is the caller's
+    fallback, not this write's.
+    """
+    try:
+        from ...services.review.model import load_reviewers
+    except Exception:
+        return []
+    try:
+        out: list[str] = []
+        for rev in load_reviewers(root):
+            for value in (rev.name, rev.model):
+                if value:
+                    out.append(value)
+        return out
+    except Exception:
+        return []
+
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
 #: size_after)` of the written shard. A module registers itself here (`services.shardmarks`
 #: keeps the shard high-water mark current, Ba24a8d32ee) so every EventLog -- the CLI's
@@ -335,6 +360,7 @@ class EventLog(_GuardMixin, _ReadMixin):
                 # `[upstream].redact_extra`, once that section exists (`names_for`)
                 up = getattr(cfg, "upstream", None)
                 names = [str(n) for n in (getattr(up, "redact_extra", None) or [])]
+                names.extend(_reviewer_redact_names(self.root))
             except Exception:
                 # an unreadable config: the built-in patterns for THIS write, and the config is
                 # read again on the next one, so a fixed config is not shadowed by the fallback
