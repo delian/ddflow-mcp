@@ -48,7 +48,8 @@ def _percentile(values: list[float], p: float) -> float:
 
 
 def _ewma(values: list[float], alpha: float) -> float:
-    """Exponentially-weighted mean (last value = the drift seat)."""
+    """Exponentially-weighted mean (``alpha`` weights the newest observation each step; the
+    final smoothed value is what the creep test compares, not the last raw sample)."""
     out = values[0]
     for v in values[1:]:
         out = alpha * v + (1 - alpha) * out
