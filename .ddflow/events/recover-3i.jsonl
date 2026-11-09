@@ -7,3 +7,4 @@
 {"agent":"recover-3i","data":{},"id":"ed9f3f4f1491f243ead0a4e38","kind":"item.started","lamport":158001,"schema":1,"subject":"fix-B38ceb8819e","ts":"2026-11-09T00:08:32.055688Z"}
 {"agent":"recover-3i","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e1e6398bdb3563a4d55d16ca1","kind":"cadence.ran","lamport":158002,"schema":1,"subject":"recall_recheck:fix-B38ceb8819e","ts":"2026-11-09T00:08:45.814371Z"}
 {"agent":"recover-3i","data":{"by":"recover-3i","event":"e0ca37225bb9fe75095515d53","holder":"recover-5e","note":"salvaged"},"id":"e82a96da317f5b1cb1adb2294","kind":"lease.released","lamport":158012,"schema":1,"subject":"fix-B489298dd27","ts":"2026-11-09T00:09:54.608306Z"}
+{"agent":"recover-3i","data":{"by":"recover-3i","event":"ebfc3755882dcd2b290abb38d","holder":"bg96","note":"salvaged"},"id":"ec3a8b86195ee9c537819607d","kind":"lease.released","lamport":158013,"schema":1,"subject":"fix-B4f35548c0a","ts":"2026-11-09T00:09:59.710255Z"}
