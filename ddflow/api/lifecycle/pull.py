@@ -216,7 +216,7 @@ def _lane_worktree(repo: Path, name: str) -> Path | None:
     return wt
 
 
-def launch_due(ctx: TickCtx) -> str | None:
+def _launch_due(ctx: TickCtx) -> str | None:
     """The swarm scheduler tick: the production caller of `lanes.launch.launch` (B5c8139e564).
 
     Reads the pull answer for each approved template lane that holds no item, and starts the

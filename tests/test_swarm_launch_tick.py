@@ -40,7 +40,7 @@ def test_the_tick_target_is_the_production_caller_of_launch():
     assert target.__module__.startswith("ddflow.")
     import ddflow.api.lifecycle.pull as P
 
-    assert P.launch_due is target
+    assert P._launch_due is target
 
 
 def test_launch_due_does_not_launch_while_launch_is_off(monkeypatch):
@@ -49,7 +49,7 @@ def test_launch_due_does_not_launch_while_launch_is_off(monkeypatch):
     cfg = Config()
     cfg.swarm.launch_enabled = False
     monkeypatch.setattr(P, "_load", lambda repo, agent="": (None, cfg, None))
-    assert P.launch_due(_ctx(False)) is None
+    assert P._launch_due(_ctx(False)) is None
 
 
 def test_launch_due_starts_the_first_idle_approved_lane(monkeypatch):
@@ -95,7 +95,7 @@ def test_launch_due_starts_the_first_idle_approved_lane(monkeypatch):
     monkeypatch.setattr(P.D, "pull_for", lambda *a, **k: P.D.Answer("offer", "dy", "A-1"))
     monkeypatch.setattr(LN, "launch", _fake_launch)
 
-    note = P.launch_due(_ctx(True))
+    note = P._launch_due(_ctx(True))
     assert launched and note == "launched lane 'dy' on A-1"
     assert launched[0].item == "A-1" and launched[0].agent == "dy"
 
@@ -145,6 +145,6 @@ def test_a_refused_lane_does_not_block_the_next_lane(monkeypatch):
     monkeypatch.setattr(P.D, "pull_for", lambda name, *a, **k: P.D.Answer("offer", name, "A-1"))
     monkeypatch.setattr(LN, "launch", _fake_launch)
 
-    note = P.launch_due(_ctx(True))
+    note = P._launch_due(_ctx(True))
     assert note == "launched lane 'b' on A-1; also refused: sticky refusal"
     assert launched[0].agent == "b"

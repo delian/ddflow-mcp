@@ -474,7 +474,7 @@ register(
         "swarm.launch",
         every_s=30,
         budget_s=15.0,
-        target="ddflow.api.lifecycle.pull:launch_due",
+        target="ddflow.api.lifecycle.pull:_launch_due",
         enabled=_swarm_launch_enabled,
     )
 )
