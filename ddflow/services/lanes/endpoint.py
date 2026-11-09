@@ -187,8 +187,17 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
 
 
 def launch_env(ep: Endpoint) -> dict[str, str]:
-    """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read at launch)."""
-    return {ep.api_key_env: ep.api_key_env} if ep.api_key_env else {}
+    """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read at launch).
+
+    The value is resolved here, variable first, then key file (`resolve_key`): a key that
+    lives only in the endpoint's key FILE is read and carried to the child under its
+    variable, so the operator does not export it by hand."""
+    if not ep.api_key_env:
+        return {}
+    got = resolve_key(ep)
+    if got and got.source == "file":
+        os.environ[ep.api_key_env] = got.value
+    return {ep.api_key_env: ep.api_key_env}
 
 
 def resolve_key(ep: Endpoint) -> review_keys.KeyResult:
