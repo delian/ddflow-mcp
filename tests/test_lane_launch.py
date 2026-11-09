@@ -24,7 +24,6 @@ from ddflow.services.swarm import seedpack as SP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import run_cli
-
 from lanes_fixture import T0, Log
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
