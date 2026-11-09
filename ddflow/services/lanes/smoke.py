@@ -89,25 +89,29 @@ def is_guard_refusal(text: str) -> bool:
 def _refusal(output: Any) -> str:
     """The reason of a ddflow refusal in a tool's output, or "". A heartbeat that renewed nothing
     is one: it exits 2, not 3, but the lane has no lease to go on with. The refusal JSON may
-    follow leading prose (a warning line); only its own text matters."""
+    follow leading prose (a warning line, braces in prose included) or sit behind an earlier,
+    non-refusal object; only its own text matters."""
     if not isinstance(output, str):
         return ""
     text = output.lstrip()
-    if not text.startswith("{"):
+    decoder = json.JSONDecoder()
+    while True:
         first = text.find("{")
         if first < 0:
             return ""
-        text = text[first:]
-    try:
-        head, _ = json.JSONDecoder().raw_decode(text)
-    except ValueError:
-        return ""
-    if not isinstance(head, dict):
-        return ""
-    if head.get("renewed") is False:
-        return NOT_RENEWED
-    got = head.get("refusal")
-    return str(got.get("reason") or "refused") if isinstance(got, dict) else ""
+        try:
+            head, end = decoder.raw_decode(text[first:])
+        except ValueError:  # a '{' in prose, not JSON: scan past it
+            text = text[first + 1 :]
+            continue
+        if isinstance(head, dict):
+            if head.get("renewed") is False:
+                return NOT_RENEWED
+            got = head.get("refusal")
+            if isinstance(got, dict):
+                return str(got.get("reason") or "refused")
+        # a real object, but not a refusal: scan past it
+        text = text[first + end :]
 
 
 def _call(part: dict[str, Any], step: int) -> Call:

@@ -112,6 +112,22 @@ def test_a_refusal_after_leading_text_is_still_a_refusal():
     assert "no commit ahead" in s.calls[0].detail
 
 
+def test_a_refusal_behind_a_brace_in_prose_is_still_a_refusal():
+    """A '{' in leading prose is not the refusal, and must not hide the one that follows."""
+    out = 'Warning: stale {lock}\n{"refusal":{"reason":"no commit ahead"},"schema":"x"}'
+    s = S.read_stream([tool("ddflow_ddflow_gate", out=out, action="record")])
+    assert s.calls[0].status == S.REFUSED
+    assert "no commit ahead" in s.calls[0].detail
+
+
+def test_a_refusal_behind_an_earlier_non_refusal_object_is_still_a_refusal():
+    """An earlier completed-call object in the same output is not the refusal; scan past it."""
+    out = '{"status":"ok","schema":"x"}\n{"refusal":{"reason":"no commit ahead"},"schema":"x"}'
+    s = S.read_stream([tool("ddflow_ddflow_gate", out=out, action="record")])
+    assert s.calls[0].status == S.REFUSED
+    assert "no commit ahead" in s.calls[0].detail
+
+
 def test_a_lease_hook_error_is_a_guard_refusal_not_a_bad_call():
     no_lease = f"lane {LANE} holds no live lease: stop; do not write any file"
     glob = f"lane {LANE}: other.txt is outside the item's lease globs (hello.txt); do not edit it"
