@@ -4,8 +4,8 @@ Re-exported from `ddflow.config`, which assembles `Config` from every section (A
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from ._docs import declare, int_at_least, knob
 
