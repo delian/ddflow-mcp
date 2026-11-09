@@ -53,9 +53,13 @@ def _state(round_at: str | None):
 def test_a_job_wait_blocks_while_running_then_wakes_ready_with_next_actions(repo, monkeypatch):
     cfg = Config()
     log = _log(repo)
+    # A detached review of a commit/branch carries no item: `item` is empty, so "over" is
+    # the handle's only signal and `next_actions` points at the job's log (no item round
+    # to check). The item-with-round vs item-without-round verdicts are the `_judge_job`
+    # tests below.
     log.append(
         "job.started", "J1",
-        {"item": "fix-X", "command": "python -m ddflow review fix-X", "pid": 1, "host": J.host(), "log": "jobs/j.log"},
+        {"item": "", "command": "python -m ddflow review --commit abc", "pid": 1, "host": J.host(), "log": "jobs/j.log"},
     )
     running = {"on": True}
     monkeypatch.setattr(
@@ -72,14 +76,13 @@ def test_a_job_wait_blocks_while_running_then_wakes_ready_with_next_actions(repo
     assert not still.data["woke"] and still.data["ready"] == []
     assert still.data["next_actions"] == [], "no round recorded yet: no next actions"
 
-    # The detached review finishes (and, with no item in the log, "over" IS the round):
-    # the wait wakes READY.
+    # The detached review finishes: the wait wakes READY.
     running["on"] = False
     out = A.wait(repo, job="J1", timeout_s=20, poll_s=0.05, agent="asker")
     assert out.exit == O.OK, out.reason
     assert out.data["woke"] and out.data["ready"] == ["J1"]
     assert out.data["job"] == "J1"
-    assert any("fix-X" in a for a in out.data["next_actions"]), out.data["next_actions"]
+    assert any("tail jobs/j.log" in a for a in out.data["next_actions"]), out.data["next_actions"]
 
 
 def test_a_job_over_with_a_recorded_round_is_ready(monkeypatch):

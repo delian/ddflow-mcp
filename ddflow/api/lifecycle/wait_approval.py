@@ -288,8 +288,11 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
     recorded its round at or after the job started (`_round_recorded_after`): a killed or
     crashed review is over too, and then the wait is refused (hopeless) with the move that
     WOULD fix it (re-run the review) rather than a READY that promises a round that is
-    not there. Unknown, the item the job names having vanished, or running on another
-    host (which this wait cannot poll), is what no further waiting ends: refused up front.
+    not there. Unknown, or running on another host (which this wait cannot poll), is what
+    no further waiting ends: refused up front. A handle whose item has NO record to check
+    -- a detached review of a commit or branch (``item`` empty), or an item since removed
+    -- ends READY when the job is over: over is the only signal the handle itself carries,
+    so `next_actions` points at the job's log instead of an item.
     ``now`` is unused; jobs hold no lease to age.
     """
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
