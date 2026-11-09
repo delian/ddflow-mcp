@@ -32,20 +32,18 @@ def slug_of(decision_id: str) -> str:
 
 
 def _default_rel(it, decision_id: str) -> str:
-    """The doc path: a ``.md`` glob under ``DOC_DIR`` the task already names, else the slug.
+    """The doc path: the id's `<slug>.md` when a glob covers it, else a single literal
+    ``.md`` glob under ``DOC_DIR`` the task names, else the slug.
 
-    A decide task that globs `docs/ddflow/decisions/answers.md` must land there, not at
-    the id's `<slug>.md`, which the globs do not cover (B502b06b881). Only a *literal*
-    path counts as the task naming a document: a pattern glob (`*.md`) is left to
-    `inside()` to match the slug against, never written literally."""
+    A task that globs `docs/ddflow/decisions/answers.md` must land there, not at the
+    id's `<slug>.md`, which the globs do not cover (B502b06b881). A pattern glob
+    (`*.md`) is left to `inside()`, and never written literally."""
     prefix = DOC_DIR.rstrip("/") + "/"
     named = f"{DOC_DIR}/{slug_of(decision_id)}.md"
-    docs = [g for g in it.globs if g.startswith(prefix) and g.endswith(".md") and _literal(g)]
-    if named in docs:
+    if any(inside(named, g) for g in it.globs):
         return named
-    if len(docs) == 1:
-        return docs[0]
-    return named
+    docs = [g for g in it.globs if g.startswith(prefix) and g.endswith(".md") and _literal(g)]
+    return docs[0] if len(docs) == 1 else named
 
 
 def _literal(glob: str) -> bool:
