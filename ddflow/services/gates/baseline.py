@@ -30,6 +30,12 @@ CACHE_DIR = Path(".ddflow") / "local" / "baseline"
 KNOB = "baseline_red_auto"
 #: Index of a cache entry's failure text (``[failed, measured_at, text]``; older entries omit it).
 SIG_AT = 2
+#: Marker element stamped on entries whose failure text is kept WHOLE (not cut to
+#: ``flakes.LINE_CHARS``): index 3 of a cache entry -- older entries omit it. A whole text of
+#: exactly LINE_CHARS length is told apart from a legacy entry cut to that length only by this
+#: marker (B60e9e09308: re-measure the legacy, never a genuine whole 240-char reason).
+SIG_WHOLE_AT = 3
+SIG_WHOLE = "whole"
 
 
 def _path(repo: Path, sha: str, command: str = "") -> Path:
@@ -37,19 +43,28 @@ def _path(repo: Path, sha: str, command: str = "") -> Path:
     return Path(repo) / CACHE_DIR / f"{sha[:40]}.{digest(command)[:12]}.json"
 
 
-def cache_load(
+def _entries(
     repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
-) -> dict[str, bool]:
-    """``{test id: failed on this base}`` measured so far and still younger than ``ttl_s``
-    (each id has its own age); {} when none."""
+) -> dict[str, list]:
+    """One read of ``sha``/``command``'s cache: ``{test id: [failed, measured_at, text?, whole?]}``
+    for entries still within ``ttl_s`` (each id its own age). A single parse so every view built
+    from it agrees -- separate reads can interleave with a concurrent ``cache_store`` (B60e9e09308)."""
     if ttl_s <= 0:
         return {}
     clock_now = CLOCK.wall() if now is None else now
     try:
         seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
-        return {str(k): bool(v[0]) for k, v in seen.items() if _fresh(v, clock_now, ttl_s)}
+        return {str(k): v for k, v in seen.items() if _fresh(v, clock_now, ttl_s)}
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return {}
+
+
+def cache_load(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> dict[str, bool]:
+    """``{test id: failed on this base}`` measured so far and still younger than ``ttl_s``
+    (each id has its own age); {} when none."""
+    return {k: bool(v[0]) for k, v in _entries(repo, sha, ttl_s, now, command).items()}
 
 
 def cache_signatures(
@@ -59,21 +74,33 @@ def cache_signatures(
     without text -- an old entry -- is absent); {} when none. The text is what the branch's
     shown later compares against to spot a new offender (B-baseline-red-hides-new-offender-
     in-red-ratchet)."""
-    if ttl_s <= 0:
-        return {}
-    clock_now = CLOCK.wall() if now is None else now
-    try:
-        seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
-        out: dict[str, str] = {}
-        for k, v in seen.items():
-            if _fresh(v, clock_now, ttl_s) and len(v) > SIG_AT and v[SIG_AT]:
-                out[str(k)] = str(v[SIG_AT])
-        return out
-    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
-        return {}
+    return {
+        k: str(v[SIG_AT])
+        for k, v in _entries(repo, sha, ttl_s, now, command).items()
+        if len(v) > SIG_AT and v[SIG_AT]
+    }
+
+
+def cache_snapshot(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> tuple[dict[str, bool], dict[str, str], dict[str, bool]]:
+    """``(known, sigs, whole)`` from ONE cache read, so the three never disagree when a concurrent
+    ``cache_store`` rewrites the file between separate calls (B60e9e09308). ``known``: id ->
+    failed on the base; ``sigs``: id -> whole failure text; ``whole``: id -> True for a text kept
+    WHOLE."""
+    entries = _entries(repo, sha, ttl_s, now, command)
+    known = {k: bool(v[0]) for k, v in entries.items()}
+    sigs = {k: str(v[SIG_AT]) for k, v in entries.items() if len(v) > SIG_AT and v[SIG_AT]}
+    whole = {k: True for k, v in entries.items() if len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]}
+    return known, sigs, whole
 
 
 def _fresh(entry, now: float, ttl_s: int) -> bool:
+    """Is a held ``[failed, measured_at]`` entry well formed and still within the ttl?"""
+    try:
+        return now - float(entry[1]) <= ttl_s
+    except (TypeError, ValueError, IndexError, KeyError):
+        return False
     """Is a held ``[failed, measured_at]`` entry well formed and still within the ttl?"""
     try:
         return now - float(entry[1]) <= ttl_s
@@ -91,7 +118,10 @@ def cache_store(
 ) -> None:
     """Merge ``results`` into the cache of ``sha`` and ``command``, each id stamped with the
     time it was measured (best effort: a failed write costs a rerun). ``sigs`` (id -> failure
-    text) is stored beside the bool, so a later change keeps comparing against the text."""
+    text) is stored beside the bool, so a later change keeps comparing against the text. Each
+    ``sigs`` value is what ``flakes.failed_reasons`` kept for comparison -- a FAILED reason's
+    whole summary line, or an ERROR reason's own reason (kept whole by ``flakes._error_fields``);
+    the WHOLE marker stamped beside it records that provenance."""
     if ttl_s <= 0 or not results:
         return
     try:
@@ -103,10 +133,13 @@ def cache_store(
         if not isinstance(held, dict):
             held = {}
         now = CLOCK.wall()
-        merged = {
-            **{k: v for k, v in held.items() if _fresh(v, now, ttl_s)},
-            **{i: [f, now, (sigs or {}).get(i, "")] for i, f in results.items()},
-        }
+        merged = {k: v for k, v in held.items() if _fresh(v, now, ttl_s)}
+        for i, f in results.items():
+            sig = (sigs or {}).get(i, "")
+            # The WHOLE marker is stamped on the text FULLY (only an entry WITHOUT it can still
+            # be the legacy cut-to-LINE_CHARS shape): it is what tells "kept whole" apart from
+            # "cut" when the whole text happens to be exactly LINE_CHARS long (B60e9e09308).
+            merged[i] = [f, now, sig, SIG_WHOLE if sig else ""]
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)
         atomic_write(path, json.dumps({"sha": sha, "ids": merged}))

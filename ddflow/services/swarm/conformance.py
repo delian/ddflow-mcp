@@ -21,6 +21,7 @@ needs a real key. Pure grading (``grade``) is separate from the live run (``obse
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -49,8 +50,8 @@ class Params:
 
     min_accuracy: float = 0.9
     min_calls: int = 5
-    idle_s: float = 5.0
-    lease_wait_s: float = 10.0
+    idle_s: float = 120.0
+    lease_wait_s: float = 90.0
     tools: frozenset[str] = frozenset()
     max_age_s: int = 0
     max_events: int = 1000
@@ -133,7 +134,29 @@ def norm_tool(name: str) -> str:
 
 
 def _ok(call: dict[str, Any]) -> bool:
-    return call.get("ok") is not False and not call.get("error")
+    return call.get("ok") is not False and not call.get("error") and not _refused(call)
+
+
+def _refused(call: dict[str, Any]) -> str:
+    """The reason of a ddflow refusal carried in a COMPLETED call's output, or "".
+
+    A ddflow refusal arrives as a completed tool call: the call itself has no error field, and
+    the refusal is only in the output's head as ``{"refusal": {...}}`` (exit 3). A heartbeat that
+    answered nothing is the same shape with ``renewed: false`` (exit 2 in the effect). A well
+    formed call that was declined is a failure, not a pass (B6eaa5f27c2)."""
+    out = call.get("output")
+    if not isinstance(out, str) or not out.lstrip().startswith("{"):
+        return ""
+    try:
+        head, _ = json.JSONDecoder().raw_decode(out.lstrip())
+    except ValueError:
+        return ""
+    if not isinstance(head, dict):
+        return ""
+    if head.get("renewed") is False:
+        return "the heartbeat renewed nothing"
+    got = head.get("refusal")
+    return str(got.get("reason") or "refused") if isinstance(got, dict) else ""
 
 
 def _named(calls: list[dict[str, Any]], tool: str, actions: tuple[str, ...] = ("",)) -> list:

@@ -769,11 +769,16 @@
           How many times `bug found --repro-cmd CMD` reruns the command at filing
           (default 1), and thus whether the bug's sighting was confirmed: the bundle
           records `reproduced yes|no`, `runs` and `failures`.
-      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDE*', '*GATE*']   [default]
+      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', '*GATE*']   [default]
           Environment variable name patterns (fnmatch) whose values a reproduction
           bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and
-          the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN,
-          SECRET, PASSWORD, ...) is recorded as set, never with its value.
+          the gate runner's. The Claude Code entry is the two behaviour-explaining
+          names (which CLI and entrypoint) rather than `CLAUDE*`: the wildcard
+          recorded the account/org UUIDs and the messaging socket path -- operator
+          identity leaving the project without consent, and none of their names is
+          secret-named so none was masked (B6307b787dd). A variable whose name says it
+          holds a secret (KEY, TOKEN, SECRET, PASSWORD, ...) is recorded as set, never
+          with its value.
       bugs.repro_redact_extra = []   [default]
           More redaction regexes applied to a reproduction bundle, IN ADDITION to
           `[session] redact_patterns` and `redact_extra`.
@@ -4066,12 +4071,16 @@
       swarm.conformance_min_calls = 5   [default]
           Fewest tool calls a conformance run must see before accuracy is judged;
           fewer is `unavailable`, never passed.
-      swarm.conformance_idle_s = 5.0   [default]
+      swarm.conformance_idle_s = 120.0   [default]
           Seconds of silence after which a conformance run stops collecting a lane's
-          events.
-      swarm.conformance_lease_wait_s = 10.0   [default]
+          events. Long enough for a real lane's first stream line (kilo takes ~20s to
+          load its MCP server and plugins before the first event; a 5s idle ended
+          collection before any event: B72bcd17b4e).
+      swarm.conformance_lease_wait_s = 90.0   [default]
           Seconds a lane is given to stop after its lease is revoked in a conformance
-          run; a lane still working after that fails the lease level.
+          run; a lane still working after that fails the lease level. Long enough for
+          a real revocation to reach the lane (measured 8.5-14.1s: a 10s wait failed 3
+          of 5 runs, B72bcd17b4e).
       swarm.conformance_tools = ['brief', 'next', 'claim', 'heartbeat', 'show', 'help', 'identify', 'merge', 'complete', 'task', 'memory', 'gate', 'bug', 'session', 'rule', 'view']   [default]
           The lean-core ddflow tool names (the `ddflow_` and `mcp__ddflow__` prefixes
           are ignored) a lane's tool calls are judged against in a conformance run.

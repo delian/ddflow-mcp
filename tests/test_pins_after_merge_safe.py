@@ -223,3 +223,22 @@ def test_a_recipe_with_more_files_than_a_snapshot_holds_is_not_promised_back(tre
     recipe = _recipe("big", "raise SystemExit(1)")
     assert PN._snapshot(tree, recipe, most=10) is None
     assert PN._snapshot(tree, recipe, most=1000) is not None
+
+
+def test_ensure_driver_installs_the_post_merge_hook_that_re_records_pins(tree):
+    """B38ceb8819e: the merge driver was set up on every claim, but not the post-merge hook
+    that re-records the pins, so a merge that drifted a pin left main red for a manual
+    regeneration wave. ``ensure_driver`` (called by a claim) now also installs the hook."""
+    from ddflow.services.enforce import hooks_dir
+
+    (tree / ".ddflow").mkdir()
+    (tree / ".ddflow" / "pins.toml").write_text(
+        '[[pin]]\nname = "t"\nfiles = ["t.txt"]\n'
+        f'check = [{PY!r}, "-c", "raise SystemExit(1)"]\n'
+        f'regen = [{PY!r}, "-c", "pass"]\n'.replace("'", '"')
+    )
+    hook = hooks_dir(tree) / "post-merge"
+    assert not hook.exists()  # the premise: nothing installed it yet
+    assert PM.ensure_driver(tree, Config.load(tree))  # the claim-time enforcement
+    assert hook.exists()
+    assert "pins regenerate --after-merge" in hook.read_text("utf-8")

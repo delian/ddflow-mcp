@@ -1,0 +1,3 @@
+{"agent":"bg107","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e1f4551a00b1b6a444933d929","kind":"ddflow.seen","lamport":158412,"schema":1,"subject":"ddflow","ts":"2026-11-09T02:01:47.216686Z"}
+{"agent":"bg107","data":{"path":".ddflow/worktrees/fix-B652af8b678"},"id":"ef74914a98100db97bcf4271e","kind":"worktree.removed","lamport":158413,"schema":1,"subject":"fix-B652af8b678","ts":"2026-11-09T02:01:47.263172Z"}
+{"agent":"bg107","data":{"path":".ddflow/worktrees/fix-B6307b787dd"},"id":"ef7207b17803d0daa9c406812","kind":"worktree.removed","lamport":158414,"schema":1,"subject":"fix-B6307b787dd","ts":"2026-11-09T02:01:53.116025Z"}

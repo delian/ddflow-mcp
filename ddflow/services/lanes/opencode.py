@@ -83,7 +83,8 @@ STREAM_RULES = (
      "fields": {"session": "sessionID"}},
     {"when": {"path": "type", "equals": "tool_use"}, "emit": "tool",
      "fields": {"name": "part.tool", "action": "part.state.input.action",
-                "error": "part.state.error"}},
+                "error": "part.state.error", "output": "part.state.output",
+                "status": "part.state.status"}},
     {"when": {"path": "type", "equals": "error"}, "emit": "error",
      "fields": {"message": "error.data.message"}},
 )  # fmt: skip

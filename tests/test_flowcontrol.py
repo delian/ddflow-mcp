@@ -351,6 +351,18 @@ def test_at_the_ceiling_the_ceiling_is_named_not_a_growth_step():
     assert fold(series([GOOD] * 30), p).limited_by == "ceiling"
 
 
+def test_a_lowered_limit_below_the_ceiling_is_restoring_not_demand():
+    """B69323fd23e: load lowers the limit, then goes calm while the in-flight count stays
+    below the lowered limit. In-flight is how many are RUNNING, not how much is WAITING,
+    so the reason for the limit sitting below the ceiling is that it is restoring -- never
+    "demand"."""
+    samples = [Sample(i * STEP, dict(BAD)) for i in range(3)]  # decrease at t=120: 4 -> 3
+    samples += [Sample((3 + i) * STEP, dict(GOOD)) for i in range(3)]
+    d = fold_limit(samples, params(), [(0.0, 1)], samples[-1].at)
+    assert d.limit < params().start, d
+    assert d.limited_by == "restoring (1 in flight)", d
+
+
 def test_a_blind_sample_breaks_the_healthy_streak():
     run = [Sample(i * STEP, dict(GOOD)) for i in range(10)]  # 540 s healthy
     run.append(Sample(600.0, {}))
