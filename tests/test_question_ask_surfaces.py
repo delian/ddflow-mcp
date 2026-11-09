@@ -11,14 +11,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli  # noqa: E402
+from conftest import run_cli
 
 from ddflow.config import Config
 from ddflow.core.handlers.asks import asks_of
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-from ddflow.services.ask import engine as E
 from ddflow.services.approvals import harness as H
+from ddflow.services.ask import engine as E
 
 
 def _question(repo: Path, *, options: tuple[str, ...] = ()) -> str:
@@ -109,7 +109,7 @@ def test_a_free_text_question_answer_is_attested(repo, tmp_path):
                     "input": {"questions": [{"question": surfaced}]},
                 },
             ]
-        },  # fmt: skip
+        },
     }
     answered = {
         "type": "user",
@@ -155,7 +155,7 @@ def test_a_multiple_choice_question_answer_is_attested(repo, tmp_path):
                     "input": {"questions": [{"question": surfaced}]},
                 },
             ]
-        },  # fmt: skip
+        },
     }
     answered = {
         "type": "user",
