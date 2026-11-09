@@ -2323,7 +2323,8 @@ NAME is a `[template.<name>]` in `swarm.launch_templates_file`. Family and trust
 template and the model catalog, and nothing is defaulted: with no template, a template a person
 has not approved at its digest, no declared `trust`, or a family or model the catalog cannot
 vouch for, the answer is `unavailable` and offers nothing (a locally named model needs its row
-in `.ddflow/local/models.toml`). Exit 0 is an offer; exit 2 is
+in `.ddflow/local/models.toml`). A person approves a template at its current digest with
+`ddflow lanes approve NAME` (refused under an agent identity). Exit 0 is an offer; exit 2 is
 `unavailable`, `hold` (the parallel limit or paused admission) or `none` (nothing eligible, with
 the first `swarm.dispatch_why_items` refusals). It starts nothing: launching is a separate step.
 
