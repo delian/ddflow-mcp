@@ -146,4 +146,5 @@ def test_a_refused_lane_does_not_block_the_next_lane(monkeypatch):
     monkeypatch.setattr(LN, "launch", _fake_launch)
 
     note = P.launch_due(_ctx(True))
-    assert note == "launched lane 'b' on A-1" and launched[0].agent == "b"
+    assert note == "launched lane 'b' on A-1; also refused: sticky refusal"
+    assert launched[0].agent == "b"
