@@ -66,14 +66,15 @@ useDefault = true
 [[allowlists]]
   # A recorded-decision list in the event log lists several decision ids next to each
   # other; one id's own name embeds what a scanner reads as a credential keyword, and the
-  # generic-api-key rule then reads the next id as the secret. Scoped to ONE rule, ONLY the
-  # event logs, ONLY a whole-word / whole-number dash-separated slug: a value of the same
-  # shape outside the event logs still fires.
+  # generic-api-key rule then reads the next id as the secret. ddflow ids start with an
+  # uppercase prefix and their slug is whole lowercase words and plain numbers, so a
+  # lowercase-named key body (prod-9820...-style) of the same shape still fires. Scoped to
+  # ONE rule, ONLY the event logs.
   description = "plain ddflow slugs in the committed event logs are not generic api keys"
   targetRules = ["generic-api-key"]
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
-  regexes = ['''^[A-Za-z]+(?:-(?:[A-Za-z]+|[0-9]+))+[.,;:]?$''']
+  regexes = ['''^[A-Z](?:-[a-z]+)+(?:-[0-9]+)*[.,;:]?$''']
 
 [[allowlists]]
   # The committed docs quote git commit shas too (RESEARCH.md reproduces a `ddflow ci run`

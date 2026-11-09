@@ -90,6 +90,13 @@ def test_a_plain_dash_id_outside_the_event_logs_still_fires(tmp_path):
     assert _scan_committed(tmp_path, "not_events.txt", body) != 0
 
 
+def test_a_lowercase_named_key_in_the_event_logs_still_fires(tmp_path):
+    # The regex needs an UPPERCASE prefix (ddflow ids): a lowercase-named key body of the
+    # same dash shape inside the event logs is still a finding.
+    body = '{"api_key":"' + _LOOKALIKE + '"}\n'
+    assert _scan_committed(tmp_path, ".ddflow/events/x.jsonl", body) != 0
+
+
 _SHA = "0123456789abcdef" * 2 + "01234567"
 
 
