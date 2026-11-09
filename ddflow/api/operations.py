@@ -42,8 +42,8 @@ from ..services import testselect as TS
 from ..services import workers as WK
 from ..services.cadence import DueContext, due_all
 from ..services.gates import load_gates, parallel_test_advice
+from ..services.schedule import COUNT_PASSES, count_unit, done_counts
 from ..services.schedule import calendar as schedule_calendar
-from ..services.schedule import count_unit, done_counts
 from ._base import _load
 from .lifecycle.claim import _tree_of
 from .pin_files import pins_regenerate  # noqa: F401 -- `pins`' sibling: the MCP tool calls it here
@@ -101,6 +101,16 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         return O.failed("cadence", str(exc), due=[])
 
     if ran:
+        known = (
+            {name for name, _knob, _key in COUNT_PASSES} | set(calendar) | {"lessons_compression"}
+        )
+        if ran not in known:
+            return O.failed(
+                "cadence",
+                f"unknown cadence name {ran!r}: not a configured pass. Known: "
+                f"{', '.join(sorted(known))}",
+                due=[],
+            )
         if ran == "lessons_compression":
             live = [x for x in st.lessons.values() if x.live]
             result = json.dumps(
