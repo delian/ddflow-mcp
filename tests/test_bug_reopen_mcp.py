@@ -20,6 +20,12 @@ def _call(srv: Server, **arguments) -> dict:
     return srv.handle(msg)["result"]
 
 
+def _family_call(srv: Server, **arguments) -> dict:
+    msg = {"jsonrpc": "2.0", "id": 1, "method": "tools/call"}
+    msg["params"] = {"name": "ddflow_bug", "arguments": arguments}
+    return srv.handle(msg)["result"]
+
+
 def _bug(repo: Path, bid: str) -> dict:
     _rc, out, _err = run_cli(repo, "--json", "show", bid)
     return json.loads(out)
@@ -68,6 +74,23 @@ def test_a_bug_closed_as_fixed_is_reopened_too(repo):
     assert r["_meta"]["exit"] == 0, r
     body = json.loads(r["content"][0]["text"])
     assert body["was"] == "fixed" and "next" in body and "fix_task" in body
+    assert _bug(repo, bid)["state"] == "open"
+
+
+def test_reopen_is_an_action_of_the_bug_family(repo):
+    # B470534f9fd: `ddflow_bug` (the family tool of the default `lean` profile) had no
+    # `reopen` action, so an MCP-only agent could not reopen a bug closed by mistake.
+    run_cli(repo, "init")
+    _rc, out, _err = run_cli(
+        repo, "--json", "bug", "found", "--summary", "it breaks", "--severity", "low", "--new"
+    )
+    bid = json.loads(out)["id"]
+    srv = Server(repo)
+    closed = _family_call(srv, action="invalid", id=bid, reason="thought it was noise")
+    assert not closed.get("isError"), closed
+    reopened = _family_call(srv, action="reopen", id=bid, reason="it was real after all")
+    assert not reopened.get("isError"), reopened
+    assert reopened["_meta"]["exit"] == 0, reopened
     assert _bug(repo, bid)["state"] == "open"
 
 

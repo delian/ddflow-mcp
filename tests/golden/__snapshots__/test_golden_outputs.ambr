@@ -1416,6 +1416,13 @@
           mean a security issue, default ["security", "secbug"]). Unknown keys in an
           [export.<doc>] table are skipped with a warning (and ignored in this map
           form), so a newer release's keys do not stop an older checkout.
+      fasttrack.tiny_cold_max_source_lines = 10   [default]
+          Most source lines (insertions plus deletions, tests/docs/generated pins and
+          README not counted) a completed change may have and still be called tiny-
+          cold. `ddflow metrics tiny` buckets an item by the changed lines its gate
+          evidence recorded; the file-count limits a tiny-cold change also bounds are
+          declared by FT-guard, whose numstat probe the metrics view reports as not-
+          measured until it is wired.
       flow.model = 'trunk'   [default]
           'trunk' (default): every task branches from and lands on one base branch —
           today's behaviour. 'gitflow': tasks branch from `develop_branch` as feature/

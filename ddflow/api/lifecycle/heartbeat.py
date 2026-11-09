@@ -12,6 +12,7 @@ from ...core import outcome as O
 from ...core.model import fold
 from ...services import eventcommit as EC
 from ...services import healthwatch as HW
+from ...services import identity as ID
 from ...services import inbox as IB
 from ...services import leasebreak as LB
 from ...services import leases as L
@@ -274,14 +275,29 @@ def release(
     force: bool = False,
     reason: str = "",
 ) -> O.Outcome:
-    """Give up a lease. Another CLONE's live lease is not released without ``force`` and a
-    ``reason``, recorded on the release (B90b43dd2d8)."""
+    """Give up a lease. Another CLONE's live lease (B90b43dd2d8) is not released without
+    ``force`` and a ``reason``, recorded on the release; an AGENT releasing a same-clone
+    PEER agent's live lease needs the same (B59a07c283d), the operator releasing a crashed
+    agent's lease stays unchanged."""
     log, cfg, _st = _load(repo, agent)
     refusal, forced = L.foreign_guard(
         log, cfg, item, force=force, reason=reason, what="releasing it"
     )
     if refusal:
         return O.refused("lease.released", refusal, id=item, released=False, woke=[])
+    if ID.is_agent(agent):
+        peer_refusal, peer_forced = L.peer_guard(
+            log,
+            cfg,
+            item,
+            force=force,
+            reason=reason,
+            what="releasing it",
+            caller=log.agent_id,
+        )
+        if peer_refusal:
+            return O.refused("lease.released", peer_refusal, id=item, released=False, woke=[])
+        forced = forced or peer_forced
     note = "; ".join(filter(None, [forced, note]))
     # Read BEFORE letting go: a waiter wakes on the release and unregisters, and one
     # quick enough to do that before a read after it would never be reported.

@@ -298,10 +298,13 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
         return 0
     have = {f.get("digest"): n for n, f in enumerate(kept, 1)}
     carried = _carry_delta_verdicts(log, it, gate, kept, mine, say)
+    new: set[str] = set()
     for f in mine:
         if f.get("digest") not in have:
             kept.append(f)
             have[f.get("digest")] = len(kept)
+            if f.get("digest"):
+                new.add(f.get("digest"))
         else:  # the earlier copy stays, numbered in the earlier cut (`merge_rerun`)
             ev["delta_reraised"] = [*ev.get("delta_reraised", []), f.get("digest")]
     gone = carry(ev, prior)
@@ -315,19 +318,34 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> i
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
     verdicts = it.triage.get(gate, {})
-    return _untriaged(kept, gone, carried, verdicts)
+    return _untriaged(kept, gone, carried, verdicts, new=new)
 
 
-def _untriaged(kept: list[dict], gone, carried: dict, verdicts: dict) -> int:
+def _untriaged(
+    kept: list[dict],
+    gone,
+    carried: dict,
+    verdicts: dict,
+    *,
+    new: set[str] | frozenset[str] = frozenset(),
+) -> int:
     """Findings of the merged record still without a settled verdict. A carried digest's
     triage is a fresh `review.triaged` `_carry_delta_verdicts` appends, not one the folded
-    ``verdicts`` held, so it is excluded per finding and never over-subtracted."""
+    ``verdicts`` held, so it is excluded per finding and never over-subtracted.
+
+    ``new`` is this delta's OWN fresh digests (not byte-identical re-raises): those do not
+    hold the pass. Their blocking weight was already judged by `_gate_outcome` -- a
+    below-floor new finding it passed is recorded but not blocking (bug
+    B-review-delta-rounds-do-not-converge), and one at or above the floor already recorded
+    the round failed -- so `_hold` counts only EARLIER findings the delta could not see.
+    """
     carried_set = set(carried)
     return sum(
         1
         for f in kept
         if f.get("digest") not in gone
         and f.get("digest") not in carried_set
+        and f.get("digest") not in new
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
 

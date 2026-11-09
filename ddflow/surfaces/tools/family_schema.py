@@ -151,7 +151,7 @@ def missing_required(routed: Routed) -> list[str]:
 
 def _description(family: Family) -> str:
     acts = ", ".join(
-        f"{a}({','.join(r)})" if (r := _requires(t)) else a for a, t in family.members.items()
+        f"{a}({','.join(r)})" if (r := _requires(t)) else a for a, t in family.actions().items()
     )
     noun = family.name.removeprefix("ddflow_")
     return f"{_BLURB[noun]}. Set `action`; required arguments in brackets: {acts}."
@@ -176,7 +176,7 @@ def family_entry(name: str) -> dict[str, Any]:
             schema["properties"][n]["type"] = sorted(types)
     schema["properties"][ACTION] = {
         "type": "string",
-        "enum": list(family.members),
+        "enum": list(family.actions()),
         "description": "What to do; see the tool description for each action's arguments.",
     }
     if name in TOOLS:
@@ -199,7 +199,7 @@ def member_of(name: str, args: Any) -> str:
     action = args.get(ACTION) if isinstance(args, dict) else None
     if family is None or family.single or not isinstance(action, str):
         return name
-    return family.members.get(action, name)
+    return family.actions().get(action, name)
 
 
 def route(name: str, args: dict[str, Any]) -> Routed | str | None:
@@ -217,17 +217,19 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     action = args.get(ACTION)
     if ACTION not in args and name in TOOLS:
         return None
-    acts = ", ".join(family.members)
+    acts = ", ".join(family.actions())
     if action in (None, ""):
         return f"{name}: missing required argument: action. Actions: {acts}"
     if not isinstance(action, str):
         return f"{name}: action must be one of: {acts}"
-    tool = family.members.get(action)
+    tool = family.actions().get(action)
     if tool is None:
         return f"{name}: unknown action {action!r}. Actions: {acts}"
     rest = {k: v for k, v in args.items() if k != ACTION}
     if OP in rest and ACTION in TOOLS[tool]["properties"]:
         rest[ACTION] = rest.pop(OP)
+    if (pinned := family.pinned.get(action)) is not None:
+        rest[pinned[1]] = True
     routed = Routed(tool, rest, f"{name} action={action}")
     return _problem(routed, family) or routed
 
