@@ -34,7 +34,20 @@ class FakeFsio(Fsio):
         return contextlib.nullcontext()
 
     def scratch_dir(self) -> Any:
-        return tempfile.TemporaryDirectory()
+        return _ScratchDir()
+
+
+class _ScratchDir:
+    """A `scratch_dir` that yields a `Path` (not `TemporaryDirectory`'s str) and removes it on exit."""
+
+    def __init__(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+
+    def __enter__(self) -> Path:
+        return Path(self._dir.name)
+
+    def __exit__(self, *exc: object) -> None:
+        self._dir.cleanup()
 
     def temp_text(self, text: str, suffix: str = "") -> Iterator[Path]:
         return _TempText(text, suffix)

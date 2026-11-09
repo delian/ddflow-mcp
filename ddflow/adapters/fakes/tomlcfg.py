@@ -31,4 +31,4 @@ class FakeToml(Toml):
 
     def move_keys(self, *args: Any, **kwargs: Any) -> Any:
         self.calls.append(("move_keys", args))
-        return {}
+        return dict(self.overlay)
