@@ -33,6 +33,10 @@ COMMANDS: tuple[Command, ...] = (
     Command(
         path=("suggest",),
         tool="ddflow_suggest",
+        tier="standard",
+        help_group="Doing the work",
+        family="ddflow_lease",
+        action="suggest",
         summary="send a bounded change to the lease holder of an item, as a suggestion",
         description=(
             "Suggest a change to the agent that holds the item's lease: cut your patch onto their "
