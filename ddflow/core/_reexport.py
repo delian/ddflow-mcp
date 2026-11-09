@@ -48,14 +48,17 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
         mod = cache.get(sub)
         if mod is None:
             fullname = f"{package}.{sub}"
-            # A halted import leaves ``sys.modules[fullname] = None``, and
-            # ``importlib.import_module`` then re-raises ``ModuleNotFoundError`` on every
-            # later access instead of re-importing -- so a transient halt makes a lazy name
-            # permanently broken (B7e585f9e5d: ``ddflow.services.ci.main`` crashed
-            # ``check_after_merge``). Drop the sentinel (or nothing) so the retry re-imports.
-            if sys.modules.get(fullname) is None:
-                sys.modules.pop(fullname, None)
-            mod = importlib.import_module(fullname)
+            # importlib marks an import that halted mid-flight with ``sys.modules[fullname]
+            # = None`` and then refuses to re-import it for the process's lifetime, so a
+            # transient halt makes a lazy name permanently broken (B7e585f9e5d:
+            # ``ddflow.services.ci.main`` crashed ``check_after_merge``). Drop that sentinel
+            # and retry once; a submodule that genuinely does not exist re-raises on the retry.
+            try:
+                mod = importlib.import_module(fullname)
+            except ModuleNotFoundError:
+                if sys.modules.get(fullname) is None:
+                    sys.modules.pop(fullname, None)
+                mod = importlib.import_module(fullname)
             cache[sub] = mod
         return getattr(mod, name)
 
