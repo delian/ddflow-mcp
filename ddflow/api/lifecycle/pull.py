@@ -222,8 +222,10 @@ def launch_due(ctx: TickCtx) -> str | None:
     Reads the pull answer for each approved template lane that holds no item, and starts the
     first one the same `launch` a test calls directly -- so every guard (template approval,
     caps, budget, hook consent, hook level) is the one guard, and a refusal starts nothing.
-    At most one lane starts per pass; the next pass starts the next. Returns a one-line note
-    or ``None`` when nothing is due."""
+    At most one lane starts per pass; the next pass starts the next. A lane that is refused
+    (or whose worktree cannot be made) never blocks the lane after it: the loop moves on, so
+    a sticky refusal on one template cannot stall every other. Returns a one-line note or
+    ``None`` when nothing started or is due."""
     repo = Path(ctx.repo)
     log, cfg, st = _load(repo)
     if not cfg.swarm.launch_enabled:
@@ -243,6 +245,7 @@ def launch_due(ctx: TickCtx) -> str | None:
     slots = _slots(c, parallel.reason, ids)
     world, items = _world_and_items(repo, log.read_all(), cfg, st, ids, now)
     cat = modelreg.load(local_dir=Path(repo) / LOCAL)
+    first_refusal = ""
     for name in sorted(templates):
         if any(lz.holder == name for lz in live.values()):
             continue  # that lane is already working an item
@@ -251,10 +254,11 @@ def launch_due(ctx: TickCtx) -> str | None:
             continue  # unavailable: family/trust/model unvouched; nothing is defaulted
         a = D.pull_for(name, src, items, world, w, slots, bounds)
         if a.status != D.OFFER:
-            continue
+            continue  # a lane not offered or held now must not stop the one that is
         worktree = _lane_worktree(repo, name)
         if worktree is None:
-            return f"lane {name!r}: could not create its worktree"
+            first_refusal = first_refusal or f"lane {name!r}: could not create its worktree"
+            continue
         req = LN.Request(
             template=src.template,
             item=a.item,
@@ -271,5 +275,5 @@ def launch_due(ctx: TickCtx) -> str | None:
         r = LN.launch(req)
         if isinstance(r, LN.Launched):
             return f"launched lane {name!r} on {a.item}"
-        return r.reasons[0] if r.reasons else f"lane {name!r} was refused"
-    return None
+        first_refusal = first_refusal or (r.reasons[0] if r.reasons else f"lane {name!r} was refused")
+    return first_refusal or None

@@ -98,3 +98,52 @@ def test_launch_due_starts_the_first_idle_approved_lane(monkeypatch):
     note = P.launch_due(_ctx(True))
     assert launched and note == "launched lane 'dy' on A-1"
     assert launched[0].item == "A-1" and launched[0].agent == "dy"
+
+
+def test_a_refused_lane_does_not_block_the_next_lane(monkeypatch):
+    import ddflow.api.lifecycle.pull as P
+    from ddflow.services.lanes import launch as LN
+
+    cfg = Config()
+    cfg.swarm.launch_enabled = True
+
+    class _Log:
+        agent_id = ""
+
+        def read_all(self):
+            return []
+
+    class _State:
+        def active_leases(self, *_a, **_k):
+            return {}
+
+    class _Reason:
+        reason = ""
+
+    t = LN.T.Template(name="dy", harness="kilo", route="r", family="deepseek", budget_usd=1.0)
+    launched = []
+
+    def _fake_launch(req):
+        if req.agent == "a":
+            return LN.Refused(("sticky refusal",))
+        launched.append(req)
+        return LN.Launched(t, object(), object(), object(), "ok")
+
+    monkeypatch.setattr(P, "_load", lambda repo, agent="": (_Log(), cfg, _State()))
+    monkeypatch.setattr(P, "plan_for", lambda *a, **k: object())
+    monkeypatch.setattr(P.FL, "limit_for", lambda *a, **k: _Reason())
+    monkeypatch.setattr(P, "caps", lambda *a, **k: object())
+    monkeypatch.setattr(P, "_candidates", lambda *a, **k: ["A-1"])
+    monkeypatch.setattr(P, "_slots", lambda *a, **k: P.D.Slots(0, 1))
+    monkeypatch.setattr(P, "_world_and_items", lambda *a, **k: (object(), []))
+    monkeypatch.setattr(P.modelreg, "load", lambda **k: None)
+    monkeypatch.setattr(P.T, "load", lambda path: ({"a": t, "b": t}, []))
+    monkeypatch.setattr(P, "_lane_worktree", lambda repo, name: repo / name)
+    monkeypatch.setattr(P, "_lane_home", lambda repo, name: repo / "home")
+    monkeypatch.setattr(P, "_source", lambda *a, **k: type("Src", (), {"template": t})())
+    monkeypatch.setattr(P.D, "gaps", lambda src: ())
+    monkeypatch.setattr(P.D, "pull_for", lambda name, *a, **k: P.D.Answer("offer", name, "A-1"))
+    monkeypatch.setattr(LN, "launch", _fake_launch)
+
+    note = P.launch_due(_ctx(True))
+    assert note == "launched lane 'b' on A-1" and launched[0].agent == "b"
