@@ -77,3 +77,34 @@ def test_a_partial_record_without_approval_still_succeeds(repo):
         "ran only some tests",
     )
     assert code == OK, err
+
+
+def test_a_skip_over_a_failed_gate_keeps_the_real_refusal_not_the_ignored_one(repo):
+    _init(repo)
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "unit_tests",
+        "--outcome",
+        "failed",
+        "--reason",
+        "tests fail",
+    )
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "unit_tests",
+        "--outcome",
+        "skipped",
+        "--reason",
+        "not now",
+        "--approval",
+        "request",
+    )
+    assert code == REFUSED, (code, out, err)
+    # The skip still needs the operator: it must not be rewritten as "no approval needed".
+    assert "approval was ignored" not in out + err, (out, err)

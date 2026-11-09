@@ -578,10 +578,17 @@ def _covered_by_ci(log, cfg, repo, it, gate, cwd, scope, gates, forced) -> O.Out
 def _ignored_approval_refusal(
     approval: str, approval_stamp: dict, gate: str, item: str, outcome: str, refused
 ):
-    """The `gate.record` refusal when `--approval` was passed for a record that needs no
-    override, else ``refused`` (bug Be2de070703): a passed `--approval` an agent may record
-    directly was dropped silently -- no Q id, no note -- so refuse it and name the real
-    route. Broken out of ``record`` so its loop count stays under the complexity ratchet."""
+    """What `record` refuses when `--approval` turns out not to be spent, else ``refused``.
+
+    `--approval` (an id, or 'request') was dropped silently when nothing needed it (bug
+    Be2de070703): for a non-skip outcome an agent may record directly, a passed
+    `--approval` has nothing to approve, so refuse it and name the real route. The real
+    refusal `_agent_skip_refusal` already returned is kept first: a skip over a failed
+    review still needs the operator, so a passed-but-unspent `--approval` on THAT call is
+    not "no approval needed" and the real refusal must not be clobbered. Broken out of
+    ``record`` so its loop count stays under the complexity ratchet."""
+    if refused is not None:
+        return refused
     if approval and not approval_stamp:
         return O.refused(
             "gate.record",
@@ -593,7 +600,7 @@ def _ignored_approval_refusal(
             gate=gate,
             outcome=outcome,
         )
-    return refused
+    return None
 
 
 def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyword-only
