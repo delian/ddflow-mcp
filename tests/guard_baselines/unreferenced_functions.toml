@@ -12,9 +12,6 @@ baseline = 0
 # `option_string`, which vulture reports at cli.py and is the protocol's signature,
 # not dead code.)
 [kept]
-# The ConfigStore port's default adapter factory (ADP-config-store); its first caller is
-# the surface that migrates off `ddflow.config.Config` / `services.configwrite` to the port.
-"ddflow/adapters/config_store.py:default_store" = "ADP-config-store"
 # The production wiring of the ExternalTool port (ADP-tools): `ddflow.services.toolrun`; SEC-scanners
 # is its first caller.
 "ddflow/services/toolrun.py:external_tool" = "SEC-scanners"
