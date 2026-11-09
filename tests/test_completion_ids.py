@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT))
 from ddflow import completion_fast as CF  # noqa: E402
 from ddflow.services import completion_ids as CI  # noqa: E402
 
+from _wait import scaled  # noqa: E402
+
 
 def _index(d: Path, name="index.db-aaaaaaaa", mtime=None) -> Path:
     (d / ".ddflow").mkdir(parents=True, exist_ok=True)
@@ -109,7 +111,7 @@ def test_locked_database_gives_nothing_fast(tmp_path, monkeypatch):
     t = time.monotonic()
     assert CI.complete_ids("", index=str(p)) == []
     # a 200 ms wait (the old, ignored-knob behaviour) would fail this; a 10 ms one does not
-    assert time.monotonic() - t < 0.1
+    assert time.monotonic() - t < scaled(0.1)
     con.execute("rollback")
     con.close()
 
@@ -204,7 +206,7 @@ def test_lookup_latency_budget(tmp_path):
         "sys.stdout = sys.__stdout__; print(len(buf.getvalue().split()), time.perf_counter() - t)"
     )
     n, took = _imports(code, tmp_path).split()
-    assert n == "2" and float(took) < 0.1
+    assert n == "2" and float(took) < scaled(0.1)
 
 
 def test_bad_arguments_print_nothing(tmp_path, monkeypatch):
@@ -243,7 +245,7 @@ def test_in_process_lookup_meets_the_100ms_budget(tmp_path):
         t = time.perf_counter()
         assert CI.complete_ids("COMP", index=p) == ["COMP-a", "COMP-b"]
         best = min(best, time.perf_counter() - t)
-    assert best < 0.1
+    assert best < scaled(0.1)
 
 
 def test_directory_named_like_an_index_is_not_chosen(tmp_path):
