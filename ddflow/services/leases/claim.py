@@ -135,6 +135,17 @@ def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
     )
 
 
+def _take_over(item_id: str, agent: str) -> str:
+    """The take-over route this caller is owed: an agent files ``--approval request`` (its
+    ``--force`` is dropped, so naming ``--force`` sends it to a flag that cannot work); a
+    person passes ``--force`` (Bbb8c158254)."""
+    return (
+        f"`ddflow claim {item_id} --approval request`"
+        if _ID.agent_marker(agent)
+        else f"`ddflow claim {item_id} --force`"
+    )
+
+
 def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller's offer
     log: EventLog,
     cfg: Config,
@@ -199,11 +210,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             # An agent's `--force` is dropped at the API layer (its route is
             # `--approval request`), so the take-over route named here is the one that
             # applies to WHO is asking, never `--force` to an agent (Bbb8c158254).
-            take_over = (
-                f"`ddflow claim {item_id} --approval request`"
-                if _ID.agent_marker(agent)
-                else f"`ddflow claim {item_id} --force`"
-            )
+            take_over = _take_over(item_id, agent)
             left = existing.remaining_s(now)
             raise LeaseError(
                 f"{item_id} is held by {existing.holder} for another {left:.0f}s"
