@@ -261,7 +261,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False, by_tag: str = "")
                 "verb": r["verb"],
                 "agent": r["requested_by"],
                 "digest": r["digest"],
-                "answer": f"ddflow approvals approve {r['id']}",
+                "answer": V.answer_form(r),
             }
             for r in approvals
         ]

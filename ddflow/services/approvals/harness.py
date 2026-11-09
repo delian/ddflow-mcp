@@ -148,6 +148,15 @@ def _outcome(answer: str, ask_id: str) -> str | None:
     return E.DENIED if answer == no else None
 
 
+def _surfaced_question(row: dict[str, Any]) -> str:
+    """The exact question text the payload puts in the tool input. An approval's stored text
+    already carries its id; a question's does not, so it is embedded here -- the transcript
+    scanners filter on the ask id, and a question whose surface omits it is never found."""
+    if row["type"] == E.QUESTION:
+        return f"{row['text']} [{row['id']}]"
+    return row["text"]
+
+
 def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
     """The AskUserQuestion input the agent must send, unaltered. An approval offers
     approve/deny (a generic request also the standing-window choice); a question offers its
@@ -155,7 +164,7 @@ def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
     its text (no `options` key: the person types the answer)."""
     if row["type"] == E.QUESTION:
         q: dict[str, Any] = {
-            "question": row["text"],
+            "question": _surfaced_question(row),
             "header": "Question",
             "multiSelect": False,
         }
@@ -405,11 +414,12 @@ def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     sit before one read before it)."""
     since = clock.epoch(row["requested_at"], default=0.0)
     hits: list[Attested] = []
+    surfaced = _surfaced_question(row)
     for path in _files(cfg, since):
-        hits += scan(path, row["text"], row["id"])
+        hits += scan(path, surfaced, row["id"])
         hits += scan_typed(path, row, cfg.approvals.min_digest_chars)
     for db in _kilo_dbs(cfg):
-        hits += scan_kilo(db, row["text"], row["id"], since)
+        hits += scan_kilo(db, surfaced, row["id"], since)
     hits.sort(key=lambda h: clock.epoch(h.at, default=0.0))
     return hits
 

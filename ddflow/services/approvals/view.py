@@ -37,16 +37,21 @@ def waiting_for_a_person(state, now: float | None = None) -> list[dict[str, Any]
     return sorted(rows, key=lambda r: r["requested_at"])
 
 
+def answer_form(r: dict[str, Any]) -> str:
+    """The command a person channel answers ``r`` with: by id for an approval, in chat for a
+    question (`ask` surfaces it, `attest` records the free text)."""
+    if r["type"] == E.QUESTION:
+        return f"ddflow approvals ask {r['id']} (then `ddflow approvals attest {r['id']}`)"
+    return f"ddflow approvals approve {r['id']}"
+
+
 def _answer_form(r: dict[str, Any]) -> str:
     """The form a person answers ``r`` with: by id for an approval, in chat for a question."""
     if r["type"] == E.QUESTION:
-        return (
-            f"{r['id']} (question from {r['requested_by']}: answer it in chat via "
-            f"`ddflow approvals ask {r['id']}`, then `ddflow approvals attest {r['id']}`)"
-        )
+        return f"{r['id']} (question from {r['requested_by']}, {answer_form(r)})"
     return (
         f"{r['id']} ({r['verb']} for {r['requested_by']}, digest {r['digest'][:12]}, "
-        f"answer `ddflow approvals approve {r['id']}`)"
+        f"{answer_form(r)})"
     )
 
 

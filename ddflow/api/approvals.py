@@ -67,28 +67,31 @@ def _pending_status(row: dict[str, Any], now: float) -> str:
     return f"{_status(row, now)} (expires {row['expires_at']})"
 
 
+def _answer_form(r: dict[str, Any]) -> str:
+    return V.answer_form(r)
+
+
 def approvals_pending(repo: Path, *, agent: str = "") -> O.Outcome:
     """The requests still waiting for a person, each with its digest and its answer form.
 
     This is the surface a remote operator reads before answering (also rendered in the brief
     and the status an MCP/chat surface carries): the digest here is what, together with the
-    answer form `ddflow approvals approve <id>`, any person channel can answer against."""
+    answer form, any person channel can answer against."""
     _log, _cfg, st = _load(repo, agent)
     now = time.time()
     rows = V.waiting_for_a_person(st, now)
-    out_rows = [{**r, "answer": f"ddflow approvals approve {r['id']}"} for r in rows]
+    out_rows = [{**r, "answer": _answer_form(r)} for r in rows]
     text = "\n".join(_pending_line(r, now) for r in rows) or "no approval requests pending"
     return O.ok("approvals.pending", approvals_pending=out_rows, text=text)
 
 
 def _pending_line(r: dict[str, Any], now: float) -> str:
-    if r["type"] == "question":
-        # A question is answered in chat: `ask` surfaces it, `attest` records the free text.
-        form = f"ddflow approvals ask {r['id']} (then `ddflow approvals attest {r['id']}`)"
-        first = f"{r['id']}  question  for {r['requested_by']}  ({_pending_status(r, now)})"
-    else:
-        form = f"ddflow approvals approve {r['id']}"
-        first = f"{r['id']}  {r['verb']}  for {r['requested_by']}  ({_pending_status(r, now)})"
+    form = _answer_form(r)
+    first = (
+        f"{r['id']}  question  for {r['requested_by']}  ({_pending_status(r, now)})"
+        if r["type"] == "question"
+        else f"{r['id']}  {r['verb']}  for {r['requested_by']}  ({_pending_status(r, now)})"
+    )
     return f"{first}\n  digest : {r['digest']}\n  answer : {form}"
 
 
