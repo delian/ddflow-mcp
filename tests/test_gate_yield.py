@@ -138,8 +138,8 @@ def test_cost_per_confirmed_finding_uses_only_confirmed():
 
 def test_co_failure_phi_builds_the_two_by_two():
     cf = GY.co_failure(facts_of(seeded()), "rubber_duck", "critic", minimum=1)
-    assert cf["both_failed"] == 1 and cf["a_only"] == 0 and cf["b_only"] == 1 and cf["neither"] == 1
-    assert cf["phi"] == pytest.approx(0.5)  # (1*1-0*1)/sqrt(1*2*2*1)
+    assert cf["both_failed"] == 1 and cf["a_only"] == 1 and cf["b_only"] == 1 and cf["neither"] == 0
+    assert cf["phi"] == pytest.approx(-0.5)  # (1*0-1*1)/sqrt(2*1*2*1)
 
 
 def test_same_tree_groups_name_gates_on_one_tree():

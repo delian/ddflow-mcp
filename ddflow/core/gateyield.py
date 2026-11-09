@@ -41,11 +41,13 @@ def gate_rows(facts: Facts, minimum: int = 3) -> list[dict]:
     first = _first_verdicts(facts)
     ever_failed: dict[str, set[str]] = defaultdict(set)
     elapsed: dict[str, float] = defaultdict(float)
+    recorded: dict[str, int] = defaultdict(int)  # verdicts that DID record a duration
     for o in facts.outcomes:
         if o.kind == "failed":
             ever_failed[o.gate].add(o.item)
-        if o.elapsed_s:
+        if o.elapsed_s is not None:
             elapsed[o.gate] += o.elapsed_s
+            recorded[o.gate] += 1
     confirmed: dict[str, int] = defaultdict(int)
     for f in facts.findings:
         if f.verdict == "confirmed":
@@ -63,7 +65,9 @@ def gate_rows(facts: Facts, minimum: int = 3) -> list[dict]:
                 "first_run_pass_rate": _pct(passed, len(firsts), minimum),
                 "ever_failed_share": _pct(len(gone), len(firsts), minimum),
                 "cost_per_confirmed_finding_s": (
-                    elapsed[gate] / confirmed[gate] if confirmed[gate] >= max(minimum, 1) else None
+                    elapsed[gate] / confirmed[gate]
+                    if confirmed[gate] >= max(minimum, 1) and recorded[gate] > 0
+                    else None
                 ),
             }
         )
@@ -77,10 +81,12 @@ def _phi(n11: int, n10: int, n01: int, n00: int) -> float | None:
 
 
 def co_failure(facts: Facts, a: str, b: str, minimum: int = 3) -> dict[str, int | float | None]:
-    """The pass/fail contingency and phi of two gates over the items that ran BOTH."""
+    """The pass/fail contingency and phi of two gates over the items that ran BOTH, judged
+    on the FIRST verdict of each (the same basis ``gate_rows`` uses)."""
+    first = _first_verdicts(facts)
     by_item: dict[str, dict[str, str]] = defaultdict(dict)
-    for o in facts.outcomes:
-        by_item[o.item][o.gate] = o.kind
+    for (item, gate), kind in first.items():
+        by_item[item][gate] = kind
     n11 = n10 = n01 = n00 = 0
     for verdicts in by_item.values():
         if a not in verdicts or b not in verdicts:
