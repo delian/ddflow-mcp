@@ -56,6 +56,14 @@ def test_next_cuts_the_blocked_list_and_counts_it_exactly(repo):
     assert "--json next" in cut["all"]
 
 
+def test_next_blocked_hint_says_the_reason_is_in_next_not_show(repo):
+    """Bc4fef29fa0: the hint once said ddflow_show <id> explains why an item is blocked,
+    but show of a cap-held item gives no reason. The reason is in next's blocked list."""
+    _blocked_queue(repo)
+    cut = _body(_call(repo, "ddflow_next"))["truncated"]
+    assert "not in ddflow_show <id>" in cut["all"]
+
+
 def test_next_clips_long_ready_bodies_and_says_so(repo):
     run_cli(repo, "init")
     log = EventLog(repo, "agent-test")
