@@ -246,8 +246,10 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
             # timeout must ADD that wait to the budget it enforces: a run that queued near
             # the gate's own limit was killed at 3600s before it started, and
             # `[ci].suite_wait_s`/`DDFLOW_CI_SUITE_WAIT_S` was unreachable past that
-            # (B83c7a5eb50). A `0`/negative budget stays unlimited.
-            timeout_s += int(cfg.ci.suite_wait_s)
+            # (B83c7a5eb50). A `0`/negative budget stays unlimited; the wait is clamped to
+            # 0 like the `SL.hold` consumer that applies it does, so a negative
+            # [ci].suite_wait_s cannot SHRINK the run budget it is meant to extend.
+            timeout_s += max(0, int(cfg.ci.suite_wait_s))
         ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),

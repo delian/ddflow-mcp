@@ -48,6 +48,13 @@ def test_an_unlimited_ci_gate_timeout_stays_unlimited(tmp_path, monkeypatch):
     assert _captured_timeout(tmp_path, monkeypatch, gate=gate, suite_wait_s=900) == 0
 
 
+def test_a_negative_queue_wait_does_not_shrink_the_run_budget(tmp_path, monkeypatch):
+    """`SL.hold` clamps [ci].suite_wait_s to 0 in the child; the wrap must match, not let a
+    negative wait subtract from the run budget it is meant to extend."""
+    gate = GateDef(id="ci", title="ci", command="ddflow ci run", timeout_s=3600)
+    assert _captured_timeout(tmp_path, monkeypatch, gate=gate, suite_wait_s=-10) == 3600
+
+
 def test_a_ci_command_that_does_not_queue_internally_is_not_extended(tmp_path, monkeypatch):
     """Only a `ddflow ci run` command queues for the suite lock inside itself; a custom ci
     command runs straight through, so its budget is untouched."""
