@@ -11,6 +11,7 @@ from ...adapters.registry import Registry
 from ...config import Config
 from ...core import clock
 from ...core.events import Event
+from ...core.metrics import VIEWS
 from ...core.model import State
 from .facts import collect
 from .forecast import forecast as forecast_view
@@ -38,20 +39,6 @@ from .summary import build, has_figures
 from .tiny import build as tiny_build
 from .tiny import has_figures as tiny_ok
 from .tiny import text as tiny_text
-
-VIEWS = (
-    "summary",
-    "forecast",
-    "retro",
-    "skips",
-    "lanes",
-    "stages",
-    "locks",
-    "tiny",
-    "paths",
-    "swarm",
-)
-
 
 #: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
 SWARM: Registry[Callable[..., Any]] = Registry("swarm metrics")
@@ -94,9 +81,7 @@ def parse_since(text: str, now: float) -> float | None:
 
 
 def _stages(ctx: Context, group_by: str) -> Answer:
-    return _figure(
-        ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage"
-    )
+    return _figure(ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage")
 
 
 def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
