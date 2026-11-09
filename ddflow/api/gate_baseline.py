@@ -225,18 +225,17 @@ def _probe_and_ids(
 
 
 def _ci_ids(repo, cfg, ev: dict[str, Any], capped: list[str]) -> list[str]:
-    """Every failing id of the ci run: the whole list `ci run` kept aside for this commit, else
-    the evidence's own when it was not cut ([] when the list is cut and no file holds it)."""
-    sha = str((ev.get("ci_scope") or {}).get("sha") or "")
-    return BL.read_full(repo, sha) or (capped if not ev.get("failed_tests_more") else [])
+    """Every failing id of the ci run: the whole list the run kept aside as a committed blob
+    (linked from ``failing_ids``), else the evidence's own when it was not cut ([] when the
+    list is cut and no blob holds it)."""
+    return BL.read_full(repo, ev.get("failing_ids")) or (capped if not ev.get("failed_tests_more") else [])
 
 
 def _unit_ids(repo, ev: dict[str, Any], capped: list[str]) -> list[str]:
     """Every failing id of a unit_tests run whose list was cut: the whole list the run kept
-    aside for its own tree (``runner.run_command_gate``), else the evidence's own when it was
-    not cut ([] when the list is cut and no file holds it)."""
-    sha = str(ev.get("tree_sha") or "")
-    return BL.read_full(repo, sha) or (capped if not ev.get("failed_tests_more") else [])
+    aside for its own tree (linked from ``failing_ids``), else the evidence's own when it was
+    not cut ([] when the list is cut and no blob holds it)."""
+    return BL.read_full(repo, ev.get("failing_ids")) or (capped if not ev.get("failed_tests_more") else [])
 
 
 def _unit_tests_def(repo, cfg):
