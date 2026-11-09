@@ -72,15 +72,16 @@ def rollup(repo) -> list[dict]:
     from ddflow.services.perf import store
 
     by: dict[tuple[str, str, str, str], dict] = defaultdict(
-        lambda: {"count": 0, "ok": 0, "total_s": 0.0}
+        lambda: {"count": 0, "ok": 0, "timed": 0, "total_s": 0.0}
     )
     for s in store._read_ring(repo, "agent_calls"):
         agent, lane, item = ([*s.env.split(":"), "", "", ""])[:3]
         b = by[(agent, lane, item, s.gate)]
         b["count"] += 1
-        b["ok"] += int(s.digest.endswith(":1") if s.digest else True)
+        b["ok"] += int(s.digest.endswith(":1"))  # a missing digest is not a success
         if s.value >= 0:  # a recorded duration (the -1 sentinel is a count-only call)
             b["total_s"] += s.value
+            b["timed"] += 1
     return [
         {
             "agent": a,
@@ -90,10 +91,25 @@ def rollup(repo) -> list[dict]:
             "count": b["count"],
             "ok": b["ok"],
             "failed": b["count"] - b["ok"],
+            "timed": b["timed"],
             "total_s": b["total_s"],
         }
         for (a, ln, it, tc), b in sorted(by.items())
     ]
+
+
+def doctor(repo) -> list[dict]:
+    """Which agent-call sources are in use and which are available, so the operator can turn
+    one off: the hook always runs; a harness telemetry importer appears when it is wired."""
+    from ddflow.services.perf import store
+
+    hook_n = len(store._read_ring(repo, "agent_calls"))
+    out = [{"source": "hook", "in_use": hook_n > 0, "count": hook_n, "off": "remove the post-tool hook call"}]
+    out += [
+        {"source": name, "in_use": False, "count": 0, "off": why}
+        for name, why in sorted(NOT_COLLECTED.items())
+    ]
+    return out
 
 
 NOT_COLLECTED = {
