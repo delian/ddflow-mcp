@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import json
 import os
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -21,6 +23,7 @@ from .. import blobstore as BS
 from .. import fsio
 from .. import hostinfo as H
 from .. import shardmeta as SMT
+from .. import tomlcfg as TC
 from ._agent import default_agent_id
 from ._guard import _GuardMixin
 from ._lock import _HELD, _flock, _held_key
@@ -32,6 +35,73 @@ from ._skew import LogMark
 _STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND, CAPABILITIES_KIND})
 
 T = TypeVar("T")
+
+
+@dataclass
+class _LocalReviewer:
+    """The reviewer fields redaction cares about: name, model and local endpoint."""
+
+    name: str = ""
+    model: str = ""
+    base_url: str = ""
+
+
+def _reviewer_redact_names(root: Path) -> list[str]:
+    """The LOCAL configured reviewers' service names and model strings.
+
+    A local reviewer's endpoint names a private address, so its service name and model
+    are none of a secret, a host, a path or the machine's own name: the committed-log
+    name pass must learn them or they leak into the pushed shards as review evidence
+    (bug B8ef0d325ed). A public reviewer's name and model name a public endpoint and
+    stay. Read with ``toilcfg`` (infra), never ``services.review``, so the log stays on
+    its own layer; anything unreadable is the caller's fallback, not this write's.
+    """
+    try:  # anything failing to load is the caller's fallback, not this write's
+        out: list[str] = []
+        blocks = TC.overlay_array(
+            TC.config_paths(root, "reviewers.toml"),
+            "reviewer",
+            _LocalReviewer,
+            key="name",
+            fallback_key="model",
+            lenient=True,
+        )
+        for name, spec in blocks.items():
+            where = spec if isinstance(spec, dict) else {}
+            if not _is_local_endpoint(str(where.get("base_url") or "")):
+                continue
+            if name:
+                out.append(name)
+            model = str(where.get("model") or "")
+            if model and model != name:
+                out.append(model)
+        return out
+    except Exception:
+        return []
+
+
+def _is_local_endpoint(base_url: str) -> bool:
+    """``True`` when ``base_url`` names a private/loopback/link-local address or host."""
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(base_url).hostname or "").lower()
+    except Exception:
+        return False
+    if not host:
+        return False
+    # A literal address first: global means public, anything else (private/loopback/
+    # link-local, or IPv6) reads from `is_global` so a global IPv6 literal is public.
+    try:
+        return not ipaddress.ip_address(host).is_global
+    except ValueError:
+        pass
+    # A hostname: a single label (localhost, ollama, vllm) is never a public internet
+    # host, and a dotted name in a local pseudo-TLD is not routable beyond the machine.
+    if "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
+        return True
+    return False
+
 
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
 #: size_after)` of the written shard. A module registers itself here (`services.shardmarks`
@@ -335,6 +405,7 @@ class EventLog(_GuardMixin, _ReadMixin):
                 # `[upstream].redact_extra`, once that section exists (`names_for`)
                 up = getattr(cfg, "upstream", None)
                 names = [str(n) for n in (getattr(up, "redact_extra", None) or [])]
+                names.extend(_reviewer_redact_names(self.root))
             except Exception:
                 # an unreadable config: the built-in patterns for THIS write, and the config is
                 # read again on the next one, so a fixed config is not shadowed by the fallback
