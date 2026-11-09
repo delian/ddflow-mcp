@@ -114,7 +114,7 @@ def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
             pass
 
 
-def _regen_after_merge(tree: Path, cfg: Config | None) -> None:
+def _regen_after_merge(tree: Path) -> None:
     """Re-record the fast after-merge pins a merge just made stale, in the throwaway tree.
 
     The scratch merge runs no repository hook (it once let the post-merge hook run the golden
@@ -124,11 +124,12 @@ def _regen_after_merge(tree: Path, cfg: Config | None) -> None:
     (B8127ab103e). The cheap recipes (`after_merge = true`: README regions, default.toml) re-record
     here so the merged tree is self-consistent; the suite-backed recipes stay out, and a recipe
     that cannot finish under `[pins].after_merge_timeout_s` is left alone, never failing the run."""
-    if cfg is None:
-        return
     try:
-        regenerate_pins(tree, cfg, after_merge=True, bounded=True)
-    except Exception as exc:  # a re-record must not be what stops the checks it was there to help
+        # The merged tree's own config and recipes decide what to re-record (a pin the base added
+        # is only in the merged tree), and a config that cannot load or a re-record that fails
+        # must not be what stops the checks it was there to help (reviewer finding #1,#2).
+        regenerate_pins(tree, Config.load(tree), after_merge=True, bounded=True)
+    except Exception as exc:
         print(
             f"ci: after-merge pin regen could not run ({type(exc).__name__}: {exc})",
             file=sys.stderr,
@@ -246,5 +247,5 @@ def merge_tree(
                 # The tree is now final: re-record the fast after-merge pins so the merged
                 # result is self-consistent (B8127ab103e). A base already contained in `ref`
                 # needs no merge, and its own pins are left for the pins precheck to judge.
-                _regen_after_merge(tree, Config.load(repo))
+                _regen_after_merge(tree)
             yield tree, Failure("", "ok")
