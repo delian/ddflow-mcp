@@ -268,10 +268,11 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
 
     A detached review (`ddflow review --detach`) relaunches the review as a recorded job
     and returns that job's id as the handle. Running means waiting can help (the review
-    is still going): blocked. Over (``ended`` / ``exited`` / ``gone``) means the round is
-    recorded -- a detached review records its round BEFORE its process exits -- so it is
-    ready. Unknown, or running on another host (which this wait cannot poll), is what no
-    further waiting ends: refused up front.
+    is still going): blocked. Over and COMPLETE (``ended`` / ``exited``) means the review
+    ran to conclusion and recorded its round before its process returned: ready. Killed
+    with no exit (``gone``) is the one over state whose round is NOT recorded: hopeless.
+    Unknown, or running on another host (which this wait cannot poll), is what no further
+    waiting ends: refused up front. ``now`` is unused; jobs hold no lease to age.
     """
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
     j = st.jobs.get(job_id)
@@ -294,7 +295,7 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
         }
     if s.state == "gone":
         # Killed with no exit recorded in its log: a detached review records its round
-        # BEFORE it exits, so a process that died without writing an exit never recorded
+        # BEFORE it returns, so a process that died without writing an exit never recorded
         # one, and no further waiting records it either -- someone has to re-run the review.
         return {
             **out,
@@ -306,7 +307,7 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
         **out,
         "status": "ready",
         "ready": [job_id],
-        "why": f"{job_id} is finished ({s.detail}); its round is recorded",
+        "why": f"{job_id} is finished ({s.detail})",
     }
 
 
