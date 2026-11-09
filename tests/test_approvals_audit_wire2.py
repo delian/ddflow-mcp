@@ -15,6 +15,7 @@ from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import approval as AP
+from ddflow.services.approvals import harness as H
 from ddflow.services.approvals import overrides as OV
 
 STAMP = {"ask": "Qabc", "approved_by": "me", "via": "harness", "level": 2, "digest": "d" * 16}
@@ -77,6 +78,72 @@ def test_doctor_notes_count_overrides_never_secrets(repo_with_overrides):
     assert "approvals audit: 1 approved gate skip(s)" in notes
     assert "approvals audit: 1 relayed consent(s)" in notes
     assert "d" * 16 not in notes
+
+
+def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(
+    repo, monkeypatch, tmp_path
+):
+    # Bdb4ef97bd5: `gate list --overrides` re-verified EVERY consumed harness approval by
+    # re-reading every transcript file and re-running the Kilo SQLite query once per ask, so
+    # the listing ran 100% CPU for minutes on a real log. Listing N overrides must scan each
+    # store once.
+    run_cli(repo, "init")
+    log = EventLog(repo, "bot")
+    for i in ("1", "2", "3"):
+        ask = f"Q{i}"
+        log.append(
+            "ask.requested", ask, {"id": ask, "verb": "claim.force", "uses": 1, "subject": "T1"}
+        )
+        log.append("ask.answered", ask, {"id": ask, "outcome": "approved", "by": "me",
+                                         "via": "harness", "level": 2})  # fmt: skip
+        log.append("ask.consumed", ask, {"id": ask, "by": "bot", "verb": "claim.force"})
+    events = log.read_all()
+
+    t1 = tmp_path / "a.jsonl"
+    t2 = tmp_path / "b.jsonl"
+    t1.write_text("{}")
+    t2.write_text("{}")
+
+    kilo_reads: list[str] = []
+    monkeypatch.setattr(H, "read_only_rows", lambda p, *a, **k: kilo_reads.append(str(p)) or [])
+    monkeypatch.setattr(H, "_files", lambda cfg, since: [t1, t2])
+    monkeypatch.setattr(H, "_kilo_dbs", lambda cfg: [Path("/nonexistent/kilo.db")])
+    real_read_text = Path.read_text
+    file_reads: list[str] = []
+
+    def counting(self, *a, **k):
+        file_reads.append(str(self))
+        return real_read_text(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", counting)
+    for fn in H._answers_cached, H._typed_cached, H._lines_cached, H._kilo_question_parts_cached:
+        fn.cache_clear()
+
+    OV.rows(events, fold(events, strict=False), Config())
+    assert len(kilo_reads) == 1, (
+        f"store queried {len(kilo_reads)} times for 3 asks (must be exactly once, not once per ask)"
+    )
+    assert file_reads.count(str(t1)) == 1 and file_reads.count(str(t2)) == 1, (
+        f"transcript files read once each, got {file_reads}"
+    )
+    # The transcript WALK -- json parsing each line, the 100%-CPU path -- is also keyed per
+    # file, not per consumed ask: two files parsed once each, the one store queried once.
+    assert H._answers_cached.cache_info().misses <= 2, H._answers_cached.cache_info()
+    assert H._typed_cached.cache_info().misses <= 2, H._typed_cached.cache_info()
+    assert H._kilo_question_parts_cached.cache_info().misses <= 1, (
+        H._kilo_question_parts_cached.cache_info()
+    )
+
+
+def test_scan_kilo_skips_a_null_timestamp_or_data_row(monkeypatch):
+    monkeypatch.setattr(
+        H,
+        "_kilo_question_parts",
+        lambda path: ((1, None, "{}"), (2, 123, None), (3, "not-a-number", "{}")),
+    )
+    # A NULL/non-numeric time_created or NULL data row is dropped, not compared
+    # (Bdb4ef97bd5: `None < x` and `"str" < x` raise).
+    assert H.scan_kilo(Path("/nonexistent/kilo.db"), "q?", "Q1", 0.0) == []
 
 
 def test_a_typed_chat_t3_use_and_a_claim_force_are_listed(repo):
