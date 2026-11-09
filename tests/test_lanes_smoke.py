@@ -128,6 +128,12 @@ def test_a_refusal_behind_an_earlier_non_refusal_object_is_still_a_refusal():
     assert "no commit ahead" in s.calls[0].detail
 
 
+def test_a_non_refusal_object_without_a_refusal_is_not_one_and_terminates():
+    """A bare object, or an object with no refusal, is not a refusal and the scan ends."""
+    assert S._refusal('{"status":"ok"}') == ""
+    assert S._refusal("{}") == ""
+
+
 def test_a_lease_hook_error_is_a_guard_refusal_not_a_bad_call():
     no_lease = f"lane {LANE} holds no live lease: stop; do not write any file"
     glob = f"lane {LANE}: other.txt is outside the item's lease globs (hello.txt); do not edit it"

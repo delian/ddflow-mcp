@@ -110,8 +110,10 @@ def _refusal(output: Any) -> str:
             got = head.get("refusal")
             if isinstance(got, dict):
                 return str(got.get("reason") or "refused")
-        # a real object, but not a refusal: scan past it
-        text = text[first + end :]
+        # a real object, but not a refusal: scan past it. `raw_decode` always consumes at
+        # least one character of a value it decoded; the `max` keeps progress guaranteed
+        # even if a pathological decoder ever reported none.
+        text = text[first + max(end, 1) :]
 
 
 def _call(part: dict[str, Any], step: int) -> Call:
