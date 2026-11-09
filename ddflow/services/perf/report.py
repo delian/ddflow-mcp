@@ -39,12 +39,12 @@ def _per_gate(ctx: Context, minimum: int) -> list[dict]:
         per.setdefault(o.gate, []).append(secs)
     yields = {r["gate"]: r for r in gateyield.gate_rows(ctx.facts, minimum)}
     out = []
-    for gate in sorted(per):
+    for gate in sorted(set(per) | set(yields)):  # a gate with a yield but no duration is not dropped
         y = yields.get(gate, {})
         out.append(
             {
                 "gate": gate,
-                **stat(per[gate], minimum),
+                **stat(per.get(gate, []), minimum),
                 "items": y.get("items"),  # the yield row's own n, carried alongside the duration n
                 "first_run_pass_rate": y.get("first_run_pass_rate"),
                 "ever_failed_share": y.get("ever_failed_share"),
@@ -74,17 +74,22 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
         groups["models"][o.model or "(unknown model)"].append(kind)
         if o.by:
             groups["reviewers"][o.by].append(kind)
-    # per-agent: an item's claim agent; "passed" when the item passed every gate first-run.
-    item_clean = {
-        span.item: all(kind == "passed" for (it, _g), kind in first.items() if it == span.item)
-        and any(kind for (it, _g), kind in first.items() if it == span.item)
-        for span in ctx.facts.spans.values()
-        if ctx.in_scope(span.item, span.added_at)
-    }
+    # per-agent: an item's claim agent, its first-run "passed every gate" (only IN-SCOPE items
+    # with a recorded verdict; re-claims by the same agent count once, never inflate n).
     agent_outcomes: dict[str, list[str]] = defaultdict(list)
+    seen_claims: set[tuple[str, str]] = set()
     for span in ctx.facts.spans.values():
+        if not ctx.in_scope(span.item, span.added_at):
+            continue
+        verdicts = [(it, g) for (it, g) in first if it == span.item]
+        if not verdicts:
+            continue  # claimed but never gated: not a pass, not a failure -- omitted
+        clean = all(first[(it, g)] == "passed" for (it, g) in verdicts)
         for _at, agent in span.claims:
-            agent_outcomes[agent].append("passed" if item_clean.get(span.item, False) else "failed")
+            if (span.item, agent) in seen_claims:
+                continue
+            seen_claims.add((span.item, agent))
+            agent_outcomes[agent].append("passed" if clean else "failed")
     groups["agents"] = agent_outcomes
 
     def rows(names: dict[str, list[str]]) -> list[dict]:
