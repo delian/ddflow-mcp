@@ -46,3 +46,42 @@ def test_a_mutating_repro_does_not_reach_the_shared_log(proj):
     # A bug record still landed (the filing itself is normal).
     assert state(proj).bugs.get(out.data["id"]) is not None
     assert before <= len(shards)
+
+
+def test_a_poisoned_dot_git_is_refused_not_followed(proj):
+    """The prime refuses a `.git` that is not a real directory: a run that replaced the
+    clone's `.git` with a symlink to an operator repo must make the NEXT prime refuse, never
+    run `git reset --hard` through the link onto the pointee."""
+    import os
+    import shutil
+    import subprocess
+
+    from ddflow.services import reprocheck as RC
+
+    victim = proj / "victim"
+    victim.mkdir()
+    subprocess.run(["git", "init", "-q", str(victim)], check=True)
+    subprocess.run(["git", "-C", str(victim), "config", "user.email", "e@e"], check=True)
+    subprocess.run(["git", "-C", str(victim), "config", "user.name", "n"], check=True)
+    (victim / "f.txt").write_text("x")
+    subprocess.run(["git", "-C", str(victim), "add", "f.txt"], check=True)
+    subprocess.run(["git", "-C", str(victim), "commit", "-qm", "one"], check=True)
+    head0 = subprocess.run(
+        ["git", "-C", str(victim), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    (victim / "f.txt").write_text("y")
+    subprocess.run(["git", "-C", str(victim), "commit", "-qam", "two"], check=True)
+    head1 = subprocess.run(
+        ["git", "-C", str(victim), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    assert head1 != head0
+
+    clone = proj / "clone"
+    subprocess.run(["git", "clone", "-q", str(victim), str(clone)], check=True)
+    shutil.rmtree(clone / ".git")
+    os.symlink(str(victim / ".git"), clone / ".git")
+    # A reset that followed the link would move the pointee's HEAD back to head0.
+    assert RC._prime_scratch(clone, head0) is False
+    assert subprocess.run(
+        ["git", "-C", str(victim), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip() == head1  # untouched

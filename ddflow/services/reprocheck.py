@@ -147,7 +147,9 @@ def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
     ``.ddflow/events``. A clone's ``.git`` is a directory in the throwaway, so the child's
     repo root is the clone itself, its events land in the clone's own ``.ddflow/events``,
     and the whole directory is removed whatever happened. ``--local --no-hardlinks`` copies
-    objects, so the clone never dangles on the operator's pack being GC'd mid-run."""
+    objects, so the clone never dangles on the operator's pack being GC'd mid-run, and the
+    ``origin`` remote is removed after checkout: the throwaway has no business reaching the
+    operator's repository, and a repro command reading the remote learns no path back to it."""
     clone = G.run(
         repo,
         "clone",
@@ -162,6 +164,7 @@ def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
     if not clone.ok:
         yield None
         return
+    G.run(dst, "remote", "remove", "origin", timeout=30.0)
     out = G.run(dst, "checkout", "--detach", sha, timeout=120.0)
     if not out.ok:
         F.rmtree(dst)
@@ -178,13 +181,19 @@ def _prime_scratch(scratch: Path, sha: str) -> bool:
     could not be guaranteed (with no fresh checkout there is no run to read).
 
     The scratch is a full CLONE (``.git`` is a directory, the clone's own), so there is no
-    gitdir pointer a run could poison onto another repository: a run that deleted or
-    corrupted ``.git`` merely fails the next reset, which is the run being unreached, never
-    a write into the operator's tree. ``git clean -xdfq -f`` removes ignored files AND
-    nested repositories a stateful run left, and ``git reset --hard sha`` returns the tree
-    to the recorded commit. An untracked directory squatting a tracked path can fail a
-    reset: cleaning first (and once more after a failed reset) lets the reset land."""
+    gitdir pointer a run could poison onto another repository. But a run MAY still replace
+    ``.git`` with a symlink to the operator's repo (a ``git clean``/``reset`` run through it
+    would move the REAL checkout's HEAD): before any git command the prime REFUSES a
+    ``.git`` that is not a real directory, exactly as the old linked-worktree path refused
+    a non-plain-file pointer, so a poisoned ``.git`` never steers the reset onto another
+    repository. ``git clean -xdfq -f`` removes ignored files AND nested repositories a
+    stateful run left, and ``git reset --hard sha`` returns the tree to the recorded commit.
+    An untracked directory squatting a tracked path can fail a reset: cleaning first (and
+    once more after a failed reset) lets the reset land."""
     try:
+        gitdir = scratch / ".git"
+        if gitdir.is_symlink() or not gitdir.is_dir():
+            return False
         cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
         reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
         if reset.code != 0:
