@@ -221,6 +221,13 @@ def plan(
             note = interrupted(state, it, live)
             if note:
                 p.interrupted.append(note)
+                # An INTERRUPTED item (RUNNING, no live lease) is nobody's work right now:
+                # `ddflow recover` resumes it, `claim` refuses it. It is still in flight, so
+                # it is reported under `running`, never offered a free ready slot -- a slot it
+                # took hid CLAIMABLE work behind "held by the cap" with no one to run the
+                # slot (Bcec3b3229f).
+                p.running.append(it)
+                continue
             p.ready.append(it)
 
     # TWO caps, because they are two different statements and `min()` of them was one
