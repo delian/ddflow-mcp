@@ -260,6 +260,8 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     log, cfg, st = _items._load(repo, agent)
     bad = _edges_problem(st, parent, needs, allow_unknown_needs)
     if bad:
+        if IT.closed_phase_parent(st, parent):
+            return O.refused("task.added", bad, id=item)
         return O.failed("task.added", bad, id=item)
     wanted, bad = _wanted_lines(st, cfg, line, lines, port_of)
     if bad:
