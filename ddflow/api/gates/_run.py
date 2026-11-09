@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -266,6 +267,39 @@ def _mark_or_refuse_twin(repo, item, gate, started_on):
     )
 
 
+def _merged_tree_run(repo: Path, it, cwd: Path | None):
+    """A context that yields a scratch checkout of the commit ``it`` merged as, for a command
+    gate whose worktree is gone and whose base stands nowhere on the merged tree (B80a4dafd02).
+
+    `merge` removes the worktree, and once the base has moved past the merge no checkout stands
+    at the merged tree, so `gate run` had nothing to run and recorded UNAVAILABLE. The merged
+    work is still a committed tree at `merged_sha`, so the gate runs there. Yields None when the
+    caller has a tree already, or the item is unmerged/a phase/its merged commit is not here --
+    then the caller's ordinary no-tree refusal answers instead."""
+    if (
+        cwd is not None
+        or not it.merged_sha
+        or it.kind == "phase"
+        or it.worktree  # a KEPT tree is a live checkout, judged by the kept-tree rules, not here
+        or not W.rev(repo, it.merged_sha)
+    ):
+        return nullcontext(None)
+    return W.scratch_tree(repo, it.merged_sha, detach=True, prefix="ddflow-merged.", quiet=True)
+
+
+def _resolve_tree(repo, it, item, gate, held, cwd, made, force):
+    """(where a command gate runs, else None; the no-tree ``(reason, kept)``, else None).
+
+    ``made`` is the scratch checkout `_merged_tree_run` made of the merged commit, or None;
+    without one and without a live tree the gate has nowhere to run, and the no-tree reason
+    is returned for `run` to record. A helper so `run` never posts grade-D complexity."""
+    if cwd is not None:
+        return cwd, None
+    if made is not None and made.path is not None:
+        return made.path, None
+    return None, _no_tree_reason(repo, it, item, gate, held, force)
+
+
 def run(
     repo: Path,
     item: str,
@@ -334,50 +368,60 @@ def run(
     forced = bool(forced_by)
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
-    if cwd is None:
-        reason, kept = _no_tree_reason(repo, it, item, gate, held, force)
-        if not kept:
-            R.record_measured(
-                log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
+    with _merged_tree_run(repo, it, cwd) as made:
+        cwd, no_tree = _resolve_tree(repo, it, item, gate, held, cwd, made, force)
+        if cwd is None:
+            reason, kept = no_tree
+            if not kept:
+                R.record_measured(
+                    log,
+                    cfg,
+                    repo,
+                    it,
+                    gate,
+                    "unavailable",
+                    reason=reason,
+                    gates=gates,
+                    forced=forced,
+                )
+            return O.nothing(
+                "gate.run",
+                reason,
+                gate=gate,
+                outcome=kept or "unavailable",
+                evidence={"reason": reason},
+                id=item,
             )
-        return O.nothing(
-            "gate.run",
-            reason,
-            gate=gate,
-            outcome=kept or "unavailable",
-            evidence={"reason": reason},
-            id=item,
+        repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
+        if repeated is not None:
+            return repeated
+        scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
+        if covered is not None:
+            return covered
+        started_on = G.tree_identity(cwd)
+        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
+        if twin_refusal is not None:
+            return twin_refusal
+        started_at = clock.now_iso()
+        log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+        done = _guarded(
+            log,
+            cfg,
+            repo,
+            agent,
+            it,
+            item,
+            gate,
+            gdef=gdef,
+            gates=gates,
+            cwd=cwd,
+            scope=scope,
+            forced=forced,
+            rerun_failed=rerun_failed,
+            started_on=started_on,
+            started_at=started_at,
+            marker=marker,
         )
-    repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
-    if repeated is not None:
-        return repeated
-    scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
-    if covered is not None:
-        return covered
-    started_on = G.tree_identity(cwd)
-    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
-    if twin_refusal is not None:
-        return twin_refusal
-    started_at = clock.now_iso()
-    log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
-    done = _guarded(
-        log,
-        cfg,
-        repo,
-        agent,
-        it,
-        item,
-        gate,
-        gdef=gdef,
-        gates=gates,
-        cwd=cwd,
-        scope=scope,
-        forced=forced,
-        rerun_failed=rerun_failed,
-        started_on=started_on,
-        started_at=started_at,
-        marker=marker,
-    )
     if isinstance(done, O.Outcome):
         return done
     result, ev, reason = done
