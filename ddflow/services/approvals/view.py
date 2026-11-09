@@ -65,8 +65,13 @@ def pending_line(state, shown: int = 3) -> str:
         return ""
     names = ", ".join(_answer_form(r) for r in rows[:shown])
     more = f" (+{len(rows) - shown} more)" if len(rows) > shown else ""
+    have_req = any(r["type"] != E.QUESTION for r in rows)
+    have_q = any(r["type"] == E.QUESTION for r in rows)
+    noun = (
+        "ask(s)" if have_req and have_q else ("approval request(s)" if have_req else "question(s)")
+    )
     return (
-        f"{len(rows)} ask(s) wait for the operator: {names}{more}. "
+        f"{len(rows)} {noun} wait for the operator: {names}{more}. "
         "`ddflow approvals pending` lists them with their digests; a person answers an "
         "approval with `ddflow approvals approve ID`, a question in chat (`ddflow approvals "
         "ask ID` surfaces it, `ddflow approvals attest ID` records the answer)."
