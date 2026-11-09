@@ -470,6 +470,22 @@ lock_falsifier_red_main_pct = 10
 lock_revert_key = "locks.mode"
 lock_revert_value = "strict"
 
+[notify]
+channel = "terminal"
+ask_channel = "harness"
+endpoints = {}
+token_env = {}
+send_timeout_s = 10.0
+ask_timeout_s = 300.0
+ask_attempts = 3
+email_host = ""
+email_port = 587
+email_from = ""
+email_to = ""
+email_user = ""
+email_password_env = ""
+email_tls = true
+
 [output]
 max_rows = 50
 max_chars = 30000
