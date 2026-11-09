@@ -60,7 +60,7 @@ def test_a_real_submodule_import_failure_re_raises_and_runs_its_body_once(tmp_pa
     # must run the body exactly once -- the retry is reserved for the halt sentinel only.
     try:
         with pytest.raises(ModuleNotFoundError):
-            badpkg.MAGIC
+            _ = badpkg.MAGIC
         assert R.RUNS == 1
     finally:
         sys.modules.pop("badpkg", None)
