@@ -113,8 +113,9 @@ def stdlib_ladder() -> list[ResourceProbe]:
 
 
 def sample(pid: int, probes: list[ResourceProbe] | None = None) -> ResourceSample:
-    """One live sample of ``pid``, defaulting to the stdlib /proc then ps ladder."""
-    probes = probes or stdlib_ladder()
+    """One live sample of ``pid``, defaulting to the stdlib /proc then ps ladder. An explicit
+    empty list means every adapter declined: the sample is ``unavailable``, never a live read."""
+    probes = stdlib_ladder() if probes is None else probes
     return degrade(probes, pid)
 
 
