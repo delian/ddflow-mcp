@@ -39,7 +39,7 @@ def import_edges(package: Path) -> dict[str, set[str]]:
                     if name.startswith(pkg_name + "."):
                         name = name[len(pkg_name) + 1 :]  # package-relative, matches _module_name
                     edges[module].add(name)
-                    edges[module].add(alias.name.split(".")[0])
+                    edges[module].add(name.split(".")[0])
             elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                 target = node.module
                 if target.startswith(pkg_name + "."):
@@ -66,21 +66,34 @@ def fan_in(edges: dict[str, set[str]]) -> dict[str, int]:
 
 
 def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
-    """module -> its longest import chain in EDGES (dependency depth). Cycle-safe: a cycle
-    caps its depth at the cycle entry, never recurses forever."""
+    """module -> the longest import chain in EDGES out of the module (dependency depth).
+
+    Cycle-safe and order-independent: a cycle edge contributes 0 and is never memoized, so a
+    node whose depth ran through a back-edge is recomputed each time it is entered fresh,
+    and a node's longest tail is always the same regardless of insertion order."""
     nodes = set(edges)
     memo: dict[str, int] = {}
 
-    def depth(m: str, visiting: set[str]) -> int:
-        if m in memo:
-            return memo[m]
-        deps = [d for d in edges.get(m, ()) if d in nodes and d not in visiting]
-        visiting.add(m)
-        memo[m] = 1 + max((depth(d, visiting) for d in deps), default=0) if deps else 0
-        visiting.discard(m)
-        return memo[m]
+    def depth(m: str, resolving: set[str]) -> tuple[int, bool]:
+        if m in memo and m not in resolving:
+            return memo[m], False
+        deps = [d for d in edges.get(m, ()) if d in nodes]
+        if not deps:
+            memo[m] = 0
+            return 0, False
+        resolving.add(m)
+        best, truncated = 0, False
+        for d in deps:
+            if d in resolving:
+                truncated = True  # a back-edge: contributes 0, the value is path-dependent
+                continue
+            best = max(best, 1 + depth(d, resolving)[0])
+        resolving.discard(m)
+        if not truncated:
+            memo[m] = best
+        return best, truncated
 
-    return {m: depth(m, set()) for m in nodes}
+    return {m: depth(m, set())[0] for m in nodes}
 
 
 def touched(facts: Facts) -> list[dict]:
