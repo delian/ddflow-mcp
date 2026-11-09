@@ -55,9 +55,10 @@ def _brief_recovery(
     item: str = "",
 ) -> list[str]:
     """The RESUME block: the recoverable entries, with what was interrupted and whether
-    ddflow has resumed it -- rendered OUTSIDE the budget, so `brief_max_tokens` never
-    cuts it (DX-recover-brief-slice; folded B-res-brief-recovery-link). Returns only the
-    lines THIS call appended (not the lines ``out`` already held: duck #1).
+    ddflow has resumed it -- reserved from the section-trimming pass, but capped to half the
+    budget by `brief()` (B027549013a), which names the overflow here with a `ddflow recover`
+    note (folded B-res-brief-recovery-link). Returns only the lines THIS call appended (not
+    the lines ``out`` already held: duck #1).
 
     When a brief is ABOUT one item AND that item is itself among the recoverable
     entries, the item's own entry renders FIRST and every OTHER entry collapses to one
@@ -682,8 +683,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
 
     Ordered by what an agent must not miss: anything needing rescue first, then what
     it is doing, then what it may do next, then the lessons that bear on it. The RESUME
-    slice (recoverable work) is RESERVED and never cut by the budget; when the rest does
-    not fit, each section is cut to its share of the budget
+    slice (recoverable work) is reserved from the section-trimming pass but capped to half
+    the budget (``B027549013a``), with the overflow named by a ``ddflow recover`` note;
+    when the rest does not fit, each section is cut to its share of the budget
     (``_SECTION_SHARE``, B1472311a63) and says what it left out and where it is; what a
     short section does not use goes to the ones after it, head first, so the
     safety-critical head still survives a squeeze -- and no section ahead of them can
@@ -731,4 +733,24 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     )
     # The RESUME slice opens the pack, before even its own heading line (duck #2): a
     # session that starts after a crash must see recoverable work in the first line.
+    # B027549013a: the slice is reserved from the budget, but BOUNDED to half of it -- the
+    # bound the reports block keeps -- so a focused brief on a busy repo's per-band list of
+    # OTHER crashes cannot starve the item's own Current/decisions/lessons down to nothing.
+    # (The charter is separately clamped by CH.block's own reserve.) `ddflow recover` lists
+    # every entry beyond the bound.
+    bound = max(_SECTION_FLOOR, budget * 2)
+    if len("\n".join(reserved)) > bound:
+        kept: list[str] = []
+        used = 0
+        for line in reserved:
+            if used + len(line) + 1 > bound:
+                break
+            kept.append(line)
+            used += len(line) + 1
+        kept.append("")
+        kept.append(
+            "_more recoverable entries past the slice's bound: `ddflow recover` lists them._"
+        )
+        kept.append("")
+        reserved = kept
     return _assemble(reserved + head, sections, budget * 4, note, charter, item)

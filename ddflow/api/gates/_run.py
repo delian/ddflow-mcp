@@ -188,13 +188,31 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
     )
 
 
+def _found_text(result: str, ev: dict[str, Any]) -> str:
+    """What a finished-but-superseded run found, so its outcome is not lost (B267a6b0b5e)."""
+    found = [result.upper()]
+    summary = ev.get("summary") or []
+    if summary and not isinstance(summary, str):
+        found.append("; ".join(str(s) for s in summary))
+    return " ".join(found).strip()
+
+
 def _superseded_run(
-    repo: Path, agent: str, item: str, gate: str, started_on: str, started_at: str, cwd: Path
+    repo: Path,
+    agent: str,
+    item: str,
+    gate: str,
+    started_on: str,
+    started_at: str,
+    cwd: Path,
+    result: str = "",
+    ev: dict[str, Any] | None = None,
 ) -> str:
     """Why a finished run must not be recorded ("" when it may): it began on a commit that
     HEAD, or the gate's recorded outcome, has since moved past (B27a236a534). Recording it
     would put a verdict about old source over one about the new -- a stale FAILED over a
-    newer PASSED, which `complete` then refuses."""
+    newer PASSED, which `complete` then refuses. The refusal still says what the run found
+    (its verdict and summary lines), so the outcome is not lost (B267a6b0b5e)."""
     _log, _cfg, st = _load(repo, agent)
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
@@ -203,6 +221,7 @@ def _superseded_run(
     # repository, so ancestry is asked there (git cannot answer from a missing directory, and
     # "could not tell" keeps the record: Bcf22c7f7c8).
     asked = cwd if cwd.is_dir() else repo
+    found = f"; it found {_found_text(result, ev or {})}" if result else ""
     if (
         recorded
         and clock.epoch(rec.at) > clock.epoch(started_at)
@@ -213,7 +232,7 @@ def _superseded_run(
         return (
             f"{gate} ran on {G.head_of(started_on)}, but an outcome for "
             f"{G.head_of(recorded)} was recorded while it ran: its outcome is superseded "
-            f"and was not recorded. Re-run `ddflow gate run {item} {gate}` on the current commit."
+            f"and was not recorded{found}. Re-run `ddflow gate run {item} {gate}` on the current commit."
         )
     for newer, what in (
         (G.tree_identity(cwd), "the tree is now at"),
@@ -222,7 +241,7 @@ def _superseded_run(
         if newer and G.superseded_by(started_on, newer, asked, paths=(it.globs if it else None)):
             return (
                 f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
-                f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
+                f"its outcome is superseded and was not recorded{found}. Re-run `ddflow gate run "
                 f"{item} {gate}` on the current commit."
             )
     return ""
@@ -447,7 +466,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
     if scope is not None:
         ev.update(scope.evidence())
     ev["started_tree_sha"] = started_on
-    stale = _superseded_run(repo, agent, item, gate, started_on, started_at, cwd)
+    stale = _superseded_run(repo, agent, item, gate, started_on, started_at, cwd, result, ev)
     if stale:
         return O.refused("gate.run", stale, id=item, gate=gate, outcome="", evidence=ev)
 

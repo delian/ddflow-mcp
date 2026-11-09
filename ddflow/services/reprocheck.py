@@ -20,9 +20,11 @@ A bug whose repro did not fail is UNCONFIRMED until a second sighting or a faili
 (the fold keeps "yes" once a run places it). Nothing is read as reproduced without a run
 behind it: a window that produced no exit code is unavailable, never reproduced, and a
 run that never reached an exit code is counted apart as ``unreached``, never cited for
-the verdict. The line runs THROUGH THE SHELL, like the ci gate's line: it is the
-operator's own command, so ``VAR=val cmd`` prefixes, ``&&``, redirections and globs are
-the shell's, and a timeout kills the whole process group (`services.cmdrunner.CommandRunner`).
+the verdict. The line runs THROUGH THE SHELL, like the ci gate's line: it is the CLI
+operator's own ``--repro-cmd``, so ``VAR=val cmd`` prefixes, ``&&``, redirections and
+globs are the shell's, and a timeout kills the whole process group
+(`services.cmdrunner.CommandRunner`). Agent-supplied ``evidence`` reaches the record as
+the bug's ``evidence`` text instead and is STORED, never executed here.
 """
 
 from __future__ import annotations

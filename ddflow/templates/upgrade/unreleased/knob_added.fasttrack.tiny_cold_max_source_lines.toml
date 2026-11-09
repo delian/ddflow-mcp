@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "fasttrack.tiny_cold_max_source_lines"
+new = "10"
+why = "Tiny-fix fast track (D-fast-track-answers): the source-line limit a change may have and still run the reduced pipeline; ddflow metrics tiny buckets items by it."
+impact = "additive"

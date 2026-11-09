@@ -54,6 +54,11 @@ class Bug:
     invalid_at: str = ""
     invalid_reason: str = ""
     evidence: str = ""
+    #: `bug found --evidence` (the MCP tool's agent-supplied "what showed the bug"):
+    #: stored, never run. Kept apart from `evidence` (the `bug invalid` probe that showed
+    #: the finding FALSE): the two claim different things and a found-evidence must not be
+    #: dropped when a later invalid closure records its own probe.
+    found_evidence: str = ""
     #: Optional, from `bug found --title/--severity/--scope`; an old event carries none
     #: and folds to "" (scope: `project`, the default).
     title: str = ""

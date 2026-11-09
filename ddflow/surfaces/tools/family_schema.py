@@ -151,7 +151,7 @@ def missing_required(routed: Routed) -> list[str]:
 
 def _description(family: Family) -> str:
     acts = ", ".join(
-        f"{a}({','.join(r)})" if (r := _requires(t)) else a for a, t in family.members.items()
+        f"{a}({','.join(r)})" if (r := _requires(t)) else a for a, t in family.actions().items()
     )
     noun = family.name.removeprefix("ddflow_")
     return f"{_BLURB[noun]}. Set `action`; required arguments in brackets: {acts}."
@@ -176,7 +176,7 @@ def family_entry(name: str) -> dict[str, Any]:
             schema["properties"][n]["type"] = sorted(types)
     schema["properties"][ACTION] = {
         "type": "string",
-        "enum": list(family.members),
+        "enum": list(family.actions()),
         "description": "What to do; see the tool description for each action's arguments.",
     }
     if name in TOOLS:
@@ -199,7 +199,7 @@ def member_of(name: str, args: Any) -> str:
     action = args.get(ACTION) if isinstance(args, dict) else None
     if family is None or family.single or not isinstance(action, str):
         return name
-    return family.members.get(action, name)
+    return family.actions().get(action, name)
 
 
 def route(name: str, args: dict[str, Any]) -> Routed | str | None:
@@ -217,29 +217,34 @@ def route(name: str, args: dict[str, Any]) -> Routed | str | None:
     action = args.get(ACTION)
     if ACTION not in args and name in TOOLS:
         return None
-    acts = ", ".join(family.members)
+    acts = ", ".join(family.actions())
     if action in (None, ""):
         return f"{name}: missing required argument: action. Actions: {acts}"
     if not isinstance(action, str):
         return f"{name}: action must be one of: {acts}"
-    tool = family.members.get(action)
+    tool = family.actions().get(action)
     if tool is None:
         return f"{name}: unknown action {action!r}. Actions: {acts}"
     rest = {k: v for k, v in args.items() if k != ACTION}
     if OP in rest and ACTION in TOOLS[tool]["properties"]:
         rest[ACTION] = rest.pop(OP)
+    if (pinned := family.pinned.get(action)) is not None:
+        rest[pinned[1]] = True
     routed = Routed(tool, rest, f"{name} action={action}")
-    return _problem(routed) or routed
+    return _problem(routed, family) or routed
 
 
-def _problem(routed: Routed) -> str:
+def _problem(routed: Routed, family: Family) -> str:
     """Why the routed call lacks what its member needs ("" when it has it): a required argument
-    missing, or one the member does not take, each said with the action it was asked of."""
+    missing, or one NO action of the family takes (an argument some other action advertises is
+    not unknown -- the union schema offered it, so refusing it here would teach the caller to
+    distrust the schema; B34e7a7001f), each said with the action it was asked of."""
     if missing := missing_required(routed):
         return f"{routed.display}: missing required argument(s): {', '.join(missing)}"
     known = set(member_props(routed.tool))
     known |= set(TOOLS[routed.tool].get("deprecated") or {})
     known |= set(TOOLS[routed.tool].get("arg_aliases") or {})
+    known |= set(_union(family)) - {OP}  # B34e7a7001f: an argument ANY action advertises is known
     if unknown := sorted(set(routed.args) - known):
         return (
             f"{routed.display}: unknown argument(s): {', '.join(unknown)}. "

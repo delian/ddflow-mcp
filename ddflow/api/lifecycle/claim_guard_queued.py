@@ -15,22 +15,16 @@ def _refuse_if_queued(ctx: ClaimContext) -> O.Outcome | None:
     if ctx.skip or it is None:
         return None
     want = ctx.want
-    ahead = WG.queue_ahead(
-        ctx.st, ctx.cfg, ctx.item, ctx.me, list(want if want is not None else it.globs), time.time()
-    )
-    if ahead is None:
+    mine = list(want if want is not None else it.globs)
+    aheads = WG.queued_ahead(ctx.st, ctx.cfg, ctx.item, ctx.me, mine, time.time())
+    if not aheads:
         return None
-    pairs = WG.conflicts(
-        list(want if want is not None else it.globs), ahead.globs, WG.shared_globs(ctx.cfg)
-    )
-    named = f"{pairs[0][0]!r} " if pairs else ""
     return O.refused(
         "item.claimed",
-        f"{ctx.item}: {named}is queued behind {ahead.holder} ({ahead.item}), who asked "
-        f"for it first ([lease].wait_queue).",
+        f"{ctx.item}: {WG.queued_names(mine, aheads, ctx.cfg)}.",
         id=ctx.item,
         alternatives=[],
-        queued_behind=ahead.item,
+        queued_behind=aheads[0].item,
     )
 
 

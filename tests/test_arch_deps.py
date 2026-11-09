@@ -53,7 +53,6 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.services.similar",
     ),
     "tomllib": (
-        "ddflow.adapters.toml",
         "ddflow.adapters.tools",
         "ddflow.api.harness_drv",
         "ddflow.api.plan",
@@ -184,7 +183,6 @@ BASELINE: dict[str, tuple[str, ...]] = {
         "ddflow.core.schedule._plan",
         "ddflow.infra.claimref",
         "ddflow.infra.container",
-        "ddflow.infra.fsio",
         "ddflow.infra.harness_identity",
         "ddflow.infra.localstore",
         "ddflow.infra.log",
@@ -350,24 +348,59 @@ def test_violations_are_importers_outside_the_home():
     assert reports["subprocess"].violations == ()
     assert reports["fsio"].home == ("ddflow.adapters.fsio",)
     assert reports["hashlib"].home == ("ddflow.adapters.digest",)
-    assert reports["tomlkit"].home == ("ddflow.infra.tomlcfg",)
+    assert reports["tomllib"].home == ("ddflow.adapters.toml",)
+    assert reports["tomlkit"].home == ("ddflow.infra.tomlcfg", "ddflow.adapters.toml")
     assert reports["http"].home == ("ddflow.adapters.http",)
     assert "ddflow.adapters.http" in reports["http"].importers
     assert "ddflow.adapters.http" not in reports["http"].violations
 
 
+def _ratchet_gaps(
+    actual: dict[str, A.FamilyReport],
+    baseline: dict[str, tuple[str, ...]],
+) -> tuple[list[str], dict[str, list[str]], dict[str, list[str]]]:
+    """Every family's ratchet drift at once: names not in the baseline, families that GREW
+    (a new importer outside the home) and families that SHRANK (a baseline entry no longer
+    imports). One pass over the whole census, so a failure names every drifted family, not
+    just the first one the loop hits (B068d551e89)."""
+    unknown = sorted(set(actual) - set(baseline))
+    grew: dict[str, list[str]] = {}
+    removed: dict[str, list[str]] = {}
+    for name, want in baseline.items():
+        report = actual.get(name)
+        got = set(report.violations) if report is not None else set()
+        if got - set(want):
+            grew[name] = sorted(got - set(want))
+        if set(want) - got:
+            removed[name] = sorted(set(want) - got)
+    return unknown, grew, removed
+
+
 def test_ratchet_violations_match_baseline():
-    actual = _families(A.scan(ROOT))
-    unknown = set(actual) - set(BASELINE)
-    assert not unknown, f"new dependency family not in the committed baseline: {sorted(unknown)}"
-    for name, base in BASELINE.items():
-        got = set(actual[name].violations)
-        want = set(base)
-        if got != want:
-            grew = sorted(got - want)
-            removed = sorted(want - got)
-            assert not grew, f"{name}: NEW importer(s) outside its declared home: {grew}"
-            assert not removed, f"{name}: lower its baseline by removing {removed}"
+    unknown, grew, removed = _ratchet_gaps(_families(A.scan(ROOT)), BASELINE)
+    assert not (unknown or grew or removed), (
+        "ratchet drift reported for EVERY family at once — "
+        f"not-in-baseline={unknown}; "
+        f"grew (NEW importer outside its declared home)={grew}; "
+        f"shrank (lower the baseline by removing)={removed}"
+    )
+
+
+def test_ratchet_reports_every_family_at_once():
+    # Two families drift at once: the report names BOTH, not just the first one the loop
+    # would hit (B068d551e89): alpha grew and beta shrank in the same census. gamma is in
+    # the baseline but has NO importer left (a vanished third-party package): the report
+    # must not KeyError, and its stale entries read as removed.
+    actual = {
+        "alpha": A.FamilyReport("alpha", ("a",), ("home",), ("home", "stray")),
+        "beta": A.FamilyReport("beta", ("b",), (), ()),
+    }
+    unknown, grew, removed = _ratchet_gaps(
+        actual, {"alpha": (), "beta": ("gone",), "gamma": ("orphan",)}
+    )
+    assert unknown == []
+    assert grew == {"alpha": ["stray"]}
+    assert removed == {"beta": ["gone"], "gamma": ["orphan"]}
 
 
 def test_fake_returns_the_reports_it_is_given():

@@ -10,6 +10,7 @@ from ...config import Config
 from ...core import clock
 from ...core import globs as GL
 from ...core.admission import conflicts, glob_conflict, is_shared
+from ...core.admission import glob_clashes as _glob_clashes
 from ...core.flow import line_key
 from ...core.model import Item, Lease, State, fold
 from ...infra import worktree as W
@@ -32,6 +33,39 @@ def _fold(log: EventLog) -> State:
     """The state of the log as read now: the `decide` that `EventLog.decide_then_append`
     runs outside the append lock, and again under it if the log changed in between."""
     return localize(fold(log.read_all(), strict=False), log, _leases.time.time())
+
+
+def glob_clashes(
+    state: State, cfg: Config, it: Item, holder: str, globs: list[str], now: float
+) -> list[tuple[str, Lease, tuple[str, str]]]:
+    """Every OTHER live lease ``globs`` would overlap: [(item id, lease, pair), ...].
+
+    `glob_clash` is the first of these; `claim` and `update --globs` name them all.
+    """
+    return [
+        (c.item, c.lease, c.pair)
+        for c in _glob_clashes(
+            state,
+            cfg,
+            it,
+            globs,
+            holder,
+            against="live",
+            live=unfinished_leases(state, cfg, now),
+        )
+    ]
+
+
+def clash_report(clashes: list[tuple[str, Lease, tuple[str, str]]]) -> tuple[str, list[str]]:
+    """The clash list as (text, item ids): one `'mine' overlaps 'theirs' held by H on I`
+    clause per clash, and every conflicting item id (a waiter must wait on each), so one
+    refusal names them all instead of the first (B-glob-refusal-names-one-conflict)."""
+    text = "; ".join(
+        f"{p0!r} overlaps {p1!r} held by {lz.holder} on {oid}" for oid, lz, (p0, p1) in clashes
+    )
+    # One other item that overlaps on two globs yields two clashes; a waiter must wait on
+    # that item once, not twice.
+    return text, list(dict.fromkeys(oid for oid, _lz, _p in clashes))
 
 
 def glob_clash(

@@ -129,9 +129,11 @@ def test_every_family_lists_every_action_with_the_old_name_it_replaces():
         if fam.single:
             continue
         line = by_family[name]
-        assert f"({len(fam.members)} actions)" in line
+        assert f"({len(fam.actions())} actions)" in line
         for action, old in fam.members.items():
             assert f"`{action}` (was `{old}`)" in line or (old == name and f"`{action}`" in line)
+        for action in fam.pinned:
+            assert f"`{action}`" in line
 
 
 def test_the_profile_and_family_bullets_do_not_look_like_tool_rows():

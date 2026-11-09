@@ -315,7 +315,12 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
     # claim has otherwise succeeded: nothing after this point can refuse it, so a refusal
     # never strands the item half-reopened (B-rework-of-merged-item-keeps-stale-merge).
     out.data.update(_reopen_stale_merge(log, claimed, item))
-    warned = [*missing_globs(repo, cfg, lz.globs), *stale_notes]
+    # A glob the item declares lives on the item's own branch, not the primary's: a re-claim
+    # that rebinds to the item's recorded tree must check THAT tree, or a file committed on the
+    # branch but missing (or moved) on main warns that it does not exist
+    # (B-claim-glob-warning-ignores-item-tree).
+    stand = Path(wt.path) if wt is not None else repo
+    warned = [*missing_globs(stand, cfg, lz.globs), *stale_notes]
     if warned:
         out.data["glob_warnings"] = warned
     out.data.update(OG.claim_fields(st, cfg, item, repo))

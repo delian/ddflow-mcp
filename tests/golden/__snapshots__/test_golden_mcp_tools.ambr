@@ -36,7 +36,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe.",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -113,7 +113,7 @@
          },
          "evidence": {
           "type": "string",
-          "description": "The probe command or test node id that showed it false."
+          "description": "What showed the bug: evidence kept with the record (agent-supplied text, stored, never run)."
          },
          "reopen": {
           "type": "boolean",
@@ -182,7 +182,9 @@
            "invalid",
            "found",
            "file_tasks",
-           "dedupe"
+           "dedupe",
+           "reopen",
+           "tag"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }

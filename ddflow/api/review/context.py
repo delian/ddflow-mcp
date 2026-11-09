@@ -33,8 +33,16 @@ _DELTA_CAVEAT = (
 
 
 def _converges(kind: str, fix: bool) -> bool:
-    """Whether the convergence floor applies: a full, non-fix re-review only."""
-    return kind == "full" and not fix
+    """Whether the convergence floor applies: a full or delta, non-fix re-review.
+
+    A delta round shows only the new commits, but the author has still triaged every
+    finding the earlier rounds recorded, so a delta that keeps raising a new MEDIUM or
+    LOW nit must converge the same way a full re-review does (bug
+    B-review-delta-rounds-do-not-converge). A fix round re-checks the author's fixes
+    alone, where any new finding is a real defect of the new code, so it still blocks at
+    any severity.
+    """
+    return kind in ("full", "delta") and not fix
 
 
 def _floor_for(cfg, kind: str, fix: bool) -> str:
@@ -43,8 +51,8 @@ def _floor_for(cfg, kind: str, fix: bool) -> str:
 
 
 def _floor_lines(floor: str) -> list[str]:
-    """The prompt's convergence-floor paragraph; empty when no floor applies (a delta or
-    fix round, where every finding blocks, bug Bf797745b5a)."""
+    """The prompt's convergence-floor paragraph; empty when no floor applies (a chunk
+    re-run or a fix round, where every finding blocks, bug Bf797745b5a)."""
     if not floor:
         return []
     return [

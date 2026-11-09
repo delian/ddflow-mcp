@@ -74,6 +74,7 @@ skip_gates = ["research", "rules", "implement", "rubber_duck", "critic", "verify
 [ci]
 command = ""
 base = ""
+ruff_autofix = true
 pins_precheck = true
 timeout_s = 3600
 workers = "auto"
@@ -160,6 +161,9 @@ redact = true
 max_bytes = 60000
 refresh = "off"
 tables = {}
+
+[fasttrack]
+tiny_cold_max_source_lines = 10
 
 [flow]
 model = "trunk"
@@ -637,6 +641,7 @@ max_lanes = 4
 family_cap = 3
 hedge_max = 1
 default_min_trust = 0
+conformance_min_level = 0
 explore_share = 0.1
 explore_min_n = 5
 bug_window_s = 604800

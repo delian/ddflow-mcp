@@ -407,7 +407,8 @@
                           is reserved)
     --no-task             file no fix task: the bug is fixed in the commit that found it
     --repro-cmd REPRO_CMD
-                          the command that shows the bug, kept in the repro bundle (never run)
+                          the command that shows the bug, run once at filing in a scratch checkout
+                          of the recorded sha (CLI only; the operator's own command)
     --test TEST           a pytest id: run once, its output tail goes in the repro bundle
     --repro-capture REPRO_CAPTURE
                           off | basic | full: how much repro bundle to store (default [bugs]
@@ -3502,7 +3503,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3515,6 +3516,8 @@
     --lease LEASE        wait for a lease instead of an item: an agent id (until it holds nothing)
                          or a path/glob (until no other agent's live lease covers it); a bare wait
                          returns the first ready item at once
+    --approval APPROVAL  wait for an operator-approval request id until it is answered; ready then
+                         means re-run the gated command with --approval ID
     --token TOKEN        resume token from an earlier wait
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks

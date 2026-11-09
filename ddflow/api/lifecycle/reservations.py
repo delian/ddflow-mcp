@@ -152,16 +152,15 @@ def _queued_blocker(st, cfg, it, me: str, held, want: list[str], now: float):
     # literal re-statement: README.md held, README.md re-stated.
     mine_glob = set(held.globs) if held is not None else set()
     fresh = [g for g in want if g not in mine_glob]
-    ahead = WG.queue_ahead(st, cfg, it.id, me, fresh, now)
-    if ahead is None:
+    aheads = WG.queued_ahead(st, cfg, it.id, me, fresh, now)
+    if not aheads:
         return None
-    pairs = WG.conflicts(fresh, ahead.globs, WG.shared_globs(cfg))
-    # `queue_ahead` returned on the SAME `conflicts(fresh, ahead.globs, shared)` being
-    # non-empty, so `pairs` is non-empty here; fall back to the caller's own first glob,
-    # never the waiter's (a glob the caller did not ask for would be a false refusal).
-    named = pairs[0][0] if pairs else fresh[0]
-    reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first ([lease].wait_queue)"
-    return Blocked(it.id, "conflict", reason, [ahead.item])
+    return Blocked(
+        it.id,
+        "conflict",
+        WG.queued_names(fresh, aheads, cfg),
+        list(dict.fromkeys(a.item for a in aheads)),
+    )
 
 
 def _claim_blocker(
@@ -199,14 +198,14 @@ def _claim_blocker(
         return Blocked(it.id, "conflict", f"leased by {held.holder}", [it.id])
     # The globs the claim will name, when the caller says (`wait --globs`): judged on the
     # stored ones, READY was followed by a claim refused for its own globs (B7036cf788c).
-    clash = L.glob_clash(st, cfg, it, me, list(it.globs if globs is None else globs), now)
-    if clash is not None:
-        other_id, lz, pair = clash
+    clashes = L.glob_clashes(st, cfg, it, me, list(it.globs if globs is None else globs), now)
+    if clashes:
+        named, ids = L.clash_report(clashes)
         return Blocked(
             it.id,
             "conflict",
-            f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})",
-            [other_id],
+            f"globs overlap a live lease: {named}",
+            ids,
         )
     short = _resource_blocker(cfg, it, live)
     if short is not None:

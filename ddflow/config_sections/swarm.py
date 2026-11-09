@@ -124,6 +124,11 @@ class SwarmConfig:
         doc="Trust tier a lane needs for an item that names none. A lane's tier is whatever the operator grants it; a lane below the item's tier is refused, whatever its score.",
         check=_count,
     )
+    conformance_min_level: int = knob(
+        0,
+        doc="Measured conformance level a lane needs before the scheduler offers it a real item (a lane at level 0 has never passed a conformance run, so its tier is only its own word). Zero does not enforce conformance.",
+        check=_count,
+    )
     explore_share: float = knob(
         0.10,
         doc="Share of picks spent on under-measured (family, model) pairs (D-swarm-answers Q10). Zero turns exploration off.",
