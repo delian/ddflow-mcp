@@ -116,7 +116,6 @@
 ["managed-file", "settings.json", "ddflow/services/compat_refs.py", 1]
 ["managed-file", "settings.json", "ddflow/services/harness.py", 1]
 ["network", "host:127.0.0.1", "ddflow/services/review/model.py", 14]
-["network", "host:adaptivecards.io", "ddflow/adapters/notify_outbound.py", 1]
 ["network", "host:api.anthropic.com", "ddflow/services/review/model.py", 1]
 ["network", "host:api.deepseek.com", "ddflow/services/review/model.py", 1]
 ["network", "host:api.fireworks.ai", "ddflow/services/review/model.py", 1]

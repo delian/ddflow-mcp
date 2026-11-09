@@ -238,6 +238,20 @@ def test_network_calls_and_hardcoded_hosts(tmp_path: Path):
     assert all("pw" not in s.detail for f in c.families for s in f.sites)  # userinfo dropped
 
 
+def test_a_schema_namespace_url_is_not_a_network_host(tmp_path: Path):
+    """B489298dd27: a URL that only IDENTIFIES a message format's schema (an Adaptive Card
+    ``$schema`` field another system renders) is not an endpoint ddflow calls, so that URL's
+    host is not a network dependence; a non-schema path on the SAME host still is."""
+    src = (
+        'CARD_SCHEMA = "http://adaptivecards.io/schemas/adaptive-card.json"\n'
+        'NOTIFY = "https://adaptivecards.io/v1/notify"\n'
+    )
+    c = I.scan(_tree(tmp_path, {"card.py": src}))
+    counts = {f.family: len(f.sites) for f in c.families if f.kind == "network"}
+    # the schema namespace is dropped, the non-schema path on the same host is still one site
+    assert counts["host:adaptivecards.io"] == 1
+
+
 def test_unparsable_file_is_reported(tmp_path: Path):
     c = I.scan(
         _tree(tmp_path, {"ok.py": 'import os\nos.getenv("OK_VAR")\n', "bad.py": "def f(:\n"})
