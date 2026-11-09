@@ -30,6 +30,8 @@ NOT_COLLECTED = {
     "flaky_rate": "PM-flaky",
     "complexity": "PM-complexity",
     "network": "not collected by decision (D-perf-metrics-answers .8)",
+    "deltas": "PM-report-data (period-over-period deltas) - computed by the renderer over two windows",
+    "findings": "PM-detect (merged) for drift findings; PM-auto for the proposals",
 }
 
 
@@ -72,8 +74,7 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
         if o is None:
             continue
         groups["models"][o.model or "(unknown model)"].append(kind)
-        if o.by:
-            groups["reviewers"][o.by].append(kind)
+        groups["reviewers"][o.by or "(unknown reviewer)"].append(kind)
     # per-agent: an item's claim agent, its first-run "passed every gate" (only IN-SCOPE items
     # with a recorded verdict; re-claims by the same agent count once, never inflate n).
     agent_outcomes: dict[str, list[str]] = defaultdict(list)
