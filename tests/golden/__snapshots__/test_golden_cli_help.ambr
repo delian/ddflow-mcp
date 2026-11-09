@@ -1653,12 +1653,12 @@
 # ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume}] [lane]
+  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume,approve}] [lane]
   
   positional arguments:
-    {state,brief,advise,fleet,resume}
-                          state (default), brief <lane>, advise, fleet or resume <lane>
-    lane                  with brief or resume: the lane name, or a unique part of it
+    {state,brief,advise,fleet,resume,approve}
+                          state (default), brief <lane>, advise, fleet, resume <lane> or approve <template>
+    lane                  with brief, resume or approve: the lane name (for approve, the template name), or a unique part of it
   
   options:
     -h, --help            show this help message and exit

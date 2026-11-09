@@ -58,8 +58,8 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "lane",
-                help="Lane name (or a unique part); with view=brief or resume.",
-                cli_help="with brief or resume: the lane name, or a unique part of it",
+                help="Lane name (or a unique part); with view=brief, resume or approve.",
+                cli_help="with brief, resume or approve: the lane name (for approve, the template name), or a unique part of it",
                 positional=True,
                 nargs="?",
                 default=None,
