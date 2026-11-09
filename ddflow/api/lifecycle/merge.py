@@ -17,6 +17,7 @@ from ...services import ci as CI
 from ...services import eventcommit as EC
 from ...services import flow as FS
 from ...services import gates as G
+from ...services import identity as ID
 from ...services import leases as LS
 from ...services import merge_force as MF
 from ...services.cleanup import (  # noqa: F401  (re-exported)
@@ -154,9 +155,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         return it
     if (contested := LS.contest_refusal(it, "worktree.merged", "merged")) is not None:
         return contested  # B2809f4213b: before any git action
-    held = LS.foreign_live_lease(log, cfg, item, caller=agent) or LS.peer_live_lease(
-        log, cfg, item, caller=agent
-    )
+    held = LS.foreign_live_lease(log, cfg, item, caller=agent)
     if held is not None:
         # Bddda807b51: before any git action, like contest_refusal. The lease it ends at
         # merge is the current holder's, so a non-holder landing it would release the
@@ -171,6 +170,21 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             sha="",
             dirty=[],
         )
+    if ID.is_agent(agent):
+        held = LS.peer_live_lease(log, cfg, item, caller=log.agent_id)
+        if held is not None:
+            # A same-clone peer agent's live lease: refuse like a foreign one (the
+            # operator recovering a crashed agent's item is exempt -- not is_agent).
+            who = held.holder
+            return O.refused(
+                "worktree.merged",
+                f"cannot merge {item}: it is leased by {who} and the lease is live; "
+                "merging releases their lease and removes their worktree. Ask them, "
+                "wait for the lease to lapse, or release it first.",
+                id=item,
+                sha="",
+                dirty=[],
+            )
     if blocked := _gate_blockers(repo, cfg, st, item):
         # D-failed-review-gate (B85841c0846): landing work whose review failed and was
         # never re-reviewed ships it unreviewed; DX-skip-failed-gate: nor a failed ci.

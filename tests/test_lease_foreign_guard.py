@@ -169,6 +169,13 @@ def test_merge_of_another_clones_live_lease_is_refused(clones):
     assert _lease_of(b, "T2") is not None
 
 
+def test_merge_of_a_peer_agents_live_lease_is_refused(clones):
+    a, _b = clones
+    code, out, err = run_cli(a, "merge", "T2", agent="U2")
+    assert code == REFUSED, out + err
+    assert "U9" in out + err
+
+
 def test_release_force_needs_a_reason(clones):
     _a, b = clones
     before = _events(b)
