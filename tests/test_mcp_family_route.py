@@ -150,3 +150,23 @@ def test_an_argument_another_action_advertises_is_not_unknown(inited):
     # sends it to `action=similar` is not refused as "unknown argument: sources".
     text, _err = _call(inited, "ddflow_memory", action="similar", text="x", sources="decisions")
     assert "unknown argument" not in text
+
+
+def test_bug_fixed_takes_the_no_task_argument_the_family_advertises(inited):
+    # Bab813498a3: `no_task` is a `bug found` argument the `ddflow_bug` family union
+    # advertises, so a call that sends it to `action=fixed` routes to the member rather
+    # than being refused as "unknown argument: no_task" (the member ignores it; `fixed`
+    # files no task). The refusal was already removed by 46f383622 (B34e7a7001f): the
+    # family routing now knows every argument ANY action advertises.
+    from ddflow.surfaces.tools import family_schema
+
+    routed = family_schema.route(
+        "ddflow_bug", {"action": "fixed", "id": "B-no-such", "no_task": True}
+    )
+    # On the unfixed router this is the refusal "unknown argument(s): no_task", a string.
+    assert not isinstance(routed, str), routed
+    assert routed.tool == "ddflow_bug_fixed"
+    # End to end: the routed call reaches the member's own answer, never an
+    # unknown-argument error, under the family tool name the schema advertises no_task.
+    text, _err = _call(inited, "ddflow_bug", action="fixed", id="B-no-such", no_task=True)
+    assert "unknown argument" not in text
