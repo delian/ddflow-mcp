@@ -67,3 +67,13 @@ class LocalFs:
 
 #: The shared default instance.
 DEFAULT: Fs = LocalFs()
+
+
+def which(cmd: str) -> str | None:
+    """The first executable named ``cmd`` on ``PATH`` (``shutil.which``), or ``None``.
+
+    ``shutil.which`` is a ``shutil`` function, so it lives here -- the ``fsio-home``
+    import contract keeps ``shutil`` in this one module -- and callers reach it through
+    this adapter rather than importing ``shutil`` directly.
+    """
+    return shutil.which(cmd)
