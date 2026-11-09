@@ -111,6 +111,20 @@ SITES: tuple[Site, ...] = (
         ("ddflow/services/grants.py:_agent_approval",),
         "ddflow grant add ...",
     ),
+    # Relay the channel-consent grant (channels.grant_consent) so `approvals ask`/`attest` can offer it.
+    Site(
+        "channel.consent",
+        "A",
+        T2,
+        L1,
+        "the channel kind and its consent digest (once per kind, D7e0d117ba5)",
+        (),  # no marker call here: the refusal lives in approval.grant, which this relays to
+        "ddflow approvals consent <kind> --reason ...",
+        anchor=(
+            "ddflow/services/ask/channels.py",
+            "A person consents to one kind of network channel",
+        ),
+    ),
     Site(
         "approve.partial",
         "A",

@@ -1122,7 +1122,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 599 knobs.
+cadences, and the rest of the 613 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5412,7 +5412,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 599): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 613): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5999,7 +5999,7 @@ declared once and persists — see
 
 ## Configuration
 
-599 knobs across 55 sections, every one documented in place and listed, with its default
+613 knobs across 56 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6066,8 +6066,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=74ecfc8c2d34 -->
-<details><summary>All 599 knobs across 55 sections</summary>
+<!-- ddflow:begin README/knobs sha=385f3cb87e0c -->
+<details><summary>All 613 knobs across 56 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6470,6 +6470,20 @@ long default is left to `ddflow config --explain`.
 | `metrics.lock_falsifier_red_main_pct` | `10` |  |
 | `metrics.lock_revert_key` | `"locks.mode"` |  |
 | `metrics.lock_revert_value` | `"strict"` |  |
+| `notify.channel` | `"terminal"` | `terminal` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
+| `notify.ask_channel` | `"harness"` | `harness` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
+| `notify.endpoints` | `{}` |  |
+| `notify.token_env` | `{}` |  |
+| `notify.send_timeout_s` | `10.0` |  |
+| `notify.ask_timeout_s` | `300.0` |  |
+| `notify.ask_attempts` | `3` |  |
+| `notify.email_host` | `""` |  |
+| `notify.email_port` | `587` |  |
+| `notify.email_from` | `""` |  |
+| `notify.email_to` | `""` |  |
+| `notify.email_user` | `""` |  |
+| `notify.email_password_env` | `""` |  |
+| `notify.email_tls` | `true` |  |
 | `output.max_rows` | `50` |  |
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |

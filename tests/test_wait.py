@@ -260,14 +260,14 @@ def test_a_wait_nothing_can_end_is_refused_up_front(proj, setup, item, needle):
         run_cli(proj, *argv)
     started = time.monotonic()
     out = A.wait(proj, item=item, timeout_s=30, poll_s=0.05, agent=WAITER)
-    assert out.exit == O.NOTHING and not out.data["waitable"], out.reason
+    assert out.exit == O.REFUSED and not out.data["waitable"], out.reason
     assert needle in out.reason
     assert time.monotonic() - started < 5, "it slept on a wait that could never end"
 
 
 def test_waiting_on_a_dependency_you_hold_yourself_is_refused(proj):
     out = A.wait(proj, item="T3", timeout_s=30, agent=HOLDER)
-    assert out.exit == O.NOTHING and not out.data["waitable"]
+    assert out.exit == O.REFUSED and not out.data["waitable"]
     assert "YOU hold" in out.reason
 
 
@@ -277,7 +277,7 @@ def test_a_done_item_is_not_waited_on(proj, monkeypatch):
     )  # a person forcing
     A.complete(proj, "T1", force=True, agent=HOLDER)
     out = A.wait(proj, item="T1", timeout_s=30, agent=WAITER)
-    assert out.exit == O.NOTHING and not out.data["waitable"]
+    assert out.exit == O.REFUSED and not out.data["waitable"]
     assert "already done" in out.reason
 
 
@@ -292,7 +292,7 @@ def test_waiting_for_anything_with_nothing_in_flight_is_refused(repo):
     run_cli(repo, "task", "add", "C1", "--title", "C1 fixture", "--needs", "C2")
     run_cli(repo, "task", "add", "C2", "--title", "C2 fixture", "--needs", "C1")
     out = A.wait(repo, timeout_s=30, agent=WAITER)
-    assert out.exit == O.NOTHING and not out.data["waitable"]
+    assert out.exit == O.REFUSED and not out.data["waitable"]
     assert "no other agent holds anything" in out.reason
 
 
@@ -409,7 +409,7 @@ def test_an_expired_lease_on_the_item_ITSELF_is_not_a_wake(repo, monkeypatch):
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     monkeypatch.setattr(WT, "RECHECK_S", 0.2)
     out = A.wait(repo, item="T1", timeout_s=20, poll_s=0.05, agent=WAITER)
-    assert out.exit == O.NOTHING and not out.data["waitable"], out.reason
+    assert out.exit == O.REFUSED and not out.data["waitable"], out.reason
     assert "ddflow recover" in out.reason
     refused = A.claim(repo, "T1", no_worktree=True, agent=WAITER)
     assert refused.exit == O.REFUSED, "if claim accepts it, wait should have said ready"
@@ -580,7 +580,7 @@ def test_a_resource_you_hold_yourself_is_not_waited_on(repo):
         run_cli(repo, "update", tid, "--resources", "gpu:1")
     assert A.claim(repo, "P", no_worktree=True, agent=WAITER).ok
     out = A.wait(repo, item="Q", timeout_s=0, agent=WAITER)
-    assert out.exit == O.NOTHING and not out.data["waitable"], out.data
+    assert out.exit == O.REFUSED and not out.data["waitable"], out.data
     assert "P" in out.reason and "YOU hold" in out.reason, out.reason
 
 

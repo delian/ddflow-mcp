@@ -46,6 +46,10 @@ useDefault = true
     # names them in task bodies, and the generic-api-key rule reads one that follows an
     # `api` word as the key. The `.N-` slice part is what no credential format has.
     '''^[A-Za-z]+(?:-[A-Za-z0-9]+)+\.[0-9]+(?:-[A-Za-z0-9]+)+[.,;:]?$''',
+    # ddflow's own decision id that follows the `auth-token` inside its neighbour
+    # `D-auth-token-defaults` in a recorded-decision list: a specific value, not the id
+    # shape, because no regex separates a decision slug from a credential shape safely.
+    '''^D-swarm-pilot-2026-11-05[.,;:]?$''',
   ]
   # The context7 key that leaked into the PARENT repository is deliberately NOT listed.
   # It does not appear in ddflow's history, and if it ever does, this scan must fire.
@@ -61,6 +65,19 @@ useDefault = true
   targetRules = ["sourcegraph-access-token"]
   condition = "AND"
   paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^[0-9a-f]{40}$''']
+
+
+[[allowlists]]
+  # The committed docs quote git commit shas too (RESEARCH.md reproduces a `ddflow ci run`
+  # that names one), and mention sourcegraph elsewhere in the same file: the rule's keyword
+  # prefilter is per file, so the sha reads as a token. Scoped to ONE rule, ONLY the
+  # committed docs, ONLY a bare 40-hex value: a real `sgp_`-prefixed token, or a bare hex
+  # string outside `docs/`, still fires.
+  description = "40-hex git shas in the committed docs are not sourcegraph tokens"
+  targetRules = ["sourcegraph-access-token"]
+  condition = "AND"
+  paths = ['''^docs/''']
   regexes = ['''^[0-9a-f]{40}$''']
 
 [[allowlists]]

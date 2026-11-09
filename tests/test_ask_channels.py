@@ -392,3 +392,18 @@ def test_email_is_built_from_the_settings(log, repo):
 def test_an_unknown_channel_name_names_those_known(log, repo):
     with pytest.raises(KeyError, match="terminal"):
         C.open_channel(log, Config(), "smoke-signals", repo=repo)
+
+
+def test_settings_from_reads_the_notify_knobs_and_marks_committed_addresses(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text(
+        "[notify]\nchannel = \"slack\"\nendpoints = { slack = \"https://hook\" }\nask_channel = \"email\"\n",
+        "utf-8",
+    )
+    from ddflow.config import Config
+
+    cfg = Config.load(tmp_path)
+    s = C.settings_from(cfg)
+    assert s.channel == "slack" and s.ask_channel == "email"
+    assert s.endpoints == {"slack": "https://hook"}
+    assert "channel" in s.committed and "ask_channel" in s.committed  # committed layer

@@ -67,6 +67,32 @@ def test_a_real_looking_key_after_the_same_keyword_still_fires(tmp_path):
     assert _scan(tmp_path, key) != 0
 
 
+# Built from pieces so the repository's own scan does not read the decision id out of this
+# file: the id is allowlisted by its exact value, and this file is not one of the paths
+# gitleaks skips, so the literal must stay out of the committed test source.
+_DECISION_ID = "D-swarm-pilot" + "-" + "2026" + "-11" + "-05"
+
+
+def test_a_decision_id_after_a_token_named_id_is_not_a_secret(tmp_path):
+    # A recorded-decision list names the decision _DECISION_ID beside a decision whose own
+    # name holds the word "auth-token"; the generic-api-key rule reads _DECISION_ID as the
+    # secret after that keyword. The allowlist names that exact value.
+    token_named = "D-auth" + "-token" + "-defaults"
+    body = '{"body":"decisions ' + token_named + ', ' + _DECISION_ID + '"}\n'
+    assert _scan(tmp_path, body) == 0
+
+
+_LOOKALIKE = "Prod" + "-" + "82910" + "4857261" + "9038" + "271"
+
+
+def test_a_credential_lookalike_after_a_token_named_id_still_fires(tmp_path):
+    # Only that one decision id is allowlisted, not a dash shape: a credential-shaped value
+    # in its place still fires, so a broad shape allowlist cannot regress in unnoticed.
+    token_named = "D-auth" + "-token" + "-defaults"
+    body = '{"body":"decisions ' + token_named + ', ' + _LOOKALIKE + '"}\n'
+    assert _scan_committed(tmp_path, ".ddflow/events/padapt2.jsonl", body) != 0
+
+
 _SHA = "0123456789abcdef" * 2 + "01234567"
 
 
@@ -107,6 +133,13 @@ _BODY = '{"body":"sourcegraph search","head":"' + _SHA + '"}\n'
 def test_a_git_sha_in_an_event_log_that_mentions_sourcegraph_is_not_a_token(tmp_path):
     # The rule's keyword is per file; the committed logs name 40-hex shas all the time.
     assert _scan_committed(tmp_path, ".ddflow/events/a.jsonl", _BODY) == 0
+
+
+def test_a_git_sha_in_docs_that_mentions_sourcegraph_is_not_a_token(tmp_path):
+    # RESEARCH.md quotes a `git` commit sha under a sourcegraph mention; the committed docs
+    # name 40-hex shas like the event logs do.
+    doc = "sourcegraph search from sha " + _SHA + "\n"
+    assert _scan_committed(tmp_path, "docs/ddflow/RESEARCH.md", doc) == 0
 
 
 def test_the_same_hex_outside_the_event_logs_still_fires(tmp_path):
