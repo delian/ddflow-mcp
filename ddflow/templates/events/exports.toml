@@ -3,11 +3,18 @@
 [[kind]]
 name = "export.acknowledged"
 doc = "A generated document's edit by hand was acknowledged."
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "export.disabled"
 doc = "Generating a document was turned off."
+fields = { "by" = ["str"], "document" = ["str"], "human" = ["bool"], "local" = ["bool"], "locked" = ["bool"] }
+lookup = { "by" = "an agent id", "document" = "a document name" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "export.enabled"
 doc = "Generating a document was turned on, with its path and mode."
+fields = { "by" = ["str"], "document" = ["str"], "human" = ["bool"], "local" = ["bool"], "locked" = ["bool"], "mode" = ["str"], "path" = ["str"] }
+lookup = { "by" = "an agent id", "document" = "a document name", "mode" = "a mode word" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"

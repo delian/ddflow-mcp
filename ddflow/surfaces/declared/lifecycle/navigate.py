@@ -330,6 +330,7 @@ COMMANDS: tuple[Command, ...] = (
             lease=a.get("lease", "") or "",
             token=a.get("token", "") or "",
             approval=a.get("approval", "") or "",
+            job=a.get("job", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -376,6 +377,13 @@ COMMANDS: tuple[Command, ...] = (
                 help="Wait for an APPROVAL instead of an item or lease: an operator-approval request id, until the person answers it. Ready then means re-run the gated command with --approval ID.",
                 cli_help="wait for an operator-approval request id until it is answered; ready then means "
                 "re-run the gated command with --approval ID",
+                default="",
+            ),
+            Param(
+                "job",
+                help="Wait for a JOB instead of an item, lease or approval: the run handle a detached review (`ddflow review --detach`) returns, until its process is over and the round is recorded. Ready then means read the round (next_actions) and act on it.",
+                cli_help="wait for a job (a detached review's run handle) instead of an item, lease or "
+                "approval: until its process is over and its round is recorded",
                 default="",
             ),
             Param(

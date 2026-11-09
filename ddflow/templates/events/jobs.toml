@@ -3,35 +3,62 @@
 [[kind]]
 name = "external.observed"
 doc = "A job observed a change outside the log."
+exempt = "a machine observation or run record, not authored text"
 
 [[kind]]
 name = "job.ended"
 doc = "A background job ended."
+fields = { "exit_code" = ["int"], "note" = ["str"] }
+text = ["note"]
+exempt = "a machine observation or run record, not authored text"
 
 [[kind]]
 name = "job.started"
 doc = "A background job started."
+fields = { "command" = ["str"], "cwd" = ["str"], "host" = ["str"], "item" = ["str"], "log" = ["str"], "pid" = ["int"], "proc_start" = ["str"] }
+text = ["command"]
+lookup = { "cwd" = "a directory that is opened", "host" = "a machine id compared for liveness", "item" = "an item id", "log" = "a path that is opened", "proc_start" = "a process start stamp" }
+exempt = "a machine observation or run record, not authored text"
 
 [[kind]]
 name = "schedule.defined"
 doc = "A scheduled job was defined."
+fields = { "cadence" = ["dict"], "concurrency_group" = ["str"], "enabled" = ["bool"], "needs" = ["list"], "scope_globs" = ["list"], "tags" = ["list"], "title" = ["str"] }
+text = ["title"]
+lookup = { "cadence" = "numbers and cron words", "concurrency_group" = "a group id", "scope_globs" = "globs" }
+exempt = "a scheduled job's definition: a document keyed by its id (defining an id again replaces it) and validated by api.schedule; the authoring surfaces that add a duplicate check are B-sched-author"
 
 [[kind]]
 name = "schedule.removed"
 doc = "A scheduled job was removed."
+fields = { "reason" = ["str"] }
+text = ["reason"]
+exempt = "a scheduled job's definition: a document keyed by its id (defining an id again replaces it) and validated by api.schedule; the authoring surfaces that add a duplicate check are B-sched-author"
 
 [[kind]]
 name = "schedule.updated"
 doc = "A scheduled job was changed."
+exempt = "a scheduled job's definition: a document keyed by its id (defining an id again replaces it) and validated by api.schedule; the authoring surfaces that add a duplicate check are B-sched-author"
 
 [[kind]]
 name = "trigger.evaluated"
 doc = "The trigger evaluator ran over a batch of events."
+fields = { "errors" = ["list"], "fired" = ["int"], "now" = ["str"], "suppressed" = ["int"], "triggers" = ["list"] }
+text = ["errors"]
+lookup = { "now" = "a timestamp", "triggers" = "trigger ids" }
+exempt = "the trigger evaluator's own record of a run, a fire or a suppression: no authored text"
 
 [[kind]]
 name = "trigger.fired"
 doc = "A trigger fired its job."
+fields = { "digest" = ["str"], "events" = ["list"], "hop" = ["int"], "items" = ["list"], "job" = ["str"], "key" = ["str"] }
+lookup = { "events" = "event ids", "items" = "item ids", "job" = "a job id", "key" = "a dedupe key" }
+exempt = "the trigger evaluator's own record of a run, a fire or a suppression: no authored text"
 
 [[kind]]
 name = "trigger.suppressed"
 doc = "A trigger was suppressed, with the reason."
+fields = { "detail" = ["str"], "events" = ["list"], "key" = ["str"], "reason" = ["str"] }
+text = ["detail", "reason"]
+lookup = { "events" = "event ids", "key" = "a dedupe key" }
+exempt = "the trigger evaluator's own record of a run, a fire or a suppression: no authored text"

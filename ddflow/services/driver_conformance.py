@@ -1,8 +1,9 @@
 """The offline conformance of ONE driver descriptor (`ddflow harness test`).
 
 The per-descriptor checks that need no recorded fixture, no probe and no install: the
-facts overlay lists only well-formed facts, and a command-hooked descriptor's normalizer
-and emitter resolve. The fixture-backed checks (E1 hook payloads, E4 argv, E5 stream and
+facts overlay lists only well-formed facts, and a command-hooked descriptor's emit
+variant resolves (its field map is total, so the variant is the one fallible resolution
+worth checking here). The fixture-backed checks (E1 hook payloads, E4 argv, E5 stream and
 the Lane contract) run in the test suite (`tests/test_driver_conformance.py`), the other
 half of DRV-conformance. Together they are the one offline conformance suite; this module
 is the half the CLI runs for a single descriptor.
@@ -34,32 +35,35 @@ def run(h) -> dict:
     if fact_problems:
         checks["facts"] = {"status": "failed", "detail": "; ".join(fact_problems)}
     else:
-        checks["facts"] = {"status": "ok", "detail": f"{len(fact_rows)} fact row(s), all well-formed"}
+        checks["facts"] = {
+            "status": "ok",
+            "detail": f"{len(fact_rows)} fact row(s), all well-formed",
+        }
 
     if h.hooks is not None and h.hooks.style in HR.COMMAND_HOOK_STYLES:
         # The plan is built from the descriptor in hand, not re-fetched by id: a local
         # descriptor (`ddflow harness add`) is not in the shipped registry, and an override
         # is the one under test, so `plan_for(hid)` would read the wrong (or no) descriptor.
         plan = hookio.Plan(
-            hid, h.hooks.normalizer, h.hooks.emitter, h.hooks.inject, dict(h.hooks.events)
+            hid,
+            hookio.fieldmap(h.hooks.fields),
+            h.hooks.emitter,
+            h.hooks.inject,
+            dict(h.hooks.events),
         )
-        unresolved = [
-            name
-            for name, table in (
-                ("normalizer", hookio.NORMALIZERS),
-                ("emitter", hookio.EMITTERS),
-            )
-            if getattr(plan, name) not in table
-        ]
-        if unresolved:
+        # The field map resolves for any `[hooks.fields]` table (missing facts default,
+        # unknown names drop), so the emit variant is the descriptor resolution that can
+        # fail; the named-normalizer/emitter tables it replaced are gone by design
+        # (tests/test_hook_core.py pins their removal).
+        if plan.emitter not in hookio.EMIT_VARIANTS:
             checks["hooks"] = {
                 "status": "failed",
-                "detail": f"unresolved {', '.join(unresolved)}",
+                "detail": f"unresolved emit variant {plan.emitter!r}",
             }
         else:
             checks["hooks"] = {
                 "status": "ok",
-                "detail": f"{plan.normalizer}/{plan.emitter}",
+                "detail": plan.emitter,
             }
 
     ok = all(c["status"] == "ok" for c in checks.values())

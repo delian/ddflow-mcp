@@ -14,11 +14,11 @@ from ._base import _load
 
 
 def approvals_ask(repo: Path, ask_id: str, *, agent: str = "") -> O.Outcome:
-    """The exact AskUserQuestion input for a waiting request."""
+    """The exact AskUserQuestion input for a waiting request or question."""
     _log, cfg, st = _load(repo, agent)
     row = asks_of(st).get(ask_id)
-    if row is None or not row["verb"]:
-        return O.failed("approvals.ask", f"no approval request {ask_id}")
+    if row is None:
+        return O.failed("approvals.ask", f"no ask {ask_id}")
     if not cfg.approvals.accept_harness:
         return O.refused("approvals.ask", "the harness channel is off ([approvals].accept_harness)")
     if row["min_level"] > H.LEVEL:

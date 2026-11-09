@@ -32,7 +32,7 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval
+from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval, _wait_job
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
@@ -423,10 +423,16 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     lease: str = "",
     token: str = "",
     approval: str = "",
+    job: str = "",
 ) -> O.Outcome:
     """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
 
     ``approval`` (instead of ``item``/``lease``) waits until the operator answers the approval.
+
+    ``job`` (instead of ``item``/``lease``/``approval``) waits for a JOB: the run handle a
+    detached review (`ddflow review --detach`) returns. Ready when the job's process is over
+    -- a detached review records its round before it exits -- with `next_actions` naming what
+    to do with the round.
 
     ``lease`` (instead of ``item``) waits for a LEASE: an agent id until it holds nothing, or
     a path/glob until no other agent's live lease covers it. A bare wait returns the first
@@ -449,6 +455,8 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     # fmt: off
     if approval:
         return _wait_approval(repo, approval, item, phase, lease, globs, token, timeout_s, poll_s, max_s, agent, on_progress)
+    if job:
+        return _wait_job(repo, job, item, phase, lease, globs, token, timeout_s, poll_s, max_s, agent, on_progress)
     # fmt: on
     args = _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s)
     if isinstance(args, O.Outcome):
