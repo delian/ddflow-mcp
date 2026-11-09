@@ -221,6 +221,36 @@ def _claim_by_approval(repo: Path, item: str, refused: O.Outcome, approval: str,
         json.dumps({"state": it.state if it else "", "holder": lease.holder if lease else ""})
     )
     canon = Canon(verb="claim.force", agent=log.agent_id, item=item, state=state)
+    if approval and approval != CN.REQUEST:
+        # A real approval id: VALIDATE it but do NOT spend it yet (B6365c86730). The forced
+        # claim may still refuse (a live lease overlap `--force` cannot break), and that refusal
+        # must not spend the operator's single-use approval -- the use is recorded only once the
+        # claim has actually landed.
+        decision = CN.check(log, canon, approval, cfg=cfg)
+        if not decision.ok:
+            return O.refused(
+                "item.claimed", f"{refused.reason}\n{decision.message}", id=item, alternatives=[]
+            )
+        stamp = decision.stamp
+        why = f"{note} [operator approval {stamp['ask']} by {stamp['approved_by']} via {stamp['via']}]"
+        out = _claim_once(repo, item, note=why.strip(), force=True, **kw)
+        if not out.ok:
+            return O.refused(
+                "item.claimed",
+                f"{out.reason}\nrefusing: the operator approval {stamp['ask']} was NOT consumed "
+                "(the forced claim still refused); run again once it can land.",
+                id=item,
+                alternatives=[],
+            )
+        spent = CN.spend(log, canon, approval, cfg=cfg)
+        if not spent.ok:
+            # `check` validated this answer moments ago against this same pre-claim canon, so this
+            # cannot fail in practice; a spend that does fail (a TTL lapse, a concurrent identical
+            # spend) is surfaced in the answer rather than silently dropping the use.
+            out.data["approval_not_consumed"] = spent.message
+        return out
+    # No id (a steering refusal, or a standing rule may answer) or `--approval request` files the
+    # request: exactly the operator_gate path, whose standing-rule stamp may still auto-approve.
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
     if not decision.ok:
         return O.refused(
