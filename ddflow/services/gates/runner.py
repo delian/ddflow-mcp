@@ -542,7 +542,7 @@ def capture_test_durations(repo, item_id: str, gate: str, xml_report: str, worke
         from ..perf import testtimes
 
         cases = testtimes.parse_junit(xml_report)
-        testtimes.fold(cases, repo)
+        testtimes.fold(cases, repo, gate)
         return testtimes.rollup(cases, workers)
     except (OSError, ValueError, SyntaxError):  # ElementTree.ParseError is a SyntaxError
         return {"unavailable": True, "item": item_id, "gate": gate}

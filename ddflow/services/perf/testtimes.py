@@ -20,67 +20,69 @@ from xml.etree import ElementTree
 class TestCase:
     test_id: str  # the test's dotted id, never its body or output
     file: str
-    duration_s: float
+    duration_s: float | None  # None: the junit carried no (or a non-numeric) time
 
 
 def parse_junit(xml_text: str) -> list[TestCase]:
-    """junit XML -> one TestCase per ``<testcase>`` (a missing ``time`` is a measured 0)."""
+    """junit XML -> one TestCase per ``<testcase>``. A missing or non-numeric ``time`` is a
+    None duration (the case is not a duration sample; it is never a measured 0)."""
     root = ElementTree.fromstring(xml_text)
     out: list[TestCase] = []
     for case in root.iter("testcase"):
         name = case.get("name", "")
         classname = case.get("classname", "")
         try:
-            duration = float(case.get("time", 0.0))
+            duration = float(case.get("time", ""))
         except ValueError:
-            duration = 0.0
+            duration = None
         out.append(
-            TestCase(
-                test_id=f"{classname}.{name}",
-                file=classname.replace(".", "/") + ".py",
-                duration_s=duration,
-            )
+            TestCase(test_id=f"{classname}.{name}", file=classname.replace(".", "/") + ".py", duration_s=duration)
         )
     return out
 
 
 def rollup(cases: list[TestCase], workers: int, top_n: int = 10) -> dict:
     """The small rollup that rides the evidence: count, top slowest, per-file totals, skew,
-    serial-equivalent seconds and the critical-path floor (what a wall run cannot beat)."""
+    serial-equivalent seconds and the critical-path floor (what a wall run cannot beat). A
+    case with no duration is counted (``count``) but contributes no time (it is not a 0)."""
+    timed = [c for c in cases if c.duration_s is not None]
     per_file: dict[str, float] = defaultdict(float)
-    for c in cases:
+    for c in timed:
         per_file[c.file] += c.duration_s
-    serial = sum(c.duration_s for c in cases)
-    slowest_test = max((c.duration_s for c in cases), default=0.0)
+    serial = sum(c.duration_s for c in timed)
+    slowest_test = max((c.duration_s for c in timed), default=0.0)
     slowest_file = max(per_file.values(), default=0.0) if per_file else 0.0
-    # A file cannot parallelize within itself: under file-level distribution the floor is the
-    # slowest file; under no distribution it is the slowest test. Take the larger.
-    floor = max(slowest_test, slowest_file) if workers <= 1 else max(slowest_test, 0.0)
+    floor = max(slowest_test, slowest_file)
     return {
         "count": len(cases),
+        "with_duration": len(timed),
         "top_slowest": [
             {"test_id": c.test_id, "file": c.file, "duration_s": c.duration_s}
-            for c in sorted(cases, key=lambda c: -c.duration_s)[:top_n]
+            for c in sorted(timed, key=lambda c: -c.duration_s)[:top_n]
         ],
         "per_file": dict(sorted(per_file.items(), key=lambda kv: -kv[1])[:top_n]),
-        "skew": slowest_file / floor if floor else 0.0,
+        #: the slowest file's share of the SERIAL work (the concentration the workers must hide)
+        "skew": slowest_file / serial if serial else 0.0,
         "serial_seconds": serial,
         "critical_path_floor_s": floor,
         "workers": workers,
     }
 
 
-def fold(cases: list[TestCase], repo) -> None:
-    """Append one ring sample per test (the raw durations; only the rollup reaches evidence)."""
+def fold(cases: list[TestCase], repo, gate: str) -> None:
+    """Append one ring sample per timed test (the raw durations) to the ``gate`` series; only
+    the rollup reaches evidence. A case with no duration is not a sample."""
     import time
 
     from ddflow.services.perf import store
 
     for c in cases:
+        if c.duration_s is None:
+            continue
         store.append(
             repo,
             "test_durations",
-            store.Sample(time.time(), c.file, c.duration_s, "unit_tests", c.test_id),
+            store.Sample(time.time(), c.file, c.duration_s, gate, c.test_id),
         )
 
 
