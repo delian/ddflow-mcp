@@ -109,10 +109,11 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
 def _reopen_done_parent(st: State, child_id: str) -> None:
     """Re-open a phase that just gained an open task (bug B86e99de0c6): a phase that
     reports done must hold no open task, so a task filed -- or re-opened -- under a DONE
-    phase invalidates the phase's completion. Its gates and `completed_at` clear, so the
-    phase pipeline re-runs. A truly-closed (imported) phase is NOT re-opened here:
-    ``services.items.missing_parent`` refuses a new open task under it before any event
-    is written, so the fold only reaches this for a phase completed normally.
+    phase invalidates the phase's completion, however it closed (normal or imported). Its
+    gates and `completed_at` clear, so the phase pipeline re-runs. A NEW task under a
+    truly-closed (imported) phase is refused by ``services.items.closed_phase_parent``
+    before any event is written; the fold reaches an imported phase only when one of its
+    tasks re-opens, which also re-opens the phase rather than leaving it done.
     """
     child = st.items.get(child_id)
     if child is None or child.kind == "phase" or not child.parent:
@@ -120,12 +121,11 @@ def _reopen_done_parent(st: State, child_id: str) -> None:
     parent = st.items.get(child.parent)
     if parent is None or parent.kind != "phase" or parent.state != DONE:
         return
-    if parent.id in st.imported_done:
-        return
     parent.state = OPEN
     parent.completed_at = ""
     parent.gates = {}
     parent.lease = None
+    st.imported_done.discard(parent.id)
 
 
 def _h_updated(st: State, ev: Event, kind: str) -> None:

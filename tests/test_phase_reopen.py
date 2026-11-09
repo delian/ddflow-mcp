@@ -60,3 +60,15 @@ def test_a_task_reopened_under_a_done_phase_reopens_it(repo):
     st = _state(repo)
     assert st.items["P9.T1"].state == OPEN
     assert st.items["P9"].state == OPEN, "a phase reopens when a task under it becomes open again"
+
+
+def test_a_task_reopened_under_a_closed_imported_phase_reopens_it(repo):
+    _done_phase(repo, imported=True)
+    assert _state(repo).items["P9"].state == DONE
+
+    log = EventLog(repo, "seed")
+    log.append("item.reopened", "P9.T1", {"reason": "did not hold"})
+
+    st = _state(repo)
+    assert st.items["P9.T1"].state == OPEN
+    assert st.items["P9"].state == OPEN, "an imported phase reopens when its task is reopened"
