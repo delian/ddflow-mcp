@@ -115,7 +115,12 @@ def touched(facts: Facts) -> list[dict]:
         files = list(globs)
         tests = [g for g in files if g.startswith("tests/")]
         out.append(
-            {"item": item, "files": len(files), "tests": len(tests), "source_files": len(files) - len(tests)}
+            {
+                "item": item,
+                "files": len(files),
+                "tests": len(tests),
+                "source_files": len(files) - len(tests),
+            }
         )
     return out
 
@@ -125,7 +130,11 @@ def churn_hotspots(facts: Facts) -> list[dict]:
     item). No outcome recorded changed lines -> ``None`` (unmeasured, never 0)."""
     out = []
     for item, globs in _items(facts):
-        lines = [o.changed_lines for o in facts.outcomes if o.item == item and o.changed_lines is not None]
+        lines = [
+            o.changed_lines
+            for o in facts.outcomes
+            if o.item == item and o.changed_lines is not None
+        ]
         out.append({"item": item, "globs": len(globs), "changed_lines": max(lines, default=None)})
     return out
 
