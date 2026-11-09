@@ -438,6 +438,38 @@ def _reuse_note(
     return StaleNote(note.gate, "", reused=decision.why)
 
 
+def _refine_disjoint(
+    notes: list,
+    it: Item,
+    cwd: Path,
+    landed: str,
+    changed: list[str] | None,
+    ignore: Sequence[str],
+    docs: Sequence[str],
+) -> list:
+    """The `[locks].review_reuse` = disjoint classification of the stale notes: kept (``reused``
+    carries why), narrowed to the overlapping files (a delta), or the note as it was when git
+    cannot tell (fail closed). A separate function so `refine_stale_notes` stays below the
+    complexity ratchet."""
+    tip = landed if landed and landed != "HEAD" else (getattr(it, "branch", "") or "HEAD")
+    own_id = own_patch_id(cwd, getattr(it, "base", "") or W.default_branch(cwd), tip, changed or [])
+    entries = None
+    out = []
+    for note in notes:
+        rec = it.gates.get(note.gate)
+        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        if note.unverified or not isinstance(recorded, dict):
+            out.append(note)
+            continue
+        if entries is None:
+            entries = commit_tree_entries(cwd, landed) if landed else worktree_entries(cwd)
+        if entries is None:
+            out.append(note)
+            continue
+        out.append(_reuse_note(note, recorded, changed, entries, own_id, ignore, docs))
+    return out
+
+
 def refine_stale_notes(
     notes: list,
     it: Item,
@@ -463,14 +495,10 @@ def refine_stale_notes(
     files main changed are disjoint from the reviewed files, so the review is KEPT and returned
     as a note with ``reused`` set (record why); an overlap returns the note narrowed to the
     overlapping files (a delta); anything git cannot tell keeps the note whole (fail closed)."""
+    if reuse == "disjoint":
+        return _refine_disjoint(notes, it, cwd, landed, changed, ignore, docs)
     entries = None
     out = []
-    own_id = ""
-    if reuse == "disjoint":
-        tip = landed if landed and landed != "HEAD" else (getattr(it, "branch", "") or "HEAD")
-        own_id = own_patch_id(
-            cwd, getattr(it, "base", "") or W.default_branch(cwd), tip, changed or []
-        )
     for note in notes:
         rec = it.gates.get(note.gate)
         recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
@@ -481,9 +509,6 @@ def refine_stale_notes(
             entries = commit_tree_entries(cwd, landed) if landed else worktree_entries(cwd)
         if entries is None:
             out.append(note)
-            continue
-        if reuse == "disjoint":
-            out.append(_reuse_note(note, recorded, changed, entries, own_id, ignore, docs))
             continue
         candidates = recorded.keys() | set(changed)
         gone = {p for p in candidates if p not in entries}

@@ -67,12 +67,10 @@ def sync(
             cfg.locks.review_reuse,
         )
         unverified = {n.gate for n in notes if n.unverified}
-        reused = {n.gate for n in notes if n.reused}
-        stale = {n.gate for n in notes if not n.unverified} - reused
+        stale = {n.gate for n in notes if not n.unverified and not n.reused}
         recorded = {g for g, rec in it.gates.items() if rec.outcome == "passed"}
         data["gates_valid"] = sorted(recorded - stale - unverified)
         data["gates_stale"] = sorted(recorded & stale)
-        data["gates_reused"] = sorted(reused)
         # A gate recorded failed/unavailable/partial/skipped was never green: not "valid".
         data["gates_not_passing"] = sorted(g for g, r in it.gates.items() if r.outcome != "passed")
         data["gates_unverified"] = sorted(recorded & unverified)
@@ -128,10 +126,8 @@ def _text(r: BS.SyncResult, d: dict) -> str:
     pins = f" Pin files settled: {', '.join(r.merged_pins)}." if r.merged_pins else ""
     valid, stale = d.get("gates_valid", []), d.get("gates_stale", [])
     unver = d.get("gates_unverified", [])
-    reused = d.get("gates_reused", [])
     extra = f"; could not be checked: {', '.join(unver)}" if unver else ""
-    reuse = f"; reused: {', '.join(reused)}" if reused else ""
     return (
         f"merged `{r.base}` into {d['item']}: {r.behind} commit(s), {r.relevant} touching its globs."
-        f"{pins} Recorded gates still valid: {', '.join(valid) or 'none'}; stale: {', '.join(stale) or 'none'}{extra}{reuse}."
+        f"{pins} Recorded gates still valid: {', '.join(valid) or 'none'}; stale: {', '.join(stale) or 'none'}{extra}."
     )
