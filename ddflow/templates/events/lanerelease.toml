@@ -3,3 +3,6 @@
 [[kind]]
 name = "lane.released_for_gate"
 doc = "An agent handed an item to the merge queue and gave up its lease."
+fields = { "author" = ["str"], "gates" = ["list"], "holder" = ["str"], "judgement" = ["list"], "tree" = ["str"] }
+lookup = { "author" = "a family or model id compared at completion", "gates" = "gate ids", "holder" = "an agent id compared with the lease's holder", "judgement" = "gate ids" }
+exempt = "a machine record of a release: ids and gate names, no authored text"

@@ -3,3 +3,7 @@
 [[kind]]
 name = "probe.recorded"
 doc = "A conflict probe ran: an item's branch against main or a peer, clean, conflicting or unavailable, with both tip shas."
+fields = { "against" = ["str"], "base" = ["str"], "head" = ["str"], "method" = ["str"], "paths" = ["list"], "result" = ["str"], "why" = ["str"] }
+text = ["why"]
+lookup = { "against" = "the ref the item was probed against", "method" = "merge-tree, scratch-merge or none", "result" = "clean, conflict or unavailable" }
+exempt = "a machine record of a conflict probe: refs, shas and paths, no authored text"

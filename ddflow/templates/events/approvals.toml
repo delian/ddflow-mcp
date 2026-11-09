@@ -3,7 +3,14 @@
 [[kind]]
 name = "approval.granted"
 doc = "A person approved a digest, so one action covered by it may run."
+fields = { "digest" = ["str"], "host" = ["str"], "human" = ["bool"], "note" = ["str"], "subject" = ["str"], "token_hash" = ["str"], "user" = ["str"] }
+text = ["note"]
+lookup = { "host" = "a machine id compared by liveness", "token_hash" = "a hash that is compared", "user" = "a user id" }
+exempt = "a person's approval of a digest, or a single-use approval spent: no authored text to compare (services.approval)"
 
 [[kind]]
 name = "approval.used"
 doc = "A single-use approval was spent by the action it covered."
+fields = { "digest" = ["str"], "subject" = ["str"], "token_hash" = ["str"] }
+lookup = { "token_hash" = "a hash that is compared" }
+exempt = "a person's approval of a digest, or a single-use approval spent: no authored text to compare (services.approval)"

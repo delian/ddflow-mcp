@@ -3,35 +3,70 @@
 [[kind]]
 name = "bug.found"
 doc = "A bug was filed."
+fields = { "dedupe" = ["dict"], "duplicate_of" = ["str"], "extends" = ["str"], "fix_task" = ["str"], "globs" = ["list"], "item" = ["str"], "key" = ["str"], "related" = ["str"], "repro" = ["dict"], "scope" = ["str"], "score" = ["float"], "severity" = ["str"], "summary" = ["str"], "tags" = ["list"], "title" = ["str"] }
+text = ["summary", "title"]
+lookup = { "item" = "an item id", "key" = "a dedupe key", "repro" = "the link to a stored bundle: its blob reference, size and mode", "scope" = "a scope word", "severity" = "a severity word" }
+checked = "knowledge.bug_found"
 
 [[kind]]
 name = "decision.recorded"
 doc = "A decision was recorded."
+fields = { "alternatives" = ["str"], "consequences" = ["str"], "context" = ["str"], "decided_by" = ["str"], "decision" = ["str"], "dedupe" = ["dict"], "extends" = ["str"], "globs" = ["list"], "item" = ["str"], "related" = ["str"], "sources" = ["list"], "status" = ["str"], "supersedes" = ["list"], "tags" = ["list"], "title" = ["str"] }
+text = ["alternatives", "consequences", "context", "decision", "title", "sources"]
+lookup = { "decided_by" = "an agent id", "item" = "an item id", "status" = "a status word" }
+checked = "decisions.decision_add"
 
 [[kind]]
 name = "lesson.recorded"
 doc = "A lesson was recorded."
+fields = { "dedupe" = ["dict"], "extends" = ["str"], "globs" = ["list"], "how" = ["str"], "pattern" = ["str"], "related" = ["str"], "rule" = ["str"], "seen_in" = ["list"], "sites" = ["list"], "summary" = ["str"], "supersedes" = ["list"], "tags" = ["list"], "title" = ["str"], "why" = ["str"] }
+text = ["how", "pattern", "rule", "summary", "title", "why", "sites"]
+lookup = { "seen_in" = "item ids" }
+checked = "knowledge.lesson_add"
 
 [[kind]]
 name = "link.recorded"
 doc = "Two records were linked as related, duplicate or extension."
+fields = { "by" = ["str"], "relation" = ["str"], "target" = ["str"] }
+lookup = { "by" = "an agent id", "relation" = "a relation word", "target" = "an id" }
+exempt = "the duplicate check's own answer: two records judged related or the same"
 
 [[kind]]
 name = "memory.recorded"
 doc = "A memory was recorded."
+fields = { "dedupe" = ["dict"], "origin_at" = ["str"], "related" = ["str"], "source" = ["str"], "tags" = ["list"], "text" = ["str"] }
+text = ["text", "source"]
+lookup = { "origin_at" = "a timestamp" }
+checked = "knowledge.memory_add"
 
 [[kind]]
 name = "phase.added"
 doc = "A phase was added to the queue."
+fields = { "body" = ["str"], "dedupe" = ["dict"], "globs" = ["list"], "kind" = ["str"], "line" = ["str"], "needs" = ["list"], "priority" = ["int"], "related" = ["str"], "source" = ["str"], "tags" = ["list"], "title" = ["str"] }
+text = ["body", "title", "line"]
+lookup = { "kind" = "a kind word", "source" = "an origin id or path" }
+checked = "items.phase_add"
 
 [[kind]]
 name = "record.extended"
 doc = "Text was added onto a record the duplicate check judged the same."
+fields = { "auto" = ["bool"], "dedupe" = ["dict"], "relation" = ["str"], "score" = ["float", "null"], "text" = ["str"], "who" = ["str"] }
+text = ["text"]
+lookup = { "relation" = "a relation word", "who" = "an agent id" }
+exempt = "the duplicate check's own answer: text added onto a checked record"
 
 [[kind]]
 name = "research.recorded"
 doc = "A research note with its claim and verdict was recorded."
+fields = { "budget" = ["str"], "claim" = ["str"], "dedupe" = ["dict"], "falsifier" = ["str"], "item" = ["str"], "mechanism" = ["str"], "probe" = ["str"], "probe_output" = ["str"], "question" = ["str"], "related" = ["str"], "sources" = ["list"], "tags" = ["list"], "verdict" = ["str"] }
+text = ["claim", "falsifier", "mechanism", "probe", "probe_output", "question", "sources"]
+lookup = { "budget" = "a tier word", "item" = "an item id", "verdict" = "a verdict word" }
+checked = "knowledge.research_add"
 
 [[kind]]
 name = "task.added"
 doc = "A task was added to the queue."
+fields = { "body" = ["str"], "dedupe" = ["dict"], "extends" = ["str"], "fixes" = ["list"], "globs" = ["list"], "kind" = ["str"], "line" = ["str"], "needs" = ["list"], "parent" = ["str"], "port_from" = ["str"], "port_of" = ["str"], "port_strategy" = ["str"], "priority" = ["int"], "related" = ["str"], "resources" = ["list"], "source" = ["str"], "tags" = ["list"], "title" = ["str"] }
+text = ["body", "title", "line"]
+lookup = { "kind" = "a kind word", "port_from" = "an id", "port_of" = "an id", "port_strategy" = "a strategy word", "source" = "an origin id or path" }
+checked = "items.task_add"
