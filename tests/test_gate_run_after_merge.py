@@ -67,6 +67,17 @@ def _gate(repo: Path, name: str):
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates.get(name)
 
 
+def _merged_sha(repo: Path) -> str:
+    return fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
+
+
+def _ran_at_merged_sha(repo: Path) -> None:
+    """The recorded evidence names the merged commit the command ran in -- the reverse of the
+    B430dae3a68 hole (measuring the moved/dirty/reverted primary instead)."""
+    proof = (_gate(repo, "unit_tests").evidence or {}).get("tree_sha", "")
+    assert _merged_sha(repo)[:12] in proof, _gate(repo, "unit_tests").evidence
+
+
 def test_a_gate_run_after_merge_runs_on_the_merged_tree(repo):
     """B430dae3a68: a merged item with NO unit_tests outcome is not stranded: the gate
     genuinely re-runs on the merged tree (the primary, at the base's HEAD) and records
@@ -117,6 +128,7 @@ def test_a_merged_partial_reruns_at_the_merged_sha_not_unavailable(repo):
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
 def test_a_merged_baseline_red_partial_reruns_at_the_merged_sha(repo):
@@ -173,6 +185,7 @@ def test_a_merged_baseline_red_partial_reruns_at_the_merged_sha(repo):
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
     assert "ddflow approve" not in text  # a re-run is possible: no person is asked to settle
+    _ran_at_merged_sha(repo)
 
 
 def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
@@ -182,7 +195,6 @@ def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
     merged work is still the committed `merged_sha`, so the gate runs THERE (a scratch
     checkout) and records a real outcome instead of UNAVAILABLE (B80a4dafd02)."""
     _merged(repo)
-    merged_sha = fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "later work on main")
@@ -191,9 +203,7 @@ def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
-    # The evidence names the MERGED commit the gate actually ran in -- not the moved primary.
-    proof = (_gate(repo, "unit_tests").evidence or {}).get("tree_sha", "")
-    assert merged_sha[:12] in proof, _gate(repo, "unit_tests").evidence
+    _ran_at_merged_sha(repo)
 
 
 def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
@@ -210,6 +220,7 @@ def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
 def test_a_dirty_primary_is_not_claimed_over_the_merged_sha(repo):
@@ -223,6 +234,7 @@ def test_a_dirty_primary_is_not_claimed_over_the_merged_sha(repo):
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
 def test_a_hidden_marked_primary_is_not_claimed_over_the_merged_sha(repo):
@@ -240,6 +252,7 @@ def test_a_hidden_marked_primary_is_not_claimed_over_the_merged_sha(repo):
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
 def test_a_merged_phase_off_the_merged_tree_is_implement_judged(repo):
