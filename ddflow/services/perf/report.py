@@ -96,6 +96,7 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
                 {
                     "name": name,
                     "n": len(kinds),
+                    "env": "",  # log-derived tables are not env-keyed; the store's series carry env
                     "first_run_pass_rate": (
                         passed / len(kinds) if kinds and len(kinds) >= max(minimum, 1) else None
                     ),
