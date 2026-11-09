@@ -417,6 +417,8 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
     answer, which this is not)."""
     found: list[Attested] = []
     for pid, created, raw in _kilo_question_parts(str(path)):
+        if created is None or raw is None:
+            continue  # NULL time_created/data the SQL filter once dropped: skip, never compare
         if created < since * 1000 or marker not in raw:
             continue
         try:

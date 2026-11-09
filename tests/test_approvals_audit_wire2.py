@@ -102,9 +102,15 @@ def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(r
     monkeypatch.setattr(H, "_kilo_dbs", lambda cfg: [Path("/nonexistent/kilo.db")])
 
     OV.rows(events, fold(events, strict=False), Config())
-    assert len(reads) <= 1, (
-        f"store queried {len(reads)} times for 3 asks (must be once, not once per ask)"
+    assert len(reads) == 1, (
+        f"store queried {len(reads)} times for 3 asks (must be exactly once, not once per ask)"
     )
+
+
+def test_scan_kilo_skips_a_null_timestamp_or_data_row(monkeypatch):
+    monkeypatch.setattr(H, "_kilo_question_parts", lambda path: ((1, None, "{}"), (2, 123, None)))
+    # A NULL time_created/data row is dropped, not compared (Bdb4ef97bd5: `None < x` raises).
+    assert H.scan_kilo(Path("/nonexistent/kilo.db"), "q?", "Q1", 0.0) == []
 
 
 def test_a_typed_chat_t3_use_and_a_claim_force_are_listed(repo):
