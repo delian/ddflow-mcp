@@ -137,7 +137,9 @@ def _complete_days(repo: Path, series: str, now: float) -> list[float]:
         {
             int(s.t // clock.DURATION_UNITS["d"]) * clock.DURATION_UNITS["d"]
             for s in store._read_ring(repo, series)
-            if int(s.t // clock.DURATION_UNITS["d"]) * clock.DURATION_UNITS["d"] + clock.DURATION_UNITS["d"] <= now
+            if int(s.t // clock.DURATION_UNITS["d"]) * clock.DURATION_UNITS["d"]
+            + clock.DURATION_UNITS["d"]
+            <= now
         }
     )
 
