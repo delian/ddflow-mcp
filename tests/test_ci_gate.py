@@ -162,6 +162,35 @@ def test_a_process_killed_by_a_signal_is_unavailable_not_failed():
     assert res.failures == {}, res.failures
 
 
+def test_a_full_run_that_skipped_the_tests_hook_is_unavailable_not_passed():
+    """B717b798547: a full-scope run on an empty diff skips the file-filtered `tests` hook, so
+    only non-test hooks (gitleaks, lint) run and the run would read as passed vacuously. ``full``
+    whose test hook was skipped must be unavailable (r-unavailable-not-pass)."""
+    from types import SimpleNamespace
+
+    from ddflow.services.ci.runner import _result
+    from ddflow.services.cmdrunner import CommandRun
+
+    full = SimpleNamespace(
+        scope="full",
+        evidence=lambda sha: {"scope": "full"},
+        workers=None,
+        admission=None,
+    )
+    skipped = CommandRun("ran", code=0, out="gitleaks.....................Passed\n")
+    res = _result(skipped, "", "pre-commit run --hook-stage pre-push", "sha0", "base0", full)
+    assert res.status == "unavailable", res.status
+    assert "no test ran" in res.reason, res.reason
+
+    tests_ran = CommandRun(
+        "ran",
+        code=0,
+        out="gitleaks.....................Passed\ntests........................Passed\n",
+    )
+    res = _result(tests_ran, "", "pre-commit run --hook-stage pre-push", "sha0", "base0", full)
+    assert res.status == "passed", res.status
+
+
 def test_the_scratch_worktree_is_removed_and_the_tree_untouched(repo, fake_precommit):
     _project(repo)
     _branch(repo)
