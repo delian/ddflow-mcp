@@ -11,10 +11,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from _wait import scaled  # noqa: E402
+
 from ddflow import completion_fast as CF  # noqa: E402
 from ddflow.services import completion_ids as CI  # noqa: E402
-
-from _wait import scaled  # noqa: E402
 
 
 def _index(d: Path, name="index.db-aaaaaaaa", mtime=None) -> Path:
