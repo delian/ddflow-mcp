@@ -100,9 +100,14 @@ def detect_series(
     )  # a zero baseline makes the relative gate undefined: a flat (0) delta never steps
     drift = _creep_drift(baseline, window, cfg.detect_creep_alpha)
     bmed = median(baseline)
-    # The median shift clears the absolute floor (so a sub-second change, or a lone trailing
-    # spike whose median never moved, never alerts), and the EWMA crossed the LOWER creep bar.
-    crept = abs_s >= cfg.detect_absolute_floor_s and drift > bmed * cfg.detect_creep_threshold
+    # Creep is gated by the EWMA DRIFT (a slow slide can drift past the floor while the
+    # median shift is still under it -- 1% a week), not the median shift, and by a NONZERO
+    # median shift so a lone trailing spike (median never moved) is not a regression.
+    crept = (
+        abs_s > 0
+        and drift >= cfg.detect_absolute_floor_s
+        and drift > bmed * cfg.detect_creep_threshold
+    )
     if not (stepped or crept):
         return None
     return Finding(series, env, start, end, median(window), rel, abs_s, len(window), suspected)
