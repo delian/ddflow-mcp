@@ -142,7 +142,6 @@ def merge_tree(
     base: str,
     pins: Callable[[], Iterable[str]] | None = None,
     deadline_s: float | None = None,
-    cfg: Config | None = None,
 ) -> Iterator[tuple[Path | None, str]]:
     """A scratch worktree of `ref` with `base` merged in: (path, "") or (None, why not).
 
@@ -247,5 +246,5 @@ def merge_tree(
                 # The tree is now final: re-record the fast after-merge pins so the merged
                 # result is self-consistent (B8127ab103e). A base already contained in `ref`
                 # needs no merge, and its own pins are left for the pins precheck to judge.
-                _regen_after_merge(tree, cfg)
+                _regen_after_merge(tree, Config.load(repo))
             yield tree, Failure("", "ok")

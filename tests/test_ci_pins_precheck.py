@@ -124,7 +124,7 @@ def test_the_scratch_merge_re_records_an_after_merge_pin_left_stale_by_main(repo
     default = _pinned_project(repo, after_merge=True)
     _drift(repo, default)
     sha = _git(repo, "rev-parse", "HEAD")
-    with CI.merge_tree(repo, sha, default, cfg=Config.load(repo)) as (tree, why):
+    with CI.merge_tree(repo, sha, default) as (tree, why):
         assert tree is not None and why.kind == "ok"
         # main added knob 0 and the branch added knob z: the merged tree holds four knobs, and
         # the merge re-recorded count.txt from the "3" both sides wrote to the truth, 4.
