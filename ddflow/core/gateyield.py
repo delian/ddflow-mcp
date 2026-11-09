@@ -132,11 +132,12 @@ def rework_loops(facts: Facts) -> list[dict]:
     return loops
 
 
-def build(facts: Facts, minimum: int = 3) -> dict:
-    """The gate-yield scoreboard as one plain structure (the report/registry reads it)."""
+def build(facts: Facts, minimum: int = 3, *, a: str = "rubber_duck", b: str = "critic") -> dict:
+    """The gate-yield scoreboard as one plain structure. ``a``/``b`` name the review-gate
+    pair whose co-failure is reported (override for an install that renames its reviewers)."""
     return {
         "gates": gate_rows(facts, minimum),
-        "co_failure": co_failure(facts, "rubber_duck", "critic", minimum),
+        "co_failure": co_failure(facts, a, b, minimum),
         "same_tree": same_tree_groups(facts),
         "rework": rework_loops(facts),
     }

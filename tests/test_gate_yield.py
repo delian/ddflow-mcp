@@ -122,7 +122,7 @@ def seeded() -> Log:
     return log
 
 
-def test_first_run_pass_rate_counts_the_first_verdict_only(log=None):
+def test_first_run_pass_rate_counts_the_first_verdict_only():
     rows = {r["gate"]: r for r in GY.build(facts_of(seeded()), minimum=1)["gates"]}
     rd = rows["rubber_duck"]
     assert rd["first_run_pass_rate"] == pytest.approx(1 / 3)  # A failed, B passed, C failed
