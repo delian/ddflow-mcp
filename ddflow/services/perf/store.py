@@ -289,13 +289,16 @@ def write_aggregate(
     merged: dict[str, dict[str, Any]] = {}
     prior = _read_aggregate_file(repo, series, day)
     for env in sorted(set(prior) | set(fresh)):
-        # A snapshot only grows: the fresh entry wins only when it strictly GAINED samples
-        # (a day's samples accrue while the tick runs); an equal or smaller count is a ring
-        # that has only aged-out since, so the committed percentiles stay.
-        if fresh.get(env, {}).get("count", 0) > prior.get(env, {}).get("count", 0):
-            merged[env] = fresh[env]
+        # A snapshot only grows: the fresh entry replaces the committed one only when it
+        # strictly GAINED samples (a day's samples accrue while the tick runs); an equal or
+        # smaller count means the ring only aged-out since, so the committed entries stay.
+        fresh_row, prior_row = fresh.get(env), prior.get(env)
+        if fresh_row is not None and (prior_row is None or fresh_row["count"] > prior_row["count"]):
+            merged[env] = fresh_row
+        elif prior_row is not None:
+            merged[env] = prior_row
         else:
-            merged[env] = prior.get(env, fresh[env])
+            merged[env] = fresh_row
     path = aggregate_path(repo, series, day)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, json.dumps(merged, sort_keys=True, separators=(",", ":")) + "\n")
