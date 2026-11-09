@@ -56,3 +56,21 @@ def test_answer_ignores_an_ask_for_a_different_item(repo):
     run_cli(repo, "init")
     assert LD.message(repo, "lead", "which?", sender="lane", item="A")[0] is not None
     assert LD.answer(repo, "lane", "take B", sender="lead", item="B")[0] is None
+
+
+def test_answer_ignores_a_wake_that_is_not_a_question(repo):
+    run_cli(repo, "init")
+    assert (
+        LD.message(repo, "lead", "your item merged", sender="lane", item="A", reason="merge_offer")[
+            0
+        ]
+        is not None
+    )
+    assert LD.answer(repo, "lane", "thanks", sender="lead", item="A")[0] is None
+
+
+def test_answer_carries_the_asks_item_when_answer_omits_it(repo):
+    run_cli(repo, "init")
+    assert LD.message(repo, "lead", "which?", sender="lane", item="A")[0] is not None
+    reply, why = LD.answer(repo, "lane", "take A", sender="lead")
+    assert reply is not None and reply.item == "A", why

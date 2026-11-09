@@ -101,15 +101,18 @@ def answer(
 ) -> tuple[Message | None, str]:
     """Relay an answer to one lane that actually asked, never a sweep.
 
-    The ask is a pending message FROM ``to`` (the asking lane) in ``sender``'s (the lead's)
-    inbox about ``item``. An answer with no matching pending ask is refused, so a lead
-    cannot forward an operator's reply to every lane that did not ask (the parked patch's
-    sweep). The answer is a ``message`` -- the lane pairs it to its question by ``item``
-    and withdraws the ask.
+    The ask is a pending ``message`` (a question, reason ``message``) FROM ``to`` (the
+    asking lane) in ``sender``'s (the lead's) inbox, about ``item``. A wake (``ready``,
+    ``merge_offer``, ``yield``) is not a question and is never answered. The reply carries
+    the ask's item (or the given ``item``), so the lane pairs it to its question by item
+    and withdraws the ask. An answer with no matching ask is refused.
     """
     if not sender:
         return None, "an answer names who relays it (the lead)"
-    asks = IB.pending(repo, sender)
-    if not any(m.sender == to and (not item or m.item == item) for m in asks):
+    asks = [m for m in IB.pending(repo, sender) if m.sender == to and m.reason == "message"]
+    if item:
+        asks = [m for m in asks if m.item == item]
+    if not asks:
         return None, f"no pending ask from {to or 'that lane'} to answer"
+    item = item or asks[0].item
     return message(repo, to, text, sender=sender, item=item, reason="message", cfg=cfg)

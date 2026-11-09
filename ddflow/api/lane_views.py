@@ -29,21 +29,22 @@ NOBODY = "\0lanes"
 
 
 def _lead_text(ledger, st, at: float, agent: str, max_asks: int, repo: Path) -> str:
-    """The lead rollup: the ledger with every lane's honest ETA, then its pending asks."""
+    """The lead rollup: the ledger with every lane's honest ETA, then its inbox."""
     text = LD.summary(ledger, st, at)
     if not agent:
         return text
-    asks = LD.pending(repo, agent)
-    if not asks:
+    msgs = LD.pending(repo, agent)
+    if not msgs:
         return text
     rows = [
-        f"  ask {i}. from {LD.safe(m.sender) or 'a lane'}"
+        f"  {'ask' if m.reason == 'message' else m.reason} {i}. from "
+        f"{LD.safe(m.sender) or 'a lane'}"
         + (f" about {LD.safe(m.item)}" if m.item else "")
         + ": "
         + m.text.replace("\n", " ")[:200]
-        for i, m in enumerate(asks[:max_asks], 1)
+        for i, m in enumerate(msgs[:max_asks], 1)
     ]
-    head = "open asks to you:" + ("\n" if rows else " none")
+    head = "your inbox:" + ("\n" if rows else " none")
     return text + "\n\n" + head + "\n" + "\n".join(rows)
 
 
