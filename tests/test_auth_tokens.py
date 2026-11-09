@@ -293,10 +293,10 @@ def test_taking_a_variable_returns_it_and_removes_it(monkeypatch):
 
 
 def test_token_support_adds_no_environment_read_to_the_census():
-    """Measured on the real tree: the port stays at main's sites, and nothing reads the token
-    outside it."""
+    """Measured on the real tree: the port stays at the port's sites (its `get` and `setdefault`
+    reads), and nothing reads the token outside it."""
     counts = IF.counts(IF.scan(Path(__file__).resolve().parents[1]))
-    assert counts[("env", "<dynamic>", "ddflow/adapters/env.py")] == 1
+    assert counts[("env", "<dynamic>", "ddflow/adapters/env.py")] == 2  # get + setdefault
     assert counts[("env", "<all>", "ddflow/adapters/env.py")] == 1
     assert ("env", "<dynamic>", "ddflow/surfaces/context.py") not in counts
     assert not [k for k in counts if k[1] == AU.TOKEN_ENV or k[2] == "ddflow/services/auth.py"]
