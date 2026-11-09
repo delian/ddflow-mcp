@@ -45,6 +45,15 @@ _WRAPPERS = frozenset(
 )  # fmt: skip
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 _SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&", "(", ")", ";;"})
+#: What may come right before a `#` that begins a comment: a blank, or an operator
+#: (`)`, `(`, `<`, `>`, `;`, `&`, `|`) -- bash starts a comment after any of these, not
+#: only after a blank. `{` and `}` are reserved words that need a blank, not operators:
+#: a `#` glued to them is a literal `#` inside a word. `\r` is not a blank to the shell:
+#: a `#` glued to it stays inside the word, so a `;` after it is a separator, not a comment
+#: (B-forbidden-guard-multiline-quote-bypass critic #1). The one exception: a `)` that
+#: closes a `$(` / `<(` / `>(` substitution is NOT a boundary (bash glues the `#` to the
+#: substitution's value), decided in `_comment` against the recorded closing parens.
+_COMMENT_BOUNDARY = " \t\n;|&()<>"
 #: git's global options that take their value as the NEXT word.
 _GIT_VALUED = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
@@ -112,10 +121,352 @@ def _strip_heredocs(text: str) -> str:
     return "\n".join(out)
 
 
+def _strip_continuations(text: str) -> str:
+    """`text` with a backslash-newline removed (a line continuation joins a `$` / backtick over
+    the break, so it is still a command substitution). A single quote keeps its backslash; `'`
+    inside a `"..."` is literal."""
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if _ansi_at(text, n, i):
+            j = _ansi_c_end(text, n, i)
+            out.append(text[i:j])
+            i = j
+        elif c == "'":
+            j = text.find("'", i + 1)
+            out.append(text[i:] if j < 0 else text[i : j + 1])
+            i = n if j < 0 else j + 1
+        elif c == '"':
+            out.append('"')
+            j = i + 1
+            while j < n and text[j] != '"':
+                if text[j] == "\\" and j + 1 < n and text[j + 1] == "\n":
+                    j += 2  # a continuation inside the double quote: dropped
+                elif text[j] == "\\":
+                    out.append(text[j : j + 2])
+                    j += 2
+                else:  # includes a `'`, which is literal inside a double quote
+                    out.append(text[j])
+                    j += 1
+            if j < n:
+                out.append('"')
+                j += 1
+            i = j
+        elif c == "\\" and i + 1 < n and text[i + 1] == "\n":
+            i += 2
+        elif c == "\\" and i + 1 < n:  # an escape: the quoted char is not a quote opener
+            out.append(text[i : i + 2])
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _ansi_c_end(text: str, n: int, k: int) -> int:
+    """Index after the `$'...'` that opened at `k`; a `\\'` inside is a literal quote, not the
+    close, so `_find_body` must not take it for one (bash ANSI-C quoting)."""
+    i = k + 2
+    while i < n:
+        if text[i] == "\\" and i + 1 < n:
+            i += 2
+        elif text[i] == "'":
+            return i + 1
+        else:
+            i += 1
+    return n
+
+
+def _ansi_at(text: str, n: int, k: int) -> bool:
+    """Does `text[k]` open a `$'...'` (bash ANSI-C quote)?"""
+    return text[k] == "$" and k + 1 < n and text[k + 1] == "'"
+
+
+def _sub_open_at(text: str, n: int, k: int) -> bool:
+    """Does `text[k]` open a `$(` / `<(` / `>(` substitution or a `$'...'` quote?"""
+    return (text[k] in "$<>" and k + 1 < n and text[k + 1] == "(") or _ansi_at(text, n, k)
+
+
+def _bare_word(text: str, n: int, k: int, word: str) -> bool:
+    """`text[k:]` starts the bare keyword `word` -- a word boundary on each side."""
+    if not text.startswith(word, k):
+        return False
+    if k > 0 and text[k - 1] not in " \t\r\n;|&(":
+        return False
+    end = k + len(word)
+    return end >= n or not (text[end].isalnum() or text[end] == "_")
+
+
+def _case_end(text: str, n: int, k: int, bodies: list[str], sub_close: set[int]) -> int:
+    """Index after the `esac` that closes the `case` at `k`; a quoted, commented or escaped
+    span is text, so an `esac` inside it is not the keyword that ends the case (a double
+    quote, `$(` body or backtick body a case arm holds is skipped too, so an `esac` a quote
+    swallows does not drop the depth -- B-forbidden-guard-multiline-quote-bypass critic #2)."""
+    depth = 1
+    k += 4
+    while k < n and depth:
+        if text[k] == "#" and _comment(text, k, -1, sub_close):
+            k2 = text.find("\n", k)
+            k = k2 if k2 >= 0 else n
+        elif text[k] == "'":
+            k2 = text.find("'", k + 1)
+            k = k + 1 if k2 < 0 else k2 + 1
+        elif _ansi_at(text, n, k):
+            k = _ansi_c_end(text, n, k)
+        elif text[k] == '"':
+            k = _dquote_end(text, n, bodies, sub_close, k)
+        elif text[k] == "`" or (text[k] in "$<>" and k + 1 < n and text[k + 1] == "("):
+            k = _sub_body(text, n, bodies, sub_close, k)
+        elif text[k] == "\\":
+            k += 2 if k + 1 < n else 1
+        elif _bare_word(text, n, k, "case"):
+            depth += 1
+            k += 4
+        elif _bare_word(text, n, k, "esac"):
+            depth -= 1
+            k += 4
+        else:
+            k += 1
+    return k
+
+
+def _comment(text: str, k: int, j: int, sub_close: set[int]) -> bool:
+    """`text[k]` is the `#` of a comment that starts right there: the body that opened at `j`
+    begins with it, or the char before it is in `_COMMENT_BOUNDARY` -- but a `)` that closed a
+    `$(` / `<(` / `>(` substitution is NOT one: bash keeps the `#` literal, glued to the
+    substitution's value, so a `;` after it still separates a command
+    (B-forbidden-guard-multiline-quote-bypass residual: `echo $(echo hi)#; git push` runs
+    `git push`)."""
+    if text[k] != "#":
+        return False
+    if k == j:
+        return True
+    prev = text[k - 1]
+    if prev == ")":
+        return k - 1 not in sub_close
+    return prev in _COMMENT_BOUNDARY
+
+
+def _has_esac(text: str, n: int, k: int) -> bool:
+    """A `case` at `k` opens a case STATEMENT, whose `)` separators are pattern terminators,
+    only if a bare `esac` closes it somewhere ahead; a bare `case` WORD (`echo case`) has none
+    and is just a word (B-forbidden-guard-multiline-quote-bypass bare-case)."""
+    j = text.find("esac", k + 4)
+    while j >= 0:
+        if _bare_word(text, n, j, "esac"):
+            return True
+        j = text.find("esac", j + 1)
+    return False
+
+
+def _param_end(text: str, n: int, bodies: list[str], sub_close: set[int], k: int) -> int:
+    """Index just past the `}` that closes the `${` parameter expansion at `k`. The braces nest
+    (``${x:-${y}}``), and a `}` / `)` inside a quoted span, an escape or a `$(` / backtick body
+    in between is part of the expansion, never the closing `}` -- so a `)` inside the expansion
+    is not the close of an enclosing `$(` body, and a `$(` a ``${x:-...}`` holds still records
+    its body (B-forbidden-guard-multiline-quote-bypass critic #2)."""
+    depth = 1
+    i = k + 2
+    while i < n and depth:
+        if text[i] == "$" and i + 1 < n and text[i + 1] == "{":
+            depth += 1
+            i += 2
+        elif text[i] == "}":
+            depth -= 1
+            i += 1
+        elif text[i] == "\\" and i + 1 < n:
+            i += 2
+        elif text[i] == "'":
+            j = text.find("'", i + 1)
+            i = i + 1 if j < 0 else j + 1
+        elif text[i] == '"':
+            i = _dquote_end(text, n, bodies, sub_close, i)
+        elif text[i] == "`" or text[i : i + 2] in ("$(", "<(", ">("):
+            i = _sub_body(text, n, bodies, sub_close, i)
+        else:
+            i += 1
+    return i
+
+
+def _find_body(
+    text: str,
+    n: int,
+    bodies: list[str],
+    sub_close: set[int],
+    j: int,
+    closer: str,
+    case_ok: bool = True,
+) -> int:
+    """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes,
+    substitutions and a nested `( ... )` subshell inside are navigated (so the first plain `)`
+    is not taken for this body's close) but mark no newline. An escaped closer is not the end.
+    ``case_ok`` is False inside a `$((` arithmetic body, whose `case`/`esac` are arithmetic
+    tokens, not a shell case statement (B-forbidden-guard-multiline-quote-bypass critic: a
+    post-arithmetic `esac` must not swallow a later command)."""
+    k = j
+    while k < n:
+        if text[k] == closer:
+            return k
+        k = _skip_span(text, n, bodies, sub_close, k, j, closer, case_ok)
+    return k
+
+
+def _skip_span(
+    text: str,
+    n: int,
+    bodies: list[str],
+    sub_close: set[int],
+    k: int,
+    j: int,
+    closer: str,
+    case_ok: bool = True,
+) -> int:
+    """Index after the span that starts at `k` when it is data, not `closer`: a comment (its
+    `)` is text), a nested `( ... )` subshell, a `case` statement, a quote, an escape, a
+    `${...}` parameter expansion, or a nested substitution. A plain char is not a span (one
+    past it)."""
+    if _comment(text, k, j, sub_close):
+        k2 = text.find("\n", k)
+        return k2 if k2 >= 0 else n
+    c = text[k]
+    if closer == ")" and c == "(":
+        # a nested ( ... ) subshell: its plain `)` (and a `#` after it) is not this body's
+        # close, so skip to one past it (groq critic: `echo $( (echo hi) )#; git push`).
+        return _find_body(text, n, bodies, sub_close, k + 1, ")", case_ok) + 1
+    if case_ok and closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
+        return _case_end(
+            text, n, k, bodies, sub_close
+        )  # a case's `)` separators end patterns, not this `$(` body
+    if c == "'":
+        k2 = text.find("'", k + 1)
+        return k + 1 if k2 < 0 else k2 + 1
+    if _ansi_at(text, n, k):
+        return _ansi_c_end(text, n, k)
+    if c == '"':
+        return _dquote_end(text, n, bodies, sub_close, k)
+    if c == "\\":  # an escaped closer (\) / \`) is not the end of the body
+        return k + 2 if k + 1 < n else k + 1
+    if text[k : k + 2] == "${":
+        return _param_end(
+            text, n, bodies, sub_close, k
+        )  # a `)` inside ${...} is not this body's close
+    if c == "`" or text[k : k + 2] in ("$(", "<(", ">("):
+        return _sub_body(text, n, bodies, sub_close, k)
+    return k + 1
+
+
+def _dquote_end(text: str, n: int, bodies: list[str], sub_close: set[int], j: int) -> int:
+    """The index after the `"` that opened at `j`, recursing into the `$(` / backtick bodies a
+    double-quoted span holds. `<(` / `>(` are NOT special inside double quotes: bash prints
+    them literally and runs no command, so they stay text
+    (B-forbidden-guard-multiline-quote-bypass critic #5, dquote process substitution)."""
+    k = j + 1
+    while k < n:
+        cc = text[k]
+        if cc == '"':
+            return k + 1
+        if cc == "\\":
+            k += 2 if k + 1 < n else 1
+        elif cc == "`" or (cc == "$" and k + 1 < n and text[k + 1] == "("):
+            k = _sub_body(text, n, bodies, sub_close, k)
+        else:
+            k += 1
+    return k
+
+
+def _sub_body(text: str, n: int, bodies: list[str], sub_close: set[int], k: int) -> int:
+    """Index just past the substitution that opened at `k`: a backtick (closer `` ` ``), a `$(` or
+    a `<(` / `>(` process substitution (closer `)`); its body is recorded (a nested
+    substitution's commands run as commands). A `$((` arithmetic expansion runs no commands,
+    but its closing `))` still keeps a following `#` literal, so its OUTER `)` is recorded."""
+    is_arith = text[k] == "$" and k + 2 < n and text[k + 1] == "(" and text[k + 2] == "("
+    closer = "`" if text[k] == "`" else ")"
+    start = k + 3 if is_arith else (k + 2 if text[k] != "`" else k + 1)
+    k2 = _find_body(text, n, bodies, sub_close, start, closer, case_ok=not is_arith)
+    if is_arith:
+        sub_close.add(k2 + 1)  # the outer `)` of `$((...))`: bash glues a following `#` to it
+        return k2 + 2
+    bodies.append(text[start:k2])
+    if closer == ")":
+        sub_close.add(k2)
+    return k2 + 1
+
+
+def _scan(text: str) -> tuple[list[str], list[str]]:
+    """Split `text` at the newlines that ARE command separators, and note the interiors of the
+    `$(` ... `)` / backquoted command substitutions (whose commands run as commands). A newline
+    is data only inside a quote's literal body; a single-quoted `$(` or backtick is data. A
+    comment (`#` to end of line) is data too: its characters are dropped from the lines, so a
+    `;` or reserved word inside one is not a command (a `` `# ... ; git push` `` body is a
+    comment, not a command -- critic #1, backtick comment)."""
+    n = len(text)
+    cut = [False] * n
+    drop = [False] * n
+    bodies: list[str] = []
+    sub_close: set[int] = set()
+
+    i = 0
+    while i < n:
+        c = text[i]
+        if c == "\n":
+            cut[i] = True
+            i += 1
+        elif c == "#" and _comment(text, i, 0, sub_close):
+            k2 = text.find("\n", i)  # a comment: its quotes are data to the end of the line
+            e = k2 if k2 >= 0 else n
+            drop[i:e] = [True] * (e - i)
+            i = e
+        elif c == "'":
+            k2 = text.find("'", i + 1)
+            i = i + 1 if k2 < 0 else k2 + 1
+        elif c == '"':
+            i = _dquote_end(text, n, bodies, sub_close, i)
+        elif c == "\\":
+            i += 2 if i + 1 < n else 1
+        elif c == "`":
+            k2 = _find_body(text, n, bodies, sub_close, i + 1, "`")
+            bodies.append(text[i + 1 : k2])
+            drop[i : min(k2 + 1, n)] = [True] * (min(k2 + 1, n) - i)
+            i = k2 + 1
+        elif _sub_open_at(text, n, i):
+            if _ansi_at(text, n, i):
+                i = _ansi_c_end(text, n, i)  # `$'...'` is data, kept inline
+            else:
+                end = min(_sub_body(text, n, bodies, sub_close, i), n)
+                # an unclosed `$(` / `<(` / `>(` does not grow the line masks
+                drop[i:end] = [True] * (end - i)  # the body is captured in `bodies`, not inline
+                i = end
+        else:
+            i += 1
+
+    lines: list[str] = []
+    cur: list[str] = []
+    for i, ch in enumerate(text):
+        if ch == "\n" and cut[i]:
+            lines.append("".join(cur))
+            cur = []
+        elif not drop[i]:
+            cur.append(ch)
+    if cur:
+        lines.append("".join(cur))
+    return lines, bodies
+
+
+def _logical_lines(text: str) -> list[str]:
+    """The command-position spans of `text`: `_scan` at its newlines, continuations stripped."""
+    return _scan(_strip_continuations(text))[0]
+
+
+def _substitutions(text: str) -> list[str]:
+    """The interiors of the `$(` ... `)` / backquoted command substitutions in `text`."""
+    return _scan(_strip_continuations(text))[1]
+
+
 def _split(text: str) -> list[list[str]]:
     """The commands of `text` as their words (no `sh -c` string looked into)."""
     cmds: list[list[str]] = []
-    for line in _strip_heredocs(text).split("\n"):
+    for line in _logical_lines(_strip_heredocs(text)):
         lex = shlex.shlex(line, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
         lex.commenters = ""
@@ -135,20 +486,81 @@ def _split(text: str) -> list[list[str]]:
 
 
 def _commands(text: str) -> list[list[str]]:
-    """Each command of `text` as its words, and of the strings given to `sh -c` (three levels)."""
+    """Each command of `text` as its words, of the strings given to `sh -c`, and of the
+    `$(` ... `)` / backquoted command substitutions. The descent runs until no new command
+    string is left, keyed by the string content so a chain is descended once through whatever
+    mix of `sh -c` payloads and substitution bodies holds it (no fixed level cap to skip one
+    past -- B-forbidden-guard-multiline-quote-bypass 16-iteration cap, critic #3)."""
     cmds = _split(text)
     todo = cmds
-    for _ in range(3):  # three nested `sh -c` levels are looked into
+    bodies = _substitutions(text)
+    seen: set[str] = set()
+    while todo or bodies:
         found: list[list[str]] = []
+        new_bodies: list[str] = []
         for c in todo:
-            body = _head(c)
-            if body and body[0].rsplit("/", 1)[-1] in _SHELLS and "-c" in body:
-                i = body.index("-c")
-                if i + 1 < len(body):
-                    found.extend(_split(body[i + 1]))
+            head = _head(c)
+            if head and head[0].rsplit("/", 1)[-1] in _SHELLS:
+                i = _sh_c(head) if len(head) > 1 else -1
+                if i >= 0:
+                    s = head[i]  # _sh_c returns the command-string word's index directly
+                    if s not in seen:
+                        seen.add(s)
+                        found.extend(_split(s))
+                        new_bodies.extend(_substitutions(s))
+        for b in bodies:
+            if b not in seen:
+                seen.add(b)
+                found.extend(_split(b))
+                new_bodies.extend(_substitutions(b))
         cmds.extend(found)
         todo = found
+        bodies = new_bodies
     return cmds
+
+
+#: Bash long options that take their value as the next word (`bash --rcfile FILE -c 'x'`).
+_VALUED_LONG = frozenset({"--rcfile", "--init-file"})
+
+
+def _sh_c(head: list[str]) -> int:
+    """The index of the word bash runs as the `-c` command string, or -1. Bash reads its
+    option words first (`-x`, `+x`, `-o NAME`, `--rcfile FILE`), and `-c` makes the FIRST
+    non-option argument the command string; option words AFTER `-c` do not stop it, so
+    `bash -c -x 'git push'`, `bash -c -- 'git push'`, `bash -c - 'git push'` and
+    `bash -co pipefail 'git push'` all RUN `git push` (B-forbidden-guard-multiline-quote-bypass
+    critic #6). A `c` inside a cluster is `-c` (`sh -xc 'pkill'`); a `+c` reads the next
+    non-option as the run string too (bash treats `-c` and `+c` alike); an optname that CLOSES a
+    cluster (`bash -xo pipefail -c 'pkill'`) and a valued long option (`--rcfile FILE`) consume
+    their value; the LAST `-c`/`+c` before the operand wins (`bash -co pipefail -c 'pkill'`
+    runs the `-c`). Returns the command-string word's index, or -1 (no `-c` still set)."""
+    c_set = False
+    i = 1
+    while i < len(head):
+        w = head[i]
+        if w in {"--", "-"}:
+            # `--` and a lone `-` end the option words: the command string is the NEXT word.
+            return i + 1 if c_set and i + 1 < len(head) else -1
+        if not w.startswith("-") and not w.startswith("+"):
+            return i if c_set else -1  # the first non-option: the command string, or a script
+        if w.startswith("--"):
+            i += 2 if w in _VALUED_LONG else 1  # a valued long option consumes its word
+            continue
+        body = w[1:]
+        j = 0
+        while j < len(body):
+            ch = body[j]
+            if ch == "c":
+                c_set = True  # `-c`/`+c` both read the next non-option as the run string
+            if ch in "oO":
+                # `-o`/`-O`/`+o`/`+O` optname takes the rest of THIS token, or the NEXT word
+                # when `o`/`O` CLOSES it (`-xo pipefail`): both are the option's value.
+                if j == len(body) - 1:
+                    i += 1
+                break
+            j += 1
+        i += 1
+    return -1
 
 
 #: Each wrapper's options that take their value as the next word (`sudo -u root`, `nice -n 5`);
