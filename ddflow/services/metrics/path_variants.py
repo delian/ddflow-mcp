@@ -75,8 +75,7 @@ def variants(ctx: Context) -> list[dict]:
     for seq in (_sequence(items[item]) for item in items):
         counts[tuple(seq)] += 1
     return [
-        {"sequence": list(seq), "n": n}
-        for seq, n in sorted(counts.items(), key=lambda kv: -kv[1])
+        {"sequence": list(seq), "n": n} for seq, n in sorted(counts.items(), key=lambda kv: -kv[1])
     ]
 
 

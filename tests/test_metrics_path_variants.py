@@ -59,7 +59,9 @@ def test_directly_follows_counts_a_gate_pair_and_its_gap(log=None):
 
 def test_a_gate_run_before_an_earlier_canonical_step_is_out_of_order():
     ooo = out_of_order(ctx_of(seeded()))
-    assert any(r["item"] == "B" and r["gate"] == "critic" for r in ooo)  # critic ran before rubber_duck
+    assert any(
+        r["item"] == "B" and r["gate"] == "critic" for r in ooo
+    )  # critic ran before rubber_duck
     assert not any(r["item"] == "A" for r in ooo)
 
 
