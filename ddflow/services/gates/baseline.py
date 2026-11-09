@@ -43,19 +43,28 @@ def _path(repo: Path, sha: str, command: str = "") -> Path:
     return Path(repo) / CACHE_DIR / f"{sha[:40]}.{digest(command)[:12]}.json"
 
 
-def cache_load(
+def _entries(
     repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
-) -> dict[str, bool]:
-    """``{test id: failed on this base}`` measured so far and still younger than ``ttl_s``
-    (each id has its own age); {} when none."""
+) -> dict[str, list]:
+    """One read of ``sha``/``command``'s cache: ``{test id: [failed, measured_at, text?, whole?]}``
+    for entries still within ``ttl_s`` (each id its own age). A single parse so every view built
+    from it agrees -- separate reads can interleave with a concurrent ``cache_store`` (B60e9e09308)."""
     if ttl_s <= 0:
         return {}
     clock_now = CLOCK.wall() if now is None else now
     try:
         seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
-        return {str(k): bool(v[0]) for k, v in seen.items() if _fresh(v, clock_now, ttl_s)}
+        return {str(k): v for k, v in seen.items() if _fresh(v, clock_now, ttl_s)}
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return {}
+
+
+def cache_load(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> dict[str, bool]:
+    """``{test id: failed on this base}`` measured so far and still younger than ``ttl_s``
+    (each id has its own age); {} when none."""
+    return {k: bool(v[0]) for k, v in _entries(repo, sha, ttl_s, now, command).items()}
 
 
 def cache_signatures(
@@ -65,18 +74,11 @@ def cache_signatures(
     without text -- an old entry -- is absent); {} when none. The text is what the branch's
     shown later compares against to spot a new offender (B-baseline-red-hides-new-offender-
     in-red-ratchet)."""
-    if ttl_s <= 0:
-        return {}
-    clock_now = CLOCK.wall() if now is None else now
-    try:
-        seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
-        out: dict[str, str] = {}
-        for k, v in seen.items():
-            if _fresh(v, clock_now, ttl_s) and len(v) > SIG_AT and v[SIG_AT]:
-                out[str(k)] = str(v[SIG_AT])
-        return out
-    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
-        return {}
+    return {
+        k: str(v[SIG_AT])
+        for k, v in _entries(repo, sha, ttl_s, now, command).items()
+        if len(v) > SIG_AT and v[SIG_AT]
+    }
 
 
 def cache_whole(
@@ -86,18 +88,39 @@ def cache_whole(
     ``on_base`` trusts a whole text even when its length is exactly ``flakes.LINE_CHARS``; an
     entry WITHOUT the marker is the legacy cut-to-that-length shape and is re-measured instead
     (B60e9e09308). An id with no text is absent here, as in ``cache_signatures``."""
-    if ttl_s <= 0:
-        return {}
-    clock_now = CLOCK.wall() if now is None else now
-    try:
-        seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
-        out: dict[str, bool] = {}
-        for k, v in seen.items():
-            if _fresh(v, clock_now, ttl_s) and len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]:
-                out[str(k)] = True
-        return out
-    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
-        return {}
+    return {
+        k: True
+        for k, v in _entries(repo, sha, ttl_s, now, command).items()
+        if len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]
+    }
+
+
+def cache_whole(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> dict[str, bool]:
+    """``{test id: True}`` for ids whose cached failure text is marked WHOLE (``SIG_WHOLE``), so
+    ``on_base`` trusts a whole text even when its length is exactly ``flakes.LINE_CHARS``; an
+    entry WITHOUT the marker is the legacy cut-to-that-length shape and is re-measured instead
+    (B60e9e09308). An id with no text is absent here, as in ``cache_signatures``."""
+    return {
+        k: True
+        for k, v in _entries(repo, sha, ttl_s, now, command).items()
+        if len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]
+    }
+
+
+def cache_snapshot(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> tuple[dict[str, bool], dict[str, str], dict[str, bool]]:
+    """``(known, sigs, whole)`` from ONE cache read, so the three never disagree when a concurrent
+    ``cache_store`` rewrites the file between separate calls (B60e9e09308). ``known``: id ->
+    failed on the base; ``sigs``: id -> whole failure text; ``whole``: id -> True for a text kept
+    WHOLE."""
+    entries = _entries(repo, sha, ttl_s, now, command)
+    known = {k: bool(v[0]) for k, v in entries.items()}
+    sigs = {k: str(v[SIG_AT]) for k, v in entries.items() if len(v) > SIG_AT and v[SIG_AT]}
+    whole = {k: True for k, v in entries.items() if len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]}
+    return known, sigs, whole
 
 
 def _fresh(entry, now: float, ttl_s: int) -> bool:

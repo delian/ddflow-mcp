@@ -26,7 +26,7 @@ from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
 from ..flakes import LINE_CHARS
-from .baseline import cache_load, cache_signatures, cache_store, cache_whole
+from .baseline import cache_snapshot, cache_store
 from .testcmd import counts_of
 
 GATES = ("ci", "unit_tests")
@@ -88,9 +88,7 @@ def on_base(
     # not the candidate's own merge-base with ``base`` (the fork point is older, so a test
     # ``base`` broke since the fork reads as a new failure there: B-ci-baseline-older-than-
     # candidate; B48c70b6773's earlier merge-base pin had this wrong).
-    known = cache_load(repo, sha, ttl_s, None, gdef.command)
-    cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
-    whole = cache_whole(repo, sha, ttl_s, None, gdef.command)
+    known, cached_sigs, whole = cache_snapshot(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
     # A cache entry measured before failure text was kept (old format, no text) has nothing to
     # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
