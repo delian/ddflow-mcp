@@ -1,8 +1,9 @@
 """The offline conformance of ONE driver descriptor (`ddflow harness test`).
 
 The per-descriptor checks that need no recorded fixture, no probe and no install: the
-facts overlay lists only well-formed facts, and a command-hooked descriptor's field map
-and emit variant resolve. The fixture-backed checks (E1 hook payloads, E4 argv, E5 stream and
+facts overlay lists only well-formed facts, and a command-hooked descriptor's emit
+variant resolves (its field map is total, so the variant is the one fallible resolution
+worth checking here). The fixture-backed checks (E1 hook payloads, E4 argv, E5 stream and
 the Lane contract) run in the test suite (`tests/test_driver_conformance.py`), the other
 half of DRV-conformance. Together they are the one offline conformance suite; this module
 is the half the CLI runs for a single descriptor.
