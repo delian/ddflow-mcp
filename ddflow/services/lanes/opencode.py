@@ -9,8 +9,9 @@ Keys go by env NAME only. Nothing is written to the project, and no model is cal
 
 Honest by construction (D-swarm-answers): ``select`` prefers opencode and falls back to kilo, and says
 which binary and version it used and whether the version was READ; a stream shape or flag nobody read on
-the real tool is ``unverified`` in ``FACTS``. ``usage`` and ``steer`` are not advertised (the stream's
-token fields were never read, and a headless run takes its prompt as argv), ``resume`` only when asked.
+the real tool is ``unverified`` in ``FACTS``. ``steer`` is not advertised (a headless run takes its
+prompt as argv) and ``resume`` only when asked; ``usage`` is advertised from the ``step_finish`` line's
+``part.tokens.total`` and ``part.cost`` (read live, SW-live-smoke).
 A live run against a real model is the operator's call: ``LIVE_PROBE`` is always ``unavailable``.
 ACP (``opencode acp``) can register as a further transport behind the same contract.
 """
@@ -71,13 +72,16 @@ FACTS = {
         "verified; event names unverified",
     ),
     "acp subcommand": ("opencode 1.19.0 acp --help", "exists; not used (later transport)"),
-    "json stream shape (step_start, tool_use, error)": (
-        "opencode source, from memory",
-        "unverified",
+    "json stream shape (step_start, tool_use, step_finish, error)": (
+        "kilo 7.8.18 run --format json, read live (SW-live-smoke)",
+        "verified",
     ),
-    "usage tokens in stream": ("not read", "unverified: usage not advertised"),
+    "usage tokens in stream": (
+        "kilo 7.8.18 step_finish part.tokens.total and part.cost (SW-live-smoke)",
+        "verified",
+    ),
 }
-#: E5 rules for ``run --format json`` lines. UNVERIFIED shape: re-read against a real run.
+#: E5 rules for ``run --format json`` lines, read live on kilo 7.8.18 (SW-live-smoke).
 STREAM_RULES = (
     {"when": {"path": "type", "equals": "step_start"}, "emit": "started",
      "fields": {"session": "sessionID"}},
@@ -85,6 +89,8 @@ STREAM_RULES = (
      "fields": {"name": "part.tool", "action": "part.state.input.action",
                 "error": "part.state.error", "output": "part.state.output",
                 "status": "part.state.status"}},
+    {"when": {"path": "type", "equals": "step_finish"}, "emit": "usage",
+     "fields": {"tokens": "part.tokens.total", "cost": "part.cost"}},
     {"when": {"path": "type", "equals": "error"}, "emit": "error",
      "fields": {"message": "error.data.message"}},
 )  # fmt: skip
@@ -277,9 +283,9 @@ def cleanup(home: Path) -> str:
 
 class OpenCodeLane(ProcessHeadless):
     """``ProcessHeadless`` that states only what this lane can do: no ``steer`` (the prompt is
-    argv), no ``usage`` (stream tokens unread), ``resume`` only if a spec asks."""
+    argv), ``usage`` from the ``step_finish`` line, ``resume`` only if a spec asks."""
 
-    capabilities = frozenset({"interrupt", "tool_events"})
+    capabilities = frozenset({"interrupt", "tool_events", "usage"})
 
 
 def conformance(
