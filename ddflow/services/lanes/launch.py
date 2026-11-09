@@ -226,10 +226,13 @@ def launch(req: Request) -> Launched | Refused:
         ),
         SP.Knobs.from_config(cfg),
     )
-    # A route whose tool_call is only `unverified` must still launch: the lane IS the
-    # live probe that verifies it (Bc64f9048f5). The slot checks above already resolve
-    # the endpoint with require_tools=False; prepare() must not refuse the same route on
-    # its require_tools=True default, or the first probe has no route to run on at all.
+    # A route whose tool_call is only `unverified` must still launch: refusing it here
+    # leaves the operator-run probe that verifies tool calling (endpoint.probe_plan) with
+    # no lane to set up (Bc64f9048f5). `require_tools=False` only means "do not require
+    # tool calling to be VERIFIED": the route still renders with tool_call off until that
+    # probe records the fact, so it never pilots an unproven tool call. The slot checks
+    # above already resolve the endpoint with require_tools=False; prepare() must not
+    # refuse the same route on its require_tools=True default.
     prep = OC.prepare(
         req.cat,
         t.route,
