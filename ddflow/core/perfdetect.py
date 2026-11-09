@@ -28,12 +28,23 @@ def _robust_sigma(values: list[float]) -> float:
     return 1.4826 * mad(values)
 
 
-def median_shift(baseline: list[float], window: list[float]) -> tuple[float, float, float]:
-    """(median change, relative change, robust z-score) of ``window`` against ``baseline``."""
+def median_shift(baseline: list[float], window: list[float]) -> tuple[float, float | None, float]:
+    """(median change, relative change, robust z-score) of ``window`` against ``baseline``.
+    The relative change is None when the baseline median is 0 (division undefined)."""
     bmed = median(baseline)
     wmed = median(window)
     sigma = _robust_sigma(baseline) or 1.0
-    return wmed - bmed, (wmed - bmed) / bmed if bmed else 0.0, (wmed - bmed) / sigma
+    rel = (wmed - bmed) / bmed if bmed else None
+    return wmed - bmed, rel, (wmed - bmed) / sigma
+
+
+def _percentile(values: list[float], p: float) -> float:
+    """A percentile by linear interpolation between the bracketing ranks (R-7 style)."""
+    ordered = sorted(values)
+    idx = (len(ordered) - 1) * p / 100.0
+    lo = int(idx)
+    hi = min(lo + 1, len(ordered) - 1)
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (idx - lo)
 
 
 def _ewma(values: list[float], alpha: float) -> float:
@@ -44,10 +55,12 @@ def _ewma(values: list[float], alpha: float) -> float:
     return out
 
 
-def _creep_exceeded(baseline: list[float], window: list[float], alpha: float, rel: float) -> bool:
-    """Whether the EWMA of the window drifted past the relative threshold over the baseline."""
+def _creep_exceeded(baseline: list[float], window: list[float], alpha: float, rel: float) -> float:
+    """The EWMA drift over the baseline median as an absolute shift (None when it did not
+    cross the lower creep bar); a positive value is the shift."""
     b = median(baseline)
-    return _ewma(window, alpha) > b * (1 + rel) if b else _ewma(window, alpha) > 0
+    drift = _ewma(window, alpha) - b
+    return drift if drift > b * rel else 0.0
 
 
 @dataclass(frozen=True)
@@ -59,7 +72,7 @@ class Finding:
     start: float
     end: float
     median_s: float  # the window's median
-    effect_size: float  # relative change vs baseline median
+    effect_size: float | None  # relative change vs baseline median (None when the baseline is 0)
     absolute_s: float  # absolute change vs baseline median
     sample_size: int
     suspected: str
@@ -82,8 +95,9 @@ def detect_series(
     if len(baseline) < max(cfg.detect_min_samples, 2) or len(window) < max(cfg.detect_min_samples, 2):
         return None
     abs_s, rel, _z = median_shift(baseline, window)
-    stepped = rel >= cfg.detect_relative_threshold and abs_s >= cfg.detect_absolute_floor_s
-    crept = _creep_exceeded(baseline, window, cfg.detect_creep_alpha, cfg.detect_relative_threshold)
+    stepped = abs_s >= cfg.detect_absolute_floor_s and (rel is None or rel >= cfg.detect_relative_threshold)
+    crept_s = _creep_exceeded(baseline, window, cfg.detect_creep_alpha, cfg.detect_creep_threshold)
+    crept = crept_s >= cfg.detect_absolute_floor_s  # the floor gates creep too (sub-second is noise)
     if not (stepped or crept):
         return None
     return Finding(series, env, start, end, median(window), rel, abs_s, len(window), suspected)
@@ -121,13 +135,13 @@ def burn_rate(
     """How fast a series consumes a stated budget over a short vs a long window: the p90 of
     each, as the rate-per-run and the budget left (D-perf-metrics-answers shows comparisons)."""
     if len(short) < max(min_samples, 2) or len(long) < max(min_samples, 2):
-        return {"short_p50": None, "long_p50": None, "budget_left_short": None}
-    sp50 = median(short)
-    lp50 = median(long)
+        return {"short_p90": None, "long_p90": None, "budget_left_short": None}
+    sp90 = _percentile(short, 90)
+    lp90 = _percentile(long, 90)
     return {
-        "short_p50": sp50,
-        "long_p50": lp50,
-        "budget_left_short": budget_s - sp50,
+        "short_p90": sp90,
+        "long_p90": lp90,
+        "budget_left_short": budget_s - sp90,
         "short_n": len(short),
         "long_n": len(long),
     }

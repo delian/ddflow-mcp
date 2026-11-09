@@ -29,8 +29,8 @@ def test_a_seeded_step_above_both_thresholds_alerts():
     assert f.sample_size == 12
 
 
-def test_a_step_under_the_relative_threshold_does_not_alert():
-    step = [114.0] * 12  # +14% < 20% default
+def test_a_step_under_both_thresholds_does_not_alert():
+    step = [104.0] * 12  # +4% < both the 20% step and the 10% creep bar
     f = PD.detect_series("rss", "env:a", FLAT_BASELINE, step, 0, 1)
     assert f is None
 
@@ -58,4 +58,4 @@ def test_creep_the_ewma_catches_a_slow_slide_a_fixed_threshold_misses():
 
 def test_burn_rate_reports_short_long_and_budget_left():
     r = PD.burn_rate([5.0] * 10, [4.0] * 20, budget_s=20.0)
-    assert r["short_p50"] == 5.0 and r["long_p50"] == 4.0 and r["budget_left_short"] == 15.0
+    assert r["short_p90"] == 5.0 and r["long_p90"] == 4.0 and r["budget_left_short"] == 15.0

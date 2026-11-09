@@ -70,3 +70,12 @@ class PerfMetricsConfig:
             else "must be a number >= 0"
         ),
     )
+    detect_creep_threshold: float = knob(
+        0.10,
+        doc="The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar never catches 1% a week; the creep bar does, accumulated over the window).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )
