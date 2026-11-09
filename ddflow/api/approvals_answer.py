@@ -119,7 +119,11 @@ def approvals_approve_bulk(
         return _not_a_person("approvals.approve", actor.source, "answering an approval")
 
     if all_pending:
-        target = [(r["id"], "") for r in V.waiting_for_a_person(st)]
+        target = [
+            (r["id"], "")
+            for r in V.waiting_for_a_person(st)
+            if r["type"] != "question"  # a question is answered in chat, never approved
+        ]
     else:
         target = _split_ids(ids, digests)
         if target is None:
