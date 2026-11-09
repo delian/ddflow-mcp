@@ -513,8 +513,8 @@ def _sh_c(head: list[str]) -> int:
     non-option argument the command string; option words AFTER `-c` do not stop it, so
     `bash -c -x 'git push'`, `bash -c -- 'git push'`, `bash -c - 'git push'` and
     `bash -co pipefail 'git push'` all RUN `git push` (B-forbidden-guard-multiline-quote-bypass
-    critic #6). A `c` inside a cluster is `-c` (`sh -xc 'pkill'`); a `+c` turns `-c` back OFF,
-    so the first non-option word is then a script, not a run string; an optname that CLOSES a
+    critic #6). A `c` inside a cluster is `-c` (`sh -xc 'pkill'`); a `+c` reads the next
+    non-option as the run string too (bash treats `-c` and `+c` alike); an optname that CLOSES a
     cluster (`bash -xo pipefail -c 'pkill'`) and a valued long option (`--rcfile FILE`) consume
     their value; the LAST `-c`/`+c` before the operand wins (`bash -co pipefail -c 'pkill'`
     runs the `-c`). Returns the command-string word's index, or -1 (no `-c` still set)."""

@@ -280,6 +280,9 @@ def test_refused_param_expansion_body(cmd):
         "bash -c -x 'git push origin main'",
         "bash -c -- 'git push origin main'",
         "bash -c - 'git push origin main'",
+        # `+c` reads the next non-option as the run string just like `-c` (bash runs
+        # `bash +c 'git push origin main'`), so it must be refused too (critic #6)
+        "bash +c 'git push origin main'",
     ],
 )
 def test_refused_clustered_c_flag(cmd):
