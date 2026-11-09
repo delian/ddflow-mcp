@@ -15,6 +15,7 @@ from ...services import gates as G
 from ...services import ledger as LG
 from ...services import reprobundle as RB
 from ...services.completion import changed_paths, fix_task_for
+from ...services.viewers import inherited_need_ids
 from .._base import _load
 
 #: How much of one record's text a rendering carries. The record is whole in the log and
@@ -149,11 +150,15 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         return changed_paths(repo, it)
 
     led = LG.build(_log.read_all(), item) if it.state == "done" else None
+    shown = absolutise(repo, plain(it))
+    # A task's effective dependencies are its own `needs` plus every phase ancestor's;
+    # print that, not only what the task declares itself (B8981fa81bd).
+    shown["needs"] = inherited_need_ids(st, it)
     return O.ok(
         "show",
         id=item,
         item={
-            **absolutise(repo, plain(it)),
+            **shown,
             **addenda(st, item),
             **({"ledger": LG.summary(led)} if led else {}),
         },

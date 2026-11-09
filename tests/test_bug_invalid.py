@@ -89,6 +89,17 @@ def test_a_probe_command_is_accepted_as_evidence_unchecked(repo):
     assert out.data["unchecked"] == ["ddflow wait X --once"]
 
 
+def test_a_probe_command_with_comma_separated_globs_is_not_refused_over_a_glob(repo):
+    """Bd8c82c2a5c: `--globs B.py,A.py,C.py` inside a probe command was split on the comma,
+    and the nonexistent `A.py` fragment was refused as a missing TEST although the field
+    accepts the probe command verbatim: a bare `.py` token names no test."""
+    _init(repo)
+    evidence = "ddflow update B --globs B.py,A.py,C.py ... -> EXIT=0"
+    out = K.bug_invalid(repo, "B1", reason="false finding", evidence=evidence)
+    assert out.exit == OK, out
+    assert "A.py" not in (out.data.get("missing") or []), out.data
+
+
 def test_evidence_naming_a_test_that_does_not_exist_fails_as_bug_fixed_does(repo):
     """The same static resolution `bug fixed --regression-test` applies: a node id that
     names nothing would be evidence pointing at nothing. Exit 1, not 3, deliberately --

@@ -17,8 +17,11 @@ GOVERNS = ("ddflow/**",)
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
 
-#: The two modules that own shell-line execution.
-HOMES = frozenset({"infra/proc.py", "services/cmdrunner.py"})
+#: The modules that own shell-line execution (adapters/proc.py and adapters/proc_server.py
+#: are the D-unify process layer; infra/proc.py is the legacy one being moved onto it).
+HOMES = frozenset(
+    {"infra/proc.py", "adapters/proc.py", "adapters/proc_server.py", "services/cmdrunner.py"}
+)
 
 #: `which` on the first element of an argv ddflow built itself (never an operator's line).
 EXEMPT = {

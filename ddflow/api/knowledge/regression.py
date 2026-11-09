@@ -33,11 +33,15 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         if not path.endswith(".py") or any(c.isspace() for c in path):
             unchecked.append(entry)
             continue
-        # Each parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
-        # `[...]`, and splitting them refused a real test (B-bfu-param-sep). Each, not the
-        # first: a class-parametrized `TestC[1]::test_m` resolved to `TestC` alone, so a
-        # method the class lacks was accepted (Bb3ef73d53b).
-        wanted = _bare_names(names) if sep else []
+        # A bare `.py` token with no `::` names NO test: it is a file glob inside a probe
+        # command (``--globs B.py,A.py,C.py``), not a node id to resolve here -- the
+        # comma that separated the globs split it out, and a nonexistent one reads as a
+        # missing test (bug Bd8c82c2a5c). A bare FILE given as a regression test is
+        # `_half_node_ids`' refusal ("a .py path that names no test"), a different check.
+        if not sep:
+            unchecked.append(entry)
+            continue
+        wanted = _bare_names(names)
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
         # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
         # resolved `t` and accepted the unchecked rest (B227585c781).
