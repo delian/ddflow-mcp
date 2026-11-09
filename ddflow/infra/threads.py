@@ -5,7 +5,8 @@ that imports ddflow as a library keeps its own threading. On a many-core host nu
 otherwise burns seconds of CPU per command. A value the user already set is never changed.
 """
 
-from ..adapters.env import Env, DEFAULT as ENV
+from ..adapters.env import DEFAULT as ENV
+from ..adapters.env import Env
 
 VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 

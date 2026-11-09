@@ -61,7 +61,6 @@ def test_extra_installed_reports_a_broken_install_as_not_installed(tmp_path):
 
 def test_cap_blas_threads_writes_through_the_env_port():
     from ddflow.adapters.fakes.env import FakeEnv
-
     from ddflow.infra import threads
 
     env = FakeEnv()
