@@ -71,3 +71,13 @@ def test_a_long_holder_reason_cuts_the_reason_not_the_past_timeout_note():
     assert note.endswith("a past timeout -- re-run the gate)"), note
     assert "recorded 2026-11-05 02:12" in note, note
 
+
+def test_a_reason_with_a_newline_before_the_time_is_still_a_past_timeout():
+    """`split()` folds the newline out of the shown text, so the raw reason's line break must
+    not stop the past-timeout note (a reason recorded across a line reads live otherwise)."""
+    reason = (
+        "blocked on pid 989929 / PS-snapshot of /repo since\r\n02:12:11, you are #2 in the queue"
+    )
+    note = _why_notes(_ci(reason), [("ci", "unavailable")])["ci"]
+    assert "a past timeout" in note, note
+    assert "re-run the gate" in note, note

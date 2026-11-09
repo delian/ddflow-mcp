@@ -22,7 +22,11 @@ def _past_note(at: str) -> str:
     ``at`` is when the unavailable outcome was recorded (the gate record's timestamp); a
     record without one still says the wait is past, it just cannot say when."""
     when = fmt_minute(at or "")
-    return f"recorded {when}; a past timeout -- re-run the gate" if when else "a past timeout -- re-run the gate"
+    return (
+        f"recorded {when}; a past timeout -- re-run the gate"
+        if when
+        else "a past timeout -- re-run the gate"
+    )
 
 
 def _suite_wait_note(text: str, at: str) -> str:
@@ -52,8 +56,12 @@ def _unavailable_reasons(it, rows: list[tuple[str, str]]) -> dict[str, str]:
         if o not in ("unavailable", "partial", "failed"):
             continue
         rec = it.gates.get(g)
-        text = " ".join(((rec.reason if rec else "") or "").split()) or "no reason was recorded"
-        if rec is not None and _SUITE_WAIT.match(rec.reason or ""):
+        reason = (rec.reason if rec else "") or ""
+        text = " ".join(reason.split()) or "no reason was recorded"
+        # Match the COLLAPSED text: `split()` already folds `\r`/`\n` inside the reason to
+        # ordinary spaces, and the regex's `.` does not cross a newline, so matching the raw
+        # string missed a reason whose "since <time>" was preceded by a newline.
+        if rec is not None and _SUITE_WAIT.match(text):
             text = _suite_wait_note(text, rec.at)
         out[g] = text if len(text) <= WHY_CHARS else text[: WHY_CHARS - 3] + "..."
     return out
