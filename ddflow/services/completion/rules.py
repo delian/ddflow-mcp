@@ -43,7 +43,7 @@ from ..gates.evidence import tree_being_completed as _tree_being_completed
 from ..gates.reviewed_paths import ignorable
 from ..gates.stale_why import StaleNote
 from ..gates.testcmd import coverage_of
-from ..review_reuse import DELTA, classify, own_patch_id
+from ..review_reuse import DELTA, classify, own_patch_id, shown_names
 from ._changed import changed_paths
 
 
@@ -519,9 +519,8 @@ def refine_stale_notes(
             and not ignorable(p, recorded, ignore, docs, gone)
         )
         if moved:
-            shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
             out.append(
-                replace(note, why=f"the files it reviewed or this item changes differ: {shown}")
+                replace(note, why=f"the files it reviewed or this item changes differ: {shown_names(moved)}")
             )
     return out
 

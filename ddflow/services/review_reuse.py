@@ -49,7 +49,7 @@ class Verdict:
 _SHOWN = 8  # how many path names one verdict lists before counting the rest
 
 
-def _names(paths: Sequence[str]) -> str:
+def shown_names(paths: Sequence[str]) -> str:
     """The first `_SHOWN` path names and the count of the rest, for a verdict's ``why``."""
     return ", ".join(paths[:_SHOWN]) + (
         f" (+{len(paths) - _SHOWN} more)" if len(paths) > _SHOWN else ""
@@ -109,7 +109,7 @@ def classify(
     # overlap -- it is stale, not a delta of the covered files.
     added = sorted(p for p in set(changed) - seen if not ignorable(p, recorded, ignore, docs, gone))
     if added:
-        return Verdict(STALE, f"the item now changes file(s) the review never saw: {_names(added)}")
+        return Verdict(STALE, f"the item now changes file(s) the review never saw: {shown_names(added)}")
     overlap = sorted(
         p
         for p in seen
@@ -118,7 +118,7 @@ def classify(
     )
     if overlap:
         return Verdict(
-            DELTA, f"re-review only the overlapping files: {_names(overlap)}", tuple(overlap)
+            DELTA, f"re-review only the overlapping files: {shown_names(overlap)}", tuple(overlap)
         )
     return Verdict(
         KEEP,
