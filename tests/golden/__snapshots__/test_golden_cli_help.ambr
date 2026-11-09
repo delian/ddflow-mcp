@@ -1653,12 +1653,12 @@
 # ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume,approve}] [lane]
+  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume,lead,approve}] [lane]
   
   positional arguments:
-    {state,brief,advise,fleet,resume,approve}
-                          state (default), brief <lane>, advise, fleet, resume <lane> or approve
-                          <template>
+    {state,brief,advise,fleet,resume,lead,approve}
+                          state (default), brief <lane>, advise, lead, fleet, resume <lane> or
+                          approve <template>
     lane                  with brief, resume or approve: the lane name (for approve, the template
                           name), or a unique part of it
   
@@ -3729,7 +3729,8 @@
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
-      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
+      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`,
+                          `lanes lead`
       vigil               one compact health snapshot: bug severity counts, stale pins, active
                           lanes, interrupted, pending approvals, reviewer up/429/slow
       health              idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is
