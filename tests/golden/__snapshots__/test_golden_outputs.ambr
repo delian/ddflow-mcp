@@ -769,11 +769,16 @@
           How many times `bug found --repro-cmd CMD` reruns the command at filing
           (default 1), and thus whether the bug's sighting was confirmed: the bundle
           records `reproduced yes|no`, `runs` and `failures`.
-      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDE*', '*GATE*']   [default]
+      bugs.repro_env = ['DDFLOW_*', 'CI', 'CI_*', 'GITHUB_*', 'PYTEST_*', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', '*GATE*']   [default]
           Environment variable name patterns (fnmatch) whose values a reproduction
           bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and
-          the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN,
-          SECRET, PASSWORD, ...) is recorded as set, never with its value.
+          the gate runner's. The Claude Code entry is the two behaviour-explaining
+          names (which CLI and entrypoint) rather than `CLAUDE*`: the wildcard
+          recorded the account/org UUIDs and the messaging socket path -- operator
+          identity leaving the project without consent, and none of their names is
+          secret-named so none was masked (B6307b787dd). A variable whose name says it
+          holds a secret (KEY, TOKEN, SECRET, PASSWORD, ...) is recorded as set, never
+          with its value.
       bugs.repro_redact_extra = []   [default]
           More redaction regexes applied to a reproduction bundle, IN ADDITION to
           `[session] redact_patterns` and `redact_extra`.

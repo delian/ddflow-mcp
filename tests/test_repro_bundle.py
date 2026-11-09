@@ -101,6 +101,37 @@ def test_secrets_in_env_and_config_are_redacted(proj, monkeypatch):
     assert "REDACTED" in got["env"]["DDFLOW_NOTE"]
 
 
+def test_a_bundle_holds_no_claude_account_or_socket_identifier(proj, monkeypatch):
+    # B6307b787dd: the default [bugs].repro_env pattern "CLAUDE*" recorded the Claude Code
+    # account/org UUIDs and the messaging socket path -- operator identity leaving the
+    # project without consent (r-consent-outward) -- and none of their names is
+    # credential-named, so none was masked. The default is narrowed to the behaviour-
+    # explaining variables (D-debug-capabilities-2026-11-05: stop recording the account and
+    # org UUIDs), so those identifiers never enter the bundle at all.
+    acct = "acct-00000000-1111-2222-3333-444444444444"
+    org = "org-55555555-6666-7777-8888-999999999999"
+    sock = "/home/operator/.claude/bridge.sock"
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_OWNER_ACCOUNT_UUID", acct)
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_OWNER_ORG_UUID", org)
+    monkeypatch.setenv("CLAUDE_CODE_BRIDGE_SOCKET", sock)
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "/usr/local/bin/claude")
+    monkeypatch.setenv("CLAUDECODE", "claude")
+    _, bug = _file(proj)
+    got = _bundle(proj, bug)
+    for name in (
+        "CLAUDE_CODE_BRIDGE_OWNER_ACCOUNT_UUID",
+        "CLAUDE_CODE_BRIDGE_OWNER_ORG_UUID",
+        "CLAUDE_CODE_BRIDGE_SOCKET",
+    ):
+        assert name not in got["env"], name
+    text = "".join(p.read_text() for p in (proj / ".ddflow" / "blobs").rglob("*.json"))
+    for leaked in (acct, org, sock):
+        assert leaked not in text, leaked
+    # the behaviour-explaining variables are still recorded
+    assert got["env"]["CLAUDECODE"] == "claude"
+    assert got["env"]["CLAUDE_CODE_ENTRYPOINT"] == "/usr/local/bin/claude"
+
+
 def test_capture_off_stores_nothing(proj):
     _config(proj, '[bugs]\nrepro_capture = "off"\n')
     _, bug = _file(proj)
