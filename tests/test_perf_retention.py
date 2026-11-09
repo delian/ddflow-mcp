@@ -66,6 +66,14 @@ def test_compaction_folds_aged_samples_into_the_commit_and_trims(repo: Path):
     assert agg and "a" in agg[0][1]
 
 
+def test_an_incomplete_day_is_not_folded_into_an_aggregate(repo: Path):
+    append(repo, "rss", Sample(100.0, "a", 5.0, "g", "d"))  # day 0, far from ending
+    _kept, _notes = R.compact(repo, "rss", 1000.0, cfg=PerfMetricsConfig(ring_max_age_s=10**6, ring_max_bytes=10**6))
+    from ddflow.services.perf.store import read_aggregates
+
+    assert read_aggregates(repo, "rss") == []  # day 0 is still open: no premature daily number
+
+
 def test_compact_drops_a_non_allowlist_field_from_disk(repo: Path):
     append(repo, "rss", Sample(1.0, "a", 5.0, "g", "d"))
     _append_line(

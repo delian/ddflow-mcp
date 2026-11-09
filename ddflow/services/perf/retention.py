@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ddflow.config import Config
+
 from . import store
 from .store import PerfMetricsConfig, ring_path
 
@@ -68,7 +70,7 @@ def _raw_rows(repo: Path, series: str) -> list[dict[str, Any]]:
 def audit(repo: Path, series: str, cfg: PerfMetricsConfig | None = None) -> Audit:
     """Scan one ring: rows, bytes, how many rows carried a non-allowlist field, and whether
     the ring exceeds its budget."""
-    cfg = cfg or PerfMetricsConfig()
+    cfg = cfg or Config().perf_metrics
     rows = _raw_rows(repo, series)
     dropped = sum(1 for r in rows if any(k not in ALLOWED_FIELDS for k in r))
     path = ring_path(repo, series)
@@ -79,22 +81,25 @@ def audit(repo: Path, series: str, cfg: PerfMetricsConfig | None = None) -> Audi
 def redact_ring(repo: Path, series: str) -> tuple[int, list[str]]:
     """Rewrite a ring projection only the allowlist fields, so a non-allowlist value (prompt
     text, a token, a secret) is dropped from disk. Returns (rows rewritten, dropped keys) --
-    the caller turns the keys into a doctor note.]"""
+    the caller turns the keys into a doctor note. A missing/clean ring is never rewritten."""
     rows = _raw_rows(repo, series)
+    if not rows:
+        return 0, []
     kept: list[str] = []
     dropped: list[str] = []
     for r in rows:
         projected, keys = redact_row(r)
         dropped.extend(keys)
         kept.append(json.dumps(projected, separators=(",", ":")))
-    store.atomic_write(ring_path(repo, series), "\n".join(kept) + ("\n" if kept else ""))
+    if dropped:  # clean ring: skip the O(ring) rewrite
+        store.atomic_write(ring_path(repo, series), "\n".join(kept) + "\n")
     return len(kept), sorted(set(dropped))
 
 
 def doctor(repo: Path, cfg: PerfMetricsConfig | None = None) -> list[str]:
     """The ticks' doctor notes: a ring over budget, or a field outside the allowlist seen.
     Empty notes means the store is within policy."""
-    cfg = cfg or PerfMetricsConfig()
+    cfg = cfg or Config().perf_metrics
     notes: list[str] = []
     series_names = {p.stem for p in ring_path(repo, "*").parent.glob("*.jsonl")}
     for name in sorted(series_names):
@@ -115,7 +120,7 @@ def compact(
     """The retention tick: drop non-allowlist fields (returning a doctor note per dropped
     key), fold aged samples into the committed daily aggregate, then trim the raw ring.
     Returns (raw rows kept, doctor notes). Idempotent."""
-    cfg = cfg or PerfMetricsConfig()
+    cfg = cfg or Config().perf_metrics
     _, dropped = redact_ring(repo, series)  # drop non-allowlist fields from disk
     notes = [f"{series}: saw non-allowlist field {k}" for k in dropped]
     # Fold a UTC day only once it is COMPLETE (its span ended before ``now``): no sample can
