@@ -161,7 +161,10 @@ def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
         }
         opts = row.get("options") or []
         if opts:
-            q["options"] = [{"label": str(o)} for o in opts]
+            q["options"] = [
+                {"label": str(o), "description": "answer the question with this option"}
+                for o in opts
+            ]
         return {"questions": [q]}
     yes, no = labels(row["id"])
     options = [

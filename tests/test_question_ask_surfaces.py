@@ -80,3 +80,4 @@ def test_a_question_payload_uses_its_preset_options(repo):
     qid = _question(repo, options=("red", "blue"))
     (q,) = H.payload(_row(repo, qid), Config())["questions"]
     assert [o["label"] for o in q["options"]] == ["red", "blue"]
+    assert all(o["description"] for o in q["options"])
