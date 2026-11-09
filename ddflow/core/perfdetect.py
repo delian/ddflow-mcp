@@ -55,12 +55,9 @@ def _ewma(values: list[float], alpha: float) -> float:
     return out
 
 
-def _creep_exceeded(baseline: list[float], window: list[float], alpha: float, rel: float) -> float:
-    """The EWMA drift over the baseline median as an absolute shift (None when it did not
-    cross the lower creep bar); a positive value is the shift."""
-    b = median(baseline)
-    drift = _ewma(window, alpha) - b
-    return drift if drift > b * rel else 0.0
+def _creep_drift(baseline: list[float], window: list[float], alpha: float) -> float:
+    """The signed EWMA drift over the baseline median (negative = a speedup, 0 = flat)."""
+    return _ewma(window, alpha) - median(baseline)
 
 
 @dataclass(frozen=True)
@@ -100,10 +97,11 @@ def detect_series(
     stepped = abs_s >= cfg.detect_absolute_floor_s and (
         rel is None or rel >= cfg.detect_relative_threshold
     )
-    crept_s = _creep_exceeded(baseline, window, cfg.detect_creep_alpha, cfg.detect_creep_threshold)
-    crept = (
-        crept_s >= cfg.detect_absolute_floor_s
-    )  # the floor gates creep too (sub-second is noise)
+    drift = _creep_drift(baseline, window, cfg.detect_creep_alpha)
+    bmed = median(baseline)
+    # The median shift clears the absolute floor (so a sub-second change, or a lone trailing
+    # spike whose median never moved, never alerts), and the EWMA crossed the LOWER creep bar.
+    crept = abs_s >= cfg.detect_absolute_floor_s and drift > bmed * cfg.detect_creep_threshold
     if not (stepped or crept):
         return None
     return Finding(series, env, start, end, median(window), rel, abs_s, len(window), suspected)
@@ -140,19 +138,30 @@ def burn_rate(
     *,
     min_samples: int = 8,
 ) -> dict[str, float | int | None]:
-    """How fast a series consumes a stated budget over a short vs a long window: the p90 of
-    each, as the rate-per-run and the budget left (D-perf-metrics-answers shows comparisons)."""
-    if len(short) < max(min_samples, 2) or len(long) < max(min_samples, 2):
-        return {"short_p90": None, "long_p90": None, "budget_left_short": None}
-    sp90 = _percentile(short, 90)
-    lp90 = _percentile(long, 90)
-    return {
-        "short_p90": sp90,
-        "long_p90": lp90,
-        "budget_left_short": budget_s - sp90,
+    """How fast a series consumes a stated budget: the p90 of a short vs a long window, the
+    short burn rate as a fraction of the budget, and whether the short window burns faster
+    than the long (so the budget runs out sooner). The SAME shape on too-few-samples: the
+    figures are None, never a second schema (a caller treats "none" by the None, not by a
+    missing key)."""
+    shape = {
+        "short_p90": None,
+        "long_p90": None,
+        "budget_left_short": None,
         "short_n": len(short),
         "long_n": len(long),
+        "short_burn_rate": None,
+        "short_burns_faster": None,
     }
+    if len(short) < max(min_samples, 2) or len(long) < max(min_samples, 2):
+        return shape
+    sp90 = _percentile(short, 90)
+    lp90 = _percentile(long, 90)
+    shape["short_p90"] = sp90
+    shape["long_p90"] = lp90
+    shape["budget_left_short"] = budget_s - sp90
+    shape["short_burn_rate"] = sp90 / budget_s if budget_s else None
+    shape["short_burns_faster"] = sp90 > lp90
+    return shape
 
 
 __all__ = ["Finding", "burn_rate", "detect", "detect_series", "mad", "median_shift"]
