@@ -121,13 +121,20 @@ def idle_reserved(state: State, cfg: Config, in_flight: Iterable[str], limit: in
     return max(0, min(unused, limit - len(flying)))
 
 
-def reserved_note(cfg: Config, limit: int) -> str:
-    """The one phrase `next`, `status` and `brief` print; "" when nothing is reserved."""
+def reserved_note(cfg: Config, limit: int, *, tree_binds: bool = False) -> str:
+    """The one phrase `next`, `status` and `brief` print; "" when nothing is reserved.
+
+    The share is of the cap that actually holds work back (`plan`'s ``slots ==
+    flight_slots`` split), so the worktree cap is named only when IT is the tighter one,
+    else the flight limit -- next/status/brief must not name a cap that does not bind
+    (DX-reserved-note-tree).
+    """
     wanted = cfg.schedule.reserved_slots
     if not wanted:
         return ""
     tags = ", ".join(cfg.schedule.reserved_tags)
     what = f"bug fixes and tags {tags}" if tags else "bug fixes"
-    force = reserved_in_force(wanted, limit)
-    note = f"{force} of {limit} slot(s) reserved for {what}"
+    cap, unit = (tree_cap(cfg, limit), "worktree slot") if tree_binds else (limit, "slot")
+    force = reserved_in_force(wanted, cap)
+    note = f"{force} of {cap} {unit}(s) reserved for {what}"
     return note if force == wanted else f"{note} ({wanted} set; one always stays ordinary)"
