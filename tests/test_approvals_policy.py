@@ -87,7 +87,13 @@ def _only_unavailable_gate(repo, *outcomes):
         why = (
             "worktree gone before it could run"
             if outcome == "unavailable"
-            else ("a failing test" if outcome == "failed" else "ran partway")
+            else (
+                "worktree gone after the merge"
+                if outcome == "skipped"
+                else "a failing test"
+                if outcome == "failed"
+                else "ran partway"
+            )
         )
         assert _record(repo, "unit_tests", outcome, why) == 0
 
@@ -383,6 +389,39 @@ def test_a_routine_completion_auto_answers_only_an_unavailable_gate_end_to_end(r
     assert ev.data["approval"]["policy"] == "complete_unavailable"
     assert ev.data["forced"] is True and ev.data["overridden"]
     assert ev.data["approval"]["digest"]
+
+
+def test_a_routine_completion_auto_answers_a_skipped_gate_end_to_end(repo):
+    """Bb67dc543b6: a `skipped` required gate (recorded with a reason -- e.g. `unit_tests`
+    after a merge removed the worktree) is a coverage gap the standing `complete_unavailable`
+    rule answers, exactly like `unavailable`; it must not force an operator `complete.force`."""
+    _only_unavailable_repo(repo, "skipped")
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
+    assert code == 0, (out, err)
+    ev = [e for e in EventLog(repo, "bot").read_all() if e.kind == "item.completed"][-1]
+    assert ev.data["approval"]["policy"] == "complete_unavailable"
+    assert ev.data["forced"] is True and ev.data["overridden"]
+
+
+def test_the_complete_unavailable_predicate_answers_a_skipped_gate(proj):
+    """The rule's own predicate (`_unavailable_unmet_only`) accepts a `skipped` required gate
+    the same way the completion site does, so the two cannot drift (Bb67dc543b6)."""
+    from ddflow.core.records.gates import GateRecord
+    from ddflow.core.records.items import Item
+
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(
+                gate="unit_tests", outcome="skipped", reason="merge removed it"
+            ),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+    )
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is True
 
 
 def test_a_routine_completion_never_auto_answers_a_failed_gate_end_to_end(repo):

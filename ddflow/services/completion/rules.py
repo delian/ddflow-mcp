@@ -275,7 +275,11 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it), repo=repo)
     v = Verdict(
         item=item_id,
-        coverage_gaps=list(s.unavailable),
+        # Coverage gaps are `unavailable` (could not run), `partial` (ran partway) AND
+        # `skipped` (set aside with a recorded reason): all three are "did not pass, on the
+        # record", and the standing `complete_unavailable` rule answers a routine completion
+        # over any of them alike (Bb67dc543b6). `_coverage_note` separates the three.
+        coverage_gaps=list(s.unavailable) + list(s.skipped),
         kind=it.kind,
         na_evidence=[f"{g}: {why}" for g, why in s.not_applicable.items()],
     )
@@ -375,8 +379,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     )
     v.blockers += no_reviewer
 
-    if s.unavailable:
-        v.coverage_note = _coverage_note(it, s.unavailable)
+    if v.coverage_gaps:
+        v.coverage_note = _coverage_note(it, v.coverage_gaps)
 
     readme = readme_report(state, cfg, item_id, repo=repo)
     if readme:
@@ -520,7 +524,10 @@ def refine_stale_notes(
         )
         if moved:
             out.append(
-                replace(note, why=f"the files it reviewed or this item changes differ: {shown_names(moved)}")
+                replace(
+                    note,
+                    why=f"the files it reviewed or this item changes differ: {shown_names(moved)}",
+                )
             )
     return out
 
@@ -683,13 +690,17 @@ def _is_test_or_doc_path(path: str) -> bool:
 
 
 def _coverage_note(it, gaps: list[str]) -> str:
-    """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
-    one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
-    ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
-    its `coverage`; a `partial_exits` gate has none, and its runner's own counts (from
-    the summary lines) stand in for it (bug B-gate-status-partial-did-not-run)."""
-    never = [g for g in gaps if it.gate_outcome(g) != "partial"]
+    """Say what each gap IS. ``gaps`` holds `unavailable`, `partial` and `skipped` gates
+    (Verdict.coverage_gaps), and one sentence for all of them called a critic that
+    reviewed 3 of 6 chunks one that "never ran" -- erasing the half it did
+    (B72dd4dde17). A reviewer's partial evidence carries its `coverage`; a
+    `partial_exits` gate has none, and its runner's own counts (from the summary lines)
+    stand in for it (bug B-gate-status-partial-did-not-run). A skipped gate is named a
+    skip, never a run (Bb67dc543b6)."""
+    never = [g for g in gaps if it.gate_outcome(g) not in ("partial", "skipped")]
+    skipped = [g for g in gaps if it.gate_outcome(g) == "skipped"]
     parts = [f"{', '.join(never)} never ran"] if never else []
+    parts += [f"{', '.join(skipped)} skipped"] if skipped else []
     for g in gaps:
         if it.gate_outcome(g) == "partial":
             # `is None`/`== ""`, not falsiness: a coverage of 0 is a figure, and the

@@ -69,17 +69,26 @@ def _measured_baseline_red(it, gate: str, cfg: Config) -> bool:
     return not GA.refusal(it, gate)
 
 
-_UNAVAILABLE_OR_PARTIAL = (GateOutcome.UNAVAILABLE.value, GateOutcome.PARTIAL.value)
+#: The required-gate outcomes a ROUTINE completion may finish over without a person: a gate
+#: that could not run (`unavailable`), one that reported partway (`partial`), or one the agent
+#: deliberately set aside with a recorded reason (`skipped` -- e.g. `unit_tests` after a merge
+#: removed the worktree, Bb67dc543b6). A `failed` or never-run gate is NOT here.
+_COVERAGE_GAP_OUTCOMES = (
+    GateOutcome.UNAVAILABLE.value,
+    GateOutcome.PARTIAL.value,
+    GateOutcome.SKIPPED.value,
+)
 
 
 def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     """`complete_unavailable`: `target` -- the FULL `Verdict.unmet_gates` list the
     completion site (`_auto_complete_unavailable`) passes, never a caller-derived subset --
     must be non-empty, and every gate it names a REQUIRED gate recorded `unavailable`
-    (a tool could not run) or `partial` (it reported partway). A required gate recorded
+    (a tool could not run), `partial` (it reported partway), or `skipped` (the agent set
+    it aside with a recorded reason) -- `_COVERAGE_GAP_OUTCOMES`. A required gate recorded
     `failed` ALWAYS blocks, whatever `target` names (the OVER-FIRE guard below), and a
-    never-run (silent) required gate blocks the same way -- its empty outcome is neither
-    `unavailable` nor `partial`, so the outcome check refuses it. An excused required
+    never-run (silent) required gate blocks the same way -- its empty outcome is in no
+    coverage-gap set, so the outcome check refuses it. An excused required
     gate (`applies_when` not_applicable, a chore's skip, a person-accepted partial) is
     already NOT in `Verdict.unmet_gates`, so it is not in `target` and is not re-judged:
     the verdict alone knows what `applies_when` excused. A `partial` that only a person
@@ -94,7 +103,7 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     return bool(names) and all(
         g in required
         and not it.gate_satisfied(g, True)
-        and it.gate_outcome(g) in _UNAVAILABLE_OR_PARTIAL
+        and it.gate_outcome(g) in _COVERAGE_GAP_OUTCOMES
         and not GA.person_only(it, g)
         for g in names
     )
