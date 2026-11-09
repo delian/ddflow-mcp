@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -618,8 +619,12 @@ def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
     )
     gdef = GateDef(id="unit_tests", command="pytest -q tests/")
     it = SimpleNamespace(id="T1", base="main")
-    # A legacy entry already measured before the reason was kept whole.
-    BL.cache_store(repo, sha, {ID: True}, 3600, gdef.command, {ID: cut})
+    # A legacy entry already measured before the reason was kept whole: the pre-marker format
+    # is a 3-element ``[failed, measured_at, text]`` list cut to ``LINE_CHARS`` with no WHOLE
+    # marker. Written raw: ``cache_store`` now stamps the marker, so it cannot fake one.
+    path = BL._path(repo, sha, gdef.command)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"sha": sha, "ids": {ID: [True, time.time(), cut]}}))
 
     measured = []
 
@@ -640,6 +645,54 @@ def test_a_legacy_cut_base_cache_entry_is_remeasured_not_guessed(repo) -> None:
     outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
     assert measured, "a legacy cut entry is re-measured, never guessed"
     assert outcome == "partial", why  # the base's whole reason equals the branch's: same cause
+    assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
+
+
+def test_a_whole_cause_of_exactly_line_chars_is_not_remeasured(repo) -> None:
+    """B60e9e09308: a WHOLE failure text that happens to be exactly ``LINE_CHARS`` long is a
+    genuine whole reason, not a legacy cut-to-that-length; its WHOLE marker keeps it cached, so
+    it is NOT re-run on the base every gate execution."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.flakes import LINE_CHARS
+    from ddflow.services.gates import baseline as BL
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo)
+    whole = "ratchet grew:" + "x" * (LINE_CHARS - len("ratchet grew:"))  # whole text AT the cap
+    assert len(whole) == LINE_CHARS
+    sha = _sha(repo, "main")
+    cfg = SimpleNamespace(
+        gates=SimpleNamespace(
+            baseline_cache_ttl_s=3600,
+            baseline_red_auto="on",
+            unit_tests_max_files=100,
+            unit_tests_hub_importers=100,
+            unit_tests_max_hops=2,
+            unit_tests_name_max_tests=30,
+        )
+    )
+    gdef = GateDef(id="unit_tests", command="pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+    BL.cache_store(repo, sha, {ID: True}, 3600, gdef.command, {ID: whole})
+
+    measured = []
+
+    def run(g, where=None):
+        measured.append(where)
+        return (
+            "failed",
+            {
+                "exit": 1,
+                "failed_tests": [ID],
+                "failed_reasons": {ID: whole},
+                "summary": ["1 failed in 0.1s"],
+            },
+        )
+
+    ev: dict = {"failed_tests": [ID], "failed_reasons": {ID: whole}}
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert not measured, "a whole 240-char reason is trusted, never re-measured"
+    assert outcome == "partial", why  # the same whole reason on the base: still baseline-red
     assert ev["baseline"]["red"] is True and ev["baseline"]["still_failing"] == [ID]
 
 

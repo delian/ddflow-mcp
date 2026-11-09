@@ -30,6 +30,12 @@ CACHE_DIR = Path(".ddflow") / "local" / "baseline"
 KNOB = "baseline_red_auto"
 #: Index of a cache entry's failure text (``[failed, measured_at, text]``; older entries omit it).
 SIG_AT = 2
+#: Marker element stamped on entries whose failure text is kept WHOLE (not cut to
+#: ``flakes.LINE_CHARS``): index 3 of a cache entry -- older entries omit it. A whole text of
+#: exactly LINE_CHARS length is told apart from a legacy entry cut to that length only by this
+#: marker (B60e9e09308: re-measure the legacy, never a genuine whole 240-char reason).
+SIG_WHOLE_AT = 3
+SIG_WHOLE = "whole"
 
 
 def _path(repo: Path, sha: str, command: str = "") -> Path:
@@ -73,6 +79,27 @@ def cache_signatures(
         return {}
 
 
+def cache_whole(
+    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
+) -> dict[str, bool]:
+    """``{test id: True}`` for ids whose cached failure text is marked WHOLE (``SIG_WHOLE``), so
+    ``on_base`` trusts a whole text even when its length is exactly ``flakes.LINE_CHARS``; an
+    entry WITHOUT the marker is the legacy cut-to-that-length shape and is re-measured instead
+    (B60e9e09308). An id with no text is absent here, as in ``cache_signatures``."""
+    if ttl_s <= 0:
+        return {}
+    clock_now = CLOCK.wall() if now is None else now
+    try:
+        seen = json.loads(_path(repo, sha, command).read_text(encoding="utf-8"))["ids"]
+        out: dict[str, bool] = {}
+        for k, v in seen.items():
+            if _fresh(v, clock_now, ttl_s) and len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]:
+                out[str(k)] = True
+        return out
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return {}
+
+
 def _fresh(entry, now: float, ttl_s: int) -> bool:
     """Is a held ``[failed, measured_at]`` entry well formed and still within the ttl?"""
     try:
@@ -103,10 +130,13 @@ def cache_store(
         if not isinstance(held, dict):
             held = {}
         now = CLOCK.wall()
-        merged = {
-            **{k: v for k, v in held.items() if _fresh(v, now, ttl_s)},
-            **{i: [f, now, (sigs or {}).get(i, "")] for i, f in results.items()},
-        }
+        merged = {k: v for k, v in held.items() if _fresh(v, now, ttl_s)}
+        for i, f in results.items():
+            sig = (sigs or {}).get(i, "")
+            # The WHOLE marker is stamped on the text FULLY (only an entry WITHOUT it can still
+            # be the legacy cut-to-LINE_CHARS shape): it is what tells "kept whole" apart from
+            # "cut" when the whole text happens to be exactly LINE_CHARS long (B60e9e09308).
+            merged[i] = [f, now, sig, SIG_WHOLE if sig else ""]
         path.parent.mkdir(parents=True, exist_ok=True)
         fsio.ensure_ignored_dir(path.parent)
         atomic_write(path, json.dumps({"sha": sha, "ids": merged}))
