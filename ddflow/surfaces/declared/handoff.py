@@ -78,7 +78,7 @@ COMMANDS: tuple[Command, ...] = (
             ),
         ),
         tool_order=("item", "reason", "commit", "diff", "blob", "kind"),
-        call=lambda repo, a, agent: _suggest(repo, a, agent),
+        call=_suggest,
         payload=("ref", "probe", "blob"),
         render=_suggest_text,
     ),
