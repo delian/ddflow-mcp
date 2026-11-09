@@ -71,9 +71,9 @@ def _is_local_endpoint(base_url: str) -> bool:
         return False
     if not host:
         return False
-    if host in ("localhost", "localdomain") or host.endswith(
-        (".local", ".internal", ".lan", ".home.arpa")
-    ):
+    # A single label (localhost, ollama, vllm) is never a public internet host, and a
+    # dotted name in a local pseudo-TLD is not routable beyond the machine.
+    if "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
         return True
     try:
         return not ipaddress.ip_address(host).is_global

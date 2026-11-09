@@ -11,8 +11,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from ddflow.core.model import State
 from ddflow.infra.log import EventLog
+from ddflow.infra.log._eventlog import _is_local_endpoint
 from ddflow.services.gates.reviewers import _unapproved_reviewer
 
 NAME = "local-reviewer-f8f8"  # a service name only the ignored reviewers.toml holds
@@ -79,3 +82,22 @@ def test_the_unapproved_reviewer_hint_reads_the_subject_not_the_redacted_evidenc
         state, {"reviewer": "[REDACTED:name]", "reviewer_digest": dig}
     )
     assert got == NAME
+
+
+@pytest.mark.parametrize(
+    ("base_url", "local"),
+    [
+        ("http://localhost:8000/v1", True),
+        ("http://localdomain:8000/v1", True),
+        ("http://ollama:11434/v1", True),  # a single label is never a public host
+        ("http://10.220.230.242:8000/v1", True),
+        ("http://mybox.local/v1", True),
+        ("http://x.internal/v1", True),
+        ("http://x.lan/v1", True),
+        ("http://box.home.arpa/v1", True),
+        ("http://api.example.com/v1", False),
+        ("http://8.8.8.8/v1", False),
+    ],
+)
+def test_is_local_endpoint(base_url, local):
+    assert _is_local_endpoint(base_url) is local
