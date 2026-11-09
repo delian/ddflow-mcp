@@ -54,12 +54,14 @@ def resolve_patch(
         show = git.run(repo, "show", "--no-notes", "--format=", "--binary", commit)
         if show.unavailable or not show.ok:
             raise SuggestError(f"git could not show {commit}: {show.err}")
-        if "diff --git" not in show.out:
+        at = show.out.find("diff --git")
+        if at < 0:
             raise SuggestError(
                 f"{commit}: git show gives no replayable patch (an empty or merge commit); "
                 "name the change's diff with --diff FILE, or the parent with --commit COMMIT^"
             )
-        return show.out
+        # a signed commit may lead with `gpg: Signature ...`; slice to the first diff header.
+        return show.out[at:]
     src = Path(diff or blob)
     try:
         text = src.read_text("utf-8")
