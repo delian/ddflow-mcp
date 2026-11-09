@@ -220,7 +220,9 @@ def test_the_lane_mcp_server_is_spawned_in_the_lane_worktree_not_the_primary(tmp
     command = _mcp_ddflow_command(lp)
     assert "--repo" in command, command
     tree_arg = command[command.index("--repo") + 1]
-    assert tree_arg == str(wt), command  # the spawned tree, resolved to the primary + kept for claim
+    assert tree_arg == str(wt), (
+        command
+    )  # the spawned tree, resolved to the primary + kept for claim
     assert tree_arg != str(repo), command  # the primary alone hides the lane's tree from claim
 
 
