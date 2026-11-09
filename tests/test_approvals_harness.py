@@ -68,6 +68,20 @@ def _file(log, cfg, canon=None):
     return asks_of(_state(log))[filed.id]
 
 
+def _question(log, cfg, *, text="pick red or blue?", options=()):
+    """A `question` ask (type `question`, empty verb): free text, or multiple-choice when
+    ``options`` is set. Mirrors the APPROVAL helper `_file` for the other ask kind."""
+    qid = E.request(
+        log,
+        cfg,
+        subject="a question",
+        text=text,
+        kind=E.QUESTION,
+        options=options,
+    ).id
+    return asks_of(_state(log))[qid]
+
+
 def _transcript(cfg, name, rows):
     d = Path(cfg.approvals.transcript_dirs[0]) / "slug"
     d.mkdir(parents=True, exist_ok=True)
@@ -476,6 +490,37 @@ def test_auto_attest_leaves_a_request_without_an_answer_pending(log, cfg):
     results = H.attest_pending(log, cfg)
     assert any(r["id"] == row["id"] and not r["ok"] for r in results)
     assert asks_of(_state(log))[row["id"]]["state"] == "pending"
+
+
+def test_a_free_text_question_answered_in_kilo_is_auto_attested(log, cfg):
+    """B031f8330d6: a QUESTION ask (free text) answered in the Kilo `question` part with the
+    CANONICAL surfaced text (the id embedded) is found by `scan_kilo` and auto-attested by
+    `attest_pending` -- a chat answer alone answers it, no terminal and no `approve --all`.
+    Before the fix `find_all` scanned `row['text']` (no id), so `scan_kilo`'s id filter matched
+    nothing and the request stayed pending."""
+    row = _question(log, _kilo_cfg(cfg))
+    surfaced = H._surfaced_question(row)  # the canonical payload question text
+    assert surfaced == f"{row['text']} [{row['id']}]"
+    _kilo_db(cfg, [_kilo_question(surfaced, "red")])
+    results = H.attest_pending(log, cfg)
+    assert any(r["id"] == row["id"] and r["ok"] for r in results)
+    got = asks_of(_state(log))[row["id"]]
+    assert got["outcome"] == E.ANSWERED_WORD and got["answer"] == "red"
+    assert H.verify(got, cfg)
+
+
+def test_a_multiple_choice_question_answered_in_kilo_is_auto_attested(log, cfg):
+    """B031f8330d6: a QUESTION ask WITH options, answered in Kilo, is auto-attested too: the
+    selected option becomes the outcome, the answer stays empty, and `verify` passes against
+    that convention over the Kilo channel (not only the JSONL channel)."""
+    row = _question(log, _kilo_cfg(cfg), options=("red", "blue"))
+    surfaced = H._surfaced_question(row)
+    _kilo_db(cfg, [_kilo_question(surfaced, "red")])
+    results = H.attest_pending(log, cfg)
+    assert any(r["id"] == row["id"] and r["ok"] for r in results)
+    got = asks_of(_state(log))[row["id"]]
+    assert got["outcome"] == "red" and got["answer"] == ""
+    assert H.verify(got, cfg)
 
 
 def test_attest_all_over_the_cli_auto_attests(log, cfg, repo):

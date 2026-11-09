@@ -23,6 +23,7 @@ from ddflow.services.swarm import score
 from ddflow.services.swarm import seedpack as SP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conftest import run_cli
 from lanes_fixture import T0, Log
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
@@ -200,6 +201,33 @@ def test_an_agent_made_grant_or_an_edited_template_is_not_approved():
     grant(log, t.subject, t.digest(), human=False)
     assert not T.approved(fold(list(log.events), strict=False), t).ok
     assert not T.approved(state(t), tpl(budget_usd=3.0)).ok  # edited after approval
+
+
+def test_consent_names_the_working_approve_command():
+    """B8647b69e06: `consent.how` must name a command that can actually record the grant --
+    `ddflow lanes approve <name>` -- not `ddflow approvals request` (which has no subject or
+    digest argument, so no person could ever follow it and `approved()` never passes)."""
+    got = T.consent(tpl()).how
+    assert f"ddflow lanes approve {tpl().name}" in got
+    assert "approvals request" not in got
+
+
+def test_lanes_approve_is_wired_to_the_person_only_act(repo, tmp_path):
+    """`ddflow lanes approve <name>` is the missing caller of `launch_template.approve`
+    (B8647b69e06). Before the fix `approve` was not a lane view, so argparse refused the
+    word itself; now the route reaches the approval engine, which refuses the agent identity
+    ``run_cli`` inherits (exit 3, a person's act). A person at their own terminal makes the
+    same call and `launch_template.approve` records the grant at the current digest."""
+    run_cli(repo, "init")
+    tmp = tmp_path / "lane-templates.toml"
+    tmp.write_text(
+        '[template.ds]\nharness="kilo"\nroute="r"\nfamily="deepseek"\n'
+        "budget_usd=1.0\ntrust=1\nprice_in=1.0\nprice_out=2.0\n"
+    )
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[swarm]\nlaunch_templates_file = '{tmp}'\n")
+    code, out, err = run_cli(repo, "lanes", "approve", "ds")
+    assert code == 3 and "person's act" in err, (out, err)  # routed; refused for an agent
 
 
 # --- launch: refusals start nothing -----------------------------------------------------------

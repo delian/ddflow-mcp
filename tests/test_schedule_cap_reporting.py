@@ -209,9 +209,10 @@ def test_with_nothing_else_ready_the_cap_line_does_not_say_more(repo):
 
 
 def test_status_says_a_ready_task_was_interrupted(repo):
-    """roborev job 897: counting `running` off the plan moved a RUNNING task with no live
-    lease into `ready` -- correct, `next` offers it -- but status dropped the warning that
-    its worktree may hold work."""
+    """Bcec3b3229f: a RUNNING task with no live lease is reported in `in_flight` (and the
+    interrupted warning), never offered a ready slot -- a slot it took hid claimable work
+    behind "held by the cap" with no one to run it. roborev job 897 added the warning;
+    this moves the item off `ready` into `running`."""
     from ddflow import api
     from ddflow.infra.log import EventLog
 
@@ -221,11 +222,27 @@ def test_status_says_a_ready_task_was_interrupted(repo):
     log.append("lease.acquired", "T1", {"holder": "ghost", "at": time.time() - 99999, "ttl_s": 60})
     log.append("item.started", "T1", {})
     out = api.status(repo)
-    assert out.data["ready_now"] == [{"id": "T1", "title": "T1 fixture", "interrupted": True}], (
-        out.data
-    )
+    assert out.data["ready_now"] == [], out.data
+    assert [x["id"] for x in out.data["in_flight"]] == ["T1"], out.data
     assert out.data["interrupted"] and out.data["interrupted"][0].startswith("T1"), out.data
     t = out.data["tasks"]
-    assert t["ready"] == 1 and _buckets(t) + t["abandoned"] == t["total"] == 1, t
+    assert t["running"] == 1 and _buckets(t) + t["abandoned"] == t["total"] == 1, t
     _code, text, _err = run_cli(repo, "status")
     assert "INTERRUPTED: T1" in text, text
+
+
+def test_an_interrupted_item_does_not_take_a_slot_from_claimable_work(log, cfg):
+    """Bcec3b3229f: an INTERRUPTED item (RUNNING, no live lease) is no one's work -- `next`
+    must not hand it a free parallelism slot, or a slot it snapped up blocks claimable work
+    behind a slot nobody can use."""
+    log.append("phase.added", "P", {"title": "phase"})
+    log.append("task.added", "A1", {"parent": "P", "globs": ["a1"]})  # interrupted: ranks first
+    log.append("task.added", "Z2", {"parent": "P", "globs": ["z2"]})  # claimable
+    log.append("lease.acquired", "A1", {"holder": "ghost", "at": time.time() - 99999, "ttl_s": 60})
+    log.append("item.started", "A1", {})
+    cfg.schedule.max_parallel_tasks = 1
+    cfg.worktree.max_parallel = 8
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert [i.id for i in p.ready] == ["Z2"], p.ready
+    assert any(n.startswith("A1") for n in p.interrupted)
+    assert [i.id for i in p.running] == ["A1"]
