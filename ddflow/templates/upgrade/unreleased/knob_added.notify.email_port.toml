@@ -3,7 +3,7 @@
 [[change]]
 kind = "knob_added"
 key = "notify.email_port"
-new = 587
+new = "587"
 why = "The SMTP port."
-effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+effect = "channel selection and credentials now come from [notify]; the defaults are the channels.Settings ones."
 impact = "additive"

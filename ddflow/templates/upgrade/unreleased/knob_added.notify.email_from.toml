@@ -3,7 +3,7 @@
 [[change]]
 kind = "knob_added"
 key = "notify.email_from"
-new = ""
+new = "\"\""
 why = "The envelope sender."
-effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+effect = "channel selection and credentials now come from [notify]; the defaults are the channels.Settings ones."
 impact = "additive"

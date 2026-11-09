@@ -3,7 +3,7 @@
 [[change]]
 kind = "knob_added"
 key = "notify.email_tls"
-new = true
+new = "true"
 why = "STARTTLS on the SMTP connection."
-effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+effect = "channel selection and credentials now come from [notify]; the defaults are the channels.Settings ones."
 impact = "additive"

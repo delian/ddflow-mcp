@@ -3,7 +3,7 @@
 [[change]]
 kind = "knob_added"
 key = "notify.ask_attempts"
-new = 3
+new = "3"
 why = "Unusable answers the terminal takes before giving up."
-effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+effect = "channel selection and credentials now come from [notify]; the defaults are the channels.Settings ones."
 impact = "additive"
