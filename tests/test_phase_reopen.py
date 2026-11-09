@@ -72,3 +72,18 @@ def test_a_task_reopened_under_a_closed_imported_phase_reopens_it(repo):
     st = _state(repo)
     assert st.items["P9.T1"].state == OPEN
     assert st.items["P9"].state == OPEN, "an imported phase reopens when its task is reopened"
+
+
+def test_a_done_task_readded_under_a_done_phase_keeps_the_phase_done(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P9", {"title": "P"})
+    log.append("task.added", "P9.T1", {"parent": "P9", "title": "one"})
+    log.append("item.completed", "P9.T1", {"kind": "task", "evidence": "done"})
+    log.append("item.completed", "P9", {"kind": "phase", "evidence": "done"})
+    log.append("task.removed", "P9.T1", {})
+    log.append("task.added", "P9.T1", {"parent": "P9", "title": "one"})  # readd
+
+    st = _state(repo)
+    assert st.items["P9.T1"].state == DONE  # the readd does not reopen the task
+    assert st.items["P9"].state == DONE, "a phase with no open task must not re-open"

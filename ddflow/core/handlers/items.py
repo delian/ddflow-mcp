@@ -118,6 +118,11 @@ def _reopen_done_parent(st: State, child_id: str) -> None:
     child = st.items.get(child_id)
     if child is None or child.kind == "phase" or not child.parent:
         return
+    if child.terminal:
+        # Only OPEN work re-opens a done phase. A re-add of a task that is still DONE (or
+        # abandoned) under a done phase must not invalidate it: the phase still holds no
+        # open task. `item.reopened` sets the child OPEN before this runs.
+        return
     parent = st.items.get(child.parent)
     if parent is None or parent.kind != "phase" or parent.state != DONE:
         return
