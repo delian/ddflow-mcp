@@ -25,6 +25,7 @@ class SuggestError(ValueError):
 
 @dataclass(frozen=True)
 class Suggested:
+    id: str
     ref: str
     probe: str
     blob: str
@@ -113,4 +114,4 @@ def suggest(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
         )
     except SuggestionRefused as exc:
         raise SuggestError(str(exc)) from exc
-    return Suggested(ref=out.ref, probe=out.probe, blob=out.blob)
+    return Suggested(id=out.id, ref=out.ref, probe=out.probe, blob=out.blob)

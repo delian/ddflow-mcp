@@ -66,19 +66,13 @@ def suggest(
         )
     except send.SuggestError as exc:
         return O.failed("handoff.suggest", str(exc))
-    if out.ref:
-        nxt = (
-            f"apply: ddflow suggest apply {out.ref}  (MCP ddflow_suggest action=apply ref={out.ref})\n"
-            f"reject: ddflow suggest reject {out.ref}  (MCP ddflow_suggest action=reject ref={out.ref})\n"
-            f"show:   ddflow suggest show {out.ref}    (MCP ddflow_suggest action=show ref={out.ref})\n"
-            f"expiry: open for {cfg.handoff.expire_s if hasattr(cfg.handoff, 'expire_s') else 'the handoff TTL'}; "
-            f"then ddflow suggest expire {out.ref}"
-        )
-    else:
-        nxt = (
-            f"no ref cut (no owner tip yet): blob {out.blob} applies by patch-id; "
-            f"re-run once the owner pushes a branch to cut a ref"
-        )
+    sid = out.id
+    nxt = (
+        f"apply:  ddflow suggest apply {sid}   (MCP ddflow_suggest action=apply id={sid})\n"
+        f"reject: ddflow suggest reject {sid}  (MCP ddflow_suggest action=reject id={sid})\n"
+        f"show:   ddflow suggest show {sid}    (MCP ddflow_suggest action=show id={sid})\n"
+        f"expiry: ddflow suggest expire {sid}  (MCP ddflow_suggest action=expire id={sid})"
+    )
     text = (
         f"suggested to {to_agent} on {item}\n"
         f"probe: {out.probe}\n"
@@ -86,4 +80,4 @@ def suggest(
         f"blob: {out.blob}\n"
         f"owner next:\n{nxt}"
     )
-    return O.ok("handoff.suggest", ref=out.ref, probe=out.probe, blob=out.blob, text=text)
+    return O.ok("handoff.suggest", id=sid, ref=out.ref, probe=out.probe, blob=out.blob, text=text)
