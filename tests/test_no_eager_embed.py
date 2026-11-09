@@ -53,3 +53,17 @@ def test_extra_installed_does_not_import_the_extra(tmp_path):
         "print('model2vec' in sys.modules)"
     )
     assert _run(["-c", probe], tmp_path)[:2] == ["True", "False"]
+
+
+def test_cap_blas_threads_writes_through_the_env_port():
+    from ddflow.adapters.fakes.env import FakeEnv
+    from ddflow.infra import threads
+
+    env = FakeEnv()
+    threads.cap_blas_threads(env)
+    assert env.get("OMP_NUM_THREADS") == "1"
+    assert env.get("OPENBLAS_NUM_THREADS") == "1"
+    assert env.get("MKL_NUM_THREADS") == "1"
+    env.set("OPENBLAS_NUM_THREADS", "4")  # a value the user already set is never changed
+    threads.cap_blas_threads(env)
+    assert env.get("OPENBLAS_NUM_THREADS") == "4"
