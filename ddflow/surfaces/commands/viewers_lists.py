@@ -20,7 +20,7 @@ from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
 from .identify import COMMAND as IDENTIFY
-from .reporting import cmd_bug_show
+from .reporting import cmd_bug_show, cmd_research_show
 from .viewers_search import COMMAND as SEARCH
 from .viewers_search import cmd_search
 from .viewers_sessions import cmd_session_list
@@ -329,8 +329,19 @@ def register(s) -> None:
     add_commands(s, [SEARCH, IDENTIFY, LIST_COMMAND, *COMMANDS])
     rs = s.choices["research"]
     verb = next(x for x in rs._actions if x.dest == "verb")
-    verb.choices = ["add", "list"]
-    verb.help = "optional: `research add` = `research`; `research list` lists the notes"
+    verb.choices = ["add", "list", "show"]
+    verb.help = (
+        "optional: `research add` = `research`; `research list` lists the notes; "
+        "`research show <id>` reads one"
+    )
+    # `research show <id>` reads ONE note, so its id is a positional, like `bug show`.
+    rs.add_argument(
+        "research_id",
+        nargs="?",
+        default=None,
+        metavar="ID",
+        help="with `research show`: the note's id",
+    )
     for param in _filter_params("research"):
         param.add_to(rs)
     # `list` needs neither field, so argparse cannot require them for the verb-less form.
@@ -344,6 +355,9 @@ def register(s) -> None:
         if a.verb == "list":
             a.list_kind = "research"
             return cmd_list(a, c)
+        if a.verb == "show":
+            a.id = a.research_id or ""
+            return cmd_research_show(a, c)
         stray = [
             f"--{f}" for f in (*_SHARED_FLAGS, "limit", "offset") if getattr(a, f, None) is not None
         ]
