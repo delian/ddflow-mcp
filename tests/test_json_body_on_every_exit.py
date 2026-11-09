@@ -133,6 +133,27 @@ def test_no_fallback_body_after_a_command_that_printed_text(repo):
 @pytest.mark.parametrize(
     "argv",
     [
+        ("show",),          # a required argument is missing
+        ("complete",),      # a required argument is missing
+        ("nosuchcommand",),  # the command word does not exist
+        ("ci", "--item", "X"),  # a flag the command does not take
+    ],
+)
+def test_a_json_usage_error_still_answers_a_body(repo, argv):
+    """B831b6afddc: a --json usage error exits 2 with usage on stderr and nothing on stdout,
+    because argparse exits inside parse_args before the remembered_streams/refusal fallback. A
+    front end then reads an empty body, so the parser's own exit must answer one."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "--json", *argv)
+    assert code == 2, err
+    assert err.lstrip().startswith("usage:")
+    body = json.loads(out)  # raises on an empty body
+    assert body == {"refusal": {"reason": "usage error", "outcome": "nothing", "exit": 2}}, body
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
         ("reviewers", "presets"),
         ("reviewers", "list"),
         ("reviewers", "detect"),
