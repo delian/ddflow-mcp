@@ -55,18 +55,9 @@ class ConfigStore(Protocol):
         agent: str = "",
     ) -> Any:
         """Write ``key = value`` to ``layer``'s file in place (comments and layout stay); the
-        `EditResult` (nothing written when anything is refused)."""
-
-    def unset(
-        self,
-        root: Path | str,
-        key: str,
-        *,
-        layer: str = "file",
-        person: bool = False,
-        agent: str = "",
-    ) -> Any:
-        """Remove ``key`` from ``layer``'s file; the `EditResult`."""
+        `EditResult` (nothing written when anything is refused). A key REMOVAL (`unset`) is
+        not in this port yet: `services.configwrite` has a set and an append edit but no
+        remove edit, so deletion waits on one (ADP-config-store)."""
 
 
 class LocalConfigStore:
@@ -104,19 +95,6 @@ class LocalConfigStore:
             person=person,
             agent=agent,
         )
-
-    def unset(
-        self,
-        root: Path | str,
-        key: str,
-        *,
-        layer: str = "file",
-        person: bool = False,
-        agent: str = "",
-    ):
-        # configwrite's Edit is Set/Append only, no Remove: writing SetPairs([(key, None)])
-        # would spell the TOML literal "None". Removal waits on a configwrite Remove edit.
-        raise NotImplementedError("configwrite has no remove edit yet; `unset` waits on it")
 
 
 def default_store() -> LocalConfigStore:
