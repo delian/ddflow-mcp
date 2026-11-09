@@ -1,5 +1,5 @@
-"""`ddflow suggest`'s input half: `resolve_patch` turns --commit/--diff/--blob into a patch
-and a base, and `suggest` refuses a wrong shape before `events.propose` runs."""
+"""`ddflow suggest`'s input half: `resolve_patch` turns --commit/--diff/--blob into a patch,
+and `suggest` refuses a wrong shape before `events.propose` runs."""
 
 from __future__ import annotations
 
@@ -41,30 +41,18 @@ def test_resolve_patch_requires_exactly_one_input():
 def test_resolve_patch_reads_a_diff_file(tmp_path):
     f = tmp_path / "change.diff"
     f.write_text(_DIFF)
-    patch, base = resolve_patch(Path("."), diff=str(f))
-    assert patch == _DIFF and base == ""
+    assert resolve_patch(Path("."), diff=str(f)) == _DIFF
 
 
 def test_resolve_patch_reads_a_blob(tmp_path):
     f = tmp_path / "change.patch"
     f.write_text(_DIFF)
-    patch, base = resolve_patch(Path("."), blob=str(f))
-    assert patch == _DIFF and base == ""
+    assert resolve_patch(Path("."), blob=str(f)) == _DIFF
 
 
 def test_resolve_patch_from_a_commit(repo):
     sha = _commit(repo, "a.txt", "one\n", "add a")
-    patch, base = resolve_patch(repo, commit=sha)
-    assert patch.startswith("diff --git a/a.txt b/a.txt")
-    assert (
-        base
-        == subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", f"{sha}^"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    )
+    assert resolve_patch(repo, commit=sha).startswith("diff --git a/a.txt b/a.txt")
 
 
 def test_resolve_patch_refuses_a_non_patch_file(tmp_path):

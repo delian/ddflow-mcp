@@ -36,12 +36,12 @@ def resolve_patch(
     commit: str = "",
     diff: str = "",
     blob: str = "",
-) -> tuple[str, str]:
-    """``(patch, base)`` from exactly one of ``--commit``/``--diff``/``--blob``.
+) -> str:
+    """The patch from exactly one of ``--commit``/``--diff``/``--blob``.
 
-    ``commit`` is a revision whose change is the patch (its parent is the base); ``diff`` is
-    a path to a `git diff` body; ``blob`` is a path to a raw patch text. Git is read for the
-    commit form only; the two file forms are plain reads."""
+    ``commit`` is a revision whose change (vs its parent) is the patch; ``diff`` is a path to a
+    `git diff` body; ``blob`` is a path to a raw patch text. Git is read for the commit form
+    only; the two file forms are plain reads."""
     given = [k for k, v in (("commit", commit), ("diff", diff), ("blob", blob)) if v]
     if len(given) != 1:
         raise SuggestError(
@@ -53,9 +53,7 @@ def resolve_patch(
         show = git.run(repo, "show", "--format=", "--binary", commit)
         if show.unavailable or not show.ok:
             raise SuggestError(f"git could not show {commit}: {show.err}")
-        parent = git.run(repo, "rev-parse", "--verify", f"{commit}^")
-        base = parent.out if parent.ok else ""
-        return show.out, base
+        return show.out
     src = Path(diff or blob)
     try:
         text = src.read_text("utf-8")
@@ -63,10 +61,10 @@ def resolve_patch(
         raise SuggestError(f"could not read {src}: {exc}") from exc
     if not text.lstrip().startswith("diff --git"):
         raise SuggestError(f"{src}: a suggestion is a git diff patch (starts with 'diff --git')")
-    return text, ""
+    return text
 
 
-def suggest(
+def suggest(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyword-only
     log: Any,
     cfg: Config,
     *,
@@ -78,13 +76,14 @@ def suggest(
     blob: str = "",
     to_agent: str = "",
     from_item: str = "",
+    base: str = "",
 ) -> Suggested:
     """Send a change to the owner of ``to_item``: resolve the input and hand it to `propose`.
 
-    ``to_agent`` is the lease holder that must answer; the owner tip is threaded as ``base``
-    by the caller (the API resolves it from the lease snapshot). With no base no ref is cut,
+    ``to_agent`` is the lease holder that must answer; ``base`` is the owner's tip the patch
+    is re-cut onto (the API resolves it from the owner's branch). With no base no ref is cut,
     but the blob is still recorded and the patch-id taken."""
-    patch, base = resolve_patch(log.root, commit=commit, diff=diff, blob=blob)
+    patch = resolve_patch(log.root, commit=commit, diff=diff, blob=blob)
     if not reason.strip():
         raise SuggestError("a suggestion needs --reason: why the owner should take it")
     try:
