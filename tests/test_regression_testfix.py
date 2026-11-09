@@ -279,7 +279,7 @@ def test_a_collect_probe_uses_the_callers_cfg_not_the_tree_config(cfg, tmp_path)
     from ddflow.services.gates.regression_collect import tree_provides
 
     probe = tmp_path / "probe"
-    (probe / ".ddflow").mkdir()
+    (probe / ".ddflow").mkdir(parents=True)
     (probe / ".ddflow" / "config.toml").write_text('[worktree]\nbase_ref = "--local"\n')
     (probe / "test_h.py").write_text("def test_h():\n    pass\n")
     assert tree_provides(lambda *_: "true", "", probe, ["test_h.py::test_h"], cfg=cfg) is True
