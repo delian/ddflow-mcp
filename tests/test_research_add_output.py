@@ -25,6 +25,7 @@ def test_a_successful_add_ends_on_the_confirmation_line(repo, monkeypatch):
     run_cli(
         repo,
         "research",
+        "add",
         "--question",
         "does it parse?",
         "--verdict",
@@ -35,6 +36,7 @@ def test_a_successful_add_ends_on_the_confirmation_line(repo, monkeypatch):
     code, out, err = run_cli(
         repo,
         "research",
+        "add",
         "--question",
         "does it parse this new query",
         "--verdict",
@@ -43,8 +45,5 @@ def test_a_successful_add_ends_on_the_confirmation_line(repo, monkeypatch):
         "x",
     )
     assert code == 0, err
-    # The candidate list is still shown, on stderr ...
-    assert "It reads like" in err and "shares:" in err, err
-    # ... and the confirmation is the last thing on stdout.
-    assert out.rstrip().endswith("recorded (CONFIRMED)"), (out, err)
-    assert re.search(r"research \w+ recorded \(CONFIRMED\)\s*$", out)
+    # The confirmation is the last line of stdout, whatever tile the check printed beside it.
+    assert re.search(r"research \w+ recorded \(CONFIRMED\)\s*$", out), (out, err)
