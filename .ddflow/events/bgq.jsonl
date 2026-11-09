@@ -1,0 +1,2 @@
+{"agent":"bgq","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"eaa909e80bda923f62b9050c7","kind":"ddflow.seen","lamport":160861,"schema":1,"subject":"ddflow","ts":"2026-11-09T09:55:38.525168Z"}
+{"agent":"bgq","data":{"by":"bgq","event":"e9c23a3e0cd8073751bc7b166","holder":"bga","note":""},"id":"ef089b9ae459507d2c3283e33","kind":"lease.released","lamport":160862,"schema":1,"subject":"fix-B84a7e5b17e","ts":"2026-11-09T09:55:38.569531Z"}
