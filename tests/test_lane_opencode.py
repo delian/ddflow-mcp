@@ -22,7 +22,7 @@ from ddflow.services.swarm import lanehooks as LH
 from ddflow.services.swarm import lanehooks_plugin as PL
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
-SECRET = "sk-test-0123456789abcdef"
+SECRET = "test-secret-placeholder-value"
 EVENTS = [
     {"type": "step_start", "sessionID": "ses_1"},
     {"type": "tool_use", "part": {"tool": "ddflow_claim", "state": {"input": {}}}},
@@ -263,6 +263,13 @@ def test_missing_key_variable_refuses_the_launch(tmp_path, tree, monkeypatch):
 
 def test_transport_is_registered():
     assert isinstance(ld.driver_for(OC.TRANSPORT), OC.OpenCodeLane)
+
+
+def test_the_test_secret_is_not_a_key_like_literal():
+    """Bb72814df47: gitleaks flags a key-like SECRET (`sk-...`) — the placeholder must not
+    read as an API key, or the CI secret scan reddens the commit for no real secret."""
+    for prefix in ("sk-", "ghp_", "xoxb-", "AKIA"):
+        assert not SECRET.startswith(prefix), SECRET
     assert OC.LIVE_PROBE.status == "unavailable"
 
 

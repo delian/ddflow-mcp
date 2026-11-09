@@ -92,6 +92,19 @@ _EXITS = {
 #: metric two modules away.
 GATE_OUTCOMES: tuple[str, ...] = tuple(o.value for o in GateOutcome)
 
+#: The gate outcomes a ROUTINE completion may finish over without a person: a gate that could
+#: not run (`unavailable`), one that reported partway (`partial`), or one the agent deliberately
+#: set aside with a recorded reason (`skipped`). The ONE enumeration of those three: the
+#: standing `complete_unavailable` predicate (`approvals.policy`) reads the tuple itself, and the
+#: completion coverage-gap set (`completion.rules`) adds the `Skipped` member through
+#: `_skipped_gaps` and the other two through `GateStatus.unavailable` ("unavailable" + "partial",
+#: the render set in `gates.outcomes`) (Bb67dc543b6).
+COVERAGE_GAP_OUTCOMES: tuple[str, ...] = (
+    GateOutcome.UNAVAILABLE.value,
+    GateOutcome.PARTIAL.value,
+    GateOutcome.SKIPPED.value,
+)
+
 #: Outcome -> single-character mark, used by both the board and the gate status view
 #: ("" -- no outcome yet -- is a blank).
 OUTCOME_MARK: dict[str, str] = {**{o.value: o.mark for o in GateOutcome}, "": " "}

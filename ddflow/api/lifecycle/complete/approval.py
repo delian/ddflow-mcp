@@ -14,12 +14,13 @@ from ....services.approvals.canon import Canon
 
 def _only_unavailable(v, it) -> bool:
     """Would the standing `complete_unavailable` rule answer this completion: its ONLY unmet
-    conditions are required gates recorded `unavailable`/`partial`. There must be a single
-    blocker (the "required gate(s) not passed" one) and every unmet required gate a coverage
-    gap -- never a failure, silence, an open bug or unfinished sub-tasks. Nor a gate whose
-    tests FAILED and only their comparison with the base could not run (`baseline.unmeasured`),
-    nor a measured baseline-red partial only a person accepts (`gate_accept.person_only`):
-    both are a person's call."""
+    conditions are required gates recorded `unavailable`/`partial`/`skipped`. There must be a
+    single blocker (the "required gate(s) not passed" one) and every unmet required gate a
+    coverage gap (`Verdict.coverage_gaps`: `unavailable`, `partial` and an unsettled required
+    `skipped`, Bb67dc543b6) -- never a failure, silence, an open bug or unfinished sub-tasks.
+    Nor a gate whose tests FAILED and only their comparison with the base could not run
+    (`baseline.unmeasured`), nor a measured baseline-red partial only a person accepts
+    (`gate_accept.person_only`): both are a person's call."""
     if not v.unmet_gates or len(v.blockers) != 1:
         return False
     records = [it.gates[g] for g in v.unmet_gates if g in it.gates]
@@ -32,11 +33,11 @@ def _only_unavailable(v, it) -> bool:
 
 def _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp):
     """An agent's ROUTINE refusal (no `--approval`) of a completion whose ONLY unmet required
-    gates are `unavailable`/`partial` is exactly what the standing `complete_unavailable` rule
-    pre-authorised within the window: answer it and return the forced completion's stamp. An
-    explicit `--approval request` stays a person ask (Bef8d328af3), and a failure or silence is
-    never auto-answered -- `_only_unavailable` and the rule's own predicate both refuse it, so
-    this never weakens a genuinely-failed gate."""
+    gates are `unavailable`/`partial`/`skipped` is exactly what the standing `complete_unavailable`
+    rule pre-authorised within the window (Bb67dc543b6): answer it and return the forced
+    completion's stamp. An explicit `--approval request` stays a person ask (Bef8d328af3), and a
+    failure or silence is never auto-answered -- `_only_unavailable` and the rule's own predicate
+    both refuse it, so this never weakens a genuinely-failed gate."""
     if v.may_complete or force or hard or approval or not _only_unavailable(v, it):
         return force, stamp
     ok, auto_stamp, _why = _approved_force(log, cfg, it.id, v.blockers, "", agent, v.unmet_gates)
