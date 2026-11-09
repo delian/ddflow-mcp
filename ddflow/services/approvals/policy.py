@@ -22,10 +22,11 @@ from typing import Any
 from ...config import Config
 from ...core import clock
 from ...core.handlers.asks import EXPIRED, PENDING, asks_of
-from ...core.records.gates import GateOutcome
+from ...core.records.gates import COVERAGE_GAP_OUTCOMES, GateOutcome
 from .. import gate_accept as GA
 from ..ask import engine as E
 from ..gates.defs import required_gates
+from ..gates.failed_gate import skipped_after_failure
 from . import request as R
 from .canon import Canon
 
@@ -69,15 +70,10 @@ def _measured_baseline_red(it, gate: str, cfg: Config) -> bool:
     return not GA.refusal(it, gate)
 
 
-#: The required-gate outcomes a ROUTINE completion may finish over without a person: a gate
-#: that could not run (`unavailable`), one that reported partway (`partial`), or one the agent
-#: deliberately set aside with a recorded reason (`skipped` -- e.g. `unit_tests` after a merge
-#: removed the worktree, Bb67dc543b6). A `failed` or never-run gate is NOT here.
-_COVERAGE_GAP_OUTCOMES = (
-    GateOutcome.UNAVAILABLE.value,
-    GateOutcome.PARTIAL.value,
-    GateOutcome.SKIPPED.value,
-)
+#: The required-gate outcomes a ROUTINE completion may finish over without a person: the ONE
+#: enumeration (`core.records.gates.COVERAGE_GAP_OUTCOMES`) the predicate and the completion
+#: coverage-gap set both read, never a list spelled here (Bb67dc543b6).
+_COVERAGE_GAP_OUTCOMES = COVERAGE_GAP_OUTCOMES
 
 
 def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
@@ -98,6 +94,11 @@ def _unavailable_unmet_only(it, target: str, cfg: Config) -> bool:
     required = set(required_gates(cfg))
     for g in required:
         if it.gate_outcome(g) == GateOutcome.FAILED.value:
+            return False
+        # A `skipped` that masked a FAILED run (DX-skip-failed-gate) is a failure wearing a
+        # gap's outcome: only the record path that produces it for a required gate is refused
+        # today, so this is defense-in-depth, not a reachable state (Bb67dc543b6, roborev).
+        if it.gate_outcome(g) == GateOutcome.SKIPPED.value and skipped_after_failure(it, g):
             return False
     names = [g for g in (target or "").split(",") if g]
     return bool(names) and all(

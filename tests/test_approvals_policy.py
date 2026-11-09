@@ -424,6 +424,30 @@ def test_the_complete_unavailable_predicate_answers_a_skipped_gate(proj):
     assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is True
 
 
+def test_the_complete_unavailable_predicate_refuses_a_skip_that_masked_a_failure(proj):
+    """A `skipped` that replaced a FAILED run is a failure wearing a gap's outcome
+    (DX-skip-failed-gate): it must never be auto-answered, even though its latest outcome is
+    `skipped` (Bb67dc543b6, roborev)."""
+    from ddflow.core.records.gates import GateRecord, GateRun
+    from ddflow.core.records.items import Item
+
+    cfg = _cfg(policy=["complete_unavailable"], policy_max_uses=99)
+    it = Item(
+        id="T1",
+        kind="task",
+        gates={
+            "unit_tests": GateRecord(gate="unit_tests", outcome="skipped", reason="skip"),
+            "implement": GateRecord(gate="implement", outcome="passed"),
+            "merge": GateRecord(gate="merge", outcome="passed"),
+        },
+        gate_history=[
+            GateRun(gate="unit_tests", outcome="failed"),
+            GateRun(gate="unit_tests", outcome="skipped"),
+        ],
+    )
+    assert PO.RULES["complete_unavailable"].when(it, "unit_tests", cfg) is False
+
+
 def test_a_routine_completion_never_auto_answers_a_failed_gate_end_to_end(repo):
     _only_unavailable_repo(repo, "failed")
     code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-4", agent="bot")
