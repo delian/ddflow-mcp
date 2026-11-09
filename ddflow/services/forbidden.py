@@ -486,8 +486,8 @@ def _commands(text: str) -> list[list[str]]:
             head = _head(c)
             if head and head[0].rsplit("/", 1)[-1] in _SHELLS:
                 i = _sh_c(head) if len(head) > 1 else -1
-                if i >= 0 and i + 1 < len(head):
-                    s = head[i + 1]
+                if i >= 0:
+                    s = head[i]  # _sh_c returns the command-string word's index directly
                     if s not in seen:
                         seen.add(s)
                         found.extend(_split(s))
@@ -508,36 +508,34 @@ _VALUED_LONG = frozenset({"--rcfile", "--init-file"})
 
 
 def _sh_c(head: list[str]) -> int:
-    """The index of the `-c` option's word in the shell command `head` (its value is the NEXT
-    word), or -1. Bash reads its single-letter options (``+`` forms too: `bash +x -c 'pkill'`)
-    until `--` or the first non-option operand (a script name); a `c` inside a cluster is `-c`
-    -- `sh -xc 'pkill'` clusters `-x` and `-c` and still takes the next word
-    (B-forbidden-guard-multiline-quote-bypass critic #3). A `-c` after a script operand, and
-    the `c` a `-o`/`-O`/`+o`/`+O` optname swallows, is NOT the shell's `-c` (critic #5); an
-    optname that CLOSES a cluster (`bash -xo pipefail -c 'pkill'`) and a valued long option
-    (`--rcfile FILE`) consume their value, and the `-c` after them is still the shell's; the
-    LAST `-c` before an operand wins (`bash -co pipefail -c 'pkill'` runs the `-c`)."""
+    """The index of the word bash runs as the `-c` command string, or -1. Bash reads its
+    option words first (`-x`, `+x`, `-o NAME`, `--rcfile FILE`), and `-c` makes the FIRST
+    non-option argument the command string; option words AFTER `-c` do not stop it, so
+    `bash -c -x 'git push'`, `bash -c -- 'git push'`, `bash -c - 'git push'` and
+    `bash -co pipefail 'git push'` all RUN `git push` (B-forbidden-guard-multiline-quote-bypass
+    critic #6). A `c` inside a cluster is `-c` (`sh -xc 'pkill'`); a `+c` turns `-c` back OFF,
+    so the first non-option word is then a script, not a run string; an optname that CLOSES a
+    cluster (`bash -xo pipefail -c 'pkill'`) and a valued long option (`--rcfile FILE`) consume
+    their value; the LAST `-c`/`+c` before the operand wins (`bash -co pipefail -c 'pkill'`
+    runs the `-c`). Returns the command-string word's index, or -1 (no `-c` still set)."""
+    c_set = False
     i = 1
-    last = -1
     while i < len(head):
         w = head[i]
-        if w == "--" or (not w.startswith("-") and not w.startswith("+")):
-            break  # `--` ends options; a non-option is the script operand
-        if w == "-" or w == "+":
-            i += 1
-            continue
+        if w == "--" or w == "-":
+            # `--` and a lone `-` end the option words: the command string is the NEXT word.
+            return i + 1 if c_set and i + 1 < len(head) else -1
+        if not w.startswith("-") and not w.startswith("+"):
+            return i if c_set else -1  # the first non-option: the command string, or a script
         if w.startswith("--"):
             i += 2 if w in _VALUED_LONG else 1  # a valued long option consumes its word
             continue
         body = w[1:]
-        if not body:
-            i += 1
-            continue
         j = 0
         while j < len(body):
             ch = body[j]
             if ch == "c":
-                last = i  # a `-c` flag; a later `-c` before an operand overrides it
+                c_set = True  # `-c`/`+c` both read the next non-option as the run string
             if ch in "oO":
                 # `-o`/`-O`/`+o`/`+O` optname takes the rest of THIS token, or the NEXT word
                 # when `o`/`O` CLOSES it (`-xo pipefail`): both are the option's value.
@@ -546,7 +544,7 @@ def _sh_c(head: list[str]) -> int:
                 break
             j += 1
         i += 1
-    return last
+    return -1
 
 
 #: Each wrapper's options that take their value as the next word (`sudo -u root`, `nice -n 5`);

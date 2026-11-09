@@ -273,6 +273,13 @@ def test_refused_param_expansion_body(cmd):
         "bash +o pipefail -c 'git push origin main'",
         "bash -co pipefail -c 'git push origin main'",
         "bash -cO extglob -c 'git push origin main'",
+        # `-c` reads the FIRST non-option argument, not the next literal word: an option word
+        # (`-x`, `--`, `-`) or a `-o`-consumed optname AFTER `-c` does not stop it, so these
+        # all RUN `git push` too (critic #6)
+        "bash -co pipefail 'git push origin main'",
+        "bash -c -x 'git push origin main'",
+        "bash -c -- 'git push origin main'",
+        "bash -c - 'git push origin main'",
     ],
 )
 def test_refused_clustered_c_flag(cmd):
