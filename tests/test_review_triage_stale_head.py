@@ -253,6 +253,27 @@ def test_a_merge_commit_after_merge_resolves_to_the_branch_head_content(
     assert RV.reviewed_other_tree(repo, None, NS(items={"T1": it}), "T1", "critic") == ""
 
 
+def test_the_stays_failed_message_names_the_reviewed_head_not_the_measured_tree(
+    repo, tmp_path, monkeypatch
+):
+    """Bb2c62995e3: a commit landed while a review ran, so the evidence's `tree_sha`
+    (measured when the run ended) names that later head, but the commit the review READ is
+    `reviewed_head` (captured before the diff). The 'stays failed' message must name the
+    reviewed head, not a tree no reviewer saw."""
+    from ddflow.api import review as RV
+
+    first, head, make = _merged_scenario(repo, tmp_path, monkeypatch)
+    st = make(first, head)  # reviewed_head=first (what was read), merged_sha=head (later)
+    ev = st.items["T1"].gates["critic"].evidence
+    # The run measured a later tree when it ended: a source-tree stamp the review vouches
+    # for, whose head (`head`) is NOT the commit the review read (`first`).
+    ev["tree_sha"] = f"{head[:12]}+st:not-the-reviewed-tree"
+    text = RV.reviewed_other_tree(repo, None, st, "T1", "critic")
+    assert "holds other content" in text, text
+    assert first[:19] in text, text  # the head the review actually read
+    assert head[:12] not in text, text  # not the later head the message used to name
+
+
 def test_different_commits_with_the_same_content_compare_equal(repo, tmp_path, monkeypatch):
     """Content is compared, not commit ids: two commits that differ only in ddflow's own
     bookkeeping (`.ddflow/`, excluded from `source_tree`) are one tree to a review."""
