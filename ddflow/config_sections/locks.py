@@ -95,3 +95,9 @@ class LocksConfig:
         "2.38",
         doc="The oldest git whose `merge-tree --write-tree` the probe uses; an older git (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe fall back to a scratch merge in a throwaway worktree, slower and the same answer.",
     )
+    review_reuse: str = knob(
+        "off",
+        doc="Whether a recorded review may be REUSED after the tree it covered moved (main merged in or a rebase) instead of running it whole (LK-review-reuse). 'off' (default, until measured) never reuses: a review whose recorded tree no longer matches is re-reviewed. 'disjoint' classifies each review gate with `git patch-id --stable` of the item's own change plus disjoint changed files -- when the item's own change is unchanged and the files main changed are disjoint from the files the reviewer saw, the review is kept and the reason recorded; when they overlap, only the overlapping files are re-reviewed as a delta; anything git cannot tell invalidates (fail closed, never a guess). Measured by the wrong-keep rate (a kept review followed by a finding on the same files).",
+        choices=("off", "disjoint"),
+        strictest=("off", "reuse is off: a tree that moved invalidates the review"),
+    )
