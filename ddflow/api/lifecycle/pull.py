@@ -128,21 +128,7 @@ def _ask(
     w, bounds = Weights.from_config(cfg), D.Bounds.from_config(cfg)
     if D.gaps(src) or slots.held():  # no item is offered: do not fold the whole log for it
         return D.pull_for(lane, src, (), score.World(), w, slots, bounds)
-    events = log.read_all()
-    shared = shared_globs(cfg)
-    chain = critical_path(st, phase, cfg)
-    waited = _waited(events, set(ids), now)
-    items = [D.item_of(st, i, chain=chain, waited=waited, shared=shared) for i in ids]
-    live = st.active_leases(now, cfg.lease.grace_s)
-    world = D.world_of(
-        st,
-        items,
-        cfg=cfg,
-        now=now,
-        ledger=LG.build(events, st, cfg, now, bug_window_s=w.bug_window_s),
-        families=_live_families(events, cfg, live, now),
-        shared=shared,
-    )
+    world, items = _world_and_items(log.read_all(), cfg, st, ids, phase, now)
     return D.pull_for(lane, src, items, world, w, slots, bounds)
 
 
@@ -178,12 +164,12 @@ def next_lane(
     return O.nothing("next", "; ".join(a.why), **data)
 
 
-def _world_and_items(repo: Path, events: Any, cfg: Config, st: State, ids: list[str], now: float):
-    """The scored items and scheduler world for ``ids``, the same fold `_ask` uses, so the
-    launch constraints judge the exact snapshot the pull offered (one answer, not two)."""
+def _world_and_items(events: Any, cfg: Config, st: State, ids: list[str], phase: str, now: float):
+    """The scored items and scheduler world for ``ids`` -- the one fold `_ask` and `_launch_due`
+    share, so the launch constraints judge the exact snapshot the pull offered (one answer)."""
     w = Weights.from_config(cfg)
     shared = shared_globs(cfg)
-    chain = critical_path(st, "", cfg)
+    chain = critical_path(st, phase, cfg)
     waited = _waited(events, set(ids), now)
     items = [D.item_of(st, i, chain=chain, waited=waited, shared=shared) for i in ids]
     live = st.active_leases(now, cfg.lease.grace_s)
@@ -243,7 +229,7 @@ def _launch_due(ctx: TickCtx) -> str | None:
     w = Weights.from_config(cfg)
     bounds = D.Bounds.from_config(cfg)
     slots = _slots(c, parallel.reason, ids)
-    world, items = _world_and_items(repo, log.read_all(), cfg, st, ids, now)
+    world, items = _world_and_items(log.read_all(), cfg, st, ids, "", now)
     cat = modelreg.load(local_dir=Path(repo) / LOCAL)
     first_refusal = ""
     for name in sorted(templates):
