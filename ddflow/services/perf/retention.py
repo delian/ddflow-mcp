@@ -1,0 +1,116 @@
+"""Retention, compaction and redaction for the perf store, with a size budget (PM-retention).
+
+The policy PM-decide fixed: age and size caps come from the ``[perf_metrics]`` knobs (the
+store already trims them); this module adds (1) compaction of raw samples that aged out into
+the committed daily aggregate, (2) a redaction pass that keeps only an allowlist of fields and
+drops -- with a doctor note -- anything else a hostile writer stored, and (3) the size audit
+that reports when a ring exceeds budget. Raw samples stay in ``.ddflow/local``; only the small
+per-run rollups and the daily aggregate reach the committed log.
+
+No second store or scheduler: compaction is a pure function the report/tick calls
+(D-sched-no-daemon). Fields are ``t`` (time), ``env`` (machine-class key), ``value``, ``gate``
+(a gate id) and ``digest`` (a content hash) -- never prompt text, arguments, user paths or
+secrets.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from . import store
+from .store import PerfMetricsConfig, ring_path
+
+#: The only keys a raw sample may carry. Anything else was not written by the sampler and is
+#: dropped with a doctor note, never stored (r-no-secrets).
+ALLOWED_FIELDS = frozenset({"t", "env", "value", "gate", "digest"})
+
+
+@dataclass(frozen=True)
+class Audit:
+    """What one retention pass found about a series' ring."""
+
+    series: str
+    rows: int
+    bytes: int
+    dropped: int  # rows that carried a key outside the allowlist
+    over_budget: bool = False
+
+
+def redact_row(raw: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Project one raw row onto the allowlist; returns the kept fields and the dropped keys."""
+    dropped = [k for k in raw if k not in ALLOWED_FIELDS]
+    return {k: raw[k] for k in ("t", "env", "value", "gate", "digest") if k in raw}, dropped
+
+
+def _raw_rows(repo: Path, series: str) -> list[dict[str, Any]]:
+    """The ring's raw JSON rows, skipping torn lines (the store already does this on read)."""
+    path = ring_path(repo, series)
+    if not path.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text("utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            d = json.loads(line)
+            if isinstance(d, dict):
+                out.append(d)
+        except ValueError:
+            continue
+    return out
+
+
+def audit(repo: Path, series: str) -> Audit:
+    """Scan one ring: rows, bytes, and how many rows carried a non-allowlist field."""
+    rows = _raw_rows(repo, series)
+    dropped = sum(1 for r in rows if any(k not in ALLOWED_FIELDS for k in r))
+    path = ring_path(repo, series)
+    return Audit(series, len(rows), path.stat().st_size if path.exists() else 0, dropped)
+
+
+def doctor(repo: Path, cfg: PerfMetricsConfig | None = None) -> list[str]:
+    """The ticks' doctor notes: a ring over budget, or a field outside the allowlist seen.
+    Empty notes means the store is within policy."""
+    cfg = cfg or PerfMetricsConfig()
+    notes: list[str] = []
+    series_names = {p.stem for p in ring_path(repo, "*").parent.glob("*.jsonl")}
+    for name in sorted(series_names):
+        a = audit(repo, name)
+        if a.bytes > cfg.ring_max_bytes:
+            notes.append(f"{name}: ring {a.bytes} bytes > {cfg.ring_max_bytes} budget")
+        if a.dropped:
+            notes.append(f"{name}: {a.dropped} sample(s) carried a field outside the allowlist")
+    return notes
+
+
+def compact(
+    repo: Path,
+    series: str,
+    now: float,
+    cfg: PerfMetricsConfig | None = None,
+) -> int:
+    """The retention tick: fold samples that age out into the committed daily aggregate, then
+    trim the ring. Returns the number of raw rows kept. Idempotent -- a second run over the
+    same ring changes nothing (the aggregate is monotonic)."""
+    cfg = cfg or PerfMetricsConfig()
+    cutoff = now - cfg.ring_max_age_s
+    # Fold the samples that are about to age out into the committed aggregate FIRST (reading
+    # the pre-trim ring), then trim -- so the compacted numbers survive the trim.
+    for day in _touched_days(repo, series, cutoff):
+        store.write_aggregate(repo, series, day, cfg)
+    return store.trim(repo, series, now, cfg)
+
+
+def _touched_days(repo: Path, series: str, cutoff: float) -> list[float]:
+    """The UTC days (as day epochs) of the samples older than ``cutoff``, ascending."""
+    days: set[float] = set()
+    for s in store._read_ring(repo, series):
+        if s.t < cutoff:
+            days.add(int(s.t // 86400) * 86400)
+    return sorted(days)
+
+
+__all__ = ["ALLOWED_FIELDS", "Audit", "audit", "compact", "doctor", "redact_row"]
