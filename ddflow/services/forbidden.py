@@ -433,9 +433,8 @@ def _scan(text: str) -> tuple[list[str], list[str]]:
             if _ansi_at(text, n, i):
                 i = _ansi_c_end(text, n, i)  # `$'...'` is data, kept inline
             else:
-                end = _sub_body(text, n, bodies, sub_close, i)
-                if end > n:  # an unclosed `$(` / `<(` / `>(` does not grow the line masks
-                    end = n
+                end = min(_sub_body(text, n, bodies, sub_close, i), n)
+                # an unclosed `$(` / `<(` / `>(` does not grow the line masks
                 drop[i:end] = [True] * (end - i)  # the body is captured in `bodies`, not inline
                 i = end
         else:
@@ -539,7 +538,7 @@ def _sh_c(head: list[str]) -> int:
     i = 1
     while i < len(head):
         w = head[i]
-        if w == "--" or w == "-":
+        if w in {"--", "-"}:
             # `--` and a lone `-` end the option words: the command string is the NEXT word.
             return i + 1 if c_set and i + 1 < len(head) else -1
         if not w.startswith("-") and not w.startswith("+"):
