@@ -40,9 +40,12 @@ def import_edges(package: Path) -> dict[str, set[str]]:
                         name = name[len(pkg_name) + 1 :]  # package-relative, matches _module_name
                     edges[module].add(name)
                     edges[module].add(alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                edges[module].add(node.module)
-                edges[module].add(node.module.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                target = node.module
+                if target.startswith(pkg_name + "."):
+                    target = target[len(pkg_name) + 1 :]  # absolute package-relative, like Import
+                edges[module].add(target)
+                edges[module].add(target.split(".")[0])
     return dict(dict(edges).items())
 
 
