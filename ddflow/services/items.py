@@ -250,6 +250,19 @@ def release_umbrella(
     return True
 
 
+def _validation_refusal(st: State, draft: TaskDraft, readd: bool) -> Added | None:
+    """The ``got refused / failed`` for a draft that cannot be filed, or None when the id,
+    globs, kind, or parent are all acceptable. Broken out of ``add_task`` so the closed-
+    phase refusal and the shape checks live beside it here, in one loop count."""
+    closed = closed_phase_parent(st, draft.parent, readd=readd, item=draft.id)
+    if closed:
+        return Added(draft.id, closed, refused=True)
+    bad = problem_of(draft) or missing_parent(st, draft.parent)
+    if bad:
+        return Added(draft.id, bad)
+    return None
+
+
 def add_task(
     log: EventLog,
     st: State,
@@ -274,12 +287,9 @@ def add_task(
     """
     if not hasattr(dedupe, "fields") and not (isinstance(dedupe, str) and dedupe.strip()):
         raise ValueError("add_task: dedupe is a settled check, or the reason there is none")
-    closed = closed_phase_parent(st, draft.parent, readd=readd, item=draft.id)
-    if closed:
-        return Added(draft.id, closed, refused=True)
-    bad = problem_of(draft) or missing_parent(st, draft.parent)
-    if bad:
-        return Added(draft.id, bad)
+    refused = _validation_refusal(st, draft, readd)
+    if refused is not None:
+        return refused
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)
