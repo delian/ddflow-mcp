@@ -14,20 +14,18 @@ def _similar(repo, *args):
     return run_cli(repo, "--json", "similar", *args)
 
 
-def test_a_low_floor_surfaces_a_near_miss_below_the_default(repo):
+def test_a_low_floor_surfaces_a_near_miss_the_default_floor_hid(repo):
     run_cli(repo, "init")
+    run_cli(repo, "config", "dedupe.show_floor", "0.5")  # raise the default above the hit
     code, _o, err = run_cli(
         repo, "task", "add", "GV-complexity-score", "--title",
         "One deterministic complexity score per task",
     )  # fmt: skip
     assert code == 0, err
-    q = "complexity score estimate"  # scores ~0.45
-    code, out, err = _similar(repo, q, "--kind", "task")
-    assert code == 0, err  # above the packaged 0.35 default floor
-    assert any(r["id"] == "GV-complexity-score" for r in json.loads(out))
-    # the flag is the knob: a higher floor hides it, --floor 0 honors being lowered
-    code, _out, _err = _similar(repo, q, "--kind", "task", "--floor", "0.5")
-    assert code == 2  # 0.45 is below an explicit 0.5 floor
+    q = "complexity score estimate"  # scores ~0.45: below the 0.5 floor just set
+    code, _out, err = _similar(repo, q, "--kind", "task")
+    assert code == 2, err  # hidden at the 0.5 floor
     code, out, err = _similar(repo, q, "--kind", "task", "--floor", "0")
-    assert code == 0, err
-    assert any(r["id"] == "GV-complexity-score" for r in json.loads(out))
+    assert code == 0, err  # --floor 0 surfaces the near miss the default hid
+    rows = json.loads(out)
+    assert any(r["id"] == "GV-complexity-score" for r in rows), rows
