@@ -343,12 +343,8 @@ def _main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
-        # argparse's own error() prints usage to stderr and exits 2 on a bad command line
-        # (unknown command/flag, missing required argument) -- before `remembered_streams`
-        # starts, so the fallback body below never runs and a `--json` front end reads an
-        # empty body at exit 2 (B831b6afddc). Answer that body here instead. A --help or
-        # --version exits 0 with its own output already written, so only a usage error (2)
-        # gets the body appended.
+        # argparse's error() exits 2 on a bad command line (usage to stderr, no body) before
+        # `remembered_streams` runs (B831b6afddc); --help/--version exit 0 with their own output.
         if exc.code == NOTHING and "--json" in typed:
             emit_json(refusal_body(NOTHING, "usage error", EXIT_NAMES.get(NOTHING, "failed")))
         raise
