@@ -152,4 +152,4 @@ def test_same_tree_groups_name_gates_on_one_tree():
 
 def test_rework_loops_name_a_completed_item_hit_by_a_later_bug():
     loops = GY.rework_loops(facts_of(seeded()))
-    assert [l["item"] for l in loops] == ["A"]
+    assert [loop["item"] for loop in loops] == ["A"]
