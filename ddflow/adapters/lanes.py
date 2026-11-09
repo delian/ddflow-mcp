@@ -75,8 +75,8 @@ class LaunchSpec:
     secret_env: Mapping[str, str] = field(
         default_factory=dict, repr=False
     )  #: child var -> secret VALUE (a key resolved at prepare, e.g. a lane endpoint key read
-    #: from its variable or key file); the value reaches only the child env, never `repr`,
-    #: `describe` or the process environment
+    #: from its variable or key file). It reaches the child env, never the process
+    #: environment; `repr` hides it, but `asdict`/`vars` would not, so do not call them here
     fixed_env: Mapping[str, str] = field(
         default_factory=dict
     )  #: literal, non-secret (telemetry off)

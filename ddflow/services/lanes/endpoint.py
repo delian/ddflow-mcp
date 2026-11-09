@@ -261,6 +261,12 @@ def prepare(
     ep = resolve(cat, route, model, require_tools=require_tools)
     if isinstance(ep, Result):
         return ep
+    if ep.api_key_env:
+        key = resolve_key(ep)
+        if not key:
+            return unavailable(
+                key.reason or f"no API key: set ${ep.api_key_env} in the environment"
+            )
     cfg = write_private(ep, harness, home)
     if isinstance(cfg, Result):
         return cfg
