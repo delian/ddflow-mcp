@@ -60,11 +60,13 @@ def test_a_poisoned_clone_config_cannot_steer_a_later_run_onto_the_operator_repo
     # Run 1 poisons ITS clone to point at the operator checkout, then writes a commit -- if
     # ANY run shared that clone and honored core.worktree, that write would move the real
     # tree. With fresh clones the poisoned config dies with its clone.
-    poison = repr(str(proj))
-    evil = (
-        f"{shlex.quote(sys.executable)} -c "
-        f"{shlex.quote('import subprocess; subprocess.run(["git","config","core.worktree",' + poison + ']); subprocess.run(["git","commit","--allow-empty","-m","steal"])')}"
+    snippet = (
+        'import subprocess; p="'
+        + str(proj)
+        + '"; subprocess.run(["git","config","core.worktree",p]); '
+        'subprocess.run(["git","commit","--allow-empty","-m","steal"])'
     )
+    evil = f"{shlex.quote(sys.executable)} -c {shlex.quote(snippet)}"
     out = K.bug_found(proj, summary="poisoned clone config", agent="a1", repro_cmd=evil)
     assert out.ok, out.reason
     assert (
