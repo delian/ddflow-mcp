@@ -196,9 +196,16 @@ class _Replay:
 
     def why_not_higher(self, now: float) -> str:
         """With every signal healthy: the growth step, while the limit is binding (it
-        rises one per `adapt_up_after_s` of that), else the demand that does not reach it."""
+        rises one per `adapt_up_after_s` of that), else the demand that does not reach it.
+
+        In-flight is how many are RUNNING, not how much work is WAITING: a limit a past
+        decrease lowered below the ceiling is never short of demand -- it is restoring, and
+        the in-flight count below it only says the limit is not yet binding again
+        (B69323fd23e)."""
         flying = _in_flight_at(self.history, self.times, now)
         if flying < self.limit:
+            if self.last_dec is not None:
+                return f"restoring ({flying} in flight)"
             return f"demand ({flying} in flight)"
         wait = self.params.adapt_up_after_s - self.accum
         if self.quiet(now) and self.last_dec is not None:

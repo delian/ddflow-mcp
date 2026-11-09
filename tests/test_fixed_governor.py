@@ -81,3 +81,20 @@ def test_fixed_mode_calm_load_restores_the_cap_but_never_exceeds_it():
     d = FC.fold_limit(calm, p, [(0.0, 99)], calm[-1].at)
     assert d.limit == 16, d
     assert d.limited_by == "ceiling", d
+
+
+def test_fixed_mode_below_ceiling_names_restoring_not_demand():
+    # B69323fd23e: the limit lowered under load, then calm, with the in-flight count below
+    # the lowered limit names "restoring" -- in-flight counts RUNNING work, not the work
+    # that is WAITING -- never "demand (N in flight)".
+    p = FP.params(_fixed_cfg())
+    step = 60.0
+    bad = [FC.Sample(T0 + i * step, {"load_per_core": 2.0}) for i in range(12)]
+    lowered = FC.fold_limit(bad, p, [(0.0, 1)], bad[-1].at).limit
+    assert lowered < 16
+    calm = bad + [
+        FC.Sample(bad[-1].at + (i + 1) * step, {"load_per_core": 0.05}) for i in range(3)
+    ]
+    d = FC.fold_limit(calm, p, [(0.0, 1)], calm[-1].at)
+    assert d.limit < 16, d
+    assert d.limited_by == "restoring (1 in flight)", d

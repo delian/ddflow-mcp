@@ -57,8 +57,9 @@ def test_limited_by_never_names_a_signal_that_is_null_now():
 
 def test_with_every_signal_healthy_the_growth_or_demand_is_named():
     """The incident's own values: the ratio at 1.2-1.4, under its low mark, and the
-    latency ratio null -- nothing holds the limit but demand (one agent running)."""
-    assert _after_a_decrease(None, 1.3, in_flight=1).limited_by == "demand (1 in flight)"
+    latency ratio null -- nothing still holds the limit, which is restoring toward its
+    ceiling with one agent running (B69323fd23e: in-flight is running, not demand)."""
+    assert _after_a_decrease(None, 1.3, in_flight=1).limited_by == "restoring (1 in flight)"
 
 
 def test_a_decrease_signal_that_recovered_is_not_named():
