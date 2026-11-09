@@ -21,11 +21,11 @@ from ddflow.infra.log import EventLog
 from ddflow.services import actors as A
 from ddflow.services import pins as PN
 from ddflow.services import pins_written as PW
-from ddflow.services.identity import HARNESS_MARKERS
 from ddflow.services.approvals import class_states as APCS
 from ddflow.services.approvals import request as R
 from ddflow.services.approvals.canon import Canon
 from ddflow.services.ask import engine as E
+from ddflow.services.identity import HARNESS_MARKERS
 
 GEN = """\
 import sys
