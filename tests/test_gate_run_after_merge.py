@@ -123,7 +123,13 @@ def test_a_merged_baseline_red_partial_reruns_at_the_merged_sha(repo):
     """B80a4dafd02: a MEASURED baseline-red partial is not stranded either. After the merge
     lands and main moves on, no checkout stands at the merged tree -- but the gate can still
     re-run at `merged_sha`, so it measures freshly rather than pointing a person at `approve`
-    for a dead re-run (B-merged-partial-rerun-records-unavailable)."""
+    for a dead re-run (B-merged-partial-rerun-records-unavailable).
+
+    `command = "true"` genuinely runs and exits 0, so the fresh measurement this test records
+    is `passed` earned by the command really passing -- it is NOT the stale partial kept, and
+    NOT an `unavailable` recorded over the measured evidence. A command that actually failed
+    (a genuinely red test) would record its own failure the same way: the fix re-measures, it
+    never fabricates a green."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
