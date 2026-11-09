@@ -12,6 +12,7 @@ No prompt text, arguments, user paths or secrets appear in any figure.
 from __future__ import annotations
 
 import ast
+import functools
 from collections import defaultdict
 from pathlib import Path
 
@@ -80,34 +81,19 @@ def fan_in(edges: dict[str, set[str]]) -> dict[str, int]:
 
 
 def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
-    """module -> the longest import chain in EDGES out of the module (dependency depth).
+    """module -> its longest SIMPLE import chain out of it (dependency depth), in edges.
 
-    Cycle-safe and order-independent: a cycle edge contributes 0 and is never memoized, so a
-    node whose depth ran through a back-edge is recomputed each time it is entered fresh,
-    and a node's longest tail is always the same regardless of insertion order."""
+    Order-independent and cycle-safe: the longest path that never reuses a node, so a cycle
+    contributes at most one hop and the answer does not depend on which node is entered first."""
+
     nodes = set(edges)
-    memo: dict[str, int] = {}
 
-    def depth(m: str, resolving: set[str]) -> tuple[int, bool]:
-        if m in memo and m not in resolving:
-            return memo[m], False
-        deps = [d for d in edges.get(m, ()) if d in nodes]
-        if not deps:
-            memo[m] = 0
-            return 0, False
-        resolving.add(m)
-        best, truncated = 0, False
-        for d in deps:
-            if d in resolving:
-                truncated = True  # a back-edge: contributes 0, the value is path-dependent
-                continue
-            best = max(best, 1 + depth(d, resolving)[0])
-        resolving.discard(m)
-        if not truncated:
-            memo[m] = best
-        return best, truncated
+    @functools.cache
+    def longest(m: str, visited: frozenset[str]) -> int:
+        deps = [d for d in edges.get(m, ()) if d in nodes and d not in visited]
+        return max((1 + longest(d, visited | {m}) for d in deps), default=0)
 
-    return {m: depth(m, set())[0] for m in nodes}
+    return {m: longest(m, frozenset()) for m in nodes}
 
 
 def touched(facts: Facts) -> list[dict]:
