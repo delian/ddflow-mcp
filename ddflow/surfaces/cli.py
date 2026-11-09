@@ -349,8 +349,8 @@ def _main(argv: list[str] | None = None) -> int:
         # empty body at exit 2 (B831b6afddc). Answer that body here instead. A --help or
         # --version exits 0 with its own output already written, so only a usage error (2)
         # gets the body appended.
-        if exc.code == 2 and "--json" in typed:
-            emit_json(refusal_body(2, "usage error", EXIT_NAMES.get(2, "failed")))
+        if exc.code == NOTHING and "--json" in typed:
+            emit_json(refusal_body(NOTHING, "usage error", EXIT_NAMES.get(NOTHING, "failed")))
         raise
     # What was typed, for the commands a refusal tells the caller to run instead.
     args._argv = typed
