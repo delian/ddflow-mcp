@@ -114,14 +114,27 @@ def rollup(repo) -> list[dict]:
 
 def doctor(repo) -> list[dict]:
     """Which agent-call sources are in use and which are available, so the operator can turn
-    one off: the hook always runs; a harness telemetry importer appears when it is wired."""
+    one off: the hook and any wired importer each count their own ring rows (read off the
+    digest's source prefix); a not-wired importer is unavailable, never a zero count."""
     from ddflow.services.perf import store
 
-    hook_n = len(store._read_ring(repo, "agent_calls"))
-    out = [{"source": "hook", "in_use": hook_n > 0, "count": hook_n, "off": "remove the post-tool hook call"}]
+    counts: dict[str, int] = defaultdict(int)
+    for s in store._read_ring(repo, "agent_calls"):
+        source = s.digest.split(":")[0] if s.digest else "unknown"
+        counts[source] += 1
+    out = [
+        {
+            "source": src,
+            "in_use": n > 0,
+            "count": n,
+            "off": "remove the post-tool hook call" if src == "hook" else "remove the importer",
+        }
+        for src, n in sorted(counts.items())
+    ]
     out += [
         {"source": name, "in_use": False, "unavailable": True, "off": why}
         for name, why in sorted(NOT_COLLECTED.items())
+        if name not in counts
     ]
     return out
 
