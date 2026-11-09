@@ -69,4 +69,3 @@ def test_the_fake_keeps_an_empty_string_and_a_bool_typing(tmp_path):
     assert data["ui"]["theme"] == "" and data["core"]["enabled"] is True
     fake.set(tmp_path, "core.enabled", False)
     assert fake.resolve(tmp_path).as_dict()["core"]["enabled"] is False
-
