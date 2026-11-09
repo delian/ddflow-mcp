@@ -518,10 +518,12 @@ def _revoke_refutation_pass(log, cfg, st, item: str, gate: str, mirrored, verdic
         if not isinstance(flag, dict):
             continue
         live = GD.triage_counts(it, g) or {}
-        # No confirmed-count lower bound: the pass was recorded over an all-refuted
-        # finding set (confirmed == 0), so a re-triage to confirmed always grows the
-        # count and revokes; a "confirmed <= flag" guard here was unreachable dead code
-        # (grok #1: the no-op test passed verdict="refuted", which returns above).
+        # Skip a gate whose confirmed count did NOT grow: the pass already accounted for
+        # it. triage_counts is per gate, and a mirrored finding counted only for the
+        # primary gate leaves the mirror's count below the snapshot, so the mirror keeps
+        # its pass while the primary (whose count grew) revokes below.
+        if live.get("confirmed", 0) <= int(flag.get("confirmed", 0)):
+            continue
         ev = {k: v for k, v in (rec.evidence or {}).items() if k != "passed_on_refutation"}
         GD.record(
             log,
