@@ -1,0 +1,3 @@
+{"agent":"recover-b368","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"eb9244e742587cf3ab3414063","kind":"ddflow.seen","lamport":162599,"schema":1,"subject":"ddflow","ts":"2026-11-09T17:01:47.755578Z"}
+{"agent":"recover-b368","data":{"path":".ddflow/worktrees/PM-report-data"},"id":"e875c71b140296aa5f41b4511","kind":"worktree.removed","lamport":162600,"schema":1,"subject":"PM-report-data","ts":"2026-11-09T17:01:47.869428Z"}
+{"agent":"recover-b368","data":{"by":"recover-b368","event":"ecfff00cdbf96fa5be916a4ce","holder":"recover-7b","note":"salvaged"},"id":"ed33458db3bdb1cc3f4a198c9","kind":"lease.released","lamport":162606,"schema":1,"subject":"fix-B36819b6c73","ts":"2026-11-09T17:04:31.221059Z"}
