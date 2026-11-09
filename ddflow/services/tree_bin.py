@@ -10,6 +10,7 @@ installed command is untouched.
 
 from __future__ import annotations
 
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -41,6 +42,31 @@ def write_shim(tree: Path) -> Path | None:
     except OSError:
         return None
     return shim
+
+
+def shim_dir(tree: Path) -> Path | None:
+    """This tree's shim directory (its ``ddflow`` runs the tree's own code), or None.
+
+    The shim lives at `<tree>/.ddflow/local/bin/ddflow`; the DIR is what belongs first on
+    ``PATH``, so a nested ``ddflow`` (a gate or ci command that runs ``ddflow ...``) resolves
+    to the tree's code rather than the primary checkout's.
+    """
+    shim = Path(tree).resolve() / SHIM_REL
+    return shim.parent if shim.is_file() else None
+
+
+def with_shim_on_path(env, tree: Path) -> dict[str, str]:
+    """`env` with `shim_dir(tree)` first on ``PATH``; the same dict when the tree has no shim.
+
+    The shim only shadows the ``ddflow`` NAME -- its directory holds nothing else -- so
+    ``git``, ``pytest`` and every other command a gate runs still resolve exactly as before.
+    """
+    directory = shim_dir(tree)
+    if directory is None:
+        return env
+    env = dict(env)
+    env["PATH"] = str(directory) + (os.pathsep + env.get("PATH", "") if env.get("PATH") else "")
+    return env
 
 
 def advice(tree: Path) -> str:

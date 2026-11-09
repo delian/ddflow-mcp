@@ -19,6 +19,7 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from .. import suitelock as SL
+from .. import tree_bin as TB
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failed_tests, failure_evidence
@@ -327,6 +328,10 @@ def run_command_gate(
             **gdef.env,
             **(env or {}),
         }
+        # A gate command that runs `ddflow ...` must get THIS tree's code, not the primary
+        # checkout's on PATH: the shim only shadows the `ddflow` name, so the branch's gate
+        # logic (runner, baseline, ci_marker) is what its own gate runs exercise (B627636de73).
+        full_env = TB.with_shim_on_path(full_env, cwd)
         # A command gate IS a shell command line the operator wrote in gates.toml, run by the
         # one CommandRunner: it checks the executable is installed BEFORE running (under
         # `shell=True` a missing binary exits 127, indistinguishable from a suite that chose
