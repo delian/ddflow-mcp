@@ -486,7 +486,7 @@ def attest(
             f": put `ddflow approvals ask {ask_id}` to the person with AskUserQuestion first"
         )
     if row["type"] == E.QUESTION:
-        if row["options"]:
+        if row.get("options"):
             outcome = hit.answer  # a multiple-choice question: the selected option IS the outcome
             text = ""
         else:
