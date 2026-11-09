@@ -35,12 +35,32 @@ def _default_rel(it, decision_id: str) -> str:
     """The doc path: a ``.md`` glob under ``DOC_DIR`` the task already names, else the slug.
 
     A decide task that globs `docs/ddflow/decisions/answers.md` must land there, not at
-    the id's `<slug>.md`, which the globs do not cover (B502b06b881)."""
+    the id's `<slug>.md`, which the globs do not cover (B502b06b881). Only a *literal*
+    path counts as the task naming a document: a pattern glob (`*.md`) is left to
+    `inside()` to match the slug against, never written literally."""
     prefix = DOC_DIR.rstrip("/") + "/"
-    for g in it.globs:
-        if g.startswith(prefix) and g.endswith(".md"):
-            return g
-    return f"{DOC_DIR}/{slug_of(decision_id)}.md"
+    named = f"{DOC_DIR}/{slug_of(decision_id)}.md"
+    docs = [g for g in it.globs if g.startswith(prefix) and g.endswith(".md") and _literal(g)]
+    if named in docs:
+        return named
+    if len(docs) == 1:
+        return docs[0]
+    return named
+
+
+def _literal(glob: str) -> bool:
+    """A single concrete path, not a pattern: no `*?[` magic (`inside` matches those)."""
+    return not any(c in glob for c in "*?[")
+
+
+def _append_block(existing: str, block: str) -> str:
+    """Append ``block`` below ``existing``, but never twice: a retry after a failed commit
+    must not write the same restatement and body a second time."""
+    if not existing.strip():
+        return block
+    if block.strip() in existing:
+        return existing
+    return existing.rstrip("\n") + "\n\n" + block
 
 
 def render(item: str, d) -> str:
@@ -165,7 +185,7 @@ def decide(
     if body:
         block = block.rstrip("\n") + "\n\n" + body.strip() + "\n"
     if append and target.exists():
-        block = target.read_text().rstrip("\n") + "\n\n" + block
+        block = _append_block(target.read_text(), block)
     replace_text(target, block)
     made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
     if not made.ok and "nothing to commit" not in (made.out + made.err):

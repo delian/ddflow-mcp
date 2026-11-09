@@ -13,6 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.api.decide import _append_block
 from ddflow.core.autoorder import is_decide
 from ddflow.core.model import fold
 from ddflow.core.schedule import inherited_deps
@@ -194,7 +195,26 @@ def test_decide_keeps_an_existing_doc_and_appends_the_body(proj):
     assert _state(proj).items["X-decide"].state == "done"
     landed = _git(proj, "show", "HEAD:docs/ddflow/decisions/x.md")
     assert "Already drafted before the decision landed." in landed
+    assert "**Decision.** d" in landed  # the restated record still lands with the body
     assert "Q: left open?" in landed and "A: settled now." in landed
+
+
+def test_decide_appending_is_idempotent_on_a_retry():
+    block = "## D-x: t\n\n**Decision.** d\n\nQ: left open?\nA: settled now.\n"
+    # A failed commit retried with --append: the restatement and body land once, not twice.
+    assert _append_block(block, block) == block
+    proposal = "# Proposal\n\nAlready drafted.\n"
+    assert _append_block(proposal, block) == proposal.rstrip("\n") + "\n\n" + block
+
+
+def test_decide_a_pattern_glob_still_lands_at_the_slug(proj):
+    _queue_doc(proj, "docs/ddflow/decisions/*.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, out, err = run_cli(proj, "--json", "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 0, err
+    assert json.loads(out)["path"] == "docs/ddflow/decisions/x.md"
 
 
 def test_decide_body_lands_on_a_fresh_doc(proj):

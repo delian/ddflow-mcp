@@ -45,7 +45,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "path",
                 help="The document path.",
-                cli_help="the document (default docs/ddflow/decisions/<slug>.md)",
+                cli_help="the document (default: a docs/ddflow/decisions/<name>.md glob the task names, else <slug>.md)",
             ),
             Param(
                 "append",
