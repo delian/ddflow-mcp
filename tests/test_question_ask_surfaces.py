@@ -128,3 +128,50 @@ def test_a_free_text_question_answer_is_attested(repo, tmp_path):
     answered_row = _row(repo, qid)
     assert answered_row["outcome"] == E.ANSWERED_WORD
     assert answered_row["answer"] == "red"
+
+
+def test_a_multiple_choice_question_answer_is_attested(repo, tmp_path):
+    """The multiple-choice round-trip mirrors the free-text one: the selected option becomes
+    the outcome, the answer stays empty, and verify passes against that convention."""
+    run_cli(repo, "init")
+    projects = tmp_path / "projects"
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[approvals]\ntranscript_dirs = ['{projects}']\n")
+    log = EventLog(repo, "bot")
+    qid = _question(repo, options=("red", "blue"))
+    row = _row(repo, qid)
+    cfg = Config()
+    cfg.approvals.transcript_dirs = [str(projects)]
+    surfaced = H._surfaced_question(row)
+    asked = {
+        "type": "assistant",
+        "uuid": "A1",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "U1",
+                    "name": H.TOOL,
+                    "input": {"questions": [{"question": surfaced}]},
+                },
+            ]
+        },  # fmt: skip
+    }
+    answered = {
+        "type": "user",
+        "uuid": "R1",
+        "sourceToolAssistantUUID": "A1",
+        "timestamp": "2026-10-23T10:00:00Z",
+        "toolUseResult": {"answers": {surfaced: "red"}},
+        "message": {"content": [{"type": "tool_result", "tool_use_id": "U1", "content": "x"}]},
+        "permissionDecision": {"decision": "accept", "source": "user_temporary"},
+    }
+    d = projects / "slug"
+    d.mkdir(parents=True)
+    (d / "s.jsonl").write_text("\n".join(json.dumps(r) for r in [asked, answered]))
+    ok, message = H.attest(log, cfg, qid)
+    assert ok, message
+    answered_row = _row(repo, qid)
+    assert answered_row["outcome"] == "red"
+    assert answered_row["answer"] == ""
+    assert H.verify(answered_row, cfg)
