@@ -50,6 +50,9 @@ class Evidence:
     ci_scope: dict[str, Any] | None = None
     #: Seconds the run queued for the host suite lock (B1d51fb9da1): recorded as `waited_s`.
     waited_s: float | None = None
+    #: Seconds the run's own command took (set by `ci run`; absent when the caller did not run
+    #: a command, e.g. a hand-recorded gate): recorded as `elapsed_s` (B28537b615d).
+    elapsed_s: float | None = None
     #: Set by a ddflow tool that RAN the gate's command itself (`ci run`), never by a flag or
     #: an MCP argument: it is what tells that record from an agent's typed `--command`.
     ran_by: str = ""
@@ -312,6 +315,8 @@ def _evidence_fields(
         ev["ci_scope"] = evidence.ci_scope
     if evidence.waited_s is not None:
         ev["waited_s"] = evidence.waited_s
+    if evidence.elapsed_s is not None:
+        ev["elapsed_s"] = evidence.elapsed_s
     if evidence.ran_by:
         ev["ran_by"] = evidence.ran_by
     if evidence.output_file:
