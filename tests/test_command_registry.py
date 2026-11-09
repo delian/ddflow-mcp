@@ -179,6 +179,12 @@ WAIT = Command(
             help="wait for an operator-approval request id until it is answered; ready then means "
             "re-run the gated command with --approval ID",
         ),
+        Param(
+            "job",
+            default="",
+            help="wait for a job (a detached review's run handle) instead of an item, lease or "
+            "approval: until its process is over and its round is recorded",
+        ),
         Param("token", default="", help="resume token from an earlier wait"),
         Param(
             "timeout",
