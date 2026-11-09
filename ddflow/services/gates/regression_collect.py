@@ -34,7 +34,13 @@ def _scan(root: Path, tests: list[str]) -> bool:
 
 
 def tree_provides(
-    command_for: Any, configured: str, root: Path, tests: list[str], *, scan: bool = True
+    command_for: Any,
+    configured: str,
+    root: Path,
+    tests: list[str],
+    *,
+    scan: bool = True,
+    cfg: Any = None,
 ) -> bool:
     """Does ``root`` provide every named test?
 
@@ -44,7 +50,12 @@ def tree_provides(
     id "not found" too), OR it timed out or has no runner -- and the text scan decides. The
     scan only keeps the test in the restored check; a base file pytest cannot import still
     ends there as "not run" (exit 4), exactly as before this probe existed. ``scan=False``:
-    only pytest's own exit 0 counts (the static name check, which has its own strict scan)."""
+    only pytest's own exit 0 counts (the static name check, which has its own strict scan).
+
+    ``cfg`` is the CALLER's config, run against ``root`` exactly as the caller does: a
+    probed/scratch tree can carry a committed config this ddflow refuses to load (a
+    historical ``worktree.base_ref = "--local"``), and reloading it must not crash the probe
+    (B20cfd41344)."""
     if any(not (root / s.partition("::")[0]).is_file() for s in tests):
         return False
     command = command_for(configured, tests, root)
@@ -54,6 +65,6 @@ def tree_provides(
             title="collect the named tests",
             command=f"{command} --collect-only -q",
         )
-        if run_command_gate(probe, root)[0] == "passed":
+        if run_command_gate(probe, root, cfg=cfg)[0] == "passed":
             return True
     return scan and _scan(root, tests)

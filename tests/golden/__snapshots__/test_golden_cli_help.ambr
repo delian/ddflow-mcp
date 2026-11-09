@@ -2665,8 +2665,8 @@
                        item's `review-exclude:<glob>` tags (comma-separated; 'none' = leave nothing
                        out)
     --include-pinned   send the files pins.toml owns too, for this review
-    --force            run a full round past [review].max_rounds; needs --reason, recorded in the
-                       evidence
+    --force            run a round past [review].max_rounds (a delta with --delta); needs --reason,
+                       recorded in the evidence
     --reason REASON    why --force
     --finding FINDING  triage: the finding's number (#N) or a unique digest prefix (6+ hex)
     --refuted          triage: --probe shows the finding is false

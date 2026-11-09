@@ -126,6 +126,37 @@ def test_unit_tests_does_not_widen_a_failed_selected_ci_to_the_whole_suite(monke
     assert full.scope == "full" and "ci gate is failed" in full.why
 
 
+def test_covered_by_a_full_ci_needs_a_pytest_summary(monkeypatch, tmp_path):
+    """B847e0494de: a ci recorded scope=full whose test hook ran no pytest (no changed file in
+    its pre-commit range) covers nothing, so the unit_tests gate runs the whole suite itself; a
+    full run WITH a pytest summary still covers it."""
+    monkeypatch.setattr(TSC, "changed_lines", lambda tree, base: 3)
+    monkeypatch.setattr(TSC.W, "repo_root", lambda t: tmp_path)
+    monkeypatch.setattr(TSC.W, "default_branch", lambda r: "main")
+    monkeypatch.setattr(TSC, "effective_pipeline", lambda repo, cfg, it: ["ci"])
+    monkeypatch.setattr(TSC, "_ci_not_passed_here", lambda cfg, it, tree: "")
+    cfg = Config()
+    cfg.gates.unit_tests_scope = "selected"
+
+    def _it(evidence):
+        return NS(
+            kind="task",
+            promote_to="",
+            fixes=["B1"],
+            base="main",
+            gates={"ci": NS(outcome="passed", evidence=evidence)},
+        )
+
+    no_summary = TSC.unit_tests_scope(
+        cfg, NS(bugs={}), _it({"ci_scope": {"scope": "full", "sha": "abc123"}}), "pytest", tmp_path
+    )
+    assert no_summary.scope == "full" and "no pytest summary" in no_summary.why
+    with_summary = _it({"ci_scope": {"scope": "full", "sha": "abc123"}, "summary": ["1 passed"]})
+    assert (
+        TSC.unit_tests_scope(cfg, NS(bugs={}), with_summary, "pytest", tmp_path).scope == "covered"
+    )
+
+
 def test_a_hook_stage_that_could_not_start_is_not_called_failed(branch, stubs, monkeypatch):
     from ddflow.services.cmdrunner import CommandRunner
 

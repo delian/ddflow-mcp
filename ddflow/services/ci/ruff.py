@@ -16,9 +16,9 @@ when available, so the fix formats with the version the check uses.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
+from ...adapters import fs as FS
 from ...infra import git as G
 from ...infra import proc as P
 
@@ -31,9 +31,9 @@ def ruff_bin(tree: Path) -> list[str]:
     hooks: `uv run ruff` when the project is a uv project with a lockfile (the pinned venv the
     hook uses), else the bare `ruff` on PATH. [] when there is nothing either way."""
     root = Path(tree)
-    if (root / "uv.lock").is_file() and shutil.which("uv"):
+    if (root / "uv.lock").is_file() and FS.which("uv"):
         return ["uv", "run", "ruff"]
-    if shutil.which("ruff"):
+    if FS.which("ruff"):
         return ["ruff"]
     return []
 

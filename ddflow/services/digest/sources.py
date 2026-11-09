@@ -302,6 +302,7 @@ EXEMPT_SITES: dict[str, str] = {
     "export.force": "an immediate act by a person; nothing pends in State",
     "export.machine": "an immediate act by a person; nothing pends in State",
     "claim.force": "an immediate act by a person; nothing pends in State",
+    "release.force": "an immediate flag on one command; nothing pends in State",
     "config.set": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "pins.regenerate": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "history.accept": "a pending request for it is an 'approval' entry; nothing else pends in State",

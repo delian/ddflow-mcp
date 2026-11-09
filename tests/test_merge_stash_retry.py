@@ -179,6 +179,29 @@ def test_the_multi_line_lock_explanation_before_the_sentence_is_still_retried(re
     assert r.ok, r.err or r.out  # the second attempt ran and merged
 
 
+def test_a_merge_msg_read_error_is_retried(repo, monkeypatch):
+    """Bae7ae3e86c: `fatal: Could not read from .git/MERGE_MSG: No such file or directory`
+    is a transient (a concurrent process in the same tree mid-merge); nothing was merged,
+    so the identical retry succeeds."""
+    cfg = Config()
+    wt = W.create(repo, cfg, "T1")
+    _commit(wt.path, "f.py", "x\n", "feat: f")
+    real = W.git
+    seen = []
+    err = "fatal: Could not read from .git/MERGE_MSG: No such file or directory\n"
+
+    def git(tree, *a, **kw):
+        if a[:1] == ("merge",) and not seen:
+            seen.append(1)
+            return W.GitResult(128, "", err)
+        return real(tree, *a, **kw)
+
+    monkeypatch.setattr(W, "git", git)
+    _patch_sleep(monkeypatch, lambda s: None)
+    r = W.merge(repo, cfg, wt)
+    assert r.ok, r.err or r.out  # the second attempt ran and merged
+
+
 def test_other_threads_sleeping_do_not_count_as_the_merge_pauses(repo, monkeypatch):
     """A busy neighbour thread sleeps all the while; only the merge's own pauses are counted."""
     cfg, wt = _setup(repo)

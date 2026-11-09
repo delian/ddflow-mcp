@@ -83,8 +83,12 @@ class StaleNote:
     """A passed gate whose evidence is not about the tree being completed -- or, with
     ``unverified``, one whose evidence could not be compared with it at all. The two
     are kept apart: "could not tell" rendered as "fresh" is a silent pass, and rendered
-    as "stale" is a false alarm."""
+    as "stale" is a false alarm. ``reused`` (non-empty) is a review KEPT under
+    `[locks].review_reuse`: its recorded tree moved but the item's own change is unchanged
+    and main's changes are disjoint from the files it reviewed, so the pass stands -- the
+    string is the reason."""
 
     gate: str
     why: str
     unverified: bool = False
+    reused: str = ""
