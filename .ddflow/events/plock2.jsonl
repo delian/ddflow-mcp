@@ -363,3 +363,5 @@
 {"agent":"plock2","data":{"at":1794255164.4306283,"branch":"ddflow/LK-sg-send","holder":"plock2","worktree":".ddflow/worktrees/LK-sg-send"},"id":"e719e4f6654a92dcdda9a53ed","kind":"lease.renewed","lamport":163283,"schema":1,"subject":"LK-sg-send","ts":"2026-11-09T20:12:45.792362Z"}
 {"agent":"plock2","data":{},"id":"ea0353777e22b4632c6da6d31","kind":"item.started","lamport":163284,"schema":1,"subject":"LK-sg-send","ts":"2026-11-09T20:12:48.164719Z"}
 {"agent":"plock2","data":{"at":1794255511.619943,"holder":"plock2"},"id":"e3b1a4220b0bd7d3f051522f9","kind":"lease.renewed","lamport":163307,"schema":1,"subject":"LK-sg-send","ts":"2026-11-09T20:18:31.745562Z"}
+{"agent":"plock2","data":{"at":1794258329.408161,"holder":"plock2"},"id":"e1cb426a053f2bad781b15d75","kind":"lease.renewed","lamport":163527,"schema":1,"subject":"LK-sg-send","ts":"2026-11-09T21:05:29.526886Z"}
+{"agent":"plock2","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e3a346bc6a30a801875dd0313","kind":"cadence.ran","lamport":163528,"schema":1,"subject":"recall_recheck:LK-sg-send","ts":"2026-11-09T21:05:36.356661Z"}
