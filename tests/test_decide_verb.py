@@ -246,6 +246,18 @@ def test_decide_a_pattern_glob_still_lands_at_the_slug(proj):
     assert json.loads(out)["path"] == "docs/ddflow/decisions/x.md"
 
 
+def test_an_incidental_literal_does_not_shadow_the_slug_a_pattern_covers(proj):
+    # A README index glob + a *.md pattern: the slug path matches the pattern, so it wins
+    # over the incidental literal (a decision must not land in README.md).
+    _queue_doc(proj, "docs/ddflow/decisions/README.md,docs/ddflow/decisions/*.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, out, err = run_cli(proj, "--json", "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 0, err
+    assert json.loads(out)["path"] == "docs/ddflow/decisions/x.md"
+
+
 def test_decide_body_lands_on_a_fresh_doc(proj):
     _queue_doc(proj, "docs/ddflow/decisions/x.md")
     run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
