@@ -53,7 +53,7 @@ repro_tail_bytes = 4096
 repro_events = 10
 repro_test_timeout_s = 300
 repro_runs = 1
-repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDE*", "*GATE*"]
+repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "*GATE*"]
 repro_redact_extra = []
 
 [cadence]

@@ -86,10 +86,11 @@ class BugsConfig:
             "CI_*",
             "GITHUB_*",
             "PYTEST_*",
-            "CLAUDE*",
+            "CLAUDECODE",
+            "CLAUDE_CODE_ENTRYPOINT",
             "*GATE*",
         ],
-        doc="Environment variable name patterns (fnmatch) whose values a reproduction bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and the gate runner's. A variable whose name says it holds a secret (KEY, TOKEN, SECRET, PASSWORD, ...) is recorded as set, never with its value.",
+        doc="Environment variable name patterns (fnmatch) whose values a reproduction bundle records, redacted: the DDFLOW_* variables, CI markers, pytest's and the gate runner's. The Claude Code entry is the two behaviour-explaining names (which CLI and entrypoint) rather than `CLAUDE*`: the wildcard recorded the account/org UUIDs and the messaging socket path -- operator identity leaving the project without consent, and none of their names is secret-named so none was masked (B6307b787dd). A variable whose name says it holds a secret (KEY, TOKEN, SECRET, PASSWORD, ...) is recorded as set, never with its value.",
     )
     repro_redact_extra: list[str] = knob(
         factory=list,
