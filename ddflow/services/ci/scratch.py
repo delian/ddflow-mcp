@@ -252,7 +252,10 @@ def merge_tree(
                     )
                     return
                 # The tree is now final: re-record the fast after-merge pins so the merged
-                # result is self-consistent (B8127ab103e). A base already contained in `ref`
-                # needs no merge, and its own pins are left for the pins precheck to judge.
-                _regen_after_merge(tree)
+                # result is self-consistent (B8127ab103e). Only a caller that passed `pins` --
+                # the ci gate; the probe's plain mergeability check does not -- re-records here,
+                # so the probe keeps its own deadline. A base already contained in `ref` needs no
+                # merge, and its own pins are left for the pins precheck to judge.
+                if pins is not None:
+                    _regen_after_merge(tree)
             yield tree, Failure("", "ok")
