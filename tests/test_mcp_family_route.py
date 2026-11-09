@@ -150,3 +150,11 @@ def test_an_argument_another_action_advertises_is_not_unknown(inited):
     # sends it to `action=similar` is not refused as "unknown argument: sources".
     text, _err = _call(inited, "ddflow_memory", action="similar", text="x", sources="decisions")
     assert "unknown argument" not in text
+
+
+def test_bug_fixed_takes_the_no_task_argument_the_family_advertises(inited):
+    # Bab813498a3: `no_task` is a `bug found` argument the `ddflow_bug` family union
+    # advertises, so a call that sends it to `action=fixed` is not refused as
+    # "unknown argument: no_task" (the member ignores it; `fixed` files no task).
+    text, _err = _call(inited, "ddflow_bug", action="fixed", id="B-no-such", no_task=True)
+    assert "unknown argument" not in text
