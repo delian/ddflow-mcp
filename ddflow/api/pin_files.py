@@ -128,7 +128,10 @@ def _regenerate_tail(
     attr_actions = [] if check else _follow_the_recipes(repo, cfg, only)
     tick = _lease_tick(primary, agent)
     stamp: dict[str, object] = {}
-    if approval and verb == "regenerate" and not check and not after_merge:
+    # An agent re-records pins only with a valid approval; omitting ``--approval`` must not
+    # bypass the pins-are-stale gate (B90b8d3fe89: the check used to apply only when an
+    # approval WAS passed, so a bare agent `pins regenerate` re-recorded pins ungated).
+    if (approval or AP.agent_marker(agent)) and verb == "regenerate" and not check and not after_merge:
         bad = _regenerate_approval(
             primary, agent=agent, before=before, only=only, approval=approval
         )

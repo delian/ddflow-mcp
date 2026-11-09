@@ -15,6 +15,16 @@ from pathlib import Path
 import pytest
 
 import ddflow
+from ddflow.config import Config
+from ddflow.core.model import fold
+from ddflow.infra.log import EventLog
+from ddflow.services import actors as A
+from ddflow.services import pins as PN
+from ddflow.services import pins_written as PW
+from ddflow.services.approvals import class_states as APCS
+from ddflow.services.approvals import request as R
+from ddflow.services.approvals.canon import Canon
+from ddflow.services.ask import engine as E
 
 GEN = """\
 import sys
@@ -52,17 +62,34 @@ def git(repo: Path, *args: str) -> str:
     return done.stdout
 
 
-def ddflow_cli(repo: Path, *args: str) -> subprocess.CompletedProcess:
+def ddflow_cli(repo: Path, *args: str, person: bool = False) -> subprocess.CompletedProcess:
     env = {**os.environ, "PYTHONPATH": SRC}
     env.pop("DDFLOW_AGENT", None)
     env.pop("PYTEST_XDIST_WORKER", None)  # a regeneration refuses to run under xdist
-    return subprocess.run(
-        [sys.executable, "-m", "ddflow", "--repo", str(repo), "--agent", "t", *args],
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=repo,
+    argv = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
+    if not person:
+        argv += ["--agent", "t"]
+    argv += args
+    return subprocess.run(argv, capture_output=True, text=True, env=env, cwd=repo)
+
+
+def approve(repo: Path, only: str = "") -> str:
+    """File and answer a `pins.regenerate` approval an agent (``--agent t``) can spend. The
+    mechanical re-records below go through the agent route, which is gated (B90b8d3fe89): an
+    agent needs a valid approval, so each re-record mints one bound to the pins as they stand."""
+    cfg = Config.load(repo)
+    log = EventLog(repo, "t")
+    before = PW.snapshot(repo, [*PN.pin_files(repo, cfg), ".gitattributes"])
+    canon = Canon(
+        verb="pins.regenerate",
+        agent=log.agent_id,
+        item=only,
+        args={"only": only},
+        state=APCS.pins_state(before),
     )
+    filed = R.file(log, cfg, fold(log.read_all(), strict=False), canon, reason="test approval")
+    E.answer(log, cfg, filed.id, "approved", actor=A.resolve_actor(cfg, "me"), digest=filed.digest)
+    return filed.id
 
 
 @pytest.fixture
@@ -78,7 +105,10 @@ def repo(tmp_path: Path) -> Path:
     (r / ".ddflow").mkdir()
     (r / ".ddflow" / "pins.toml").write_text(RECIPES)
     (r / ".gitignore").write_text("__pycache__/\n.ddflow/local/\n")
-    ddflow_cli(r, "pins", "regenerate")
+    # the event log union-merges across branches, as in the real project's .gitattributes: each
+    # branch mints its own approval events and they must not conflict (B90b8d3fe89 test infra)
+    (r / ".gitattributes").write_text(".ddflow/events/*.jsonl merge=union\n")
+    ddflow_cli(r, "pins", "regenerate", "--approval", approve(r))
     git(r, "add", "-A")
     git(r, "commit", "-qm", "base")
     return r
@@ -91,7 +121,7 @@ def test_check_lists_a_stale_pin_and_regenerate_fixes_only_it(repo: Path):
     assert stale.returncode == 1
     assert "demo" in stale.stdout and "other" not in stale.stdout
     assert (repo / "pin.txt").read_text() == "1 knobs\n- a\n"  # --check wrote nothing
-    done = ddflow_cli(repo, "pins", "regenerate")
+    done = ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
     assert done.returncode == 0, done.stderr
     assert (repo / "pin.txt").read_text() == "2 knobs\n- a\n- b\n"
     assert (repo / "other.txt").read_text() == "keep\n"  # it was current: untouched
@@ -101,7 +131,7 @@ def test_check_lists_a_stale_pin_and_regenerate_fixes_only_it(repo: Path):
 def test_only_names_one_pin_and_refuses_an_unknown_one(repo: Path):
     (repo / "knobs.txt").write_text("a\nb\n")
     assert ddflow_cli(repo, "pins", "regenerate", "--check", "--only", "other").returncode == 0
-    bad = ddflow_cli(repo, "pins", "regenerate", "--only", "nosuch")
+    bad = ddflow_cli(repo, "pins", "regenerate", "--only", "nosuch", "--approval", approve(repo, only="nosuch"))
     assert bad.returncode != 0 and "nosuch" in bad.stderr + bad.stdout
     assert (repo / "pin.txt").read_text() == "1 knobs\n- a\n"
 
@@ -117,6 +147,17 @@ def test_approval_request_files_a_request_instead_of_crashing(repo: Path):
     assert "requested" in done.stdout + done.stderr
 
 
+def test_agent_regenerate_without_approval_is_refused(repo: Path):
+    # B90b8d3fe89: a bare agent `pins regenerate` re-recorded pins ungated because the gate
+    # only applied when an approval WAS passed. Omitting `--approval` must still refuse (exit
+    # 3) and route the agent to a request, leaving the pins untouched.
+    (repo / "knobs.txt").write_text("a\nb\n")
+    done = ddflow_cli(repo, "pins", "regenerate")
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "pins.regenerate" in done.stdout + done.stderr
+    assert (repo / "pin.txt").read_text() == "1 knobs\n- a\n"  # nothing re-recorded
+
+
 def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
     inst = ddflow_cli(repo, "pins", "regenerate", "--install")
     assert inst.returncode == 0, inst.stderr
@@ -126,7 +167,7 @@ def test_two_branches_that_each_add_a_knob_merge_into_green_pins(repo: Path):
     for branch, knob in (("one", "b"), ("two", "c")):
         git(repo, "checkout", "-q", "-b", branch, "main")
         (repo / "knobs.txt").write_text(f"a\n{knob}\n")
-        ddflow_cli(repo, "pins", "regenerate")
+        ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
         git(repo, "commit", "-qam", f"add {knob}")
     git(repo, "checkout", "-q", "main")
     git(repo, "merge", "-q", "--no-edit", "one")
@@ -208,7 +249,7 @@ def edit_branch(repo: Path, name: str, *, prose: dict[str, str], knob: str = "")
     (repo / "doc.md").write_text(text)
     if knob:
         (repo / "knobs.txt").write_text(f"a\n{knob}\n")
-    ddflow_cli(repo, "pins", "regenerate")
+    ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
     git(repo, "commit", "-qam", name)
 
 
