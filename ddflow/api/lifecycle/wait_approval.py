@@ -263,16 +263,34 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
     return result(v, time.monotonic() - started, [])  # the deadline passed still pending
 
 
+def _round_recorded_after(st, it, started: str) -> bool:
+    """Did the item record a review round at or after the job started?
+
+    "Process over" is what a job reports, but it is not "round recorded": a detached
+    review that was killed or crashed before recording is over too. The item's gates each
+    keep the ``at`` of their LAST recorded round, so a round is recorded when the newest
+    such ``at`` is at or after the job's ``started_at`` (the detached review records the
+    round AFTER it is launched). ``it`` is the item the job reviews (``j.item``).
+    """
+    started_s = _epoch(started, default=0.0) if started else 0.0
+    latest = max(
+        (_epoch(getattr(g, "at", ""), default=0.0) for g in it.gates.values()), default=0.0
+    )
+    return latest > 0 and (started_s <= 0 or latest >= started_s)
+
+
 def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
     """`wait --job`'s verdict: the one thing the detached review's OWN progress can end.
 
     A detached review (`ddflow review --detach`) relaunches the review as a recorded job
     and returns that job's id as the handle. Running means waiting can help (the review
-    is still going): blocked. Over and COMPLETE (``ended`` / ``exited``) means the review
-    ran to conclusion and recorded its round before its process returned: ready. Killed
-    with no exit (``gone``) is the one over state whose round is NOT recorded: hopeless.
-    Unknown, or running on another host (which this wait cannot poll), is what no further
-    waiting ends: refused up front. ``now`` is unused; jobs hold no lease to age.
+    is still going): blocked. Over ends the wait READY only if the review actually
+    recorded its round at or after the job started (`_round_recorded_after`): a killed or
+    crashed review is over too, and then the wait is refused (hopeless) with the move that
+    WOULD fix it (re-run the review) rather than a READY that promises a round that is
+    not there. Unknown, the item the job names having vanished, or running on another
+    host (which this wait cannot poll), is what no further waiting ends: refused up front.
+    ``now`` is unused; jobs hold no lease to age.
     """
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
     j = st.jobs.get(job_id)
@@ -293,23 +311,27 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
             "why": f"{job_id} runs on {j.host}, which cannot be checked from here; "
             "wait there instead",
         }
-    if s.state == "gone" or (s.state == "exited" and (s.exit_code or 0) >= 128):
-        # Killed, whether with no exit line at all ("gone") or with a signal exit code in
-        # its log (128+N, which the launch wrapper still writes when the command is sent a
-        # signal): a detached review records its round BEFORE it returns, so a process that
-        # was killed never recorded one, and no further waiting records it either --
-        # someone has to re-run the review.
+    if j.item and (it := st.items.get(j.item)) is not None:
+        if _round_recorded_after(st, it, j.started_at):
+            return {
+                **out,
+                "status": "ready",
+                "ready": [job_id],
+                "why": f"{job_id} is over ({s.detail}) and recorded its round",
+            }
         return {
             **out,
             "status": "hopeless",
-            "why": f"{job_id} was killed before its round was recorded ({s.detail}); "
+            "why": f"{job_id} is over ({s.detail}) but recorded no review round; "
             "re-run the review",
         }
+    # No item to check (a detached review of a commit/branch, or its item is gone): the
+    # job being over is the best signal the handle itself can give.
     return {
         **out,
         "status": "ready",
         "ready": [job_id],
-        "why": f"{job_id} is finished ({s.detail})",
+        "why": f"{job_id} is over ({s.detail})",
     }
 
 
