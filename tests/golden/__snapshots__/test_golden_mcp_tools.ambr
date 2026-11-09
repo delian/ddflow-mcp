@@ -36,7 +36,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe.",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -113,7 +113,7 @@
          },
          "evidence": {
           "type": "string",
-          "description": "The probe command or test node id that showed it false."
+          "description": "What showed the bug: evidence kept with the record (agent-supplied text, stored, never run)."
          },
          "reopen": {
           "type": "boolean",
@@ -182,7 +182,9 @@
            "invalid",
            "found",
            "file_tasks",
-           "dedupe"
+           "dedupe",
+           "reopen",
+           "tag"
           ],
           "description": "What to do; see the tool description for each action's arguments."
          }
@@ -345,11 +347,11 @@
          },
          "reason": {
           "type": "string",
-          "description": "Why this step does not apply HERE. 'n/a' is not a reason: the next person reads this to decide whether you were right."
+          "description": "Why the gate did not pass. Required for failed/unavailable/partial/skipped; ..."
          },
          "evidence": {
           "type": "string",
-          "description": "What you ran and what it said. Required by some gates."
+          "description": "What you ran and what it said: the output you observed (a summary)."
          },
          "model": {
           "type": "string",
@@ -564,6 +566,10 @@
           "type": "string",
           "description": "Comma-separated subset of the configured kinds to look in: bug,task,phase,lesson,decision,research,memory. ..."
          },
+         "floor": {
+          "type": "number",
+          "description": "Minimum score to report (default: [dedupe].show_floor)."
+         },
          "item": {
           "type": "string",
           "description": "Only the pairs this record is in."
@@ -571,10 +577,6 @@
          "open_only": {
           "type": "boolean",
           "description": "Only pairs where both records are still live (the dedupe_sweep pass)."
-         },
-         "floor": {
-          "type": "number",
-          "description": "Minimum score to report (default: [dedupe].show_floor)."
          },
          "subject": {
           "type": "string",
@@ -1323,7 +1325,7 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks or swarm."
+          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm."
          },
          "lane": {
           "type": "string",

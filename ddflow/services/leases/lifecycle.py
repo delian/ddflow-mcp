@@ -189,15 +189,13 @@ def plan_retarget(
         # refusal-vague). Only the NEW globs contend, and the refusal names which one.
         mine_glob = set(lz.globs) if lz else set()
         want = [g for g in accepted if g not in mine_glob]
-        ahead = WG.queue_ahead(state, cfg, item_id, lz.holder, want, now)
-        if ahead is not None:
-            pairs = WG.conflicts(want, ahead.globs, WG.shared_globs(cfg))
-            # `queue_ahead` returned on `conflicts(want, ahead.globs, shared)` being non-empty,
-            # so `pairs` is non-empty here; fall back to the caller's own glob, never the
-            # waiter's (that would be a false refusal for a glob the caller did not ask).
-            named = pairs[0][0] if pairs else want[0]
-            reason = f"{named} is queued behind {ahead.holder} ({ahead.item}), who asked for it first."
-            return (lz, f"{item_id}: {reason} The globs were not changed.", None)
+        aheads = WG.queued_ahead(state, cfg, item_id, lz.holder, want, now)
+        if aheads:
+            return (
+                lz,
+                f"{item_id}: {WG.queued_names(want, aheads, cfg)}. The globs were not changed.",
+                None,
+            )
     if resources:
         try:
             short = resource_shortfall(
@@ -377,6 +375,59 @@ def foreign_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "
     if lease is None or not foreign(lease, log.clone_id(create=False)):
         return None
     return lease if lease.live(now, cfg.lease.grace_s) else None
+
+
+def peer_live_lease(log: EventLog, cfg: Config, item_id: str, caller: str = "") -> Lease | None:
+    """The LIVE lease on ``item_id`` held by a DIFFERENT agent than ``caller`` on THIS
+    clone (B59a07c283d), else None.
+
+    The clone-scoped guard (`foreign_live_lease`, B90b43dd2d8) leaves a peer agent of the
+    SAME clone unprotected: one lane's `release` dropped a peer lane's live lease, after
+    which the peer's writes were refused. A lease is still evidence of intent, not a lock,
+    so a peer lease is released only as a foreign one is -- ``--force`` and a recorded
+    ``reason``. The caller's OWN lease (``caller == lease.holder``) is never a peer's. A
+    lease with NO recorded clone is not a same-clone peer either: like `foreign_live_lease`,
+    it is left unchanged (operator decision D-mu-bugfix-answers)."""
+    it = _fold(log).items.get(item_id)
+    lease = it.lease if it else None
+    if lease is None or not lease.live(_leases.time.time(), cfg.lease.grace_s):
+        return None
+    if not lease.clone or foreign(lease, log.clone_id(create=False)):
+        return None  # no recorded clone: unchanged; foreign: foreign_guard's
+    if lease.holder == caller:
+        return None
+    return lease
+
+
+def peer_guard(
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    *,
+    force: bool,
+    reason: str,
+    what: str,
+    caller: str = "",
+) -> tuple[str, str]:
+    """(refusal, forced-by) for an act that would overwrite a SAME-clone PEER agent's
+    live lease; mirrors `foreign_guard` for the agent (not clone) scope added by
+    B59a07c283d."""
+    held = peer_live_lease(log, cfg, item_id, caller=caller)
+    if held is None:
+        return "", ""
+    base = (
+        f"{item_id} is leased by {held.holder} and the lease is live; "
+        f"{what} would overwrite their work. "
+    )
+    if not force:
+        return (
+            base + "Ask them, wait for the lease to lapse, or override on the record: "
+            "pass --force --reason '<why>'.",
+            "",
+        )
+    if not reason.strip():
+        return base + "--force on another agent's lease needs --reason '<why>' (recorded).", ""
+    return "", f"forced over {held.holder}: {reason.strip()}"
 
 
 def foreign_guard(

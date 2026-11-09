@@ -259,6 +259,26 @@ def test_each_runs_output_is_bounded_before_the_tail_is_cut(proj):
     assert run["output"] == "-marker\n"  # the joined tail, 'run' cut by the byte budget
 
 
+def test_mcp_evidence_is_stored_verbatim_never_executed(proj):
+    # `ddflow_bug_found`'s `evidence` is agent-supplied TEXT describing what showed the
+    # bug; it must be STORED on the record, never EXECUTED (over MCP an agent supplies it,
+    # and a lane held to its globs could otherwise run a shell through it). A value that
+    # would leave a marker when run must leave none, sit verbatim on the record, and leave
+    # `reproduced` empty (no repro run happened).
+    from test_add_dedupe_mcp import call
+
+    marker = proj / "evidence_ran"
+    evidence = python(f"open({str(marker)!r}, 'w').write('x')")
+    body, result = call(
+        proj, "ddflow_bug_found", summary="mcp evidence must not run", evidence=evidence
+    )
+    assert not result.get("isError"), body
+    bug = state(proj).bugs[body["id"]]
+    assert not marker.exists()  # the server-side evidence was never executed
+    assert "evidence_ran" in bug.found_evidence  # ... stored on the record instead
+    assert bug.reproduced == ""  # ... with no repro run behind it
+
+
 def test_the_capture_is_a_scratch_file_not_an_in_process_buffer(proj, monkeypatch):
     # Pins the mechanism: the budget must bound the run ITSELF, not cut after it. The
     # line runs in a subshell whose whole output redirects into a tail file OUTSIDE the

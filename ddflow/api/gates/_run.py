@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -188,13 +189,31 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
     )
 
 
+def _found_text(result: str, ev: dict[str, Any]) -> str:
+    """What a finished-but-superseded run found, so its outcome is not lost (B267a6b0b5e)."""
+    found = [result.upper()]
+    summary = ev.get("summary") or []
+    if summary and not isinstance(summary, str):
+        found.append("; ".join(str(s) for s in summary))
+    return " ".join(found).strip()
+
+
 def _superseded_run(
-    repo: Path, agent: str, item: str, gate: str, started_on: str, started_at: str, cwd: Path
+    repo: Path,
+    agent: str,
+    item: str,
+    gate: str,
+    started_on: str,
+    started_at: str,
+    cwd: Path,
+    result: str = "",
+    ev: dict[str, Any] | None = None,
 ) -> str:
     """Why a finished run must not be recorded ("" when it may): it began on a commit that
     HEAD, or the gate's recorded outcome, has since moved past (B27a236a534). Recording it
     would put a verdict about old source over one about the new -- a stale FAILED over a
-    newer PASSED, which `complete` then refuses."""
+    newer PASSED, which `complete` then refuses. The refusal still says what the run found
+    (its verdict and summary lines), so the outcome is not lost (B267a6b0b5e)."""
     _log, _cfg, st = _load(repo, agent)
     it = st.items.get(item)
     rec = it.gates.get(gate) if it else None
@@ -203,6 +222,7 @@ def _superseded_run(
     # repository, so ancestry is asked there (git cannot answer from a missing directory, and
     # "could not tell" keeps the record: Bcf22c7f7c8).
     asked = cwd if cwd.is_dir() else repo
+    found = f"; it found {_found_text(result, ev or {})}" if result else ""
     if (
         recorded
         and clock.epoch(rec.at) > clock.epoch(started_at)
@@ -213,7 +233,7 @@ def _superseded_run(
         return (
             f"{gate} ran on {G.head_of(started_on)}, but an outcome for "
             f"{G.head_of(recorded)} was recorded while it ran: its outcome is superseded "
-            f"and was not recorded. Re-run `ddflow gate run {item} {gate}` on the current commit."
+            f"and was not recorded{found}. Re-run `ddflow gate run {item} {gate}` on the current commit."
         )
     for newer, what in (
         (G.tree_identity(cwd), "the tree is now at"),
@@ -222,7 +242,7 @@ def _superseded_run(
         if newer and G.superseded_by(started_on, newer, asked, paths=(it.globs if it else None)):
             return (
                 f"{gate} ran on {G.head_of(started_on)}, but {what} {G.head_of(newer)}: "
-                f"its outcome is superseded and was not recorded. Re-run `ddflow gate run "
+                f"its outcome is superseded and was not recorded{found}. Re-run `ddflow gate run "
                 f"{item} {gate}` on the current commit."
             )
     return ""
@@ -245,6 +265,39 @@ def _mark_or_refuse_twin(repo, item, gate, started_on):
         outcome="",
         id=item,
     )
+
+
+def _merged_tree_run(repo: Path, it, cwd: Path | None):
+    """A context that yields a scratch checkout of the commit ``it`` merged as, for a command
+    gate whose worktree is gone and whose base stands nowhere on the merged tree (B80a4dafd02).
+
+    `merge` removes the worktree, and once the base has moved past the merge no checkout stands
+    at the merged tree, so `gate run` had nothing to run and recorded UNAVAILABLE. The merged
+    work is still a committed tree at `merged_sha`, so the gate runs there. Yields None when the
+    caller has a tree already, or the item is unmerged/a phase/its merged commit is not here --
+    then the caller's ordinary no-tree refusal answers instead."""
+    if (
+        cwd is not None
+        or not it.merged_sha
+        or it.kind == "phase"
+        or it.worktree  # a KEPT tree is a live checkout, judged by the kept-tree rules, not here
+        or not W.rev(repo, it.merged_sha)
+    ):
+        return nullcontext(None)
+    return W.scratch_tree(repo, it.merged_sha, detach=True, prefix="ddflow-merged.", quiet=True)
+
+
+def _resolve_tree(repo, it, item, gate, held, cwd, made, force):
+    """(where a command gate runs, else None; the no-tree ``(reason, kept)``, else None).
+
+    ``made`` is the scratch checkout `_merged_tree_run` made of the merged commit, or None;
+    without one and without a live tree the gate has nowhere to run, and the no-tree reason
+    is returned for `run` to record. A helper so `run` never posts grade-D complexity."""
+    if cwd is not None:
+        return cwd, None
+    if made is not None and made.path is not None:
+        return made.path, None
+    return None, _no_tree_reason(repo, it, item, gate, held, force)
 
 
 def run(
@@ -315,50 +368,60 @@ def run(
     forced = bool(forced_by)
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
-    if cwd is None:
-        reason, kept = _no_tree_reason(repo, it, item, gate, held, force)
-        if not kept:
-            R.record_measured(
-                log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
+    with _merged_tree_run(repo, it, cwd) as made:
+        cwd, no_tree = _resolve_tree(repo, it, item, gate, held, cwd, made, force)
+        if cwd is None:
+            reason, kept = no_tree
+            if not kept:
+                R.record_measured(
+                    log,
+                    cfg,
+                    repo,
+                    it,
+                    gate,
+                    "unavailable",
+                    reason=reason,
+                    gates=gates,
+                    forced=forced,
+                )
+            return O.nothing(
+                "gate.run",
+                reason,
+                gate=gate,
+                outcome=kept or "unavailable",
+                evidence={"reason": reason},
+                id=item,
             )
-        return O.nothing(
-            "gate.run",
-            reason,
-            gate=gate,
-            outcome=kept or "unavailable",
-            evidence={"reason": reason},
-            id=item,
+        repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
+        if repeated is not None:
+            return repeated
+        scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
+        if covered is not None:
+            return covered
+        started_on = G.tree_identity(cwd)
+        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
+        if twin_refusal is not None:
+            return twin_refusal
+        started_at = clock.now_iso()
+        log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
+        done = _guarded(
+            log,
+            cfg,
+            repo,
+            agent,
+            it,
+            item,
+            gate,
+            gdef=gdef,
+            gates=gates,
+            cwd=cwd,
+            scope=scope,
+            forced=forced,
+            rerun_failed=rerun_failed,
+            started_on=started_on,
+            started_at=started_at,
+            marker=marker,
         )
-    repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
-    if repeated is not None:
-        return repeated
-    scope, gdef, covered = _scoped(log, cfg, repo, st, it, gdef, cwd, gates, forced)
-    if covered is not None:
-        return covered
-    started_on = G.tree_identity(cwd)
-    marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
-    if twin_refusal is not None:
-        return twin_refusal
-    started_at = clock.now_iso()
-    log.append("gate.started", item, {"gate": gate, **({"forced": True} if forced else {})})
-    done = _guarded(
-        log,
-        cfg,
-        repo,
-        agent,
-        it,
-        item,
-        gate,
-        gdef=gdef,
-        gates=gates,
-        cwd=cwd,
-        scope=scope,
-        forced=forced,
-        rerun_failed=rerun_failed,
-        started_on=started_on,
-        started_at=started_at,
-        marker=marker,
-    )
     if isinstance(done, O.Outcome):
         return done
     result, ev, reason = done
@@ -447,7 +510,7 @@ def _execute(  # noqa: PLR0913 -- everything `run` resolved, handed on whole
     if scope is not None:
         ev.update(scope.evidence())
     ev["started_tree_sha"] = started_on
-    stale = _superseded_run(repo, agent, item, gate, started_on, started_at, cwd)
+    stale = _superseded_run(repo, agent, item, gate, started_on, started_at, cwd, result, ev)
     if stale:
         return O.refused("gate.run", stale, id=item, gate=gate, outcome="", evidence=ev)
 

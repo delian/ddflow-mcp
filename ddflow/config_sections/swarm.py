@@ -124,6 +124,11 @@ class SwarmConfig:
         doc="Trust tier a lane needs for an item that names none. A lane's tier is whatever the operator grants it; a lane below the item's tier is refused, whatever its score.",
         check=_count,
     )
+    conformance_min_level: int = knob(
+        0,
+        doc="Measured conformance level a lane needs before the scheduler offers it a real item (a lane at level 0 has never passed a conformance run, so its tier is only its own word). Zero does not enforce conformance.",
+        check=_count,
+    )
     explore_share: float = knob(
         0.10,
         doc="Share of picks spent on under-measured (family, model) pairs (D-swarm-answers Q10). Zero turns exploration off.",
@@ -150,13 +155,13 @@ class SwarmConfig:
         check=_count,
     )
     conformance_idle_s: float = knob(
-        5.0,
-        doc="Seconds of silence after which a conformance run stops collecting a lane's events.",
+        120.0,
+        doc="Seconds of silence after which a conformance run stops collecting a lane's events. Long enough for a real lane's first stream line (kilo takes ~20s to load its MCP server and plugins before the first event; a 5s idle ended collection before any event: B72bcd17b4e).",
         check=_positive,
     )
     conformance_lease_wait_s: float = knob(
-        10.0,
-        doc="Seconds a lane is given to stop after its lease is revoked in a conformance run; a lane still working after that fails the lease level.",
+        90.0,
+        doc="Seconds a lane is given to stop after its lease is revoked in a conformance run; a lane still working after that fails the lease level. Long enough for a real revocation to reach the lane (measured 8.5-14.1s: a 10s wait failed 3 of 5 runs, B72bcd17b4e).",
         check=_positive,
     )
     conformance_tools: list[str] = knob(

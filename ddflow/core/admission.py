@@ -66,14 +66,66 @@ def conflicts(
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
 
 
+def queued_globs(mine: list[str], theirs: list[str], cfg: Any) -> list[str]:
+    """The ``mine`` globs that ``theirs`` overlaps (shared globs excluded): one name per
+    queued-behind clause, so the refusal names it instead of the whole ``theirs`` list."""
+    return list(dict.fromkeys(m for m, _t in conflicts(mine, theirs, shared_globs(cfg))))
+
+
 @dataclass(frozen=True)
 class Clash:
-    """The first other item ``globs`` would overlap, with the pair that does."""
+    """One overlapping pair with another item ``globs`` would collide on, and whose."""
 
     item: str
     pair: tuple[str, str]
     #: The overlapped item's live lease; ``None`` when it is merely offered or reserved.
     lease: Lease | None = None
+
+
+def glob_clashes(
+    state: State,
+    cfg: Any,
+    it: Item,
+    globs: list[str],
+    holder: str = "",
+    *,
+    against: Literal["live", "offered"] = "live",
+    live: dict[str, Lease] | None = None,
+    others: Iterable[Item] = (),
+) -> list[Clash]:
+    """Every overlapping pair another item's globs have with ``globs`` (``glob_conflict``
+    stops at the first). One other item that overlaps on more than one glob yields one
+    `Clash` per pair, so a refusal built from the list names every held glob instead of
+    the first (B-glob-refusal-names-one-conflict).
+
+    ``against="live"``: the live leases ``live`` (item id -> lease), skipping ``it``'s own
+    and any held by ``holder`` (one author cannot collide with itself).
+    ``against="offered"``: the items ``others`` (already offered in one plan, or the item a
+    waiter is queued for), skipping ``it`` itself should it be among them.
+
+    Items on different release lines are different branches: `src/x.py` on 2.x and on 3.x
+    cannot collide, and refusing it would serialise every port behind its fix.
+    ``shared_globs`` overlap nothing.
+    """
+    mine = line_key(state, it, cfg)
+    shared = shared_globs(cfg)
+    out: list[Clash] = []
+    if against == "live":
+        for other_id, lease in (live or {}).items():
+            if other_id == it.id or lease.holder == holder:
+                continue
+            other = state.items.get(other_id)
+            if other is not None and line_key(state, other, cfg) != mine:
+                continue
+            pairs = conflicts(globs, lease.globs, shared)
+            out.extend(Clash(other_id, pair, lease) for pair in pairs)
+        return out
+    for other in others:
+        if other.id == it.id or line_key(state, other, cfg) != mine:
+            continue
+        pairs = conflicts(globs, list(other.globs), shared)
+        out.extend(Clash(other.id, pair) for pair in pairs)
+    return out
 
 
 def glob_conflict(
@@ -89,32 +141,7 @@ def glob_conflict(
 ) -> Clash | None:
     """The first other item whose globs overlap ``globs``, or ``None`` when none does.
 
-    ``against="live"``: the live leases ``live`` (item id -> lease), skipping ``it``'s own
-    and any held by ``holder`` (one author cannot collide with itself).
-    ``against="offered"``: the items ``others`` (already offered in one plan, or the item a
-    waiter is queued for), skipping ``it`` itself should it be among them.
-
-    Items on different release lines are different branches: `src/x.py` on 2.x and on 3.x
-    cannot collide, and refusing it would serialise every port behind its fix.
-    ``shared_globs`` overlap nothing.
+    See `glob_clashes` for the rules; this is its first result.
     """
-    mine = line_key(state, it, cfg)
-    shared = shared_globs(cfg)
-    if against == "live":
-        for other_id, lease in (live or {}).items():
-            if other_id == it.id or lease.holder == holder:
-                continue
-            other = state.items.get(other_id)
-            if other is not None and line_key(state, other, cfg) != mine:
-                continue
-            pairs = conflicts(globs, lease.globs, shared)
-            if pairs:
-                return Clash(other_id, pairs[0], lease)
-        return None
-    for other in others:
-        if other.id == it.id or line_key(state, other, cfg) != mine:
-            continue
-        pairs = conflicts(globs, list(other.globs), shared)
-        if pairs:
-            return Clash(other.id, pairs[0])
-    return None
+    clashes = glob_clashes(state, cfg, it, globs, holder, against=against, live=live, others=others)
+    return clashes[0] if clashes else None

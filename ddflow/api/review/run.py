@@ -475,7 +475,7 @@ def _failing_reviewer(results, it, gate, converging, cfg, identifying, author_mo
     return identifying
 
 
-def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
+def _review_gate(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -704,7 +704,8 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         cfg,
         extra_evidence,
         say,
-        author_model,
+        author_model=author_model,
+        kind=kind,
     )
     named = _failing_reviewer(
         results, it, gate, _converges(kind, fix), cfg, identifying, author_model
@@ -726,6 +727,13 @@ def _review_gate(  # noqa: PLR0913, C901 -- what to diff is one of commit | bran
         "findings": _finding_rows(results),
         "text": "\n".join(transcript),
     }
+    return _answer_outcome(identifying, data)
+
+
+def _answer_outcome(identifying, data: dict[str, Any]):
+    """The MCP/CLI answer for a gate's identifying run: OK on REVIEWED, refused with the
+    failing reviewer's status otherwise. Extracted from `_review_gate` so its branch count
+    stays under the complexity ratchet."""
     exit_code = {
         RV.REVIEWED: O.OK,
         RV.PARTIAL: O.REFUSED,

@@ -988,7 +988,8 @@
   "shape": "object",
   "payload": [
    "applicable",
-   "project_wide"
+   "project_wide",
+   "path_matching"
   ],
   "output_schema": {
    "type": "object",
@@ -998,6 +999,7 @@
     },
     "applicable": {},
     "project_wide": {},
+    "path_matching": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

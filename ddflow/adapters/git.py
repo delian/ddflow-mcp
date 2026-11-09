@@ -332,8 +332,16 @@ def real_path(path: Path | str) -> str:
 def branch_tip_aheads(repo: Path | str, base: str) -> dict[str, int]:
     """Commits ahead of ``base`` per local branch-tip object id, one `for-each-ref`.
 
-    Empty when git could not answer, or has no ``ahead-behind`` atom (before 2.41)."""
-    r = run(repo, "for-each-ref", f"--format=%(objectname) %(ahead-behind:{base})", "refs/heads")
+    The base is resolved to a commit first: git ends the ``%(ahead-behind:...)`` atom at
+    the first `)`, so a base branch named e.g. ``release)1`` would make the one batched
+    call fail and the answer silently fall back to a rev-list per HEAD. Empty when git
+    could not answer, or has no ``ahead-behind`` atom (before 2.41)."""
+    target = base
+    if base:
+        resolved = run(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
+        if resolved.ok:
+            target = resolved.out
+    r = run(repo, "for-each-ref", f"--format=%(objectname) %(ahead-behind:{target})", "refs/heads")
     out: dict[str, int] = {}
     if r.ok:
         for line in r.out.splitlines():

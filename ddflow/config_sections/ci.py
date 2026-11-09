@@ -27,6 +27,10 @@ class CiConfig:
         "",
         doc="The branch merged into the task's branch before the checks run, so an interaction with what the base has become is tested (a parallel merge's effect). Empty (default): the repository's default branch.",
     )
+    ruff_autofix: bool = knob(
+        True,
+        doc="Whether the `ci` gate auto-corrects ruff lint/format drift it finds on an item's branch before it can merge. When a `ddflow ci run` for an item fails on the PRE-COMMIT ruff hooks (`ruff check`, `ruff format --check`) and this is on, the run also runs `ruff check --fix` then `ruff format` over the changed Python files in the item's own worktree and records the corrections (``reformatted``/``fixed`` files) in the gate evidence; the gate stays failed until the agent commits them and re-runs, so a file with drift cannot reach the merge (the recurring `git push` pre-commit failure, Bci-ruff-format-check-ci-lint-*). Ruff is run as `uv run ruff` when the project has a `uv.lock` (the pinned venv the `repo: local` hooks use), else as `ruff` when it is on PATH; with neither the correction is recorded unavailable. false: only report the failure.",
+    )
     pins_precheck: bool = knob(
         True,
         doc="Before the default CI command runs, check the project's pinned outputs (`ddflow pins regenerate --check`, the recipes in `[pins].recipes_file`) in the merge result. A pin that was current on the branch can be stale once the base moved (README tables, snapshots); the run then ends at once as failed, naming the stale pins and the fix (`ddflow pins regenerate`), instead of running the whole suite to a failure that does not say so. A pin that cannot be checked is skipped, never a failure. false: go straight to the command. A custom `--command` is never prechecked.",

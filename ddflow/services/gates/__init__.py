@@ -38,6 +38,7 @@ from __future__ import annotations
 from .baseline import (  # noqa: F401
     auto_decision,
     cache_load,
+    cache_snapshot,
     cache_signatures,
     cache_store,
     only_tests_failed,
@@ -129,6 +130,7 @@ from .outcomes import (  # noqa: F401
     StaleNote,
     is_triageable,
     local_command_notes,
+    lost_branch,
     on_refutation,
     refuted_line,
     refuted_passes,

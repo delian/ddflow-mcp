@@ -301,15 +301,17 @@ def blocking_findings(
     """The findings of a review round that keep the gate open (the convergence floor).
 
     The FIRST full round blocks on every finding: the author has seen none of them yet, so a
-    MEDIUM or LOW one is still new information that must be looked at. A LATER FULL re-review
-    (``converged`` True, set by the caller only for a full re-review, bug Bf797745b5a) blocks
+    MEDIUM or LOW one is still new information that must be looked at. A LATER full re-review
+    (``converged`` True, set by the caller for a full re-review, bug Bf797745b5a) blocks
     only on findings at or above ``floor`` (`[review].converge_floor`): once the diff's
     material findings are fixed, a reviewer that keeps raising a new MEDIUM or LOW nit --
     often against a file unchanged since the last review, or a stale head -- does not
     re-open the gate. The below-floor findings are still recorded on the gate and triageable;
-    they just do not hold the pass on their own. A delta or fix round does not cite this
-    (it shows only NEW code, where any finding is a real defect), so it keeps blocking on
-    every finding.
+    they just do not hold the pass on their own. A delta round converges the same way
+    (bug B-review-delta-rounds-do-not-converge): its new below-floor finding is recorded but
+    not blocking, so a delta that keeps raising a new nit does not keep the gate failed
+    forever. A fix round shows only the fix's new code, where any finding is a real defect,
+    so it keeps blocking on every finding.
 
     ``known`` is the digests of the previous review's findings still standing (not refuted):
     a finding whose digest is in ``known`` is NOT a new nit, so the floor does not filter it

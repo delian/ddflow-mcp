@@ -28,8 +28,9 @@ def _setup(repo: Path, tmp_path: Path) -> None:
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat | grep '^+')\n"
-        'case "$in" in *FINDME-B*) printf \'FINDING MEDIUM y.py:1\\nsecond problem\\n\\n'
+        'case "$in" in *FINDME-H*) printf \'FINDING HIGH z.py:1\\nnew high problem\\n\\n'
         "STATUS: FINDINGS 1\\n';; "
+        "*FINDME-B*) printf 'FINDING MEDIUM y.py:1\\nsecond problem\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*FINDME*) printf 'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac\n"
     )
@@ -83,19 +84,19 @@ def test_failed_gate_with_confirmed_findings_and_no_delta_round_is_refused(repo,
 def test_a_delta_round_that_did_not_raise_the_finding_again_clears_it(repo, tmp_path):
     _setup(repo, tmp_path)
     _failed_and_confirmed(repo)
-    # fix #1, and the next change draws a NEW finding: the gate stays failed, #1 is answered
+    # fix #1, and the next change draws a NEW HIGH finding: the gate stays failed, #1 is answered
     _commit(repo, "x.py", "x = 1\n")
-    _commit(repo, "y.py", "y = 1  # FINDME-B\n")
+    _commit(repo, "z.py", "z = 1  # FINDME-H\n")
     out = api.review(repo, gate="critic", item="T1", branch="feat")
     assert out.data["outcome"] == "failed", out.data
     ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
     assert len(ev["delta_raised"]) == 1 and ev["findings"] == 2, ev
-    t = api.triage(repo, "T1", gate="critic", finding=2, verdict="confirmed", probe="y.py is wrong")
+    t = api.triage(repo, "T1", gate="critic", finding=2, verdict="confirmed", probe="z.py is wrong")
     assert t.exit == 0, t.reason
     _, text = _complete(repo)
     assert BLOCKER in text and "confirmed finding(s) " in text, text
     # the second finding gets its own delta round that does not raise it
-    _commit(repo, "y.py", "y = 1\n")
+    _commit(repo, "z.py", "z = 1\n")
     api.review(repo, gate="critic", item="T1", branch="feat")
     _, text = _complete(repo)
     assert BLOCKER not in text, text

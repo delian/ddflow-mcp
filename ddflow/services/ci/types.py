@@ -56,6 +56,9 @@ class Result:
     scope: dict = field(default_factory=dict)
     #: seconds queued for the host-wide suite lock; None when the run took no lock (B1d51fb9da1)
     waited_s: float | None = None
+    #: seconds the check command itself ran (the processes that decided the verdict, summed
+    #: across its stages); None when the run never reached a command (B28537b615d)
+    elapsed_s: float | None = None
 
     @property
     def ok(self) -> bool:

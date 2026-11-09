@@ -67,6 +67,17 @@ def _gate(repo: Path, name: str):
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates.get(name)
 
 
+def _merged_sha(repo: Path) -> str:
+    return fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
+
+
+def _ran_at_merged_sha(repo: Path) -> None:
+    """The recorded evidence names the merged commit the command ran in -- the reverse of the
+    B430dae3a68 hole (measuring the moved/dirty/reverted primary instead)."""
+    proof = (_gate(repo, "unit_tests").evidence or {}).get("tree_sha", "")
+    assert _merged_sha(repo)[:12] in proof, _gate(repo, "unit_tests").evidence
+
+
 def test_a_gate_run_after_merge_runs_on_the_merged_tree(repo):
     """B430dae3a68: a merged item with NO unit_tests outcome is not stranded: the gate
     genuinely re-runs on the merged tree (the primary, at the base's HEAD) and records
@@ -103,29 +114,34 @@ def test_a_forced_gate_run_after_merge_takes_the_fresh_measurement(repo):
     assert _gate(repo, "unit_tests").outcome == "passed"
 
 
-def test_a_merged_partial_is_kept_not_overwritten_as_unavailable(repo):
-    """B-merged-partial-rerun-records-unavailable: a merged item whose base moved on has no
-    tree, so `gate run` re-measures nothing and `_no_tree_reason` recorded UNAVAILABLE over
-    the partial -- erasing the evidence. A partial must be kept like a pass. The hand-recorded
-    partial here is NOT a measured baseline-red, so the advice must not point at an `approve`
-    that would refuse it (rubber_duck round 1)."""
+def test_a_merged_partial_reruns_at_the_merged_sha_not_unavailable(repo):
+    """B80a4dafd02: a merged item whose base moved on used to have no tree, and `_no_tree_reason`
+    recorded UNAVAILABLE over a pre-merge partial (erasing its evidence). The partial is no
+    dead end and no evidence is left to erase: the gate re-runs at the committed `merged_sha`
+    and gets a fresh measurement."""
     _merged(repo, partial_before=True)
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "later work on main")
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code != 0, text
-    assert _gate(repo, "unit_tests").outcome == "partial", _gate(repo, "unit_tests")
-    assert "only a person's re-record" in text
-    assert "ddflow approve" not in text  # a non-baseline-red partial is not approvable
-    assert "--outcome passed" not in text  # nor a hand-record pass it did not earn
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
+    assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
-def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
-    """The `ddflow approve` advice is real only for a MEASURED baseline-red partial: that is
-    the one gate_accept accepts, so it alone may say "a person can settle it" with the
-    approve command (rubber_duck round 1)."""
+def test_a_merged_baseline_red_partial_reruns_at_the_merged_sha(repo):
+    """B80a4dafd02: a MEASURED baseline-red partial is not stranded either. After the merge
+    lands and main moves on, no checkout stands at the merged tree -- but the gate can still
+    re-run at `merged_sha`, so it measures freshly rather than pointing a person at `approve`
+    for a dead re-run (B-merged-partial-rerun-records-unavailable).
+
+    `command = "true"` genuinely runs and exits 0, so the fresh measurement this test records
+    is `passed` earned by the command really passing -- it is NOT the stale partial kept, and
+    NOT an `unavailable` recorded over the measured evidence. A command that actually failed
+    (a genuinely red test) would record its own failure the same way: the fix re-measures, it
+    never fabricates a green."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
@@ -156,79 +172,87 @@ def test_a_merged_baseline_red_partial_points_at_approve_not_rerun(repo):
             },
         },
     )
-    assert run_cli(repo, "merge", "T1")[0] == 0
+    # B0eca409559: a person-only baseline-red partial is REFUSED by a plain `merge` (it would
+    # land unsettled and `complete` would then refuse with no tree left to re-run); a person
+    # lands it deliberately with --force to reach the merged state this test exercises.
+    assert run_cli(repo, "merge", "T1", "--force")[0] == 0
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "later work on main")
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code != 0, text
-    rec = _gate(repo, "unit_tests")
-    assert rec.outcome == "partial", rec
-    # The no-tree keep must not rewrite the record: the measured baseline-red evidence
-    # `ddflow approve` reads has to SURVIVE, else the destruction this bug is about remains
-    # (rubber_duck round 1).
-    assert (rec.evidence or {}).get("baseline", {}).get("red") is True, rec.evidence
-    assert "a person can settle it" in text
-    assert "ddflow approve" in text
-    assert "ddflow gate run" not in text  # no rerun advice that would overwrite the evidence
-    assert "--outcome passed" not in text  # nor a hand-record pass it did not earn
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
+    assert "unavailable" not in text
+    assert "ddflow approve" not in text  # a re-run is possible: no person is asked to settle
+    _ran_at_merged_sha(repo)
 
 
 def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
-    """B430dae3a68 holefix: `merged_sha` being in the base's history says the merge was
-    landed, not that the primary is checked out AT it. A later commit moves the primary
-    past the merge; the gate must not measure that tree as T1's merged one and record
-    its pass for T1."""
+    """B430dae3a68 holefix + B80a4dafd02: `merged_sha` being in the base's history says the
+    merge was landed, not that the primary is checked out AT it. A later commit moves the
+    primary past the merge; the gate must not measure THAT tree as T1's merged one. The
+    merged work is still the committed `merged_sha`, so the gate runs THERE (a scratch
+    checkout) and records a real outcome instead of UNAVAILABLE (B80a4dafd02)."""
     _merged(repo)
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "later work on main")
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code != 0, text
-    assert _gate(repo, "unit_tests").outcome == "unavailable"
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
+    assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
 def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
     """A revert keeps `merged_sha` in main's history while the checked-out tree no longer
     holds T1's work. The ancestry check alone passes; only the tree comparison may admit
-    the primary as the merged tree (B430dae3a68 holefix)."""
+    the primary as the merged tree (B430dae3a68 holefix). The gate measures T1's work at
+    the committed `merged_sha` (B80a4dafd02), never the reverted primary."""
     _merged(repo)
     # `merge` leaves its own event-log commit on top: revert the MERGE commit beneath it
     merge_commit = _git(repo, "log", "--merges", "-1", "--format=%H").strip()
     _git(repo, "revert", "--no-edit", "-m", "1", merge_commit)
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code != 0, text
-    assert _gate(repo, "unit_tests").outcome == "unavailable"
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
+    assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
-def test_a_dirty_primary_is_not_the_merged_tree(repo):
-    """`HEAD^{tree}` sees only the committed tree: a merged item at the merged tree with
-    an uncommitted edit is not at the merged tree either. The reviewers pinned this tail
-    of the hole, and it is the same wrong-tree admission (B430dae3a68 holefix)."""
+def test_a_dirty_primary_is_not_claimed_over_the_merged_sha(repo):
+    """`HEAD^{tree}` sees only the committed tree: a dirty primary is not the merged tree
+    (B430dae3a68 holefix), so the gate must not measure the dirty checkout. It measures
+    T1's work at the committed `merged_sha` instead (B80a4dafd02)."""
     _merged(repo)
     (repo / "t.txt").write_text("dirty\n")
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code != 0, text
-    assert _gate(repo, "unit_tests").outcome == "unavailable"
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
+    assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
-def test_a_hidden_marked_primary_is_not_the_merged_tree(repo):
+def test_a_hidden_marked_primary_is_not_claimed_over_the_merged_sha(repo):
     """A tracked file the index marks `assume-unchanged` (or `skip-worktree`) and then
     modifies is INVISIBLE to `git status` and `git diff --quiet` while its content
     differs, so no checkout whose index carries a mark can be PROVEN to stand at the
-    merged tree and none is admitted (B430dae3a68 reviewer findings #1/#3)."""
+    merged tree and none is admitted (B430dae3a68 reviewer findings #1/#3). The gate
+    measures T1's work at the committed `merged_sha` instead (B80a4dafd02)."""
     _merged(repo)
     _git(repo, "update-index", "--assume-unchanged", "t.txt")
     (repo / "t.txt").write_text("hidden edit under the mark\n")
     _git(repo, "update-index", "--skip-worktree", "t.txt")
     code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests")
     text = out + err
-    assert code != 0, text
-    assert _gate(repo, "unit_tests").outcome == "unavailable"
+    assert code == 0, text
+    assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
+    assert "unavailable" not in text
+    _ran_at_merged_sha(repo)
 
 
 def test_a_merged_phase_off_the_merged_tree_is_implement_judged(repo):

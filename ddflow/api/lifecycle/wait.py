@@ -11,14 +11,13 @@ from typing import Any
 from ...core import globspec as GS
 from ...core import outcome as O
 from ...core.admission import conflicts, shared_globs
-from ...core.clock import WAIT_MAX_S
-from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
+from ...core.clock import WAIT_MAX_S  # noqa: F401  (re-exported by lifecycle/__init__)
+from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S  # noqa: F401  (re-exported by lifecycle/__init__)
 from ...core.model import ABANDONED, DONE, REVIEW
 from ...core.plain import plain
 from ...core.schedule import Blocked, plan
 from ...infra.log import EventLog
 from ...services import inbox as IB
-from ...services import leasekeep as LK
 from ...services import leases as L
 from ...services import waits as WT
 from ...services import watch as WK
@@ -33,12 +32,7 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-
-
-def _note_cap(say, capped: bool, cap: float = WAIT_MAX_S) -> None:
-    """Tell the caller its wait was shortened to the cap."""
-    if capped:
-        say(f"waiting at most {cap}s at a time; resume with the token to wait longer")
+from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
@@ -267,22 +261,6 @@ def _judge_any(
     }
 
 
-def _bounded(
-    timeout_s: float | None, max_s: float | None, cap: float = WAIT_MAX_S
-) -> tuple[float, bool]:
-    """(seconds to wait, whether the request was cut to ``cap``). ``max_s`` is the caller's
-    own bound and is honoured whole: it is the wait's length when no ``timeout_s`` is given
-    (B-wait-lease-max-s-ignored) and the wait never outlasts it; only a wait with no
-    explicit bound is cut to ``cap`` (`[lease].wait_cap_s`)."""
-    if timeout_s is None:
-        timeout = DEFAULT_WAIT_TIMEOUT_S if max_s is None else float(max_s)
-    else:
-        timeout = float(timeout_s)
-    if max_s is not None:
-        return min(timeout, float(max_s)), False  # negative: refused by the caller
-    return min(timeout, float(cap)), timeout > cap
-
-
 def _holders(st, cfg, ids: list[str]) -> list[dict[str, Any]]:
     """Who holds each live item the caller waits on, for how long, and when it last renewed:
     a wait that ends blocked must name the holder, not just say "still blocked"."""
@@ -392,10 +370,11 @@ def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: f
     holders = _holders(st, cfg, v["waiting_on"])
     data["holders"] = holders
     who = f" Held: {_holders_text(holders)}." if holders else ""
+    resume = data["wake"]["token"]
     return O.nothing(
         "wait",
         f"Still blocked after {round(waited)}s: {v['why']}.{who} Try later; `ddflow wait` "
-        f"again to keep waiting.",
+        f"again, or `ddflow wait --token {resume}` to resume waiting.",
         **data,
     )
 
@@ -443,8 +422,11 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     globs: str | list[str] | None = None,
     lease: str = "",
     token: str = "",
+    approval: str = "",
 ) -> O.Outcome:
     """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
+
+    ``approval`` (instead of ``item``/``lease``) waits until the operator answers the approval.
 
     ``lease`` (instead of ``item``) waits for a LEASE: an agent id until it holds nothing, or
     a path/glob until no other agent's live lease covers it. A bare wait returns the first
@@ -464,6 +446,10 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     the reservation, which is the crash-recovery problem leases already solve.
     """
 
+    # fmt: off
+    if approval:
+        return _wait_approval(repo, approval, item, phase, lease, globs, token, timeout_s, poll_s, max_s, agent, on_progress)
+    # fmt: on
     args = _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s)
     if isinstance(args, O.Outcome):
         return args
@@ -500,7 +486,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     ):
         return result(v, 0.0, [])
 
-    _note_cap(say, capped, cfg.lease.wait_cap_s)
+    _note_cap(say, capped, resume, cfg.lease.wait_cap_s)
     started = time.monotonic()
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`
@@ -522,28 +508,21 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     keep = carried > 0
     WT.drop_queue(repo, me, item)  # the wait record is on disk: it carries the place now
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
-    # None, so the first pass re-judges whatever landed between the load above and
-    # the registration -- a release in that gap must not cost a whole RECHECK_S.
-    seen = None  # an EventLog.mark() once taken
-    checked = started
     # The waiter's OWN leases stay alive while it waits (Bf81c097a89): hours of waiting once
     # lapsed the very claim the wait was for.
     keep_alive = _keep_alive(log, cfg, st)
+    inbox_ttl_s = cfg.lease.inbox_ttl_s
     try:
-        while True:
-            left = deadline - time.monotonic()
-            if left <= 0:
-                return result(v, time.monotonic() - started, [])
-            time.sleep(min(poll, left))
-            keep_alive()
-            if IB.has_pending(repo, me, ttl_s=cfg.lease.inbox_ttl_s):
-                return result(v, time.monotonic() - started, [])
-            # Fingerprint BEFORE the read, never after: see `EventLog.mark`.
-            ext = log.mark(clock=False)
-            if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
-                continue
-            seen, checked = ext, time.monotonic()
-            log, cfg, st = _load(repo, agent)
+        for cfg, st in _poll(
+            log,
+            deadline,
+            poll,
+            keep_alive,
+            repo,
+            agent,
+            time,
+            wake_check=lambda: IB.has_pending(repo, me, ttl_s=inbox_ttl_s),
+        ):
             was = v
             v = _judge(st, cfg, me, item, phase, kind, want, repo, lease)
             if v["status"] != "blocked":
@@ -555,26 +534,10 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
             if v["why"] != was["why"]:
                 say(f"still waiting: {v['why']}")
                 WT.update(w, waiting_on=v["waiting_on"], reason=v["why"])
+        # The deadline passed, or the inbox woke us: both end the wait the same way.
+        return result(v, time.monotonic() - started, [])
     finally:
         _end_wait(WT, w, keep, cfg)
-
-
-def _keep_alive(log, cfg, st):
-    """A tick renewing every live lease the waiter holds once per `[lease].heartbeat_s`; a
-    no-op when it holds none or `[lease].renew_long_commands` is off. The interval is
-    enforced here: `for_holder` hands the pacing to its caller, and renewing on every poll
-    folds the whole log every couple of seconds."""
-    tick, every = LK.for_holder(log, cfg, st)
-    if tick is None:
-        return lambda: None
-    last = [time.monotonic()]
-
-    def paced() -> None:
-        if time.monotonic() - last[0] >= every:
-            last[0] = time.monotonic()
-            tick()
-
-    return paced
 
 
 def _end_wait(WT, w, keep: bool, cfg) -> None:

@@ -206,6 +206,18 @@ def test_harness_work_calls_do_not_dilute_accuracy():
     assert statuses(r)["tool_accuracy"] == cf.PASSED and r.level == 7, r.outcomes
 
 
+def test_a_refused_call_carried_in_the_output_is_not_a_success():
+    """B6eaa5f27c2: a ddflow refusal arrives as a COMPLETED tool call with the refusal only in
+    its output ({"refusal": {..., "exit": 3}}). `_ok` saw no `error` field and counted it ok, so
+    a lane whose claim/heartbeat/gate_record were all refused still passed levels 2-4. A
+    heartbeat answering `renewed: false` is the same refusal shape (~exit 2)."""
+    refused = {"name": "claim", "output": json.dumps({"refusal": {"reason": "held elsewhere"}})}
+    assert cf._ok(refused) is False
+    flat = {"name": "heartbeat", "output": json.dumps({"renewed": False})}
+    assert cf._ok(flat) is False
+    assert grade_calls(refused, flat).level == 1  # a lane that only REFUSED climbs no further
+
+
 def test_gate_call_for_another_action_is_not_a_record():
     listing = {"name": "gate", "action": "list"}
     r = grade_calls("claim", "heartbeat", listing)
@@ -312,3 +324,13 @@ def test_non_mapping_lanes_are_replaced_not_crashed_on(tmp_path):
     cio.path_for(tmp_path).write_text('{"schema": "lane-levels@1", "lanes": ["a"]}')
     cio.save(tmp_path, cf.Report("c", 2, (), 1.0))
     assert set(cio.load_all(tmp_path)) == {"c"}
+
+
+def test_shipped_conformance_timeout_defaults_outlast_a_real_lane():
+    """B72bcd17b4e: the shipped idle and lease-wait defaults are long enough for a REAL lane, not
+    a stub. kilo's first stream line lands ~20s after start (MCP server + plugin load), so a 5s
+    idle ended collection before any event at level 0; revocation-to-exit measured 8.5-14.1s, so
+    a 10s lease wait failed 3 of 5 runs. 120s idle / 90s wait reached level 6 in 5 of 5."""
+    c = Config().swarm
+    assert c.conformance_idle_s >= 60.0  # > kilo's ~20s first line, with margin
+    assert c.conformance_lease_wait_s >= 30.0  # > 14.1s revocation-to-exit, with margin

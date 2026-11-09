@@ -83,7 +83,8 @@ STREAM_RULES = (
      "fields": {"session": "sessionID"}},
     {"when": {"path": "type", "equals": "tool_use"}, "emit": "tool",
      "fields": {"name": "part.tool", "action": "part.state.input.action",
-                "error": "part.state.error"}},
+                "error": "part.state.error", "output": "part.state.output",
+                "status": "part.state.status"}},
     {"when": {"path": "type", "equals": "error"}, "emit": "error",
      "fields": {"message": "error.data.message"}},
 )  # fmt: skip
@@ -147,14 +148,29 @@ def instructions(agent: str, item: str, worktree: Path) -> str:
     )
 
 
-def mcp_entry(repo: Path, agent: str, command: list[str] | None = None) -> dict[str, Any]:
-    """The lane's ddflow MCP server in the opencode shape, with the lane's own identity."""
+def mcp_entry(
+    repo: Path,
+    agent: str,
+    command: list[str] | None = None,
+    *,
+    worktree: Path | None = None,
+) -> dict[str, Any]:
+    """The lane's ddflow MCP server in the opencode shape, with the lane's own identity.
+
+    ``--repo`` names where the server is spawned -- the lane's WORKTREE, not the primary.
+    Pinning it to the primary hid the launched tree from the MCP path, so `claim` answered
+    `here=false` and created a SECOND worktree instead of adopting the one the lane was
+    launched in (bug B7d091d0f35): ``repo_root`` resolves the worktree to the primary for
+    the shared event log and keeps the worktree as ``called_from``, which is what makes
+    `claim` adopt it. ``worktree`` defaults to ``repo`` only for callers that name the two
+    alike (a test, or a lane launched in the primary itself)."""
+    tree = worktree if worktree is not None else repo
     argv = command or [
         sys.executable,
         "-m",
         "ddflow",
         "--repo",
-        str(repo),
+        str(tree),
         f"--agent={agent}",
         "mcp",
     ]
@@ -235,7 +251,7 @@ def prepare(  # noqa: PLR0913 - one call that writes the whole private lane
     instr = home / "ddflow-lane" / "AGENTS.md"
     instr.parent.mkdir(parents=True, exist_ok=True)
     fsio.atomic_write(instr, instructions(agent, item, worktree), mode=0o600)
-    _merge_config(ep.config, mcp_entry(repo, agent, mcp_command), instr)
+    _merge_config(ep.config, mcp_entry(repo, agent, mcp_command, worktree=worktree), instr)
     opts = lane_options(cfg or Config())
     pass_env = tuple(dict.fromkeys((*opts.pop("pass_env"), "PATH")))  # the binary needs PATH
     spec = LaunchSpec(

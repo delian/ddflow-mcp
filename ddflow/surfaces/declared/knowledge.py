@@ -87,6 +87,12 @@ def _applicable_text(out, a) -> str:
         f"  [{d['id']}] {d['title']}  (project-wide)\n      {d['decision']}"
         for d in out.data["project_wide"]
     ]
+    if out.data.get("path_matching"):
+        if lines:
+            lines.append("")
+        lines.append("path matching could not run: the item declares no globs")
+        if not out.data["applicable"] and not out.data["project_wide"]:
+            lines.append("no project-wide decisions recorded either")
     return "\n".join(lines)
 
 
@@ -353,7 +359,11 @@ COMMANDS: tuple[Command, ...] = (
         tool="ddflow_similar",
         description="'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state, score (0-1), shared words and flags, per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2.",
         call=lambda repo, a, agent: _api().similar(
-            repo, a.get("text", "") or "", kinds=a.get("kind", "") or "", agent=agent
+            repo,
+            a.get("text", "") or "",
+            kinds=a.get("kind", "") or "",
+            floor=a.get("floor"),
+            agent=agent,
         ),
         payload="candidates",
         params=(
@@ -368,6 +378,12 @@ COMMANDS: tuple[Command, ...] = (
                 help="Comma-separated subset of the configured kinds to look in: bug,task,phase,lesson,decision,research,memory. Default: all of them.",
                 cli_help="comma-separated subset of [dedupe].kinds: bug,task,phase,lesson,decision,research,memory (default: all of them)",
                 default="",
+            ),
+            Param(
+                "floor",
+                type="number",
+                help="Minimum score to report (default: [dedupe].show_floor).",
+                cli_help="minimum score to report (default: [dedupe].show_floor)",
             ),
         ),
     ),
@@ -643,7 +659,7 @@ COMMANDS: tuple[Command, ...] = (
         "writing the code, without them having to know it exists. Returns "
         "project-wide decisions too.",
         call=lambda repo, a, agent: _api().decision_applicable(repo, a["id"]),
-        payload=("applicable", "project_wide"),
+        payload=("applicable", "project_wide", "path_matching"),
         params=(Param("id", help="Item id.", cli_help="", positional=True),),
     ),
     Command(

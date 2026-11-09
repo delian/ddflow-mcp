@@ -20,6 +20,9 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
+from .paths import build as paths_build
+from .paths import has_figures as paths_ok
+from .paths import text as paths_text
 from .providers import Context, register
 from .render import forecast as text_forecast
 from .render import lanes as text_lanes
@@ -32,8 +35,22 @@ from .stages import build as stages_build
 from .stages import has_figures as stages_ok
 from .stages import text as stages_text
 from .summary import build, has_figures
+from .tiny import build as tiny_build
+from .tiny import has_figures as tiny_ok
+from .tiny import text as tiny_text
 
-VIEWS = ("summary", "forecast", "retro", "skips", "lanes", "stages", "locks", "swarm")
+VIEWS = (
+    "summary",
+    "forecast",
+    "retro",
+    "skips",
+    "lanes",
+    "stages",
+    "locks",
+    "tiny",
+    "paths",
+    "swarm",
+)
 
 
 #: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
@@ -77,22 +94,51 @@ def parse_since(text: str, now: float) -> float | None:
 
 
 def _stages(ctx: Context, group_by: str) -> Answer:
+    return _figure(ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage")
+
+
+def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
+    """The shared figure a derived view answers: build once (a ``ValueError`` is a bad
+    call, not a figure), one min-sample gate, one text. Every derived view routes through
+    here so the repeated body is not a duplicate-code cluster."""
     try:
-        data = stages_build(ctx, group_by)
+        data = build(ctx)
     except ValueError as exc:
         return Answer(False, str(exc), failed=True)
-    ok = stages_ok(data)
-    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any stage"
-    return Answer(ok, "" if ok else why, metrics=data, text=stages_text(data))
+    ok = ok_of(data)
+    why = f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any {subject}"
+    return Answer(ok, "" if ok else why, metrics=data, text=text_of(data))
 
 
 def _locks(ctx: Context, probes: Probes | None) -> Answer:
-    data = locks_build(ctx, probes)
-    ok = locks_ok(data)
-    why = (
-        f"not enough data: fewer than {ctx.cfg.metrics.min_samples} samples behind any lock figure"
-    )
-    return Answer(ok, "" if ok else why, metrics=data, text=locks_text(data))
+    return _figure(ctx, lambda c: locks_build(c, probes), locks_ok, locks_text, "lock figure")
+
+
+def _tiny(ctx: Context) -> Answer:
+    return _figure(ctx, tiny_build, tiny_ok, tiny_text, "figure")
+
+
+def _paths(ctx: Context) -> Answer:
+    return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
+
+
+def _retro(item: str, events: Sequence[Event], facts: Any, state: State) -> Answer:
+    """The ``retro`` view: one item's timeline, refused without an id or a known item."""
+    if not item:
+        return Answer(False, "retro needs an item id", failed=True)
+    if item not in state.items:
+        return Answer(False, f"no item {item!r}", failed=True)
+    t = timeline(events, facts, item)
+    reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
+    return Answer(not reason, reason, metrics=t, text=text_retro(t))
+
+
+def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None) -> Answer:
+    """The ``lanes`` view: a grid sample over who worked in the window, with utilisation."""
+    g = grid_sample(events, cfg, now, floor)
+    u = utilisation(g["rows"])
+    reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
+    return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
 
 
 def run(
@@ -125,25 +171,20 @@ def run(
         f = forecast_view(facts, state, cfg, now, phase)
         return Answer(f["available"], f["reason"], metrics=f, text=text_forecast(f))
     if view == "retro":
-        if not item:
-            return Answer(False, "retro needs an item id", failed=True)
-        if item not in state.items:
-            return Answer(False, f"no item {item!r}", failed=True)
-        t = timeline(events, facts, item)
-        reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
-        return Answer(not reason, reason, metrics=t, text=text_retro(t))
+        return _retro(item, events, facts, state)
     if view == "stages":
         return _stages(ctx, group_by)
     if view == "locks":
         return _locks(ctx, probes)
+    if view == "tiny":
+        return _tiny(ctx)
+    if view == "paths":
+        return _paths(ctx)
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
-        g = grid_sample(events, cfg, now, floor)
-        u = utilisation(g["rows"])
-        reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
-        return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
+        return _lanes(events, cfg, now, floor)
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:

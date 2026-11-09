@@ -173,6 +173,12 @@ WAIT = Command(
             "path/glob (until no other agent's live lease covers it); a bare wait returns the "
             "first ready item at once",
         ),
+        Param(
+            "approval",
+            default="",
+            help="wait for an operator-approval request id until it is answered; ready then means "
+            "re-run the gated command with --approval ID",
+        ),
         Param("token", default="", help="resume token from an earlier wait"),
         Param(
             "timeout",

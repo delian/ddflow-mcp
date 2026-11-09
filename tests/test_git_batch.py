@@ -148,6 +148,22 @@ def test_one_query_tells_merged_commits_from_unmerged_ones(repo):
     assert f._on_base == {(on, "main"): True, (off, "main"): False}
 
 
+def test_a_base_branch_with_a_paren_keeps_the_batched_ahead_counts(repo):
+    """B-gitbatch-paren-base-loses-batch: `%(ahead-behind:...)` ends its atom at the first
+    `)`, so a base branch named e.g. `release)1` made the one `for-each-ref` fail and the
+    helper return {} (correct only via a later per-HEAD rev-list fallback). The batched
+    answer must still be produced, so resolve the base to a commit first."""
+    _git(repo, "checkout", "-q", "-b", "release)1")
+    base_tip = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-b", "ddflow/feat")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "feat")
+    feat_tip = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    aheads = G.branch_tip_aheads(repo, "release)1")
+    assert aheads.get(feat_tip) == 1, aheads
+    assert aheads.get(base_tip) == 0, aheads
+
+
 def test_a_sweep_that_raises_is_not_retried_on_every_brief(repo, monkeypatch):
     run_cli(repo, "init")
     run_cli(repo, "config", "--set", "worktree.sweep_interval_s", "900")

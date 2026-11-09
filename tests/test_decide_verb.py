@@ -13,6 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.api.decide import _append_block, render
 from ddflow.core.autoorder import is_decide
 from ddflow.core.model import fold
 from ddflow.core.schedule import inherited_deps
@@ -151,3 +152,121 @@ def test_decide_prints_what_landed(proj):
     code, out, err = run_cli(proj, "decide", "X-decide", "--decision-id", "D-x")
     assert code == 0, err
     assert "X-decide decided by D-x" in out
+
+
+def _queue_doc(repo, glob: str, tags: str = "decide"):
+    run_cli(repo, "phase", "add", "P-gate", "--title", "gate")
+    run_cli(repo, "task", "add", "G1", "--title", "g", "--globs", "src/g.py")
+    run_cli(repo, "phase", "add", "P-next", "--title", "next", "--needs", "P-gate")
+    code, _o, err = run_cli(
+        repo, "task", "add", "X-decide", "--title", "x", "--phase", "P-next",
+        "--globs", glob, "--tags", tags,
+    )  # fmt: skip
+    assert code == 0, err
+
+
+def test_decide_defaults_to_a_doc_the_task_globs_name(proj):
+    # The slug `D-x` is `x`, but the task already globs `answers.md`: the default path must
+    # be the task's own doc, not a `<slug>.md` the globs do not cover (B502b06b881).
+    _queue_doc(proj, "docs/ddflow/decisions/answers.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, out, err = run_cli(proj, "--json", "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 0, err
+    assert json.loads(out)["path"] == "docs/ddflow/decisions/answers.md"
+
+
+def test_decide_keeps_an_existing_doc_and_appends_the_body(proj):
+    _queue_doc(proj, "docs/ddflow/decisions/x.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    wt = Path(_state(proj).items["X-decide"].worktree)
+    wt = wt if wt.is_absolute() else (proj / wt).resolve()
+    doc = wt / "docs/ddflow/decisions/x.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("# Proposal\n\nAlready drafted before the decision landed.\n")
+    code, _out, err = run_cli(
+        proj, "--json", "decide", "X-decide", "--decision-id", "D-x",
+        "--append", "--body", "Q: left open?\nA: settled now.",
+    )  # fmt: skip
+    assert code == 0, err
+    assert _state(proj).items["X-decide"].state == "done"
+    landed = _git(proj, "show", "HEAD:docs/ddflow/decisions/x.md")
+    assert "Already drafted before the decision landed." in landed
+    assert "**Decision.** d" in landed  # the restated record still lands with the body
+    assert "Q: left open?" in landed and "A: settled now." in landed
+
+
+def test_decide_appending_is_idempotent_on_a_retry():
+    restatement = "## D-x: t\n\n**Decision.** d"
+    block = restatement + "\n\nQ: left open?\nA: settled now.\n"
+    # A refused commit re-run with the same block: the block is not written below itself.
+    assert _append_block(block, block).rstrip("\n") == block.rstrip("\n")
+    # The same retry never deletes a document already on disk, only extends it.
+    proposal = "# Proposal\n\nAlready drafted.\n"
+    assert _append_block(proposal, block).rstrip("\n") == proposal.rstrip(
+        "\n"
+    ) + "\n\n" + block.rstrip("\n")
+
+
+def test_a_retried_append_lands_the_restatement_once(proj):
+    # A first `--append --body` wrote the restatement and Q-and-A, then its commit was
+    # refused, leaving the file behind; the retry must not write either a second time.
+    _queue_doc(proj, "docs/ddflow/decisions/x.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    st = _state(proj)
+    wt = Path(st.items["X-decide"].worktree)
+    wt = wt if wt.is_absolute() else (proj / wt).resolve()
+    doc = wt / "docs/ddflow/decisions/x.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(
+        render("X-decide", st.decisions["D-x"]).rstrip("\n")
+        + "\n\nQ: left open?\nA: settled now.\n"
+    )
+    code, _out, err = run_cli(
+        proj, "--json", "decide", "X-decide", "--decision-id", "D-x",
+        "--append", "--body", "Q: left open?\nA: settled now.",
+    )  # fmt: skip
+    assert code == 0, err
+    landed = _git(proj, "show", "HEAD:docs/ddflow/decisions/x.md")
+    assert landed.count("Q: left open?") == 1 and landed.count("## D-x: t") == 1
+
+
+def test_decide_a_pattern_glob_still_lands_at_the_slug(proj):
+    _queue_doc(proj, "docs/ddflow/decisions/*.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, out, err = run_cli(proj, "--json", "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 0, err
+    assert json.loads(out)["path"] == "docs/ddflow/decisions/x.md"
+
+
+def test_an_incidental_literal_does_not_shadow_the_slug_a_pattern_covers(proj):
+    # A README index glob + a *.md pattern: the slug path matches the pattern, so it wins
+    # over the incidental literal (a decision must not land in README.md).
+    _queue_doc(proj, "docs/ddflow/decisions/README.md,docs/ddflow/decisions/*.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, out, err = run_cli(proj, "--json", "decide", "X-decide", "--decision-id", "D-x")
+    assert code == 0, err
+    assert json.loads(out)["path"] == "docs/ddflow/decisions/x.md"
+
+
+def test_decide_body_lands_on_a_fresh_doc(proj):
+    _queue_doc(proj, "docs/ddflow/decisions/x.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    code, _out, err = run_cli(
+        proj, "--json", "decide", "X-decide", "--decision-id", "D-x",
+        "--body", "The person's own words.",
+    )  # fmt: skip
+    assert code == 0, err
+    landed = _git(proj, "show", "HEAD:docs/ddflow/decisions/x.md")
+    assert "The person's own words." in landed

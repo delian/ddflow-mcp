@@ -59,6 +59,11 @@ _SUBMODULE_OF = {
     "executable_missing": "shell",
     "scope_to_diff": "shell",
     "tool_missing": "shell",
+    # ruff
+    "auto_fix": "ruff",
+    "changed_python": "ruff",
+    "failing_ruff": "ruff",
+    "ruff_bin": "ruff",
     # scratch
     "CC": "scratch",
     "OWNER_SUFFIX": "scratch",
@@ -84,7 +89,6 @@ _SUBMODULE_OF = {
     "_default_on_the_diff": "runner",
     "_execute": "runner",
     "_holder": "runner",
-    "_lock_wait": "runner",
     "_merge_base": "runner",
     "_needs_suite_slot": "runner",
     "_result": "runner",

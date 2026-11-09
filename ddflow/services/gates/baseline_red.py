@@ -26,7 +26,7 @@ from ...core import digest as D
 from ...infra import worktree as W
 from .. import testselect as TS
 from ..flakes import LINE_CHARS
-from .baseline import cache_load, cache_signatures, cache_store
+from .baseline import cache_snapshot, cache_store
 from .testcmd import counts_of
 
 GATES = ("ci", "unit_tests")
@@ -88,20 +88,24 @@ def on_base(
     # not the candidate's own merge-base with ``base`` (the fork point is older, so a test
     # ``base`` broke since the fork reads as a new failure there: B-ci-baseline-older-than-
     # candidate; B48c70b6773's earlier merge-base pin had this wrong).
-    known = cache_load(repo, sha, ttl_s, None, gdef.command)
-    cached_sigs = cache_signatures(repo, sha, ttl_s, None, gdef.command)
+    known, cached_sigs, whole = cache_snapshot(repo, sha, ttl_s, None, gdef.command)
     where = {"base": base, "base_sha": sha}
     # A cache entry measured before failure text was kept (old format, no text) has nothing to
     # compare against: re-run it so a later new offender is spotted, its id-only verdict stands
     # meanwhile (B-baseline-red-hides-new-offender-in-red-ratchet). An entry whose text sits at
     # the old cut-to-LINE_CHARS length is ambiguous -- the base's whole reason may differ past it
     # or not -- so it is re-measured too, never guessed either way (B-baseline-red-hides-new
-    # -cause, the legacy-cache migration).
+    # -cause, the legacy-cache migration). A WHOLE text of exactly LINE_CHARS length is not the
+    # legacy shape though: its WHOLE marker keeps it cached so it is not re-run every gate
+    # execution (B60e9e09308).
     todo = [
         i
         for i in ids
         if i not in known
-        or (known.get(i) and (i not in cached_sigs or len(cached_sigs[i]) == LINE_CHARS))
+        or (
+            known.get(i)
+            and (i not in cached_sigs or (len(cached_sigs[i]) == LINE_CHARS and i not in whole))
+        )
     ]
     if not todo:
         return {**_tally(ids, known, before, cached_sigs), **where, "cached": True, "ids": ids}
@@ -122,13 +126,21 @@ def _tally(
     onbase: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """What ``known`` says of ``ids``: red only when every one of them failed on the base with
-    the failure text the branch showed. A test the base also fails, but DIFFERENTLY, is a new
-    offender, not baseline (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to
-    ``different``, so ``still`` no longer covers it and ``red`` misses it."""
+    no id shown to differ (an id whose failure text is absent on either side is counted in
+    ``uncompared`` and still toward ``red``: "not different" then is an absence of evidence,
+    not a match). A test the base also fails, but DIFFERENTLY, is a new offender, not baseline
+    (B-baseline-red-hides-new-offender-in-red-ratchet): it goes to ``different``, so ``still``
+    no longer covers it and ``red`` misses it."""
     different = [i for i in ids if known.get(i) and _differs(i, before, onbase)]
     still = [i for i in ids if known.get(i) and i not in different]
+    #: Ids whose failure text is missing on EITHER side: `_differs` returns "not different"
+    #: then (it never claims a new offender when the branch or the base text is unknown), so
+    #: "still failing" for one of these is an ABSENCE of evidence, not proof it failed the same
+    #: way. A decision that rests on the comparison being whole-vs-whole (an auto-accept of a
+    #: full selection whose reach cannot be told) must treat them as not compared (B0f41a2f1d6).
+    uncompared = [i for i in ids if not (before or {}).get(i) or not (onbase or {}).get(i)]
     return {"red": len(still) == len(ids), "still_failing": still, "different": different,
-            "unmeasured": [i for i in ids if i not in known]}  # fmt: skip
+            "unmeasured": [i for i in ids if i not in known], "uncompared": uncompared}  # fmt: skip
 
 
 def _differs(test_id: str, before: dict[str, str] | None, onbase: dict[str, str] | None) -> bool:

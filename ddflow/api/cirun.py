@@ -74,13 +74,22 @@ def held_item(repo: Path, agent: str, where: Path | None) -> str:
     return held[0]
 
 
-def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from) -> str:
+def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from, data: dict) -> str:
     """Record the item's `ci` gate from this run, as `gate run ci` does. Returns "" when it
     was recorded, else why not (never raises: the run's own verdict stands)."""
     outcome = {"passed": "passed", "failed": "failed"}.get(res.status, "unavailable")
     note = f"ddflow ci run on {res.sha[:12] or 'the branch'}" + (
         f" merged with {res.merged_with}" if res.merged_with else ""
     )
+    if data.get("corrections_unavailable"):
+        note += f"; ruff drift auto-fix unavailable: {data['corrections_unavailable']}"
+    elif corrections := data.get("corrections"):
+        fixed = ", ".join(corrections.get("reformatted", []) + corrections.get("fixed", []))
+        note += (
+            f"; ruff drift auto-corrected: {fixed}"
+            if fixed
+            else "; ruff drift not auto-correctable"
+        )
     out = record(
         repo,
         item,
@@ -92,12 +101,36 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from)
             command=res.command,
             exit_code={"passed": 0, "failed": 1}.get(res.status, 2),
             ci_scope=res.scope or None,
+            waited_s=res.waited_s,
+            elapsed_s=res.elapsed_s,
             ran_by=CI_RUN,
         ),
         agent=agent,
         called_from=called_from,
     )
     return "" if out.ok else out.reason
+
+
+def _auto_fix_ruff(repo: Path, cfg, st, item: str, res: CI.Result, data: dict) -> None:
+    """The `[ci].ruff_autofix` auto-correction (DX-ci-ruff-gate): when this failed item run's
+    failing checks are the pre-commit ruff hooks, run `ruff format` + `ruff check --fix` over
+    the changed Python files in the item's own worktree and record the corrections in ``data``."""
+    if not item or not cfg.ci.ruff_autofix:
+        return
+    ruff = CI.failing_ruff(res.checks)
+    if not ruff:
+        return
+    it = st.items.get(item)
+    if it is None or not getattr(it, "worktree", ""):
+        return
+    root = W.load_path(repo, it.worktree)
+    if not root.is_dir():
+        return
+    ready = CI.auto_fix(root, CI.changed_python(repo, res.sha, res.merged_with))
+    if ready.get("unavailable"):
+        data["corrections_unavailable"] = ready["unavailable"]
+    elif ready:
+        data["corrections"] = {"ruff": ruff, **ready}
 
 
 def _keep_failing_ids(repo: Path, res) -> dict:
@@ -184,11 +217,12 @@ def run(
     data.update(_keep_failing_ids(repo, res))
     if res.scope:
         data["scope_line"] = CM.marker_line(res.scope)
+    _auto_fix_ruff(repo, cfg, st, item, res, data)
     if log_to is not None and not res.ok:  # a pass keeps no log
         log_to.parent.mkdir(parents=True, exist_ok=True)
         fsio.atomic_write(log_to, res.output, fsync=False)  # empty too: a log that says so
     if item and not command and os.environ.get(IN_GATE_ENV) != "ci":
-        why = _record_gate(repo, item, res, agent, called_from)
+        why = _record_gate(repo, item, res, agent, called_from, data)
         data["recorded"] = {
             "item": item,
             "gate": "ci",

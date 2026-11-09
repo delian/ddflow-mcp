@@ -33,6 +33,8 @@ def cmd_wait(a, c: Ctx) -> int:
         kind=a.kind,
         globs=a.globs,
         lease=a.lease or "",
+        token=a.token or "",
+        approval=a.approval or "",
         timeout_s=a.timeout,
         poll_s=a.poll,
         max_s=a.max_s,
