@@ -656,7 +656,9 @@ README_REMEDY = (
 )
 
 
-def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path, cache: dict | None = None) -> str:
+def readme_report(
+    state: State, cfg: Config, item_id: str, *, repo: Path, cache: dict | None = None
+) -> str:
     """The "README not updated" report when a task's diff changed code and not the README;
     `README_UNKNOWN` when git cannot say what changed; else "".
 

@@ -56,16 +56,16 @@ def test_a_scan_derives_each_merged_items_diff_once(repo, monkeypatch):
     )
 
     derived = []
-    real = CH.changed_paths  # the low-level git diff every `_read` branch reaches (landed, branch or cited)
+    real = (
+        CH.changed_paths
+    )  # the low-level git diff every `_read` branch reaches (landed, branch or cited)
 
     def counting(repo_arg, *a, **k):
         derived.append(1)
         return real(repo_arg, *a, **k)
 
     monkeypatch.setattr(CH, "changed_paths", counting)
-    recs = L.scan(
-        EventLog(repo, "scanner"), Config.load(repo), repo, now=time.time() + 10_000
-    )
+    recs = L.scan(EventLog(repo, "scanner"), Config.load(repo), repo, now=time.time() + 10_000)
     assert recs, "the scan found no lapsed leases"
 
     # The diff is a property of the item; the scan weighs it per item, not per probe.
