@@ -1,10 +1,13 @@
 """The timeout / missing-binary / failed-exit branches of every call site that went through
 `infra.proc.capture` (B-uc-infra-proc-fsio).
 
-Written against the sites as they were (each called `proc.run` itself) and unchanged by the
-move: every site still reaches the process layer through the module attribute `proc.run`,
-so one fake of it pins what each site makes of a timeout, a binary that is not there and a
-non-zero exit. Real children for the handshakes, in one parametrized test.
+Every site reaches the process layer through `proc.capture` (B-uc-infra-proc-fsio moved
+them off `proc.run`), and `capture` routes through `run` in `ddflow.adapters.proc` (the
+canonical home, per the seam comment beside `capture`). One fake of THAT `run` pins what
+each site makes of a timeout, a binary that is not there and a non-zero exit. `ddflow.infra.proc`
+is a re-export shim: patching its `run` leaves `capture` looking up the real one (bug
+B2cb9364fc3), so the fake patches the canonical module. Real children for the handshakes,
+in one parametrized test.
 """
 
 from __future__ import annotations
@@ -18,13 +21,15 @@ from types import SimpleNamespace
 
 import pytest
 
+from ddflow.adapters import proc as _proc
 from ddflow.infra import forge, paths, signals
 from ddflow.infra import proc as P
 from ddflow.services import bisect, companions, jobs, onboard_verify, roborev
 
 
 def _fake(monkeypatch: pytest.MonkeyPatch, outcome):
-    """Make `proc.run` raise ``outcome`` (an exception) or return it (a result)."""
+    """Make the process layer's `proc.run` seam raise ``outcome`` (an exception) or return
+    it (a result)."""
     calls: list[tuple] = []
 
     def run(*args, **kwargs):
@@ -33,7 +38,10 @@ def _fake(monkeypatch: pytest.MonkeyPatch, outcome):
             raise outcome
         return outcome
 
-    monkeypatch.setattr(P, "run", run)
+    # Patch the canonical module, not the `ddflow.infra.proc` re-export shim: `capture`
+    # resolves `run` in `ddflow.adapters.proc`'s globals, so a patch on the shim would not
+    # intercept it (bug B2cb9364fc3).
+    monkeypatch.setattr(_proc, "run", run)
     return calls
 
 
