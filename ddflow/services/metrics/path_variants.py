@@ -96,14 +96,21 @@ def superseded_passes(ctx: Context) -> list[dict]:
 
 
 def out_of_order(ctx: Context) -> list[dict]:
-    """a gate run recorded before an EARLIER canonical step on the same item (it ran ahead of
-    its prerequisite -- e.g. critic before rubber_duck)."""
+    """a gate whose FIRST run came before an EARLIER canonical step's FIRST run (it ran ahead
+    of a prerequisite that had not run yet -- e.g. critic first-ran before rubber_duck)."""
     rank = {g: i for i, g in enumerate(CANON)}
     out = []
     for item, rows in _items(ctx).items():
-        rrows = [(o.at, o.gate) for o in rows if o.gate in rank]
-        for i, (at, gate) in enumerate(rrows):
-            if any(rank[g] < rank[gate] for t2, g in rrows[i + 1 :]):
+        first_at: dict[str, float] = {}
+        for o in rows:
+            if o.gate in rank and o.gate not in first_at:
+                first_at[o.gate] = o.at
+        for gate, r in rank.items():
+            at = first_at.get(gate)
+            if at is None:
+                continue
+            # a lower-rank gate that RAN later than this one means this run was ahead of it
+            if any(r2 < r and first_at[g2] > at for g2, r2 in rank.items() if g2 in first_at):
                 out.append({"item": item, "gate": gate, "at": at})
     return out
 
