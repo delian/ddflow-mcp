@@ -74,10 +74,18 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
         groups["models"][o.model or "(unknown model)"].append(kind)
         if o.by:
             groups["reviewers"][o.by].append(kind)
-    for agent in sorted(ctx.facts.agents):
-        groups["agents"][
-            agent
-        ] = []  # present in the window; a per-verdict agent id is not in the log
+    # per-agent: an item's claim agent; "passed" when the item passed every gate first-run.
+    item_clean = {
+        span.item: all(kind == "passed" for (it, _g), kind in first.items() if it == span.item)
+        and any(kind for (it, _g), kind in first.items() if it == span.item)
+        for span in ctx.facts.spans.values()
+        if ctx.in_scope(span.item, span.added_at)
+    }
+    agent_outcomes: dict[str, list[str]] = defaultdict(list)
+    for span in ctx.facts.spans.values():
+        for _at, agent in span.claims:
+            agent_outcomes[agent].append("passed" if item_clean.get(span.item, False) else "failed")
+    groups["agents"] = agent_outcomes
 
     def rows(names: dict[str, list[str]]) -> list[dict]:
         out = []
