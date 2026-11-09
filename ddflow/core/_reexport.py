@@ -26,6 +26,7 @@ itself never becomes a public name of the package (or of the ``__all__`` it writ
 from __future__ import annotations
 
 import importlib
+import sys
 from collections.abc import Mapping
 from typing import Any
 
@@ -46,7 +47,21 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
             raise AttributeError(f"module {package!r} has no attribute {name!r}")
         mod = cache.get(sub)
         if mod is None:
-            mod = importlib.import_module(f"{package}.{sub}")
+            fullname = f"{package}.{sub}"
+            # importlib marks an import that halted mid-flight with ``sys.modules[fullname]
+            # = None`` and then refuses to re-import it for the process's lifetime, so a
+            # transient halt makes a lazy name permanently broken (B7e585f9e5d:
+            # ``ddflow.services.ci.main`` crashed ``check_after_merge``). Drop that sentinel
+            # and retry ONCE. A real import failure deletes the entry instead of leaving a
+            # sentinel, so it must re-raise here -- never run the submodule's body twice.
+            try:
+                mod = importlib.import_module(fullname)
+            except ModuleNotFoundError:
+                if fullname in sys.modules and sys.modules[fullname] is None:
+                    sys.modules.pop(fullname, None)
+                    mod = importlib.import_module(fullname)
+                else:
+                    raise
             cache[sub] = mod
         return getattr(mod, name)
 

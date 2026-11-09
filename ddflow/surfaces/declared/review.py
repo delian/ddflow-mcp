@@ -238,7 +238,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="run a full round past [review].max_rounds; needs --reason, recorded in the evidence",
+                help="run a round past [review].max_rounds (a delta with --delta); needs --reason, recorded in the evidence",
                 cli_only=True,
             ),
             Param("reason", help="why --force", default="", cli_only=True),

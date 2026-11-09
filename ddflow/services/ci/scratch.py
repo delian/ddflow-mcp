@@ -10,15 +10,18 @@ from __future__ import annotations
 import os
 import shutil
 import signal
+import sys
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ...config import Config
 from ...infra import fsio
 from ...infra import git as G
 from ...infra import worktree as W
 from .. import ci_conflict as CC
+from ..pins import regenerate as regenerate_pins
 from .types import CANNOT_MERGE, CONFLICT, NOT_MERGEABLE, Failure
 
 #: The scratch trees of a ci run (`merge_tree`), made under the system temp directory: the
@@ -109,6 +112,37 @@ def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
             marker.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def _regen_after_merge(tree: Path) -> None:
+    """Re-record the fast after-merge pins a merge just made stale, in the throwaway tree.
+
+    The scratch merge runs no repository hook (it once let the post-merge hook run the golden
+    suite past the git timeout: B36c484af97), so the merge of a base that moved on leaves the
+    generated regions the two sides computed separately -- the branch's README lacks the knobs a
+    later editor landed on the base, and the lane then fails its own README tests "as new"
+    (B8127ab103e). The cheap recipes (`after_merge = true`: README regions, default.toml) re-record
+    here so the merged tree is self-consistent; the suite-backed recipes stay out, and a recipe
+    that cannot finish under `[pins].after_merge_timeout_s` is left alone, never failing the run."""
+    try:
+        # The merged tree's own config and recipes decide what to re-record (a pin the base added
+        # is only in the merged tree), and a config that cannot load or a re-record that fails
+        # must not be what stops the checks it was there to help (reviewer finding #1,#2).
+        rep = regenerate_pins(tree, Config.load(tree), after_merge=True, bounded=True)
+    except Exception as exc:
+        print(
+            f"ci: after-merge pin regen could not run ({type(exc).__name__}: {exc})",
+            file=sys.stderr,
+        )
+        return
+    # A recipe that could not run is not the same as one that had nothing to do: say so, never
+    # let "could not run" read as silence.
+    if rep.problem:
+        print(f"ci: after-merge pin regen: {rep.problem}", file=sys.stderr)
+    for p in rep.unavailable:
+        print(
+            f"ci: after-merge pin regen: {p.name}: unavailable ({p.unavailable})", file=sys.stderr
+        )
 
 
 @contextmanager
@@ -219,4 +253,11 @@ def merge_tree(
                         ),
                     )
                     return
+                # The tree is now final: re-record the fast after-merge pins so the merged
+                # result is self-consistent (B8127ab103e). Only a caller that passed `pins` --
+                # the ci gate; the probe's plain mergeability check does not -- re-records here,
+                # so the probe keeps its own deadline. A base already contained in `ref` needs no
+                # merge, and its own pins are left for the pins precheck to judge.
+                if pins is not None:
+                    _regen_after_merge(tree)
             yield tree, Failure("", "ok")

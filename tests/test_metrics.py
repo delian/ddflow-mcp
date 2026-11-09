@@ -52,6 +52,31 @@ def test_gate_time_runs_from_started_to_verdict_else_the_reviews_own_time():
     assert rows["rubber_duck"]["n"] == 24 and rows["rubber_duck"]["p50_s"] == 250  # elapsed_s
 
 
+def test_gate_time_reports_outcomes_it_could_not_time():
+    """B28537b615d: a `ddflow ci run` outcome had no `gate.started` and no `elapsed_s`, so
+    the gate-time figure silently dropped it. The row names how many outcomes it dropped."""
+    log = Log()
+    log.task("C", "c.py")
+    log.claim("a1", "C", T0, "c.py")
+    log.add("gate.passed", "C", "a1", T0 + 100, gate="ci", by="a1", evidence={})  # untimed
+    log.add("gate.failed", "C", "a1", T0 + 200, gate="ci", by="a1", evidence={"elapsed_s": 50})
+    rows = {r["gate"]: r for r in run(log, knobs={"min_samples": 1}).metrics["gate_time"]}
+    assert rows["ci"]["untimed"] == 1, rows
+    assert rows["ci"]["n"] == 1 and rows["ci"]["p50_s"] == 50, rows
+
+
+def test_gate_time_names_a_gate_with_only_untimed_outcomes():
+    """B28537b615d: a gate whose runs were ALL hand/ci-run recorded (no started, no
+    elapsed_s) must still appear over its untimed count -- dropping the whole row was the
+    silent omission the bug is about."""
+    log = Log()
+    log.task("C", "c.py")
+    log.claim("a1", "C", T0, "c.py")
+    log.add("gate.passed", "C", "a1", T0 + 100, gate="ci", by="a1", evidence={})  # untimed
+    rows = {r["gate"]: r for r in run(log, knobs={"min_samples": 1}).metrics["gate_time"]}
+    assert rows["ci"]["untimed"] == 1 and rows["ci"]["n"] == 0, rows
+
+
 def test_outcome_rates_by_gate_and_by_reviewer():
     by_gate = {r["group"]: r for r in run(twelve()).metrics["outcomes"]}
     assert by_gate["rubber_duck"]["failed"] == 12 and by_gate["rubber_duck"]["failure_rate"] == 0.5
