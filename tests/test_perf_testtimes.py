@@ -49,9 +49,16 @@ def test_the_skew_is_the_slowest_files_share_of_the_path():
 def test_capture_folds_into_the_ring_and_returns_only_the_rollup(tmp_path: Path):
     out = capture_test_durations(tmp_path, "ITEM-1", "unit_tests", JUNIT, workers=4)
     assert out["count"] == 3 and out["critical_path_floor_s"] == pytest.approx(11.0)
-    # the raw durations landed in the local ring (never in the evidence)
-    tmp_path / ".ddflow" / "local" / "perf" / "test_durations.jsonl"
+    # the raw durations landed in the LOCAL ring (read it back, don't just compute the path)
+    ring = tmp_path / ".ddflow" / "local" / "perf" / "test_durations.jsonl"
+    assert ring.exists() and ring.read_text().strip() != ""
     assert "test_a.test_slow" not in out  # the rollup carries ids only via top_slowest
+
+
+def test_a_parameterized_test_id_strips_the_argument(tmp_path: Path):
+    xml = '<testsuite name="pytest"><testcase classname="tests.test_a" name="test_x[secret-arg]" time="1.0"/></testsuite>'
+    cases = parse_junit(xml)
+    assert cases[0].test_id == "tests.test_a.test_x"  # the [secret-arg] is gone
 
 
 def test_an_unparseable_report_is_unavailable(tmp_path: Path):

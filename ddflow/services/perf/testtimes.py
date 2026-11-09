@@ -41,7 +41,9 @@ def parse_junit(xml_text: str) -> list[TestCase]:
     root = ElementTree.fromstring(xml_text)
     out: list[TestCase] = []
     for case in root.iter("testcase"):
-        name = case.get("name", "")
+        # a pytest parameterized id is test_func[arg]: the "[...]" may embed a path/secret, so
+        # the id kept is the bare function name (the argument never reaches the report).
+        name = case.get("name", "").split("[", 1)[0]
         classname = case.get("classname", "")
         file = _file_of(classname)  # the classname-derived id, never a raw user path
         try:
