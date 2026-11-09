@@ -184,6 +184,7 @@ def test_the_operator_merge_of_a_peer_lease_is_not_lease_refused(clones):
     _code, out, err = run_cli(a, "merge", "T2")
     assert "leased by U9" not in out + err
 
+
 def test_release_force_needs_a_reason(clones):
     _a, b = clones
     before = _events(b)
