@@ -391,6 +391,7 @@ probe = true
 probe_timeout_s = 30
 probe_at = ["claim", "gate", "merge"]
 probe_merge_tree_min_git = "2.38"
+review_reuse = "off"
 
 [log]
 reuse_parsed = true
