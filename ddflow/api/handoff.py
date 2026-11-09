@@ -65,19 +65,25 @@ def suggest(
             base=tip,
         )
     except send.SuggestError as exc:
-        return O.failed("handoff.suggest", str(exc))
-    if out.ref:
-        owner_nxt = (
-            f"apply: ddflow suggest apply {out.ref}  (MCP: ddflow_suggest action=apply ref={out.ref}); "
-            f"reject: ddflow suggest reject {out.ref}; show: ddflow suggest show {out.ref}"
+        return O.failed(
+            "handoff.suggest",
+            f"{exc}; resend (CLI `ddflow suggest {item} --reason '...' --diff F`, "
+            f"MCP ddflow_suggest item={item} reason=... diff=F)",
         )
-    else:
-        owner_nxt = "no ref (blob-only): the owner applies by patch-id; re-run with a base to cut a ref"
+    ref = out.ref or ""
+    _arrow = f"apply: ddflow suggest apply {ref}" if ref else "apply: ddflow apply by patch-id"
+    _nxt = (
+        f"{_arrow}  (MCP ddflow_suggest action=apply ref={ref})\n"
+        f"reject: ddflow suggest reject {ref}  (MCP ddflow_suggest action=reject ref={ref})\n"
+        f"show:   ddflow suggest show {ref}    (MCP ddflow_suggest action=show ref={ref})\n"
+        f"expiry: open for {cfg.handoff.expire_s if hasattr(cfg.handoff, 'expire_s') else 'the handoff TTL'}; "
+        f"then ddflow suggest expire {ref}"
+    )
     text = (
         f"suggested to {to_agent} on {item}\n"
         f"probe: {out.probe}\n"
-        f"ref: {out.ref or '(no base: blob stored)'}\n"
+        f"ref: {ref or '(no base: blob stored)'}\n"
         f"blob: {out.blob}\n"
-        f"owner next ({owner_nxt})"
+        f"owner next:\n{_nxt}"
     )
     return O.ok("handoff.suggest", ref=out.ref, probe=out.probe, blob=out.blob, text=text)
