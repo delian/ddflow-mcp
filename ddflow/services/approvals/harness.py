@@ -298,7 +298,11 @@ def _note_uses(
             asked = (b.get("input") or {}).get("questions")
             if isinstance(asked, list):
                 questions = list(
-                    dict.fromkeys(q.get("question", "") for q in asked if isinstance(q, dict))
+                    dict.fromkeys(
+                        q.get("question")
+                        for q in asked
+                        if isinstance(q, dict) and isinstance(q.get("question"), str)
+                    )
                 )
                 if questions:
                     uses[str(b.get("id"))] = (row.get("uuid"), questions)
