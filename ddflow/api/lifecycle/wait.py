@@ -32,7 +32,7 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval
+from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval, _wait_job
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
@@ -357,8 +357,10 @@ def _wake_data(repo: Path, me: str, cfg, v: dict[str, Any], resume: str):
 
 
 def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: float):
-    """The Outcome of a wait that ended: ready or woken by the inbox (exit 0), nothing to
-    wait for, or still blocked at the deadline (exit 2, naming the holders)."""
+    """The Outcome of a wait that ended: ready or woken by the inbox (exit 0), refused at
+    once when waiting cannot help (exit 3 -- not exit 2, whose "try again" a caller
+    retries into a spin; Be68798098a), or still blocked at the deadline (exit 2, naming
+    the holders)."""
     if woken and v["status"] != "ready":
         data["advice"] = _WOKEN_ADVICE.format(why=data["wake"]["reason"])
         return O.ok("wait", **data)
@@ -366,7 +368,7 @@ def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: f
         data["advice"] = _ready_advice(v, lease)
         return O.ok("wait", **data)
     if v["status"] == "hopeless":
-        return O.nothing("wait", f"Not waiting: {v['why']}", **data)
+        return O.refused("wait", f"Not waiting: {v['why']}", **data)
     holders = _holders(st, cfg, v["waiting_on"])
     data["holders"] = holders
     who = f" Held: {_holders_text(holders)}." if holders else ""
@@ -423,10 +425,16 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     lease: str = "",
     token: str = "",
     approval: str = "",
+    job: str = "",
 ) -> O.Outcome:
     """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
 
     ``approval`` (instead of ``item``/``lease``) waits until the operator answers the approval.
+
+    ``job`` (instead of ``item``/``lease``/``approval``) waits for a JOB: the run handle a
+    detached review (`ddflow review --detach`) returns. Ready when the job's process is over
+    -- a detached review records its round before it exits -- with `next_actions` naming what
+    to do with the round.
 
     ``lease`` (instead of ``item``) waits for a LEASE: an agent id until it holds nothing, or
     a path/glob until no other agent's live lease covers it. A bare wait returns the first
@@ -449,6 +457,8 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     # fmt: off
     if approval:
         return _wait_approval(repo, approval, item, phase, lease, globs, token, timeout_s, poll_s, max_s, agent, on_progress)
+    if job:
+        return _wait_job(repo, job, item, phase, lease, globs, token, timeout_s, poll_s, max_s, agent, on_progress)
     # fmt: on
     args = _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s)
     if isinstance(args, O.Outcome):

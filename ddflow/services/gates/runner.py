@@ -19,6 +19,7 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from .. import suitelock as SL
+from .. import tree_bin as TB
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failed_tests, failure_evidence
@@ -327,6 +328,10 @@ def run_command_gate(
             **gdef.env,
             **(env or {}),
         }
+        # A gate command that runs `ddflow ...` must get THIS tree's code, not the primary
+        # checkout's on PATH: the shim only shadows the `ddflow` name, so the branch's gate
+        # logic (runner, baseline, ci_marker) is what its own gate runs exercise (B627636de73).
+        full_env = TB.with_shim_on_path(full_env, cwd)
         # A command gate IS a shell command line the operator wrote in gates.toml, run by the
         # one CommandRunner: it checks the executable is installed BEFORE running (under
         # `shell=True` a missing binary exits 127, indistinguishable from a suite that chose
@@ -395,18 +400,24 @@ def run_command_gate(
 
 
 def _keep_cut_failing_ids(gdef: GateDef, cwd: Path, out: str, ev: dict[str, Any]) -> None:
-    """Keep a unit_tests full-suite failure's WHOLE failing list aside for the run's own tree
-    (the evidence caps it to a sample): ``gate_baseline`` reads it to measure the failure on
-    the base, so ``[gates].baseline_red_auto`` can accept it (B69d1c0ff00). A run that could
-    not be kept is dropped: the outcome it follows is unchanged."""
-    if gdef.id != "unit_tests" or not ev.get("failed_tests_more"):
+    """Keep a ci / unit_tests full-suite failure's WHOLE failing list aside as a committed blob,
+    linked from the evidence as ``failing_ids`` (the evidence caps the list to a sample):
+    ``gate_baseline`` reads it back to measure the failure on the base, so
+    ``[gates].baseline_red_auto`` can accept it, and a teammate reads all ids from the record
+    (B86370c6924, after B69d1c0ff00). A run that could not be kept is dropped: the outcome it
+    follows is unchanged."""
+    if gdef.id not in ("ci", "unit_tests") or not ev.get("failed_tests_more"):
         return
     from .baseline import write_full  # deferred, as run_log_writer does
 
     try:
-        write_full(W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)])
+        stub = write_full(
+            W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)]
+        )
     except (OSError, ValueError, KeyError):
         return
+    if stub:
+        ev["failing_ids"] = stub
 
 
 class Classified(NamedTuple):

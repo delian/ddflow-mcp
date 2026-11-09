@@ -154,3 +154,61 @@ def test_the_budget_spent_triage_keeps_its_passed_on_refutation_flag(repo, tmp_p
     )
     assert out.exit == OK, out.reason
     assert out.data["passed_on_refutation"] is True
+
+
+def _setup_shifted(repo: Path, tmp_path: Path) -> Path:
+    """A command reviewer that flags a `FINDME` line at the line number in the ``wording``
+    file, with the same claim; two single-gate reviews at different line numbers put the
+    SAME finding under a different digest per gate (bug Bbd391bfef5)."""
+    wording = tmp_path / "wording"
+    wording.write_text("x.py:1|combo bad line")
+    cli = tmp_path / "fake-reviewer"
+    cli.write_text(
+        "#!/bin/sh\nin=$(cat)\n"
+        f"w=$(cat '{wording}')\n"
+        "loc=${w%%|*}\n"
+        "det=${w#*|}\n"
+        'case "$in" in '
+        '*FINDME*) printf \'FINDING HIGH %s\\n%s\\n\\nSTATUS: FINDINGS 1\\n\' "$loc" "$det";; '
+        '*) echo "STATUS: NO FINDINGS";; esac\n'
+    )
+    cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
+        'model = "gemini-2.5-pro"\nhedge = 1\ngates = ["critic", "rubber_duck"]\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "add files", "--globs", "*.py")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "x.py").write_text("x = 1  # FINDME\ny = 2\n")
+    _git(repo, "add", "x.py")
+    _git(repo, "commit", "-qm", "work")
+    return wording
+
+
+def test_a_refuted_triage_carries_to_a_sibling_same_point_under_another_digest(repo, tmp_path):
+    """The same claim at the same design point cited at a different line (a different
+    digest) under the other gate is the SAME finding: one --refuted settles it there too,
+    instead of asking for a separate triage per digest (bug Bbd391bfef5)."""
+    wording = _setup_shifted(repo, tmp_path)
+    api.review(repo, gate="rubber_duck", item="T1", branch="feat")
+    wording.write_text("x.py:2|combo bad line")
+    api.review(repo, gate="critic", item="T1", branch="feat")
+
+    it = _state(repo)
+    assert (
+        it.gates["rubber_duck"].evidence["chunk_findings"][0]["digest"]
+        != it.gates["critic"].evidence["chunk_findings"][0]["digest"]
+    ), "the digests must differ for this test to exercise the design-point carry"
+
+    out = api.triage(
+        repo, "T1", gate="rubber_duck", finding=1, verdict="refuted", probe="combo line is harmless"
+    )
+    assert out.exit == OK, out.reason
+
+    duck, critic = _duck_and_critic(repo)
+    assert duck == {"findings": 1, "refuted": 1, "confirmed": 0, "untriaged": 0}, duck
+    assert critic == {"findings": 1, "refuted": 1, "confirmed": 0, "untriaged": 0}, critic
