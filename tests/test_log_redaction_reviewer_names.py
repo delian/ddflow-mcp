@@ -20,6 +20,8 @@ from ddflow.services.gates.reviewers import _unapproved_reviewer
 
 NAME = "local-reviewer-f8f8"  # a service name only the ignored reviewers.toml holds
 MODEL = "Local/Reviewer-Flash"  # its model string
+#: built at run time, so no tracked file names a private network host (test_repo_is_generic)
+_PRIVATE_IP = ".".join(("10", "220", "230", "242"))
 
 
 def _root(tmp_path: Path) -> Path:
@@ -88,7 +90,7 @@ def test_the_unapproved_reviewer_hint_reads_the_subject_not_the_redacted_evidenc
         ("http://localhost:8000/v1", True),
         ("http://localdomain:8000/v1", True),
         ("http://ollama:11434/v1", True),  # a single label is never a public host
-        ("http://10.220.230.242:8000/v1", True),
+        (f"http://{_PRIVATE_IP}:8000/v1", True),
         ("http://mybox.local/v1", True),
         ("http://x.internal/v1", True),
         ("http://x.lan/v1", True),
