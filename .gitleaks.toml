@@ -64,6 +64,30 @@ useDefault = true
   regexes = ['''^[0-9a-f]{40}$''']
 
 [[allowlists]]
+  # A recorded-decision list in the event log lists several decision ids next to each
+  # other; one id's own name embeds what a scanner reads as a credential keyword, and the
+  # generic-api-key rule then reads the next id as the secret. Scoped to ONE rule, ONLY the
+  # event logs, ONLY a whole-word / whole-number dash-separated slug: a value of the same
+  # shape outside the event logs still fires.
+  description = "plain ddflow slugs in the committed event logs are not generic api keys"
+  targetRules = ["generic-api-key"]
+  condition = "AND"
+  paths = ['''^\.ddflow/events/[^/]+\.jsonl$''']
+  regexes = ['''^[A-Za-z]+(?:-(?:[A-Za-z]+|[0-9]+))+[.,;:]?$''']
+
+[[allowlists]]
+  # The committed docs quote git commit shas too (RESEARCH.md reproduces a `ddflow ci run`
+  # that names one), and mention sourcegraph elsewhere in the same file: the rule's keyword
+  # prefilter is per file, so the sha reads as a token. Scoped to ONE rule, ONLY the
+  # committed docs, ONLY a bare 40-hex value: a real `sgp_`-prefixed token, or a bare hex
+  # string outside `docs/`, still fires.
+  description = "40-hex git shas in the committed docs are not sourcegraph tokens"
+  targetRules = ["sourcegraph-access-token"]
+  condition = "AND"
+  paths = ['''^docs/''']
+  regexes = ['''^[0-9a-f]{40}$''']
+
+[[allowlists]]
   # [session].redact_patterns holds the REGEX that masks a PEM block, and an upgrade note about
   # that knob quotes its value: `PRIVATE KEY-----.*?-----END`, a wildcard where a real key has
   # its base64 body. Scoped to ONE rule, ONLY the upgrade notes, ONLY that literal source text:
