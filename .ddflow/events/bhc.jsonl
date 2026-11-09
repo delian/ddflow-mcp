@@ -1,0 +1,3 @@
+{"agent":"bhc","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e0dfbe4f49da68e7738b04e83","kind":"ddflow.seen","lamport":162417,"schema":1,"subject":"ddflow","ts":"2026-11-09T16:01:27.638248Z"}
+{"agent":"bhc","data":{"path":".ddflow/worktrees/ADP-home-ports"},"id":"e9e13b07319960c73caaa96ff","kind":"worktree.removed","lamport":162418,"schema":1,"subject":"ADP-home-ports","ts":"2026-11-09T16:01:27.743523Z"}
+{"agent":"bhc","data":{"path":".ddflow/worktrees/LK-events-autodiscover"},"id":"e788aed52d48bb1e15db836bd","kind":"worktree.removed","lamport":162419,"schema":1,"subject":"LK-events-autodiscover","ts":"2026-11-09T16:01:30.541290Z"}
