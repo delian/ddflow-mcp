@@ -438,7 +438,6 @@ def _kilo_answer(state: Any, question: str) -> str:
     return ""
 
 
-@cache
 def _kilo_question_parts(path: str) -> tuple[tuple[Any, ...], ...]:
     """Every `question` tool part in one Kilo transcript store, cached by the file's stat (bug
     Bdb4ef97bd5): the query used to run once per consumed ask, so listing N overrides

@@ -116,6 +116,8 @@ def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(
         return real_read_text(self, *a, **k)
 
     monkeypatch.setattr(Path, "read_text", counting)
+    for fn in H._answers_cached, H._typed_cached, H._lines_cached, H._kilo_question_parts_cached:
+        fn.cache_clear()
 
     OV.rows(events, fold(events, strict=False), Config())
     assert len(kilo_reads) == 1, (
@@ -123,6 +125,13 @@ def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(
     )
     assert file_reads.count(str(t1)) == 1 and file_reads.count(str(t2)) == 1, (
         f"transcript files read once each, got {file_reads}"
+    )
+    # The transcript WALK -- json parsing each line, the 100%-CPU path -- is also keyed per
+    # file, not per consumed ask: two files parsed once each, the one store queried once.
+    assert H._answers_cached.cache_info().misses <= 2, H._answers_cached.cache_info()
+    assert H._typed_cached.cache_info().misses <= 2, H._typed_cached.cache_info()
+    assert H._kilo_question_parts_cached.cache_info().misses <= 1, (
+        H._kilo_question_parts_cached.cache_info()
     )
 
 
