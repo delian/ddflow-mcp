@@ -7,6 +7,7 @@ import ipaddress
 import json
 import os
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -22,6 +23,7 @@ from .. import blobstore as BS
 from .. import fsio
 from .. import hostinfo as H
 from .. import shardmeta as SMT
+from .. import tomlcfg as TC
 from ._agent import default_agent_id
 from ._guard import _GuardMixin
 from ._lock import _HELD, _flock, _held_key
@@ -35,6 +37,15 @@ _STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND, CAPABILITIES_KIND})
 T = TypeVar("T")
 
 
+@dataclass
+class _LocalReviewer:
+    """The reviewer fields redaction cares about: name, model and local endpoint."""
+
+    name: str = ""
+    model: str = ""
+    base_url: str = ""
+
+
 def _reviewer_redact_names(root: Path) -> list[str]:
     """The LOCAL configured reviewers' service names and model strings.
 
@@ -42,20 +53,28 @@ def _reviewer_redact_names(root: Path) -> list[str]:
     are none of a secret, a host, a path or the machine's own name: the committed-log
     name pass must learn them or they leak into the pushed shards as review evidence
     (bug B8ef0d325ed). A public reviewer's name and model name a public endpoint and
-    stay. The reviewer loader is imported lazily (services <-> infra) and any of it
-    being unreadable is the caller's fallback, not this write's.
+    stay. Read with ``toilcfg`` (infra), never ``services.review``, so the log stays on
+    its own layer; anything unreadable is the caller's fallback, not this write's.
     """
-    try:
-        from ...services.review.model import load_reviewers
-    except Exception:
-        return []
-    try:
+    try:  # anything failing to load is the caller's fallback, not this write's
         out: list[str] = []
-        for rev in load_reviewers(root):
-            if _is_local_endpoint(rev.base_url):
-                for value in (rev.name, rev.model):
-                    if value:
-                        out.append(value)
+        blocks = TC.overlay_array(
+            TC.config_paths(root, "reviewers.toml"),
+            "reviewer",
+            _LocalReviewer,
+            key="name",
+            fallback_key="model",
+            lenient=True,
+        )
+        for name, spec in blocks.items():
+            where = spec if isinstance(spec, dict) else {}
+            if not _is_local_endpoint(str(where.get("base_url") or "")):
+                continue
+            if name:
+                out.append(name)
+            model = str(where.get("model") or "")
+            if model and model != name:
+                out.append(model)
         return out
     except Exception:
         return []
