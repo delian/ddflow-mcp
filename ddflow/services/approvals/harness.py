@@ -314,14 +314,18 @@ def _note_results(
         if tid not in uses:
             continue
         uuid, questions = uses[tid]
-        answers = (row.get("toolUseResult") or {}).get("answers")
-        ok = (
+        tool = row.get("toolUseResult")
+        perm = row.get("permissionDecision")
+        if not (
             uuid
-            and (row.get("permissionDecision") or {}).get("decision") == "accept"
+            and isinstance(tool, dict)
+            and isinstance(perm, dict)
+            and perm.get("decision") == "accept"
             and row.get("sourceToolAssistantUUID") == uuid
-            and isinstance(answers, dict)
-        )
-        if not ok:
+        ):
+            continue
+        answers = tool.get("answers")
+        if not isinstance(answers, dict):
             continue
         at = str(row.get("timestamp", ""))
         for question in questions:
