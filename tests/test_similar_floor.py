@@ -21,13 +21,13 @@ def test_a_low_floor_surfaces_a_near_miss_below_the_default(repo):
         "One deterministic complexity score per task",
     )  # fmt: skip
     assert code == 0, err
-    q = "complexity score estimate"  # scores ~0.45: below the 0.5 the project sets
+    q = "complexity score estimate"  # scores ~0.45
     code, out, err = _similar(repo, q, "--kind", "task")
-    assert code == 0, err
+    assert code == 0, err  # above the packaged 0.35 default floor
     assert any(r["id"] == "GV-complexity-score" for r in json.loads(out))
-    # the flag is the knob: a high floor hides it, a low floor honors being lowered
+    # the flag is the knob: a higher floor hides it, --floor 0 honors being lowered
     code, _out, _err = _similar(repo, q, "--kind", "task", "--floor", "0.5")
-    assert code == 2
+    assert code == 2  # 0.45 is below an explicit 0.5 floor
     code, out, err = _similar(repo, q, "--kind", "task", "--floor", "0")
     assert code == 0, err
     assert any(r["id"] == "GV-complexity-score" for r in json.loads(out))
