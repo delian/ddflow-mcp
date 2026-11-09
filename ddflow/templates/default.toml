@@ -485,6 +485,7 @@ detect_relative_threshold = 0.2
 detect_absolute_floor_s = 5.0
 detect_persistence_windows = 2
 detect_creep_alpha = 0.1
+detect_creep_threshold = 0.1
 
 [pins]
 recipes_file = ".ddflow/pins.toml"

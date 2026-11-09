@@ -3220,6 +3220,9 @@
           The EWMA alpha for slow creep that a fixed threshold never sees (1% a week
           is invisible step-wise); the detector flags an EWMA that drifted past the
           relative threshold across the window.
+      perf_metrics.detect_creep_threshold = 0.1   [default]
+          The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar
+          never catches 1% a week; the creep bar does, accumulated over the window).
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the

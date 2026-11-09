@@ -71,3 +71,8 @@ def test_persistence_survives_a_thin_window_that_could_not_run():
     f = PD.detect("rss", "env:a", [100.0] * 8, windows, cfg=cfg)
     assert f is not None
     assert f.absolute_s == pytest.approx(100.0)
+
+
+def test_a_zero_baseline_jump_alerts_with_an_undefined_effect():
+    f = PD.detect_series("rss", "env:a", [0.0] * 8, [10.0] * 8, 0, 1)
+    assert f is not None and f.effect_size is None and f.absolute_s == pytest.approx(10.0)
