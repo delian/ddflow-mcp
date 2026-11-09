@@ -282,7 +282,12 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                         else ""
                     )
                     if existing is not None
-                    else ""
+                    else (
+                        f". Claim with `ddflow claim {item_id} --globs <files>` naming "
+                        "only the files your work really writes: the item's declared "
+                        "globs are refused only where another lease holds them, so a "
+                        "narrower set can be claimed at once."
+                    )
                 ),
                 holder=lease.holder,
                 item=item_id,
