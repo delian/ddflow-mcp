@@ -1,0 +1,2 @@
+{"agent":"bhq","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"efcaf3463191e19bf8eedecf0","kind":"ddflow.seen","lamport":163705,"schema":1,"subject":"ddflow","ts":"2026-11-09T22:19:37.062819Z"}
+{"agent":"bhq","data":{"at":1794262775.1652908,"globs":[],"holder":"bhq","lease_event":"","on":[{"holder":"bhr","item":"fix-Be8ca1270a5","pair":["",""]}],"queue":false,"since":1794262775.1652908,"ttl_s":5400},"id":"e04147b9312284fcb2763e31f","kind":"lease.waiting","lamport":163706,"schema":1,"subject":"fix-Be8ca1270a5","ts":"2026-11-09T22:19:37.116756Z"}
