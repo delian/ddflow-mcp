@@ -3,19 +3,37 @@
 [[kind]]
 name = "item.resolved"
 doc = "An item's definition or lease was resolved."
+fields = { "at" = ["float"], "claim" = ["dict"], "definition" = ["dict"], "keep" = ["str"], "kind" = ["str"], "ttl_s" = ["int"] }
+lookup = { "claim" = "re-applied by the fold: a lease with its worktree and event ids", "definition" = "re-applied by the fold; its text was redacted when first written", "keep" = "an id", "kind" = "a kind word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "lease.acquired"
 doc = "An agent leased an item and its files."
+fields = { "agent" = ["str"], "at" = ["float"], "branch" = ["str"], "expires_at" = ["int"], "globs" = ["list"], "holder" = ["str"], "kind" = ["str"], "note" = ["str"], "resources" = ["list"], "ttl_s" = ["int"], "worktree" = ["str"] }
+text = ["note"]
+lookup = { "agent" = "an agent id", "holder" = "an agent id", "kind" = "a kind word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "lease.expired"
 doc = "A lease lapsed or was broken."
+fields = { "branch" = ["str"], "broken_by" = ["str"], "broken_for" = ["str"], "event" = ["str"], "files" = ["list"], "holder" = ["str"], "idle_s" = ["float"], "reason" = ["str"], "worktree" = ["str"] }
+text = ["reason"]
+lookup = { "broken_by" = "the agent id that broke the lease", "broken_for" = "the item id the break was made for", "event" = "an event id", "files" = "the glob pair the break was about", "holder" = "an agent id" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "lease.released"
 doc = "A lease was given up or handed over."
+fields = { "agent" = ["str"], "by" = ["str"], "event" = ["str"], "holder" = ["str"], "note" = ["str"], "reason" = ["str"], "transfer" = ["bool"] }
+text = ["note", "reason"]
+lookup = { "agent" = "an agent id", "by" = "an agent id", "event" = "an event id", "holder" = "an agent id" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "lease.renewed"
 doc = "A lease was extended."
+fields = { "at" = ["float"], "branch" = ["str"], "globs" = ["list"], "holder" = ["str"], "resources" = ["list"], "worktree" = ["str"] }
+lookup = { "holder" = "an agent id" }
+exempt = "a state change of a record that already exists; it adds no text to compare"

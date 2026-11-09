@@ -104,7 +104,8 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             "blocked": len(blocked),
             "shown": NEXT_BLOCKED_SHOWN,
             "blocked_by_reason": reasons,
-            "all": "`ddflow --json next` lists every blocked item; ddflow_show <id> says why one is",
+            "all": "`ddflow --json next` lists every blocked item and its reason (a cap-held "
+            "item's reason is only in next's list, not in ddflow_show <id>)",
         }
     if cut[0]:
         out.setdefault("truncated", {})["clipped_strings"] = cut[0]

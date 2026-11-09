@@ -3,19 +3,39 @@
 [[kind]]
 name = "def.merged"
 doc = "Two managed definitions were merged into one."
+fields = { "digest" = ["str"], "id" = ["str"], "kind" = ["str"], "provenance" = ["dict"], "reason" = ["str"], "source" = ["str"], "successor" = ["str"] }
+text = ["reason"]
+lookup = { "kind" = "a kind word", "provenance" = "ids of origin", "source" = "an origin id or path", "successor" = "an id" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "def.recorded"
 doc = "A managed definition (kind, template, gate, lens, role) was added."
+fields = { "dedupe" = ["dict"], "digest" = ["str"], "fields" = ["dict"], "id" = ["str"], "kind" = ["str"], "provenance" = ["dict"], "reason" = ["str"], "source" = ["str"] }
+text = ["fields", "reason"]
+lookup = { "kind" = "a kind word", "provenance" = "ids of origin", "source" = "an origin id or path" }
+checked = "defs.def_record"
 
 [[kind]]
 name = "def.retired"
 doc = "A managed definition was removed as a tombstone."
+fields = { "digest" = ["str"], "id" = ["str"], "kind" = ["str"], "provenance" = ["dict"], "reason" = ["str"], "source" = ["str"], "split_into" = ["list"] }
+text = ["reason"]
+lookup = { "kind" = "a kind word", "provenance" = "ids of origin", "source" = "an origin id or path", "split_into" = "ids of the parts a split made" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "def.superseded"
 doc = "A managed definition was replaced by a successor."
+fields = { "digest" = ["str"], "id" = ["str"], "kind" = ["str"], "provenance" = ["dict"], "reason" = ["str"], "source" = ["str"], "successor" = ["str"] }
+text = ["reason"]
+lookup = { "kind" = "a kind word", "provenance" = "ids of origin", "source" = "an origin id or path", "successor" = "an id" }
+exempt = "changes or closes an existing record (same id); the add was checked"
 
 [[kind]]
 name = "def.updated"
 doc = "A managed definition's fields were changed."
+fields = { "digest" = ["str"], "fields" = ["dict"], "id" = ["str"], "kind" = ["str"], "provenance" = ["dict"], "reason" = ["str"], "source" = ["str"] }
+text = ["fields", "reason"]
+lookup = { "kind" = "a kind word", "provenance" = "ids of origin", "source" = "an origin id or path" }
+exempt = "changes or closes an existing record (same id); the add was checked"

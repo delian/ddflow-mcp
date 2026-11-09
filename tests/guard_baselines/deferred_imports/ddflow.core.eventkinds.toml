@@ -1,0 +1,7 @@
+# Ratchet `deferred_imports` for ddflow.core.eventkinds (tests/test_architecture_guards.py).
+# Lower it in the same change that removes sites; delete the file at zero.
+# Never raise it.
+# Justification: `current_version` is imported inside `problems` because `upcasters`
+# imports `events` at module level; hoisting it would close the cycle
+# (events -> redact.log -> eventkinds -> upcasters -> events) and break import.
+baseline = 1

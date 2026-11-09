@@ -3,35 +3,71 @@
 [[kind]]
 name = "suggestion.proposed"
 doc = "An agent proposed a bounded patch, held as data, to the agent that holds the lease on the file it needs."
+fields = { "added" = ["int"], "base" = ["str"], "blob" = ["str"], "digest" = ["str"], "files" = ["list"], "from_agent" = ["str"], "from_item" = ["str"], "id" = ["str"], "kind" = ["str"], "patch_id" = ["str"], "probe" = ["str"], "reason" = ["str"], "ref" = ["str"], "removed" = ["int"], "to_agent" = ["str"], "to_item" = ["str"] }
+text = ["reason", "probe"]
+lookup = { "added" = "a number", "blob" = "a blob address that is compared", "files" = "the paths the patch touches, compared with the owner's leases", "from_agent" = "an agent id, the audit trail's who", "from_item" = "an item id", "kind" = "a kind word", "patch_id" = "a git patch-id hash that is compared", "ref" = "a hidden git ref name", "removed" = "a number", "to_agent" = "an agent id, the audit trail's who", "to_item" = "an item id" }
+exempt = "a patch and its reason are compared by the handoff service, which owns the duplicate rule (services.handoff)"
 
 [[kind]]
 name = "suggestion.seen"
 doc = "The delivery layer recorded that the owner was shown a suggestion."
+fields = { "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.accepted"
 doc = "The owner accepted a suggestion and will apply it."
+fields = { "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.applied"
 doc = "A suggestion's change landed on the owner's branch, by the owner or detected by patch id."
+fields = { "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.rejected"
 doc = "The owner rejected a suggestion with a reason."
+fields = { "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.countered"
 doc = "The owner answered a suggestion with a different proposal."
+fields = { "counter" = ["str"], "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason", "counter"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.withdrawn"
 doc = "The sender took a suggestion back."
+fields = { "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.superseded"
 doc = "The sender replaced a suggestion with a newer one."
+fields = { "by_id" = ["str"], "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "by_id" = "the id of the replacing suggestion", "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
 
 [[kind]]
 name = "suggestion.expired"
 doc = "A suggestion went unanswered past its time limit or its owner's lease ended."
+fields = { "id" = ["str"], "reason" = ["str"], "role" = ["str"] }
+text = ["reason"]
+lookup = { "role" = "a role word: ddflow or operator" }
+exempt = "a state move carries no text that is compared for duplicates (services.handoff)"
