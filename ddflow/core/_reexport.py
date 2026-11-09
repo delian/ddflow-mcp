@@ -58,7 +58,7 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
                 mod = importlib.import_module(fullname)
             except ModuleNotFoundError:
                 if fullname in sys.modules and sys.modules[fullname] is None:
-                    del sys.modules[fullname]
+                    sys.modules.pop(fullname, None)
                     mod = importlib.import_module(fullname)
                 else:
                     raise
