@@ -575,6 +575,27 @@ def _covered_by_ci(log, cfg, repo, it, gate, cwd, scope, gates, forced) -> O.Out
     return O.ok("gate.run", gate=gate, outcome="passed", evidence=ev, id=it.id)
 
 
+def _ignored_approval_refusal(
+    approval: str, approval_stamp: dict, gate: str, item: str, outcome: str, refused
+):
+    """The `gate.record` refusal when `--approval` was passed for a record that needs no
+    override, else ``refused`` (bug Be2de070703): a passed `--approval` an agent may record
+    directly was dropped silently -- no Q id, no note -- so refuse it and name the real
+    route. Broken out of ``record`` so its loop count stays under the complexity ratchet."""
+    if approval and not approval_stamp:
+        return O.refused(
+            "gate.record",
+            f"recording {gate} as {outcome} needs no operator's approval, so --approval "
+            "was ignored -- nothing was filed or spent. Record it directly (no approval is "
+            f"needed for it), or have the operator accept the recorded gate with "
+            f"`ddflow approve {item} {gate}`.",
+            id=item,
+            gate=gate,
+            outcome=outcome,
+        )
+    return refused
+
+
 def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyword-only
     repo: Path,
     item: str,
@@ -615,25 +636,9 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         G.required_gates(cfg, gates),
         gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
+    refused = _ignored_approval_refusal(approval, approval_stamp, gate, item, outcome, refused)
     if refused is not None:
         return refused
-    if approval and not approval_stamp:
-        # `--approval` (an id, or 'request') was passed but this record needs no operator
-        # override -- recording a non-skipped outcome over a gate with no unanswered
-        # failed-review findings is the agent's own to make -- so it was not spent and no
-        # request was filed. Surface that instead of silently recording with the argument
-        # dropped (bug Be2de070703): nothing is here to approve through `--approval`; the
-        # operator overrides an ALREADY-recorded gate with `ddflow approve <id> <gate>`.
-        return O.refused(
-            "gate.record",
-            f"recording {gate} as {outcome} needs no operator's approval, so --approval "
-            "was ignored -- nothing was filed or spent. Record it directly (no approval is "
-            f"needed for it), or have the operator accept the recorded gate with "
-            f"`ddflow approve {item} {gate}`.",
-            id=item,
-            gate=gate,
-            outcome=outcome,
-        )
     # B97106be46a: a refused skip already says which case it is (the refusal names the
     # request id); a skip that was NOT refused must say so too. See `_not_gated_skip_note`.
 
