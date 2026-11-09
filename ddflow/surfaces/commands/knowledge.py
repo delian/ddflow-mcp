@@ -513,7 +513,8 @@ def cmd_session(a, c: Ctx) -> int:
                 out.body(("redactions", "session", "how")),
             )
         else:
-            c.out(f"noted{where}", out.body(("session", "how")))
+            on = f" on item {out.data['item']}" if out.data.get("item") else ""
+            c.out(f"noted{on}{where}", out.body(("session", "how", "item")))
         return OK
     if a.session_cmd == "adopt-orphans":
         out = A.session_adopt_orphans(c.repo, agent=c.requested_agent)
