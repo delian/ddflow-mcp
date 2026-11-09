@@ -1,0 +1,3 @@
+{"agent":"recover-7a","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e608d5b2677fcef8f11e6008a","kind":"ddflow.seen","lamport":161286,"schema":1,"subject":"ddflow","ts":"2026-11-09T11:32:01.148498Z"}
+{"agent":"recover-7a","data":{"path":".ddflow/worktrees/WP-gate-yield"},"id":"e93d88daceca4f0e6f9d7886c","kind":"worktree.removed","lamport":161287,"schema":1,"subject":"WP-gate-yield","ts":"2026-11-09T11:32:01.220165Z"}
+{"agent":"recover-7a","data":{"tags":["skip-followup","wave:0"]},"id":"e38029a5075b53ab01f138d7b","kind":"task.updated","lamport":161297,"schema":1,"subject":"gskip-fix-Bb67dc543b6-1","ts":"2026-11-09T11:32:21.573161Z"}
