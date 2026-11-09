@@ -120,8 +120,13 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         lines.extend(_finding_lines(shown, f, mine, supers))
     if shown == 0:
         return context
+    scope = (
+        f"the delta of {item} (commits since the reviewed head)"
+        if kind == "delta"
+        else f"the whole diff of {item}"
+    )
     say(
-        f"re-review: the whole diff of {item}, with {shown} previous {gate} finding(s) "
+        f"re-review: {scope}, with {shown} previous {gate} finding(s) "
         "and their triage (D-gate-economy)"
     )
     return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)
