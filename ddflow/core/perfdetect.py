@@ -123,6 +123,10 @@ def detect(
     cfg = cfg or PerfMetricsConfig()
     streak = 0
     for start, end, vals in windows:
+        # A window under the sample floor is NOT a miss (an unrun probe is not a regression,
+        # and not a healthy pass either): it is skipped, so the persistence streak survives it.
+        if len(baseline) < cfg.detect_min_samples or len(vals) < cfg.detect_min_samples:
+            continue
         hit = detect_series(series, env, baseline, vals, start, end, cfg=cfg) is not None
         streak = streak + 1 if hit else 0
         if streak >= cfg.detect_persistence_windows:

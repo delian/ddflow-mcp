@@ -59,3 +59,15 @@ def test_creep_the_ewma_catches_a_slow_slide_a_fixed_threshold_misses():
 def test_burn_rate_reports_short_long_and_budget_left():
     r = PD.burn_rate([5.0] * 10, [4.0] * 20, budget_s=20.0)
     assert r["short_p90"] == 5.0 and r["long_p90"] == 4.0 and r["budget_left_short"] == 15.0
+
+
+def test_persistence_survives_a_thin_window_that_could_not_run():
+    # A thin (under-floor) window does NOT reset the streak: the two windows that ran are a
+    # 100% regression and still fire together.
+    from ddflow.config_sections.perf_metrics import PerfMetricsConfig
+
+    cfg = PerfMetricsConfig(detect_persistence_windows=2)
+    windows = [(0.0, 1.0, [200.0] * 8), (1.0, 2.0, [200.0, 200.0]), (2.0, 3.0, [200.0] * 8)]
+    f = PD.detect("rss", "env:a", [100.0] * 8, windows, cfg=cfg)
+    assert f is not None
+    assert f.absolute_s == pytest.approx(100.0)
