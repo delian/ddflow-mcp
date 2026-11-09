@@ -57,3 +57,17 @@ def test_a_failed_gates_reason_is_untouched():
         "ci"
     ]
     assert note == "1 test failed: tests/test_x.py"
+
+
+def test_a_long_holder_reason_cuts_the_reason_not_the_past_timeout_note():
+    """A holder line can embed a long path, pushing the note past WHY_CHARS: the past-timeout
+    note must survive the truncation, or a long path drops it and re-lives the misread."""
+    from ddflow.services.gates.reasons import WHY_CHARS
+
+    path = "some_very_long_checkout_directory_name" * 6  # a reason past the cap on its own
+    reason = f"blocked on pid 989929 / {path} since 02:12:11, you are #2 in the queue"
+    note = _why_notes(_ci(reason), [("ci", "unavailable")])["ci"]
+    assert len(note) <= WHY_CHARS, len(note)
+    assert note.endswith("a past timeout -- re-run the gate)"), note
+    assert "recorded 2026-11-05 02:12" in note, note
+

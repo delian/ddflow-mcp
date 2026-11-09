@@ -16,15 +16,28 @@ WHY_CHARS = 200
 _SUITE_WAIT = re.compile(r"^blocked on .+? since (?:\d{2}:\d{2}:\d{2}|an unknown time)")
 
 
-def _past_suite_wait(text: str, at: str) -> str:
-    """``text`` + a note that it is a FINISHED suite-lock timeout, not a live queue entry.
+def _past_note(at: str) -> str:
+    """The note that a full-suite timeout is FINISHED, not a live queue entry (bug Bc53afb94b4).
 
     ``at`` is when the unavailable outcome was recorded (the gate record's timestamp); a
     record without one still says the wait is past, it just cannot say when."""
     when = fmt_minute(at or "")
-    if when:
-        return f"{text} (recorded {when}; a past timeout -- re-run the gate)"
-    return f"{text} (a past timeout -- re-run the gate)"
+    return f"recorded {when}; a past timeout -- re-run the gate" if when else "a past timeout -- re-run the gate"
+
+
+def _suite_wait_note(text: str, at: str) -> str:
+    """``text`` with its past-timeout note, the note kept WHOLE when the reason is long.
+
+    A holder line can embed a filesystem path, so ``text`` alone may already approach
+    `WHY_CHARS`; the generic front-slice would then cut the note off the TAIL and leave only
+    the present-tense wording -- the exact misread this note exists to fix. Here the REASON
+    is cut instead, never the note."""
+    note = _past_note(at)
+    tail = f" ({note})"
+    if len(text) + len(tail) <= WHY_CHARS:
+        return text + tail
+    head = text[: WHY_CHARS - len(tail) - 3].rstrip() + "..."
+    return head + tail
 
 
 def _unavailable_reasons(it, rows: list[tuple[str, str]]) -> dict[str, str]:
@@ -41,6 +54,6 @@ def _unavailable_reasons(it, rows: list[tuple[str, str]]) -> dict[str, str]:
         rec = it.gates.get(g)
         text = " ".join(((rec.reason if rec else "") or "").split()) or "no reason was recorded"
         if rec is not None and _SUITE_WAIT.match(rec.reason or ""):
-            text = _past_suite_wait(text, rec.at)
+            text = _suite_wait_note(text, rec.at)
         out[g] = text if len(text) <= WHY_CHARS else text[: WHY_CHARS - 3] + "..."
     return out
