@@ -82,14 +82,14 @@ class PsProbe(ResourceProbe):
         return "ps"
 
     def sample(self, pid: int) -> ResourceSample | None:
-        import subprocess
+        from ddflow.adapters import proc
 
         try:
-            out = subprocess.run(
+            out = proc.run(
                 ["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5
             )
             rss_kb = int(out.stdout.strip().split()[0])
-        except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        except (OSError, ValueError, IndexError, proc.TimeoutExpired):
             return None
         return ResourceSample(rss_kb, "ps")
 
