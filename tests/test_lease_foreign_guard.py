@@ -165,7 +165,7 @@ def test_merge_of_another_clones_live_lease_is_refused(clones):
     _a, b = clones
     code, out, err = run_cli(b, "merge", "T2", agent="U2")
     assert code == REFUSED, out + err
-    assert "U9" in out + err and "--force" in out + err
+    assert "U9" in out + err
     assert _lease_of(b, "T2") is not None
 
 

@@ -166,8 +166,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
             "worktree.merged",
             f"cannot merge {item}: it is leased by {who} and the lease is live; "
             "merging releases their lease and removes their worktree. Ask them, wait "
-            "for the lease to lapse, or override on the record with --force --reason "
-            "'<why>'.",
+            "for the lease to lapse, or release it first.",
             id=item,
             sha="",
             dirty=[],
