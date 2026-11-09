@@ -1657,8 +1657,10 @@
   
   positional arguments:
     {state,brief,advise,fleet,resume,approve}
-                          state (default), brief <lane>, advise, fleet, resume <lane> or approve <template>
-    lane                  with brief, resume or approve: the lane name (for approve, the template name), or a unique part of it
+                          state (default), brief <lane>, advise, fleet, resume <lane> or approve
+                          <template>
+    lane                  with brief, resume or approve: the lane name (for approve, the template
+                          name), or a unique part of it
   
   options:
     -h, --help            show this help message and exit

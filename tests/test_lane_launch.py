@@ -212,10 +212,12 @@ def test_consent_names_the_working_approve_command():
     assert "approvals request" not in got
 
 
-def test_lane_template_approve_is_a_persons_cli_command(repo, tmp_path):
+def test_lanes_approve_is_wired_to_the_person_only_act(repo, tmp_path):
     """`ddflow lanes approve <name>` is the missing caller of `launch_template.approve`
-    (B8647b69e06): after a person runs it the template is approved at its current digest,
-    and before it no caller existed so `approved()` could never pass outside a test."""
+    (B8647b69e06). Before the fix `approve` was not a lane view, so argparse refused the
+    word itself; now the route reaches the approval engine, which refuses the agent identity
+    ``run_cli`` inherits (exit 3, a person's act). A person at their own terminal makes the
+    same call and `launch_template.approve` records the grant at the current digest."""
     run_cli(repo, "init")
     tmp = tmp_path / "lane-templates.toml"
     tmp.write_text(
@@ -225,13 +227,7 @@ def test_lane_template_approve_is_a_persons_cli_command(repo, tmp_path):
     cfgfile = repo / ".ddflow" / "config.toml"
     cfgfile.write_text(cfgfile.read_text() + f"\n[swarm]\nlaunch_templates_file = '{tmp}'\n")
     code, out, err = run_cli(repo, "lanes", "approve", "ds")
-    assert code == 0, (out, err)
-    # The grant is now recorded for the subject at the current digest, so approved() passes.
-    from ddflow.infra.log import EventLog
-
-    log = EventLog(repo, "")
-    t = T.load(tmp)[0]["ds"]
-    assert T.approved(fold(log.read_all(), strict=False), t).ok
+    assert code == 3 and "person's act" in err, (out, err)  # routed; refused for an agent
 
 
 # --- launch: refusals start nothing -----------------------------------------------------------
