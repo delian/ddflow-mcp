@@ -182,6 +182,7 @@ def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
     merged work is still the committed `merged_sha`, so the gate runs THERE (a scratch
     checkout) and records a real outcome instead of UNAVAILABLE (B80a4dafd02)."""
     _merged(repo)
+    merged_sha = fold(EventLog(repo).read_all(), strict=False).items["T1"].merged_sha
     (repo / "later.txt").write_text("later\n")
     _git(repo, "add", ".")
     _git(repo, "commit", "-qm", "later work on main")
@@ -190,6 +191,9 @@ def test_a_gate_run_after_a_later_commit_does_not_claim_the_moved_primary(repo):
     assert code == 0, text
     assert _gate(repo, "unit_tests").outcome == "passed", _gate(repo, "unit_tests")
     assert "unavailable" not in text
+    # The evidence names the MERGED commit the gate actually ran in -- not the moved primary.
+    proof = (_gate(repo, "unit_tests").evidence or {}).get("tree_sha", "")
+    assert merged_sha[:12] in proof, _gate(repo, "unit_tests").evidence
 
 
 def test_a_gate_run_after_a_revert_does_not_claim_the_reverted_primary(repo):
