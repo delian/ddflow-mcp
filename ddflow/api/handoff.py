@@ -65,25 +65,25 @@ def suggest(
             base=tip,
         )
     except send.SuggestError as exc:
-        return O.failed(
-            "handoff.suggest",
-            f"{exc}; resend (CLI `ddflow suggest {item} --reason '...' --diff F`, "
-            f"MCP ddflow_suggest item={item} reason=... diff=F)",
+        return O.failed("handoff.suggest", str(exc))
+    if out.ref:
+        nxt = (
+            f"apply: ddflow suggest apply {out.ref}  (MCP ddflow_suggest action=apply ref={out.ref})\n"
+            f"reject: ddflow suggest reject {out.ref}  (MCP ddflow_suggest action=reject ref={out.ref})\n"
+            f"show:   ddflow suggest show {out.ref}    (MCP ddflow_suggest action=show ref={out.ref})\n"
+            f"expiry: open for {cfg.handoff.expire_s if hasattr(cfg.handoff, 'expire_s') else 'the handoff TTL'}; "
+            f"then ddflow suggest expire {out.ref}"
         )
-    ref = out.ref or ""
-    _arrow = f"apply: ddflow suggest apply {ref}" if ref else "apply: ddflow apply by patch-id"
-    _nxt = (
-        f"{_arrow}  (MCP ddflow_suggest action=apply ref={ref})\n"
-        f"reject: ddflow suggest reject {ref}  (MCP ddflow_suggest action=reject ref={ref})\n"
-        f"show:   ddflow suggest show {ref}    (MCP ddflow_suggest action=show ref={ref})\n"
-        f"expiry: open for {cfg.handoff.expire_s if hasattr(cfg.handoff, 'expire_s') else 'the handoff TTL'}; "
-        f"then ddflow suggest expire {ref}"
-    )
+    else:
+        nxt = (
+            f"no ref cut (no owner tip yet): blob {out.blob} applies by patch-id; "
+            f"re-run once the owner pushes a branch to cut a ref"
+        )
     text = (
         f"suggested to {to_agent} on {item}\n"
         f"probe: {out.probe}\n"
-        f"ref: {ref or '(no base: blob stored)'}\n"
+        f"ref: {out.ref or '(no base: blob stored)'}\n"
         f"blob: {out.blob}\n"
-        f"owner next:\n{_nxt}"
+        f"owner next:\n{nxt}"
     )
     return O.ok("handoff.suggest", ref=out.ref, probe=out.probe, blob=out.blob, text=text)
