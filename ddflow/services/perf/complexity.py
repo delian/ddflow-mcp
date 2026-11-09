@@ -44,16 +44,22 @@ def import_edges(package: Path) -> dict[str, set[str]]:
                 if node.module and node.level == 0:
                     target = node.module
                     if target.startswith(pkg_name + "."):
-                        target = target[len(pkg_name) + 1 :]  # absolute package-relative, like Import
+                        target = target[
+                            len(pkg_name) + 1 :
+                        ]  # absolute package-relative, like Import
                     edges[module].add(target)
                     edges[module].add(target.split(".")[0])
-                elif node.level > 0:  # a relative from .X / from . — resolve against THIS module's package
-                    parts = _module_name(package, py).split(".")
-                    base = parts[: len(parts) - node.level] if len(parts) > node.level else []
-                    target = ".".join(base + ([node.module] if node.module else []))
-                    if target:
-                        edges[module].add(target)
-                        edges[module].add(target.split(".")[0])
+                elif (
+                    node.level > 0
+                ):  # a relative from .X / from . — resolve against THIS module's dir
+                    dir_parts = list(py.relative_to(package).parent.parts)
+                    up = node.level - 1
+                    base = dir_parts[: len(dir_parts) - up] if len(dir_parts) >= up else []
+                    names = [node.module] if node.module else [a.name for a in node.names]
+                    for nm in names:
+                        tgt = ".".join([*base, nm])
+                        edges[module].add(tgt)
+                        edges[module].add(tgt.split(".")[0])
     return dict(dict(edges).items())
 
 
@@ -127,7 +133,11 @@ def churn_hotspots(facts: Facts) -> list[dict]:
     whose outcomes recorded no changed lines has ``changed_lines=None`` (unmeasured, never 0)."""
     out = []
     for lease in facts.leases:
-        lines = [o.changed_lines for o in facts.outcomes if o.item == lease.item if o.changed_lines]
+        lines = [
+            o.changed_lines
+            for o in facts.outcomes
+            if o.item == lease.item and o.changed_lines is not None
+        ]
         out.append(
             {
                 "item": lease.item,
@@ -158,7 +168,7 @@ def tests_per_changed_line(facts: Facts) -> dict:
     (``Outcome.changed_lines``), not over file-glob counts (a glob is not a line). No outcome
     recorded a line count -> ``changed_lines=None`` (an unrun probe is never zero)."""
     tests = sum(1 for lease in facts.leases for g in lease.globs if g.startswith("tests/"))
-    recorded = [o.changed_lines for o in facts.outcomes if o.changed_lines]
+    recorded = [o.changed_lines for o in facts.outcomes if o.changed_lines is not None]
     changed = sum(recorded) if recorded else None
     return {
         "test_files": tests,
