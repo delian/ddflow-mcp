@@ -172,7 +172,7 @@ def test_run_locked_passes_the_lock_to_execute_as_holding_suite(tmp_path: Path, 
 
     def execute(cfg_, tree, cmd, scope, budget, tick=None, **kw):
         seen.append(kw)
-        return NS(ran=True), ""
+        return NS(ran=True), "", 0.0
 
     monkeypatch.setattr(runner, "_execute", execute)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))  # never the host-wide lock

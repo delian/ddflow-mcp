@@ -3178,6 +3178,15 @@
           enforced lock: ddflow has no organisation layer yet, so the local layer or
           `DDFLOW_OUTPUT_ALLOW_FULL` can still override it. Default true: a person at
           a terminal asking for everything gets everything.
+      perf_metrics.ring_max_bytes = 2000000   [default]
+          Most bytes one raw-sample ring (`.ddflow/local/perf/<series>.jsonl`) keeps;
+          when a series exceeds it the oldest samples are dropped first (flowstate
+          precedent). Raw detail only -- rollups and aggregates are committed.
+      perf_metrics.ring_max_age_s = 604800   [default]
+          Seconds a raw sample stays in the local ring before the store trims it.
+      perf_metrics.aggregate_min_samples = 3   [default]
+          Fewest samples a daily aggregate needs before its p50/p90/max are reported;
+          below it the count is reported and the percentiles are None, never zero.
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the

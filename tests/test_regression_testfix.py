@@ -269,3 +269,17 @@ def test_a_collect_probe_that_does_not_answer_falls_back_to_the_text_scan(tmp_pa
     assert tree_provides(lambda *_: "false", "", tmp_path, ["test_h.py::test_g"]) is False
     assert tree_provides(lambda *_: "true", "", tmp_path, ["test_h.py::test_g"]) is True  # exit 0
     assert tree_provides(lambda *_: "true", "", tmp_path, ["gone.py::test_h"]) is False
+
+
+def test_a_collect_probe_uses_the_callers_cfg_not_the_tree_config(cfg, tmp_path):
+    """The collection probe runs with the CALLER's config, so a probed tree that still
+    carries a committed ``worktree.base_ref = "--local"`` cannot crash it. B20cfd41344
+    fixed the run path in `mutation.py` but not this probe (`regression_collect` reloaded
+    the tree's config and raised `InvalidValue` instead of answering)."""
+    from ddflow.services.gates.regression_collect import tree_provides
+
+    probe = tmp_path / "probe"
+    (probe / ".ddflow").mkdir(parents=True)
+    (probe / ".ddflow" / "config.toml").write_text('[worktree]\nbase_ref = "--local"\n')
+    (probe / "test_h.py").write_text("def test_h():\n    pass\n")
+    assert tree_provides(lambda *_: "true", "", probe, ["test_h.py::test_h"], cfg=cfg) is True

@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.ring_max_bytes"
+new = "2000000"
+why = "Perf store (D-perf-metrics-answers): most bytes one raw-sample ring keeps."
+impact = "additive"

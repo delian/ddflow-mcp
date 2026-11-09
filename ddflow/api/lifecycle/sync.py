@@ -64,9 +64,10 @@ def sync(
             changed_paths(repo, it),
             cfg.review.triage_ignore_globs,
             cfg.review.doc_globs,
+            cfg.locks.review_reuse,
         )
-        stale = {n.gate for n in notes if not n.unverified}
         unverified = {n.gate for n in notes if n.unverified}
+        stale = {n.gate for n in notes if not n.unverified and not n.reused}
         recorded = {g for g, rec in it.gates.items() if rec.outcome == "passed"}
         data["gates_valid"] = sorted(recorded - stale - unverified)
         data["gates_stale"] = sorted(recorded & stale)

@@ -89,7 +89,11 @@ def _not_red(
     plain = [i for i in ids if i not in blind and i not in still and i not in set(changed)]
     if plain or changed:
         found["new_failures"] = (plain + changed)[: BR.SHOWN * 4]
-        return result, (why + "; " if why else "") + _new_reason(base, plain, changed, blind)
+        return (
+            result,
+            (why + "; " if why else "")
+            + _new_reason(base, found.get("base_sha", ""), plain, changed, blind),
+        )
     if not blind:
         return result, why
     shown = ", ".join(sorted(blind)[: BR.SHOWN]) + (" ..." if len(blind) > BR.SHOWN else "")
@@ -100,18 +104,24 @@ def _not_red(
     return "unavailable", reason
 
 
-def _new_reason(base: str, plain: list[str], changed: list[str], blind: set[str]) -> str:
+def _new_reason(
+    base: str, base_sha: str, plain: list[str], changed: list[str], blind: set[str]
+) -> str:
     """The reason text for ids the base does not fail as it does here: ``plain`` are not failing
-    there, ``changed`` fail there too but differently (a new offender in an already-red test)."""
+    there, ``changed`` fail there too but differently (a new offender in an already-red test).
+    ``base_sha`` is the commit actually measured, named beside ``base`` because ``base`` is a
+    moving branch: by the time the reason is read the live tip may have changed, so the bare
+    branch name no longer says which commit the comparison tested (B7c0121c0c4)."""
+    where = f"{base} ({base_sha[:8]})" if base_sha else base
     parts: list[str] = []
     if plain:
         parts.append(
-            f"new failure(s) not failing on {base}: {', '.join(plain[: BR.SHOWN])}"
+            f"new failure(s) not failing on {where}: {', '.join(plain[: BR.SHOWN])}"
             f"{' ...' if len(plain) > BR.SHOWN else ''}"
         )
     if changed:
         parts.append(
-            f"new offender(s) in an already-red test (fails on {base} too, but "
+            f"new offender(s) in an already-red test (fails on {where} too, but "
             f"differently): {', '.join(changed[: BR.SHOWN])}"
             f"{' ...' if len(changed) > BR.SHOWN else ''}"
         )

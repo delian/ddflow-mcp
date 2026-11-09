@@ -200,6 +200,7 @@ def _prepare(spec: LaunchSpec, private: list[Path]):
     env = {n: os.environ[n] for n in spec.pass_env if n in os.environ}
     env.update(spec.fixed_env)
     env.update(r.env)
+    env.update(spec.secret_env)
     identity = _identity(spec.cwd, env)
     if isinstance(identity, Result):
         return identity
@@ -245,7 +246,9 @@ class ProcessHeadless:
         except (OSError, ValueError) as e:
             self._rm(private)
             return failed(f"cannot start {argv[0]}: {e}")
-        secret_values = tuple(v for v in r.env.values() if len(v) >= SECRET_MIN)
+        secret_values = tuple(
+            v for v in (*r.env.values(), *spec.secret_env.values()) if len(v) >= SECRET_MIN
+        )
         run = _Run(
             run_id,
             spec,

@@ -225,7 +225,9 @@ def test_a_measured_decision_reaches_the_run(monkeypatch):
     calls: list[tuple] = []
     monkeypatch.setattr(runner, "_needs_suite_slot", lambda *a: calls.append(a) or False)
     monkeypatch.setattr(
-        runner, "_run_locked", lambda *a, **k: (NS(kind="", ran=True, code=0, output=""), "", None)
+        runner,
+        "_run_locked",
+        lambda *a, **k: (NS(kind="", ran=True, code=0, output="", elapsed_s=0.0), "", None, 0.0),
     )
     monkeypatch.setattr(runner, "_merge_base", lambda *a: ("main", None))
     monkeypatch.setattr(runner, "_stale_pins", lambda *a, **k: "")
@@ -272,7 +274,7 @@ def _hold(monkeypatch, *reads: float):
 
     def fake_execute(*a, **k):
         got.append(a[4])
-        return NS(kind="ran", ran=True, code=0, output="", elapsed_s=0), ""
+        return NS(kind="ran", ran=True, code=0, output="", elapsed_s=0), "", 0.0
 
     monkeypatch.setattr(runner.time, "monotonic", monotonic)
     monkeypatch.setattr(runner.SL, "hold", fake_hold)

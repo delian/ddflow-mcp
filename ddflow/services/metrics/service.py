@@ -11,6 +11,7 @@ from ...adapters.registry import Registry
 from ...config import Config
 from ...core import clock
 from ...core.events import Event
+from ...core.metrics import VIEWS
 from ...core.model import State
 from .facts import collect
 from .forecast import forecast as forecast_view
@@ -38,20 +39,6 @@ from .summary import build, has_figures
 from .tiny import build as tiny_build
 from .tiny import has_figures as tiny_ok
 from .tiny import text as tiny_text
-
-VIEWS = (
-    "summary",
-    "forecast",
-    "retro",
-    "skips",
-    "lanes",
-    "stages",
-    "locks",
-    "tiny",
-    "paths",
-    "swarm",
-)
-
 
 #: `swarm_metrics` and the swarm ledger import this package, so these resolve when first used.
 SWARM: Registry[Callable[..., Any]] = Registry("swarm metrics")
@@ -94,9 +81,7 @@ def parse_since(text: str, now: float) -> float | None:
 
 
 def _stages(ctx: Context, group_by: str) -> Answer:
-    return _figure(
-        ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage"
-    )
+    return _figure(ctx, lambda c: stages_build(c, group_by), stages_ok, stages_text, "stage")
 
 
 def _figure(ctx: Context, build, ok_of, text_of, subject: str) -> Answer:
@@ -124,7 +109,26 @@ def _paths(ctx: Context) -> Answer:
     return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
 
 
-def run(  # noqa: PLR0911, C901 -- one return per view; the dispatcher IS the branch
+def _retro(item: str, events: Sequence[Event], facts: Any, state: State) -> Answer:
+    """The ``retro`` view: one item's timeline, refused without an id or a known item."""
+    if not item:
+        return Answer(False, "retro needs an item id", failed=True)
+    if item not in state.items:
+        return Answer(False, f"no item {item!r}", failed=True)
+    t = timeline(events, facts, item)
+    reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
+    return Answer(not reason, reason, metrics=t, text=text_retro(t))
+
+
+def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None) -> Answer:
+    """The ``lanes`` view: a grid sample over who worked in the window, with utilisation."""
+    g = grid_sample(events, cfg, now, floor)
+    u = utilisation(g["rows"])
+    reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
+    return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
+
+
+def run(
     events: Sequence[Event],
     state: State,
     cfg: Config,
@@ -154,13 +158,7 @@ def run(  # noqa: PLR0911, C901 -- one return per view; the dispatcher IS the br
         f = forecast_view(facts, state, cfg, now, phase)
         return Answer(f["available"], f["reason"], metrics=f, text=text_forecast(f))
     if view == "retro":
-        if not item:
-            return Answer(False, "retro needs an item id", failed=True)
-        if item not in state.items:
-            return Answer(False, f"no item {item!r}", failed=True)
-        t = timeline(events, facts, item)
-        reason = "" if t["biggest_gap"] else f"{item} has fewer than two events to compare"
-        return Answer(not reason, reason, metrics=t, text=text_retro(t))
+        return _retro(item, events, facts, state)
     if view == "stages":
         return _stages(ctx, group_by)
     if view == "locks":
@@ -173,10 +171,7 @@ def run(  # noqa: PLR0911, C901 -- one return per view; the dispatcher IS the br
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))
     if view == "lanes":
-        g = grid_sample(events, cfg, now, floor)
-        u = utilisation(g["rows"])
-        reason = "" if u["utilisation"] is not None else "no lane worked in the sampled window"
-        return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
+        return _lanes(events, cfg, now, floor)
     try:
         data = build(ctx, group_by or "gate")
     except ValueError as exc:

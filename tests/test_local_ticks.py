@@ -100,7 +100,11 @@ def test_a_target_given_by_name_is_imported_only_when_it_runs(proj: Path) -> Non
 
 
 def test_the_ticks_ddflow_ships_are_the_flow_sample_and_the_integrator() -> None:
-    assert [t.name for t in TK.registered()] == ["flow.sample", "merge_queue.integrator"]
+    assert [t.name for t in TK.registered()] == [
+        "flow.sample",
+        "merge_queue.integrator",
+        "swarm.launch",
+    ]
 
 
 # -- due, claimed, recorded ----------------------------------------------------------------

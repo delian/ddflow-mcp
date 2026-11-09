@@ -252,6 +252,15 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     # refused below, and saying "rounds used N+1" for it read as the round it burned.
     if item and not _flagged_unchanged_delta(a, why):
         say(_rounds_report(cfg, it, a, why_ok))
+    why, rerun = _compute_rerun(a, cfg, it, gate, revs, diff, why)
+    return kind, done, forced, diff, how, why, rerun
+
+
+def _compute_rerun(a: dict[str, Any], cfg, it, gate, revs, diff, why) -> tuple[str, Any]:
+    """``(why, rerun)`` for this call: a ``--chunk`` re-run resolves first (its failure
+    refuses in ``why``), then a resume of a signal-cut review, both only when there is a
+    diff. Inline in `_scope` before: extracted so the round's branch count stays under the
+    complexity ratchet."""
     rerun = None
     if a["chunks"] and diff.strip():
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"], cfg.review.chunk_max_tokens)
@@ -262,7 +271,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         # by `not why`: an explicit --chunk request that failed explains itself in `why`; a resume
         # must not paper over that refusal with a fresh chunk list (B-review-chunk-checkpoint).
         rerun = _resume_of_terminated(it, gate, revs, diff, cfg.review.chunk_max_tokens)
-    return kind, done, forced, diff, how, why, rerun
+    return why, rerun
 
 
 def _flagged_unchanged_delta(a: dict[str, Any], why: str) -> bool:
