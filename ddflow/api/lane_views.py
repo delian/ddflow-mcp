@@ -36,16 +36,22 @@ def _lead_text(ledger, st, at: float, agent: str, max_asks: int, repo: Path) -> 
     msgs = LD.pending(repo, agent)
     if not msgs:
         return text
+    shown = msgs[:max_asks] if max_asks > 0 else []
     rows = [
         f"  {'ask' if m.reason == 'message' else m.reason} {i}. from "
         f"{LD.safe(m.sender) or 'a lane'}"
         + (f" about {LD.safe(m.item)}" if m.item else "")
         + ": "
         + m.text.replace("\n", " ")[:200]
-        for i, m in enumerate(msgs[:max_asks], 1)
+        for i, m in enumerate(shown, 1)
     ]
-    head = "your inbox:" + ("\n" if rows else " none")
-    return text + "\n\n" + head + "\n" + "\n".join(rows)
+    head = f"your inbox ({len(msgs)}):"
+    if not rows:
+        head += f" all {len(msgs)} held (lanes.advise_max is 0)"
+    if len(shown) < len(msgs):
+        head += f" ({len(msgs) - len(shown)} more not shown)"
+    body = "\n".join(rows)
+    return text + "\n\n" + head + ("\n" + body if body else "")
 
 
 def _lead_outcome(ledger, st, at: float, agent: str, cfg, repo: Path, data: dict) -> O.Outcome:
