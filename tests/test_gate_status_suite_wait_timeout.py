@@ -81,3 +81,20 @@ def test_a_reason_with_a_newline_before_the_time_is_still_a_past_timeout():
     note = _why_notes(_ci(reason), [("ci", "unavailable")])["ci"]
     assert "a past timeout" in note, note
     assert "re-run the gate" in note, note
+
+
+def test_the_producers_line_is_decorated_end_to_end():
+    """The producer (`SuiteBusy`) and the display (`_SUITE_WAIT`) share no code, mirroring
+    test_gate_unavailable_reason_blocked_on.py::test_what_the_lock_says_is_what_the_gate_reads:
+    this test is what keeps them from drifting apart, for every holder shape."""
+    from ddflow.services.suitelock import SuiteBusy
+
+    for holder in (
+        {"holder": "PS-snapshot of /repo", "pid": 989929, "at_iso": "02:12:11"},
+        {"holder": "item of /repo (pid 7)"},
+        {},
+    ):
+        reason = str(SuiteBusy(holder, 1800.0, 2))
+        note = _why_notes(_ci(reason), [("ci", "unavailable")])["ci"]
+        assert "a past timeout" in note, (holder, note)
+        assert "re-run the gate" in note, (holder, note)
