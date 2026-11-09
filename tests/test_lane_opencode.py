@@ -22,7 +22,7 @@ from ddflow.services.swarm import lanehooks as LH
 from ddflow.services.swarm import lanehooks_plugin as PL
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
-SECRET = "sk-test-0123456789abcdef"
+SECRET = "test-secret-placeholder-value"
 EVENTS = [
     {"type": "step_start", "sessionID": "ses_1"},
     {"type": "tool_use", "part": {"tool": "ddflow_claim", "state": {"input": {}}}},
