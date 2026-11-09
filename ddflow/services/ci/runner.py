@@ -537,6 +537,10 @@ def _execute(
 def _run_stages(
     cfg: Config, tree: Path, cmd: str, scope, budget: int, tick, used, selected, holding_suite=False
 ):
+    """Returns ``(run, prefix, elapsed)`` on BOTH paths: the run that decided the verdict, the
+    output emitted before it, and the run's own elapsed seconds summed across its stages
+    (``spent`` is initialized from the first stage's ``elapsed_s`` and accumulated per later
+    one, so the selected+always stages are included -- B28537b615d)."""
     on_tick, tick_s = tick or (None, 0)
     # The operator's own [ci].command, run as they wrote it; on timeout its whole
     # process group dies, not just the shell (Bed0f5b6d99).
