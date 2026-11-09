@@ -56,7 +56,7 @@ def test_a_scan_derives_each_merged_items_diff_once(repo, monkeypatch):
     )
 
     derived = []
-    real = CH.changed_paths
+    real = CH.changed_paths  # the low-level git diff every `_read` branch reaches (landed, branch or cited)
 
     def counting(repo_arg, *a, **k):
         derived.append(1)
