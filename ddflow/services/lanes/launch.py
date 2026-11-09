@@ -134,6 +134,14 @@ def endpoint_pools(
 
 
 def _constraints(req: Request, w: Weights) -> list[str]:
+    """The scheduler's hard constraints, judged on the same lane as dispatch builds it.
+
+    The lane is built through `dispatch.lane_of`, so launch scores under the catalog's
+    VENDOR (``family_for``), not the template's family id (B60ff757d13), and enforces the
+    catalog's window: a lane whose token estimate does not fit its served window is refused
+    here exactly as dispatch would refuse it for the next item. The template's own price is
+    the budget's source (a person approved it); the catalog price ``lane_of`` falls back to
+    is a dispatch term, not the launch budget."""
     t, item = req.template, req.state.items[req.item]
     sc_item = score.Item(
         id=item.id,

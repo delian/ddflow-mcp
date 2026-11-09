@@ -278,6 +278,13 @@ def test_family_cap_counts_the_catalog_vendor_not_the_template_family_id(tmp_pat
     assert any("family_cap" in x for x in LN.launch(replace(req, world=same)).reasons)
 
 
+def test_a_lane_whose_estimate_exceeds_the_catalog_window_is_refused(tmp_path, tree):
+    """Launch scores the same lane as dispatch, so the catalog window is enforced here too
+    (the lane's served window is a hard constraint for the item it starts)."""
+    r = LN.launch(request(tmp_path, tree, est_in=100_000))
+    assert isinstance(r, LN.Refused) and any("exceeds window" in x for x in r.reasons)
+
+
 def test_hook_plugin_consent_is_asked_and_leaves_no_files(tmp_path, tree):
     t = tpl()
     r = LN.launch(request(tmp_path, tree, st=state(t, plugin=False)))
