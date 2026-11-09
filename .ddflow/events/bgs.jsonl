@@ -47,3 +47,4 @@
 {"agent":"bgs","data":{"at":1794224121.7180958,"branch":"ddflow/fix-Bbb8c158254","holder":"bgs","worktree":".ddflow/worktrees/fix-Bbb8c158254"},"id":"e42149b23af31e3fe6ceb0d94","kind":"lease.renewed","lamport":161336,"schema":1,"subject":"fix-Bbb8c158254","ts":"2026-11-09T11:35:23.774186Z"}
 {"agent":"bgs","data":{},"id":"e3c703cfaaa201505bb61fa34","kind":"item.started","lamport":161337,"schema":1,"subject":"fix-Bbb8c158254","ts":"2026-11-09T11:35:26.267885Z"}
 {"agent":"bgs","data":{"by":"bgs","event":"e046db77d2bc95eaa817172ed","holder":"bgs","note":""},"id":"eaf8ea4873eb4bf28e510f4a4","kind":"lease.released","lamport":161358,"schema":1,"subject":"fix-Bbb8c158254","ts":"2026-11-09T11:38:26.923883Z"}
+{"agent":"bgs","data":{"tags":["skip-followup","wave:0"]},"id":"e9c578556b8fa1b407310870d","kind":"task.updated","lamport":161361,"schema":1,"subject":"gskip-fix-Bba5779e3ea-1","ts":"2026-11-09T11:38:37.033885Z"}
