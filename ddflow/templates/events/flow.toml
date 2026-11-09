@@ -3,63 +3,95 @@
 [[kind]]
 name = "backmerge.recorded"
 doc = "A branch was merged back into another and the forge reference kept."
+fields = { "forge" = ["str"], "into" = ["str"], "number" = ["int"], "url" = ["str"] }
+lookup = { "forge" = "a forge name", "into" = "a branch name" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "deploy.recorded"
 doc = "A commit was deployed to an environment."
+fields = { "env" = ["str"], "sha" = ["str"] }
+lookup = { "env" = "an environment name" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "flow.chosen"
 doc = "A flow knob was chosen for the project."
+fields = { "by" = ["str"], "knob" = ["str"], "reason" = ["str"], "user" = ["str"], "value" = ["str"] }
+text = ["reason", "value"]
+lookup = { "by" = "an agent id", "knob" = "a config key", "user" = "a user id" }
+exempt = "who changed a setting or approved a tool; the setting itself lives in config"
 
 [[kind]]
 name = "port.applied"
 doc = "A change was ported to another branch."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "pr.changes_requested"
 doc = "A pull request got a change request."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "pr.closed"
 doc = "A pull request was closed unmerged."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "pr.merged"
 doc = "A pull request was merged."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "pr.opened"
 doc = "A pull request was opened."
+fields = { "number" = ["int"], "url" = ["str"] }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "pr.synced"
 doc = "A pull request's state was read from the forge."
+fields = { "base" = ["str"], "checks" = ["str"], "feedback" = ["str"], "forge" = ["str"], "head" = ["str"], "head_sha" = ["str"], "kind" = ["str"], "merge_sha" = ["str"], "number" = ["int"], "queue" = ["str"], "queue_known" = ["bool"], "queue_position" = ["int"], "queue_state" = ["str"], "review" = ["str"], "state" = ["str"], "url" = ["str"] }
+text = ["feedback"]
+lookup = { "checks" = "a status word", "forge" = "a forge name", "head_sha" = "a sha", "kind" = "a kind word", "merge_sha" = "a sha", "queue" = "a queue state word", "queue_state" = "a state word", "review" = "a review state word", "state" = "a state word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "release.closed"
 doc = "A release was closed."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "release.opened"
 doc = "A release was opened."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "release.tagged"
 doc = "A release was tagged."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "worktree.adopted"
 doc = "An existing worktree was adopted by an item."
+fields = { "base" = ["str"], "branch" = ["str"], "path" = ["str"] }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "worktree.created"
 doc = "A worktree was created for an item."
+fields = { "base" = ["str"], "branch" = ["str"], "path" = ["str"] }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "worktree.merged"
 doc = "An item's branch was merged."
+fields = { "borrowed" = ["bool"], "branch" = ["str"], "branch_head" = ["str"], "gates" = ["dict"], "landed_after" = ["str"], "landed_before" = ["str"], "outside_globs" = ["list"], "sha" = ["str"] }
+lookup = { "branch_head" = "a sha", "gates" = "gate names and their recorded outcomes", "landed_after" = "a sha", "landed_before" = "a sha", "outside_globs" = "globs" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "worktree.removed"
 doc = "A worktree was removed."
+fields = { "path" = ["str"] }
+exempt = "a state change of a record that already exists; it adds no text to compare"
