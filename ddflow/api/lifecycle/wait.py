@@ -357,8 +357,10 @@ def _wake_data(repo: Path, me: str, cfg, v: dict[str, Any], resume: str):
 
 
 def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: float):
-    """The Outcome of a wait that ended: ready or woken by the inbox (exit 0), nothing to
-    wait for, or still blocked at the deadline (exit 2, naming the holders)."""
+    """The Outcome of a wait that ended: ready or woken by the inbox (exit 0), refused at
+    once when waiting cannot help (exit 3 -- not exit 2, whose "try again" a caller
+    retries into a spin; Be68798098a), or still blocked at the deadline (exit 2, naming
+    the holders)."""
     if woken and v["status"] != "ready":
         data["advice"] = _WOKEN_ADVICE.format(why=data["wake"]["reason"])
         return O.ok("wait", **data)
@@ -366,7 +368,7 @@ def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: f
         data["advice"] = _ready_advice(v, lease)
         return O.ok("wait", **data)
     if v["status"] == "hopeless":
-        return O.nothing("wait", f"Not waiting: {v['why']}", **data)
+        return O.refused("wait", f"Not waiting: {v['why']}", **data)
     holders = _holders(st, cfg, v["waiting_on"])
     data["holders"] = holders
     who = f" Held: {_holders_text(holders)}." if holders else ""
