@@ -40,7 +40,10 @@ def waiting_for_a_person(state, now: float | None = None) -> list[dict[str, Any]
 def _answer_form(r: dict[str, Any]) -> str:
     """The form a person answers ``r`` with: by id for an approval, in chat for a question."""
     if r["type"] == E.QUESTION:
-        return f"{r['id']} (question from {r['requested_by']})"
+        return (
+            f"{r['id']} (question from {r['requested_by']}: answer it in chat via "
+            f"`ddflow approvals ask {r['id']}`, then `ddflow approvals attest {r['id']}`)"
+        )
     return (
         f"{r['id']} ({r['verb']} for {r['requested_by']}, digest {r['digest'][:12]}, "
         f"answer `ddflow approvals approve {r['id']}`)"
@@ -61,5 +64,5 @@ def pending_line(state, shown: int = 3) -> str:
         f"{len(rows)} ask(s) wait for the operator: {names}{more}. "
         "`ddflow approvals pending` lists them with their digests; a person answers an "
         "approval with `ddflow approvals approve ID`, a question in chat (`ddflow approvals "
-        "ask ID`)."
+        "ask ID` surfaces it, `ddflow approvals attest ID` records the answer)."
     )

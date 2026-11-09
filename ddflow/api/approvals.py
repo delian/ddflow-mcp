@@ -83,15 +83,13 @@ def approvals_pending(repo: Path, *, agent: str = "") -> O.Outcome:
 
 def _pending_line(r: dict[str, Any], now: float) -> str:
     if r["type"] == "question":
-        # A question is answered in chat, with free text, after `ddflow approvals ask <id>`.
-        form = f"ddflow approvals ask {r['id']}"
+        # A question is answered in chat: `ask` surfaces it, `attest` records the free text.
+        form = f"ddflow approvals ask {r['id']} (then `ddflow approvals attest {r['id']}`)"
+        first = f"{r['id']}  question  for {r['requested_by']}  ({_pending_status(r, now)})"
     else:
         form = f"ddflow approvals approve {r['id']}"
-    return (
-        f"{r['id']}  {r['verb']}  for {r['requested_by']}  ({_pending_status(r, now)})\n"
-        f"  digest : {r['digest']}\n"
-        f"  answer : {form}"
-    )
+        first = f"{r['id']}  {r['verb']}  for {r['requested_by']}  ({_pending_status(r, now)})"
+    return f"{first}\n  digest : {r['digest']}\n  answer : {form}"
 
 
 def _row(r: dict[str, Any], now: float) -> dict[str, Any]:

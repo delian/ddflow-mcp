@@ -150,19 +150,19 @@ def _outcome(answer: str, ask_id: str) -> str | None:
 
 def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
     """The AskUserQuestion input the agent must send, unaltered. An approval offers
-    approve/deny (a generic request also the standing-window choice); a question offers a
-    free-text answer for exactly its text."""
+    approve/deny (a generic request also the standing-window choice); a question offers its
+    preset options (one is the answer) when it has them, else a free-text answer for exactly
+    its text (no `options` key: the person types the answer)."""
     if row["type"] == E.QUESTION:
-        return {
-            "questions": [
-                {
-                    "question": row["text"],
-                    "header": "Question",
-                    "multiSelect": False,
-                    "options": [],
-                }
-            ]
+        q: dict[str, Any] = {
+            "question": row["text"],
+            "header": "Question",
+            "multiSelect": False,
         }
+        opts = row.get("options") or []
+        if opts:
+            q["options"] = [{"label": str(o)} for o in opts]
+        return {"questions": [q]}
     yes, no = labels(row["id"])
     options = [
         {"label": yes, "description": "approve exactly this command, once"},
@@ -422,9 +422,15 @@ def find(cfg: Config, row: dict[str, Any], *, typed_only: bool = False) -> Attes
 def verify(row: dict[str, Any], cfg: Config) -> bool:
     """Re-check a recorded harness answer from the transcript (the level verifier): the proof
     tool_use id must still be there, answered the way the row records (approve, +window,
-    deny, or a question's free text). A later duplicate answer to the same question does not
-    undo it."""
+    deny, a question's chosen option, or a question's free text). A later duplicate answer to
+    the same question does not undo it."""
     if row.get("type") == E.QUESTION:
+        if row.get("options"):
+            # a multiple-choice question records the selected option as the outcome
+            return any(
+                h.tool_use_id == row.get("proof") and h.answer == row.get("outcome")
+                for h in find_all(cfg, row)
+            )
         return any(
             h.tool_use_id == row.get("proof") and h.answer == row.get("answer")
             for h in find_all(cfg, row)
@@ -453,9 +459,9 @@ def attest(
     if not cfg.approvals.accept_harness:
         return False, "the harness channel is off ([approvals].accept_harness)"
     row = E.get(fold(log.read_all(), strict=False), ask_id)
-    if row is None or not row["verb"]:
-        return False, f"no approval request {ask_id}"
-    t3 = row["min_level"] > LEVEL
+    if row is None:
+        return False, f"no ask {ask_id}"
+    t3 = row.get("min_level", 0) > LEVEL
     if t3 and not chat_t3(cfg):
         return False, t3_refusal(row)
     if E.status(row, now) != E.PENDING:
@@ -467,8 +473,12 @@ def attest(
             f": put `ddflow approvals ask {ask_id}` to the person with AskUserQuestion first"
         )
     if row["type"] == E.QUESTION:
-        outcome = E.ANSWERED_WORD  # a question's answer IS the free text, not a label
-        text = hit.answer
+        if row["options"]:
+            outcome = hit.answer  # a multiple-choice question: the selected option IS the outcome
+            text = ""
+        else:
+            outcome = E.ANSWERED_WORD  # a free-text question: the text is the answer, not a label
+            text = hit.answer
     else:
         outcome = _outcome(hit.answer, ask_id)
         if outcome is None:
