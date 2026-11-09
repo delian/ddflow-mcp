@@ -92,12 +92,18 @@ def detect_series(
     """One step or creep over ``window`` against ``baseline``. Returns None below the sample
     floor or under both thresholds -- the two are distinct, and a "none" is not a pass."""
     cfg = cfg or PerfMetricsConfig()
-    if len(baseline) < max(cfg.detect_min_samples, 2) or len(window) < max(cfg.detect_min_samples, 2):
+    if len(baseline) < max(cfg.detect_min_samples, 2) or len(window) < max(
+        cfg.detect_min_samples, 2
+    ):
         return None
     abs_s, rel, _z = median_shift(baseline, window)
-    stepped = abs_s >= cfg.detect_absolute_floor_s and (rel is None or rel >= cfg.detect_relative_threshold)
+    stepped = abs_s >= cfg.detect_absolute_floor_s and (
+        rel is None or rel >= cfg.detect_relative_threshold
+    )
     crept_s = _creep_exceeded(baseline, window, cfg.detect_creep_alpha, cfg.detect_creep_threshold)
-    crept = crept_s >= cfg.detect_absolute_floor_s  # the floor gates creep too (sub-second is noise)
+    crept = (
+        crept_s >= cfg.detect_absolute_floor_s
+    )  # the floor gates creep too (sub-second is noise)
     if not (stepped or crept):
         return None
     return Finding(series, env, start, end, median(window), rel, abs_s, len(window), suspected)
@@ -121,7 +127,9 @@ def detect(
         hit = detect_series(series, env, baseline, vals, start, end, cfg=cfg) is not None
         streak = streak + 1 if hit else 0
         if streak >= cfg.detect_persistence_windows:
-            return detect_series(series, env, baseline, vals, start, end, cfg=cfg, suspected=suspected)
+            return detect_series(
+                series, env, baseline, vals, start, end, cfg=cfg, suspected=suspected
+            )
     return None
 
 
