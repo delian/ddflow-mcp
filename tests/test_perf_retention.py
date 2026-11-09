@@ -65,3 +65,13 @@ def test_compaction_folds_aged_samples_into_the_commit_and_trims(repo: Path):
 
     agg = read_aggregates(repo, "rss")
     assert agg and "a" in agg[0][1]
+
+
+def test_compact_drops_a_non_allowlist_field_from_disk(repo: Path):
+    append(repo, "rss", Sample(1.0, "a", 5.0, "g", "d"))
+    _append_line(ring_path(repo, "rss"), json.dumps({"t": 2.0, "env": "a", "value": 6.0, "token": "x"}))
+    R.compact(repo, "rss", 1000.0, cfg=PerfMetricsConfig(ring_max_age_s=10**6, ring_max_bytes=10**6))
+    # the hostile `token` key is gone from the stored ring
+    stored = ring_path(repo, "rss").read_text("utf-8")
+    assert "token" not in stored
+    assert R.doctor(repo, PerfMetricsConfig(ring_max_bytes=10**6)) == []

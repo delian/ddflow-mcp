@@ -63,12 +63,27 @@ def _raw_rows(repo: Path, series: str) -> list[dict[str, Any]]:
     return out
 
 
-def audit(repo: Path, series: str) -> Audit:
-    """Scan one ring: rows, bytes, and how many rows carried a non-allowlist field."""
+def audit(repo: Path, series: str, cfg: PerfMetricsConfig | None = None) -> Audit:
+    """Scan one ring: rows, bytes, how many rows carried a non-allowlist field, and whether
+    the ring exceeds its budget."""
+    cfg = cfg or PerfMetricsConfig()
     rows = _raw_rows(repo, series)
     dropped = sum(1 for r in rows if any(k not in ALLOWED_FIELDS for k in r))
     path = ring_path(repo, series)
-    return Audit(series, len(rows), path.stat().st_size if path.exists() else 0, dropped)
+    size = path.stat().st_size if path.exists() else 0
+    return Audit(series, len(rows), size, dropped, size > cfg.ring_max_bytes)
+
+
+def redact_ring(repo: Path, series: str) -> int:
+    """Rewrite a ring projectonly the allowlist fields, so a non-allowlist value (prompt text,
+    a token, a secret) is dropped from disk, not merely counted. Returns rows rewritten."""
+    rows = _raw_rows(repo, series)
+    kept: list[str] = []
+    for r in rows:
+        projected, _ = redact_row(r)
+        kept.append(json.dumps(projected, separators=(",", ":")))
+    store.atomic_write(ring_path(repo, series), "\n".join(kept) + ("\n" if kept else ""))
+    return len(kept)
 
 
 def doctor(repo: Path, cfg: PerfMetricsConfig | None = None) -> list[str]:
@@ -96,6 +111,7 @@ def compact(
     trim the ring. Returns the number of raw rows kept. Idempotent -- a second run over the
     same ring changes nothing (the aggregate is monotonic)."""
     cfg = cfg or PerfMetricsConfig()
+    redact_ring(repo, series)  # drop non-allowlist fields from disk, then fold + trim
     cutoff = now - cfg.ring_max_age_s
     # Fold the samples that are about to age out into the committed aggregate FIRST (reading
     # the pre-trim ring), then trim -- so the compacted numbers survive the trim.
@@ -113,4 +129,4 @@ def _touched_days(repo: Path, series: str, cutoff: float) -> list[float]:
     return sorted(days)
 
 
-__all__ = ["ALLOWED_FIELDS", "Audit", "audit", "compact", "doctor", "redact_row"]
+__all__ = ["ALLOWED_FIELDS", "Audit", "audit", "compact", "doctor", "redact_ring", "redact_row"]
