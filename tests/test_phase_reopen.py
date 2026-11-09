@@ -87,3 +87,20 @@ def test_a_done_task_readded_under_a_done_phase_keeps_the_phase_done(repo):
     st = _state(repo)
     assert st.items["P9.T1"].state == DONE  # the readd does not reopen the task
     assert st.items["P9"].state == DONE, "a phase with no open task must not re-open"
+
+
+def test_a_settled_task_readd_under_a_closed_phase_is_not_refused(repo):
+    _done_phase(repo, imported=True)
+    log = EventLog(repo, "seed")
+    log.append("task.removed", "P9.T1", {})
+
+    st = _state(repo)
+    assert st.items["P9.T1"].removed and st.items["P9.T1"].state == DONE
+
+    # A readd that restores a still-settled task adds no OPEN work: allowed, not refused.
+    code, _o, err = run_cli(repo, "task", "add", "P9.T1", "--title", "one", "--parent", "P9", "--readd")
+    assert code == 0, (code, err)
+
+    st = _state(repo)
+    assert st.items["P9.T1"].state == DONE  # still settled
+    assert st.items["P9"].state == DONE, "no open task, the phase stays closed"

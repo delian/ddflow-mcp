@@ -184,20 +184,23 @@ def _bad_kind(kind: str | None) -> str:
 
 def missing_parent(st: State, parent: str | None) -> str:
     """Why ``parent`` cannot hold a new task, or ""."""
-    if not parent:
-        return ""
-    if parent not in st.items:
+    if parent and parent not in st.items:
         return f"no such parent {parent!r}. Add the phase or task first."
-    return closed_phase_parent(st, parent)
+    return ""
 
 
-def closed_phase_parent(st: State, parent: str | None) -> str:
-    """Why a new open task under ``parent`` is REFUSED, or "" (bug B86e99de0c6): a
+def closed_phase_parent(
+    st: State, parent: str | None, *, readd: bool = False, item: str = ""
+) -> str:
+    """Why a NEW open task under ``parent`` is REFUSED, or "" (bug B86e99de0c6): a
     truly-closed phase -- one the importer wrote (or `phase close`d), which reports done
     with ``imported`` authority -- cannot take an open task, or the task would sit beneath
     a closed phase. The operator re-opens it first (`ddflow verify --reopen <phase>`); a
     phase completed normally re-opens on its own when it gains an open task (see
     ``handlers.items._reopen_done_parent``).
+
+    A ``readd`` that restores a still-settled task is NOT refused: it adds no open work
+    under the phase, so it may land beneath a closed phase without violating the invariant.
     """
     if not parent:
         return ""
@@ -205,6 +208,8 @@ def closed_phase_parent(st: State, parent: str | None) -> str:
     if holder is None or holder.kind != "phase" or holder.state != DONE:
         return ""
     if holder.id not in st.imported_done:
+        return ""
+    if readd and (existing := st.items.get(item)) is not None and existing.terminal:
         return ""
     return (
         f"phase {parent!r} is closed (imported): re-open it before filing a task under "
@@ -269,10 +274,12 @@ def add_task(
     """
     if not hasattr(dedupe, "fields") and not (isinstance(dedupe, str) and dedupe.strip()):
         raise ValueError("add_task: dedupe is a settled check, or the reason there is none")
-    closed = closed_phase_parent(st, draft.parent)
+    closed = closed_phase_parent(st, draft.parent, readd=readd, item=draft.id)
+    if closed:
+        return Added(draft.id, closed, refused=True)
     bad = problem_of(draft) or missing_parent(st, draft.parent)
     if bad:
-        return Added(draft.id, bad, refused=bad == closed)
+        return Added(draft.id, bad)
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)

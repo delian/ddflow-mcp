@@ -201,11 +201,8 @@ def _edges_problem(st, parent: str, needs: str, allow_unknown_needs: bool) -> st
     return IT.unknown_needs(st, csv_list(needs))
 
 
-def _edge_refusal(st, parent: str, bad: str, item: str) -> O.Outcome:
-    """The task-add reply for an edge that cannot stand: a CLOSED (imported) phase refuses,
-    a typo'd parent or need fails."""
-    if IT.closed_phase_parent(st, parent):
-        return O.refused("task.added", bad, id=item)
+def _edge_refusal(bad: str, item: str) -> O.Outcome:
+    """The task-add reply for an edge that cannot stand: a typo'd parent or need fails."""
     return O.failed("task.added", bad, id=item)
 
 
@@ -268,7 +265,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     log, cfg, st = _items._load(repo, agent)
     bad = _edges_problem(st, parent, needs, allow_unknown_needs)
     if bad:
-        return _edge_refusal(st, parent, bad, item)
+        return _edge_refusal(bad, item)
     wanted, bad = _wanted_lines(st, cfg, line, lines, port_of)
     if bad:
         return O.failed("task.added", bad, id=item)
