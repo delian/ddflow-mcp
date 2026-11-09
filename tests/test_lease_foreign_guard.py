@@ -161,6 +161,30 @@ def test_release_of_another_clones_live_lease_is_refused(clones):
     assert _lease_of(b, "T2") is not None
 
 
+def test_merge_of_another_clones_live_lease_is_refused(clones):
+    _a, b = clones
+    code, out, err = run_cli(b, "merge", "T2", agent="U2")
+    assert code == REFUSED, out + err
+    assert "U9" in out + err
+    assert _lease_of(b, "T2") is not None
+
+
+def test_merge_of_a_peer_agents_live_lease_is_refused(clones):
+    a, _b = clones
+    code, out, err = run_cli(a, "merge", "T2", agent="U2")
+    assert code == REFUSED, out + err
+    assert "U9" in out + err
+
+
+def test_the_operator_merge_of_a_peer_lease_is_not_lease_refused(clones):
+    a, _b = clones
+    # No --agent (an operator at a terminal) merging is not the peer-lease refusal: the
+    # operator recovering a crashed agent's item keeps the normal path (here it needs a
+    # branch for a no-worktree claim, not a "leased by U9" refusal).
+    _code, out, err = run_cli(a, "merge", "T2")
+    assert "leased by U9" not in out + err
+
+
 def test_release_force_needs_a_reason(clones):
     _a, b = clones
     before = _events(b)
