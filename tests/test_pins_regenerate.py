@@ -21,6 +21,7 @@ from ddflow.infra.log import EventLog
 from ddflow.services import actors as A
 from ddflow.services import pins as PN
 from ddflow.services import pins_written as PW
+from ddflow.services.identity import HARNESS_MARKERS
 from ddflow.services.approvals import class_states as APCS
 from ddflow.services.approvals import request as R
 from ddflow.services.approvals.canon import Canon
@@ -66,6 +67,11 @@ def ddflow_cli(repo: Path, *args: str, person: bool = False) -> subprocess.Compl
     env = {**os.environ, "PYTHONPATH": SRC}
     env.pop("DDFLOW_AGENT", None)
     env.pop("PYTEST_XDIST_WORKER", None)  # a regeneration refuses to run under xdist
+    if person:
+        # a clean operator identity: a harness marker (CLAUDECODE) left in the environment would
+        # re-detect the call as an agent's and refuse the regeneration B90b8d3fe89 now gates.
+        for var in HARNESS_MARKERS:
+            env.pop(var, None)
     argv = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
     if not person:
         argv += ["--agent", "t"]

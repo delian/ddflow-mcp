@@ -123,14 +123,12 @@ def _regenerate_tail(
     before = PW.snapshot(repo, watched) if not check else {}
     if after_merge:
         return _after_merge_note(primary, repo, cfg, before, watched, check=check)
-    # attributes follow the recipes (the hook is `--install`'s), even when the regeneration then
-    # cannot run; what is written is reported. A refused `--only nosuch` writes nothing.
-    attr_actions = [] if check else _follow_the_recipes(repo, cfg, only)
-    tick = _lease_tick(primary, agent)
     stamp: dict[str, object] = {}
     # An agent re-records pins only with a valid approval; omitting ``--approval`` must not
     # bypass the pins-are-stale gate (B90b8d3fe89: the check used to apply only when an
-    # approval WAS passed, so a bare agent `pins regenerate` re-recorded pins ungated).
+    # approval WAS passed, so a bare agent `pins regenerate` re-recorded pins ungated). The
+    # check runs BEFORE anything is written: a refused regenerate must touch nothing, not
+    # even `.gitattributes` (roborev finding: the recipe write used to land first).
     if (
         (approval or AP.agent_marker(agent))
         and verb == "regenerate"
@@ -143,6 +141,10 @@ def _regenerate_tail(
         if isinstance(bad, O.Outcome):
             return bad
         stamp = bad
+    # attributes follow the recipes (the hook is `--install`'s), even when the regeneration then
+    # cannot run; what is written is reported. A refused `--only nosuch` writes nothing.
+    attr_actions = [] if check else _follow_the_recipes(repo, cfg, only)
+    tick = _lease_tick(primary, agent)
     rep = PN.regenerate(repo, cfg, only=only, check=check, tick=tick, on_progress=on_progress)
     if not check:
         _record_written(primary, repo, before, watched)

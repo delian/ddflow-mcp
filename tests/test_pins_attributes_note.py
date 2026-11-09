@@ -34,6 +34,18 @@ def test_a_gitattributes_line_it_adds_is_reported_with_its_reason(repo: Path):
     assert "added 'third.txt merge=pinsregen' to .gitattributes (a pin recipe lacked" in done.stdout
 
 
+def test_a_refused_bare_agent_regenerate_does_not_mutate_gitattributes(repo: Path):
+    """B90b8d3fe89: the approval gate runs BEFORE the recipe-attribute write, so a refused
+    bare-agent `pins regenerate` touches nothing -- not even `.gitattributes` (the write used
+    to land first and left an unreported edit on a denied operation)."""
+    _installed_then_a_recipe_added(repo)
+    before = (repo / ".gitattributes").read_text()
+    done = ddflow_cli(repo, "pins", "regenerate")
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "pins.regenerate" in done.stdout + done.stderr
+    assert (repo / ".gitattributes").read_text() == before  # nothing mutated on refusal
+
+
 def test_nothing_is_said_when_gitattributes_is_already_current(repo: Path):
     assert ddflow_cli(repo, "pins", "regenerate", "--install").returncode == 0
     done = ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
