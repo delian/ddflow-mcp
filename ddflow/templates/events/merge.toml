@@ -3,3 +3,7 @@
 [[kind]]
 name = "merge.forced"
 doc = "A merge landed over unsettled required gates under [merge].require_gates = refuse: names the gates and the approval."
+fields = { "agent" = ["str"], "approval" = ["dict"], "sha" = ["str"], "unmet_gates" = ["list"] }
+text = ["unmet_gates"]
+lookup = { "agent" = "an agent id compared", "approval" = "an approval stamp compared", "sha" = "a sha" }
+exempt = "gate names and an approval stamp only; no claim about code to check"

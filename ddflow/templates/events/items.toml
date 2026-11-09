@@ -3,31 +3,57 @@
 [[kind]]
 name = "item.abandoned"
 doc = "A task or phase was given up."
+fields = { "kind" = ["str"], "reason" = ["str"] }
+text = ["reason"]
+lookup = { "kind" = "a kind word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "item.blocked"
 doc = "An item was blocked, with the reason."
+fields = { "imported" = ["bool"], "kind" = ["str"], "reason" = ["str"] }
+text = ["reason"]
+lookup = { "kind" = "a kind word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "item.completed"
 doc = "An item was completed."
+fields = { "changelog" = ["dict", "str"], "chore" = ["dict", "str"], "evidence" = ["str"], "forced" = ["bool"], "imported" = ["bool"], "kind" = ["str"], "ledger" = ["dict"], "not_applicable" = ["dict"], "overridden" = ["list"], "sha" = ["str"] }
+text = ["changelog", "evidence", "not_applicable", "chore"]
+lookup = { "kind" = "a kind word", "ledger" = "files, tests and counts", "overridden" = "gate names" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "item.reopened"
 doc = "A completed item was reopened."
+fields = { "claims" = ["list"], "forced" = ["bool"], "reason" = ["str"] }
+text = ["reason", "claims"]
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "item.reworked"
 doc = "A re-claim reopened an item's already-merged state, clearing its merge and ci gates."
+fields = { "sha" = ["str"] }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "item.started"
 doc = "An item was started."
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "item.unblocked"
 doc = "A blocked item was unblocked."
+fields = { "kind" = ["str"], "note" = ["str"], "was" = ["str"] }
+text = ["note"]
+lookup = { "kind" = "a kind word", "was" = "a state word" }
+exempt = "a state change of a record that already exists; it adds no text to compare"
 
 [[kind]]
 name = "phase.completed"
 doc = "A phase was deliberately retired after its tasks settled."
+fields = { "evidence" = ["str"], "kind" = ["str"], "tasks" = ["int"] }
+text = ["evidence"]
+lookup = { "kind" = "a kind word" }
+exempt = "records the deliberate retire of a settled phase: no authored text beyond its evidence"
