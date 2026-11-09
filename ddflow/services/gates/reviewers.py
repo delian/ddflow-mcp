@@ -48,7 +48,11 @@ def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
     if not dig or not evidence.get("reviewer"):
         return ""
     if dig in state.reviewer_writes and dig not in state.reviewer_approvals:
-        return str(evidence["reviewer"])
+        # The name is the `reviewer.configured` subject (kept verbatim); the evidence's
+        # own `reviewer` copy is redacted from the committed log (bug B8ef0d325ed).
+        wrote = state.reviewer_writes[dig]
+        name = wrote.get("name") if isinstance(wrote, dict) else ""
+        return str(name or evidence["reviewer"])
     return ""
 
 

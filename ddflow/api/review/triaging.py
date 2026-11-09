@@ -246,7 +246,11 @@ def reviewed_other_tree(repo: Path, cfg, st, item: str, gate: str) -> str:
         if moved == []:  # only files outside what the item changed and the round saw
             return ""
         where = f" ({_name_paths(moved)})" if moved else ""
-        reviewed = (ev.get("tree_sha") or ev.get("reviewed_head") or "")[:19]
+        # Bb2c62995e3: name the head the review READ (`reviewed_head`, captured before the
+        # diff was taken), not `tree_sha`, which a `record_measured` run stores from the tree
+        # as it was when the run ENDED -- a commit landed while the review ran that no
+        # reviewer saw. With no reviewed head (an older round), the tree it measured stands.
+        reviewed = (ev.get("reviewed_head") or ev.get("tree_sha") or "")[:19]
         return f"the round reviewed {reviewed}, and {item} holds other content now{where}; {redo}"
     return ""
 

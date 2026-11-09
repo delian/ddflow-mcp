@@ -49,6 +49,7 @@ MARKER_CALLS: dict[str, int] = {
     "ddflow/api/chore.py:chore_approve": 1,
     "ddflow/api/lifecycle/claim.py:_claim_by_approval": 1,
     "ddflow/api/lifecycle/claim.py:_agent_marker_of": 1,
+    "ddflow/api/lifecycle/heartbeat.py:release": 1,
     "ddflow/api/lifecycle/complete/approval.py:_approved_force": 1,
     "ddflow/api/lifecycle/complete/approval.py:_person_force": 1,
     "ddflow/api/lifecycle/complete/approval.py:_ask_hint": 1,
@@ -301,6 +302,15 @@ SITES: tuple[Site, ...] = (
         "the item and the exact required gates left unsettled (never a failed review or ci gate)",
         ("ddflow/services/merge_force.py:authorise",),
         "ddflow merge <id> --force --approval request|ID",
+    ),
+    Site(
+        "release.force",
+        "C",
+        T2,
+        L1,
+        "the item and who holds its lease",
+        ("ddflow/api/lifecycle/heartbeat.py:release",),
+        "ddflow release <id> --force --reason ...",
     ),
     Site(
         "phase.complete",

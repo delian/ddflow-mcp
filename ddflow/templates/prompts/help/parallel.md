@@ -17,8 +17,10 @@ and there is no signal that would let ddflow work it out for them.
     ddflow claim <id>              lease + worktree; exit 3 = refused, with the reason
     ddflow claim <id> --no-worktree   for work that edits nothing
 
-`claim` refuses when another agent holds the item, when a dependency is unmet, when the
-item's globs overlap something already in flight, or when the parallelism caps are full.
+`claim` refuses when another agent holds the item, when a dependency is unmet, or when
+the item's globs overlap something already in flight. The parallelism cap does NOT hold
+a claim for a NAMED item: `claim <id>` grants it whatever the cap says. The cap decides
+only which items `next` OFFERS in the ready list, and names the rest as held by the cap.
 **The refusal is the feature** — it names the conflicting item and its holder, so the
 answer is "take a different one", not "wait and hope".
 
