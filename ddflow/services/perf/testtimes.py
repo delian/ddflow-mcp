@@ -38,7 +38,7 @@ class TestCase:
 def parse_junit(xml_text: str) -> list[TestCase]:
     """junit XML -> one TestCase per ``<testcase>``. A missing or non-numeric ``time`` is a
     None duration (the case is not a duration sample; it is never a measured 0)."""
-    root = ElementTree.fromstring(xml_text)
+    root = ElementTree.fromstring(xml_text)  # nosec B314 -- the runner's own junit, not untrusted input
     out: list[TestCase] = []
     for case in root.iter("testcase"):
         # a pytest parameterized id is test_func[arg]: the "[...]" may embed a path/secret, so
