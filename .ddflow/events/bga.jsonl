@@ -72,3 +72,4 @@
 {"agent":"bga","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ed9226aefd3bb6227603ebaec","kind":"cadence.ran","lamport":159850,"schema":1,"subject":"recall_recheck:fix-B83c7a5eb50","ts":"2026-11-09T06:03:14.971553Z"}
 {"agent":"bga","data":{"at":1794204203.573918,"holder":"bga"},"id":"e29f20cd603d87706cf204621","kind":"lease.renewed","lamport":159851,"schema":1,"subject":"fix-B732f22dbb1","ts":"2026-11-09T06:03:23.680781Z"}
 {"agent":"bga","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e1e083a7ebec2921ca9b17a89","kind":"cadence.ran","lamport":159852,"schema":1,"subject":"recall_recheck:fix-B732f22dbb1","ts":"2026-11-09T06:03:30.398127Z"}
+{"agent":"bga","data":{"by":"bga","event":"e1d91b0e62fca5443ab80d736","holder":"bga","note":""},"id":"e2aab95b1adc3b5f1fa1500a7","kind":"lease.released","lamport":159880,"schema":1,"subject":"fix-B8127ab103e","ts":"2026-11-09T06:07:18.876645Z"}
