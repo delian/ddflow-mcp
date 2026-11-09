@@ -159,6 +159,44 @@ def test_claim_force_by_approval_for_an_agent(proj, monkeypatch):
     assert len([r for r in asks_of(_state(proj)).values() if r["verb"] == "claim.force"]) == 1
 
 
+def test_a_refused_forced_claim_does_not_spend_the_operators_approval(proj, monkeypatch):
+    """B6365c86730: `claim --approval ID` spent (recorded `ask.consumed`) the operator's one-use
+    `claim.force` approval the moment it was checked, then ran the forced claim -- which still
+    refused (a live lease overlap `--force` cannot break). The person's answer was lost and had
+    to be asked for again. The use must be recorded only once the claim has actually landed."""
+    import importlib
+
+    from ddflow.api import claim as CL
+    from ddflow.core import outcome as O
+
+    C = importlib.import_module("ddflow.api.lifecycle.claim")
+
+    def once(repo, item, *, force=False, **kw):
+        if not force:
+            return O.refused(
+                "item.claimed",
+                f"{item} is in review; --force to take it back anyway.",
+                id=item, alternatives=[],
+            )
+        # the forced claim STILL refuses: a live lease overlap `--force` cannot break
+        return O.refused(
+            "item.claimed",
+            f"{item} overlaps sw-fleet's live lease on DX-fleet-registry.",
+            id=item, alternatives=[],
+        )
+
+    monkeypatch.setattr(C, "_claim_once", once)
+    out = CL(proj, "T1", no_worktree=True, agent="bot", approval="request")
+    ask_id = _ask_id(out.reason)
+    _approve(proj, ask_id)
+    out = CL(proj, "T1", no_worktree=True, agent="bot", approval=ask_id)
+    assert out.exit == 3, out.reason
+    row = asks_of(_state(proj))[ask_id]
+    assert row["used"] == 0, row          # the refused forced claim spent nothing
+    assert not row.get("consumed"), row   # no `ask.consumed` was recorded
+    assert "was NOT consumed" in out.reason, out.reason
+
+
 def test_an_agents_force_flag_never_completes_even_with_approval_request(proj):
     """B49fa10bbb1: `force` plus `--approval request` skipped the approval check, so an agent
     (every MCP call is one) force-completed. The flag is a person's; an agent's is ignored."""
