@@ -68,10 +68,11 @@ def suggest(
         return O.failed("handoff.suggest", str(exc))
     sid = out.id
     nxt = (
-        f"apply:  ddflow suggest apply {sid}   (MCP ddflow_suggest action=apply id={sid})\n"
-        f"reject: ddflow suggest reject {sid}  (MCP ddflow_suggest action=reject id={sid})\n"
-        f"show:   ddflow suggest show {sid}    (MCP ddflow_suggest action=show id={sid})\n"
-        f"expiry: ddflow suggest expire {sid}  (MCP ddflow_suggest action=expire id={sid})"
+        f"apply:  ddflow suggestions applied {sid}   (MCP ddflow_suggestions action=applied id={sid})\n"
+        f"reject: ddflow suggestions rejected {sid} --reason ...  "
+        f"(MCP ddflow_suggestions action=rejected id={sid} reason=...)\n"
+        f"show:   ddflow suggestions show {sid}       (MCP ddflow_suggestions action=show id={sid})\n"
+        f"expiry: ddflow suggestions expired {sid}    (MCP ddflow_suggestions action=expired id={sid})"
     )
     text = (
         f"suggested to {to_agent} on {item}\n"
