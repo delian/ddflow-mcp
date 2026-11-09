@@ -80,10 +80,13 @@ def test_doctor_notes_count_overrides_never_secrets(repo_with_overrides):
     assert "d" * 16 not in notes
 
 
-def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(repo, monkeypatch):
+def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(
+    repo, monkeypatch, tmp_path
+):
     # Bdb4ef97bd5: `gate list --overrides` re-verified EVERY consumed harness approval by
     # re-reading every transcript file and re-running the Kilo SQLite query once per ask, so
-    # the listing took minutes on a real log. Listing N overrides must scan each store once.
+    # the listing ran 100% CPU for minutes on a real log. Listing N overrides must scan each
+    # store once.
     run_cli(repo, "init")
     log = EventLog(repo, "bot")
     for i in ("1", "2", "3"):
@@ -96,14 +99,30 @@ def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(r
         log.append("ask.consumed", ask, {"id": ask, "by": "bot", "verb": "claim.force"})
     events = log.read_all()
 
-    reads: list[str] = []
-    monkeypatch.setattr(H, "read_only_rows", lambda path, *a, **k: reads.append(str(path)) or [])
-    monkeypatch.setattr(H, "_dirs", lambda cfg: [])
+    t1 = tmp_path / "a.jsonl"
+    t2 = tmp_path / "b.jsonl"
+    t1.write_text("{}")
+    t2.write_text("{}")
+
+    kilo_reads: list[str] = []
+    monkeypatch.setattr(H, "read_only_rows", lambda p, *a, **k: kilo_reads.append(str(p)) or [])
+    monkeypatch.setattr(H, "_files", lambda cfg, since: [t1, t2])
     monkeypatch.setattr(H, "_kilo_dbs", lambda cfg: [Path("/nonexistent/kilo.db")])
+    real_read_text = Path.read_text
+    file_reads: list[str] = []
+
+    def counting(self, *a, **k):
+        file_reads.append(str(self))
+        return real_read_text(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", counting)
 
     OV.rows(events, fold(events, strict=False), Config())
-    assert len(reads) == 1, (
-        f"store queried {len(reads)} times for 3 asks (must be exactly once, not once per ask)"
+    assert len(kilo_reads) == 1, (
+        f"store queried {len(kilo_reads)} times for 3 asks (must be exactly once, not once per ask)"
+    )
+    assert file_reads.count(str(t1)) == 1 and file_reads.count(str(t2)) == 1, (
+        f"transcript files read once each, got {file_reads}"
     )
 
 

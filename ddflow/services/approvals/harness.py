@@ -261,56 +261,39 @@ def _text(answer: Any) -> str:
     return answer[0] if isinstance(answer, list) and len(answer) == 1 else ""
 
 
-def _asks(row: dict[str, Any], content: list, question: str) -> dict[str, str | None]:
-    """The AskUserQuestion tool_uses of an assistant row that ask exactly ``question``."""
-    out: dict[str, str | None] = {}
-    for b in content:
-        if not (isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == TOOL):
-            continue
-        asked = (b.get("input") or {}).get("questions")
-        if isinstance(asked, list) and any(
-            isinstance(q, dict) and q.get("question") == question for q in asked
-        ):
-            out[str(b.get("id"))] = row.get("uuid")
-    return out
+def _stat_key(path: str) -> tuple[int, int]:
+    try:
+        st = Path(path).stat()
+    except OSError:
+        return (-1, -1)  # missing/unreadable: one stable key, so a failed read is not re-fired
+    return (st.st_mtime_ns, st.st_size)
 
 
-def _accepted(row: dict[str, Any], uuid: str | None, question: str) -> str:
-    """The answer text of an accepted harness result to ``question``, or ""."""
-    answers = (row.get("toolUseResult") or {}).get("answers")
-    ok = (
-        uuid
-        and (row.get("permissionDecision") or {}).get("decision") == "accept"
-        and row.get("sourceToolAssistantUUID") == uuid
-        and isinstance(answers, dict)
-    )
-    return _text(answers.get(question)) if ok else ""
-
-
-def _results(row: dict[str, Any], content: list, uses: dict, question: str, name: str):
-    for b in content:
-        if isinstance(b, dict) and b.get("type") == "tool_result":
-            tid = str(b.get("tool_use_id"))
-            if tid in uses and (ans := _accepted(row, uses[tid], question)):
-                yield Attested(tid, ans, str(row.get("timestamp", "")), name)
+def _lines(path: str) -> tuple[str, ...]:
+    """One transcript's lines, cached by the file's stat: an unchanged file is read once (bug
+    Bdb4ef97bd5 -- listing N overrides read the corpus N times), a rewritten one is re-read
+    (attest must see the transcript change mid-process)."""
+    return _lines_cached(path, *_stat_key(path))
 
 
 @cache
-def _lines(path: str) -> tuple[str, ...]:
-    """One transcript's lines, read once per process (bug Bdb4ef97bd5): `scan` and
-    `scan_typed` re-read the same file for every consumed ask, so listing N overrides read
-    the whole transcript corpus N times."""
+def _lines_cached(path: str, mtime_ns: int, size: int) -> tuple[str, ...]:
     return tuple(Path(path).read_text(errors="replace").splitlines())
 
 
-def scan(path: Path, question: str, marker: str) -> list[Attested]:
-    """The accepted answers to exactly ``question`` in one transcript (``marker`` is a cheap
-    substring every line about it contains: the ask id)."""
-    uses: dict[str, str | None] = {}  # tool_use id -> uuid of the assistant row that asked
-    found: list[Attested] = []
-    for line in _lines(str(path)):
-        if marker not in line and not any(u in line for u in uses):
-            continue
+def _answers_of(path: str) -> tuple[tuple[str, str, str, str], ...]:
+    """Every accepted AskUserQuestion answer in one transcript -- ``(question, tool_use id,
+    answer, at)`` -- extracted, cached by the file's stat (bug Bdb4ef97bd5): scanning per ask
+    walked every line once per consumed ask, the unbounded CPU path `gate list --overrides`
+    hit. A rewritten transcript re-extracts."""
+    return _answers_cached(path, *_stat_key(path))
+
+
+@cache
+def _answers_cached(path: str, mtime_ns: int, size: int) -> tuple[tuple[str, str, str, str], ...]:
+    uses: dict[str, tuple[str | None, list[str]]] = {}  # tool_use id -> (uuid, questions)
+    out: list[tuple[str, str, str, str]] = []
+    for line in _lines_cached(path, mtime_ns, size):
         try:
             row = json.loads(line)
         except ValueError:
@@ -319,10 +302,45 @@ def scan(path: Path, question: str, marker: str) -> list[Attested]:
         if not isinstance(content, list):
             continue
         if row.get("type") == "assistant":
-            uses.update(_asks(row, content, question))
+            for b in content:
+                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == TOOL:
+                    asked = (b.get("input") or {}).get("questions")
+                    if isinstance(asked, list):
+                        uses[str(b.get("id"))] = (
+                            row.get("uuid"),
+                            [q.get("question", "") for q in asked if isinstance(q, dict)],
+                        )
         elif row.get("type") == "user":
-            found.extend(_results(row, content, uses, question, path.name))
-    return found
+            for b in content:
+                if not (isinstance(b, dict) and b.get("type") == "tool_result"):
+                    continue
+                tid = str(b.get("tool_use_id"))
+                if tid not in uses:
+                    continue
+                uuid, questions = uses[tid]
+                answers = (row.get("toolUseResult") or {}).get("answers")
+                ok = (
+                    uuid
+                    and (row.get("permissionDecision") or {}).get("decision") == "accept"
+                    and row.get("sourceToolAssistantUUID") == uuid
+                    and isinstance(answers, dict)
+                )
+                if not ok:
+                    continue
+                at = str(row.get("timestamp", ""))
+                for question in questions:
+                    if question and (ans := _text(answers.get(question))):
+                        out.append((question, tid, ans, at))
+    return tuple(out)
+
+
+def scan(path: Path, question: str, marker: str) -> list[Attested]:
+    """The accepted answers to exactly ``question`` in one transcript (``marker`` is the ask id,
+    a cheap substring of ``question``; the answers are extracted once, bug Bdb4ef97bd5)."""
+    name = path.name
+    return [
+        Attested(tid, ans, at, name) for q, tid, ans, at in _answers_of(str(path)) if q == question
+    ]
 
 
 #: What the person types in their own chat: `approve|deny <request id> <first characters of the digest>`
@@ -342,14 +360,21 @@ def _human_text(row: dict[str, Any]) -> str:
     return ""
 
 
-def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested]:
-    """Answers the person TYPED in their chat: a user row the harness marked `origin.kind == human`
-    whose whole text is `approve|deny <this request id> <digest prefix>`. An agent's text, a tool
-    result, a notification and a quotation inside a longer message are not such rows."""
-    found: list[Attested] = []
-    for line in _lines(str(path)):
-        if ask["id"] not in line:
-            continue
+def _typed_of(path: str) -> tuple[tuple[str, str, str, str, str], ...]:
+    """Every answer the person TYPED in their own chat -- ``(ask id, Approve|Deny, prefix,
+    at, uuid)`` -- extracted, cached by the file's stat (bug Bdb4ef97bd5). A user row the
+    harness marked ``origin.kind == human`` whose whole text is `approve|deny <request id>
+    <digest prefix>`; an agent's text, a tool result, a notification and a quotation in a
+    longer message are not such rows."""
+    return _typed_cached(path, *_stat_key(path))
+
+
+@cache
+def _typed_cached(
+    path: str, mtime_ns: int, size: int
+) -> tuple[tuple[str, str, str, str, str], ...]:
+    out: list[tuple[str, str, str, str, str]] = []
+    for line in _lines_cached(path, mtime_ns, size):
         try:
             row = json.loads(line)
         except ValueError:
@@ -357,19 +382,22 @@ def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested
         if row.get("type") != "user" or (row.get("origin") or {}).get("kind") != "human":
             continue
         m = TYPED.match(_human_text(row))
-        if not m or m.group(2) != ask["id"] or row.get("toolUseResult"):
+        if not m or row.get("toolUseResult"):
             continue
-        prefix = m.group(3).lower()
-        if len(prefix) >= min_chars and ask["digest"].startswith(prefix):
-            word = "Approve" if m.group(1).lower() == "approve" else "Deny"
-            found.append(
-                Attested(
-                    f"typed:{row.get('uuid')}",
-                    f"{word} {ask['id']}",
-                    str(row.get("timestamp", "")),
-                    path.name,
-                )
-            )
+        word = "Approve" if m.group(1).lower() == "approve" else "Deny"
+        out.append((m.group(2), word, m.group(3).lower(), str(row.get("timestamp", "")),
+                   str(row.get("uuid", ""))))  # fmt: skip
+    return tuple(out)
+
+
+def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested]:
+    """Answers the person TYPED in their chat for exactly this ask (bug Bdb4ef97bd5: extracted
+    once per process, then filtered, instead of re-walking the file per ask)."""
+    found: list[Attested] = []
+    for ask_id, word, prefix, at, uuid in _typed_of(str(path)):
+        if ask_id != ask["id"] or len(prefix) < min_chars or not ask["digest"].startswith(prefix):
+            continue
+        found.append(Attested(f"typed:{uuid}", f"{word} {ask_id}", at, path.name))
     return found
 
 
@@ -394,11 +422,16 @@ def _kilo_answer(state: Any, question: str) -> str:
 
 @cache
 def _kilo_question_parts(path: str) -> tuple[tuple[Any, ...], ...]:
-    """Every `question` tool part in one Kilo transcript store, read once per process (bug
+    """Every `question` tool part in one Kilo transcript store, cached by the file's stat (bug
     Bdb4ef97bd5): the query used to run once per consumed ask, so listing N overrides
     re-scanned the whole store N times. The per-ask ``since`` and ``marker`` filters move to
     `scan_kilo`, so one read serves every ask. No rows when this is not a readable Kilo store
     (wrong schema, locked, missing)."""
+    return _kilo_question_parts_cached(path, *_stat_key(path))
+
+
+@cache
+def _kilo_question_parts_cached(path: str, mtime_ns: int, size: int) -> tuple[tuple[Any, ...], ...]:
     rows = read_only_rows(
         Path(path),
         "SELECT id, time_created, data FROM part "
