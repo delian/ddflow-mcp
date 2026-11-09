@@ -63,7 +63,7 @@ def gate_rows(facts: Facts, minimum: int = 3) -> list[dict]:
                 "first_run_pass_rate": _pct(passed, len(firsts), minimum),
                 "ever_failed_share": _pct(len(gone), len(firsts), minimum),
                 "cost_per_confirmed_finding_s": (
-                    elapsed[gate] / confirmed[gate] if confirmed[gate] else None
+                    elapsed[gate] / confirmed[gate] if confirmed[gate] >= max(minimum, 1) else None
                 ),
             }
         )
@@ -103,28 +103,26 @@ def co_failure(facts: Facts, a: str, b: str, minimum: int = 3) -> dict[str, int 
 
 
 def same_tree_groups(facts: Facts) -> list[dict]:
-    """Groups of gates whose verdicts name the identical tree (a merged review round)."""
-    by_tree: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    """Groups of DISTINCT gates whose verdicts name the identical tree (a merged review
+    round): at least two different gates on one tree."""
+    by_tree: dict[str, set[str]] = defaultdict(set)
     for o in facts.outcomes:
         if o.tree_sha:
-            by_tree[o.tree_sha].add((o.item, o.gate))
+            by_tree[o.tree_sha].add(o.gate)
     return [
-        {"tree_sha": sha, "runs": sorted(g for _, g in pairs), "items": len({i for i, _ in pairs})}
-        for sha, pairs in sorted(by_tree.items())
-        if len(pairs) > 1  # a group is at least two gates on one tree
+        {"tree_sha": sha, "runs": sorted(gates), "gates": len(gates)}
+        for sha, gates in sorted(by_tree.items())
+        if len(gates) > 1  # a group is at least two distinct gates on one tree
     ]
 
 
 def rework_loops(facts: Facts) -> list[dict]:
-    """A completed item that a bug was later filed against (the rework the report shows)."""
-    completed_at: dict[str, float] = {}
-    for o in facts.outcomes:
-        if o.at >= completed_at.get(o.item, 0.0):
-            completed_at[o.item] = o.at
+    """A COMPLETED item that a bug was later filed against (the rework the report shows)."""
     loops: list[dict] = []
     for item, at in sorted(facts.bugs, key=lambda x: x[1]):
-        if item in completed_at and at > completed_at[item]:
-            loops.append({"item": item, "completed_at": completed_at[item], "bug_at": at})
+        span = facts.spans.get(item)
+        if span is not None and span.completed_at is not None and at > span.completed_at:
+            loops.append({"item": item, "completed_at": span.completed_at, "bug_at": at})
     return loops
 
 
