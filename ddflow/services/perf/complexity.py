@@ -22,20 +22,26 @@ def import_edges(package: Path) -> dict[str, set[str]]:
     """module (dotted, package-relative) -> its direct imports, parsed by stdlib ``ast``.
     A ``.py`` file that does not parse is skipped (not an import)."""
     edges: dict[str, set[str]] = defaultdict(set)
+    pkg_name = package.name
     for py in package.rglob("*.py"):
         if "__pycache__" in py.parts:
             continue
+        module = _module_name(package, py)
+        edges[module]  # every module is a node (a leaf, a parse failure: the module STAYS)
         try:
             tree = ast.parse(py.read_text("utf-8"), filename=str(py))
-        except (OSError, SyntaxError):
-            continue
-        module = _module_name(package, py)
-        edges[module]  # every module is a node, even a leaf with no imports
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue  # unreadable/parse-failed: node stays, imports unavailable (never under-counted)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
+                    name = alias.name
+                    if name.startswith(pkg_name + "."):
+                        name = name[len(pkg_name) + 1 :]  # package-relative, matches _module_name
+                    edges[module].add(name)
                     edges[module].add(alias.name.split(".")[0])
             elif isinstance(node, ast.ImportFrom) and node.module:
+                edges[module].add(node.module)
                 edges[module].add(node.module.split(".")[0])
     return dict(dict(edges).items())
 
@@ -57,18 +63,21 @@ def fan_in(edges: dict[str, set[str]]) -> dict[str, int]:
 
 
 def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
-    """module -> its longest import chain in EDGES (dependency depth), via the shared graph."""
+    """module -> its longest import chain in EDGES (dependency depth). Cycle-safe: a cycle
+    caps its depth at the cycle entry, never recurses forever."""
     nodes = set(edges)
     memo: dict[str, int] = {}
 
-    def depth(m: str) -> int:
+    def depth(m: str, visiting: set[str]) -> int:
         if m in memo:
             return memo[m]
-        deps = [d for d in edges.get(m, ()) if d in nodes]
-        memo[m] = 1 + max((depth(d) for d in deps), default=0) if deps else 0
+        deps = [d for d in edges.get(m, ()) if d in nodes and d not in visiting]
+        visiting.add(m)
+        memo[m] = 1 + max((depth(d, visiting) for d in deps), default=0) if deps else 0
+        visiting.discard(m)
         return memo[m]
 
-    return {m: depth(m) for m in nodes}
+    return {m: depth(m, set()) for m in nodes}
 
 
 def touched(facts: Facts) -> list[dict]:
@@ -90,14 +99,18 @@ def touched(facts: Facts) -> list[dict]:
 
 
 def churn_hotspots(facts: Facts) -> list[dict]:
-    """an item's changed lines (size) over its lease globs (churn x size hotspot)."""
+    """an item's changed lines (size) over its lease globs (churn x size hotspot). An item
+    whose outcomes recorded no changed lines has ``changed_lines=None`` (unmeasured, never 0)."""
     out = []
     for lease in facts.leases:
-        size = 0
-        for o in facts.outcomes:
-            if o.item == lease.item and o.changed_lines:
-                size = max(size, o.changed_lines)
-        out.append({"item": lease.item, "globs": len(lease.globs), "changed_lines": size})
+        lines = [o.changed_lines for o in facts.outcomes if o.item == lease.item if o.changed_lines]
+        out.append(
+            {
+                "item": lease.item,
+                "globs": len(lease.globs),
+                "changed_lines": max(lines, default=None),
+            }
+        )
     return out
 
 
@@ -117,13 +130,14 @@ def co_change(facts: Facts) -> list[dict]:
 
 
 def tests_per_changed_line(facts: Facts) -> dict:
-    """the ratio: test files changed per source line changed (the thing that must not grow)."""
+    """tests per CHANGED LINE: test files the window touched, over the source LINES it changed
+    (``Outcome.changed_lines``), not over file-glob counts (a glob is not a line)."""
     tests = sum(1 for lease in facts.leases for g in lease.globs if g.startswith("tests/"))
-    lines = sum(1 for lease in facts.leases for g in lease.globs if not g.startswith("tests/"))
+    changed = sum(o.changed_lines or 0 for o in facts.outcomes if o.changed_lines)
     return {
         "test_files": tests,
-        "source_files": lines,
-        "tests_per_file": tests / lines if lines else None,
+        "changed_lines": changed,
+        "tests_per_line": tests / changed if changed else None,
     }
 
 

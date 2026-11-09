@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lanes_fixture import T0, Log
@@ -51,7 +53,7 @@ def seeded() -> Log:
             T0 + 100,
             gate="rubber_duck",
             by="r1",
-            evidence={"changed_lines": 10},
+            evidence={"diff_stat": {"insertions": 10, "deletions": 0}},
         )
         log.complete("a1", tid, T0 + 200)
         log.release("a1", tid, T0 + 201)
@@ -66,12 +68,12 @@ def test_import_edges_fan_in_and_depth_on_a_synthetic_graph(tmp_path):
     assert depths["a"] == 2  # a -> b -> c
 
 
-def test_a_parse_error_misses_the_edge_not_the_module(tmp_path):
+def test_a_parse_error_keeps_the_module_with_no_edges(tmp_path):
     package = tmp_path / "pkg"
     write(package, "ok.py", "import m\n")
-    write(package, "bad.py", "def broken(:\n")  # SyntaxError: skipped
+    write(package, "bad.py", "def broken(:\n")  # SyntaxError: the node stays, imports unavailable
     edges = CX.import_edges(package)
-    assert "ok" in edges and "bad" not in edges
+    assert "ok" in edges and "bad" in edges and edges["bad"] == set()
 
 
 def test_touched_splits_tests_from_source():
@@ -98,13 +100,13 @@ def test_co_change_finds_glob_pairs_touched_together():
     assert got[("src/x.py", "tests/test_x.py")] == 2  # A and D both touch the pair
 
 
-def test_tests_per_changed_line_is_a_ratio_not_a_count():
+def test_tests_per_changed_line_is_a_ratio_over_lines():
     r = CX.tests_per_changed_line(facts_of(seeded()))
-    assert r["test_files"] == 3 and r["source_files"] == 3
-    assert r["tests_per_file"] == 1.0
+    assert r["test_files"] == 3 and r["changed_lines"] == 30  # 3 items x 10 changed lines
+    assert r["tests_per_line"] == pytest.approx(3 / 30)
 
 
 def test_build_names_the_files_over_time_as_not_measured(tmp_path):
     out = CX.build(facts_of(seeded()), synthetic_package(tmp_path))
     assert "files_over_time" in out["not_measured"]
-    assert out["tests_per_changed_line"]["tests_per_file"] == 1.0
+    assert out["tests_per_changed_line"]["tests_per_line"] == pytest.approx(1 / 10)
