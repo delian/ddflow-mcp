@@ -152,6 +152,27 @@ def test_a_retry_after_giving_up_keeps_its_place(tmp_path: Path):
     assert order == ["early", "late"]
 
 
+def test_a_waiter_that_gives_up_twice_in_a_row_keeps_its_place_both_times(tmp_path: Path):
+    """B5225d3ad22: `gate run unit_tests` waited out the suite lock and landed UNAVAILABLE at
+    #2/#3 TWICE IN A ROW, so a patient waiter starved. Each give-up parks the ticket now, so a
+    retry within `[ci].suite_queue_grace_s` takes the SAME place back however many times it has
+    given up: a patient waiter never finds itself behind a fresh arrival."""
+    order: list[str] = []
+    threads = []
+    with SL.hold(cfg(), "holder", tmp_path, say=lambda _t: None):
+        for round_ in range(2):
+            with pytest.raises(SL.SuiteBusy):
+                with SL.hold(cfg(wait=0.2), "patient", tmp_path, say=lambda _t: None):
+                    pass
+            threads.append(_waiter(tmp_path, f"late{round_}", order))
+            _until(lambda r=round_: _has(tmp_path, f"late{r}"))
+            threads.append(_waiter(tmp_path, "patient", order))  # the retry: keeps its place
+            _until(lambda: _has(tmp_path, "patient"))
+    for t in threads:
+        t.join(30)
+    assert order == ["patient", "late0", "late1"]
+
+
 def test_a_ticket_not_yet_locked_by_its_owner_still_holds_its_place(tmp_path: Path):
     queue = tmp_path / "queue"
     queue.mkdir()
