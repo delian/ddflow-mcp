@@ -44,6 +44,10 @@ def test_the_skew_is_the_slowest_files_share_of_the_path():
     # workers=1 cannot finish before the whole serial run (13.0): the floor is 13
     assert r["critical_path_floor_s"] == pytest.approx(13.0)
     assert r["skew"] == pytest.approx(11.0 / 13.0)
+    # workers=4: the file-level path is 11 (the slowest file dominates), so the share is 1.0
+    r4 = rollup(parse_junit(JUNIT), workers=4, top_n=2)
+    assert r4["critical_path_floor_s"] == pytest.approx(11.0)
+    assert r4["skew"] == pytest.approx(1.0)
 
 
 def test_capture_folds_into_the_ring_and_returns_only_the_rollup(tmp_path: Path):
