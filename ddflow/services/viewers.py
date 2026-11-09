@@ -90,7 +90,7 @@ def _tags(tags: list[str], cfg: Config) -> list[str]:
     return [redact_text(t, cfg).text for t in tags]
 
 
-def _inherited_needs(st: State, it: Item) -> list[str]:
+def inherited_need_ids(st: State, it: Item) -> list[str]:
     """The dependencies that bind `it`: its own `needs` plus every phase ancestor's,
     deduped in declaration order (`inherited_deps`). A row shows the graph an operator
     actually has to satisfy, not only what `it` declares itself (B8981fa81bd)."""
@@ -119,7 +119,7 @@ def _item_row(st: State, it: Item, cfg: Config) -> dict[str, Any]:
         "tags": _tags(it.tags, cfg),
         # What a plan audit needs without the index: the edges and the declared files.
         "parent": it.parent or "",
-        "needs": _inherited_needs(st, it),
+        "needs": inherited_need_ids(st, it),
         "globs": list(it.globs),
     }
 
