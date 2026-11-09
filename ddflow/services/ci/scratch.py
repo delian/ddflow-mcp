@@ -10,15 +10,18 @@ from __future__ import annotations
 import os
 import shutil
 import signal
+import sys
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ...config import Config
 from ...infra import fsio
 from ...infra import git as G
 from ...infra import worktree as W
 from .. import ci_conflict as CC
+from ..pins import regenerate as regenerate_pins
 from .types import CANNOT_MERGE, CONFLICT, NOT_MERGEABLE, Failure
 
 #: The scratch trees of a ci run (`merge_tree`), made under the system temp directory: the
@@ -111,6 +114,24 @@ def _remove_on_signals(repo: Path, tree: Path, marker: Path) -> Iterator[None]:
             pass
 
 
+def _regen_after_merge(tree: Path, cfg: Config | None) -> None:
+    """Re-record the fast after-merge pins a merge just made stale, in the throwaway tree.
+
+    The scratch merge runs no repository hook (it once let the post-merge hook run the golden
+    suite past the git timeout: B36c484af97), so the merge of a base that moved on leaves the
+    generated regions the two sides computed separately -- the branch's README lacks the knobs a
+    later editor landed on the base, and the lane then fails its own README tests "as new"
+    (B8127ab103e). The cheap recipes (`after_merge = true`: README regions, default.toml) re-record
+    here so the merged tree is self-consistent; the suite-backed recipes stay out, and a recipe
+    that cannot finish under `[pins].after_merge_timeout_s` is left alone, never failing the run."""
+    if cfg is None:
+        return
+    try:
+        regenerate_pins(tree, cfg, after_merge=True, bounded=True)
+    except Exception as exc:  # a re-record must not be what stops the checks it was there to help
+        print(f"ci: after-merge pin regen could not run ({type(exc).__name__}: {exc})", file=sys.stderr)
+
+
 @contextmanager
 def merge_tree(
     repo: Path,
@@ -118,6 +139,7 @@ def merge_tree(
     base: str,
     pins: Callable[[], Iterable[str]] | None = None,
     deadline_s: float | None = None,
+    cfg: Config | None = None,
 ) -> Iterator[tuple[Path | None, str]]:
     """A scratch worktree of `ref` with `base` merged in: (path, "") or (None, why not).
 
@@ -219,4 +241,8 @@ def merge_tree(
                         ),
                     )
                     return
+                # The tree is now final: re-record the fast after-merge pins so the merged
+                # result is self-consistent (B8127ab103e). A base already contained in `ref`
+                # needs no merge, and its own pins are left for the pins precheck to judge.
+                _regen_after_merge(tree, cfg)
             yield tree, Failure("", "ok")

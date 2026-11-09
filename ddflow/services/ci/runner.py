@@ -176,7 +176,7 @@ def _merged_once(repo, cfg, sha, base, cmd, decide):
     a `Result` to return, or `None` for "take the suite slot". A refused merge and a busy suite
     slot become their `Result`s here, so no caller repeats that mapping."""
     try:
-        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg), cfg=cfg) as (tree, failure):
             if tree is None:
                 return _merge_refused(cmd, sha, failure)
             return decide(tree)
@@ -322,7 +322,7 @@ def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, pl
     queued_at = time.monotonic()
     with SL.hold(cfg, holder):
         waited = round(time.monotonic() - queued_at, 6)
-        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
+        with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg), cfg=cfg) as (tree, failure):
             if tree is None:
                 status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
                 return (
