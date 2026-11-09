@@ -22,6 +22,7 @@ from ..core import clock
 from ..core import limits as L
 from ..core import progress as PR
 from ..core.model import Bug, Item, Lesson, ResearchNote, Session, State
+from ..core.schedule import inherited_deps
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 
@@ -89,6 +90,19 @@ def _tags(tags: list[str], cfg: Config) -> list[str]:
     return [redact_text(t, cfg).text for t in tags]
 
 
+def _inherited_needs(st: State, it: Item) -> list[str]:
+    """The dependencies that bind `it`: its own `needs` plus every phase ancestor's,
+    deduped in declaration order (`inherited_deps`). A row shows the graph an operator
+    actually has to satisfy, not only what `it` declares itself (B8981fa81bd)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for _owner, dep in inherited_deps(st, it):
+        if dep not in seen:
+            seen.add(dep)
+            out.append(dep)
+    return out
+
+
 def _item_row(st: State, it: Item, cfg: Config) -> dict[str, Any]:
     updated = it.completed_at or it.created_at
     if it.lease is not None:
@@ -105,7 +119,7 @@ def _item_row(st: State, it: Item, cfg: Config) -> dict[str, Any]:
         "tags": _tags(it.tags, cfg),
         # What a plan audit needs without the index: the edges and the declared files.
         "parent": it.parent or "",
-        "needs": list(it.needs),
+        "needs": _inherited_needs(st, it),
         "globs": list(it.globs),
     }
 

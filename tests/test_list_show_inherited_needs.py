@@ -65,4 +65,4 @@ def test_show_reports_the_phase_needs_a_task_inherits(repo):
     _project(repo)
     code, out, err = run_cli(repo, "--json", "show", "P1.T1")
     assert code == 0, err
-    assert json.loads(out)["item"]["needs"] == ["P0"]
+    assert json.loads(out)["needs"] == ["P0"]

@@ -10,6 +10,7 @@ from ...core import clock
 from ...core import outcome as O
 from ...core.plain import plain
 from ...core.records import contested_summary, record_pools
+from ...core.schedule import inherited_deps
 from ...infra.worktree import absolutise
 from ...services import gates as G
 from ...services import ledger as LG
@@ -25,6 +26,19 @@ _TEXT_CAP = 600
 def _epoch(ts: str) -> float:
     """An event's ISO timestamp as epoch seconds; 0.0 for one that does not parse."""
     return clock.epoch(ts, naive="local", default=0.0)
+
+
+def _inherited_needs(st, it) -> list[str]:
+    """The dependencies that bind `it`: its own `needs` plus every phase ancestor's,
+    deduped in declaration order (`inherited_deps`). Printed so the graph shown is the
+    one an operator actually has to satisfy, not only what `it` declares (B8981fa81bd)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for _owner, dep in inherited_deps(st, it):
+        if dep not in seen:
+            seen.add(dep)
+            out.append(dep)
+    return out
 
 
 def record_summary(st, rid: str) -> dict[str, Any]:
@@ -149,11 +163,15 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         return changed_paths(repo, it)
 
     led = LG.build(_log.read_all(), item) if it.state == "done" else None
+    shown = absolutise(repo, plain(it))
+    # A task's effective dependencies are its own `needs` plus every phase ancestor's;
+    # print that, not only what the task declares itself (B8981fa81bd).
+    shown["needs"] = _inherited_needs(st, it)
     return O.ok(
         "show",
         id=item,
         item={
-            **absolutise(repo, plain(it)),
+            **shown,
             **addenda(st, item),
             **({"ledger": LG.summary(led)} if led else {}),
         },
