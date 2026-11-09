@@ -100,9 +100,9 @@ class JsonManagedFile:
         data = _read(path)
         for key, value_ in owned.items():
             data[key] = value_
-        own = set(_owned_keys(data)) | owned.keys()
-        data[OWNER_KEY] = {"owner": version, "keys": {k: _digest(data[k]) for k in own}}
+        own = (set(_owned_keys(data)) | owned.keys()) & set(data)
         _backup(path)
+        data[OWNER_KEY] = {"owner": version, "keys": {k: _digest(data[k]) for k in own}}
         atomic_write(path, _dump(data))
 
     def remove(self, path: str, *, keys: frozenset[str]) -> Any:
@@ -112,7 +112,8 @@ class JsonManagedFile:
         own = _owned_keys(data)
         for key in keys & own:  # only the owned keys: an unmanaged key is never touched
             data.pop(key, None)
-        left = own - keys
+        left = (own - keys) & set(data)
+        _backup(path) if Path(path).is_file() else None
         if left:
             data[OWNER_KEY]["keys"] = {k: _digest(data[k]) for k in left}
         else:
@@ -122,7 +123,9 @@ class JsonManagedFile:
     def owned(self, path: str) -> dict[str, str]:
         data = _read(path)
         marker = data.get(OWNER_KEY)
-        hashes = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
+        keys = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
+        # a legacy marker lists names only (no digests): a name is "current", drift is not known
+        hashes = keys if isinstance(keys, dict) else {}
         return {
             k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
             for k in _owned_keys(data)
