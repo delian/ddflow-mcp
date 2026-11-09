@@ -35,15 +35,14 @@ def test_rollup_reports_count_top_slowest_serial_and_the_path_floor():
     assert r["count"] == 3
     assert r["top_slowest"][0]["test_id"] == "tests.test_a.test_slow"
     assert r["serial_seconds"] == pytest.approx(13.0)
-    # the floor cannot beat the slowest FILE (test_a = 11.0: a file does not parallelize)
+    # workers=4: floor = max(slowest file 11, serial/4=3.25) = 11
     assert r["critical_path_floor_s"] == pytest.approx(11.0)
 
 
-def test_the_skew_is_the_slowest_files_share_of_the_serial_work():
+def test_the_skew_is_the_slowest_files_share_of_the_path():
     r = rollup(parse_junit(JUNIT), workers=1, top_n=2)
-    # floor = max(slowest test 10, slowest file 11) = 11 (a file cannot parallelize within itself)
-    assert r["critical_path_floor_s"] == pytest.approx(11.0)
-    # skew = the slowest file (test_a = 11.0) as a share of the serial work (13.0)
+    # workers=1 cannot finish before the whole serial run (13.0): the floor is 13
+    assert r["critical_path_floor_s"] == pytest.approx(13.0)
     assert r["skew"] == pytest.approx(11.0 / 13.0)
 
 

@@ -17,12 +17,13 @@ from xml.etree import ElementTree
 
 
 def _file_of(classname: str) -> str:
-    """junit ``classname`` -> file path. A class test's classname is ``module.Class``; a trailing
-    CamelCase segment is a class, so it is dropped (``tests.test_a.TestSuite`` -> ``tests/test_a.py``)."""
+    """junit ``classname`` -> file id. A class test's classname is ``module.Class``: ONE trailing
+    CamelCase segment is the class and is dropped (``tests.test_a.TestSuite`` -> ``tests/test_a.py``,
+    ``tests.TestFoo.TestFoo`` -> ``tests/TestFoo.py``). No raw junit ``file`` attribute is used."""
     if not classname:
         return ""
     parts = classname.split(".")
-    while parts and parts[-1] and parts[-1][0].isupper():
+    if parts and parts[-1] and parts[-1][0].isupper():
         parts = parts[:-1]
     return "/".join(parts) + ".py"
 
@@ -42,7 +43,7 @@ def parse_junit(xml_text: str) -> list[TestCase]:
     for case in root.iter("testcase"):
         name = case.get("name", "")
         classname = case.get("classname", "")
-        file = case.get("file") or _file_of(classname)
+        file = _file_of(classname)  # the classname-derived id, never a raw user path
         try:
             duration = float(case.get("time", ""))
         except ValueError:
@@ -60,11 +61,10 @@ def rollup(cases: list[TestCase], workers: int, top_n: int = 10) -> dict:
     for c in timed:
         per_file[c.file] += c.duration_s
     serial = sum(c.duration_s for c in timed)
-    slowest_test = max((c.duration_s for c in timed), default=0.0)
     slowest_file = max(per_file.values(), default=0.0) if per_file else 0.0
-    floor = max(slowest_test, slowest_file)
-    # the file-level makespan at ``workers`` workers: a file does not split, and the workers
-    # divide the rest, so the critical path is max(slowest_file, serial/workers).
+    # The critical-path floor at the workers used: a file does not split within itself and the
+    # workers divide the rest, so the wall cannot beat max(slowest_file, serial / workers); a
+    # single worker cannot beat the whole serial run.
     makespan = max(slowest_file, serial / workers if workers else serial)
     return {
         "count": len(cases),
@@ -77,7 +77,7 @@ def rollup(cases: list[TestCase], workers: int, top_n: int = 10) -> dict:
         #: the slowest file's share of the CRITICAL PATH at the workers used
         "skew": slowest_file / makespan if makespan else 0.0,
         "serial_seconds": serial,
-        "critical_path_floor_s": floor,
+        "critical_path_floor_s": makespan,
         "workers": workers,
     }
 
