@@ -28,7 +28,7 @@ def test_doctor_reports_a_need_on_an_abandoned_item(repo):
     a stuck edge (B740b7f8cf4); a removed need is (see the removed test below)."""
     _seed(repo)
     run_cli(repo, "abandon", "D1", "--reason", "done as a decision")
-    code, out, err = run_cli(repo, "doctor")
+    _code, out, err = run_cli(repo, "doctor")
     text = out + err
     assert "T1 needs 'D1'" not in text, f"abandoned is settled, not stuck: {text}"
 
