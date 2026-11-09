@@ -51,3 +51,19 @@ def test_a_local_reviewer_name_never_reaches_the_shard(tmp_path):
     assert NAME not in shard, f"the reviewer service name {NAME!r} reached the committed log"
     assert MODEL not in shard, f"the reviewer model {MODEL!r} reached the committed log"
     assert "[REDACTED:name]" in shard
+
+
+def test_the_configured_subject_keeps_the_name_for_the_trust_readback(tmp_path):
+    # The unapproved-reviewer hint reads the name back from `reviewer.configured.subject`,
+    # which is a verbatim event field, not `data`; the data copy is the redacted one.
+    root = _root(tmp_path)
+    log = EventLog(root, "T")
+    log.stamp = False
+    log.append(
+        "reviewer.configured",
+        NAME,
+        {"digest": "d" * 16, "kind": "openai", "person": False, "user": ""},
+    )
+    shard = _shard(root)
+    assert f'"subject":"{NAME}"' in shard, "the verbatim subject must keep the name"
+    assert '"[REDACTED:name]"' not in shard, "a verbatim subject is not redacted"

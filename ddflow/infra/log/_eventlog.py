@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import json
 import os
 from collections.abc import Callable, Iterable, Iterator
@@ -35,14 +36,14 @@ T = TypeVar("T")
 
 
 def _reviewer_redact_names(root: Path) -> list[str]:
-    """The configured reviewers' service names and model strings.
+    """The LOCAL configured reviewers' service names and model strings.
 
-    A reviewer's endpoint, model name and key variable belong in the git-ignored
-    reviewer config, so its service name and model are none of a secret, a host, a path
-    or the machine's own name: the committed-log name pass must learn them or they leak
-    into the pushed shards as review evidence (bug B8ef0d325ed). The reviewer loader is
-    imported lazily (services <-> infra) and any of it being unreadable is the caller's
-    fallback, not this write's.
+    A local reviewer's endpoint names a private address, so its service name and model
+    are none of a secret, a host, a path or the machine's own name: the committed-log
+    name pass must learn them or they leak into the pushed shards as review evidence
+    (bug B8ef0d325ed). A public reviewer's name and model name a public endpoint and
+    stay. The reviewer loader is imported lazily (services <-> infra) and any of it
+    being unreadable is the caller's fallback, not this write's.
     """
     try:
         from ...services.review.model import load_reviewers
@@ -51,12 +52,24 @@ def _reviewer_redact_names(root: Path) -> list[str]:
     try:
         out: list[str] = []
         for rev in load_reviewers(root):
-            for value in (rev.name, rev.model):
-                if value:
-                    out.append(value)
+            if _is_local_endpoint(rev.base_url):
+                for value in (rev.name, rev.model):
+                    if value:
+                        out.append(value)
         return out
     except Exception:
         return []
+
+
+def _is_local_endpoint(base_url: str) -> bool:
+    """``True`` when ``base_url`` names a private/loopback/link-local address."""
+    try:
+        from urllib.parse import urlparse
+
+        host = urlparse(base_url).hostname
+        return bool(host) and not ipaddress.ip_address(host).is_global
+    except Exception:
+        return False
 
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
 #: size_after)` of the written shard. A module registers itself here (`services.shardmarks`
