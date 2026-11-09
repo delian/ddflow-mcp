@@ -208,16 +208,23 @@ def test_every_adapter_module_is_under_twenty_kib(path: Path):
 
 
 def test_a_single_adapter_family_has_no_name_and_a_multi_adapter_family_has_one():
-    """`name` is the registry's key, so only a family with SEVERAL adapters carries it:
-    `Forge` is the worked example (`Registry[Forge]`, keyed by name); every other family has
-    one default implementation, and a second one is a bug, not a registry entry."""
+    """`name` is the registry's key, so only a family with SEVERAL adapters carries it, as a
+    declared member of its port. `name` is data, and a `@runtime_checkable` port refuses a
+    data member, so the multi-adapter ports ARE the ports that are not `@runtime_checkable`
+    -- discovered, not listed: `Forge` is the worked example, not the only one."""
     ports = _ports()
-    assert "name" in ports["Forge"].__annotations__, "Forge must declare `name`"
-    for family in sorted(set(ports) - {"Forge"}):
-        assert "name" not in ports[family].__annotations__, (
-            f"{family} is a single-adapter family; a `name` there invites a registry with "
-            "one entry."
-        )
+    for family, cls in sorted(ports.items()):
+        multi = not getattr(cls, "_is_runtime_protocol", False)
+        if multi:
+            assert "name" in cls.__annotations__, (
+                f"{family}: a multi-adapter family (its port is not `@runtime_checkable`) "
+                "must declare `name` as its registry key."
+            )
+        else:
+            assert "name" not in cls.__annotations__, (
+                f"{family} is a single-adapter family; a `name` there invites a registry "
+                "with one entry."
+            )
 
 
 #: The ceiling the baseline may never exceed: the ports still without a fake when the ratchet

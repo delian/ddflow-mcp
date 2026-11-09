@@ -3,7 +3,14 @@
 [[kind]]
 name = "token.issued"
 doc = "A paired bearer token was issued to a named client with a role."
+fields = { "by" = ["str"], "expires_at" = ["str"], "id" = ["str"], "name" = ["str"], "role" = ["str"], "rotated_from" = ["str"] }
+lookup = { "by" = "an actor id, the audit trail's who", "expires_at" = "a time that is compared", "name" = "the client name, its identity, compared", "role" = "a role word", "rotated_from" = "a token id that is compared" }
+exempt = "records who holds a credential; it carries no checkable project text"
 
 [[kind]]
 name = "token.revoked"
 doc = "A paired bearer token was ended, by a person or by its rotation."
+fields = { "by" = ["str"], "id" = ["str"], "name" = ["str"], "reason" = ["str"] }
+text = ["reason"]
+lookup = { "by" = "an actor id, the audit trail's who", "name" = "the client name, its identity, compared" }
+exempt = "records a credential's end; its reason is the operator's note, not a checkable claim"
