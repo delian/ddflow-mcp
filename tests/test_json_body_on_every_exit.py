@@ -151,6 +151,17 @@ def test_a_json_usage_error_still_answers_a_body(repo, argv):
     assert body == {"refusal": {"reason": "usage error", "outcome": "nothing", "exit": 2}}, body
 
 
+def test_json_help_and_version_do_not_get_a_usage_body_appended(repo):
+    """The usage-error body of B831b6afddc fires only on exit 2: --help / --version exit 0
+    with their own output already written, and appending a `{"refusal": ...}` behind it would
+    make stdout two documents."""
+    run_cli(repo, "init")
+    code, out, _err = run_cli(repo, "--json", "--help")
+    assert code == 0 and "usage:" in out and '"refusal"' not in out
+    code, out, _err = run_cli(repo, "--json", "--version")
+    assert code == 0 and '"refusal"' not in out
+
+
 @pytest.mark.parametrize(
     "argv",
     [
