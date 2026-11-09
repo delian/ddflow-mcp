@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -70,6 +71,26 @@ def test_key_by_name_only_and_keyless(tmp_path, monkeypatch):
     pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "hh")
     assert "sk-sentinel-value" not in repr(pr) + pr.config.read_text() + repr(pr.env)
     assert "ENDPOINT-HOST" not in repr(ep2)
+
+
+def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, monkeypatch):
+    # A keyed lane endpoint whose key lives ONLY in its key file must still launch: the
+    # resolver reads the variable first, then the file, and `launch_env` hands the value
+    # to the child under the variable name (it is never written into the provider block).
+    keyfile = tmp_path / "endpoint.key"
+    keyfile.write_text("sk-key-from-file")
+    keyfile.chmod(0o600)
+    t = EXAMPLE.read_text().replace('s = "unverified"', 's = "verified"')
+    t = t.replace(
+        'api_key_env = "LAN_ENDPOINT_KEY"',
+        f'api_key_env = "LAN_ENDPOINT_KEY", api_key_file = "{keyfile}"',
+    )
+    monkeypatch.delenv("LAN_ENDPOINT_KEY", raising=False)
+    ep = E.resolve(_cat(tmp_path, t), "lan-vllm")
+    assert isinstance(ep, E.Endpoint)
+    assert E.resolve_key(ep).value == "sk-key-from-file"
+    assert E.launch_env(ep) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
+    assert os.environ.get("LAN_ENDPOINT_KEY") == "sk-key-from-file"
 
 
 @pytest.mark.parametrize(
