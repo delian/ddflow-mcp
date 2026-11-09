@@ -71,8 +71,8 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
     groups: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     for (item, gate), kind in first.items():
         o = first_out.get((item, gate))
-        if o is None:
-            continue
+        if o is None or not ctx.in_scope(item, o.at if hasattr(o, "at") else 0.0):
+            continue  # outside the window: not part of this report
         groups["models"][o.model or "(unknown model)"].append(kind)
         groups["reviewers"][o.by or "(unknown reviewer)"].append(kind)
     # per-agent: an item's claim agent, its first-run "passed every gate" (only IN-SCOPE items
@@ -130,14 +130,19 @@ def _waits(ctx: Context, minimum: int) -> dict[str, dict]:
     lease_wait: list[float] = []
     for item, waits in ctx.facts.waits.items():
         span = ctx.facts.spans.get(item)
-        if span is not None and span.first_claim is not None:
+        if span is not None and span.first_claim is not None and ctx.in_scope(item, span.first_claim):
             before = [w for w in waits if w <= span.first_claim]
             if before:
                 lease_wait.append(span.first_claim - min(before))
     merge_wait: list[float] = []
     for item, merged in ctx.facts.merges.items():
         span = ctx.facts.spans.get(item)
-        if span is not None and span.completed_at is not None and span.completed_at <= merged[0]:
+        if (
+            span is not None
+            and span.completed_at is not None
+            and span.completed_at <= merged[0]
+            and ctx.in_scope(item, span.completed_at)
+        ):
             merge_wait.append(merged[0] - span.completed_at)
     return {
         "lease": stat(lease_wait, minimum),
