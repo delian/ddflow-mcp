@@ -292,11 +292,21 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
             "why": f"{job_id} runs on {j.host}, which cannot be checked from here; "
             "wait there instead",
         }
+    if s.state == "gone":
+        # Killed with no exit recorded in its log: a detached review records its round
+        # BEFORE it exits, so a process that died without writing an exit never recorded
+        # one, and no further waiting records it either -- someone has to re-run the review.
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{job_id} was killed before its round was recorded ({s.detail}); "
+            "re-run the review",
+        }
     return {
         **out,
         "status": "ready",
         "ready": [job_id],
-        "why": f"{job_id} is finished ({s.detail})",
+        "why": f"{job_id} is finished ({s.detail}); its round is recorded",
     }
 
 
@@ -404,7 +414,11 @@ def _wait_job(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
             freed_by=freed,
             wake={"reason": v["status"], "token": "", "messages": []},
             advice=_job_advice(v, job),
-            next_actions=_job_actions(j) if j is not None else [],
+            # "read the round" is an action only once a round IS recorded: it is NOT
+            # next_actions while the job is still running (blocked) or never recorded one
+            # (hopeless), or the CLI would print "ddflow review show X" for a round that
+            # does not yet exist.
+            next_actions=_job_actions(j) if j is not None and v["status"] == "ready" else [],
         )
         return _job_outcome(v, data, waited, job)
 

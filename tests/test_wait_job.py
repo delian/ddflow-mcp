@@ -58,6 +58,7 @@ def test_a_job_wait_blocks_while_running_then_wakes_ready_with_next_actions(repo
     still = A.wait(repo, job="J1", timeout_s=0, agent="asker")
     assert still.exit == O.NOTHING, still.reason
     assert not still.data["woke"] and still.data["ready"] == []
+    assert still.data["next_actions"] == [], "no round recorded yet: no next actions"
 
     # The detached review finishes while the lane waits: the wait wakes READY.
     running["on"] = False
@@ -66,6 +67,14 @@ def test_a_job_wait_blocks_while_running_then_wakes_ready_with_next_actions(repo
     assert out.data["woke"] and out.data["ready"] == ["J1"]
     assert out.data["job"] == "J1"
     assert any("fix-X" in a for a in out.data["next_actions"]), out.data["next_actions"]
+
+
+def test_a_job_killed_before_recording_its_round_is_hopeless_not_ready(repo, monkeypatch):
+    _started(_log(repo))
+    monkeypatch.setattr(J, "status", lambda job: J.Status("gone", "pid 1 is gone and its log records no exit: it was killed"))
+    out = A.wait(repo, job="J1", timeout_s=5, poll_s=0.05, agent="asker")
+    assert out.exit == O.NOTHING and "killed before its round was recorded" in out.reason
+    assert out.data["next_actions"] == []
 
 
 def test_an_unknown_job_is_hopeless(repo):
