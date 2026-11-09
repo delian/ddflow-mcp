@@ -55,6 +55,14 @@ def _coerce(raw: str) -> Any:
         return raw  # the text as typed, the empty string included
 
 
+@dataclass
+class _Result:
+    """The fake's stand-in for `configwrite.EditResult`: nothing is refused here."""
+
+    written: tuple[str, ...] = ()
+    error: str | None = None
+
+
 @fake
 class FakeConfigStore(ConfigStore):
     """A `ConfigStore` over one in-memory layer: ``files`` maps a dotted knob to the string a
@@ -85,6 +93,9 @@ class FakeConfigStore(ConfigStore):
 
     def set(self, root, key, value, *, layer="file", person=False, agent=""):
         self.files[key] = "true" if value is True else "false" if value is False else str(value)
+        return _Result(written=(key,))
 
     def unset(self, root, key, *, layer="file", person=False, agent=""):
-        self.files.pop(key, None)
+        if self.files.pop(key, None) is None:
+            return _Result(error=f"{key!r} is not set")
+        return _Result(written=(key,))
