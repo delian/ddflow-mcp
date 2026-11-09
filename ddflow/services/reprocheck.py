@@ -76,41 +76,39 @@ def _run_at(
     load_start = _first_load()
     keep = max(0, int(tail_bytes))
     with F.scratch_dir(prefix="ddflow-repro-", ignore_cleanup_errors=True) as tails:
-        with _isolated_clone(repo, sha, tails / "checkout") as clone:
-            if clone is None:
-                return {
-                    "unavailable": f"no scratch checkout of {sha[:12]}",
-                    "load": load_start,
-                }
-            codes: list[int] = []
-            out: list[bytes] = []
-            bigger = False
-            unreached = 0
-            for _ in range(count):
-                if not _prime_scratch(clone, sha):
+        codes: list[int] = []
+        out: list[bytes] = []
+        bigger = False
+        unreached = 0
+        for nth in range(count):
+            # A fresh clone PER RUN: a stateful line can mutate the clone's own config and
+            # tree all it likes and no later run inherits it, and a run that rewired
+            # ``.git`` (a symlink, ``core.worktree`` pointing elsewhere) cannot steer THIS
+            # run's -- or any later run's -- reset onto another checkout: there is no
+            # reset, each run starts from a new throwaway clone.
+            with _isolated_clone(repo, sha, tails / f"run-{nth}") as clone:
+                if clone is None:
                     unreached += 1
                     continue
-                # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
-                # run's path cannot know the name (it was never on any argv line).
                 code, tailed, size = _one_run(
                     clone, tails / secrets.token_hex(6), line, keep, timeout_s
                 )
-                if code is None:
-                    unreached += 1
-                    continue
-                codes.append(code)
-                if tailed:
-                    out.append(tailed)
-                bigger = bigger or size > keep
-    if not codes:
-        why = "every run was cut off before an exit code" if unreached else "no run"
-        record: dict[str, Any] = {
-            "executed": False,
-            "unavailable": f"{why} reached an exit code to read",
-        }
-        record["unreached"] = unreached
-        record["load"] = load_start
-        return record
+            if code is None:
+                unreached += 1
+                continue
+            codes.append(code)
+            if tailed:
+                out.append(tailed)
+            bigger = bigger or size > keep
+        if not codes:
+            why = "every run was cut off before an exit code" if unreached else "no run"
+            record: dict[str, Any] = {
+                "executed": False,
+                "unavailable": f"{why} reached an exit code to read",
+            }
+            record["unreached"] = unreached
+            record["load"] = load_start
+            return record
     failed = [c for c in codes if c != 0]
     record = {
         "executed": True,
@@ -174,34 +172,6 @@ def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
         yield dst
     finally:
         F.rmtree(dst)
-
-
-def _prime_scratch(scratch: Path, sha: str) -> bool:
-    """Reset the isolated clone's checkout to ``sha`` BEFORE one run; False when the reset
-    could not be guaranteed (with no fresh checkout there is no run to read).
-
-    The scratch is a full CLONE (``.git`` is a directory, the clone's own), so there is no
-    gitdir pointer a run could poison onto another repository. But a run MAY still replace
-    ``.git`` with a symlink to the operator's repo (a ``git clean``/``reset`` run through it
-    would move the REAL checkout's HEAD): before any git command the prime REFUSES a
-    ``.git`` that is not a real directory, exactly as the old linked-worktree path refused
-    a non-plain-file pointer, so a poisoned ``.git`` never steers the reset onto another
-    repository. ``git clean -xdfq -f`` removes ignored files AND nested repositories a
-    stateful run left, and ``git reset --hard sha`` returns the tree to the recorded commit.
-    An untracked directory squatting a tracked path can fail a reset: cleaning first (and
-    once more after a failed reset) lets the reset land."""
-    try:
-        gitdir = scratch / ".git"
-        if gitdir.is_symlink() or not gitdir.is_dir():
-            return False
-        cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
-        reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
-        if reset.code != 0:
-            cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
-            reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
-        return reset.code == 0 and cleaned.code == 0
-    except OSError:
-        return False
 
 
 def _one_run(

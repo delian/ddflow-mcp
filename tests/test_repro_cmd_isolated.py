@@ -48,40 +48,29 @@ def test_a_mutating_repro_does_not_reach_the_shared_log(proj):
     assert before <= len(shards)
 
 
-def test_a_poisoned_dot_git_is_refused_not_followed(proj):
-    """The prime refuses a `.git` that is not a real directory: a run that replaced the
-    clone's `.git` with a symlink to an operator repo must make the NEXT prime refuse, never
-    run `git reset --hard` through the link onto the pointee."""
-    import os
-    import shutil
+def test_a_poisoned_clone_config_cannot_steer_a_later_run_onto_the_operator_repo(proj):
+    """Repro_runs > 1 is fresh-clone-per-run: a first run that plants `core.worktree` at the
+    operator checkout into its clone's config cannot make ANY run's git act on the operator
+    tree (there is no shared clone to reset), so the operator repo is never touched."""
     import subprocess
 
-    from ddflow.services import reprocheck as RC
-
-    victim = proj / "victim"
-    victim.mkdir()
-    subprocess.run(["git", "init", "-q", str(victim)], check=True)
-    subprocess.run(["git", "-C", str(victim), "config", "user.email", "e@e"], check=True)
-    subprocess.run(["git", "-C", str(victim), "config", "user.name", "n"], check=True)
-    (victim / "f.txt").write_text("x")
-    subprocess.run(["git", "-C", str(victim), "add", "f.txt"], check=True)
-    subprocess.run(["git", "-C", str(victim), "commit", "-qm", "one"], check=True)
     head0 = subprocess.run(
-        ["git", "-C", str(victim), "rev-parse", "HEAD"], capture_output=True, text=True
+        ["git", "-C", str(proj), "rev-parse", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
-    (victim / "f.txt").write_text("y")
-    subprocess.run(["git", "-C", str(victim), "commit", "-qam", "two"], check=True)
-    head1 = subprocess.run(
-        ["git", "-C", str(victim), "rev-parse", "HEAD"], capture_output=True, text=True
-    ).stdout.strip()
-    assert head1 != head0
 
-    clone = proj / "clone"
-    subprocess.run(["git", "clone", "-q", str(victim), str(clone)], check=True)
-    shutil.rmtree(clone / ".git")
-    os.symlink(str(victim / ".git"), clone / ".git")
-    # A reset that followed the link would move the pointee's HEAD back to head0.
-    assert RC._prime_scratch(clone, head0) is False
+    evil = (
+        f"{shlex.quote(sys.executable)} -c "
+        f"{shlex.quote('import subprocess; subprocess.run([\"git\",\"config\",\"core.worktree\",' + repr(str(proj)) + '])')}"
+        " && exit 1"
+    )
+    out = K.bug_found(
+        proj,
+        summary="poisoned clone config",
+        agent="a1",
+        repro_cmd=f"{evil} && exit 1",
+    )
+    assert out.ok, out.reason
+    # The operator checkout's HEAD is untouched: no run's git acted on it.
     assert subprocess.run(
-        ["git", "-C", str(victim), "rev-parse", "HEAD"], capture_output=True, text=True
-    ).stdout.strip() == head1  # untouched
+        ["git", "-C", str(proj), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip() == head0
