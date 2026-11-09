@@ -114,15 +114,9 @@ class LocalConfigStore:
         person: bool = False,
         agent: str = "",
     ):
-        from ddflow.services import configwrite as cw
-
-        return cw.apply_edit(
-            Path(root),
-            cw.SetPairs([(key, None)]),
-            layer=layer,
-            person=person,
-            agent=agent,
-        )
+        # configwrite's Edit is Set/Append only, no Remove: writing SetPairs([(key, None)])
+        # would spell the TOML literal "None". Removal waits on a configwrite Remove edit.
+        raise NotImplementedError("configwrite has no remove edit yet; `unset` waits on it")
 
 
 def default_store() -> LocalConfigStore:

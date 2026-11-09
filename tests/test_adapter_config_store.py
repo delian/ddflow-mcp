@@ -69,3 +69,11 @@ def test_the_fake_keeps_an_empty_string_and_a_bool_typing(tmp_path):
     assert data["ui"]["theme"] == "" and data["core"]["enabled"] is True
     fake.set(tmp_path, "core.enabled", False)
     assert fake.resolve(tmp_path).as_dict()["core"]["enabled"] is False
+
+
+def test_the_fake_unset_removes_a_set_key_and_noops_a_missing_one(tmp_path):
+    fake = FakeConfigStore({"lease.ttl_s": "900"})
+    assert fake.resolve(tmp_path).as_dict()["lease"]["ttl_s"] == 900
+    assert fake.unset(tmp_path, "lease.ttl_s").written == ("lease.ttl_s",)
+    assert fake.unset(tmp_path, "lease.ttl_s").written == ()  # now absent: a no-op, no error
+    assert fake.unset(tmp_path, "lease.ttl_s").error is None
