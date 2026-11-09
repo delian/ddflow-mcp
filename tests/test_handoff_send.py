@@ -60,3 +60,31 @@ def test_resolve_patch_refuses_a_non_patch_file(tmp_path):
     f.write_text("just some text, not a git diff")
     with pytest.raises(SuggestError, match="diff --git"):
         resolve_patch(Path("."), diff=str(f))
+
+
+def test_resolve_patch_refuses_a_non_utf8_patch(tmp_path):
+    f = tmp_path / "change.diff"
+    f.write_bytes(b"diff --git a/x b/x\n--- a/x\n+++ b/x\n-\xff\xfe\n")
+    with pytest.raises(SuggestError, match="could not read"):
+        resolve_patch(Path("."), diff=str(f))
+
+
+def test_resolve_patch_refuses_an_empty_commit(repo):
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "--allow-empty", "-qm", "no change"], check=True
+    )
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    with pytest.raises(SuggestError, match="no replayable patch"):
+        resolve_patch(repo, commit=sha)
+
+
+from ddflow.services.handoff.send import suggest as _send  # noqa: E402
+
+
+def test_suggest_refuses_a_missing_reason(tmp_path):
+    f = tmp_path / "change.diff"
+    f.write_text(_DIFF)
+    with pytest.raises(SuggestError, match="reason"):
+        _send(None, None, to_item="O-1", to_agent="owner", reason="", diff=str(f))

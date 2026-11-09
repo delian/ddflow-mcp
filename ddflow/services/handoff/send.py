@@ -95,9 +95,9 @@ def suggest(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
     is re-cut onto (the API resolves it from the owner's branch); ``evidence`` is the
     ``CMD,EXIT`` a ``gate_fix`` re-run must reproduce. With no base no ref is cut, but the
     blob is still recorded and the patch-id taken."""
-    patch = resolve_patch(log.root, commit=commit, diff=diff, blob=blob)
     if not reason.strip():
         raise SuggestError("a suggestion needs --reason: why the owner should take it")
+    patch = resolve_patch(log.root, commit=commit, diff=diff, blob=blob)
     try:
         out = events.propose(
             log,
