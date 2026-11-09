@@ -51,14 +51,13 @@ def resolve_patch(
     if commit:
         from ...adapters import git
 
-        show = git.run(repo, "show", "--format=", "--binary", commit)
+        show = git.run(repo, "show", "--no-notes", "--format=", "--binary", commit)
         if show.unavailable or not show.ok:
             raise SuggestError(f"git could not show {commit}: {show.err}")
-        if not show.out.lstrip().startswith("diff --git"):
+        if "diff --git" not in show.out:
             raise SuggestError(
                 f"{commit}: git show gives no replayable patch (an empty or merge commit); "
-                "name the change's diff with --diff FILE, or the parent with --commit "
-                "COMMIT^"
+                "name the change's diff with --diff FILE, or the parent with --commit COMMIT^"
             )
         return show.out
     src = Path(diff or blob)
