@@ -77,7 +77,7 @@ def test_the_facts_overlay_is_total_and_well_formed(hid):
     assert result["checks"]["facts"]["status"] == "ok", (hid, result)
 
 
-def test_run_reports_failed_when_a_command_hooked_agent_has_an_unresolved_normalizer(monkeypatch):
+def test_run_reports_failed_when_a_command_hooked_agent_has_an_unknown_emitter(monkeypatch):
     from types import SimpleNamespace
 
     from ddflow.services import harnessfacts
@@ -87,8 +87,8 @@ def test_run_reports_failed_when_a_command_hooked_agent_has_an_unresolved_normal
         facts={},
         hooks=SimpleNamespace(
             style="claude",  # a COMMAND_HOOK_STYLE
-            normalizer="bogus",  # no such NORMALIZERS key
-            emitter="claude",
+            fields={},  # no `[hooks.fields]`: the default field map resolves
+            emitter="bogus",  # no such EMIT_VARIANTS key
             inject=(),
             events={},
         ),
@@ -112,8 +112,8 @@ def test_run_resolves_the_hook_plan_from_the_given_descriptor(monkeypatch):
         facts={},
         hooks=SimpleNamespace(
             style="claude",
-            normalizer="claude",
-            emitter="claude",
+            fields={},  # the default field map (Claude's dialect)
+            emitter="plain",
             inject=(),
             events={},
         ),
