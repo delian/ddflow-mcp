@@ -45,12 +45,45 @@ def _per_gate(ctx: Context, minimum: int) -> list[dict]:
             {
                 "gate": gate,
                 **stat(per[gate], minimum),
+                "items": y.get("items"),  # the yield row's own n, carried alongside the duration n
                 "first_run_pass_rate": y.get("first_run_pass_rate"),
                 "ever_failed_share": y.get("ever_failed_share"),
                 "cost_per_confirmed_finding_s": y.get("cost_per_confirmed_finding_s"),
             }
         )
     return out
+
+
+def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
+    """The per-model and per-reviewer comparison D-perf-metrics-answers always shows: n and
+    the first-run pass rate per name, None where there is not enough data."""
+    from collections import defaultdict
+
+    models: dict[str, list[str]] = defaultdict(list)
+    reviewers: dict[str, list[str]] = defaultdict(list)
+    for o in ctx.facts.outcomes:
+        key = (o.item, o.gate)
+        models[o.model or "(unknown model)"].append(o.kind)
+        if o.by:
+            reviewers[o.by].append(o.kind)
+
+    def rows(groups: dict[str, list[str]]) -> list[dict]:
+        out = []
+        for name in sorted(groups):
+            kinds = groups[name]
+            passed = sum(1 for k in kinds if k == "passed")
+            out.append(
+                {
+                    "name": name,
+                    "n": len(kinds),
+                    "first_run_pass_rate": passed / len(kinds)
+                    if len(kinds) >= max(minimum, 1)
+                    else None,
+                }
+            )
+        return out
+
+    return {"models": rows(models), "reviewers": rows(reviewers)}
 
 
 def _cycle_split(ctx: Context, minimum: int) -> dict:
@@ -90,21 +123,25 @@ class Report:
     cycle: dict = field(default_factory=dict)
     waits: dict = field(default_factory=dict)
     rework: list[dict] = field(default_factory=list)
+    comparisons: dict = field(default_factory=dict)
     not_collected: dict = field(default_factory=dict)
 
     def find(self, section: str) -> list[dict] | dict:
+        if section in ("models", "reviewers", "agents"):
+            return self.comparisons.get(section, [])
         return getattr(self, section, [])
 
 
 def build(ctx: Context, minimum: int | None = None) -> Report:
     """The report data as one structure. Deterministic for the same log and config."""
     cfg = Config()
-    minimum = minimum or int(cfg.metrics.min_samples)
+    minimum = int(cfg.metrics.min_samples) if minimum is None else minimum
     return Report(
         gates=_per_gate(ctx, minimum),
         cycle=_cycle_split(ctx, minimum),
         waits=_waits(ctx, minimum),
         rework=gateyield.rework_loops(ctx.facts),
+        comparisons=_comparisons(ctx, minimum),
         not_collected=dict(NOT_COLLECTED),
     )
 

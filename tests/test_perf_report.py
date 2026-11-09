@@ -56,3 +56,15 @@ def test_under_the_minimum_a_number_is_none_not_zero():
     report = build(ctx_of(seeded()), minimum=50)  # far above the samples present
     assert all(g["p50_s"] is None for g in report.gates)
     assert report.cycle["p50_s"] is None
+
+
+def test_the_model_and_reviewer_comparison_is_always_present_with_n():
+    report = build(ctx_of(seeded()), minimum=1)
+    assert report.find("models")  # the per-model comparison D-perf-metrics-answers mandates
+    assert report.find("reviewers")
+    assert all("n" in row for row in report.find("models"))
+
+
+def test_a_zero_minimum_is_respected_not_treated_as_missing():
+    report = build(ctx_of(seeded()), minimum=0)  # two durations must still yield a percentile
+    assert any(g["p50_s"] is not None for g in report.gates)
