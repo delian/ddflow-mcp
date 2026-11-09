@@ -617,6 +617,23 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
     )
     if refused is not None:
         return refused
+    if approval and not approval_stamp:
+        # `--approval` (an id, or 'request') was passed but this record needs no operator
+        # override -- recording a non-skipped outcome over a gate with no unanswered
+        # failed-review findings is the agent's own to make -- so it was not spent and no
+        # request was filed. Surface that instead of silently recording with the argument
+        # dropped (bug Be2de070703): nothing is here to approve through `--approval`; the
+        # operator overrides an ALREADY-recorded gate with `ddflow approve <id> <gate>`.
+        return O.refused(
+            "gate.record",
+            f"recording {gate} as {outcome} needs no operator's approval, so --approval "
+            "was ignored -- nothing was filed or spent. Record it directly (no approval is "
+            f"needed for it), or have the operator accept the recorded gate with "
+            f"`ddflow approve {item} {gate}`.",
+            id=item,
+            gate=gate,
+            outcome=outcome,
+        )
     # B97106be46a: a refused skip already says which case it is (the refusal names the
     # request id); a skip that was NOT refused must say so too. See `_not_gated_skip_note`.
 
