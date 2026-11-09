@@ -136,8 +136,13 @@ def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(
 
 
 def test_scan_kilo_skips_a_null_timestamp_or_data_row(monkeypatch):
-    monkeypatch.setattr(H, "_kilo_question_parts", lambda path: ((1, None, "{}"), (2, 123, None)))
-    # A NULL time_created/data row is dropped, not compared (Bdb4ef97bd5: `None < x` raises).
+    monkeypatch.setattr(
+        H,
+        "_kilo_question_parts",
+        lambda path: ((1, None, "{}"), (2, 123, None), (3, "not-a-number", "{}")),
+    )
+    # A NULL/non-numeric time_created or NULL data row is dropped, not compared
+    # (Bdb4ef97bd5: `None < x` and `"str" < x` raise).
     assert H.scan_kilo(Path("/nonexistent/kilo.db"), "q?", "Q1", 0.0) == []
 
 

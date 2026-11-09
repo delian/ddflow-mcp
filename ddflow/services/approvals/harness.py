@@ -297,10 +297,11 @@ def _note_uses(
         if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == TOOL:
             asked = (b.get("input") or {}).get("questions")
             if isinstance(asked, list):
-                uses[str(b.get("id"))] = (
-                    row.get("uuid"),
-                    [q.get("question", "") for q in asked if isinstance(q, dict)],
+                questions = list(
+                    dict.fromkeys(q.get("question", "") for q in asked if isinstance(q, dict))
                 )
+                if questions:
+                    uses[str(b.get("id"))] = (row.get("uuid"), questions)
 
 
 def _note_results(
@@ -467,8 +468,8 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
     answer, which this is not)."""
     found: list[Attested] = []
     for pid, created, raw in _kilo_question_parts(str(path)):
-        if created is None or raw is None:
-            continue  # NULL time_created/data the SQL filter once dropped: skip, never compare
+        if raw is None or not isinstance(created, (int, float)) or isinstance(created, bool):
+            continue  # a NULL/malformed time_created/data the SQL filter once dropped: skip, never compare
         if created < since * 1000 or marker not in raw:
             continue
         try:
