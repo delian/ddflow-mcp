@@ -57,7 +57,7 @@ ENV_PATTERN = "DDFLOW_{}_BIN"
 EXTRA_DIRS = ("~/.local/bin",)
 LIVE_PROBE = unavailable(
     "live smoke run against a model: calls an endpoint and uses a key, so it needs the operator's "
-    "consent; run `ddflow lanes smoke` once approved and record the result"
+    "consent; run `ddflow lanes state` once approved and record the verdict"
 )
 #: Facts about the run command and its stream: (value, status, where it was read).
 FACTS = {
