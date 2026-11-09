@@ -96,8 +96,8 @@ def detect_series(
         return None
     abs_s, rel, _z = median_shift(baseline, window)
     stepped = abs_s >= cfg.detect_absolute_floor_s and (
-        rel is None or rel >= cfg.detect_relative_threshold
-    )
+        (rel is None and abs_s > 0) or (rel is not None and rel >= cfg.detect_relative_threshold)
+    )  # a zero baseline makes the relative gate undefined: a flat (0) delta never steps
     drift = _creep_drift(baseline, window, cfg.detect_creep_alpha)
     bmed = median(baseline)
     # The median shift clears the absolute floor (so a sub-second change, or a lone trailing
