@@ -52,13 +52,16 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
             # = None`` and then refuses to re-import it for the process's lifetime, so a
             # transient halt makes a lazy name permanently broken (B7e585f9e5d:
             # ``ddflow.services.ci.main`` crashed ``check_after_merge``). Drop that sentinel
-            # and retry once; a submodule that genuinely does not exist re-raises on the retry.
+            # and retry ONCE. A real import failure deletes the entry instead of leaving a
+            # sentinel, so it must re-raise here -- never run the submodule's body twice.
             try:
                 mod = importlib.import_module(fullname)
             except ModuleNotFoundError:
-                if sys.modules.get(fullname) is None:
-                    sys.modules.pop(fullname, None)
-                mod = importlib.import_module(fullname)
+                if fullname in sys.modules and sys.modules[fullname] is None:
+                    del sys.modules[fullname]
+                    mod = importlib.import_module(fullname)
+                else:
+                    raise
             cache[sub] = mod
         return getattr(mod, name)
 
