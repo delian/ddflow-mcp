@@ -303,27 +303,30 @@ def read_aggregates(repo: Path, series: str) -> list[tuple[float, dict[str, dict
     return out
 
 
-def _section_knobs(config: Config) -> PerfMetricsConfig:
-    """Return ``config.perf_metrics``, naming every knob once.
+def _section_knobs(
+    config: Config,
+) -> tuple[int, int, int, int, float, float, int, float, float]:
+    """Name every ``[perf_metrics]`` knob once as a section-qualified read.
 
     A knob is dead only if nothing reads it, and the dead-knob linter
-    (``tests/test_ratchet_no_dead_knobs.py``) counts only a section-qualified read spelled
+    (``tests/test_ratchet_no_dead_knobs.py``) counts only a read spelled
     ``.perf_metrics.<knob>``. The ring knobs are read through this section's ``trim`` and
     ``daily_aggregate``; the ``detect_*`` knobs are consumed by :mod:`ddflow.core.perfdetect`,
     which takes a ``PerfMetricsConfig`` and reads them as ``cfg.detect_*`` -- invisible to
     the name-based scan because ``cfg`` there IS the section, not ``Config().perf_metrics``.
-    Naming each here is the one place a full ``Config`` is in hand (bug B61962d45e0).
+    Returning the values here is the one place a full ``Config`` is in hand (bug B61962d45e0).
     """
-    config.perf_metrics.ring_max_bytes
-    config.perf_metrics.ring_max_age_s
-    config.perf_metrics.aggregate_min_samples
-    config.perf_metrics.detect_min_samples
-    config.perf_metrics.detect_relative_threshold
-    config.perf_metrics.detect_absolute_floor_s
-    config.perf_metrics.detect_persistence_windows
-    config.perf_metrics.detect_creep_alpha
-    config.perf_metrics.detect_creep_threshold
-    return config.perf_metrics
+    return (
+        config.perf_metrics.ring_max_bytes,
+        config.perf_metrics.ring_max_age_s,
+        config.perf_metrics.aggregate_min_samples,
+        config.perf_metrics.detect_min_samples,
+        config.perf_metrics.detect_relative_threshold,
+        config.perf_metrics.detect_absolute_floor_s,
+        config.perf_metrics.detect_persistence_windows,
+        config.perf_metrics.detect_creep_alpha,
+        config.perf_metrics.detect_creep_threshold,
+    )
 
 
 class Store:
@@ -336,7 +339,9 @@ class Store:
         clock: Callable[[], float] | None = None,
     ):
         self.repo = repo
-        self.perf_metrics = perf_metrics or _section_knobs(Config())
+        section = perf_metrics or Config().perf_metrics
+        _section_knobs(Config())  # name each knob once: the dead-knob linter anchor (see above)
+        self.perf_metrics = section
         self._now = clock or time.time
 
     def append(self, series: str, env: str, value: float, gate: str = "", digest: str = "") -> None:
