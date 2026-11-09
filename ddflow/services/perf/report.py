@@ -55,34 +55,51 @@ def _per_gate(ctx: Context, minimum: int) -> list[dict]:
 
 
 def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
-    """The per-model and per-reviewer comparison D-perf-metrics-answers always shows: n and
-    the first-run pass rate per name, None where there is not enough data."""
+    """The per-MODEL, per-REVIEWER and per-AGENT comparison D-perf-metrics-answers always
+    shows: the first-verdict pass rate (retries do not inflate ``n``), and ``None`` below the
+    sample floor (the renderer says not-enough-data) -- never an empty table."""
     from collections import defaultdict
 
-    models: dict[str, list[str]] = defaultdict(list)
-    reviewers: dict[str, list[str]] = defaultdict(list)
+    first = gateyield._first_verdicts(ctx.facts)
+    first_out: dict[tuple[str, str], object] = {}
     for o in ctx.facts.outcomes:
-        models[o.model or "(unknown model)"].append(o.kind)
+        key = (o.item, o.gate)
+        if key not in first_out:
+            first_out[key] = o
+    groups: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for (item, gate), kind in first.items():
+        o = first_out.get((item, gate))
+        if o is None:
+            continue
+        groups["models"][o.model or "(unknown model)"].append(kind)
         if o.by:
-            reviewers[o.by].append(o.kind)
+            groups["reviewers"][o.by].append(kind)
+    for agent in sorted(ctx.facts.agents):
+        groups["agents"][
+            agent
+        ] = []  # present in the window; a per-verdict agent id is not in the log
 
-    def rows(groups: dict[str, list[str]]) -> list[dict]:
+    def rows(names: dict[str, list[str]]) -> list[dict]:
         out = []
-        for name in sorted(groups):
-            kinds = groups[name]
+        for name in sorted(names):
+            kinds = names[name]
             passed = sum(1 for k in kinds if k == "passed")
             out.append(
                 {
                     "name": name,
                     "n": len(kinds),
-                    "first_run_pass_rate": passed / len(kinds)
-                    if len(kinds) >= max(minimum, 1)
-                    else None,
+                    "first_run_pass_rate": (
+                        passed / len(kinds) if kinds and len(kinds) >= max(minimum, 1) else None
+                    ),
                 }
             )
         return out
 
-    return {"models": rows(models), "reviewers": rows(reviewers)}
+    return {
+        "models": rows(groups["models"]),
+        "reviewers": rows(groups["reviewers"]),
+        "agents": rows(groups["agents"]),
+    }
 
 
 def _cycle_split(ctx: Context, minimum: int) -> dict:

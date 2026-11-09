@@ -62,6 +62,7 @@ def test_the_model_and_reviewer_comparison_is_always_present_with_n():
     report = build(ctx_of(seeded()), minimum=1)
     assert report.find("models")  # the per-model comparison D-perf-metrics-answers mandates
     assert report.find("reviewers")
+    assert report.find("agents")  # per-agent comparison is present too
     assert all("n" in row for row in report.find("models"))
 
 
