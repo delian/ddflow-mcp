@@ -26,6 +26,8 @@ from .store import PerfMetricsConfig, ring_path
 #: The only keys a raw sample may carry. Anything else was not written by the sampler and is
 #: dropped with a doctor note, never stored (r-no-secrets).
 ALLOWED_FIELDS = frozenset({"t", "env", "value", "gate", "digest"})
+#: Seconds in a UTC day (the aggregate's grain).
+DAY_S = 86400
 
 
 @dataclass(frozen=True)
@@ -116,21 +118,24 @@ def compact(
     cfg = cfg or PerfMetricsConfig()
     _, dropped = redact_ring(repo, series)  # drop non-allowlist fields from disk
     notes = [f"{series}: saw non-allowlist field {k}" for k in dropped]
-    cutoff = now - cfg.ring_max_age_s
-    # Fold the samples that are about to age out into the committed aggregate FIRST (reading
-    # the pre-trim ring), then trim -- so the compacted numbers survive the trim.
-    for day in _touched_days(repo, series, cutoff):
+    # Fold a UTC day only once it is COMPLETE (its span ended before ``now``): no sample can
+    # still arrive, so the pre-trim ring holds the full day and the aggregate is final (then
+    # monotonic against any later re-fold). Then trim age+size.
+    for day in _complete_days(repo, series, now):
         store.write_aggregate(repo, series, day, cfg)
     return store.trim(repo, series, now, cfg), notes
 
 
-def _touched_days(repo: Path, series: str, cutoff: float) -> list[float]:
-    """The UTC days (as day epochs) of the samples older than ``cutoff``, ascending."""
-    days: set[float] = set()
-    for s in store._read_ring(repo, series):
-        if s.t < cutoff:
-            days.add(int(s.t // 86400) * 86400)
-    return sorted(days)
+def _complete_days(repo: Path, series: str, now: float) -> list[float]:
+    """The UTC day epochs whose whole span ended before ``now`` (a complete day: no late
+    sample can still arrive, so the daily aggregate is final)."""
+    return sorted(
+        {
+            int(s.t // DAY_S) * DAY_S
+            for s in store._read_ring(repo, series)
+            if int(s.t // DAY_S) * DAY_S + DAY_S <= now
+        }
+    )
 
 
 __all__ = ["ALLOWED_FIELDS", "Audit", "audit", "compact", "doctor", "redact_ring", "redact_row"]
