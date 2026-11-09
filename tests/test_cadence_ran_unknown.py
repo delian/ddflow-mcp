@@ -39,3 +39,12 @@ def test_lessons_compression_is_still_recorded(repo):
     code, out, err = run_cli(repo, "cadence", "--ran", "lessons_compression")
     assert code == OK, (code, out, err)
     assert "recorded cadence run: lessons_compression" in out
+
+
+def test_a_calendar_name_from_every_days_is_still_recorded(repo):
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[cadence]\nevery_days = ["foo=7"]\n')
+    code, out, err = run_cli(repo, "cadence", "--ran", "foo")
+    assert code == OK, (code, out, err)
+    assert "recorded cadence run: foo" in out
+
