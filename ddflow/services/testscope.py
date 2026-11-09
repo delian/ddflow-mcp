@@ -277,12 +277,31 @@ def _selected(
     )
 
 
+def _pytest_summary(it) -> list[str]:
+    """The pytest summary the item's ci gate recorded ([] when no pytest ran, e.g. a "full"
+    ci whose pre-commit range held no file the `tests` hook reaches)."""
+    gates = getattr(it, "gates", None) or {}
+    ci = gates.get("ci") if isinstance(gates, dict) else None
+    evidence = getattr(ci, "evidence", None) if ci is not None else None
+    return list((evidence or {}).get("summary") or ())
+
+
 def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict) -> Scope:
     """The scope when the item's ci gate passed HERE and recorded which tests it took
     (D-test-economy-r2): nothing when ci's scope is this gate's or wider, else only the
     difference -- the tests this gate's selection holds that ci did not run."""
     sha = str(ran.get("sha", ""))[:12]
     if ran.get("scope") == "full":
+        if not _pytest_summary(it):
+            # A "full" ci whose pre-commit range held no file the `tests` hook reaches ran no
+            # pytest at all (only the lint/scan hooks), so it covers nothing: the whole suite
+            # must run HERE (B847e0494de).
+            return Scope(
+                "full",
+                "the ci gate recorded a full scope but no pytest summary: the test hook never "
+                "ran, so no whole-suite run covers this tree",
+                changed_lines=lines,
+            )
         return Scope(
             "covered", "the ci gate ran the whole suite on this tree", changed_lines=lines,
             covered_by=f"ci full run {sha}",

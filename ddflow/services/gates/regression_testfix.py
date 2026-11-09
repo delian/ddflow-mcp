@@ -93,7 +93,9 @@ def verify_test_only_fix(
     with tools.merge_tree(repo, base_sha, "") as (ptree, why):
         if ptree is None:
             return UNRUN, {**ev, "reason": why}
-        if not tree_provides(tools.command_for, defn.command if defn else "", ptree, tests):
+        if not tree_provides(
+            tools.command_for, defn.command if defn else "", ptree, tests, cfg=cfg
+        ):
             restored = "not run (the test is not in the base's test files)"
         else:
             command = tools.command_for(defn.command if defn else "", tests, ptree)
