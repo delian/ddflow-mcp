@@ -320,6 +320,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
         note,
         force,
         resources,
+        agent,
         queue,
         {"break_lease": break_lease, "broke": broke},
     )
@@ -400,7 +401,7 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
 
 
 def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
-    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False, brk=None
+    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, agent="", queue=False, brk=None
 ):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
@@ -412,6 +413,7 @@ def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
             note=note,
             force=force,
             resources=csv_list(resources) or None,
+            agent=agent,
             offer=alternatives_offer(repo, log, cfg),
             **(brk or {}),
         )

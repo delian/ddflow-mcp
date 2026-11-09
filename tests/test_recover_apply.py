@@ -89,20 +89,32 @@ def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo, monkeypatch):
     assert out.exit == 0, out.reason
 
 
-def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_force_is_safe(repo):
-    """Bc58ea6b7a7: the help says a recorded expiry is still taken back with --force, and
-    the refusal sent the agent back to `recover`, which had already run. The refusal now
-    says what the record says: nothing to salvage, and --force takes it over."""
+def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_the_agent_route_is_approval(repo):
+    """Bc58ea6b7a7: the help says a recorded expiry is still taken back. An agent's refusal
+    names the agent's route (`--approval request`, never `--force`, which claim drops for
+    agents) and says what the record says: nothing to salvage (Bbb8c158254)."""
     _crashed_with_work(repo, work=False)
     RP.recover(repo, apply=True, agent="op")
     out = LC.claim(repo, "T1", agent="next")
     assert out.exit == 3, "a recorded expiry is still taken back deliberately (the help)"
     flat = " ".join(out.reason.split())
     assert "recorded" in flat and "nothing to salvage" in flat, flat
-    assert "ddflow claim T1 --force" in flat, flat
+    assert "ddflow claim T1 --approval request" in flat, flat
+    assert "ddflow claim T1 --force" not in flat, "an agent's --force is dropped: " + flat
     assert "safe as of that sweep" in flat, "the measurement is dated, not current: " + flat
     assert "Run `ddflow recover" not in flat, "recover already ran: " + flat
     assert "wait --item" not in flat, flat
+
+
+def test_a_person_claim_of_an_unswept_expired_lease_is_told_to_force(repo):
+    """Bbb8c158254: the same refusal to a PERSON at a terminal says --force, the route a
+    person's claim honours (an agent's --force is dropped and becomes --approval)."""
+    _crashed_with_work(repo)
+    out = LC.claim(repo, "T1", agent="")
+    assert out.exit == 3
+    flat = " ".join(out.reason.split())
+    assert "ddflow claim T1 --force" in flat, flat
+    assert "--approval request" not in flat, flat
 
 
 def test_a_plain_claim_of_an_unswept_expired_lease_still_sends_to_recover(repo):
@@ -110,3 +122,4 @@ def test_a_plain_claim_of_an_unswept_expired_lease_still_sends_to_recover(repo):
     out = LC.claim(repo, "T1", agent="next")
     assert out.exit == 3
     assert "ddflow recover --item T1" in out.reason, out.reason
+    assert "ddflow claim T1 --approval request" in out.reason, out.reason
