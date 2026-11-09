@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any
 
 from ...config import Config
@@ -54,14 +55,14 @@ def resolve_patch(
         show = git.run(repo, "show", "--no-notes", "--format=", "--binary", commit)
         if show.unavailable or not show.ok:
             raise SuggestError(f"git could not show {commit}: {show.err}")
-        at = show.out.find("diff --git")
-        if at < 0:
+        at = re.search(r"(?m)^diff --git ", show.out)
+        if at is None:
             raise SuggestError(
                 f"{commit}: git show gives no replayable patch (an empty or merge commit); "
                 f"replay a merge as `git diff {commit}^1 {commit}` and send it with --diff FILE"
             )
         # a signed commit may lead with `gpg: Signature ...`; slice to the first diff header.
-        return show.out[at:]
+        return show.out[at.start() :]
     src = Path(diff or blob)
     try:
         text = src.read_text("utf-8")
