@@ -90,7 +90,7 @@ def test_launch_due_starts_the_first_idle_approved_lane(monkeypatch):
     monkeypatch.setattr(P.T, "load", lambda path: ({"dy": t}, []))
     monkeypatch.setattr(P, "_lane_worktree", lambda repo, name: repo / "wt")
     monkeypatch.setattr(P, "_lane_home", lambda repo, name: repo / "home")
-    monkeypatch.setattr(P, "_source", lambda *a, **k: object())
+    monkeypatch.setattr(P, "_source", lambda *a, **k: type("Src", (), {"template": t})())
     monkeypatch.setattr(P.D, "gaps", lambda src: ())
     monkeypatch.setattr(P.D, "pull_for", lambda *a, **k: P.D.Answer("offer", "dy", "A-1"))
     monkeypatch.setattr(LN, "launch", _fake_launch)
