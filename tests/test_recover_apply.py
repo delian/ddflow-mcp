@@ -89,7 +89,9 @@ def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo, monkeypatch):
     assert out.exit == 0, out.reason
 
 
-def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_the_agent_route_is_approval(repo):
+def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_the_agent_route_is_approval(
+    repo,
+):
     """Bc58ea6b7a7: the help says a recorded expiry is still taken back. An agent's refusal
     names the agent's route (`--approval request`, never `--force`, which claim drops for
     agents) and says what the record says: nothing to salvage (Bbb8c158254)."""
@@ -125,4 +127,6 @@ def test_a_plain_claim_of_an_unswept_expired_lease_still_sends_to_recover(repo):
     assert out.exit == 3
     assert "ddflow recover --item T1" in out.reason, out.reason
     assert "ddflow claim T1 --approval request" in out.reason, out.reason
-    assert "ddflow claim T1 --force" not in out.reason, "an agent's --force is dropped: " + out.reason
+    assert "ddflow claim T1 --force" not in out.reason, (
+        "an agent's --force is dropped: " + out.reason
+    )

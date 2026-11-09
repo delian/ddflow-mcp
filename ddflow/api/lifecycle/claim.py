@@ -401,7 +401,19 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
 
 
 def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
-    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, agent="", queue=False, brk=None
+    repo: Path,
+    log,
+    cfg,
+    st,
+    item: str,
+    want,
+    prior,
+    note,
+    force,
+    resources,
+    agent="",
+    queue=False,
+    brk=None,
 ):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
