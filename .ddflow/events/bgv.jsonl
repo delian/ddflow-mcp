@@ -1,0 +1,2 @@
+{"agent":"bgv","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e50f320444d369a69b6ea161f","kind":"ddflow.seen","lamport":161345,"schema":1,"subject":"ddflow","ts":"2026-11-09T11:36:04.443456Z"}
+{"agent":"bgv","data":{"at":1794224162.9709835,"globs":[],"holder":"bgv","lease_event":"","on":[{"holder":"bgs","item":"fix-Bbb8c158254","pair":["",""]}],"queue":false,"since":1794224162.9709835,"ttl_s":5400},"id":"e4eb200989bc566cf81ffd076","kind":"lease.waiting","lamport":161346,"schema":1,"subject":"fix-Bbb8c158254","ts":"2026-11-09T11:36:04.495801Z"}

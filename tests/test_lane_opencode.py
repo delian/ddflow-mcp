@@ -22,7 +22,7 @@ from ddflow.services.swarm import lanehooks as LH
 from ddflow.services.swarm import lanehooks_plugin as PL
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
-SECRET = "sk-test-0123456789abcdef"
+SECRET = "test-secret-placeholder-value"
 EVENTS = [
     {"type": "step_start", "sessionID": "ses_1"},
     {"type": "tool_use", "part": {"tool": "ddflow_claim", "state": {"input": {}}}},
@@ -152,7 +152,7 @@ def test_spec_identity_key_by_name_and_no_shell(tmp_path, tree):
     s = lp.spec
     assert s.name == "lane-7" and s.cwd == str(wt) and s.home == home
     assert s.fixed_env == {"DDFLOW_AGENT": "lane-7"}
-    assert s.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"} and SECRET not in repr(s)
+    assert s.env == {} and s.secret_env == {"LAN_ENDPOINT_KEY": SECRET} and SECRET not in repr(s)
     assert "PATH" in s.pass_env
     assert (
         s.argv[1] == "run"
@@ -263,7 +263,20 @@ def test_missing_key_variable_refuses_the_launch(tmp_path, tree, monkeypatch):
 
 def test_transport_is_registered():
     assert isinstance(ld.driver_for(OC.TRANSPORT), OC.OpenCodeLane)
+
+
+def test_the_test_secret_is_not_a_key_like_literal():
+    """Bb72814df47: gitleaks flags a key-like SECRET (`sk-...`) — the placeholder must not
+    read as an API key, or the CI secret scan reddens the commit for no real secret."""
+    for prefix in ("sk-", "ghp_", "xoxb-", "AKIA"):
+        assert not SECRET.startswith(prefix), SECRET
     assert OC.LIVE_PROBE.status == "unavailable"
+
+
+def test_live_probe_names_an_existing_lanes_command():
+    # ba655b17982: `ddflow lanes smoke` never existed; the verb offers state/brief/advise only.
+    assert "ddflow lanes smoke" not in OC.LIVE_PROBE.detail
+    assert "ddflow lanes state" in OC.LIVE_PROBE.detail
 
 
 # --- the stream, read live (B8478a28c60) ---------------------------------------------------

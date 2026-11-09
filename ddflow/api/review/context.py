@@ -97,6 +97,7 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         return context
     mine = it.triage.get(gate, {})
     cleared = _cleared_confirmed(it, gate) if kind == "delta" else set()
+    look = "the commits shown" if kind == "delta" else "the whole diff"
     lines = [
         "## Previous findings on this change, and the author's triage",
         "",
@@ -107,8 +108,8 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         "saying why the fix or the probe does not answer it. Do not restate a finding from "
         "memory: check each previous finding against the current code, and do not carry it over "
         "when the code it cites is gone or the change answers it; if the same defect "
-        "still stands (even moved or edited), report it at its new place. Then look for NEW issues in "
-        "the whole diff -- these are not the only places to look.",
+        "still stands (even moved or edited), report it at its new place. Then look for NEW "
+        f"issues in {look} -- these are not the only places to look.",
         "",
         *_floor_lines(floor),
     ]
@@ -120,8 +121,13 @@ def _with_previous_findings(  # noqa: PLR0913 -- the previous round plus the flo
         lines.extend(_finding_lines(shown, f, mine, supers))
     if shown == 0:
         return context
+    scope = (
+        f"the delta of {item} (commits since the reviewed head)"
+        if kind == "delta"
+        else f"the whole diff of {item}"
+    )
     say(
-        f"re-review: the whole diff of {item}, with {shown} previous {gate} finding(s) "
+        f"re-review: {scope}, with {shown} previous {gate} finding(s) "
         "and their triage (D-gate-economy)"
     )
     return "\n\n".join(x for x in (context.strip(), "\n".join(lines)) if x)

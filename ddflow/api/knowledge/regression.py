@@ -64,7 +64,7 @@ def _collected(repo: Path, trees: list[Path], entry: str, path: str) -> bool:
         if (
             inside is not None
             and inside.is_file()
-            and G.tree_provides(TS.run_command, configured, tree, [entry], scan=False)
+            and G.tree_provides(TS.run_command, configured, tree, [entry], scan=False, cfg=cfg)
         ):
             return True
     return False

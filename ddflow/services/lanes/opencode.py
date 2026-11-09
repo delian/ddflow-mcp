@@ -57,7 +57,7 @@ ENV_PATTERN = "DDFLOW_{}_BIN"
 EXTRA_DIRS = ("~/.local/bin",)
 LIVE_PROBE = unavailable(
     "live smoke run against a model: calls an endpoint and uses a key, so it needs the operator's "
-    "consent; run `ddflow lanes smoke` once approved and record the result"
+    "consent; run `ddflow lanes state` once approved and record the verdict"
 )
 #: Facts about the run command and its stream: (value, status, where it was read).
 FACTS = {
@@ -266,7 +266,8 @@ def prepare(  # noqa: PLR0913 - one call that writes the whole private lane
         values={"model": ep.model, "dir": str(worktree)},
         prompt=prompt,
         cwd=str(worktree),
-        env=ep.env,
+        env={},  # the child's key env vars come from the secret-resolved `ep.env` below
+        secret_env=dict(ep.env),
         fixed_env=dict(hooks.env),
         home=home,
         pass_env=pass_env,
