@@ -33,3 +33,40 @@ class PerfMetricsConfig:
         doc="Fewest samples a daily aggregate needs before its p50/p90/max are reported; below it the count is reported and the percentiles are None, never zero.",
         check=int_at_least(1),
     )
+    detect_min_samples: int = knob(
+        8,
+        doc="Fewest samples a series needs before the regression detector will call a change; a smaller window says not-enough-data, never an alert.",
+        check=int_at_least(2),
+    )
+    detect_relative_threshold: float = knob(
+        0.20,
+        doc="The relative step a drift detector must exceed to fire -- the change is at least this fraction above the baseline median (D-perf-metrics-answers default +20%).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )
+    detect_absolute_floor_s: float = knob(
+        5.0,
+        doc="The absolute step (seconds) a drift detector must also exceed; a +20% change smaller than this is noise, so microseconds do not alert.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )
+    detect_persistence_windows: int = knob(
+        2,
+        doc="How many consecutive windows must exceed both thresholds before a change becomes a finding (a one-window spike is not a regression).",
+        check=int_at_least(1),
+    )
+    detect_creep_alpha: float = knob(
+        0.10,
+        doc="The EWMA alpha for slow creep that a fixed threshold never sees (1% a week is invisible step-wise); the detector flags an EWMA that drifted past the relative threshold across the window.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )
