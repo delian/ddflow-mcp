@@ -289,6 +289,46 @@ def _answers_of(path: str) -> tuple[tuple[str, str, str, str], ...]:
     return _answers_cached(path, *_stat_key(path))
 
 
+def _note_uses(
+    uses: dict[str, tuple[str | None, list[str]]], row: dict[str, Any], content: list
+) -> None:
+    """Each AskUserQuestion tool_use of an assistant row -> the row's uuid and its questions."""
+    for b in content:
+        if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == TOOL:
+            asked = (b.get("input") or {}).get("questions")
+            if isinstance(asked, list):
+                uses[str(b.get("id"))] = (
+                    row.get("uuid"),
+                    [q.get("question", "") for q in asked if isinstance(q, dict)],
+                )
+
+
+def _note_results(
+    out: list, uses: dict[str, tuple[str | None, list[str]]], row: dict[str, Any], content: list
+) -> None:
+    """The accepted answers of a user row for exact questions one of its tool_uses asked."""
+    for b in content:
+        if not (isinstance(b, dict) and b.get("type") == "tool_result"):
+            continue
+        tid = str(b.get("tool_use_id"))
+        if tid not in uses:
+            continue
+        uuid, questions = uses[tid]
+        answers = (row.get("toolUseResult") or {}).get("answers")
+        ok = (
+            uuid
+            and (row.get("permissionDecision") or {}).get("decision") == "accept"
+            and row.get("sourceToolAssistantUUID") == uuid
+            and isinstance(answers, dict)
+        )
+        if not ok:
+            continue
+        at = str(row.get("timestamp", ""))
+        for question in questions:
+            if question and (ans := _text(answers.get(question))):
+                out.append((question, tid, ans, at))
+
+
 @cache
 def _answers_cached(path: str, mtime_ns: int, size: int) -> tuple[tuple[str, str, str, str], ...]:
     uses: dict[str, tuple[str | None, list[str]]] = {}  # tool_use id -> (uuid, questions)
@@ -302,35 +342,9 @@ def _answers_cached(path: str, mtime_ns: int, size: int) -> tuple[tuple[str, str
         if not isinstance(content, list):
             continue
         if row.get("type") == "assistant":
-            for b in content:
-                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == TOOL:
-                    asked = (b.get("input") or {}).get("questions")
-                    if isinstance(asked, list):
-                        uses[str(b.get("id"))] = (
-                            row.get("uuid"),
-                            [q.get("question", "") for q in asked if isinstance(q, dict)],
-                        )
+            _note_uses(uses, row, content)
         elif row.get("type") == "user":
-            for b in content:
-                if not (isinstance(b, dict) and b.get("type") == "tool_result"):
-                    continue
-                tid = str(b.get("tool_use_id"))
-                if tid not in uses:
-                    continue
-                uuid, questions = uses[tid]
-                answers = (row.get("toolUseResult") or {}).get("answers")
-                ok = (
-                    uuid
-                    and (row.get("permissionDecision") or {}).get("decision") == "accept"
-                    and row.get("sourceToolAssistantUUID") == uuid
-                    and isinstance(answers, dict)
-                )
-                if not ok:
-                    continue
-                at = str(row.get("timestamp", ""))
-                for question in questions:
-                    if question and (ans := _text(answers.get(question))):
-                        out.append((question, tid, ans, at))
+            _note_results(out, uses, row, content)
     return tuple(out)
 
 
