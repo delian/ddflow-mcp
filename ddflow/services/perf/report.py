@@ -46,11 +46,7 @@ def _scoped_facts(ctx: Context):
         outcomes=[o for o in f.outcomes if ctx.in_scope(o.item, o.at)],
         findings=[x for x in f.findings if ctx.in_scope(x.item, x.at)],
         bugs=[(i, t) for (i, t) in f.bugs if ctx.in_scope(i, t)],
-        spans={
-            item: s
-            for item, s in f.spans.items()
-            if ctx.in_scope(item, s.added_at)
-        },
+        spans={item: s for item, s in f.spans.items() if ctx.in_scope(item, s.added_at)},
     )
 
 
@@ -60,7 +56,9 @@ def _per_gate(ctx: Context, minimum: int) -> list[dict]:
         per.setdefault(o.gate, []).append(secs)
     yields = {r["gate"]: r for r in gateyield.gate_rows(_scoped_facts(ctx), minimum)}
     out = []
-    for gate in sorted(set(per) | set(yields)):  # a gate with a yield but no duration is not dropped
+    for gate in sorted(
+        set(per) | set(yields)
+    ):  # a gate with a yield but no duration is not dropped
         y = yields.get(gate, {})
         out.append(
             {
@@ -75,15 +73,69 @@ def _per_gate(ctx: Context, minimum: int) -> list[dict]:
     return out
 
 
+#: A verdict that RAN the gate. A SKIP did not run and an UNAVAILABLE could not run: both are
+#: excluded from the rate (neither a pass nor a zero) and from ``n`` (D: unavailable never zero
+#: or passed).
+RAN_KINDS = frozenset({"passed", "failed", "partial"})
+
+
+def _pass_rate(kinds: list[str], minimum: int) -> tuple[float | None, int]:
+    """(passed / ran, ran count) -- skip and unavailable are excluded from both. Below the
+    floor the rate is None (the renderer says not-enough-data), never zero."""
+    ran = [k for k in kinds if k in RAN_KINDS]
+    passed = ran.count("passed")
+    return (passed / len(ran) if len(ran) >= max(minimum, 1) else None), len(ran)
+
+
+def _agent_outcomes(ctx: Context, first: dict) -> dict[str, list[str]]:
+    """per-agent: an item's claim agent, first-run "passed every RAN gate" (in-scope, re-claims
+    count once, a skip-only item is omitted)."""
+    from collections import defaultdict
+
+    out: dict[str, list[str]] = defaultdict(list)
+    seen: set[tuple[str, str]] = set()
+    for span in ctx.facts.spans.values():
+        if span.added_at is None or not ctx.in_scope(span.item, span.added_at):
+            continue
+        kinds = [kind for (it, _g), kind in first.items() if it == span.item]
+        ran = [k for k in kinds if k in RAN_KINDS]
+        if not ran:
+            continue
+        clean = all(k == "passed" for k in ran)
+        for _at, agent in span.claims:
+            if (span.item, agent) in seen:
+                continue
+            seen.add((span.item, agent))
+            out[agent].append("passed" if clean else "failed")
+    return out
+
+
+def _rows(names: dict[str, list[str]], minimum: int) -> list[dict]:
+    out = []
+    for name in sorted(names):
+        rate, n = _pass_rate(names[name], minimum)
+        out.append(
+            {
+                "name": name,
+                "n": n,  # ran verdicts only; a skip or unavailable neither passes nor counts
+                "env": "",  # log-derived tables are not env-keyed; the store's series carry env
+                "first_run_pass_rate": rate,
+            }
+        )
+    return out
+
+
 def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
     """The per-MODEL, per-REVIEWER and per-AGENT comparison D-perf-metrics-answers always
-    shows: the first-verdict pass rate (retries do not inflate ``n``), and ``None`` below the
-    sample floor (the renderer says not-enough-data) -- never an empty table."""
+    shows: the first-verdict pass rate over the RAN verdicts (a skip is excluded, so a retry
+    and a skip do not inflate ``n`` or move the rate), and ``None`` below the sample floor."""
     from collections import defaultdict
 
     first = gateyield._first_verdicts(ctx.facts)
     first_out: dict[tuple[str, str], object] = {}
-    for o in ctx.facts.outcomes:
+    for o in sorted(
+        ctx.facts.outcomes, key=lambda o: o.at
+    ):  # time order, same basis as _first_verdicts
         key = (o.item, o.gate)
         if key not in first_out:
             first_out[key] = o
@@ -94,45 +146,12 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
             continue  # outside the window: not part of this report
         groups["models"][o.model or "(unknown model)"].append(kind)
         groups["reviewers"][o.by or "(unknown reviewer)"].append(kind)
-    # per-agent: an item's claim agent, its first-run "passed every gate" (only IN-SCOPE items
-    # with a recorded verdict; re-claims by the same agent count once, never inflate n).
-    agent_outcomes: dict[str, list[str]] = defaultdict(list)
-    seen_claims: set[tuple[str, str]] = set()
-    for span in ctx.facts.spans.values():
-        if not ctx.in_scope(span.item, span.added_at):
-            continue
-        verdicts = [(it, g) for (it, g) in first if it == span.item]
-        if not verdicts:
-            continue  # claimed but never gated: not a pass, not a failure -- omitted
-        clean = all(first[(it, g)] == "passed" for (it, g) in verdicts)
-        for _at, agent in span.claims:
-            if (span.item, agent) in seen_claims:
-                continue
-            seen_claims.add((span.item, agent))
-            agent_outcomes[agent].append("passed" if clean else "failed")
-    groups["agents"] = agent_outcomes
-
-    def rows(names: dict[str, list[str]]) -> list[dict]:
-        out = []
-        for name in sorted(names):
-            kinds = names[name]
-            passed = sum(1 for k in kinds if k == "passed")
-            out.append(
-                {
-                    "name": name,
-                    "n": len(kinds),
-                    "env": "",  # log-derived tables are not env-keyed; the store's series carry env
-                    "first_run_pass_rate": (
-                        passed / len(kinds) if kinds and len(kinds) >= max(minimum, 1) else None
-                    ),
-                }
-            )
-        return out
+    groups["agents"] = _agent_outcomes(ctx, first)
 
     return {
-        "models": rows(groups["models"]),
-        "reviewers": rows(groups["reviewers"]),
-        "agents": rows(groups["agents"]),
+        "models": _rows(groups["models"], minimum),
+        "reviewers": _rows(groups["reviewers"], minimum),
+        "agents": _rows(groups["agents"], minimum),
     }
 
 
@@ -149,7 +168,11 @@ def _waits(ctx: Context, minimum: int) -> dict[str, dict]:
     lease_wait: list[float] = []
     for item, waits in ctx.facts.waits.items():
         span = ctx.facts.spans.get(item)
-        if span is not None and span.first_claim is not None and ctx.in_scope(item, span.first_claim):
+        if (
+            span is not None
+            and span.first_claim is not None
+            and ctx.in_scope(item, span.first_claim)
+        ):
             before = [w for w in waits if w <= span.first_claim]
             if before:
                 lease_wait.append(span.first_claim - min(before))
