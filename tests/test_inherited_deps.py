@@ -569,7 +569,6 @@ def test_a_dependency_on_an_abandoned_task_does_not_block_the_dependent(repo):
     assert run_cli(repo, "abandon", "B", "--reason", "dropped")[0] == OK
     plan = _plan(repo)
     assert "A" not in _blocked(plan), (
-        "an abandoned dependency must not block its dependent forever: "
-        f"{_blocked(plan).get('A')}"
+        f"an abandoned dependency must not block its dependent forever: {_blocked(plan).get('A')}"
     )
     assert "A" in _ready(plan), f"the dependent of an abandoned item is ready: {_ready(plan)}"
