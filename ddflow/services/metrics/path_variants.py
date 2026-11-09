@@ -71,10 +71,12 @@ def directly_follows(ctx: Context) -> list[dict]:
 def variants(ctx: Context) -> list[dict]:
     """The ordered gate sequences and how often each occurs (top variants first)."""
     counts: dict[str, int] = defaultdict(int)
-    for item in _items(ctx):
-        counts[tuple(_sequence(_items(ctx)[item]))] += 1
+    items = _items(ctx)
+    for seq in (_sequence(items[item]) for item in items):
+        counts[tuple(seq)] += 1
     return [
-        {"sequence": list(seq), "n": n} for seq, n in sorted(counts.items(), key=lambda kv: -kv[1])
+        {"sequence": list(seq), "n": n}
+        for seq, n in sorted(counts.items(), key=lambda kv: -kv[1])
     ]
 
 
@@ -128,7 +130,7 @@ def overlap(ctx: Context) -> dict:
         "union_p50_s": union_s,
         "saved_p50_s": saved_s,
         "sum_p50_s": total,
-        "burst_share": union_s / total if union_s and total else None,
+        "burst_share": union_s / total if total else None,
     }
 
 
