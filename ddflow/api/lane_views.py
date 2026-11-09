@@ -16,15 +16,43 @@ from ..services import fleet as FR
 from ..services import flowstate as FL
 from ..services import lanes as LN
 from ..services.lanes import launch_template as T
+from ..services.lanes import lead as LD
 from ..services.lanes.redraw import watch as _watch
 from ._base import _load
 from .fleet import fleet_view
 from .lifecycle.planning import plan_for
 from .reporting.waitcycles import wait_moves, wait_report
 
-VIEWS = ("state", "brief", "advise", "fleet", "resume", "approve")
+VIEWS = ("state", "brief", "advise", "fleet", "resume", "lead", "approve")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
 NOBODY = "\0lanes"
+
+
+def _lead_text(ledger, st, at: float, agent: str, max_asks: int, repo: Path) -> str:
+    """The lead rollup: the ledger with every lane's honest ETA, then its pending asks."""
+    text = LD.summary(ledger, st, at)
+    if not agent:
+        return text
+    asks = LD.pending(repo, agent)
+    if not asks:
+        return text
+    rows = [
+        f"  ask {i}. from {LD.safe(m.sender) or 'a lane'}"
+        + (f" about {LD.safe(m.item)}" if m.item else "")
+        + ": "
+        + m.text.replace("\n", " ")[:200]
+        for i, m in enumerate(asks[:max_asks], 1)
+    ]
+    head = "open asks to you:" + ("\n" if rows else " none")
+    return text + "\n\n" + head + "\n" + "\n".join(rows)
+
+
+def _lead_outcome(ledger, st, at: float, agent: str, cfg, repo: Path, data: dict) -> O.Outcome:
+    """`view=lead`: the summary text, exit 2 with no lanes, else ok."""
+    data["text"] = _lead_text(ledger, st, at, agent, cfg.lanes.advise_max, repo)
+    if not ledger:
+        return O.nothing("lanes", "no lanes active in the window", **data)
+    return O.ok("lanes", **data)
 
 
 def lane_template_approve(
@@ -116,6 +144,8 @@ def lanes(
         if not moves:
             return O.nothing("lanes", "no lane needs a move", **data)
         return O.ok("lanes", **data)
+    if view == "lead":
+        return _lead_outcome(ledger, st, at, agent, cfg, Path(repo), data)
     data["text"] = LN.render_ledger(ledger, at)
     if not ledger:
         return O.nothing("lanes", "no lanes active in the window", **data)

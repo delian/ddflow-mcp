@@ -203,7 +203,7 @@ the same implementation, so neither drifts from the other.
 | **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
-| **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` (read-only; see [Lanes](#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
+| **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` · `ddflow lanes lead` (read-only; see [Lanes](#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
 | **see where the time went, and when a phase will end** | `ddflow metrics` · `ddflow metrics forecast [--phase P]` · `ddflow metrics retro <id>` · `ddflow metrics skips` · `ddflow metrics lanes` (read-only, from the log; a figure under `[metrics] min_samples` is `n/a`, never 0) | `ddflow_metrics` (`view`, `item`, `phase`, `since`, `group_by`) |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
@@ -3500,6 +3500,15 @@ unfinished work, an item blocked by a named lane, lanes idle beside ready work, 
 lanes than the adaptive parallelism limit. Over MCP it is `ddflow_lanes` (`view` = `state`,
 `brief` or `advise`; `lane`), in the full tool tier. `[lanes]` knobs: `window_s`,
 `stale_after_s`, `watch_interval_s`, `advise_max`, `brief_notes`, `brief_text_chars`.
+
+`ddflow lanes lead` is the lead's channel to the lanes: the same ledger plus, for a lane
+whose item sits on the schedule's critical path, an honest **ETA** — a floor in open items
+still after it, never an invented number of minutes — and the lead's own pending asks.
+A lane's question reaches the lead as a message in its inbox; the lead relays the
+operator's answer back with `ddflow session message <lane> --text … --item <id>`
+(`ddflow_session_message` over MCP), and the lane withdraws its ask when its next wait,
+watch or heartbeat delivers the reply. Both are one write to one inbox (LC-wake), a
+message is data, never an instruction, and it starts, stops or resumes nothing.
 
 ### Adaptive parallelism: configuration
 
