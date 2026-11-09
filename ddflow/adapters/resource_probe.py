@@ -51,7 +51,7 @@ def _proc_rss_kb(pid: int) -> int | None:
     """``/proc/<pid>/stat`` field 24 (RSS in pages), the stdlib Linux adapter. The stat line's
     ``comm`` field may contain spaces and parens, so parse from the last ``)``."""
     try:
-        line = Path(f"/proc/{pid}/stat").read_text("utf-8")
+        line = Path(f"/proc/{pid}/stat").read_text("utf-8", errors="replace")
     except OSError:
         return None
     rest = line.rsplit(")", 1)[-1].split()
@@ -105,9 +105,16 @@ def degrade(probes: list[ResourceProbe], pid: int) -> ResourceSample:
     return ResourceSample(None, UNAVAILABLE)
 
 
+def stdlib_ladder() -> list[ResourceProbe]:
+    """The default stdlib-only ladder (proc then ps); a host adds the optional cgroup and
+    psutil adapters/implementations in front (the ``LADDER`` order) and passes the list to
+    ``sample`` so the degrade preserves the cgroup -> psutil -> proc -> ps contract."""
+    return [ProcProbe(), PsProbe()]
+
+
 def sample(pid: int, probes: list[ResourceProbe] | None = None) -> ResourceSample:
     """One live sample of ``pid``, defaulting to the stdlib /proc then ps ladder."""
-    probes = probes or [ProcProbe(), PsProbe()]
+    probes = probes or stdlib_ladder()
     return degrade(probes, pid)
 
 
