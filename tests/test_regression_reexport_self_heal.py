@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
 from ddflow.core import _reexport
 
 
@@ -38,3 +40,29 @@ def test_a_lazy_reexport_reimports_after_an_import_halts_on_a_none_entry(tmp_pat
         # the same name cannot bind a directory pytest has removed.
         sys.modules.pop("poisonpkg", None)
         sys.modules.pop("poisonpkg.sub", None)
+
+
+def test_a_real_submodule_import_failure_re_raises_and_runs_its_body_once(tmp_path, monkeypatch):
+    (tmp_path / "badpkg").mkdir()
+    (tmp_path / "badpkg" / "__init__.py").write_text("")
+    (tmp_path / "badpkg" / "runs.py").write_text("RUNS = 0\n")
+    (tmp_path / "badpkg" / "sub.py").write_text(
+        "import badpkg.runs as R\nR.RUNS += 1\nfrom does_not_exist import NOPE\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    import badpkg
+    import badpkg.runs as R
+
+    _reexport.reexport(badpkg.__dict__, {"MAGIC": "sub"}, "badpkg")
+
+    # A REAL failure (the submodule's body imports a missing dependency) must re-raise and
+    # must run the body exactly once -- the retry is reserved for the halt sentinel only.
+    try:
+        with pytest.raises(ModuleNotFoundError):
+            badpkg.MAGIC
+        assert R.RUNS == 1
+    finally:
+        sys.modules.pop("badpkg", None)
+        sys.modules.pop("badpkg.runs", None)
+        sys.modules.pop("badpkg.sub", None)
