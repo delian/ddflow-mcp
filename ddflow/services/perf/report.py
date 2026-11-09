@@ -160,7 +160,10 @@ class Report:
     def find(self, section: str) -> list[dict] | dict:
         if section in ("models", "reviewers", "agents"):
             return self.comparisons.get(section, [])
-        return getattr(self, section, [])
+        if hasattr(self, section):
+            return getattr(self, section)
+        # An uncomputed section is named as not-collected, never an empty table.
+        return {"not_collected": self.not_collected.get(section, "")}
 
 
 def build(ctx: Context, minimum: int | None = None) -> Report:
