@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "notify.email_user"
+new = ""
+why = "The SMTP login."
+effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+impact = "additive"

@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "notify.ask_attempts"
+new = 3
+why = "Unusable answers the terminal takes before giving up."
+effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+impact = "additive"

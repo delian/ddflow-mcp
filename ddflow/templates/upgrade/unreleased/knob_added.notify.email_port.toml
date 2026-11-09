@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "notify.email_port"
+new = 587
+why = "The SMTP port."
+effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+impact = "additive"

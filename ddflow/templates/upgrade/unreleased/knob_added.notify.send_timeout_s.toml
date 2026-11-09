@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "notify.send_timeout_s"
+new = 10.0
+why = "How long one notification send may take before it is dropped."
+effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+impact = "additive"

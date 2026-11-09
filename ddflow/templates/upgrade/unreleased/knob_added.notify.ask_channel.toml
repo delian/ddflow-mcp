@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "notify.ask_channel"
+new = "harness"
+why = "Where questions and approvals go; harness is the in-band agent chat, the rest reach a network channel."
+effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+impact = "additive"

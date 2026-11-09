@@ -1,0 +1,9 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "notify.channel"
+new = "terminal"
+why = "Where notifications go; terminal is local, every other choice reaches a network channel (r-consent-outward) and needs a grant first."
+effect = "channel selection and credentials now come from [notify]; the defaults match the channels.Settings they replace."
+impact = "additive"
