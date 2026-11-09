@@ -76,6 +76,15 @@ def test_a_parse_error_keeps_the_module_with_no_edges(tmp_path):
     assert "ok" in edges and "bad" in edges and edges["bad"] == set()
 
 
+def test_a_relative_import_resolves_within_the_package(tmp_path):
+    package = tmp_path / "pkg"
+    write(package, "sub/__init__.py", "")
+    write(package, "sub/a.py", "from .b import f\n")
+    write(package, "sub/b.py", "x = 1\n")
+    edges = CX.import_edges(package)
+    assert "sub.b" in edges["sub.a"]  # from .b in sub/a.py resolves to sub.b
+
+
 def test_touched_splits_tests_from_source():
     rows = CX.touched(facts_of(seeded()))
     assert {r["item"]: (r["files"], r["tests"]) for r in rows} == {
