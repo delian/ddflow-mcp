@@ -49,28 +49,30 @@ def test_a_mutating_repro_does_not_reach_the_shared_log(proj):
 
 
 def test_a_poisoned_clone_config_cannot_steer_a_later_run_onto_the_operator_repo(proj):
-    """Repro_runs > 1 is fresh-clone-per-run: a first run that plants `core.worktree` at the
-    operator checkout into its clone's config cannot make ANY run's git act on the operator
-    tree (there is no shared clone to reset), so the operator repo is never touched."""
+    """Each repro run is a fresh clone, so a first run that plants `core.worktree` at the
+    operator checkout into its clone's config cannot make a LATER run's git write the
+    operator tree; a follow-up git write stays inside the throwaway."""
     import subprocess
 
     head0 = subprocess.run(
         ["git", "-C", str(proj), "rev-parse", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
-
+    # Run 1 poisons ITS clone to point at the operator checkout, then writes a commit -- if
+    # ANY run shared that clone and honored core.worktree, that write would move the real
+    # tree. With fresh clones the poisoned config dies with its clone.
+    poison = repr(str(proj))
     evil = (
         f"{shlex.quote(sys.executable)} -c "
-        f"{shlex.quote('import subprocess; subprocess.run([\"git\",\"config\",\"core.worktree\",' + repr(str(proj)) + '])')}"
-        " && exit 1"
+        f"{shlex.quote('import subprocess; subprocess.run([\"git\",\"config\",\"core.worktree\",' + poison + ']); subprocess.run([\"git\",\"commit\",\"--allow-empty\",\"-m\",\"steal\"])')}"
     )
-    out = K.bug_found(
-        proj,
-        summary="poisoned clone config",
-        agent="a1",
-        repro_cmd=f"{evil} && exit 1",
-    )
+    out = K.bug_found(proj, summary="poisoned clone config", agent="a1", repro_cmd=evil)
     assert out.ok, out.reason
-    # The operator checkout's HEAD is untouched: no run's git acted on it.
     assert subprocess.run(
         ["git", "-C", str(proj), "rev-parse", "HEAD"], capture_output=True, text=True
-    ).stdout.strip() == head0
+    ).stdout.strip() == head0  # the operator checkout was never the commit's target
+    # ... and the empty commit did not land in the real log either.
+    assert subprocess.run(
+        ["git", "-C", str(proj), "log", "--oneline", "--all"],
+        capture_output=True,
+        text=True,
+    ).stdout.count("steal") == 0

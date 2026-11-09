@@ -81,12 +81,14 @@ def _run_at(
         bigger = False
         unreached = 0
         for nth in range(count):
-            # A fresh clone PER RUN: a stateful line can mutate the clone's own config and
-            # tree all it likes and no later run inherits it, and a run that rewired
-            # ``.git`` (a symlink, ``core.worktree`` pointing elsewhere) cannot steer THIS
-            # run's -- or any later run's -- reset onto another checkout: there is no
-            # reset, each run starts from a new throwaway clone.
-            with _isolated_clone(repo, sha, tails / f"run-{nth}") as clone:
+            # A fresh clone PER RUN, at an unpredictable name per run: a poisoned run that
+            # mkdir'd the NEXT clone's path cannot know the name (it was never on any argv
+            # line, and this run's own clone is removed before the next is made). A stateful
+            # line can mutate its clone's config and tree all it likes and no later run
+            # inherits it, and a run that rewired ``.git`` (a symlink, ``core.worktree``
+            # pointing elsewhere) cannot steer any later run's reset onto another checkout:
+            # there is no reset, each run starts from a fresh throwaway clone.
+            with _isolated_clone(repo, sha, tails / f"run-{nth}-{secrets.token_hex(6)}") as clone:
                 if clone is None:
                     unreached += 1
                     continue
