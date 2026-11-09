@@ -53,18 +53,18 @@ def _literal(glob: str) -> bool:
     return not any(c in glob for c in "*?[")
 
 
-def _append_block(existing: str, block: str, restatement: str) -> str:
-    """Append ``block`` below ``existing``, but never twice: a retry after a failed commit
-    replaces the prior restatement (and any earlier body) instead of duplicating it.
+def _append_block(existing: str, block: str) -> str:
+    """``block`` appended below ``existing``, which is never deleted, only extended.
 
-    The restatement is identical across retries (it comes from the unchanged record), so it
-    is the anchor: a shorter corrected body on the retry still swaps the stale one out."""
-    if not existing.strip():
+    Idempotent for the one retry that is real: a refused commit before the write handed
+    over, re-run with the same decision and body. Then ``existing`` already ends with
+    ``block`` and is returned unchanged instead of being written below itself."""
+    existing = existing.rstrip("\n")
+    if not existing:
         return block
-    marker = restatement.strip()
-    if marker and marker in existing:
-        existing = existing[: existing.find(marker)].rstrip("\n")
-    return (existing + "\n\n" if existing else "") + block
+    if existing.endswith(block.rstrip("\n")):
+        return existing + "\n"
+    return existing + "\n\n" + block
 
 
 def render(item: str, d) -> str:
@@ -189,7 +189,7 @@ def decide(
     if body:
         block = block.rstrip("\n") + "\n\n" + body.strip() + "\n"
     if append and target.exists():
-        block = _append_block(target.read_text(), block, render(item, d))
+        block = _append_block(target.read_text(), block)
     replace_text(target, block)
     made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
     if not made.ok and "nothing to commit" not in (made.out + made.err):

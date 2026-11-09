@@ -200,17 +200,15 @@ def test_decide_keeps_an_existing_doc_and_appends_the_body(proj):
 
 
 def test_decide_appending_is_idempotent_on_a_retry():
-    restatement = "## D-x: t\n\n**Decision.** d\n"
+    restatement = "## D-x: t\n\n**Decision.** d"
     block = restatement + "\n\nQ: left open?\nA: settled now.\n"
-    # A failed commit retried with --append: the restatement and body land once, not twice.
-    assert _append_block(block, block, restatement) == block
-    # A retried commit with a SHORTER body replaces the stale longer one, not appends.
-    stale = restatement + "\n\nAnswer one. Answer two is longer.\n"
-    short = restatement + "\n\nAnswer one.\n"
-    assert _append_block(stale, short, restatement) == short
-    # A fresh proposal keeps its own text with the restatement appended below it.
+    # A refused commit re-run with the same block: the block is not written below itself.
+    assert _append_block(block, block).rstrip("\n") == block.rstrip("\n")
+    # The same retry never deletes a document already on disk, only extends it.
     proposal = "# Proposal\n\nAlready drafted.\n"
-    assert _append_block(proposal, block, restatement) == proposal + "\n\n" + block
+    assert _append_block(proposal, block).rstrip("\n") == proposal.rstrip(
+        "\n"
+    ) + "\n\n" + block.rstrip("\n")
 
 
 def test_a_retried_append_lands_the_restatement_once(proj):
@@ -226,7 +224,8 @@ def test_a_retried_append_lands_the_restatement_once(proj):
     doc = wt / "docs/ddflow/decisions/x.md"
     doc.parent.mkdir(parents=True, exist_ok=True)
     doc.write_text(
-        render("X-decide", st.decisions["D-x"]).rstrip("\n") + "\n\nQ: left open?\nA: settled now.\n"
+        render("X-decide", st.decisions["D-x"]).rstrip("\n")
+        + "\n\nQ: left open?\nA: settled now.\n"
     )
     code, _out, err = run_cli(
         proj, "--json", "decide", "X-decide", "--decision-id", "D-x",
