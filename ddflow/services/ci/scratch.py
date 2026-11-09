@@ -140,7 +140,9 @@ def _regen_after_merge(tree: Path) -> None:
     if rep.problem:
         print(f"ci: after-merge pin regen: {rep.problem}", file=sys.stderr)
     for p in rep.unavailable:
-        print(f"ci: after-merge pin regen: {p.name}: unavailable ({p.unavailable})", file=sys.stderr)
+        print(
+            f"ci: after-merge pin regen: {p.name}: unavailable ({p.unavailable})", file=sys.stderr
+        )
 
 
 @contextmanager
