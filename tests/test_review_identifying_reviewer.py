@@ -257,8 +257,9 @@ def test_a_same_family_finding_does_not_block_when_cross_family_is_clean(repo, t
 def _setup_panel_high_finding_cross_family_clean(repo: Path, tmp_path: Path) -> None:
     """The panel of bug B65e2f0333d: four reviewers -- kimi (moonshot), lan-deepseek
     (deepseek, the author's own family), gemini (google) and grok (xai). The same-family
-    reviewer raises a HIGH (plus a MEDIUM and a LOW) while the two cross-family reviewers
-    come back clean, so the gate is recorded passed on the clean cross-family round. The
+    reviewer raises a HIGH (plus a MEDIUM and a LOW) while the three cross-family reviewers
+    -- kimi (moonshot), gemini (google) and grok (xai) -- come back clean, so the gate is
+    recorded passed on the clean cross-family round. The
     same-family panel member's findings must survive that pass -- recorded, digest-stamped
     and attributed -- not vanish into the job log alone."""
     same = tmp_path / "rsame"
