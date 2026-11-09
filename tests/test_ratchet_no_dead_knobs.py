@@ -195,16 +195,19 @@ def test_the_perf_detect_knobs_are_read():
     """`[perf_metrics].detect_*` are consumed by ``core/perfdetect.py`` through a
     ``PerfMetricsConfig`` it is handed (``cfg.detect_*``), which the name scan cannot
     see; ``_section_knobs`` spells each as ``.perf_metrics.detect_*`` (bug B61962d45e0)."""
-    assert dead_knobs(
-        [
-            "perf_metrics.detect_min_samples",
-            "perf_metrics.detect_relative_threshold",
-            "perf_metrics.detect_absolute_floor_s",
-            "perf_metrics.detect_persistence_windows",
-            "perf_metrics.detect_creep_alpha",
-            "perf_metrics.detect_creep_threshold",
-        ]
-    ) == []
+    assert (
+        dead_knobs(
+            [
+                "perf_metrics.detect_min_samples",
+                "perf_metrics.detect_relative_threshold",
+                "perf_metrics.detect_absolute_floor_s",
+                "perf_metrics.detect_persistence_windows",
+                "perf_metrics.detect_creep_alpha",
+                "perf_metrics.detect_creep_threshold",
+            ]
+        )
+        == []
+    )
 
 
 def test_the_detector_resolves_section_aliases():
