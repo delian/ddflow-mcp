@@ -1,10 +1,11 @@
 """The wait loop's shared plumbing (bounded waits, lease keepalive) and the
-`wait --approval` verdict + polling loop (DX-wait-approval).
+`wait --approval` / `wait --job` verdicts + polling loops (DX-wait-approval,
+DX-review-detach).
 
 Kept out of `wait.py` so that module does not grow back toward the monolith
 (`tests/test_lifecycle_layout.py` counts it under 600 lines). `wait` imports the shared
-helpers and `_wait_approval` HERE; this module imports nothing back from `wait`, so the
-edge is one-way.
+helpers and `_wait_approval` / `_wait_job` HERE; this module imports nothing back from
+`wait`, so the edge is one-way.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from ...core.clock import WAIT_MAX_S
 from ...core.clock import epoch as _epoch
 from ...core.defaults import DEFAULT_WAIT_TIMEOUT_S
 from ...core.handlers.asks import WITHDRAWN, asks_of
+from ...services import jobs as J
 from ...services import leasekeep as LK
 from ...services import waits as WT
 from ...services.ask import engine as E
@@ -259,3 +261,168 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
         if v["why"] != was["why"]:
             say(f"still waiting: {v['why']}")
     return result(v, time.monotonic() - started, [])  # the deadline passed still pending
+
+
+def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
+    """`wait --job`'s verdict: the one thing the detached review's OWN progress can end.
+
+    A detached review (`ddflow review --detach`) relaunches the review as a recorded job
+    and returns that job's id as the handle. Running means waiting can help (the review
+    is still going): blocked. Over (``ended`` / ``exited`` / ``gone``) means the round is
+    recorded -- a detached review records its round BEFORE its process exits -- so it is
+    ready. Unknown, or running on another host (which this wait cannot poll), is what no
+    further waiting ends: refused up front.
+    """
+    out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
+    j = st.jobs.get(job_id)
+    if j is None:
+        return {**out, "status": "hopeless", "why": f"no such job {job_id}"}
+    s = J.status(j)
+    if s.state == "running":
+        return {
+            **out,
+            "status": "blocked",
+            "why": f"{job_id} is still running ({s.detail})",
+            "waiting_on": [job_id],
+        }
+    if s.state == "elsewhere":
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{job_id} runs on {j.host}, which cannot be checked from here; "
+            "wait there instead",
+        }
+    return {
+        **out,
+        "status": "ready",
+        "ready": [job_id],
+        "why": f"{job_id} is finished ({s.detail})",
+    }
+
+
+def _job_actions(j) -> list[str]:
+    """What to do once a detached review's job is over: read the round it recorded, then
+    act on its outcome (merge, or fix the findings)."""
+    if getattr(j, "item", ""):
+        return [
+            f"ddflow review show {j.item}",  # triage what the round recorded
+            f"ddflow gate status {j.item}",  # the gate's outcome says merge or fix
+        ]
+    if getattr(j, "log", ""):
+        return [f"read the review's recorded answer in its log: tail {j.log}"]
+    return ["read the review's recorded answer"]
+
+
+def _job_advice(v: dict[str, Any], job_id: str) -> str:
+    """What to do on a job wait's end: read the recorded round, or keep waiting. Nothing
+    to claim -- the review already ran; only its result needs reading."""
+    if v["status"] == "ready":
+        return f"{job_id} was recorded: read its round and act on it (see next_actions)"
+    if v["status"] == "hopeless":
+        return f"not waiting: {v['why']}"
+    return f"still running: run `ddflow wait --job {job_id}` again to keep waiting"
+
+
+def _job_outcome(
+    v: dict[str, Any], data: dict[str, Any], waited: float, job_id: str
+) -> O.Outcome:
+    """The Outcome of a job wait: ready (exit 0), hopeless (exit 2, waiting cannot help),
+    or still running at the deadline (exit 2, naming the wait that would resume)."""
+    if v["status"] == "ready":
+        return O.ok("wait", **data)
+    if v["status"] == "hopeless":
+        return O.nothing("wait", f"Not waiting: {v['why']}", **data)
+    return O.nothing(
+        "wait",
+        f"Still running after {round(waited)}s: {v['why']} Run `ddflow wait --job "
+        f"{job_id}` again to keep waiting.",
+        **data,
+    )
+
+
+def _wait_job(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
+    repo: Path,
+    job: str,
+    item: str,
+    phase: str,
+    lease: str,
+    globs,
+    token: str,
+    timeout_s: float | None,
+    poll_s: float | None,
+    max_s: float | None,
+    agent: str,
+    on_progress,
+) -> O.Outcome:
+    """Block the caller (a lane) until ``job`` (a detached review's run handle) is over,
+    renewing its own leases all the while. Ready when the job's process has finished --
+    a detached review records its round before it exits, so "finished" means "recorded" --
+    with ``next_actions`` naming what to do with the round. Refused up front, and never
+    slept on, when the job is unknown or runs on another host, or when the deadline
+    passes with it still running.
+    """
+
+    def empty_v(v: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "item": "",
+            "phase": "",
+            "job": job,
+            "woke": v["status"] == "ready",
+            "waitable": v["status"] != "hopeless",
+            "ready": v["ready"],
+            "waiting_on": v["waiting_on"],
+            "freed_by": [],
+            "blocked": v["blocked"],
+            "waited_s": 0,
+            "holders": [],
+            "next_actions": [],
+        }
+
+    if item or phase or lease or globs or token:
+        return O.failed(
+            "wait",
+            "job is what to wait on instead of an item, phase, globs, lease or token: "
+            "give one",
+            **empty_v({"status": "blocked", "ready": [], "waiting_on": [], "blocked": []}),
+        )
+    log, cfg, st = _load(repo, agent)
+    timeout, _capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
+    poll = WT.POLL_S if poll_s is None else float(poll_s)
+    if timeout < 0 or poll <= 0:
+        return O.failed(
+            "wait",
+            "timeout and max-s must be >= 0 and poll > 0 seconds",
+            **empty_v({"status": "blocked", "ready": [], "waiting_on": [], "blocked": []}),
+        )
+    say = on_progress or (lambda _msg: None)
+
+    def result(v: dict[str, Any], waited: float, freed: list[str]) -> O.Outcome:
+        j = st.jobs.get(job)
+        data = empty_v(v)
+        data.update(
+            waited_s=round(waited),
+            freed_by=freed,
+            wake={"reason": v["status"], "token": "", "messages": []},
+            advice=_job_advice(v, job),
+            next_actions=_job_actions(j) if j is not None else [],
+        )
+        return _job_outcome(v, data, waited, job)
+
+    v = _judge_job(st, job, time.time())
+    if v["status"] != "blocked" or timeout == 0:
+        return result(v, 0.0, [])
+
+    started = time.monotonic()
+    deadline = started + timeout
+    say(f"waiting (up to {round(timeout)}s): {v['why']}")
+    # The lane's OWN leases stay alive while it waits on its review (the same keepalive
+    # the item-wait uses): hours of waiting must not lapse the very claim the round covers.
+    keep_alive = _keep_alive(log, cfg, st)
+    for _cfg, st in _poll(log, deadline, poll, keep_alive, repo, agent, time):
+        was = v
+        v = _judge_job(st, job, time.time())
+        if v["status"] != "blocked":
+            return result(v, time.monotonic() - started, [f"{job}: {v['status']}"])
+        if v["why"] != was["why"]:
+            say(f"still waiting: {v['why']}")
+    return result(v, time.monotonic() - started, [])  # the deadline passed still running
