@@ -51,6 +51,17 @@ def _check(cmd: str, env: dict | None = None, **kw):
         'git commit -m "a<<b"\npkill foo',
         'grep x <<< "$y"\npkill foo',
         "ddflow review X --force",
+        # a `\r` is not a shell blank: `push\r#` is one word, so the `#` is not a comment
+        # and the `;` still separates a forbidden `git push` (B-...-critic #1, `\r` boundary)
+        "git push\r#; git push origin main",
+        # a `case` inside a `$((` arithmetic body is an arithmetic token, not a shell case, so
+        # a later `esac` must not swallow the real `git push` after the arithmetic (critic)
+        "echo $((case 0)); git push origin main; echo esac",
+        # a double quote a `$(...)`/backtick body opens inside an outer double quote is not the
+        # outer quote's close: bash runs the `git push` after the `;` (critic, `_strip_continuations`
+        # must not let the nested quote swallow the separator).
+        'echo "$(echo "x")"; git push origin main',
+        'echo "`echo "x"`" && git push origin main',
     ],
 )
 def test_refused(cmd):
@@ -71,6 +82,22 @@ def test_refused(cmd):
         "git stash show stash@{0}",
         "grep -r pkill docs",
         "echo pkill",
+        # a `#` right after an opening backtick begins a comment (the substitution body runs
+        # nothing), so `git push` inside it is not a command (critic #1, backtick comment)
+        "echo `# comment; git push origin main`",
+        # `<(` / `>(` are NOT process substitution inside double quotes: bash prints the literal
+        # and runs no command, so the body is not a command (critic #5, dquote process sub)
+        'echo "<(git push origin main)"',
+        'echo ">(git push origin main)"',
+        # a `-c` AFTER a script operand is an argument to the script, not the shell's own -c
+        # (`bash ./tool.sh -cache 'x'` runs ./tool.sh), and `-o`/`-O` swallow their optname, so
+        # a `c` inside `-ocpipefail` is not a -c flag that runs the quoted word (critic #5)
+        "bash ./tool.sh -cache 'git push origin main'",
+        "bash -ocpipefail 'git push origin main'",
+        # a `case` word whose `esac` is only literal text is not a case statement: bash closes
+        # the $() at its `)` and merely prints `git push` inside the quote, never runs it
+        # (critic #2 / #4: an `esac` a quote swallows must not extend the $() body to it)
+        'echo "$(echo case x); git push origin main; esac"',
         'ddflow review X --force --reason "an extra round"',
         'ddflow review X --reason "an extra round" --force',
         "rm -rf build",
@@ -83,6 +110,190 @@ def test_refused(cmd):
 )
 def test_allowed(cmd):
     assert _check(cmd) is None, cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        'echo a; git push origin main; python3 -c "\nprint(1)"',
+        'python3 -c "\nprint(1)"; git stash -q',
+        'python3 -c "\nprint(1)"; pkill x',
+        'echo a; python3 -c "\nprint(1)"; git stash -q; pkill x',
+    ],
+)
+def test_refused_multiline_quote_after_semicolon(cmd):
+    # a multi-line quoted string must not stop `_split` from seeing the `;` that follows
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        'python3 -c "print(1)\npkill x"',
+        'python3 -c "print(1)\ngit stash -q"',
+    ],
+)
+def test_allowed_multiline_quote_data(cmd):
+    # a forbidden word inside the quoted data of `python -c` is data, not a command
+    assert _check(cmd) is None, cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        'echo "$(\ngit push origin main\n)"',
+        'echo "`\ngit push origin main\n`"',
+        'echo "$(git push origin main)"',
+        'echo "$\\\n(git push origin main)"',
+        'echo "`git push origin main`"',
+        'echo "it\'s $\\\n(git push origin main)"',
+        'echo "$(echo x\n)"; git push origin main',
+        "sh -c 'echo \"$(git push origin main)\"'",
+        'echo "$(echo \\); git push origin main)"',
+    ],
+)
+def test_refused_command_substitution_multiline(cmd):
+    # a $() or backtick body a double quote holds still runs as a command, so its newlines
+    # stay separators and the command after them is still refused
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert r.entry == "git push", cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "echo hi # don't\ngit push 'origin main'",
+        "echo hi # comment\npkill -f myserver",
+        # a `#` after a closing `)` starts a comment (its next `'` is data), so the real git push
+        # on the next line is the command that runs and must still be seen
+        "(true)#'\ngit push origin main\n'",
+    ],
+)
+def test_refused_comment_quote_spans_lines(cmd):
+    # a comment runs to the end of its line, so a quote inside it is not a quote and the next
+    # line's command is still seen
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # a `#` after a `$(`/`<(`/`>(` close is literal, not a comment start (bash glues it
+        # to the substitution's value), so the `;` still separates the forbidden command
+        # (residual finding: _COMMENT_BOUNDARY must make that `)` an exception)
+        "echo $(echo hi)#; git push origin main",
+        "echo $(echo hi)#; pkill -f myserver",
+        "cat <(echo hi)#; git stash -q",
+        # a `$((...))` arithmetic expansion's outer `)` keeps the `#` literal too
+        "echo $((1+2))#; git push origin main",
+        # a nested `( ... )` subshell (or nested parens) inside the substitution must not make
+        # `_find_body` take the first `)` for the close, so `git push` after `)#;` is still seen
+        "echo $( (echo hi) )#; git push origin main",
+        "echo $(((1+1)))#; pkill -f myserver",
+        # nested: the `#` after the inner <(...) is literal inside the outer $() body, so
+        # `git push` runs there and must still be refused
+        'echo "$(cat <(echo hi)#; git push origin main)"',
+    ],
+)
+def test_refused_hash_literal_after_substitution_close(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # a $'...' ANSI-C quote escapes its quote: the `)` after it still lives inside the $()
+        # body, so a forbidden command after the `;` must still be seen
+        "echo $(echo $'a\\')' ; git push origin main ; echo done)",
+        "echo $(echo $'a\\')' ; git stash -q ; echo done)",
+        # a comment inside a $() body is not a command, and its `)` is not the close
+        'echo "$(echo # )\ngit push origin main)"',
+        # a case pattern's `)` is a terminator, not the close of the $() body
+        "echo $(case x in x) git push origin main;; esac); echo done",
+        # an esac inside a # comment in a case body is text, not the case's end
+        'echo "$(case x in\nx) echo start # esac )\ngit push origin main;;\nesac)"',
+        # an esac inside a nested $() (or a double-quoted word with a blank before it) in a
+        # case body is not the case's end, so `git push` after the `;;` is still seen
+        'echo "$(case x in x) $(echo esac); git push origin main;; esac)"',
+        # a <(...) process substitution's `)` is not the outer $()'s close, so `git push` is seen
+        'echo "$(cat <(echo ); git push origin main)"',
+        # a bare `case` argument is a word, not a case statement: the `)` after it closes the
+        # $(), so `git push` after the real newline is still seen (bare-case bypass)
+        "echo $(echo case)\ngit push origin main",
+        # a top-level <(...) process substitution body runs as a command too (not only nested)
+        "cat <(git push origin main)",
+    ],
+)
+def test_refused_substitution_body_edge_cases(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # a `)` inside a ${...} parameter expansion is part of the expansion, not the close of
+        # the enclosing $() body, so the `git push` after the `;` inside the substitution still
+        # runs and must be seen (critic #2, ${...} treated as the $() close)
+        'echo "$(echo ${x:-)}; git push origin main)"',
+        'echo "$(echo ${x:-foo)}; git push origin main)"',
+        'echo "$(echo ${x:-$(echo a)}; git push origin main)"',
+        # a quoted `}` inside a ${...} is part of the default value, not the brace's close, so
+        # the `git push` after the `;` inside the substitution still runs (critic #2 residual)
+        'echo "$(echo ${x:-"}")}; git push origin main)"',
+    ],
+)
+def test_refused_param_expansion_body(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        # `sh`/`bash` cluster their single-letter flags, so `-c` bundled as -xc/-exc still takes
+        # the next word as the command string (critic: a clustered -c was not descended)
+        "bash -xc 'git push origin main'",
+        "sh -exc 'pkill -f worker'",
+        "bash -ec 'git stash push'",
+        # an -o/-O optname that closes a cluster takes its value as the next word, and a
+        # valued long option its word too: the -c AFTER them is still the shell's (critic:
+        # `-o NAME` two-word, `--rcfile`)
+        "bash -xo pipefail -c 'git push origin main'",
+        "bash -xO extglob -c 'git push origin main'",
+        "bash --rcfile /tmp/rc -c 'git push origin main'",
+        # a `+` form is an option too (`bash +x -c`), and the LAST `-c` before an operand wins
+        # over an earlier `-c` whose value an `-o`/`-O` consumes (`bash -co pipefail -c`)
+        "bash +x -c 'git push origin main'",
+        "bash +o pipefail -c 'git push origin main'",
+        "bash -co pipefail -c 'git push origin main'",
+        "bash -cO extglob -c 'git push origin main'",
+        # `-c` reads the FIRST non-option argument, not the next literal word: an option word
+        # (`-x`, `--`, `-`) or a `-o`-consumed optname AFTER `-c` does not stop it, so these
+        # all RUN `git push` too (critic #6)
+        "bash -co pipefail 'git push origin main'",
+        "bash -c -x 'git push origin main'",
+        "bash -c -- 'git push origin main'",
+        "bash -c - 'git push origin main'",
+        # `+c` reads the next non-option as the run string just like `-c` (bash runs
+        # `bash +c 'git push origin main'`), so it must be refused too (critic #6)
+        "bash +c 'git push origin main'",
+    ],
+)
+def test_refused_clustered_c_flag(cmd):
+    r = _check(cmd, cwd="/nonexistent")
+    assert r is not None, cmd
+    assert "Instead:" in r.message()
 
 
 def test_an_explicit_read_only_stash_entry_still_forbids_it():

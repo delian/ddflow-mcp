@@ -89,6 +89,14 @@ def test_classify_fails_closed_when_the_tree_is_unreadable() -> None:
     assert v.verdict == RR.STALE
 
 
+def test_classify_fails_closed_on_a_new_file_the_round_never_saw() -> None:
+    recorded = {"mine.py": "100644 aaaa"}
+    entries = {"mine.py": ("100644", "aaaa"), "other.py": ("100644", "bbbb")}
+    v = RR.classify(recorded, ["mine.py", "other.py"], entries, "deadbeef")
+    assert v.verdict == RR.STALE
+    assert "other.py" in v.why
+
+
 # --------------------------------------------------------------------------------- own patch-id
 
 

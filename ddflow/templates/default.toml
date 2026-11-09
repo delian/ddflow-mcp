@@ -391,6 +391,7 @@ probe = true
 probe_timeout_s = 30
 probe_at = ["claim", "gate", "merge"]
 probe_merge_tree_min_git = "2.38"
+review_reuse = "off"
 
 [log]
 reuse_parsed = true
@@ -474,6 +475,11 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+
+[perf_metrics]
+ring_max_bytes = 2000000
+ring_max_age_s = 604800
+aggregate_min_samples = 3
 
 [pins]
 recipes_file = ".ddflow/pins.toml"

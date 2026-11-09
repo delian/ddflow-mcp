@@ -98,6 +98,17 @@ def cat(tmp_path):
     return modelreg.load(local_dir=tmp_path)
 
 
+def cat_route(tmp_path, model):
+    """A catalog whose lane route serves ``model``. The shipped `families.toml` already maps
+    a family id to its vendor (claude -> anthropic, deepseek -> deepseek); this puts the
+    route the template names behind the model, so the lane scores under that vendor."""
+    (tmp_path / "models.toml").write_text(
+        "[route.lan-vllm]\n"
+        f'endpoint = {{ v = {{ kind = "openai", base_url = "http://h:8000/v1", model = "{model}", api_key_env = "LAN_ENDPOINT_KEY" }}, s = "verified", d = "2026-10-30" }}\n'
+    )
+    return modelreg.load(local_dir=tmp_path)
+
+
 class Rec:
     def __init__(self):
         self.rows = []
@@ -234,11 +245,42 @@ def test_scheduler_constraints_apply(tmp_path, tree):
     req.cfg.swarm.max_lanes = 1
     live = score.World(live=(score.Live("Y-1", ("src/y/*",), "claude"),))
     assert any("max_lanes" in x for x in LN.launch(replace(req, world=live)).reasons)
+    req = request(
+        tmp_path,
+        tree,
+        cat=cat_route(tmp_path, "deepseek-chat"),
+    )
     req.cfg.swarm.family_cap = 1
     same = score.World(live=(score.Live("Y-1", ("src/y/*",), "deepseek"),))
     assert any("family_cap" in x for x in LN.launch(replace(req, world=same)).reasons)
     clash = score.World(live=(score.Live("Y-1", ("src/a/*.py",), "claude"),))
     assert any("overlap" in x for x in LN.launch(replace(req, world=clash)).reasons)
+
+
+def test_family_cap_counts_the_catalog_vendor_not_the_template_family_id(tmp_path, tree):
+    """B60ff757d13: score the lane under the catalog VENDOR, not the template's family id.
+
+    A template for family id ``claude`` (vendor ``anthropic``) must count an existing
+    ``anthropic`` live lane against family_cap; scoring it under ``claude`` would see the two
+    as different families and undercount (independence could also compare claude with
+    anthropic as different)."""
+    req = request(
+        tmp_path,
+        tree,
+        t=tpl(family="claude"),
+        st=state(tpl(family="claude")),
+        cat=cat_route(tmp_path, "claude-sonnet"),
+    )
+    req.cfg.swarm.family_cap = 1
+    same = score.World(live=(score.Live("Y-1", ("src/y/*",), "anthropic"),))
+    assert any("family_cap" in x for x in LN.launch(replace(req, world=same)).reasons)
+
+
+def test_a_lane_whose_estimate_exceeds_the_catalog_window_is_refused(tmp_path, tree):
+    """Launch scores the same lane as dispatch, so the catalog window is enforced here too
+    (the lane's served window is a hard constraint for the item it starts)."""
+    r = LN.launch(request(tmp_path, tree, est_in=100_000))
+    assert isinstance(r, LN.Refused) and any("exceeds window" in x for x in r.reasons)
 
 
 def test_hook_plugin_consent_is_asked_and_leaves_no_files(tmp_path, tree):

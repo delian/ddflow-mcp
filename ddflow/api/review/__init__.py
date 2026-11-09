@@ -113,6 +113,7 @@ from .records import (
 from .reviewers import _ReplyFile, reviewer_block, reviewers_add, reviewers_detect, reviewers_list
 from .run import (
     _LENSES,
+    _answer_outcome,
     _any_out_of_rounds,
     _changed_lines,
     _charged_line,
@@ -189,6 +190,7 @@ __all__ = [
     "_SETTLED",
     "_ReplyFile",
     "_announce_rerun",
+    "_answer_outcome",
     "_any_out_of_rounds",
     "_bare_problem",
     "_base_after_rewrite",

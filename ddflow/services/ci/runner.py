@@ -564,6 +564,25 @@ def _run_stages(
         if selected:
             _say_what_ran(scope, unran)
         return p, "", spent
+    return _run_test_stages(cfg, tree, scope, budget, used, tick, p, spent, unran, holding_suite)
+
+
+def _run_test_stages(
+    cfg: Config,
+    tree: Path,
+    scope,
+    budget: int,
+    used,
+    tick,
+    p,
+    spent,
+    unran: set[str],
+    holding_suite,
+):
+    """Run the selected-then-always test stages after the hooks passed, and fold the verdict
+    into ``scope``. Extracted from `_run_stages` so the stage fan-out stays under the
+    complexity ratchet."""
+    on_tick, tick_s = tick or (None, 0)
     before = p.output
     stages = ((scope.command, "selected"), (scope.always_command, "always"))
     todo = [(c, label) for c, label in stages if c]
@@ -678,6 +697,21 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
                 checks.append(Check(name, scope.ok[label]))
     if p.code != 0 and not killed and not any(not c.ok for c in checks):
         checks.append(Check("command", False, f"exit {p.code}"))
+    if not killed and p.code == 0 and _full_run_ran_no_test(cmd, scope, checks):
+        return Result(
+            "unavailable",
+            checks=checks,
+            sha=sha,
+            merged_with=base,
+            command=cmd,
+            reason=(
+                "the pre-commit `tests` hook was skipped (the diff matched no test file), so no "
+                "test ran: running none passes vacuously, and the gate is unavailable, not passed"
+            ),
+            output_tail=out[-TAIL_CHARS:],
+            output=out,
+            scope=_scope_evidence(scope, sha),
+        )
     return Result(
         "unavailable" if killed else "passed" if p.code == 0 else "failed",
         checks=checks,
@@ -692,3 +726,13 @@ def _result(p, out_prefix: str, cmd: str, sha: str, base: str, scope) -> Result:
         failures=failure_evidence(out) if p.code != 0 and not killed else {},
         scope=_scope_evidence(scope, sha),
     )
+
+
+def _full_run_ran_no_test(cmd: str, scope, checks: list[Check]) -> bool:
+    """Does a FULL-scope item run's pre-commit test hook report nothing? On an empty diff the
+    file-filtered `tests` hook is skipped, so only non-test hooks (gitleaks, lint) run and
+    `passed` would be vacuous: unavailable, never passed (B717b798547, r-unavailable-not-pass).
+    A selected scope and a non-pre-commit command are untouched."""
+    if scope is None or scope.scope != "full" or "pre-commit run" not in cmd:
+        return False
+    return not any("test" in c.id.lower() for c in checks)

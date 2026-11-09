@@ -412,11 +412,11 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     return v
 
 
-def _reuse_note(note: StaleNote, recorded: dict, changed: list[str], entries, own_id: str) -> StaleNote:
+def _reuse_note(note: StaleNote, recorded: dict, changed: list[str], entries, own_id: str, ignore: Sequence[str], docs: Sequence[str]) -> StaleNote:
     """A review gate's note under `[locks].review_reuse` = disjoint: kept (``reused`` carries the
     reason), narrowed to the overlapping files (a delta), or the note as it was when git cannot
     tell (fail closed). Extracted so `refine_stale_notes` stays under the complexity ratchet."""
-    decision = classify(recorded, changed, entries, own_id)
+    decision = classify(recorded, changed, entries, own_id, ignore, docs)
     if decision.verdict == DELTA:
         return replace(note, why=decision.why)
     if decision.verdict != "keep":
@@ -469,7 +469,7 @@ def refine_stale_notes(
             out.append(note)
             continue
         if reuse == "disjoint":
-            out.append(_reuse_note(note, recorded, changed, entries, own_id))
+            out.append(_reuse_note(note, recorded, changed, entries, own_id, ignore, docs))
             continue
         candidates = recorded.keys() | set(changed)
         gone = {p for p in candidates if p not in entries}

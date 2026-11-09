@@ -27,6 +27,7 @@ from ...config import Config
 from .. import modelreg
 from ..lane_driver import LaneHandle, Result, driver_for
 from ..swarm import conformance_io as CIO
+from ..swarm import dispatch as D
 from ..swarm import lanehooks as LH
 from ..swarm import score
 from ..swarm import seedpack as SP
@@ -133,6 +134,14 @@ def endpoint_pools(
 
 
 def _constraints(req: Request, w: Weights) -> list[str]:
+    """The scheduler's hard constraints, judged on the same lane as dispatch builds it.
+
+    The lane is built through `dispatch.lane_of`, so launch scores under the catalog's
+    VENDOR (``family_for``), not the template's family id (B60ff757d13), and enforces the
+    catalog's window: a lane whose token estimate does not fit its served window is refused
+    here exactly as dispatch would refuse it for the next item. The template's own price is
+    the budget's source (a person approved it); the catalog price ``lane_of`` falls back to
+    is a dispatch term, not the launch budget."""
     t, item = req.template, req.state.items[req.item]
     sc_item = score.Item(
         id=item.id,
@@ -142,17 +151,18 @@ def _constraints(req: Request, w: Weights) -> list[str]:
         est_in=req.est_in,
         est_out=req.est_out,
     )
-    lane = score.Lane(
-        name=req.agent,
-        family=t.family,
-        model=t.model,
-        trust=t.trust,
-        price_in=t.price_in,
-        price_out=t.price_out,
-        local=t.local,
-        kinds=t.kinds,
-        level=conformance_level(req.repo, req.agent, max_age_s=req.cfg.swarm.conformance_max_age_s),
-        pools=endpoint_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
+    lane = D.lane_of(
+        req.agent,
+        D.LaneSource(
+            t,
+            D.catalog_facts(req.cat, t),
+            True,  # trust_declared: a trust tier only gates `gaps`, not the lane itself
+            True,  # approved: launch() already checked T.approved before the constraints
+            level=conformance_level(
+                req.repo, req.agent, max_age_s=req.cfg.swarm.conformance_max_age_s
+            ),
+            pools=endpoint_pools(req.cat, t.route, t.model, req.cfg.lanes.endpoint_slots),
+        ),
     )
     out = score.refusals(sc_item, lane, req.world, w)
     if not t.local and (t.price_in is None or t.price_out is None):
