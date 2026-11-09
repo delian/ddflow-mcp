@@ -47,4 +47,3 @@ def test_a_calendar_name_from_every_days_is_still_recorded(repo):
     code, out, err = run_cli(repo, "cadence", "--ran", "foo")
     assert code == OK, (code, out, err)
     assert "recorded cadence run: foo" in out
-
