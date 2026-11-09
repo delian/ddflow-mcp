@@ -530,3 +530,19 @@ _SHELL_META = cmdrunner.SHELL_META
 _SHELL_BUILTINS = cmdrunner.SHELL_WORDS
 _missing_executable = cmdrunner.executable_missing
 _looks_like_not_found = cmdrunner.looks_like_not_found
+
+
+def capture_test_durations(repo, item_id: str, gate: str, xml_report: str, workers: int) -> dict:
+    """PM-test-durations: parse a gate's junit report, fold the per-test durations into the
+    local ring, and return only the ROLLUP (count, top slowest, per-file totals, skew,
+    serial-equivalent seconds, critical-path floor) to ride the gate's evidence. The runner's
+    own pytest/junit output feeds this; other stacks plug the same parse_junit port. A report
+    that cannot be parsed is ``{"unavailable": True}``, never zero."""
+    try:
+        from ..perf import testtimes
+
+        cases = testtimes.parse_junit(xml_report)
+        testtimes.fold(cases, repo)
+        return testtimes.rollup(cases, workers)
+    except (OSError, ValueError, SyntaxError):  # ElementTree.ParseError is a SyntaxError
+        return {"unavailable": True, "item": item_id, "gate": gate}
