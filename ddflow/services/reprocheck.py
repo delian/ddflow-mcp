@@ -145,9 +145,10 @@ def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
     ``.ddflow/events``. A clone's ``.git`` is a directory in the throwaway, so the child's
     repo root is the clone itself, its events land in the clone's own ``.ddflow/events``,
     and the whole directory is removed whatever happened. ``--local --no-hardlinks`` copies
-    objects, so the clone never dangles on the operator's pack being GC'd mid-run, and the
-    ``origin`` remote is removed after checkout: the throwaway has no business reaching the
-    operator's repository, and a repro command reading the remote learns no path back to it."""
+    objects, so the clone never dangles on the operator's pack being GC'd mid-run, and every
+    remote the clone recorded is dropped (by its own name): the throwaway has no business
+    reaching the operator's repository, and a repro command reading the remotes learns no
+    path back to it."""
     clone = G.run(
         repo,
         "clone",
@@ -162,7 +163,7 @@ def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
     if not clone.ok:
         yield None
         return
-    G.run(dst, "remote", "remove", "origin", timeout=30.0)
+    _drop_remotes(dst)
     out = G.run(dst, "checkout", "--detach", sha, timeout=120.0)
     if not out.ok:
         F.rmtree(dst)
@@ -172,6 +173,18 @@ def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
         yield dst
     finally:
         F.rmtree(dst)
+
+
+def _drop_remotes(dst: Path) -> None:
+    """Remove every remote the clone's config recorded, by each remote's OWN name (never the
+    assumed name ``origin``: `clone.defaultRemoteName` renames it, and a URL left behind is a
+    path a repro command CAN read back to the operator repo). The throwaway has no business
+    reaching the operator's repository; a clone already copied its objects, so no remote is
+    needed to check the recorded commit out."""
+    listed = G.run(dst, "remote", timeout=30.0)
+    for name in (listed.out or "").splitlines():
+        if name.strip():
+            G.run(dst, "remote", "remove", name.strip(), timeout=30.0)
 
 
 def _one_run(
