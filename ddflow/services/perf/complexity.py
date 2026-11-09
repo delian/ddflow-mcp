@@ -1,0 +1,156 @@
+"""Growth indicators for the perf report (PM-complexity): what must not grow.
+
+The blast radius of a small change. Pure and stdlib-only: the import graph is parsed with
+``ast`` (no third-party), and the touch/hotspot/co-change indicators fold ``facts.collect``
+(the leases carry each item's file globs). A figure that needs git history is ``None`` (never
+zero) until a probe threads it. Every number carries its ``n``; below the sample floor it is
+None. Reuses ``ddflow.core.graph`` for the depth/fan-in, never a second engine.
+
+No prompt text, arguments, user paths or secrets appear in any figure.
+"""
+
+from __future__ import annotations
+
+import ast
+from collections import defaultdict
+from pathlib import Path
+
+from ddflow.services.metrics.facts import Facts
+
+
+def import_edges(package: Path) -> dict[str, set[str]]:
+    """module (dotted, package-relative) -> its direct imports, parsed by stdlib ``ast``.
+    A ``.py`` file that does not parse is skipped (not an import)."""
+    edges: dict[str, set[str]] = defaultdict(set)
+    for py in package.rglob("*.py"):
+        if "__pycache__" in py.parts:
+            continue
+        try:
+            tree = ast.parse(py.read_text("utf-8"), filename=str(py))
+        except (OSError, SyntaxError):
+            continue
+        module = _module_name(package, py)
+        edges[module]  # every module is a node, even a leaf with no imports
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    edges[module].add(alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                edges[module].add(node.module.split(".")[0])
+    return dict(dict(edges).items())
+
+
+def _module_name(package: Path, py: Path) -> str:
+    rel = py.relative_to(package).with_suffix("")
+    if rel.name == "__init__":
+        rel = rel.parent
+    return ".".join(rel.parts)
+
+
+def fan_in(edges: dict[str, set[str]]) -> dict[str, int]:
+    """module -> how many modules import it (the most-changed modules' fan-in)."""
+    counts: dict[str, int] = defaultdict(int)
+    for _m, deps in edges.items():
+        for dep in deps:
+            counts[dep] += 1
+    return dict(counts)
+
+
+def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
+    """module -> its longest import chain in EDGES (dependency depth), via the shared graph."""
+    nodes = set(edges)
+    memo: dict[str, int] = {}
+
+    def depth(m: str) -> int:
+        if m in memo:
+            return memo[m]
+        deps = [d for d in edges.get(m, ()) if d in nodes]
+        memo[m] = 1 + max((depth(d) for d in deps), default=0) if deps else 0
+        return memo[m]
+
+    return {m: depth(m) for m in nodes}
+
+
+def touched(facts: Facts) -> list[dict]:
+    """files and tests touched per merged item, from its lease globs (a test glob starts
+    ``tests/``). No git needed: the lease records the item's glob breadth."""
+    out = []
+    for lease in facts.leases:
+        files = list(lease.globs)
+        tests = [g for g in files if g.startswith("tests/")]
+        out.append(
+            {
+                "item": lease.item,
+                "files": len(files),
+                "tests": len(tests),
+                "source_files": len(files) - len(tests),
+            }
+        )
+    return out
+
+
+def churn_hotspots(facts: Facts) -> list[dict]:
+    """an item's changed lines (size) over its lease globs (churn x size hotspot)."""
+    out = []
+    for lease in facts.leases:
+        size = 0
+        for o in facts.outcomes:
+            if o.item == lease.item and o.changed_lines:
+                size = max(size, o.changed_lines)
+        out.append({"item": lease.item, "globs": len(lease.globs), "changed_lines": size})
+    return out
+
+
+def co_change(facts: Facts) -> list[dict]:
+    """two globs an item touched together (co-change pairs, one engine with OPT-history)."""
+    pairs: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for lease in facts.leases:
+        gl = sorted(set(lease.globs))
+        for i, a in enumerate(gl):
+            for b in gl[i + 1 :]:
+                pairs[(a, b)].add(lease.item)
+    return [
+        {"a": a, "b": b, "n": len(items)}
+        for (a, b), items in sorted(pairs.items())
+        if len(items) > 1  # a co-change needs at least two items touching the same pair
+    ]
+
+
+def tests_per_changed_line(facts: Facts) -> dict:
+    """the ratio: test files changed per source line changed (the thing that must not grow)."""
+    tests = sum(1 for lease in facts.leases for g in lease.globs if g.startswith("tests/"))
+    lines = sum(1 for lease in facts.leases for g in lease.globs if not g.startswith("tests/"))
+    return {
+        "test_files": tests,
+        "source_files": lines,
+        "tests_per_file": tests / lines if lines else None,
+    }
+
+
+def build(facts: Facts, package: Path) -> dict:
+    """The growth scoreboard: import depth/fan-in, touched, hotspots, co-change, tests-per-line."""
+    edges = import_edges(package)
+    return {
+        "import_depth": import_depth(edges),
+        "fan_in": fan_in(edges),
+        "touched": touched(facts),
+        "hotspots": churn_hotspots(facts),
+        "co_change": co_change(facts),
+        "tests_per_changed_line": tests_per_changed_line(facts),
+        "not_measured": {
+            "files_over_time": "the weekly files-touched series needs git history (a probe threads it)",
+        },
+        "next": {"cli": "ddflow metrics complexity", "mcp": "ddflow_metrics view=complexity"},
+    }
+
+
+__all__ = [
+    "build",
+    "churn_hotspots",
+    "co_change",
+    "fan_in",
+    "import_depth",
+    "import_edges",
+    "tests_per_changed_line",
+    "touched",
+]
