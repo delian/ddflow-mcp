@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _wait import scaled, wait_until
 from conftest import run_cli
+from test_pins_regenerate import approve
 
 from ddflow.api import lifecycle as LC
 from ddflow.config import Config
@@ -129,7 +130,7 @@ def _regenerate_until_renewed(repo, tmp_path, monkeypatch, renewals: int, first_
 
     watcher = threading.Thread(target=watch, daemon=True)
     watcher.start()
-    out = PF.pins_regenerate(repo, agent="me")
+    out = PF.pins_regenerate(repo, agent="me", approval=approve(repo, agent="me"))
     watcher.join(scaled(5))
     assert out.exit == 0, out.reason
     assert count() - before >= renewals, (before, count())

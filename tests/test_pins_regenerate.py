@@ -73,12 +73,12 @@ def ddflow_cli(repo: Path, *args: str, person: bool = False) -> subprocess.Compl
     return subprocess.run(argv, capture_output=True, text=True, env=env, cwd=repo)
 
 
-def approve(repo: Path, only: str = "") -> str:
-    """File and answer a `pins.regenerate` approval an agent (``--agent t``) can spend. The
-    mechanical re-records below go through the agent route, which is gated (B90b8d3fe89): an
-    agent needs a valid approval, so each re-record mints one bound to the pins as they stand."""
+def approve(repo: Path, only: str = "", agent: str = "t") -> str:
+    """File and answer a `pins.regenerate` approval an agent can spend. The mechanical
+    re-records below go through the agent route, which is gated (B90b8d3fe89): an agent needs a
+    valid approval, so each re-record mints one bound to the pins as they stand."""
     cfg = Config.load(repo)
-    log = EventLog(repo, "t")
+    log = EventLog(repo, agent)
     before = PW.snapshot(repo, [*PN.pin_files(repo, cfg), ".gitattributes"])
     canon = Canon(
         verb="pins.regenerate",
@@ -131,7 +131,9 @@ def test_check_lists_a_stale_pin_and_regenerate_fixes_only_it(repo: Path):
 def test_only_names_one_pin_and_refuses_an_unknown_one(repo: Path):
     (repo / "knobs.txt").write_text("a\nb\n")
     assert ddflow_cli(repo, "pins", "regenerate", "--check", "--only", "other").returncode == 0
-    bad = ddflow_cli(repo, "pins", "regenerate", "--only", "nosuch", "--approval", approve(repo, only="nosuch"))
+    bad = ddflow_cli(
+        repo, "pins", "regenerate", "--only", "nosuch", "--approval", approve(repo, only="nosuch")
+    )
     assert bad.returncode != 0 and "nosuch" in bad.stderr + bad.stdout
     assert (repo / "pin.txt").read_text() == "1 knobs\n- a\n"
 

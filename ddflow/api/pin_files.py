@@ -131,7 +131,12 @@ def _regenerate_tail(
     # An agent re-records pins only with a valid approval; omitting ``--approval`` must not
     # bypass the pins-are-stale gate (B90b8d3fe89: the check used to apply only when an
     # approval WAS passed, so a bare agent `pins regenerate` re-recorded pins ungated).
-    if (approval or AP.agent_marker(agent)) and verb == "regenerate" and not check and not after_merge:
+    if (
+        (approval or AP.agent_marker(agent))
+        and verb == "regenerate"
+        and not check
+        and not after_merge
+    ):
         bad = _regenerate_approval(
             primary, agent=agent, before=before, only=only, approval=approval
         )
