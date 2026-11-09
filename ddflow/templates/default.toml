@@ -53,7 +53,7 @@ repro_tail_bytes = 4096
 repro_events = 10
 repro_test_timeout_s = 300
 repro_runs = 1
-repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDE*", "*GATE*"]
+repro_env = ["DDFLOW_*", "CI", "CI_*", "GITHUB_*", "PYTEST_*", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "*GATE*"]
 repro_redact_extra = []
 
 [cadence]
@@ -391,6 +391,7 @@ probe = true
 probe_timeout_s = 30
 probe_at = ["claim", "gate", "merge"]
 probe_merge_tree_min_git = "2.38"
+review_reuse = "off"
 
 [log]
 reuse_parsed = true
@@ -474,6 +475,11 @@ max_rows = 50
 max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
+
+[perf_metrics]
+ring_max_bytes = 2000000
+ring_max_age_s = 604800
+aggregate_min_samples = 3
 
 [pins]
 recipes_file = ".ddflow/pins.toml"
@@ -647,8 +653,8 @@ explore_min_n = 5
 bug_window_s = 604800
 conformance_min_accuracy = 0.9
 conformance_min_calls = 5
-conformance_idle_s = 5.0
-conformance_lease_wait_s = 10.0
+conformance_idle_s = 120.0
+conformance_lease_wait_s = 90.0
 conformance_tools = ["brief", "next", "claim", "heartbeat", "show", "help", "identify", "merge", "complete", "task", "memory", "gate", "bug", "session", "rule", "view"]
 conformance_max_age_s = 2592000
 seed_max_tokens = 1500

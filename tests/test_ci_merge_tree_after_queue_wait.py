@@ -28,6 +28,7 @@ def test_the_fresh_merge_happens_inside_the_suite_slot(monkeypatch):
         lambda cfg, tree, cmd, scope, budget, tick, **kw: (
             NS(kind="", ran=True, code=0, output=""),
             "",
+            0.0,
         ),
     )
 
@@ -56,7 +57,5 @@ def test_the_fresh_merge_happens_inside_the_suite_slot(monkeypatch):
 
     hold = events.index("hold_enter")
     released = events.index("hold_exit")
-    merged_held = [
-        i for i, e in enumerate(events) if e == "merge_enter" and hold < i < released
-    ]
+    merged_held = [i for i, e in enumerate(events) if e == "merge_enter" and hold < i < released]
     assert merged_held, f"no merge happened while the suite slot was held: {events}"

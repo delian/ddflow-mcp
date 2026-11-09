@@ -50,6 +50,9 @@ class Evidence:
     ci_scope: dict[str, Any] | None = None
     #: Seconds the run queued for the host suite lock (B1d51fb9da1): recorded as `waited_s`.
     waited_s: float | None = None
+    #: Seconds the run's own command took (set by `ci run`; absent when the caller did not run
+    #: a command, e.g. a hand-recorded gate): recorded as `elapsed_s` (B28537b615d).
+    elapsed_s: float | None = None
     #: Set by a ddflow tool that RAN the gate's command itself (`ci run`), never by a flag or
     #: an MCP argument: it is what tells that record from an agent's typed `--command`.
     ran_by: str = ""
@@ -65,6 +68,18 @@ class _Vetted:
 def _has_research_note(st, it) -> bool:
     """Does a RESEARCH item have a recorded note (`research add --item`)? Its deliverable."""
     return it.kind == "research" and any(n.item == it.id for n in st.research.values())
+
+
+def _prior_landing_here(repo: Path, it, base: str) -> bool:
+    """B600455cc2a: `it.reopened_merge` is still the item's work ONLY while the item's
+    declared paths are unchanged between that landing and `base` (what a merge of the empty
+    branch actually lands): a revert of the landing (L then R) leaves the content gone, so
+    the landing is then not what would merge. False when there is no declared scope or no
+    prior landing, so the empty-branch refusal stays."""
+    prior = it.reopened_merge
+    if not prior or not it.globs:
+        return False
+    return W.git(repo, "diff", "--quiet", prior, base, "--", *it.globs).ok
 
 
 def _implement_without_commits(
@@ -98,6 +113,13 @@ def _implement_without_commits(
             f"if the item truly changes nothing."
         )
     if r.out.strip() != "0":
+        return ""
+    # B600455cc2a: a branch at base with no commit ahead is still "implemented" when this item
+    # is the rework of one that already merged (the merge also cleared its gates): the work is
+    # its prior landing, still in the base's history. Accept it then instead of refusing an
+    # empty branch that a re-claim for gates only left behind -- but only while the prior
+    # landing's content is actually still at the branch head (a revert or later edit is not).
+    if _prior_landing_here(wt, it, base):
         return ""
     return (
         f"{it.id}'s branch has no commit ahead of {base}: there is nothing implemented to "
@@ -172,6 +194,29 @@ def _family_of_name_or_value(model: str, cfg) -> str:
     return G.family_name_of(model, cfg.agent.families) or G.family_of(model, cfg).strip().lower()
 
 
+def _prior_landing_check(repo, cfg, it, where, full: str, head: str) -> tuple[str, str]:
+    """(full, note) when `full` is the item's prior landing of an empty rework branch, else ("", "").
+
+    B600455cc2a: a re-claim of an already-merged item ran `item.reworked` and bound a fresh
+    tree at base, so the branch has no commit ahead; the item's work is its PRIOR landing,
+    now in the base's history. It is accepted ONLY while the branch still sits at the fork it
+    recorded (`base_sha`) AND the landing's content is still what the base holds (`base`), so
+    a revert of the landing, or a later commit absorbed into base, is still refused.
+    """
+    prior = it.reopened_merge
+    fork = it.base_sha or ""
+    if not (prior and fork and head == W.rev(where, fork) and W.rev(where, prior) == full):
+        return "", ""
+    if not _prior_landing_here(where, it, cfg.worktree.base_ref or W.default_branch(repo)):
+        return "", ""
+    return (
+        full,
+        f"NOTE: --reviewed-sha {full[:10]} is the item's prior landing (re-opened "
+        f"on re-claim); the branch head ({head[:10]}) has no commit ahead of "
+        f"{cfg.worktree.base_ref or W.default_branch(repo)}.",
+    )
+
+
 def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple[str, str, str]:
     """(full sha, refusal, warning) for a ``--reviewed-sha``; the sha is "" when refused.
 
@@ -216,6 +261,10 @@ def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple
                 f"is {head[:10]}. What merges is not what was reviewed."
             ),
         )
+    if own.ok and not own.out.strip():
+        taken, note = _prior_landing_check(repo, cfg, it, where, full, head)
+        if taken:
+            return taken, "", note
     return (
         "",
         (
@@ -312,6 +361,8 @@ def _evidence_fields(
         ev["ci_scope"] = evidence.ci_scope
     if evidence.waited_s is not None:
         ev["waited_s"] = evidence.waited_s
+    if evidence.elapsed_s is not None:
+        ev["elapsed_s"] = evidence.elapsed_s
     if evidence.ran_by:
         ev["ran_by"] = evidence.ran_by
     if evidence.output_file:

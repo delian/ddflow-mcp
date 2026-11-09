@@ -179,6 +179,12 @@ class Item:
     merged_sha: str = ""
     #: The branch tip that `merge` landed: what proves a squash, which leaves no ancestry.
     merged_head: str = ""
+    #: The merged sha a re-claim reopened (`item.reworked`), when this item is the rework
+    #: of one that had already merged. The rework clears `merged_sha` so the fresh tree at
+    #: base re-merges from scratch, but the PRIOR landing stays here so the gates that need
+    #: it -- `implement` (no commit ahead) and `standards` (`--reviewed-sha`) -- can accept
+    #: the already-landed work instead of refusing an empty branch (B600455cc2a).
+    reopened_merge: str = field(default="", metadata={"omit_empty": True})
     #: Optional `item.completed` `changelog` {category, line, skip}; {} when none was given.
     changelog: dict[str, Any] = field(default_factory=dict)
     #: The branch the worktree forked from. Recorded because under gitflow and stacking it

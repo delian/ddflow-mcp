@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.ring_max_age_s"
+new = "604800"
+why = "Perf store (D-perf-metrics-answers): seconds a raw sample stays in the local ring."
+impact = "additive"

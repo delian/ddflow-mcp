@@ -339,9 +339,17 @@ def main(argv: list[str] | None = None) -> int:
 
 def _main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    typed = list(sys.argv[1:] if argv is None else argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        # argparse's error() exits 2 on a bad command line (usage to stderr, no body) before
+        # `remembered_streams` runs (B831b6afddc); --help/--version exit 0 with their own output.
+        if exc.code == NOTHING and "--json" in typed:
+            emit_json(refusal_body(NOTHING, "usage error", EXIT_NAMES.get(NOTHING, "failed")))
+        raise
     # What was typed, for the commands a refusal tells the caller to run instead.
-    args._argv = list(sys.argv[1:] if argv is None else argv)
+    args._argv = typed
     # An old command, group or flag name still works (D-compat): said once, on stderr, so
     # `--json` output stays parseable.
     for alias in _NOTICES.fresh(used_aliases(parser, args, args._argv)):

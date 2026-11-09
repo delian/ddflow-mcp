@@ -41,7 +41,9 @@ from ..gates import reviewers as GR
 from ..gates.evidence import commit_tree_entries, worktree_entries
 from ..gates.evidence import tree_being_completed as _tree_being_completed
 from ..gates.reviewed_paths import ignorable
+from ..gates.stale_why import StaleNote
 from ..gates.testcmd import coverage_of
+from ..review_reuse import DELTA, classify, own_patch_id, shown_names
 from ._changed import changed_paths
 
 
@@ -388,7 +390,14 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     v.trivial = _trivial_declaration(it, cfg, repo, own)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
     for note in refine_stale_notes(
-        stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs
+        stale,
+        it,
+        cwd,
+        landed,
+        own,
+        cfg.review.triage_ignore_globs,
+        cfg.review.doc_globs,
+        cfg.locks.review_reuse,
     ):
         if note.unverified:
             v.warnings.append(
@@ -396,11 +405,69 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
                 f"not be checked — {note.why}. Re-run it if that matters."
             )
             continue
+        if note.reused:
+            v.warnings.append(
+                f"{note.gate} review reused ([locks].review_reuse = "
+                f"{cfg.locks.review_reuse}): {note.reused}."
+            )
+            continue
         v.warnings.append(
             f"{note.gate} passed on a different tree than the one you are completing — "
             f"{note.why}. Re-run it if the change was not cosmetic."
         )
     return v
+
+
+def _reuse_note(
+    note: StaleNote,
+    recorded: dict,
+    changed: list[str],
+    entries,
+    own_id: str,
+    ignore: Sequence[str],
+    docs: Sequence[str],
+) -> StaleNote:
+    """A review gate's note under `[locks].review_reuse` = disjoint: kept (``reused`` carries the
+    reason), narrowed to the overlapping files (a delta), or the note as it was when git cannot
+    tell (fail closed). Extracted so `refine_stale_notes` stays under the complexity ratchet."""
+    decision = classify(recorded, changed, entries, own_id, ignore, docs)
+    if decision.verdict == DELTA:
+        return replace(note, why=decision.why)
+    if decision.verdict != "keep":
+        return note
+    return StaleNote(note.gate, "", reused=decision.why)
+
+
+def _refine_disjoint(
+    notes: list,
+    it: Item,
+    cwd: Path,
+    landed: str,
+    changed: list[str] | None,
+    ignore: Sequence[str],
+    docs: Sequence[str],
+) -> list:
+    """The `[locks].review_reuse` = disjoint classification of the stale notes: kept (``reused``
+    carries why), narrowed to the overlapping files (a delta), or the note as it was when git
+    cannot tell (fail closed). A separate function so `refine_stale_notes` stays below the
+    complexity ratchet."""
+    tip = landed if landed and landed != "HEAD" else (getattr(it, "branch", "") or "HEAD")
+    own_id = own_patch_id(cwd, getattr(it, "base", "") or W.default_branch(cwd), tip, changed or [])
+    entries = None
+    out = []
+    for note in notes:
+        rec = it.gates.get(note.gate)
+        recorded = ((rec.evidence or {}).get("reviewed_paths") if rec else None) or None
+        if note.unverified or not isinstance(recorded, dict):
+            out.append(note)
+            continue
+        if entries is None:
+            entries = commit_tree_entries(cwd, landed) if landed else worktree_entries(cwd)
+        if entries is None:
+            out.append(note)
+            continue
+        out.append(_reuse_note(note, recorded, changed, entries, own_id, ignore, docs))
+    return out
 
 
 def refine_stale_notes(
@@ -411,6 +478,7 @@ def refine_stale_notes(
     changed: list[str] | None,
     ignore: Sequence[str] = (),
     docs: Sequence[str] = (),
+    reuse: str = "off",
 ):
     """Narrow the "passed on a different tree" notes of review gates to the item's own paths
     (B-complete-different-tree-note-noisy). A round records `reviewed_paths` -- the content of
@@ -420,7 +488,15 @@ def refine_stale_notes(
     set or the tree unreadable, an unverified note) keeps its note as it was. A file the round
     did not review that matches ``ignore`` (`[review].triage_ignore_globs`: tests) and a file
     matching ``docs`` (`[review].doc_globs`: wording, bug Bb89ff23f21) are not a difference, as
-    they are not at triage."""
+    they are not at triage.
+
+    ``reuse`` is `[locks].review_reuse` (default `off`): `disjoint` also classifies a dropped
+    note as a reuse -- the item's own change is unchanged (`git patch-id --stable`) and the
+    files main changed are disjoint from the reviewed files, so the review is KEPT and returned
+    as a note with ``reused`` set (record why); an overlap returns the note narrowed to the
+    overlapping files (a delta); anything git cannot tell keeps the note whole (fail closed)."""
+    if reuse == "disjoint":
+        return _refine_disjoint(notes, it, cwd, landed, changed, ignore, docs)
     entries = None
     out = []
     for note in notes:
@@ -443,9 +519,8 @@ def refine_stale_notes(
             and not ignorable(p, recorded, ignore, docs, gone)
         )
         if moved:
-            shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")  # noqa: PLR2004
             out.append(
-                replace(note, why=f"the files it reviewed or this item changes differ: {shown}")
+                replace(note, why=f"the files it reviewed or this item changes differ: {shown_names(moved)}")
             )
     return out
 

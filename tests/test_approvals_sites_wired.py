@@ -152,11 +152,95 @@ def test_claim_force_by_approval_for_an_agent(proj, monkeypatch):
     assert out.exit == 0, out.reason
     assert calls[-1] is True
     assert _state(proj).items["T1"].lease.holder == "bot"
+    assert asks_of(_state(proj))[ask_id]["used"] == 1  # the landed forced claim recorded the use
     # a person has --force: the approval route changes nothing for them
     out = CL(proj, "T1", no_worktree=True, agent="", approval="request")
     assert out.exit == 3
     assert out.reason == "T1 is in review; --force to take it back anyway."  # plain, no route
     assert len([r for r in asks_of(_state(proj)).values() if r["verb"] == "claim.force"]) == 1
+
+
+def test_a_refused_forced_claim_does_not_spend_the_operators_approval(proj, monkeypatch):
+    """B6365c86730: `claim --approval ID` spent (recorded `ask.consumed`) the operator's one-use
+    `claim.force` approval the moment it was checked, then ran the forced claim -- which still
+    refused (a live lease overlap `--force` cannot break). The person's answer was lost and had
+    to be asked for again. The use must be recorded only once the claim has actually landed."""
+    import importlib
+
+    from ddflow.api import claim as CL
+    from ddflow.core import outcome as O
+
+    C = importlib.import_module("ddflow.api.lifecycle.claim")
+
+    def once(repo, item, *, force=False, **kw):
+        if not force:
+            return O.refused(
+                "item.claimed",
+                f"{item} is in review; --force to take it back anyway.",
+                id=item,
+                alternatives=[],
+            )
+        # the forced claim STILL refuses: a live lease overlap `--force` cannot break
+        return O.refused(
+            "item.claimed",
+            f"{item} overlaps sw-fleet's live lease on DX-fleet-registry.",
+            id=item,
+            alternatives=[],
+        )
+
+    monkeypatch.setattr(C, "_claim_once", once)
+    out = CL(proj, "T1", no_worktree=True, agent="bot", approval="request")
+    ask_id = _ask_id(out.reason)
+    _approve(proj, ask_id)
+    out = CL(proj, "T1", no_worktree=True, agent="bot", approval=ask_id)
+    assert out.exit == 3, out.reason
+    row = asks_of(_state(proj))[ask_id]
+    assert row["used"] == 0, row  # the refused forced claim spent nothing
+    assert not row.get("consumed"), row  # no `ask.consumed` was recorded
+    assert "was NOT consumed" in out.reason, out.reason
+
+
+def test_a_standing_policy_claim_force_over_an_empty_approval_still_lands(proj, monkeypatch):
+    """B6365c86730 reviewer follow-up: the EMPTY `--approval` path (no `--approval`, no `--force`)
+    must still route through `operator_gate`, where a standing rule (`claim_unavailable` over a
+    lapsed lease) auto-approves `claim.force` and runs the forced claim. A collapse of that branch
+    to an unconditional refusal silently breaks the documented lapsed-lane recovery flow."""
+    import importlib
+
+    from ddflow.api import claim as CL
+    from ddflow.core import outcome as O
+    from ddflow.infra.log import EventLog
+
+    C = importlib.import_module("ddflow.api.lifecycle.claim")
+
+    cfgfile = proj / ".ddflow" / "config.toml"
+    cfgfile.write_text(
+        cfgfile.read_text()
+        + '\n[approvals]\npolicy = ["claim_unavailable"]\npolicy_max_uses = 99\n'
+    )
+    EventLog(proj, "seed").append(
+        "lease.acquired",
+        "T1",
+        {"holder": "gone", "at": 0.0, "ttl_s": 1, "globs": ["t.py"]},
+    )
+
+    calls = []
+
+    def once(repo, item, *, force=False, **kw):
+        calls.append(force)
+        if not force:
+            return O.refused(
+                "item.claimed",
+                f"{item} is in review; --force to take it back anyway.",
+                id=item,
+                alternatives=[],
+            )
+        return O.ok("item.claimed", id=item)
+
+    monkeypatch.setattr(C, "_claim_once", once)
+    out = CL(proj, "T1", no_worktree=True, agent="bot")
+    assert out.exit == 0, out.reason
+    assert calls == [False, True], calls  # the standing rule drove a FORCED claim, not a refusal
 
 
 def test_an_agents_force_flag_never_completes_even_with_approval_request(proj):

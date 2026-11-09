@@ -225,7 +225,9 @@ def test_a_measured_decision_reaches_the_run(monkeypatch):
     calls: list[tuple] = []
     monkeypatch.setattr(runner, "_needs_suite_slot", lambda *a: calls.append(a) or False)
     monkeypatch.setattr(
-        runner, "_run_locked", lambda *a, **k: (NS(kind="", ran=True, code=0, output=""), "", None)
+        runner,
+        "_run_locked",
+        lambda *a, **k: (NS(kind="", ran=True, code=0, output="", elapsed_s=0.0), "", None, 0.0),
     )
     monkeypatch.setattr(runner, "_merge_base", lambda *a: ("main", None))
     monkeypatch.setattr(runner, "_stale_pins", lambda *a, **k: "")
@@ -245,13 +247,10 @@ def test_a_measured_decision_reaches_the_run(monkeypatch):
     assert calls and calls[0][-1] == [5.0]
 
 
-def test_a_queued_suite_run_charges_the_wait_against_its_own_budget(monkeypatch):
-    """B-ci-timeout-doubles-with-queue-wait: `--timeout N` bounded the queue wait to N and gave
-    the run behind the slot the SAME N again, so a queued run could take 2N seconds (a --full run
-    queued two hours and was then killed at the harness limit having run no test). The time the
-    slot cost comes off the run's own timeout: wait plus run is one deadline."""
-
-    reads = iter([0.0, 20.0]).__next__  # the two monotonic() calls in _run_locked
+def _hold(monkeypatch, *reads: float):
+    """Fake the suite lock so ``_run_under_slot``/``_run_locked`` queue ``reads[-1]`` seconds
+    without touching the host-wide lock, and capture the budget ``_execute`` was handed plus
+    the `wait_s` the run passed the lock (the run timeout must never become the queue wait)."""
 
     class Hold:
         def __enter__(self):
@@ -261,48 +260,64 @@ def test_a_queued_suite_run_charges_the_wait_against_its_own_budget(monkeypatch)
             return False
 
     got: list = []
+    waits: list = []
+    seq = list(reads) or [0.0]
+    at = [0]
+
+    def monotonic():  # return each canned sample in turn, then clamp at the last: no StopIteration
+        at[0] += 1
+        return seq[min(at[0] - 1, len(seq) - 1)]
+
+    def fake_hold(*a, **k):
+        waits.append(k.get("wait_s"))
+        return Hold()
 
     def fake_execute(*a, **k):
         got.append(a[4])
-        return NS(), ""
+        return NS(kind="ran", ran=True, code=0, output="", elapsed_s=0), "", 0.0
 
-    monkeypatch.setattr(runner.time, "monotonic", reads)
-    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
+    monkeypatch.setattr(runner.time, "monotonic", monotonic)
+    monkeypatch.setattr(runner.SL, "hold", fake_hold)
     monkeypatch.setattr(runner, "_execute", fake_execute)
-
-    # a full-suite run with a 7200 s per-run override whose slot cost it 20 s of queue
-    runner._run_locked(
-        Config(), "h", runner.Path("."), "c", None, 7200, None, {}, True, lock_wait=7200.0
-    )
-    assert got == [7180]
+    return got, waits
 
 
-def test_a_wait_that_used_the_whole_budget_leaves_the_run_a_floor(monkeypatch):
-    """The wait can consume the whole timeout; the run keeps 1 s, never zero or negative."""
+def test_a_queued_suite_run_keeps_its_full_run_budget(monkeypatch):
+    """B4f35548c0a: the queue wait consumed the run timeout, so under fleet load a run that
+    queued near its `--timeout` limit was left ~1 s to run the actual checks and timed out
+    UNAVAILABLE. `[ci].suite_wait_s` budgets the queue alone, `--timeout` budgets the RUN alone:
+    a run that queued 20 s still gets its whole 7200 s budget behind the slot, and `run()` hands
+    the lock no `wait_s` (the timeout is not spent on queueing)."""
+    got, waits = _hold(monkeypatch, 0.0, 20.0)
 
-    reads = iter([0.0, 7300.0]).__next__
-
-    class Hold:
+    class Tree:
         def __enter__(self):
-            return self
+            return "/tree", None
 
         def __exit__(self, *a):
             return False
 
-    got: list = []
+    monkeypatch.setattr(runner, "merge_tree", lambda *a, **k: Tree())
+    monkeypatch.setattr(runner, "_stale_pins", lambda *a, **k: "")
+    monkeypatch.setattr(runner, "_plan", lambda *a, **k: ("c", None))
+    monkeypatch.setattr(runner, "_needs_suite_slot", lambda *a, **k: True)
+    monkeypatch.setattr(runner, "tool_missing", lambda c: "")
+    monkeypatch.setattr(runner, "resolve_command", lambda *a: ("hooks", ""))
+    monkeypatch.setattr(runner.W, "rev", lambda *a: "abc")
+    monkeypatch.setattr(runner, "_merge_base", lambda *a: ("main", None))
 
-    def fake_execute(*a, **k):
-        got.append(a[4])
-        return NS(), ""
+    runner.run("/repo", Config(), base="main", timeout_s=7200)
+    assert got == [7200], f"the 20 s queue wait came off the run budget: {got}"
+    assert waits == [None], f"the run timeout became the queue wait cap: {waits}"
 
-    monkeypatch.setattr(runner.time, "monotonic", reads)
-    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
-    monkeypatch.setattr(runner, "_execute", fake_execute)
 
-    runner._run_locked(
-        Config(), "h", runner.Path("."), "c", None, 7200, None, {}, True, lock_wait=7200.0
-    )
-    assert got == [1]
+def test_a_wait_that_used_the_whole_timeout_leaves_the_run_budget_intact(monkeypatch):
+    """The wait consumes the whole `--timeout` (and more, the queue budget is `suite_wait_s`);
+    the run budget stays the full timeout, never a 1 s floor."""
+    got, waits = _hold(monkeypatch, 0.0, 7300.0)
+    runner._run_locked(Config(), "h", runner.Path("."), "c", None, 7200, None, {}, True)
+    assert got == [7200], f"the queue wait reduced the run budget: {got}"
+    assert waits == [None], f"the run timeout became the queue wait cap: {waits}"
 
 
 def test_the_item_run_reads_the_log_and_a_named_or_full_run_does_not(monkeypatch, tmp_path):

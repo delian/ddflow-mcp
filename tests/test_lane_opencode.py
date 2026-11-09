@@ -15,6 +15,7 @@ import pytest
 from ddflow.infra import paths
 from ddflow.services import lane_driver as ld
 from ddflow.services import modelreg
+from ddflow.services.engines import stream_map
 from ddflow.services.lanes import opencode as OC
 from ddflow.services.swarm import conformance as cf
 from ddflow.services.swarm import lanehooks as LH
@@ -204,6 +205,28 @@ def test_agent_identity_is_required(tmp_path, tree):
     assert isinstance(r, ld.Result) and "identity" in r.detail
 
 
+def _mcp_ddflow_command(lp) -> list[str]:
+    doc = json.loads(lp.endpoint.config.read_text())
+    return doc["mcp"]["ddflow"]["command"]
+
+
+def test_the_lane_mcp_server_is_spawned_in_the_lane_worktree_not_the_primary(tmp_path, tree):
+    """The regression for bug B7d091d0f35: the lane's ddflow MCP server must be told the
+    lane's WORKTREE as its spawn location, not the primary. Pinning `--repo` to the primary
+    hid the launched tree from the MCP path, so `claim` answered `here=false` and created a
+    SECOND worktree instead of adopting the one the lane was launched in (the pre-tool hook
+    then refused the lane's write as outside the lane worktree)."""
+    repo, wt, _home = tree
+    lp = prep(tmp_path, tree)
+    command = _mcp_ddflow_command(lp)
+    assert "--repo" in command, command
+    tree_arg = command[command.index("--repo") + 1]
+    assert tree_arg == str(wt), (
+        command
+    )  # the spawned tree, resolved to the primary + kept for claim
+    assert tree_arg != str(repo), command  # the primary alone hides the lane's tree from claim
+
+
 # --- running it: stub binary, stub endpoint -------------------------------------------------
 
 
@@ -217,7 +240,7 @@ def test_lane_runs_headless_in_the_worktree_with_private_home(tmp_path, tree):
     evs = list(drv.events(h, idle_s=3))
     assert [e.event for e in evs] == ["started", "tool", "tool", "tool"]
     assert evs[1].fields["name"] == "ddflow_claim"
-    assert "steer" not in h.capabilities and "usage" not in h.capabilities
+    assert "steer" not in h.capabilities and "usage" in h.capabilities
     assert drv.steer(h, "x").status == "unavailable"
     drv.stop(h)
     seen = json.loads(rec.read_text())
@@ -241,6 +264,61 @@ def test_missing_key_variable_refuses_the_launch(tmp_path, tree, monkeypatch):
 def test_transport_is_registered():
     assert isinstance(ld.driver_for(OC.TRANSPORT), OC.OpenCodeLane)
     assert OC.LIVE_PROBE.status == "unavailable"
+
+
+# --- the stream, read live (B8478a28c60) ---------------------------------------------------
+
+
+def test_the_stream_rules_advertise_usage_and_keep_the_error_url_out():
+    """B8478a28c60: kilo 7.8.18 ``run --format json`` was read live (SW-live-smoke): step_finish
+    carries ``part.tokens.total`` and ``part.cost``, so ``usage`` must be advertised; and the raw
+    error line carries the endpoint URL (``metadata.url``) and the response body, which no rule may
+    surface in an event."""
+    rules = stream_map.parse_rules(list(OC.STREAM_RULES))
+    emits = {r.emit for r in rules}
+    assert "usage" in emits
+
+    # the real line (smoke.read_stream reads part.tokens.total): tokens is a table, cost is a number
+    finish = stream_map.map_line(
+        json.dumps(
+            {
+                "type": "step_finish",
+                "part": {
+                    "tokens": {"input": 1000, "output": 234, "reasoning": 0, "total": 1234},
+                    "cost": 0.5,
+                },
+            }
+        ),
+        rules,
+    )
+    assert finish is not None and finish.event == "usage"
+    assert finish.fields == {"tokens": 1234, "cost": 0.5}
+
+    # a shape that misses the nested total must NOT pass a scalar through as tokens
+    misshaped = stream_map.map_line(
+        json.dumps({"type": "step_finish", "part": {"tokens": 42}}), rules
+    )
+    assert misshaped is not None and misshaped.event == "usage"
+    assert "tokens" not in misshaped.fields
+
+    err = stream_map.map_line(
+        json.dumps(
+            {
+                "type": "error",
+                "error": {"data": {"message": "404 Not Found"}},
+                "metadata": {"url": "https://example.test/v1/chat"},
+                "responseBody": "secret-body",
+            }
+        ),
+        rules,
+    )
+    assert err is not None and err.event == "error"
+    assert err.fields == {"message": "404 Not Found"}
+    assert "url" not in json.dumps(err.fields) and "secret-body" not in json.dumps(err.fields)
+
+    assert OC.FACTS["json stream shape (step_start, tool_use, step_finish, error)"][1] == "verified"
+    assert OC.FACTS["usage tokens in stream"][1].startswith("verified")
+    assert "usage" in OC.OpenCodeLane.capabilities
 
 
 # --- graded by SW-conformance ---------------------------------------------------------------

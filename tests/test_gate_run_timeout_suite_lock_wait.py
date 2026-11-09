@@ -1,9 +1,9 @@
-"""Ba5d5d63f12: `gate run ... ci --timeout N` replaced the ci command's budget but not the
-host suite-lock wait (`[ci].suite_wait_s`, 1800 s), so a queued run still gave up UNAVAILABLE
-at the knob although the per-run override had authorised a much longer run. With an override
-the override is the run's wait limit, replacing the knob in either direction: a longer one
-extends the queue wait, a shorter one bounds it. The give-up still parks the ticket, so a
-retry keeps its queue place."""
+"""B4f35548c0a: `gate run ... ci --timeout N` once replaced the host suite-lock wait
+(`[ci].suite_wait_s`, 1800 s) AND came off the run budget behind the lock, so a run that
+queued near its limit was left ~1 s and timed out UNAVAILABLE under fleet load. The run
+timeout now budgets the RUN only; the queue wait is always `[ci].suite_wait_s`. The `wait_s`
+override of `SL.hold` itself is unchanged (it bounds one hold's wait, and a give-up still
+parks the ticket so a retry keeps its place)."""
 
 from __future__ import annotations
 
@@ -35,13 +35,9 @@ def test_a_wait_override_extends_the_suite_wait_knob(tmp_path, monkeypatch):
     assert busy.value.position == 1  # it queued behind the holder, it did not give up at once
 
 
-def test_a_budget_override_bounds_the_lock_wait_in_both_directions():
-    assert CI._lock_wait(7200) == 7200.0  # a longer override extends the knob
-    assert CI._lock_wait(100) == 100.0  # a shorter override bounds the queued phase too
-    assert CI._lock_wait(0) is None  # no override: the knob alone decides
-
-
-def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
+def test_the_run_timeout_does_not_override_the_suite_wait(monkeypatch):
+    """The run timeout is no longer handed to the lock at all: `_run_locked` holds with the
+    `[ci].suite_wait_s` knob (no `wait_s`), so `--timeout` budgets the run only."""
     seen: dict[str, float | None] = {}
 
     @contextlib.contextmanager
@@ -60,16 +56,15 @@ def test_run_locked_hands_the_extended_wait_to_the_lock(monkeypatch):
         lambda cfg=None, tree=None, cmd=None, scope=None, budget=None, tick=None, holding_suite=False, used=None: (
             NS(kind="", ran=True),
             "",
+            0.0,
         ),
     )
-    CI._run_locked(
-        Config(), CI._holder(None, "HEAD"), None, "", None, 7200, None, {}, True, lock_wait=7200.0
-    )
-    assert seen == {"wait_s": 7200.0}, seen
+    CI._run_locked(Config(), CI._holder(None, "HEAD"), None, "", None, 7200, None, {}, True)
+    assert seen == {"wait_s": None}, seen
 
 
 def test_a_short_override_bounds_the_knob_down_through_the_lock(tmp_path, monkeypatch):
-    """The DOWN direction of the override runs end to end, not only in `_lock_wait` alone."""
+    """The DOWN direction of a `wait_s` override runs end to end, not only in `SL.hold`."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     cfg = Config()
     cfg.ci.suite_wait_s = 1.2

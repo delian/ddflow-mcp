@@ -123,6 +123,11 @@ _LOOP_SPAWN = (".subprocess_exec", ".subprocess_shell")  # asyncio event-loop me
 _ENVIRON = ("os.environ", "os.environb")
 _PATH_CTORS = {"pathlib.Path", "pathlib.PurePath", "pathlib.PurePosixPath", "os.path.join"}
 _URL = re.compile(r"^https?://(?:[^/@?#\s]*@)?(\[[0-9a-f:.]+\]|[^/:?#\s{}\[\]]+)", re.IGNORECASE)
+#: URL prefixes that only IDENTIFY a message format's schema namespace (the Adaptive Cards
+#: schema the Teams channel embeds as its ``$schema`` field): not an endpoint this project
+#: calls, so not a network dependence (bug B489298dd27). The exemption is the SCHEMA namespace
+#: path, not the host -- any other path on the same host is still a network site.
+_SCHEMA_NS_PREFIXES = ("http://adaptivecards.io/schemas/", "https://adaptivecards.io/schemas/")
 
 
 @dataclass(frozen=True)
@@ -418,7 +423,7 @@ class _Scan:
         hooks = v == GIT_HOOKS or v.startswith(GIT_HOOKS + "/") or "/" + GIT_HOOKS in v
         if hooks and not m:
             self.add("managed-file", GIT_HOOKS, node, GIT_HOOKS)
-        if m:
+        if m and not v.lower().startswith(_SCHEMA_NS_PREFIXES):
             host = m.group(1).lower()
             self.add("network", f"host:{host}", node, host)
 
