@@ -15,6 +15,7 @@ from ddflow.config import Config
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 from ddflow.services import approval as AP
+from ddflow.services.approvals import harness as H
 from ddflow.services.approvals import overrides as OV
 
 STAMP = {"ask": "Qabc", "approved_by": "me", "via": "harness", "level": 2, "digest": "d" * 16}
@@ -77,6 +78,33 @@ def test_doctor_notes_count_overrides_never_secrets(repo_with_overrides):
     assert "approvals audit: 1 approved gate skip(s)" in notes
     assert "approvals audit: 1 relayed consent(s)" in notes
     assert "d" * 16 not in notes
+
+
+def test_listing_three_harness_approvals_scans_the_store_once_not_once_per_ask(repo, monkeypatch):
+    # Bdb4ef97bd5: `gate list --overrides` re-verified EVERY consumed harness approval by
+    # re-reading every transcript file and re-running the Kilo SQLite query once per ask, so
+    # the listing took minutes on a real log. Listing N overrides must scan each store once.
+    run_cli(repo, "init")
+    log = EventLog(repo, "bot")
+    for i in ("1", "2", "3"):
+        ask = f"Q{i}"
+        log.append(
+            "ask.requested", ask, {"id": ask, "verb": "claim.force", "uses": 1, "subject": "T1"}
+        )
+        log.append("ask.answered", ask, {"id": ask, "outcome": "approved", "by": "me",
+                                         "via": "harness", "level": 2})  # fmt: skip
+        log.append("ask.consumed", ask, {"id": ask, "by": "bot", "verb": "claim.force"})
+    events = log.read_all()
+
+    reads: list[str] = []
+    monkeypatch.setattr(H, "read_only_rows", lambda path, *a, **k: reads.append(str(path)) or [])
+    monkeypatch.setattr(H, "_dirs", lambda cfg: [])
+    monkeypatch.setattr(H, "_kilo_dbs", lambda cfg: [Path("/nonexistent/kilo.db")])
+
+    OV.rows(events, fold(events, strict=False), Config())
+    assert len(reads) <= 1, (
+        f"store queried {len(reads)} times for 3 asks (must be once, not once per ask)"
+    )
 
 
 def test_a_typed_chat_t3_use_and_a_claim_force_are_listed(repo):

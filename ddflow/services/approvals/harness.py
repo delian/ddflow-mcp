@@ -22,6 +22,7 @@ import os
 import re
 import stat
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -294,12 +295,20 @@ def _results(row: dict[str, Any], content: list, uses: dict, question: str, name
                 yield Attested(tid, ans, str(row.get("timestamp", "")), name)
 
 
+@cache
+def _lines(path: str) -> tuple[str, ...]:
+    """One transcript's lines, read once per process (bug Bdb4ef97bd5): `scan` and
+    `scan_typed` re-read the same file for every consumed ask, so listing N overrides read
+    the whole transcript corpus N times."""
+    return tuple(Path(path).read_text(errors="replace").splitlines())
+
+
 def scan(path: Path, question: str, marker: str) -> list[Attested]:
     """The accepted answers to exactly ``question`` in one transcript (``marker`` is a cheap
     substring every line about it contains: the ask id)."""
     uses: dict[str, str | None] = {}  # tool_use id -> uuid of the assistant row that asked
     found: list[Attested] = []
-    for line in path.read_text(errors="replace").splitlines():
+    for line in _lines(str(path)):
         if marker not in line and not any(u in line for u in uses):
             continue
         try:
@@ -338,7 +347,7 @@ def scan_typed(path: Path, ask: dict[str, Any], min_chars: int) -> list[Attested
     whose whole text is `approve|deny <this request id> <digest prefix>`. An agent's text, a tool
     result, a notification and a quotation inside a longer message are not such rows."""
     found: list[Attested] = []
-    for line in path.read_text(errors="replace").splitlines():
+    for line in _lines(str(path)):
         if ask["id"] not in line:
             continue
         try:
@@ -383,6 +392,23 @@ def _kilo_answer(state: Any, question: str) -> str:
     return ""
 
 
+@cache
+def _kilo_question_parts(path: str) -> tuple[tuple[Any, ...], ...]:
+    """Every `question` tool part in one Kilo transcript store, read once per process (bug
+    Bdb4ef97bd5): the query used to run once per consumed ask, so listing N overrides
+    re-scanned the whole store N times. The per-ask ``since`` and ``marker`` filters move to
+    `scan_kilo`, so one read serves every ask. No rows when this is not a readable Kilo store
+    (wrong schema, locked, missing)."""
+    rows = read_only_rows(
+        Path(path),
+        "SELECT id, time_created, data FROM part "
+        "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
+        "ORDER BY time_created ASC",
+        (KILO_TOOL,),
+    )
+    return tuple(tuple(r) for r in rows)
+
+
 def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Attested]:
     """The accepted answer to exactly ``question`` in one Kilo transcript store (``marker`` is
     the ask id: every question part about it contains it). Only the harness-written `question`
@@ -390,14 +416,9 @@ def scan_kilo(path: Path, question: str, marker: str, since: float) -> list[Atte
     the agent wrote is not such a part, and a T3 act never counts (its filter wants a typed
     answer, which this is not)."""
     found: list[Attested] = []
-    rows = read_only_rows(
-        path,
-        "SELECT id, time_created, data FROM part "
-        "WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') = ? "
-        "AND time_created >= ? AND instr(data, ?) > 0 ORDER BY time_created ASC",
-        (KILO_TOOL, since * 1000, marker),
-    )  # no rows when this is not a readable Kilo store (wrong schema, locked, missing)
-    for pid, created, raw in rows:
+    for pid, created, raw in _kilo_question_parts(str(path)):
+        if created < since * 1000 or marker not in raw:
+            continue
         try:
             data = json.loads(raw)
         except ValueError:
