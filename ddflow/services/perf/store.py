@@ -22,33 +22,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ddflow.config_sections._docs import declare, int_at_least, knob
+from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.infra.fsio import atomic_write
 
 #: Where the rings live, relative to the repository root: under the git-ignored local dir.
 LOCAL_DIR = "perf"
-
-
-@declare("perf_metrics")
-@dataclass
-class PerfMetricsConfig:
-    """The perf store's limits: what the local ring keeps. Set the four ways or the MCP action."""
-
-    ring_max_bytes: int = knob(
-        2_000_000,
-        doc="Most bytes one raw-sample ring keeps; when a series exceeds it the oldest samples are dropped first (flowstate precedent). Raw detail only -- rollups and aggregates are committed.",
-        check=int_at_least(1),
-    )
-    ring_max_age_s: int = knob(
-        7 * 86400,
-        doc="Seconds a raw sample stays in the local ring; older samples are trimmed on the next write.",
-        check=int_at_least(1),
-    )
-    aggregate_min_samples: int = knob(
-        3,
-        doc="Fewest samples a daily aggregate needs before its p50/p90/max are reported; below it the count is reported and the percentiles are None, never zero.",
-        check=int_at_least(1),
-    )
 
 
 @dataclass(frozen=True)
