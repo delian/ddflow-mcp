@@ -1,0 +1,2 @@
+{"agent":"lk-reuse","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e05ee273e6a203d8d35df897a","kind":"ddflow.seen","lamport":159857,"schema":1,"subject":"ddflow","ts":"2026-11-09T06:03:51.850893Z"}
+{"agent":"lk-reuse","data":{"by":"lk-reuse","event":"ec9b64497dc78b5830b68bca2","holder":"plock2","note":"salvaged"},"id":"e4ea7cac2304618fb27887f5b","kind":"lease.released","lamport":159858,"schema":1,"subject":"LK-review-reuse","ts":"2026-11-09T06:03:51.905176Z"}
