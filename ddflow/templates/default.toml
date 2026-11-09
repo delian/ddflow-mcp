@@ -475,6 +475,11 @@ max_chars = 30000
 non_ascii_weight = 4
 allow_full = true
 
+[perf_metrics]
+ring_max_bytes = 2000000
+ring_max_age_s = 604800
+aggregate_min_samples = 3
+
 [pins]
 recipes_file = ".ddflow/pins.toml"
 timeout_s = 900
