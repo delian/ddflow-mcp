@@ -60,12 +60,18 @@ def with_shim_on_path(env, tree: Path) -> dict[str, str]:
 
     The shim only shadows the ``ddflow`` NAME -- its directory holds nothing else -- so
     ``git``, ``pytest`` and every other command a gate runs still resolve exactly as before.
+    A dict with no ``PATH`` falls back to this process's, so a runner that applies the
+    returned dict over its own environment never replaces the inherited path with the shim
+    directory alone.
     """
     directory = shim_dir(tree)
     if directory is None:
         return env
     env = dict(env)
-    env["PATH"] = str(directory) + (os.pathsep + env.get("PATH", "") if env.get("PATH") else "")
+    path = env.get("PATH")
+    if path is None:
+        path = os.environ.get("PATH", "")
+    env["PATH"] = str(directory) + (os.pathsep + path if path else "")
     return env
 
 

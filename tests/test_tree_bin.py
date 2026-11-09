@@ -75,6 +75,15 @@ def test_with_shim_on_path_is_a_noop_without_a_shim(tmp_path):
     assert env == {"PATH": "/usr/bin"}
 
 
+def test_with_shim_on_path_keeps_the_inherited_path_when_none_is_given(tmp_path, monkeypatch):
+    tree = _tree(tmp_path)
+    shim = TB.write_shim(tree)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    env = TB.with_shim_on_path({"A": "1"}, tree)
+    assert env["PATH"].split(":")[0] == str(shim.parent)
+    assert env["PATH"].endswith(":/usr/bin:/bin")
+
+
 def test_a_gate_command_gets_the_trees_shim_first_on_path(tmp_path):
     from ddflow.services import gates as G
 
