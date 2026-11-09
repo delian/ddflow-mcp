@@ -134,9 +134,11 @@ def co_change(facts: Facts) -> list[dict]:
 
 def tests_per_changed_line(facts: Facts) -> dict:
     """tests per CHANGED LINE: test files the window touched, over the source LINES it changed
-    (``Outcome.changed_lines``), not over file-glob counts (a glob is not a line)."""
+    (``Outcome.changed_lines``), not over file-glob counts (a glob is not a line). No outcome
+    recorded a line count -> ``changed_lines=None`` (an unrun probe is never zero)."""
     tests = sum(1 for lease in facts.leases for g in lease.globs if g.startswith("tests/"))
-    changed = sum(o.changed_lines or 0 for o in facts.outcomes if o.changed_lines)
+    recorded = [o.changed_lines for o in facts.outcomes if o.changed_lines]
+    changed = sum(recorded) if recorded else None
     return {
         "test_files": tests,
         "changed_lines": changed,
