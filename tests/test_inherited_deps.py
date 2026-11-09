@@ -557,3 +557,19 @@ def test_breaking_the_rule_makes_the_MCP_SURFACE_hand_out_blocked_work(repo, mon
         "the naive rule was restored and the MCP surface STILL withheld P2.T1, so this "
         f"assertion is not testing the inheritance at all. offered={offered}"
     )
+
+
+def test_a_dependency_on_an_abandoned_task_does_not_block_the_dependent(repo):
+    """B740b7f8cf4: an abandoned `needs` is SETTLED — decided not done — so its dependent
+    must not wait on it forever. Before the fix the dependent sat in `blocked` with reason
+    `deps` naming the abandoned id; after, it is offered ready."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "B", "--title", "prereq")
+    run_cli(repo, "task", "add", "A", "--needs", "B", "--title", "dependent")
+    assert run_cli(repo, "abandon", "B", "--reason", "dropped")[0] == OK
+    plan = _plan(repo)
+    assert "A" not in _blocked(plan), (
+        "an abandoned dependency must not block its dependent forever: "
+        f"{_blocked(plan).get('A')}"
+    )
+    assert "A" in _ready(plan), f"the dependent of an abandoned item is ready: {_ready(plan)}"
