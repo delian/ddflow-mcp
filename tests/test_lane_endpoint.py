@@ -65,18 +65,19 @@ def test_key_by_name_only_and_keyless(tmp_path, monkeypatch):
     assert isinstance(ep, E.Endpoint) and E.launch_env(ep) == {}
     assert "apiKey" not in json.loads(E.render(ep, "kilo"))["provider"][ep.provider]["options"]
     ep2 = E.resolve(_verified(tmp_path), "lan-vllm")
-    assert E.launch_env(ep2) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
+    assert E.launch_env(ep2) == {}  # no variable set and no key file: nothing resolved yet
     assert "key_env='LAN_ENDPOINT_KEY'" in repr(ep2)
     monkeypatch.setenv("LAN_ENDPOINT_KEY", "sk-sentinel-value")
     pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "hh")
-    assert "sk-sentinel-value" not in repr(pr) + pr.config.read_text() + repr(pr.env)
+    assert pr.env == {"LAN_ENDPOINT_KEY": "sk-sentinel-value"}
+    assert "sk-sentinel-value" not in repr(pr) + pr.config.read_text()
     assert "ENDPOINT-HOST" not in repr(ep2)
 
 
 def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, monkeypatch):
     # A keyed lane endpoint whose key lives ONLY in its key file must still launch: the
     # resolver reads the variable first, then the file, and `launch_env` hands the value
-    # to the child under the variable name (it is never written into the provider block).
+    # to the child under the variable name -- without exporting it into the process env.
     keyfile = tmp_path / "endpoint.key"
     keyfile.write_text("sk-key-from-file")
     keyfile.chmod(0o600)
@@ -89,8 +90,8 @@ def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, mon
     ep = E.resolve(_cat(tmp_path, t), "lan-vllm")
     assert isinstance(ep, E.Endpoint)
     assert E.resolve_key(ep).value == "sk-key-from-file"
-    assert E.launch_env(ep) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
-    assert os.environ.get("LAN_ENDPOINT_KEY") == "sk-key-from-file"
+    assert E.launch_env(ep) == {"LAN_ENDPOINT_KEY": "sk-key-from-file"}
+    assert "LAN_ENDPOINT_KEY" not in os.environ
 
 
 @pytest.mark.parametrize(
@@ -130,9 +131,7 @@ def test_template_ships_and_example_has_no_real_address():
 def test_prepare_writes_private_block_and_reports_probe(tmp_path):
     pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "home")
     assert isinstance(pr, E.Prepared) and pr.config.is_file()
-    assert pr.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"} and pr.model.endswith(
-        "/SERVED-MODEL-ID"
-    )
+    assert pr.env == {} and pr.model.endswith("/SERVED-MODEL-ID")
     assert pr.probe.status == "unavailable"
     assert E.prepare(_cat(tmp_path), "lan-vllm", "kilo", tmp_path / "h2").status == "unavailable"
     assert not (tmp_path / "h2").exists()  # a refused route writes nothing

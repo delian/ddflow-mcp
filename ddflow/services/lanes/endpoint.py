@@ -16,7 +16,7 @@ import json
 import os
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -187,17 +187,14 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
 
 
 def launch_env(ep: Endpoint) -> dict[str, str]:
-    """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read at launch).
-
-    The value is resolved here, variable first, then key file (`resolve_key`): a key that
-    lives only in the endpoint's key FILE is read and carried to the child under its
-    variable, so the operator does not export it by hand."""
+    """`LaunchSpec.secret_env` for the key: child variable -> resolved VALUE. The value is
+    read here (its variable first, then its key file, the same resolver the reviewers use)
+    and goes to the child's environment only -- never into the process environment nor the
+    rendered provider block, which names the variable alone."""
     if not ep.api_key_env:
         return {}
     got = resolve_key(ep)
-    if got and got.source == "file":
-        os.environ[ep.api_key_env] = got.value
-    return {ep.api_key_env: ep.api_key_env}
+    return {ep.api_key_env: got.value} if got else {}
 
 
 def resolve_key(ep: Endpoint) -> review_keys.KeyResult:
@@ -225,12 +222,13 @@ def probe_plan(ep: Endpoint, harness: str) -> Result:
 @dataclass(frozen=True)
 class Prepared:
     """What a launcher needs of an endpoint: pass ``home`` as `LaunchSpec.home`, ``env`` as
-    `LaunchSpec.env` and ``model`` to the harness's model flag."""
+    `LaunchSpec.secret_env` (a child variable -> resolved key VALUE) and ``model`` to the
+    harness's model flag."""
 
     endpoint: Endpoint
     home: Path
     config: Path
-    env: dict[str, str]
+    env: dict[str, str] = field(repr=False)  #: the key env var -> resolved key VALUE (a secret)
     model: str
     probe: Result  #: the live tool-call probe: `unavailable` until the operator runs it
 

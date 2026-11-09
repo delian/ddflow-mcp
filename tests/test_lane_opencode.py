@@ -152,7 +152,7 @@ def test_spec_identity_key_by_name_and_no_shell(tmp_path, tree):
     s = lp.spec
     assert s.name == "lane-7" and s.cwd == str(wt) and s.home == home
     assert s.fixed_env == {"DDFLOW_AGENT": "lane-7"}
-    assert s.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"} and SECRET not in repr(s)
+    assert s.env == {} and s.secret_env == {"LAN_ENDPOINT_KEY": SECRET} and SECRET not in repr(s)
     assert "PATH" in s.pass_env
     assert (
         s.argv[1] == "run"
