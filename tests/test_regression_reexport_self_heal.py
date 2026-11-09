@@ -1,48 +1,34 @@
-"""A lazy re-export recovers after its submodule import fails once (bug B7e585f9e5d).
+"""A lazy re-export re-imports after an import halts mid-flight (bug B7e585f9e5d).
 
 ``ddflow.core._reexport`` re-exports a split package's public names lazily: ``__getattr__``
-imports the submodule that defines a name on first use. A failed import of that submodule
-(a transient mid-import sibling cycle during the package-split / home-migration churn) made
-``importlib`` poison ``sys.modules`` with ``submodule_name: None``. From then on every access
-re-raised ``ModuleNotFoundError: No module named '<pkg>.<sub>'`` without re-importing, so
-``check_after_merge`` crashed on every merge (``ddflow.services.ci.main`` was the reported
-name). The lazy ``__getattr__`` must drop the poison before retrying so a transient failure
-self-heals instead of becoming permanent.
+imports the submodule that defines a name on first use. When a prior import of that submodule
+halted and left ``sys.modules[<pkg>.<sub>] = None`` (``importlib`` re-raises
+``ModuleNotFoundError`` with "import of <pkg>.<sub> halted; None in sys.modules" on every
+later access instead of re-importing), the lazy name stays broken for the whole process.
+``check_after_merge`` hit this through ``ddflow.services.ci.main`` and crashed on every merge.
+``__getattr__`` must drop the ``None`` sentinel before retrying so the name resolves.
 """
 
 from __future__ import annotations
 
 import sys
 
-import pytest
-
 from ddflow.core import _reexport
 
 
-def test_a_lazy_reexport_resolves_after_a_transient_submodule_import_failure(
-    tmp_path, monkeypatch
-):
+def test_a_lazy_reexport_reimports_after_an_import_halts_on_a_none_entry(tmp_path, monkeypatch):
     (tmp_path / "poisonpkg").mkdir()
     (tmp_path / "poisonpkg" / "__init__.py").write_text("")
-    dep = tmp_path / "poisondep.py"
-    dep.write_text("VALUE = 7\n")
-    (tmp_path / "poisonpkg" / "sub.py").write_text(
-        "from poisondep import VALUE\nMAGIC = VALUE\n"
-    )
+    (tmp_path / "poisonpkg" / "sub.py").write_text("MAGIC = 7\n")
     monkeypatch.syspath_prepend(str(tmp_path))
 
-    import poisonpkg  # noqa: PLC0415
+    import poisonpkg
 
     _reexport.reexport(poisonpkg.__dict__, {"MAGIC": "sub"}, "poisonpkg")
 
-    # First access fails: the submodule's own import cannot see its sibling yet. A failed
-    # import leaves ``sys.modules["poisonpkg.sub"] = None`` behind.
-    dep.unlink()
-    with pytest.raises(ModuleNotFoundError):
-        getattr(poisonpkg, "MAGIC")
-    assert sys.modules.get("poisonpkg.sub") is None
-
-    # The transient cause is gone: the retry must re-import and resolve the lazy name, not
-    # re-raise ``ModuleNotFoundError`` against the poisoned entry (B7e585f9e5d).
-    dep.write_text("VALUE = 7\n")
+    # A halted import leaves the sentinel importlib later refuses with
+    # "import of poisonpkg.sub halted; None in sys.modules". Without the drop-and-retry, the
+    # first access that resolves the lazy name would raise ModuleNotFoundError here; the fix
+    # drops the sentinel and re-imports the submodule.
+    sys.modules["poisonpkg.sub"] = None
     assert poisonpkg.MAGIC == 7
