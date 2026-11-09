@@ -55,6 +55,18 @@ def test_research_show_takes_id_from_the_flag_too(repo):
     assert "R1 [research]" in out
 
 
+def test_research_show_refuses_an_id_given_both_ways(repo):
+    """Giving the id both positionally and via --id is ambiguous: refuse, don't discard
+    the explicit --id."""
+    run_cli(repo, "init")
+    run_cli(
+        repo, "research", "add", "--id", "R1", "--question", "q one", "--verdict", "THEORETICAL"
+    )
+    code, _, err = run_cli(repo, "research", "show", "R2", "--id", "R1")
+    assert code != 0, err
+    assert "not both" in err
+
+
 def test_research_add_refuses_a_stray_positional_id(repo):
     """`research add R1 --question q --verdict THEORETICAL` is not `research add --id R1`:
     the positional id belongs to `research show`, so a stray token is refused, not dropped."""

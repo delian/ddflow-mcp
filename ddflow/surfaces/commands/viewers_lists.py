@@ -359,6 +359,8 @@ def register(s) -> None:
             return cmd_list(a, c)
         if a.verb == "show":
             if a.research_id is not None:
+                if a.id:
+                    rs.error("give the id either positionally or via --id, not both")
                 a.id = a.research_id
             if not a.id:
                 rs.error("`research show <id>` needs the note's id")
