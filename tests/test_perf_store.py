@@ -150,3 +150,8 @@ def test_the_daily_aggregate_is_written_committed_and_reads_back(repo: Path):
         "aggregate",
         "rollup",
     ]  # committed aggregate reached the API
+    # A re-run after the ring aged the day's samples out must NOT clobber the committed
+    # snapshot back to {} (monotonic): losing the ring drops detail only.
+    trim(repo, "rss", day + 100_000, PerfMetricsConfig(ring_max_age_s=1))
+    back_again = write_aggregate(repo, "rss", day, PerfMetricsConfig(aggregate_min_samples=1))
+    assert back_again["env:a"]["count"] >= 2  # the prior richer entry survived

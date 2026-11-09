@@ -268,17 +268,34 @@ def aggregate_path(repo: Path, series: str, day: float) -> Path:
     return repo / AGGREGATE_DIR / name / f"{int(day)}.json"
 
 
+def _read_aggregate_file(repo: Path, series: str, day: float) -> dict[str, dict[str, Any]]:
+    path = aggregate_path(repo, series, day)
+    try:
+        d = json.loads(path.read_text("utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def write_aggregate(
     repo: Path, series: str, day: float, cfg: PerfMetricsConfig | None = None
 ) -> dict[str, dict[str, Any]]:
-    """Compute the day's aggregate and write it to the committed path, idempotently (the
-    same ring recomputes the same numbers). The report/tick calls this; the event log keeps
-    the per-run rollups in gate evidence, and this file keeps the daily aggregate."""
-    agg = daily_aggregate(repo, series, day, cfg)
+    """Compute the day's aggregate and MERGE it into the committed path (the report/tick
+    calls this). Monotonic: a richer entry already committed (from before the ring trimmed
+    that day's raw samples) is kept, so a re-run after the ring ages out never clobbers the
+    committed p50/p90/max back to fewer samples or ``{}`` -- losing the ring drops detail
+    only, never the snapshot."""
+    fresh = daily_aggregate(repo, series, day, cfg)
+    merged: dict[str, dict[str, Any]] = {}
+    prior = _read_aggregate_file(repo, series, day)
+    for env in sorted(set(prior) | set(fresh)):
+        fresh_n = fresh.get(env, {}).get("count", 0)
+        prior_n = prior.get(env, {}).get("count", 0)
+        merged[env] = fresh[env] if fresh_n >= prior_n else prior[env]
     path = aggregate_path(repo, series, day)
     path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(path, json.dumps(agg, sort_keys=True, separators=(",", ":")) + "\n")
-    return agg
+    atomic_write(path, json.dumps(merged, sort_keys=True, separators=(",", ":")) + "\n")
+    return merged
 
 
 def read_aggregates(repo: Path, series: str) -> list[tuple[float, dict[str, dict[str, Any]]]]:
