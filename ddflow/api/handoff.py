@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +12,12 @@ from ..services.handoff import send
 from ._base import _load
 
 
-def _holder_agent(st: Any, item: str) -> str:
+def _holder_agent(st: Any, item: str, cfg: Any) -> str:
     it = getattr(st, "items", {}).get(item)
     lease = getattr(it, "lease", None) if it is not None else None
-    return getattr(lease, "holder", "") if lease is not None else ""
+    if lease is None or not lease.live(time.time(), cfg.lease.grace_s):
+        return ""
+    return getattr(lease, "holder", "")
 
 
 def _owner_tip(repo: Path, item: str, st: Any) -> str:
@@ -41,7 +44,7 @@ def suggest(
 ) -> O.Outcome:
     """Send ``--commit``/``--diff``/``--blob`` to ``item``'s holder and report the ref."""
     log, cfg, st = _load(repo, agent)
-    to_agent = _holder_agent(st, item)
+    to_agent = _holder_agent(st, item, cfg)
     if not to_agent:
         return O.failed(
             "handoff.suggest",
