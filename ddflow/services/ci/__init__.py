@@ -89,7 +89,6 @@ _SUBMODULE_OF = {
     "_default_on_the_diff": "runner",
     "_execute": "runner",
     "_holder": "runner",
-    "_lock_wait": "runner",
     "_merge_base": "runner",
     "_needs_suite_slot": "runner",
     "_result": "runner",

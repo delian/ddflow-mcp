@@ -111,9 +111,10 @@ def run(  # noqa: PLR0913 -- one keyword per facet of a run, all keyword-only
     rates: Sequence[float] = (),
 ) -> Result:
     """Run the CI command on `ref` merged with `base` (default: the repo's default branch).
-    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and bounds the
-    queued phase of the host suite lock besides (the per-run override covers the queue wait,
-    not only the run behind it, Ba5d5d63f12).
+    ``timeout_s`` replaces `[ci].timeout_s` for this run when it is positive, and budgets the
+    run only. The queue wait for the host suite slot is bounded by `[ci].suite_wait_s` and does
+    not come off this budget: a run that queued near its limit must still get the whole timeout
+    to run the checks (B4f35548c0a).
 
     ``for_item``: the run is one item's (D-test-economy-r2), so `[ci].tests_scope =
     "selected"` replaces the whole-suite hook by the tests the change reaches; ``full``
@@ -253,7 +254,6 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             tick,
             used,
             False,
-            lock_wait=_lock_wait(timeout_s),
         )
         return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
 
@@ -294,7 +294,6 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
             budget,
             tick,
             used,
-            lock_wait=_lock_wait(timeout_s),
             plan=merged,
         )
     except SL.SuiteBusy as busy:
@@ -305,21 +304,18 @@ def _settle(  # noqa: PLR0913 -- the whole resolver tail, one keyword per facet
     return _settled_result(p, out_prefix, waited, cmd, scope, sha, base, used)
 
 
-def _run_under_slot(  # noqa: PLR0913 -- the slot state, all already held by the caller, one per facet
-    cfg, holder, repo, sha, base, cmd, budget, tick, used, *, lock_wait, plan
-):
+def _run_under_slot(cfg, holder, repo, sha, base, cmd, budget, tick, used, *, plan):
     """A full-suite run: hold the host suite slot, merge ``sha`` with ``base`` INSIDE it (not
     before the queue wait, so a base that moved while the run queued cannot leave the tree stale:
     B-ci-merge-tree-stale-after-queue-wait), then run the checks in that fresh tree. ``plan(tree)``
     returns the tree's (scoped command, scope) or the Result that refuses it. Returns
     ``(run, out_prefix, waited, cmd, scope)``: ``run`` is the process, or None with ``out_prefix``
-    the Result that refused the fresh merge."""
+    the Result that refused the fresh merge. The queue wait (`[ci].suite_wait_s`) is separate from
+    ``budget``: the run keeps its whole budget however long it queued (B4f35548c0a)."""
     waited = None
     queued_at = time.monotonic()
-    with SL.hold(cfg, holder, wait_s=lock_wait):
+    with SL.hold(cfg, holder):
         waited = round(time.monotonic() - queued_at, 6)
-        if lock_wait is not None:
-            budget = max(1, int(lock_wait) - int(waited))
         with merge_tree(repo, sha, base, lambda: pin_files(repo, cfg)) as (tree, failure):
             if tree is None:
                 status = "failed" if getattr(failure, "kind", "") == CONFLICT else "unavailable"
@@ -335,30 +331,18 @@ def _run_under_slot(  # noqa: PLR0913 -- the slot state, all already held by the
     raise AssertionError("unreachable: SL.hold raises SuiteBusy instead of yielding past here")
 
 
-def _lock_wait(timeout_s: int) -> float | None:
-    """The suite-lock wait limit for one run: None (the `[ci].suite_wait_s` knob alone, what
-    `SL.hold` falls back to), or ``timeout_s`` when it is a positive per-run override: the
-    override caps the queued wait (this value) and is the budget of the run behind it.
-    A queued run used to give up at the knob although the caller had authorised a much
-    longer run, and a shorter run had no say about its queue wait either (Ba5d5d63f12)."""
-    if timeout_s <= 0:
-        return None
-    return float(timeout_s)
-
-
-def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite, *, lock_wait=None):
+def _run_locked(cfg, holder, tree, cmd, scope, budget, tick, used, full_suite):
     """`_execute`, holding a host suite slot when it runs the whole suite. Returns the process,
     its output prefix and the seconds spent queued for the slot (None without one). ``holder``
     is the suite-slot holder label (`_holder`); ``full_suite`` is read once at the caller --
     an empty named command is the suite, never `not cmd.strip()` on the materialized command.
-    ``lock_wait`` replaces the wait limit for this hold (see `_lock_wait`)."""
+    The queue wait (`[ci].suite_wait_s`) never comes off ``budget``: the timeout budgets the run
+    alone (B4f35548c0a)."""
     waited: float | None = None
     queued_at = time.monotonic()
-    with SL.hold(cfg, holder, wait_s=lock_wait) if full_suite else nullcontext():
+    with SL.hold(cfg, holder) if full_suite else nullcontext():
         if full_suite:  # the slot is held: everything before this was queueing
             waited = round(time.monotonic() - queued_at, 6)
-            if lock_wait is not None:  # the per-run timeout also bounds the run BEHIND the wait
-                budget = max(1, int(lock_wait) - int(waited))
         p, out_prefix = _execute(
             cfg, tree, cmd, scope, budget, tick, holding_suite=full_suite, used=used
         )
