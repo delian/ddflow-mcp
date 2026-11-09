@@ -89,6 +89,21 @@ def test_the_same_agent_reclaiming_its_live_lease_is_not_a_wait(repo):
     assert code == 0 and "waiting" not in out + err, out + err
 
 
+def test_a_glob_overlap_refusal_names_the_narrowing_command(repo):
+    """A free item whose declared globs overlap another live lease is refused with the
+    files and the holder and the alternatives and `wait` -- but the item's globs could be
+    narrower than the work, and `claim --globs` with the files really written succeeds at
+    once. The refusal must say so (B868bf3ea1c)."""
+    _seed(repo)  # T1 globs a.py, T2 globs b.py
+    run_cli(repo, "task", "add", "T3", "--title", "T3 fixture", "--globs", "a.py,b.py")
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="a")[0] == 0  # a holds a.py
+    code, out, err = run_cli(repo, "claim", "T3", "--no-worktree", agent="b")
+    text = out + err
+    assert code == 3, text
+    assert "writes files another live lease holds" in text, text
+    assert "narrower" in text, text
+
+
 def test_the_same_agent_resumes_its_own_lapsed_lease_without_force(repo, monkeypatch):
     _grace0(repo)
     monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "1")
