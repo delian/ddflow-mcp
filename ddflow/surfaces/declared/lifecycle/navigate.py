@@ -200,7 +200,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Override a refusal -- a person's route; an agent's is `approval=request` (an agent's `force` is dropped). A person retries with `force` only after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded.",
+                help="Override a refusal -- a person's route; an agent's `force` is dropped, so an agent files `approval=request` instead. A forced claim past a dependency or live lease lets two agents write one file. Recorded.",
                 cli_help="",
             ),
             Param(

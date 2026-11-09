@@ -201,16 +201,16 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             )
 
         existing = it.lease
+        # An agent's `--force` is dropped at the API layer (its route is
+        # `--approval request`), so the take-over route named here is the one that applies
+        # to WHO is asking, never `--force` to an agent (Bbb8c158254).
+        take_over = _take_over(item_id, agent)
         if existing and existing.live(now, cfg.lease.grace_s):
             if existing.holder == holder:
                 _record_claimed_globs(log, it, globs, resources)
                 return _renew_in_place(
                     log, existing, item_id, holder, now, worktree, branch, globs, note, resources
                 )
-            # An agent's `--force` is dropped at the API layer (its route is
-            # `--approval request`), so the take-over route named here is the one that
-            # applies to WHO is asking, never `--force` to an agent (Bbb8c158254).
-            take_over = _take_over(item_id, agent)
             left = existing.remaining_s(now)
             raise LeaseError(
                 f"{item_id} is held by {existing.holder} for another {left:.0f}s"

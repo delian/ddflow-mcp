@@ -107,12 +107,14 @@ def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_the_agent_rou
 
 
 def test_a_person_claim_of_an_unswept_expired_lease_is_told_to_force(repo):
-    """Bbb8c158254: the same refusal to a PERSON at a terminal says --force, the route a
-    person's claim honours (an agent's --force is dropped and becomes --approval)."""
+    """Bbb8c158254: the same refusal to a PERSON at a terminal says recover-then-`--force`,
+    the route a person's claim honours (an agent's `--force` is dropped and becomes
+    `--approval`)."""
     _crashed_with_work(repo)
     out = LC.claim(repo, "T1", agent="")
     assert out.exit == 3
     flat = " ".join(out.reason.split())
+    assert "ddflow recover --item T1" in flat, flat
     assert "ddflow claim T1 --force" in flat, flat
     assert "--approval request" not in flat, flat
 
