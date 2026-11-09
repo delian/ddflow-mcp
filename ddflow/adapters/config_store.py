@@ -32,9 +32,7 @@ class ConfigStore(Protocol):
     a new adapter, never a new code path in the loader or writer.
     """
 
-    def resolve(
-        self, root: Path | str | None = None, *, env: dict[str, str] | None = None
-    ) -> Any:
+    def resolve(self, root: Path | str | None = None, *, env: dict[str, str] | None = None) -> Any:
         """The layered config at ``root``: a value holding the merged knobs (`as_dict`), the
         source of every knob (`sources`) and the explain log (`explain`)."""
 

@@ -20,10 +20,7 @@ class _Resolved:
         return self.data
 
     def explain(self) -> list[tuple[str, Any, str, str]]:
-        return [
-            (key, self._get(key), self.sources.get(key, "default"), "")
-            for key in self.sources
-        ]
+        return [(key, self._get(key), self.sources.get(key, "default"), "") for key in self.sources]
 
     def _get(self, key: str) -> Any:
         node = self.data
