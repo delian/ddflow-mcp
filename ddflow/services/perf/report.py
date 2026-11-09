@@ -35,11 +35,30 @@ NOT_COLLECTED = {
 }
 
 
+def _scoped_facts(ctx: Context):
+    """The facts inside the window (outcomes/findings/bugs of in-scope items); the yield and
+    rework sections read this so they describe the SAME window as the comparisons and waits."""
+    from dataclasses import replace
+
+    f = ctx.facts
+    return replace(
+        f,
+        outcomes=[o for o in f.outcomes if ctx.in_scope(o.item, o.at)],
+        findings=[x for x in f.findings if ctx.in_scope(x.item, x.at)],
+        bugs=[(i, t) for (i, t) in f.bugs if ctx.in_scope(i, t)],
+        spans={
+            item: s
+            for item, s in f.spans.items()
+            if ctx.in_scope(item, s.added_at)
+        },
+    )
+
+
 def _per_gate(ctx: Context, minimum: int) -> list[dict]:
     per: dict[str, list[float]] = {}
     for o, secs in gate_durations(ctx):
         per.setdefault(o.gate, []).append(secs)
-    yields = {r["gate"]: r for r in gateyield.gate_rows(ctx.facts, minimum)}
+    yields = {r["gate"]: r for r in gateyield.gate_rows(_scoped_facts(ctx), minimum)}
     out = []
     for gate in sorted(set(per) | set(yields)):  # a gate with a yield but no duration is not dropped
         y = yields.get(gate, {})
@@ -179,7 +198,7 @@ def build(ctx: Context, minimum: int | None = None) -> Report:
         gates=_per_gate(ctx, minimum),
         cycle=_cycle_split(ctx, minimum),
         waits=_waits(ctx, minimum),
-        rework=gateyield.rework_loops(ctx.facts),
+        rework=gateyield.rework_loops(_scoped_facts(ctx)),
         comparisons=_comparisons(ctx, minimum),
         not_collected=dict(NOT_COLLECTED),
     )
