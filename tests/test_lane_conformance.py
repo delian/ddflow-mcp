@@ -324,3 +324,13 @@ def test_non_mapping_lanes_are_replaced_not_crashed_on(tmp_path):
     cio.path_for(tmp_path).write_text('{"schema": "lane-levels@1", "lanes": ["a"]}')
     cio.save(tmp_path, cf.Report("c", 2, (), 1.0))
     assert set(cio.load_all(tmp_path)) == {"c"}
+
+
+def test_shipped_conformance_timeout_defaults_outlast_a_real_lane():
+    """B72bcd17b4e: the shipped idle and lease-wait defaults are long enough for a REAL lane, not
+    a stub. kilo's first stream line lands ~20s after start (MCP server + plugin load), so a 5s
+    idle ended collection before any event at level 0; revocation-to-exit measured 8.5-14.1s, so
+    a 10s lease wait failed 3 of 5 runs. 120s idle / 90s wait reached level 6 in 5 of 5."""
+    c = Config().swarm
+    assert c.conformance_idle_s >= 60.0  # > kilo's ~20s first line, with margin
+    assert c.conformance_lease_wait_s >= 30.0  # > 14.1s revocation-to-exit, with margin
