@@ -46,10 +46,29 @@ def test_cli_main_caps_blas_threads_unless_the_user_set_them():
     assert _run(["-c", main], OPENBLAS_NUM_THREADS="4")[1] == "4"
 
 
-def test_extra_installed_does_not_import_the_extra(tmp_path):
+def test_extra_installed_reports_a_valid_extra_as_installed(tmp_path):
     (tmp_path / "model2vec.py").write_text("class StaticModel: ...\n")
-    probe = (
-        "import sys; from ddflow.services import embed; print(embed.extra_installed()); "
-        "print('model2vec' in sys.modules)"
-    )
-    assert _run(["-c", probe], tmp_path)[:2] == ["True", "False"]
+    probe = "from ddflow.services import embed; print(embed.extra_installed())"
+    assert _run(["-c", probe], tmp_path)[0] == "True"
+
+
+def test_extra_installed_reports_a_broken_install_as_not_installed(tmp_path):
+    # "findable" is not "installed": the probe finds the package, but the import itself fails.
+    (tmp_path / "model2vec.py").write_text("import this_module_does_not_exist\n")
+    probe = "from ddflow.services import embed; print(embed.extra_installed())"
+    assert _run(["-c", probe], tmp_path)[0] == "False"
+
+
+def test_cap_blas_threads_writes_through_the_env_port():
+    from ddflow.adapters.fakes.env import FakeEnv
+
+    from ddflow.infra import threads
+
+    env = FakeEnv()
+    threads.cap_blas_threads(env)
+    assert env.get("OMP_NUM_THREADS") == "1"
+    assert env.get("OPENBLAS_NUM_THREADS") == "1"
+    assert env.get("MKL_NUM_THREADS") == "1"
+    env.set("OPENBLAS_NUM_THREADS", "4")  # a value the user already set is never changed
+    threads.cap_blas_threads(env)
+    assert env.get("OPENBLAS_NUM_THREADS") == "4"

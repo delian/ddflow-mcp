@@ -27,7 +27,6 @@ import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -81,15 +80,12 @@ def _unavailable(reason: str, backend: str = "") -> Embedding:
 
 
 def extra_installed() -> bool:
-    """Is the ``[rag]`` extra's embedding half (model2vec) installed?"""
-    if _StaticModel is not _UNSET:  # an embedding already tried the import: that answer is exact
-        return _StaticModel is not None
-    # Otherwise stay import-free (r-no-eager-heavy-import): "installed" = the package is findable;
-    # a broken install is reported at the first embedding as unavailable with the reason.
-    try:
-        return find_spec("model2vec") is not None
-    except (ImportError, ValueError):
-        return False
+    """Is the ``[rag]`` extra's embedding half (model2vec) installed?
+
+    A real import: "findable" is not "installed", so a broken install (the package is on
+    the path but its import raises) is reported as absent, not as installed.
+    """
+    return _static_model() is not None
 
 
 def backend(cfg: Config) -> str:

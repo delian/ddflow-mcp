@@ -23,6 +23,9 @@ class FakeEnv:
     def take(self, name: str) -> str:
         return self.values.pop(name, "")
 
+    def setdefault(self, name: str, value: str) -> str:
+        return self.values.setdefault(name, value)
+
     def set(self, name: str, value: str) -> None:
         self.values[name] = value
 

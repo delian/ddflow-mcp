@@ -31,6 +31,9 @@ class Env(Protocol):
     def take(self, name: str) -> str:
         """The variable's value ("" when not set), and it is gone from the environment."""
 
+    def setdefault(self, name: str, value: str) -> str:
+        """The value `name` has now: left as-is when set, else written to `value`."""
+
 
 class SystemEnv:
     """The default adapter: `os.environ`, read live. Stateless."""
@@ -46,6 +49,9 @@ class SystemEnv:
         with contextlib.suppress(KeyError):
             del os.environ[name]
         return value
+
+    def setdefault(self, name: str, value: str) -> str:
+        return os.environ.setdefault(name, value)
 
 
 #: The one stateless instance callers default to; a test passes `FakeEnv` instead.
