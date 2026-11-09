@@ -4071,12 +4071,16 @@
       swarm.conformance_min_calls = 5   [default]
           Fewest tool calls a conformance run must see before accuracy is judged;
           fewer is `unavailable`, never passed.
-      swarm.conformance_idle_s = 5.0   [default]
+      swarm.conformance_idle_s = 120.0   [default]
           Seconds of silence after which a conformance run stops collecting a lane's
-          events.
-      swarm.conformance_lease_wait_s = 10.0   [default]
+          events. Long enough for a real lane's first stream line (kilo takes ~20s to
+          load its MCP server and plugins before the first event; a 5s idle ended
+          collection before any event: B72bcd17b4e).
+      swarm.conformance_lease_wait_s = 90.0   [default]
           Seconds a lane is given to stop after its lease is revoked in a conformance
-          run; a lane still working after that fails the lease level.
+          run; a lane still working after that fails the lease level. Long enough for
+          a real revocation to reach the lane (measured 8.5-14.1s: a 10s wait failed 3
+          of 5 runs, B72bcd17b4e).
       swarm.conformance_tools = ['brief', 'next', 'claim', 'heartbeat', 'show', 'help', 'identify', 'merge', 'complete', 'task', 'memory', 'gate', 'bug', 'session', 'rule', 'view']   [default]
           The lean-core ddflow tool names (the `ddflow_` and `mcp__ddflow__` prefixes
           are ignored) a lane's tool calls are judged against in a conformance run.

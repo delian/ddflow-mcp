@@ -50,8 +50,8 @@ class Params:
 
     min_accuracy: float = 0.9
     min_calls: int = 5
-    idle_s: float = 5.0
-    lease_wait_s: float = 10.0
+    idle_s: float = 120.0
+    lease_wait_s: float = 90.0
     tools: frozenset[str] = frozenset()
     max_age_s: int = 0
     max_events: int = 1000
