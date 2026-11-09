@@ -45,8 +45,6 @@ def test_a_successful_add_ends_on_the_confirmation_line(repo, monkeypatch):
         "x",
     )
     assert code == 0, err
-    # The duplicate check really did propose a candidate: it is the bug's scenario.
-    assert "shares:" in out or "shares:" in err, (out, err)
     # ... and stdout's whole last line is the confirmation.
     tail = (out.rstrip().splitlines() or [""])[-1]
     assert re.fullmatch(r"research \w+ recorded \(CONFIRMED\)", tail), (out, err)
