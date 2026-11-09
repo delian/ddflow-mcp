@@ -36,6 +36,9 @@ class FakeFsio(Fsio):
     def scratch_dir(self) -> Any:
         return _ScratchDir()
 
+    def temp_text(self, text: str, suffix: str = "") -> Iterator[Path]:
+        return _TempText(text, suffix)
+
 
 class _ScratchDir:
     """A `scratch_dir` that yields a `Path` (not `TemporaryDirectory`'s str) and removes it on exit."""
@@ -48,9 +51,6 @@ class _ScratchDir:
 
     def __exit__(self, *exc: object) -> None:
         self._dir.cleanup()
-
-    def temp_text(self, text: str, suffix: str = "") -> Iterator[Path]:
-        return _TempText(text, suffix)
 
 
 class _TempText:
