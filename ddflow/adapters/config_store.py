@@ -99,7 +99,7 @@ class LocalConfigStore:
 
         return cw.apply_edit(
             Path(root),
-            cw.SetPairs([(key, cw.Spelled(str(value)))]),
+            cw.SetPairs([(key, value)]),
             layer=layer,
             person=person,
             agent=agent,

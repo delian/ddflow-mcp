@@ -45,12 +45,14 @@ def _nest(pairs: dict[str, Any]) -> dict[str, Any]:
 
 def _coerce(raw: str) -> Any:
     raw = raw.strip()
-    if raw in ("", "true", "false"):
-        return raw == "true"
+    if raw == "true":
+        return True
+    if raw == "false":
+        return False
     try:
         return int(raw)
     except ValueError:
-        return raw
+        return raw  # the text as typed, the empty string included
 
 
 @fake
@@ -82,7 +84,7 @@ class FakeConfigStore(ConfigStore):
         return resolved.explain()
 
     def set(self, root, key, value, *, layer="file", person=False, agent=""):
-        self.files[key] = str(value)
+        self.files[key] = "true" if value is True else "false" if value is False else str(value)
 
     def unset(self, root, key, *, layer="file", person=False, agent=""):
         self.files.pop(key, None)

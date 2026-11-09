@@ -61,3 +61,11 @@ def test_resolve_layers_over_env_in_order(tmp_path, monkeypatch):
     monkeypatch.setenv("DDFLOW_LEASE_TTL_S", "5")
     data, sources, _ = _resolved(LocalConfigStore(), tmp_path)
     assert sources["lease.ttl_s"] == "env" and data["lease"]["ttl_s"] == 5
+
+
+def test_the_fake_keeps_an_empty_string_and_a_bool_typing(tmp_path):
+    fake = FakeConfigStore({"ui.theme": "", "core.enabled": "true"})
+    data, _, _ = _resolved(fake, tmp_path)
+    assert data["ui"]["theme"] == "" and data["core"]["enabled"] is True
+    fake.set(tmp_path, "core.enabled", False)
+    assert fake.resolve(tmp_path).as_dict()["core"]["enabled"] is False
