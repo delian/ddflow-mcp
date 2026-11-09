@@ -90,7 +90,7 @@ def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
 
     @functools.cache
     def longest(m: str, visited: frozenset[str]) -> int:
-        deps = [d for d in edges.get(m, ()) if d in nodes and d not in visited]
+        deps = [d for d in edges.get(m, ()) if d in nodes and d not in visited and d != m]
         return max((1 + longest(d, visited | {m}) for d in deps), default=0)
 
     return {m: longest(m, frozenset()) for m in nodes}
