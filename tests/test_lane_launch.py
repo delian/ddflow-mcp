@@ -103,10 +103,8 @@ def cat_route(tmp_path, model):
     a family id to its vendor (claude -> anthropic, deepseek -> deepseek); this puts the
     route the template names behind the model, so the lane scores under that vendor."""
     (tmp_path / "models.toml").write_text(
-        '[route.lan-vllm]\n'
-        'endpoint = {{ v = {{ kind = "openai", base_url = "http://h:8000/v1", model = "{0}", api_key_env = "LAN_ENDPOINT_KEY" }}, s = "verified", d = "2026-10-30" }}\n'.format(
-            model
-        )
+        "[route.lan-vllm]\n"
+        f'endpoint = {{ v = {{ kind = "openai", base_url = "http://h:8000/v1", model = "{model}", api_key_env = "LAN_ENDPOINT_KEY" }}, s = "verified", d = "2026-10-30" }}\n'
     )
     return modelreg.load(local_dir=tmp_path)
 
