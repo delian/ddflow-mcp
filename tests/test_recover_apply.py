@@ -125,3 +125,4 @@ def test_a_plain_claim_of_an_unswept_expired_lease_still_sends_to_recover(repo):
     assert out.exit == 3
     assert "ddflow recover --item T1" in out.reason, out.reason
     assert "ddflow claim T1 --approval request" in out.reason, out.reason
+    assert "ddflow claim T1 --force" not in out.reason, "an agent's --force is dropped: " + out.reason
