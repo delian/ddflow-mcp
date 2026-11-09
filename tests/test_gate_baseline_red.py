@@ -122,6 +122,41 @@ def test_a_failure_the_base_does_not_show_stays_failed(repo) -> None:
     assert body["evidence"]["baseline"]["red"] is False
 
 
+def test_a_new_failure_reason_names_the_commit_it_compared_with(repo) -> None:
+    """B7c0121c0c4: "main" is a moving branch -- by the time the reason is read the live tip
+    has changed, so `not failing on main` names a commit the branch has left behind and a
+    reader cannot tell which commit was actually tested. The reason must name the commit
+    (`base_sha`) it measured, not only the branch name."""
+    from ddflow.api import gate_baseline as GB
+    from ddflow.services.gates.defs import GateDef
+
+    _project(repo, base_healthy=True)  # main passes test_a
+    base_sha = _sha(repo)
+    (repo / "healthy").unlink()  # the item's tree breaks what the base has: a new failure
+    cfg = SimpleNamespace(gates=SimpleNamespace(baseline_cache_ttl_s=0, baseline_red_auto="on"))
+    ev: dict = {"failed_tests": [ID]}
+    gdef = GateDef(id="unit_tests", command="./bin/pytest -q tests/")
+    it = SimpleNamespace(id="T1", base="main")
+
+    def run(g, where=None):
+        got = subprocess.run(["sh", "-c", g.command], cwd=where, capture_output=True, text=True)
+        failed = got.returncode != 0
+        return (
+            "failed" if failed else "passed",
+            {
+                "exit": got.returncode,
+                "summary": [f"1 {'failed' if failed else 'passed'} in 0.1s"],
+                "tail": got.stdout,
+                "failed_tests": [ID] if failed else [],
+            },
+        )
+
+    outcome, why = GB.apply(repo, cfg, "worker", it, "unit_tests", gdef, "failed", ev, run, False)
+    assert outcome == "failed", why
+    assert ev["baseline"]["base_sha"] == base_sha
+    assert f"not failing on main ({base_sha[:8]})" in why, why
+
+
 def test_unattributable_failures_stay_failed(repo) -> None:
     from ddflow.services.gates import baseline_red as BR
 
