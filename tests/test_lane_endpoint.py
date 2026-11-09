@@ -60,6 +60,7 @@ def test_verified_route_renders_for_both_harnesses(tmp_path):
 
 
 def test_key_by_name_only_and_keyless(tmp_path, monkeypatch):
+    monkeypatch.delenv("LAN_ENDPOINT_KEY", raising=False)
     t = EXAMPLE.read_text().replace(', api_key_env = "LAN_ENDPOINT_KEY"', "")
     ep = E.resolve(_cat(tmp_path, t.replace('s = "unverified"', 's = "verified"')), "lan-vllm")
     assert isinstance(ep, E.Endpoint) and E.launch_env(ep) == {}
