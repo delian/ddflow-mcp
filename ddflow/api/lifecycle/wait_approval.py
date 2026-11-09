@@ -325,8 +325,7 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
         return {
             **out,
             "status": "hopeless",
-            "why": f"{job_id} is over ({s.detail}) but recorded no review round; "
-            "re-run the review",
+            "why": f"{job_id} is over ({s.detail}) but recorded no review round; re-run the review",
         }
     # No item to check (a detached review of a commit/branch, or its item is gone): the
     # job being over is the best signal the handle itself can give.
@@ -361,9 +360,7 @@ def _job_advice(v: dict[str, Any], job_id: str) -> str:
     return f"still running: run `ddflow wait --job {job_id}` again to keep waiting"
 
 
-def _job_outcome(
-    v: dict[str, Any], data: dict[str, Any], waited: float, job_id: str
-) -> O.Outcome:
+def _job_outcome(v: dict[str, Any], data: dict[str, Any], waited: float, job_id: str) -> O.Outcome:
     """The Outcome of a job wait: ready (exit 0), hopeless (exit 2, waiting cannot help),
     or still running at the deadline (exit 2, naming the wait that would resume)."""
     if v["status"] == "ready":
@@ -419,8 +416,7 @@ def _wait_job(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
     if item or phase or lease or globs or token:
         return O.failed(
             "wait",
-            "job is what to wait on instead of an item, phase, globs, lease or token: "
-            "give one",
+            "job is what to wait on instead of an item, phase, globs, lease or token: give one",
             **empty_v({"status": "blocked", "ready": [], "waiting_on": [], "blocked": []}),
         )
     log, cfg, st = _load(repo, agent)

@@ -18,7 +18,6 @@ import pytest
 
 from ddflow.api import lifecycle as A
 from ddflow.api.lifecycle import wait_approval as WA
-from ddflow.config import Config
 from ddflow.core import outcome as O
 from ddflow.core.model import Job, State
 from ddflow.core.records.gates import GateRecord
@@ -44,30 +43,43 @@ def _state(round_at: str | None):
     gates = {"critic": GateRecord(gate="critic", outcome="passed", at=round_at)} if round_at else {}
     st.items["fix-X"] = Item(id="fix-X", kind="task", gates=gates)
     st.jobs["J1"] = Job(
-        id="J1", item="fix-X", command="python -m ddflow review fix-X", pid=1,
-        host=J.host(), log="jobs/j.log", started_at="2026-01-01T00:00:00Z",
+        id="J1",
+        item="fix-X",
+        command="python -m ddflow review fix-X",
+        pid=1,
+        host=J.host(),
+        log="jobs/j.log",
+        started_at="2026-01-01T00:00:00Z",
     )
     return st
 
 
 def test_a_job_wait_blocks_while_running_then_wakes_ready_with_next_actions(repo, monkeypatch):
-    cfg = Config()
     log = _log(repo)
     # A detached review of a commit/branch carries no item: `item` is empty, so "over" is
     # the handle's only signal and `next_actions` points at the job's log (no item round
     # to check). The item-with-round vs item-without-round verdicts are the `_judge_job`
     # tests below.
     log.append(
-        "job.started", "J1",
-        {"item": "", "command": "python -m ddflow review --commit abc", "pid": 1, "host": J.host(), "log": "jobs/j.log"},
+        "job.started",
+        "J1",
+        {
+            "item": "",
+            "command": "python -m ddflow review --commit abc",
+            "pid": 1,
+            "host": J.host(),
+            "log": "jobs/j.log",
+        },
     )
     running = {"on": True}
     monkeypatch.setattr(
         J,
         "status",
-        lambda job: J.Status("running", "pid 1 running")
-        if running["on"]
-        else J.Status("exited", "exited 0 (from its log)", 0),
+        lambda job: (
+            J.Status("running", "pid 1 running")
+            if running["on"]
+            else J.Status("exited", "exited 0 (from its log)", 0)
+        ),
     )
 
     # While it is running the wait refuses to guess, and offers no next actions.
@@ -94,7 +106,9 @@ def test_a_job_over_with_a_recorded_round_is_ready(monkeypatch):
 def test_a_job_over_with_NO_recorded_round_is_hopeless_not_ready(monkeypatch):
     # The job is over (killed or crashed before recording) but the item has no round:
     # waiting cannot record one, and waking READY would promise a round that is not there.
-    monkeypatch.setattr(J, "status", lambda job: J.Status("gone", "pid 1 is gone and its log records no exit"))
+    monkeypatch.setattr(
+        J, "status", lambda job: J.Status("gone", "pid 1 is gone and its log records no exit")
+    )
     v = WA._judge_job(_state(None), "J1", 0.0)
     assert v["status"] == "hopeless", v["why"]
     assert "recorded no review round" in v["why"]
@@ -116,12 +130,20 @@ def test_a_job_on_another_host_is_hopeless(repo):
     st = State()
     st.jobs["J1"] = Job(id="J1", item="", pid=0, host="some-other-host", started_at="2026-01-01")
     log = _log(repo)
-    log.append("job.started", "J1", {"item": "", "command": "x", "pid": 0, "host": "some-other-host", "log": ""})
+    log.append(
+        "job.started",
+        "J1",
+        {"item": "", "command": "x", "pid": 0, "host": "some-other-host", "log": ""},
+    )
     out = A.wait(repo, job="J1", timeout_s=5, poll_s=0.05, agent="asker")
     assert out.exit == O.NOTHING and "cannot be checked" in out.reason
 
 
 def test_job_wait_refuses_an_item_with_it(repo):
-    _log(repo).append("job.started", "J1", {"item": "fix-X", "command": "x", "pid": 1, "host": J.host(), "log": ""})
+    _log(repo).append(
+        "job.started",
+        "J1",
+        {"item": "fix-X", "command": "x", "pid": 1, "host": J.host(), "log": ""},
+    )
     out = A.wait(repo, job="J1", item="fix-X", timeout_s=5, agent="asker")
     assert out.exit == O.FAIL and "job is what to wait on" in out.reason
