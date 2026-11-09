@@ -80,6 +80,7 @@ def _is_local_endpoint(base_url: str) -> bool:
     except ValueError:
         return False
 
+
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
 #: size_after)` of the written shard. A module registers itself here (`services.shardmarks`
 #: keeps the shard high-water mark current, Ba24a8d32ee) so every EventLog -- the CLI's

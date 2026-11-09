@@ -78,9 +78,7 @@ def test_the_unapproved_reviewer_hint_reads_the_subject_not_the_redacted_evidenc
     dig = "d" * 16
     state = State()
     state.reviewer_writes[dig] = {"name": NAME}
-    got = _unapproved_reviewer(
-        state, {"reviewer": "[REDACTED:name]", "reviewer_digest": dig}
-    )
+    got = _unapproved_reviewer(state, {"reviewer": "[REDACTED:name]", "reviewer_digest": dig})
     assert got == NAME
 
 
