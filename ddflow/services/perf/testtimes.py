@@ -89,19 +89,19 @@ def fold(cases: list[TestCase], repo, gate: str, env: str = "") -> None:
     fingerprint class (empty when unknown); the file/test id is folded into a content HASH in
     the digest (never a raw path in the ``env`` or ``digest`` slots). Only the rollup reaches
     evidence. A case with no duration is not a sample."""
-    import hashlib
     import time
 
+    from ddflow.adapters import digest
     from ddflow.services.perf import store
 
     for c in cases:
         if c.duration_s is None:
             continue
-        digest = hashlib.sha256(f"{c.file}:{c.test_id}".encode()).hexdigest()[:16]
+        digest_hex = digest.content_digest(f"{c.file}:{c.test_id}", length=16)
         store.append(
             repo,
             "test_durations",
-            store.Sample(time.time(), env, c.duration_s, gate, digest),
+            store.Sample(time.time(), env, c.duration_s, gate, digest_hex),
         )
 
 
