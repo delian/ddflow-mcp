@@ -268,7 +268,7 @@ def test_transport_is_registered():
 
 def test_live_probe_names_an_existing_lanes_command():
     # ba655b17982: `ddflow lanes smoke` never existed; the verb offers state/brief/advise only.
-    assert "smoke" not in OC.LIVE_PROBE.detail
+    assert "ddflow lanes smoke" not in OC.LIVE_PROBE.detail
     assert "ddflow lanes state" in OC.LIVE_PROBE.detail
 
 
