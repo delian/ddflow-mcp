@@ -204,18 +204,24 @@ def test_agent_identity_is_required(tmp_path, tree):
     assert isinstance(r, ld.Result) and "identity" in r.detail
 
 
-def test_mcp_entry_points_the_server_at_the_lane_worktree_not_the_primary(tmp_path, tree):
-    """The regression for bug B7d091d0f35: the lane's ddflow MCP server must see the lane's
-    WORKTREE as its spawn location, not the primary. Pinning `--repo` to the primary made
-    `claim` answer `here=false` and create a second worktree instead of adopting the one the
-    lane was launched in, because callers resolve the shared event log through the primary but
-    keep `called_from` = the spawn location for worktree adoption."""
+def _mcp_ddflow_command(lp) -> list[str]:
+    doc = json.loads(lp.endpoint.config.read_text())
+    return doc["mcp"]["ddflow"]["command"]
+
+
+def test_the_lane_mcp_server_is_spawned_in_the_lane_worktree_not_the_primary(tmp_path, tree):
+    """The regression for bug B7d091d0f35: the lane's ddflow MCP server must be told the
+    lane's WORKTREE as its spawn location, not the primary. Pinning `--repo` to the primary
+    hid the launched tree from the MCP path, so `claim` answered `here=false` and created a
+    SECOND worktree instead of adopting the one the lane was launched in (the pre-tool hook
+    then refused the lane's write as outside the lane worktree)."""
     repo, wt, _home = tree
-    argv = OC.mcp_entry(repo, "lane-7", worktree=wt)["command"]
-    assert "--repo" in argv, argv
-    tree_arg = argv[argv.index("--repo") + 1]
-    assert tree_arg == str(wt), argv  # the spawned tree, resolved to the primary + kept as called_from
-    assert tree_arg != str(repo), argv  # the primary alone hides the lane's tree from claim
+    lp = prep(tmp_path, tree)
+    command = _mcp_ddflow_command(lp)
+    assert "--repo" in command, command
+    tree_arg = command[command.index("--repo") + 1]
+    assert tree_arg == str(wt), command  # the spawned tree, resolved to the primary + kept for claim
+    assert tree_arg != str(repo), command  # the primary alone hides the lane's tree from claim
 
 
 # --- running it: stub binary, stub endpoint -------------------------------------------------
