@@ -152,6 +152,7 @@ def test_claim_force_by_approval_for_an_agent(proj, monkeypatch):
     assert out.exit == 0, out.reason
     assert calls[-1] is True
     assert _state(proj).items["T1"].lease.holder == "bot"
+    assert asks_of(_state(proj))[ask_id]["used"] == 1  # the landed forced claim recorded the use
     # a person has --force: the approval route changes nothing for them
     out = CL(proj, "T1", no_worktree=True, agent="", approval="request")
     assert out.exit == 3
