@@ -57,6 +57,11 @@ def _check(cmd: str, env: dict | None = None, **kw):
         # a `case` inside a `$((` arithmetic body is an arithmetic token, not a shell case, so
         # a later `esac` must not swallow the real `git push` after the arithmetic (critic)
         "echo $((case 0)); git push origin main; echo esac",
+        # a double quote a `$(...)`/backtick body opens inside an outer double quote is not the
+        # outer quote's close: bash runs the `git push` after the `;` (critic, `_strip_continuations`
+        # must not let the nested quote swallow the separator).
+        'echo "$(echo "x")"; git push origin main',
+        'echo "`echo "x"`" && git push origin main',
     ],
 )
 def test_refused(cmd):
