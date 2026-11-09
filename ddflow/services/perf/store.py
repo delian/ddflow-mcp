@@ -299,10 +299,12 @@ def write_aggregate(
 
 
 def read_aggregates(repo: Path, series: str) -> list[tuple[float, dict[str, dict[str, Any]]]]:
-    """Every committed daily aggregate of a series, oldest first, for the merged series API."""
+    """Every committed daily aggregate of a series, OLDEST FIRST by day number (the file
+    names are epoch-day integers, so ``10.json`` sorts before ``1.json`` lexicographically,
+    which must not be the order)."""
     path = aggregate_path(repo, series, 0.0)
     out: list[tuple[float, dict[str, dict[str, Any]]]] = []
-    for file in sorted(path.parent.glob("*.json")):
+    for file in path.parent.glob("*.json"):
         try:
             day = float(file.stem)
             d = json.loads(file.read_text("utf-8"))
@@ -310,6 +312,7 @@ def read_aggregates(repo: Path, series: str) -> list[tuple[float, dict[str, dict
                 out.append((day, d))
         except (ValueError, OSError):
             continue
+    out.sort(key=lambda pair: pair[0])  # day number, ascending (oldest first)
     return out
 
 
