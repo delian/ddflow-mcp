@@ -171,7 +171,10 @@ def local_endpoint(base_url: str) -> bool:
     ``http-home`` import contract forbids every other module importing it."""
     import ipaddress
 
-    host = (urllib.parse.urlparse(base_url).hostname or "").lower()
+    try:
+        host = (urllib.parse.urlparse(base_url).hostname or "").lower()
+    except ValueError:  # e.g. an unterminated IPv6 literal: not a local endpoint
+        return False
     if not host:
         return False
     # A literal address first: global means public, anything else (private/loopback/
