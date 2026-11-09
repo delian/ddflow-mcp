@@ -78,8 +78,13 @@ class Rollup:
 
 def _series_file(series: str) -> str:
     """A series key is a single path-sane token; anything that could resolve outside the
-    ring directory is refused (a metric name never needs a separator)."""
-    if not series or series in (".", "..") or "/" in series or "\\" in series or ".." in series:
+    ring directory is refused (a metric name never needs a separator, ``..``, or a drive
+    prefix on any host)."""
+    if (
+        not series
+        or series in (".", "..")
+        or any(c in series for c in ("/", "\\", ":", ".."))
+    ):
         raise ValueError(f"series must be a plain name, got {series!r}")
     return series + ".jsonl"
 
