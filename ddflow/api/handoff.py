@@ -67,18 +67,12 @@ def suggest(
     except send.SuggestError as exc:
         return O.failed("handoff.suggest", str(exc))
     sid = out.id
-    nxt = (
-        f"apply:  ddflow suggestions applied {sid}   (MCP ddflow_suggestions action=applied id={sid})\n"
-        f"reject: ddflow suggestions rejected {sid} --reason ...  "
-        f"(MCP ddflow_suggestions action=rejected id={sid} reason=...)\n"
-        f"show:   ddflow suggestions show {sid}       (MCP ddflow_suggestions action=show id={sid})\n"
-        f"expiry: ddflow suggestions expired {sid}    (MCP ddflow_suggestions action=expired id={sid})"
-    )
     text = (
         f"suggested to {to_agent} on {item}\n"
+        f"id: {sid}\n"
         f"probe: {out.probe}\n"
         f"ref: {out.ref or '(no base: blob stored)'}\n"
         f"blob: {out.blob}\n"
-        f"owner next:\n{nxt}"
+        f"the owner answers it in their inbox (ddflow brief / wait)"
     )
     return O.ok("handoff.suggest", id=sid, ref=out.ref, probe=out.probe, blob=out.blob, text=text)

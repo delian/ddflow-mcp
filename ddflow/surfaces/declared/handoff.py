@@ -86,7 +86,7 @@ COMMANDS: tuple[Command, ...] = (
         ),
         tool_order=("item", "reason", "commit", "diff", "blob", "kind", "evidence"),
         call=_suggest,
-        payload=("ref", "probe", "blob"),
+        payload=("id", "ref", "probe", "blob"),
         render=_suggest_text,
     ),
 )
