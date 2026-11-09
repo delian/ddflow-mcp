@@ -17,6 +17,8 @@ def _call(repo, a, agent, called_from=None, shell_cwd=None):
         path=a.get("path") or "",
         model=a.get("model") or "",
         agent=agent,
+        append=bool(a.get("append")) if a.get("append") is not None else False,
+        body=a.get("body") or "",
         called_from=called_from,
     )
 
@@ -44,6 +46,18 @@ COMMANDS: tuple[Command, ...] = (
                 "path",
                 help="The document path.",
                 cli_help="the document (default docs/ddflow/decisions/<slug>.md)",
+            ),
+            Param(
+                "append",
+                type="boolean",
+                default=False,
+                help="Keep a document that already exists instead of replacing it.",
+                cli_help="append to the document instead of replacing it (keeps an existing doc)",
+            ),
+            Param(
+                "body",
+                help="The operator's own words to append to the restated record (e.g. a Q-and-A table).",
+                cli_help="the body to append below the restated record (no second merge needed)",
             ),
             Param("model", default="", cli_help="the author's model family"),
         ),

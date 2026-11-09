@@ -31,6 +31,18 @@ def slug_of(decision_id: str) -> str:
     return re.sub(r"-r\d+$", "", re.sub(r"^D-", "", decision_id))
 
 
+def _default_rel(it, decision_id: str) -> str:
+    """The doc path: a ``.md`` glob under ``DOC_DIR`` the task already names, else the slug.
+
+    A decide task that globs `docs/ddflow/decisions/answers.md` must land there, not at
+    the id's `<slug>.md`, which the globs do not cover (B502b06b881)."""
+    prefix = DOC_DIR.rstrip("/") + "/"
+    for g in it.globs:
+        if g.startswith(prefix) and g.endswith(".md"):
+            return g
+    return f"{DOC_DIR}/{slug_of(decision_id)}.md"
+
+
 def render(item: str, d) -> str:
     """The decision document: the record restated, the log staying the source of truth."""
     head = f"{d.status} · decided by {d.decided_by or 'unrecorded'}"
@@ -91,7 +103,7 @@ def _check(repo, cfg, st, item: str, decision_id: str, path: str):
         return O.refused(KIND, f"{decision_id} is not in force ({d.status})", item=item)
     if not it.lease or not it.worktree:
         return O.refused(KIND, f"claim {item} first: the document is written under its lease")
-    rel = path or f"{DOC_DIR}/{slug_of(decision_id)}.md"
+    rel = path or _default_rel(it, decision_id)
     if not any(inside(rel, g) for g in it.globs):
         return O.refused(
             KIND,
@@ -132,9 +144,15 @@ def decide(
     path: str = "",
     model: str = "",
     agent: str = "",
+    append: bool = False,
+    body: str = "",
     called_from: Path | None = None,
 ) -> O.Outcome:
-    """Write the document for ``decision_id``, then land and complete decide task ``item``."""
+    """Write the document for ``decision_id``, then land and complete decide task ``item``.
+
+    ``append`` keeps a document that already exists (a proposal drafted before the decision)
+    instead of replacing it; ``body`` adds the operator's own words (a Q-and-A table, say) that
+    would otherwise need a second merge on a completed item."""
     _log, cfg, st = _load(repo, agent)
     got = _check(repo, cfg, st, item, decision_id, path)
     if isinstance(got, O.Outcome):
@@ -143,7 +161,12 @@ def decide(
     wt = W.Worktree(item=item, path=W.load_path(repo, it.worktree), branch=it.branch, base=it.base)
     target = wt.path / rel
     target.parent.mkdir(parents=True, exist_ok=True)
-    replace_text(target, render(item, d))
+    block = render(item, d)
+    if body:
+        block = block.rstrip("\n") + "\n\n" + body.strip() + "\n"
+    if append and target.exists():
+        block = target.read_text().rstrip("\n") + "\n\n" + block
+    replace_text(target, block)
     made = W.commit(wt, f"decision {decision_id}: {d.title}"[:120], [rel])
     if not made.ok and "nothing to commit" not in (made.out + made.err):
         return O.failed(KIND, (made.err or made.out).strip(), item=item)
