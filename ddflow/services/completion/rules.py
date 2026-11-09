@@ -390,7 +390,13 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     v.trivial = _trivial_declaration(it, cfg, repo, own)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
     for note in refine_stale_notes(
-        stale, it, cwd, landed, own, cfg.review.triage_ignore_globs, cfg.review.doc_globs,
+        stale,
+        it,
+        cwd,
+        landed,
+        own,
+        cfg.review.triage_ignore_globs,
+        cfg.review.doc_globs,
         cfg.locks.review_reuse,
     ):
         if note.unverified:
@@ -412,7 +418,15 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     return v
 
 
-def _reuse_note(note: StaleNote, recorded: dict, changed: list[str], entries, own_id: str, ignore: Sequence[str], docs: Sequence[str]) -> StaleNote:
+def _reuse_note(
+    note: StaleNote,
+    recorded: dict,
+    changed: list[str],
+    entries,
+    own_id: str,
+    ignore: Sequence[str],
+    docs: Sequence[str],
+) -> StaleNote:
     """A review gate's note under `[locks].review_reuse` = disjoint: kept (``reused`` carries the
     reason), narrowed to the overlapping files (a delta), or the note as it was when git cannot
     tell (fail closed). Extracted so `refine_stale_notes` stays under the complexity ratchet."""

@@ -24,13 +24,13 @@ Measured by the wrong-keep rate: a kept review followed by a finding on the same
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
+from ..infra import worktree as W
 from .gates.reviewed_paths import ignorable
 from .handoff.refs import patch_id as _patch_id
-from ..infra import worktree as W
 
 KEEP = "keep"
 DELTA = "delta"
@@ -77,7 +77,9 @@ def classify(
     whole. A moved path that is not new work for triage (a reviewed doc matching ``docs``, a
     test matching ``ignore``) is exempt here exactly as in `refine_stale_notes`."""
     if not isinstance(recorded, dict) or not recorded:
-        return Verdict(STALE, "the round recorded no reviewed files, so its scope cannot be re-checked")
+        return Verdict(
+            STALE, "the round recorded no reviewed files, so its scope cannot be re-checked"
+        )
     if entries is None:
         return Verdict(STALE, "the tree being completed could not be read")
     if not own_id:
@@ -87,7 +89,9 @@ def classify(
             "so the review cannot be reused",
         )
     if changed is None:
-        return Verdict(STALE, "the item's changed set could not be read, so the review cannot be reused")
+        return Verdict(
+            STALE, "the item's changed set could not be read, so the review cannot be reused"
+        )
     seen = set(recorded)
     gone = {p for p in (seen | set(changed)) if p not in entries}
     # A file the item changes now that the round never reviewed is work the round did not
@@ -104,7 +108,9 @@ def classify(
         and not ignorable(p, recorded, ignore, docs, gone)
     )
     if overlap:
-        shown = ", ".join(overlap[:8]) + (f" (+{len(overlap) - 8} more)" if len(overlap) > 8 else "")  # noqa: PLR2004
+        shown = ", ".join(overlap[:8]) + (
+            f" (+{len(overlap) - 8} more)" if len(overlap) > 8 else ""
+        )  # noqa: PLR2004
         return Verdict(DELTA, f"re-review only the overlapping files: {shown}", tuple(overlap))
     return Verdict(
         KEEP,
