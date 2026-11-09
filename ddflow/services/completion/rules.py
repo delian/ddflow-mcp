@@ -29,6 +29,7 @@ from ...config import Config
 from ...core import ids as IDS
 from ...core.admission import is_shared
 from ...core.model import Item, State
+from ...core.records.gates import GateOutcome
 from ...infra import worktree as W
 from .. import chore as CO
 from .. import gate_accept as GA
@@ -264,6 +265,29 @@ def _independence(
     return why, []
 
 
+def _skipped_gaps(it, missing) -> list[str]:
+    """The unsettled required gates recorded `skipped` -- the skip-shaped coverage gaps
+    (Bb67dc543b6). Filtered through `missing` (the `_unsettled` set), so a settled non-required
+    skip is never one. The `skipped` word is `GateOutcome.SKIPPED.value`, the third name of
+    `COVERAGE_GAP_OUTCOMES` (the other two reach `coverage_gaps` via `GateStatus.unavailable`).
+    Extracted so `verdict` stays under the complexity limit."""
+    return [g for g in missing if it.gate_outcome(g) == GateOutcome.SKIPPED.value]
+
+
+def _coverage_gap_blocker(cfg, gaps) -> str:
+    """The blocker when `[gates].unavailable_is_failure` is on: a coverage gap of ANY kind
+    (`unavailable`, `partial` or a required `skipped`) blocks like a failure. Takes the verdict's
+    `coverage_gaps` (the ONE spelling, never a rebuild) so the knob cannot drift from the gap set
+    the completion site records (roborev on Bb67dc543b6). `skipped` is only IN that set when it
+    is a required gate that did not settle (Bb67dc543b6)."""
+    if cfg.gates.unavailable_is_failure and gaps:
+        return (
+            f"a coverage gap blocks like a failure: {', '.join(gaps)} "
+            f"([gates].unavailable_is_failure is on)"
+        )
+    return ""
+
+
 def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str = "") -> Verdict:
     """Why this item may or may not complete. Reads only; writes nothing."""
     it = state.items.get(item_id)
@@ -275,7 +299,6 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it), repo=repo)
     v = Verdict(
         item=item_id,
-        coverage_gaps=list(s.unavailable),
         kind=it.kind,
         na_evidence=[f"{g}: {why}" for g, why in s.not_applicable.items()],
     )
@@ -289,6 +312,12 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     missing = _unsettled(cfg, it, excused, s, required, state)
     v.unmet_gates = missing
+    # Coverage gaps are the unmet required gates that did not pass but are on the record:
+    # `unavailable`/`partial` (the whole `s.unavailable` set) AND a `skipped` required gate
+    # (Bb67dc543b6, filtered through the SAME `_unsettled` set, so a non-required skip that
+    # legitimately settled is never a gap). The standing `complete_unavailable` rule answers a
+    # routine completion over any of them alike. `_coverage_note` separates the three kinds.
+    v.coverage_gaps = list(s.unavailable) + _skipped_gaps(it, missing)
     v.warnings += _accepted_warnings(state, it, s, required, missing, cfg)
     if missing:
         v.blockers.append(
@@ -364,19 +393,16 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"it from required."
         )
 
-    if cfg.gates.unavailable_is_failure and s.unavailable:
-        v.blockers.append(
-            f"gate(s) could not run: {', '.join(s.unavailable)} "
-            f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
-        )
+    if blocker := _coverage_gap_blocker(cfg, v.coverage_gaps):
+        v.blockers.append(blocker)
 
     v.independence, no_reviewer = _independence(
         state, cfg, it, model, gdefs, excused, changed_paths(repo, it), repo
     )
     v.blockers += no_reviewer
 
-    if s.unavailable:
-        v.coverage_note = _coverage_note(it, s.unavailable)
+    if v.coverage_gaps:
+        v.coverage_note = _coverage_note(it, v.coverage_gaps)
 
     readme = readme_report(state, cfg, item_id, repo=repo)
     if readme:
@@ -520,7 +546,10 @@ def refine_stale_notes(
         )
         if moved:
             out.append(
-                replace(note, why=f"the files it reviewed or this item changes differ: {shown_names(moved)}")
+                replace(
+                    note,
+                    why=f"the files it reviewed or this item changes differ: {shown_names(moved)}",
+                )
             )
     return out
 
@@ -683,13 +712,17 @@ def _is_test_or_doc_path(path: str) -> bool:
 
 
 def _coverage_note(it, gaps: list[str]) -> str:
-    """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
-    one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
-    ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
-    its `coverage`; a `partial_exits` gate has none, and its runner's own counts (from
-    the summary lines) stand in for it (bug B-gate-status-partial-did-not-run)."""
-    never = [g for g in gaps if it.gate_outcome(g) != "partial"]
+    """Say what each gap IS. ``gaps`` holds `unavailable`, `partial` and `skipped` gates
+    (Verdict.coverage_gaps), and one sentence for all of them called a critic that
+    reviewed 3 of 6 chunks one that "never ran" -- erasing the half it did
+    (B72dd4dde17). A reviewer's partial evidence carries its `coverage`; a
+    `partial_exits` gate has none, and its runner's own counts (from the summary lines)
+    stand in for it (bug B-gate-status-partial-did-not-run). A skipped gate is named a
+    skip, never a run (Bb67dc543b6)."""
+    never = [g for g in gaps if it.gate_outcome(g) not in ("partial", "skipped")]
+    skipped = [g for g in gaps if it.gate_outcome(g) == "skipped"]
     parts = [f"{', '.join(never)} never ran"] if never else []
+    parts += [f"{', '.join(skipped)} skipped"] if skipped else []
     for g in gaps:
         if it.gate_outcome(g) == "partial":
             # `is None`/`== ""`, not falsiness: a coverage of 0 is a figure, and the
