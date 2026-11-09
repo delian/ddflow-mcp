@@ -992,28 +992,28 @@
   "[]\n",
   ""
  ],
- [
   [
-   "cadence",
-   "--ran",
-   "nosuch"
+   [
+    "cadence",
+    "--ran",
+    "nosuch"
+   ],
+   1,
+   "",
+   "unknown cadence name 'nosuch': not a configured pass. Known: architecture_review, dedupe_sweep, integration_tests, lessons_compression, lessons_pass, mutation_tests\n"
   ],
-  0,
-  "recorded cadence run: nosuch\n",
-  ""
- ],
- [
   [
-   "cadence",
-   "--ran",
-   "architecture",
-   "--note",
-   "n"
+   [
+    "cadence",
+    "--ran",
+    "architecture",
+    "--note",
+    "n"
+   ],
+   1,
+   "",
+   "unknown cadence name 'architecture': not a configured pass. Known: architecture_review, dedupe_sweep, integration_tests, lessons_compression, lessons_pass, mutation_tests\n"
   ],
-  0,
-  "recorded cadence run: architecture\n",
-  ""
- ],
  [
   [
    "import"
