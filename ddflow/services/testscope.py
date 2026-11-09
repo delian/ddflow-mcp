@@ -283,6 +283,17 @@ def _after_ci(cfg, st, it, command: str, tree: Path, base: str, lines, ran: dict
     difference -- the tests this gate's selection holds that ci did not run."""
     sha = str(ran.get("sha", ""))[:12]
     if ran.get("scope") == "full":
+        summary = (it.gates["ci"].evidence or {}).get("summary")
+        if not summary:
+            # A "full" ci whose pre-commit range held no file the `tests` hook reaches ran no
+            # pytest at all (only the lint/scan hooks), so it covers nothing: the whole suite
+            # must run HERE (B847e0494de).
+            return Scope(
+                "full",
+                "the ci gate recorded a full scope but no pytest summary: the test hook never "
+                "ran, so no whole-suite run covers this tree",
+                changed_lines=lines,
+            )
         return Scope(
             "covered", "the ci gate ran the whole suite on this tree", changed_lines=lines,
             covered_by=f"ci full run {sha}",
