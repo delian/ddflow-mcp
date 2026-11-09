@@ -41,3 +41,26 @@ def test_research_show_reads_one_note(repo):
     code, out, err = run_cli(repo, "research", "show", "R1")
     assert code == 0, err
     assert "R1 [research]" in out
+
+
+def test_research_show_takes_id_from_the_flag_too(repo):
+    """`research show --id R1` reads the note; the positional is accepted but does not
+    clobber a parsed `--id`."""
+    run_cli(repo, "init")
+    run_cli(
+        repo, "research", "add", "--id", "R1", "--question", "q one", "--verdict", "THEORETICAL"
+    )
+    code, out, err = run_cli(repo, "research", "show", "--id", "R1")
+    assert code == 0, err
+    assert "R1 [research]" in out
+
+
+def test_research_add_refuses_a_stray_positional_id(repo):
+    """`research add R1 --question q --verdict THEORETICAL` is not `research add --id R1`:
+    the positional id belongs to `research show`, so a stray token is refused, not dropped."""
+    run_cli(repo, "init")
+    code, _, err = run_cli(
+        repo, "research", "add", "R1", "--question", "q one", "--verdict", "THEORETICAL"
+    )
+    assert code != 0, err
+    assert "research show" in err

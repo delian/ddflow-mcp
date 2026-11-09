@@ -353,11 +353,18 @@ def register(s) -> None:
 
     def research(a, c: Ctx) -> int:
         if a.verb == "list":
+            if a.research_id is not None:
+                rs.error("a positional id goes to `research show <id>`")
             a.list_kind = "research"
             return cmd_list(a, c)
         if a.verb == "show":
-            a.id = a.research_id or ""
+            if a.research_id is not None:
+                a.id = a.research_id
+            if not a.id:
+                rs.error("`research show <id>` needs the note's id")
             return cmd_research_show(a, c)
+        if a.research_id is not None:
+            rs.error("a positional id goes to `research show <id>`; `research add` takes --id")
         stray = [
             f"--{f}" for f in (*_SHARED_FLAGS, "limit", "offset") if getattr(a, f, None) is not None
         ]
