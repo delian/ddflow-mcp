@@ -72,12 +72,23 @@ def _module_name(package: Path, py: Path) -> str:
 
 
 def fan_in(edges: dict[str, set[str]]) -> dict[str, int]:
-    """module -> how many modules import it (the most-changed modules' fan-in)."""
+    """module -> how many PACAKGE modules import it (the most-changed modules' fan-in). A
+    non-package name (``os``, ``typing``, an external top-level) is not a count to surface."""
+    members = set(edges)
     counts: dict[str, int] = defaultdict(int)
     for _m, deps in edges.items():
-        for dep in deps:
+        for dep in deps & members:  # only real package nodes
             counts[dep] += 1
     return dict(counts)
+
+
+def _items(facts: Facts) -> list[tuple[str, set[str]]]:
+    """item -> its merged lease globs, ONE row per item (a re-claim merges, it does not
+    duplicate the item across the scoreboard)."""
+    per: dict[str, set[str]] = {}
+    for lease in facts.leases:
+        per.setdefault(lease.item, set()).update(lease.globs)
+    return sorted(per.items())
 
 
 def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
@@ -97,40 +108,25 @@ def import_depth(edges: dict[str, set[str]]) -> dict[str, int]:
 
 
 def touched(facts: Facts) -> list[dict]:
-    """files and tests touched per merged item, from its lease globs (a test glob starts
-    ``tests/``). No git needed: the lease records the item's glob breadth."""
+    """files and tests touched per merged item, from its merged lease globs (a re-claim merges,
+    one row per item). No git needed: the lease records the item's glob breadth."""
     out = []
-    for lease in facts.leases:
-        files = list(lease.globs)
+    for item, globs in _items(facts):
+        files = list(globs)
         tests = [g for g in files if g.startswith("tests/")]
         out.append(
-            {
-                "item": lease.item,
-                "files": len(files),
-                "tests": len(tests),
-                "source_files": len(files) - len(tests),
-            }
+            {"item": item, "files": len(files), "tests": len(tests), "source_files": len(files) - len(tests)}
         )
     return out
 
 
 def churn_hotspots(facts: Facts) -> list[dict]:
-    """an item's changed lines (size) over its lease globs (churn x size hotspot). An item
-    whose outcomes recorded no changed lines has ``changed_lines=None`` (unmeasured, never 0)."""
+    """an item's changed lines over its merged lease globs (churn x size hotspot; one row per
+    item). No outcome recorded changed lines -> ``None`` (unmeasured, never 0)."""
     out = []
-    for lease in facts.leases:
-        lines = [
-            o.changed_lines
-            for o in facts.outcomes
-            if o.item == lease.item and o.changed_lines is not None
-        ]
-        out.append(
-            {
-                "item": lease.item,
-                "globs": len(lease.globs),
-                "changed_lines": max(lines, default=None),
-            }
-        )
+    for item, globs in _items(facts):
+        lines = [o.changed_lines for o in facts.outcomes if o.item == item and o.changed_lines is not None]
+        out.append({"item": item, "globs": len(globs), "changed_lines": max(lines, default=None)})
     return out
 
 
@@ -150,10 +146,9 @@ def co_change(facts: Facts) -> list[dict]:
 
 
 def tests_per_changed_line(facts: Facts) -> dict:
-    """tests per CHANGED LINE: test files the window touched, over the source LINES it changed
-    (``Outcome.changed_lines``), not over file-glob counts (a glob is not a line). No outcome
-    recorded a line count -> ``changed_lines=None`` (an unrun probe is never zero)."""
-    tests = sum(1 for lease in facts.leases for g in lease.globs if g.startswith("tests/"))
+    """tests per CHANGED LINE: test files the window touched (one per item), over the source
+    LINES it changed (``Outcome.changed_lines``). A re-claim neither duplicates nor inflates."""
+    tests = sum(1 for _item, globs in _items(facts) for g in globs if g.startswith("tests/"))
     recorded = [o.changed_lines for o in facts.outcomes if o.changed_lines is not None]
     changed = sum(recorded) if recorded else None
     return {
