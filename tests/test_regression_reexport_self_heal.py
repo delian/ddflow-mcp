@@ -31,4 +31,10 @@ def test_a_lazy_reexport_reimports_after_an_import_halts_on_a_none_entry(tmp_pat
     # first access that resolves the lazy name would raise ModuleNotFoundError here; the fix
     # drops the sentinel and re-imports the submodule.
     sys.modules["poisonpkg.sub"] = None
-    assert poisonpkg.MAGIC == 7
+    try:
+        assert poisonpkg.MAGIC == 7
+    finally:
+        # The throwaway package outlives its tmp_path; drop its modules so a later import of
+        # the same name cannot bind a directory pytest has removed.
+        sys.modules.pop("poisonpkg", None)
+        sys.modules.pop("poisonpkg.sub", None)

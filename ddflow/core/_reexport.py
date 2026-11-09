@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+import threading
 from collections.abc import Mapping
 from typing import Any
 
@@ -40,6 +41,10 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
     attributes plus everything the map would resolve.
     """
     cache: dict[str, Any] = {}
+    # Serialize this package's lazy first-import so a halt-sentinel cleanup and the import
+    # it guards cannot interleave with a concurrent resolution of the same package's names
+    # (reentrant: ``import_module`` may resolve a sibling through this same closure).
+    lock = threading.RLock()
 
     def __getattr__(name: str) -> Any:
         sub = submodule_of.get(name)
@@ -47,16 +52,19 @@ def reexport(here: dict, submodule_of: Mapping[str, str], package: str) -> None:
             raise AttributeError(f"module {package!r} has no attribute {name!r}")
         mod = cache.get(sub)
         if mod is None:
-            fullname = f"{package}.{sub}"
-            # A failed import poisons ``sys.modules`` with ``fullname: None``, and
-            # ``importlib.import_module`` then re-raises ``ModuleNotFoundError`` on every
-            # later access WITHOUT re-importing -- so a transient mid-import failure makes a
-            # lazy name permanently broken (B7e585f9e5d: ``ddflow.services.ci.main`` crashed
-            # ``check_after_merge``). Drop the poison so the retry actually re-imports.
-            if fullname in sys.modules and sys.modules[fullname] is None:
-                del sys.modules[fullname]
-            mod = importlib.import_module(fullname)
-            cache[sub] = mod
+            with lock:
+                mod = cache.get(sub)  # a concurrent access may have filled it while we waited
+                if mod is None:
+                    fullname = f"{package}.{sub}"
+                    # A halted import leaves ``sys.modules[fullname] = None``, and
+                    # ``importlib.import_module`` then re-raises ``ModuleNotFoundError`` on
+                    # every later access instead of re-importing -- so a transient halt makes
+                    # the lazy name permanently broken (B7e585f9e5d: ``ddflow.services.ci.main``
+                    # crashed ``check_after_merge``). Drop the sentinel so the retry re-imports.
+                    if fullname in sys.modules and sys.modules[fullname] is None:
+                        del sys.modules[fullname]
+                    mod = importlib.import_module(fullname)
+                    cache[sub] = mod
         return getattr(mod, name)
 
     def __dir__() -> list[str]:
