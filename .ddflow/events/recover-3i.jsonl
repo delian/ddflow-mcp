@@ -1,0 +1,4 @@
+{"agent":"recover-3i","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"ed807cb506427030e1eacb955","kind":"ddflow.seen","lamport":157979,"schema":1,"subject":"ddflow","ts":"2026-11-09T00:02:55.074552Z"}
+{"agent":"recover-3i","data":{"path":".ddflow/worktrees/fix-B0f4cf3d3c3"},"id":"eb9d36b7b31a05abf07b044ca","kind":"worktree.removed","lamport":157980,"schema":1,"subject":"fix-B0f4cf3d3c3","ts":"2026-11-09T00:02:55.156229Z"}
+{"agent":"recover-3i","data":{"path":".ddflow/worktrees/FT-measure"},"id":"e02b50721d070d6c2f14c60b7","kind":"worktree.removed","lamport":157981,"schema":1,"subject":"FT-measure","ts":"2026-11-09T00:02:58.658587Z"}
+{"agent":"recover-3i","data":{"by":"recover-3i","event":"ecd1aade86fd087b3fef63855","holder":"recover-5e","note":"salvaged"},"id":"e5478e610cb9ad97a24c091ca","kind":"lease.released","lamport":157998,"schema":1,"subject":"fix-B38ceb8819e","ts":"2026-11-09T00:08:12.614673Z"}
