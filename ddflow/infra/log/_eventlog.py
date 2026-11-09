@@ -90,14 +90,17 @@ def _is_local_endpoint(base_url: str) -> bool:
         return False
     if not host:
         return False
-    # A single label (localhost, ollama, vllm) is never a public internet host, and a
-    # dotted name in a local pseudo-TLD is not routable beyond the machine.
-    if "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
-        return True
+    # A literal address first: global means public, anything else (private/loopback/
+    # link-local, or IPv6) reads from `is_global` so a global IPv6 literal is public.
     try:
         return not ipaddress.ip_address(host).is_global
     except ValueError:
-        return False
+        pass
+    # A hostname: a single label (localhost, ollama, vllm) is never a public internet
+    # host, and a dotted name in a local pseudo-TLD is not routable beyond the machine.
+    if "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
+        return True
+    return False
 
 
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
