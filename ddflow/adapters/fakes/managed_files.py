@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..managed_files import OWNER_KEY, ManagedFile, _dump, _owned_keys, _parse
+from ..managed_files import OWNER_KEY, ManagedFile, _digest, _dump, _owned_keys, _parse
 from . import fake
 
 
@@ -20,22 +20,30 @@ class FakeManagedFile(ManagedFile):
         data = _parse(self.files.get(path, ""))
         for key, value_ in owned.items():
             data[key] = value_
-        data[OWNER_KEY] = {"owner": version, "keys": sorted(set(_owned_keys(data)) | owned.keys())}
+        own = set(_owned_keys(data)) | owned.keys()
+        data[OWNER_KEY] = {"owner": version, "keys": {k: _digest(data[k]) for k in own}}
         self.files[path] = _dump(data)
 
     def remove(self, path: str, *, keys: frozenset[str]) -> None:
         data = _parse(self.files.get(path, ""))
-        for key in keys:
+        own = _owned_keys(data)
+        for key in keys & own:
             data.pop(key, None)
-        left = _owned_keys(data) - keys
+        left = own - keys
         if left:
-            data[OWNER_KEY]["keys"] = sorted(left)
+            data[OWNER_KEY]["keys"] = {k: _digest(data[k]) for k in left}
         else:
             data.pop(OWNER_KEY, None)
         self.files[path] = _dump(data)
 
     def owned(self, path: str) -> dict[str, str]:
-        return dict.fromkeys(_owned_keys(_parse(self.files.get(path, ""))), "current")
+        data = _parse(self.files.get(path, ""))
+        marker = data.get(OWNER_KEY)
+        hashes = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
+        return {
+            k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
+            for k in _owned_keys(data)
+        }
 
     def text(self, path: str, key: str) -> Any:
         return _parse(self.files.get(path, "")).get(key)

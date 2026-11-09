@@ -30,7 +30,7 @@ def config_cases(io) -> None:
     doc = _doc(io, path)
     # ddflow's key is merged; the marker records it
     assert doc["mcpServers"] == {"a": {"command": "x"}}
-    assert doc[OWNER_KEY]["keys"] == ["mcpServers"]
+    assert set(doc[OWNER_KEY]["keys"]) == {"mcpServers"}
     # the user's own key is untouched and unowned
     assert doc["user"] == {"x": 1}
     assert io.owned(path) == {"mcpServers": "current"}
@@ -68,3 +68,22 @@ def test_merge_is_idempotent(tmp_path):
     first = Path(path).read_text()
     io.merge(path, owned={"mcpServers": {"a": {"command": "x"}}}, version="0.2.10")
     assert Path(path).read_text() == first
+
+
+def test_the_first_write_keeps_a_bak_beside_the_file(tmp_path):
+    path = _root(tmp_path)
+    io = JsonManagedFile()
+    io.merge(path, owned={"mcpServers": {}}, version="0.2.10")
+    bak = Path(path).with_name(Path(path).name + ".ddflow-bak")
+    assert bak.is_file() and bak.read_text() == '{"user": {"x": 1}}\n'
+
+
+def test_owned_detects_a_person_edit(tmp_path):
+    path = _root(tmp_path)
+    io = JsonManagedFile()
+    io.merge(path, owned={"mcpServers": {"a": {"command": "x"}}}, version="0.2.10")
+    assert io.owned(path) == {"mcpServers": "current"}
+    doc = json.loads(Path(path).read_text())
+    doc["mcpServers"]["a"]["command"] = "y"  # the user edits ddflow's key
+    Path(path).write_text(json.dumps(doc) + "\n")
+    assert io.owned(path) == {"mcpServers": "edited"}

@@ -29,6 +29,7 @@ import json
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from .digest import content_digest
 from .ports import port
 
 #: The reserved top-level key that records which keys ddflow owns (never a user's key).
@@ -66,7 +67,7 @@ def _read(path: str) -> dict[str, Any]:
 
 def _owned_keys(data: dict[str, Any]) -> set[str]:
     marker = data.get(OWNER_KEY)
-    if isinstance(marker, dict) and isinstance(marker.get("keys"), list):
+    if isinstance(marker, dict) and isinstance(marker.get("keys"), (list, dict)):
         return {k for k in marker["keys"] if isinstance(k, str)}
     return set()
 
@@ -75,9 +76,23 @@ def _dump(data: dict[str, Any]) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
+def _digest(value: Any) -> str:
+    return content_digest(json.dumps(value, sort_keys=True))
+
+
+def _backup(path: str) -> None:
+    """A one-time `.ddflow-bak` beside the file, before the first write (D-adapters-answers-2)."""
+    p = Path(path)
+    bak = p.with_name(p.name + ".ddflow-bak")
+    if p.is_file() and not bak.is_file():
+        bak.write_text(p.read_text("utf-8"))
+
+
 class JsonManagedFile:
     """The default `ManagedFile`: merges JSON (and JSONC by a tolerant reader, later), owning
-    only the keys it was given, atomically, with a `.ddflow-bak` beside the first write."""
+    only the keys it was given, atomically. Each owned key carries a digest under the marker,
+    so a person's edit is reported as `"edited"`. Plain JSON has no comments, so the write
+    re-serialises; a `.ddflow-bak` sits beside the file before the first write."""
 
     def merge(self, path: str, *, owned: dict[str, Any], version: str) -> Any:
         from .fsio import atomic_write
@@ -85,21 +100,30 @@ class JsonManagedFile:
         data = _read(path)
         for key, value_ in owned.items():
             data[key] = value_
-        data[OWNER_KEY] = {"owner": version, "keys": sorted(set(_owned_keys(data)) | owned.keys())}
+        own = set(_owned_keys(data)) | owned.keys()
+        data[OWNER_KEY] = {"owner": version, "keys": {k: _digest(data[k]) for k in own}}
+        _backup(path)
         atomic_write(path, _dump(data))
 
     def remove(self, path: str, *, keys: frozenset[str]) -> Any:
         from .fsio import atomic_write
 
         data = _read(path)
-        for key in keys:
+        own = _owned_keys(data)
+        for key in keys & own:  # only the owned keys: an unmanaged key is never touched
             data.pop(key, None)
-        left = _owned_keys(data) - keys
+        left = own - keys
         if left:
-            data[OWNER_KEY]["keys"] = sorted(left)
+            data[OWNER_KEY]["keys"] = {k: _digest(data[k]) for k in left}
         else:
             data.pop(OWNER_KEY, None)
         atomic_write(path, _dump(data))
 
     def owned(self, path: str) -> dict[str, str]:
-        return dict.fromkeys(_owned_keys(_read(path)), "current")
+        data = _read(path)
+        marker = data.get(OWNER_KEY)
+        hashes = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
+        return {
+            k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
+            for k in _owned_keys(data)
+        }
