@@ -287,29 +287,17 @@ def _merged_tree_run(repo: Path, it, cwd: Path | None):
     return W.scratch_tree(repo, it.merged_sha, detach=True, prefix="ddflow-merged.", quiet=True)
 
 
-def _resolve_tree(repo, log, cfg, st, it, item, gate, held, cwd, made, force, gates, forced):
-    """(where a command gate runs, or None; the no-tree refusal, or None).
+def _resolve_tree(repo, it, item, gate, held, cwd, made, force):
+    """(where a command gate runs, else None; the no-tree ``(reason, kept)``, else None).
 
     ``made`` is the scratch checkout `_merged_tree_run` made of the merged commit, or None;
     without one and without a live tree the gate has nowhere to run, and the no-tree reason
-    is recorded instead. Moved out of `run` to keep it clear of grade-D complexity."""
+    is returned for `run` to record. A helper so `run` never posts grade-D complexity."""
     if cwd is not None:
         return cwd, None
     if made is not None and made.path is not None:
         return made.path, None
-    reason, kept = _no_tree_reason(repo, it, item, gate, held, force)
-    if not kept:
-        R.record_measured(
-            log, cfg, repo, it, gate, "unavailable", reason=reason, gates=gates, forced=forced
-        )
-    return None, O.nothing(
-        "gate.run",
-        reason,
-        gate=gate,
-        outcome=kept or "unavailable",
-        evidence={"reason": reason},
-        id=item,
-    )
+    return None, _no_tree_reason(repo, it, item, gate, held, force)
 
 
 def run(
@@ -381,9 +369,29 @@ def run(
 
     cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
     with _merged_tree_run(repo, it, cwd) as made:
-        cwd, refused = _resolve_tree(repo, log, cfg, st, it, item, gate, held, cwd, made, force, gates, forced)
-        if refused is not None:
-            return refused
+        cwd, no_tree = _resolve_tree(repo, it, item, gate, held, cwd, made, force)
+        if cwd is None:
+            reason, kept = no_tree
+            if not kept:
+                R.record_measured(
+                    log,
+                    cfg,
+                    repo,
+                    it,
+                    gate,
+                    "unavailable",
+                    reason=reason,
+                    gates=gates,
+                    forced=forced,
+                )
+            return O.nothing(
+                "gate.run",
+                reason,
+                gate=gate,
+                outcome=kept or "unavailable",
+                evidence={"reason": reason},
+                id=item,
+            )
         repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
         if repeated is not None:
             return repeated
