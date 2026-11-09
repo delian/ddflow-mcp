@@ -461,3 +461,20 @@ register(
         enabled=_integrator_enabled,
     )
 )
+
+
+def _swarm_launch_enabled(ctx: TickCtx) -> bool:
+    """The launch tick applies only while the scheduler may start lanes itself. Off by
+    default: a lane then starts only when a person or an explicit command asks (B5c8139e564)."""
+    return bool(getattr(getattr(ctx.cfg, "swarm", None), "launch_enabled", False))
+
+
+register(
+    Tick(
+        "swarm.launch",
+        every_s=30,
+        budget_s=15.0,
+        target="ddflow.api.lifecycle.pull:launch_due",
+        enabled=_swarm_launch_enabled,
+    )
+)
