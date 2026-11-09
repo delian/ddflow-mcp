@@ -30,3 +30,4 @@
 {"agent":"lk-events","data":{"tags":["observability","slo","decision","priority-high","wave:1"]},"id":"ead1c0e6b11aa38b068bde1d9","kind":"task.updated","lamport":161665,"schema":1,"subject":"OBS-slo-set","ts":"2026-11-09T12:53:53.720110Z"}
 {"agent":"lk-events","data":{"tags":["perf","metrics","wave:0"]},"id":"ebf83ac9cbaca8c9c8b5457d0","kind":"task.updated","lamport":161666,"schema":1,"subject":"PM-budgets","ts":"2026-11-09T12:53:53.795770Z"}
 {"agent":"lk-events","data":{"gate":"critic"},"id":"e3dd5512b22c2500779a3f25d","kind":"gate.started","lamport":161667,"schema":1,"subject":"LK-events-autodiscover","ts":"2026-11-09T12:54:00.084485Z"}
+{"agent":"lk-events","data":{"at":1794228965.6805575,"holder":"lk-events"},"id":"ede18ef877d4d68fa02d59fdd","kind":"lease.renewed","lamport":161680,"schema":1,"subject":"LK-events-autodiscover","ts":"2026-11-09T12:56:05.750718Z"}
