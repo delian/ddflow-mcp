@@ -276,5 +276,7 @@ def launch_due(ctx: TickCtx) -> str | None:
         if isinstance(r, LN.Launched):
             note = f"launched lane {name!r} on {a.item}"
             return f"{note}; also refused: {first_refusal}" if first_refusal else note
-        first_refusal = first_refusal or (r.reasons[0] if r.reasons else f"lane {name!r} was refused")
+        first_refusal = first_refusal or (
+            r.reasons[0] if r.reasons else f"lane {name!r} was refused"
+        )
     return first_refusal or None
