@@ -54,3 +54,5 @@
 {"agent":"bg112","data":{},"id":"eeae0490b33c134eceb9afb5d","kind":"item.started","lamport":159071,"schema":1,"subject":"fix-B80ea725095","ts":"2026-11-09T03:55:22.613994Z"}
 {"agent":"bg112","data":{"globs":["ddflow/surfaces/declared/lifecycle/gates.py","tests/test_gate_reason_help.py"]},"id":"ef7acb9c7ed8ec6e28a2f73f1","kind":"task.updated","lamport":159099,"schema":1,"subject":"fix-B80ea725095","ts":"2026-11-09T03:59:32.117523Z"}
 {"agent":"bg112","data":{"globs":["ddflow/surfaces/declared/lifecycle/gates.py","tests/test_gate_reason_help.py"],"holder":"bg112"},"id":"e99f16089840ebc5d4adf8b04","kind":"lease.renewed","lamport":159100,"schema":1,"subject":"fix-B80ea725095","ts":"2026-11-09T03:59:32.264667Z"}
+{"agent":"bg112","data":{"ahead":["research","rules","implement"],"gate":"rubber_duck","policy":"warn"},"id":"e471a15be3dd1b09bfb50d38e","kind":"gate.out_of_order","lamport":159118,"schema":1,"subject":"fix-B80ea725095","ts":"2026-11-09T04:01:43.384378Z"}
+{"agent":"bg112","data":{"gate":"rubber_duck"},"id":"e7d98d646b781d7669c9176e7","kind":"gate.started","lamport":159119,"schema":1,"subject":"fix-B80ea725095","ts":"2026-11-09T04:01:44.025014Z"}
