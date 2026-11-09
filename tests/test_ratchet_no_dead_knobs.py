@@ -191,6 +191,25 @@ def test_the_merge_knob_require_gates_is_read():
     assert dead_knobs(["merge.require_gates"]) == []
 
 
+def test_the_perf_detect_knobs_are_read():
+    """`[perf_metrics].detect_*` are consumed by ``core/perfdetect.py`` through a
+    ``PerfMetricsConfig`` it is handed (``cfg.detect_*``), which the name scan cannot
+    see; ``_section_knobs`` spells each as ``.perf_metrics.detect_*`` (bug B61962d45e0)."""
+    assert (
+        dead_knobs(
+            [
+                "perf_metrics.detect_min_samples",
+                "perf_metrics.detect_relative_threshold",
+                "perf_metrics.detect_absolute_floor_s",
+                "perf_metrics.detect_persistence_windows",
+                "perf_metrics.detect_creep_alpha",
+                "perf_metrics.detect_creep_threshold",
+            ]
+        )
+        == []
+    )
+
+
 def test_the_detector_resolves_section_aliases():
     """`lc = cfg.loops` then `lc.max_gate_flaps` is a read, and must not be reported."""
     src = "lc = cfg.loops\nif flips < lc.max_gate_flaps: pass"
