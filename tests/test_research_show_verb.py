@@ -76,3 +76,12 @@ def test_research_add_refuses_a_stray_positional_id(repo):
     )
     assert code != 0, err
     assert "research show" in err
+
+
+def test_research_list_refuses_a_stray_positional_id(repo):
+    """`research list R1` is not a list filter; the positional id belongs to
+    `research show`, so a stray token is refused, not dropped."""
+    run_cli(repo, "init")
+    code, _, err = run_cli(repo, "research", "list", "R1")
+    assert code != 0, err
+    assert "research show" in err
