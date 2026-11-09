@@ -259,12 +259,14 @@ def plan(
         live_note = f"{in_flight} in flight across the queue"
         p.cap_note = f"the parallelism cap ({cap})"
         reached = f"parallelism cap reached ({cap})"
+        tree_binds = False
     else:
         cap = f"worktree.max_parallel={cfg.worktree.max_parallel}"
         live_note = f"{with_trees} worktrees live across the queue"
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
-    p.reserved_note = reserved_note(cfg, limit)
+        tree_binds = True
+    p.reserved_note = reserved_note(cfg, limit, tree_binds=tree_binds)
     free, reserved = open_slots(state, cfg, live, live_items, limit, flight_slots, tree_slots)
     _cut_ready(state, cfg, p, slots, free, reserved, live_items, live_note, reached, hold)
     if parallel is not None:

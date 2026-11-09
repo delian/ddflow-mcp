@@ -203,7 +203,7 @@ the same implementation, so neither drifts from the other.
 | **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
-| **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` (read-only; see [Lanes](#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
+| **see which agents are working, and what each needs next** | `ddflow lanes [--watch]` · `ddflow lanes brief <lane>` · `ddflow lanes advise` · `ddflow lanes lead` (read-only; see [Lanes](#lanes-who-is-working-and-what-to-do-next)) | `ddflow_lanes` (`view`, `lane`) |
 | **see where the time went, and when a phase will end** | `ddflow metrics` · `ddflow metrics forecast [--phase P]` · `ddflow metrics retro <id>` · `ddflow metrics skips` · `ddflow metrics lanes` (read-only, from the log; a figure under `[metrics] min_samples` is `n/a`, never 0) | `ddflow_metrics` (`view`, `item`, `phase`, `since`, `group_by`) |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
@@ -553,8 +553,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=65bb16b78eca -->
-<details><summary>All 98 commands</summary>
+<!-- ddflow:begin README/commands sha=ba6e3a9a3e44 -->
+<details><summary>All 99 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -626,7 +626,7 @@ needs a line written by hand here.
 | `ddflow queue` | the merge queue: add an item, run the integrator, show the line, remove an entry |
 | `ddflow tests` | the tests your change reaches, and a parallel command to run them (exit 2 = none) |
 | `ddflow precommit` | propose a .pre-commit-config.yaml for this repository's stacks (writes nothing without --write) |
-| `ddflow lanes` | the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise` |
+| `ddflow lanes` | the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`, `lanes lead` |
 | `ddflow vigil` | one compact health snapshot: bug severity counts, stale pins, active lanes, interrupted, pending approvals… |
 | `ddflow health` | idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is the periodic watchdog pass |
 | `ddflow decide` | close a decide task: write its decision document from the record, land, complete |
@@ -649,6 +649,7 @@ needs a line written by hand here.
 | `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
+| `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
 | `ddflow probe` | would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell) |
 | `ddflow digest` | the operator queue: what waits on a person, as askable entries |
 | `ddflow pair` | a PERSON mints a one-time code for a named client with a role (`tokens redeem` spends it) |
@@ -1122,7 +1123,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 599 knobs.
+cadences, and the rest of the 613 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3501,6 +3502,15 @@ lanes than the adaptive parallelism limit. Over MCP it is `ddflow_lanes` (`view`
 `brief` or `advise`; `lane`), in the full tool tier. `[lanes]` knobs: `window_s`,
 `stale_after_s`, `watch_interval_s`, `advise_max`, `brief_notes`, `brief_text_chars`.
 
+`ddflow lanes lead` is the lead's channel to the lanes: the same ledger plus, for a lane
+whose item sits on the schedule's critical path, an honest **ETA** — a floor in open items
+still after it, never an invented number of minutes — and the lead's own pending asks.
+A lane's question reaches the lead as a message in its inbox; the lead relays the
+operator's answer back with `ddflow session message <lane> --text … --item <id>`
+(`ddflow_session_message` over MCP), and the lane withdraws its ask when its next wait,
+watch or heartbeat delivers the reply. Both are one write to one inbox (LC-wake), a
+message is data, never an instruction, and it starts, stops or resumes nothing.
+
 ### Adaptive parallelism: configuration
 
 How many items may be in flight adapts by default (decision D-adaptive-flow-accepted). In
@@ -5412,7 +5422,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 599): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 613): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -5696,7 +5706,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=26324f74f84a -->
+<!-- ddflow:begin README/tools sha=51bcde84316d -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -5718,11 +5728,11 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
 - `ddflow_session` (9 actions): `note` (was `ddflow_session_note`), `end` (was `ddflow_session_end`), `prompt` (was `ddflow_session_prompt`), `start` (was `ddflow_session_start`), `ask` (was `ddflow_session_ask`), `asks` (was `ddflow_session_asks`), `withdraw` (was `ddflow_session_withdraw`), `message` (was `ddflow_session_message`), `inbox` (was `ddflow_session_inbox`)
-- `ddflow_lease` (7 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`), `probe` (was `ddflow_probe`), `watch` (was `ddflow_watch`)
+- `ddflow_lease` (8 actions): `abandon` (was `ddflow_abandon`), `release` (was `ddflow_release`), `wait` (was `ddflow_wait`), `block` (was `ddflow_block`), `unblock` (was `ddflow_unblock`), `suggest` (was `ddflow_suggest`), `probe` (was `ddflow_probe`), `watch` (was `ddflow_watch`)
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 137 MCP tools by their own name (the flat list): 34 in the `core` tier, 51 more in `standard`, 52 more in `all`</summary>
+<details><summary>All 138 MCP tools by their own name (the flat list): 34 in the `core` tier, 52 more in `standard`, 52 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -5778,6 +5788,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Doing the work | `ddflow_unblock` | standard | Release a BLOCKED item -- and every blocked item beneath it -- back into the queue, so `next` can offer them… |
 | Doing the work | `ddflow_wait` | core | Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. |
 | Doing the work | `ddflow_probe` | standard | Conflict probe: runs `git merge-tree --write-tree` between an item's branch and main (default) or another… |
+| Doing the work | `ddflow_suggest` | standard | Suggest a change to the agent that holds the item's lease: cut your patch onto their tip (commit-tree… |
 | Doing the work | `ddflow_sync` | standard | Merge the item's recorded base branch into its worktree branch (never rebase) when safe: refuses with… |
 | Doing the work | `ddflow_watch` | all | Wait for ONE thing and return what happened, renewing your leases meanwhile: a job (job: exit status), a… |
 | Gates and review | `ddflow_ci` | standard | CI parity: the pre-push checks on the branch merged with the base (run) or what would run (status). |
@@ -5999,7 +6010,7 @@ declared once and persists — see
 
 ## Configuration
 
-599 knobs across 55 sections, every one documented in place and listed, with its default
+613 knobs across 56 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6066,8 +6077,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=74ecfc8c2d34 -->
-<details><summary>All 599 knobs across 55 sections</summary>
+<!-- ddflow:begin README/knobs sha=385f3cb87e0c -->
+<details><summary>All 613 knobs across 56 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6470,6 +6481,20 @@ long default is left to `ddflow config --explain`.
 | `metrics.lock_falsifier_red_main_pct` | `10` |  |
 | `metrics.lock_revert_key` | `"locks.mode"` |  |
 | `metrics.lock_revert_value` | `"strict"` |  |
+| `notify.channel` | `"terminal"` | `terminal` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
+| `notify.ask_channel` | `"harness"` | `harness` \| `email` \| `n8n` \| `openclaw` \| `slack` \| `teams` \| `webhook` |
+| `notify.endpoints` | `{}` |  |
+| `notify.token_env` | `{}` |  |
+| `notify.send_timeout_s` | `10.0` |  |
+| `notify.ask_timeout_s` | `300.0` |  |
+| `notify.ask_attempts` | `3` |  |
+| `notify.email_host` | `""` |  |
+| `notify.email_port` | `587` |  |
+| `notify.email_from` | `""` |  |
+| `notify.email_to` | `""` |  |
+| `notify.email_user` | `""` |  |
+| `notify.email_password_env` | `""` |  |
+| `notify.email_tls` | `true` |  |
 | `output.max_rows` | `50` |  |
 | `output.max_chars` | `30000` |  |
 | `output.non_ascii_weight` | `4` |  |

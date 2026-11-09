@@ -179,6 +179,7 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
     repo=None,
     sender: str = "",
     probe: str = "",
+    evidence: str = "",
     sid: str = "",
     now: float | None = None,
 ) -> Proposed:
@@ -227,6 +228,7 @@ def propose(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
             "kind": kind,
             "reason": reason,
             "probe": verdict,
+            "evidence": evidence,
         },
     )
     return Proposed(sid, shp.files, shp.added, shp.removed, ref, verdict, blob)

@@ -288,15 +288,29 @@ def _coverage_gap_blocker(cfg, gaps) -> str:
     return ""
 
 
-def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str = "") -> Verdict:
-    """Why this item may or may not complete. Reads only; writes nothing."""
+def verdict(
+    state: State,
+    cfg: Config,
+    item_id: str,
+    *,
+    repo: Path,
+    model: str = "",
+    cache: dict | None = None,
+) -> Verdict:
+    """Why this item may or may not complete. Reads only; writes nothing.
+
+    ``cache`` is a per-scan memo shared across every item a scan weighs (recover's
+    `_note_landed`, Bc52bf2ef41): the diff each probe below reads is derived once per item,
+    not once per probe."""
     it = state.items.get(item_id)
     if it is None or it.removed:
         return Verdict(item=item_id, blockers=[f"no such item {item_id!r}"])
 
     gdefs = G.load_gates(repo, cfg)
     # The actual diff, not the declared globs, decides whether a gate is out of scope.
-    s = G.status(state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it), repo=repo)
+    s = G.status(
+        state, cfg, item_id, gdefs, diff=lambda: changed_paths(repo, it, cache=cache), repo=repo
+    )
     v = Verdict(
         item=item_id,
         kind=it.kind,
@@ -307,7 +321,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # A chore (D-chore-class) is judged on the paths it ACTUALLY changed and a person's
     # approval of the chore list -- never on its tag. It is excused the gates it skipped
     # on the record, even a required one, and the reviewer.
-    excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it))
+    excused, v.chore, why_not = CO.judge(state, cfg, it, changed_paths(repo, it, cache=cache))
     v.warnings += why_not
 
     missing = _unsettled(cfg, it, excused, s, required, state)
@@ -397,22 +411,22 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         v.blockers.append(blocker)
 
     v.independence, no_reviewer = _independence(
-        state, cfg, it, model, gdefs, excused, changed_paths(repo, it), repo
+        state, cfg, it, model, gdefs, excused, changed_paths(repo, it, cache=cache), repo
     )
     v.blockers += no_reviewer
 
     if v.coverage_gaps:
         v.coverage_note = _coverage_note(it, v.coverage_gaps)
 
-    readme = readme_report(state, cfg, item_id, repo=repo)
+    readme = readme_report(state, cfg, item_id, repo=repo, cache=cache)
     if readme:
         blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
         (v.blockers if blocks else v.warnings).append(readme)
 
-    OG.add_notice(v, state, cfg, item_id, repo)
+    own = changed_paths(repo, it, cache=cache)
+    OG.add_notice(v, state, cfg, item_id, repo, read=(lambda _repo, _it: own))
 
     cwd, landed = _tree_being_completed(repo, it)
-    own = changed_paths(repo, it)
     v.trivial = _trivial_declaration(it, cfg, repo, own)
     stale = G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed, own=own)
     for note in refine_stale_notes(
@@ -642,7 +656,9 @@ README_REMEDY = (
 )
 
 
-def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str:
+def readme_report(
+    state: State, cfg: Config, item_id: str, *, repo: Path, cache: dict | None = None
+) -> str:
     """The "README not updated" report when a task's diff changed code and not the README;
     `README_UNKNOWN` when git cannot say what changed; else "".
 
@@ -667,7 +683,7 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
         or (docs.outcome == "passed" and (docs.evidence or {}).get("note"))
     ):
         return ""
-    changed = changed_paths(repo, it)
+    changed = changed_paths(repo, it, cache=cache)
     if changed is None:
         return README_UNKNOWN
     code = [

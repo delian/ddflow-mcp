@@ -233,7 +233,7 @@
          },
          "force": {
           "type": "boolean",
-          "description": "Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded."
+          "description": "Override a refusal -- a person's route; an agent's `force` is dropped, so an agent files `approval=request` instead. A forced claim past a dependency or live lease lets two agents write one file. Recorded."
          },
          "approval": {
           "type": "string",
@@ -1325,7 +1325,7 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise, fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm."
+          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm."
          },
          "lane": {
           "type": "string",

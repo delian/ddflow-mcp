@@ -41,10 +41,12 @@ def _read(read: Callable | None) -> Callable:
     return read if read is not None else changed_paths
 
 
-def verdict_notice(state: State, cfg, item_id: str, repo: Path) -> tuple[str, bool]:
+def verdict_notice(
+    state: State, cfg, item_id: str, repo: Path, read: Callable | None = None
+) -> tuple[str, bool]:
     """(notice, whether it blocks `complete`): blocking only for a known undeclared write
     under ``undeclared_write = block``; a check that could not run only warns."""
-    text = undeclared_report(state, cfg, item_id, repo=repo)
+    text = undeclared_report(state, cfg, item_id, repo=repo, read=read)
     return text, bool(text) and text != unknown(item_id) and cfg.locks.undeclared_write == "block"
 
 
@@ -194,9 +196,11 @@ def claim_fields(state: State, cfg, item_id: str, repo: Path) -> dict[str, str]:
     return {"glob_suggestion": hint} if hint else {}
 
 
-def add_notice(verdict, state: State, cfg, item_id: str, repo: Path) -> None:
+def add_notice(
+    verdict, state: State, cfg, item_id: str, repo: Path, read: Callable | None = None
+) -> None:
     """Put the undeclared-write notice on ``verdict`` as a blocker or a warning."""
-    text, blocks = verdict_notice(state, cfg, item_id, repo)
+    text, blocks = verdict_notice(state, cfg, item_id, repo, read=read)
     if text:
         (verdict.blockers if blocks else verdict.warnings).append(text)
 
