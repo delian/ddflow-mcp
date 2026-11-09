@@ -16,6 +16,17 @@ from dataclasses import dataclass
 from xml.etree import ElementTree
 
 
+def _file_of(classname: str) -> str:
+    """junit ``classname`` -> file path. A class test's classname is ``module.Class``; a trailing
+    CamelCase segment is a class, so it is dropped (``tests.test_a.TestSuite`` -> ``tests/test_a.py``)."""
+    if not classname:
+        return ""
+    parts = classname.split(".")
+    while parts and parts[-1] and parts[-1][0].isupper():
+        parts = parts[:-1]
+    return "/".join(parts) + ".py"
+
+
 @dataclass(frozen=True)
 class TestCase:
     test_id: str  # the test's dotted id, never its body or output
@@ -31,13 +42,12 @@ def parse_junit(xml_text: str) -> list[TestCase]:
     for case in root.iter("testcase"):
         name = case.get("name", "")
         classname = case.get("classname", "")
+        file = case.get("file") or _file_of(classname)
         try:
             duration = float(case.get("time", ""))
         except ValueError:
             duration = None
-        out.append(
-            TestCase(test_id=f"{classname}.{name}", file=classname.replace(".", "/") + ".py", duration_s=duration)
-        )
+        out.append(TestCase(test_id=f"{classname}.{name}", file=file, duration_s=duration))
     return out
 
 
@@ -53,6 +63,9 @@ def rollup(cases: list[TestCase], workers: int, top_n: int = 10) -> dict:
     slowest_test = max((c.duration_s for c in timed), default=0.0)
     slowest_file = max(per_file.values(), default=0.0) if per_file else 0.0
     floor = max(slowest_test, slowest_file)
+    # the file-level makespan at ``workers`` workers: a file does not split, and the workers
+    # divide the rest, so the critical path is max(slowest_file, serial/workers).
+    makespan = max(slowest_file, serial / workers if workers else serial)
     return {
         "count": len(cases),
         "with_duration": len(timed),
@@ -61,8 +74,8 @@ def rollup(cases: list[TestCase], workers: int, top_n: int = 10) -> dict:
             for c in sorted(timed, key=lambda c: -c.duration_s)[:top_n]
         ],
         "per_file": dict(sorted(per_file.items(), key=lambda kv: -kv[1])[:top_n]),
-        #: the slowest file's share of the SERIAL work (the concentration the workers must hide)
-        "skew": slowest_file / serial if serial else 0.0,
+        #: the slowest file's share of the CRITICAL PATH at the workers used
+        "skew": slowest_file / makespan if makespan else 0.0,
         "serial_seconds": serial,
         "critical_path_floor_s": floor,
         "workers": workers,

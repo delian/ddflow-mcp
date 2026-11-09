@@ -58,3 +58,12 @@ def test_capture_folds_into_the_ring_and_returns_only_the_rollup(tmp_path: Path)
 def test_an_unparseable_report_is_unavailable(tmp_path: Path):
     out = capture_test_durations(tmp_path, "I", "ci", "<not-valid", workers=4)
     assert out == {"unavailable": True, "item": "I", "gate": "ci"}
+
+
+def test_a_class_method_maps_to_its_module_file_not_a_split():
+    xml = """<testsuite name="pytest" tests="2">
+      <testcase classname="tests.test_a.TestSuite" name="test_slow" time="10"/>
+      <testcase classname="tests.test_a.TestSuite" name="test_other" time="11"/>
+    </testsuite>"""
+    cases = parse_junit(xml)
+    assert {c.file for c in cases} == {"tests/test_a.py"}
