@@ -74,16 +74,19 @@ def audit(repo: Path, series: str, cfg: PerfMetricsConfig | None = None) -> Audi
     return Audit(series, len(rows), size, dropped, size > cfg.ring_max_bytes)
 
 
-def redact_ring(repo: Path, series: str) -> int:
-    """Rewrite a ring projectonly the allowlist fields, so a non-allowlist value (prompt text,
-    a token, a secret) is dropped from disk, not merely counted. Returns rows rewritten."""
+def redact_ring(repo: Path, series: str) -> tuple[int, list[str]]:
+    """Rewrite a ring projection only the allowlist fields, so a non-allowlist value (prompt
+    text, a token, a secret) is dropped from disk. Returns (rows rewritten, dropped keys) --
+    the caller turns the keys into a doctor note.]"""
     rows = _raw_rows(repo, series)
     kept: list[str] = []
+    dropped: list[str] = []
     for r in rows:
-        projected, _ = redact_row(r)
+        projected, keys = redact_row(r)
+        dropped.extend(keys)
         kept.append(json.dumps(projected, separators=(",", ":")))
     store.atomic_write(ring_path(repo, series), "\n".join(kept) + ("\n" if kept else ""))
-    return len(kept)
+    return len(kept), sorted(set(dropped))
 
 
 def doctor(repo: Path, cfg: PerfMetricsConfig | None = None) -> list[str]:
@@ -106,18 +109,19 @@ def compact(
     series: str,
     now: float,
     cfg: PerfMetricsConfig | None = None,
-) -> int:
-    """The retention tick: fold samples that age out into the committed daily aggregate, then
-    trim the ring. Returns the number of raw rows kept. Idempotent -- a second run over the
-    same ring changes nothing (the aggregate is monotonic)."""
+) -> tuple[int, list[str]]:
+    """The retention tick: drop non-allowlist fields (returning a doctor note per dropped
+    key), fold aged samples into the committed daily aggregate, then trim the raw ring.
+    Returns (raw rows kept, doctor notes). Idempotent."""
     cfg = cfg or PerfMetricsConfig()
-    redact_ring(repo, series)  # drop non-allowlist fields from disk, then fold + trim
+    _, dropped = redact_ring(repo, series)  # drop non-allowlist fields from disk
+    notes = [f"{series}: saw non-allowlist field {k}" for k in dropped]
     cutoff = now - cfg.ring_max_age_s
     # Fold the samples that are about to age out into the committed aggregate FIRST (reading
     # the pre-trim ring), then trim -- so the compacted numbers survive the trim.
     for day in _touched_days(repo, series, cutoff):
         store.write_aggregate(repo, series, day, cfg)
-    return store.trim(repo, series, now, cfg)
+    return store.trim(repo, series, now, cfg), notes
 
 
 def _touched_days(repo: Path, series: str, cutoff: float) -> list[float]:

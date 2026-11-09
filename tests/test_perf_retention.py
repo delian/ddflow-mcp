@@ -58,7 +58,7 @@ def test_compaction_folds_aged_samples_into_the_commit_and_trims(repo: Path):
     append(repo, "rss", Sample(day, "a", 5.0, "g", "d"))
     append(repo, "rss", Sample(day + 1, "a", 6.0, "g", "d"))
     cfg = PerfMetricsConfig(ring_max_age_s=10, ring_max_bytes=10**6)
-    kept = R.compact(repo, "rss", day + 1000, cfg=cfg)
+    kept, _notes = R.compact(repo, "rss", day + 1000, cfg=cfg)
     assert kept == 0  # both samples aged out of the raw ring
     # ... and the day's aggregate was committed, so the p50 survives the ring loss
     from ddflow.services.perf.store import read_aggregates
@@ -70,8 +70,8 @@ def test_compaction_folds_aged_samples_into_the_commit_and_trims(repo: Path):
 def test_compact_drops_a_non_allowlist_field_from_disk(repo: Path):
     append(repo, "rss", Sample(1.0, "a", 5.0, "g", "d"))
     _append_line(ring_path(repo, "rss"), json.dumps({"t": 2.0, "env": "a", "value": 6.0, "token": "x"}))
-    R.compact(repo, "rss", 1000.0, cfg=PerfMetricsConfig(ring_max_age_s=10**6, ring_max_bytes=10**6))
-    # the hostile `token` key is gone from the stored ring
+    _kept, notes = R.compact(repo, "rss", 1000.0, cfg=PerfMetricsConfig(ring_max_age_s=10**6, ring_max_bytes=10**6))
+    # the hostile `token` key is gone from the stored ring AND was doctor-noted
     stored = ring_path(repo, "rss").read_text("utf-8")
     assert "token" not in stored
-    assert R.doctor(repo, PerfMetricsConfig(ring_max_bytes=10**6)) == []
+    assert any("token" in n for n in notes)
