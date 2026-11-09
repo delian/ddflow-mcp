@@ -96,6 +96,7 @@ class FakeConfigStore(ConfigStore):
         return _Result(written=(key,))
 
     def unset(self, root, key, *, layer="file", person=False, agent=""):
-        if self.files.pop(key, None) is None:
-            return _Result(error=f"{key!r} is not set")
-        return _Result(written=(key,))
+        if key in self.files:
+            self.files.pop(key)
+            return _Result(written=(key,))
+        return _Result()  # not set: nothing written, nothing refused
