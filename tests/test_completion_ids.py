@@ -111,7 +111,7 @@ def test_locked_database_gives_nothing_fast(tmp_path, monkeypatch):
     t = time.monotonic()
     assert CI.complete_ids("", index=str(p)) == []
     # a 200 ms wait (the old, ignored-knob behaviour) would fail this; a 10 ms one does not
-    assert time.monotonic() - t < scaled(0.1)
+    assert time.monotonic() - t < 0.1
     con.execute("rollback")
     con.close()
 
@@ -245,7 +245,7 @@ def test_in_process_lookup_meets_the_100ms_budget(tmp_path):
         t = time.perf_counter()
         assert CI.complete_ids("COMP", index=p) == ["COMP-a", "COMP-b"]
         best = min(best, time.perf_counter() - t)
-    assert best < scaled(0.1)
+    assert best < 0.1
 
 
 def test_directory_named_like_an_index_is_not_chosen(tmp_path):
