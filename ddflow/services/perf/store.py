@@ -90,7 +90,8 @@ def ring_path(repo: Path, series: str) -> Path:
 
 
 def _pct(values: Sequence[float], p: float, minimum: int) -> float | None:
-    """A percentile by the nearest-rank method; None below ``minimum`` samples (never 0)."""
+    """A percentile by linear interpolation between the two bracketing ranks (R-7 style);
+    None below ``minimum`` samples (never 0)."""
     if len(values) < max(minimum, 1):
         return None
     ordered = sorted(values)
