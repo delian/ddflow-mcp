@@ -200,11 +200,17 @@ def test_decide_keeps_an_existing_doc_and_appends_the_body(proj):
 
 
 def test_decide_appending_is_idempotent_on_a_retry():
-    block = "## D-x: t\n\n**Decision.** d\n\nQ: left open?\nA: settled now.\n"
+    restatement = "## D-x: t\n\n**Decision.** d\n"
+    block = restatement + "\n\nQ: left open?\nA: settled now.\n"
     # A failed commit retried with --append: the restatement and body land once, not twice.
-    assert _append_block(block, block) == block
+    assert _append_block(block, block, restatement) == block
+    # A retried commit with a SHORTER body replaces the stale longer one, not appends.
+    stale = restatement + "\n\nAnswer one. Answer two is longer.\n"
+    short = restatement + "\n\nAnswer one.\n"
+    assert _append_block(stale, short, restatement) == short
+    # A fresh proposal keeps its own text with the restatement appended below it.
     proposal = "# Proposal\n\nAlready drafted.\n"
-    assert _append_block(proposal, block) == proposal.rstrip("\n") + "\n\n" + block
+    assert _append_block(proposal, block, restatement) == proposal + "\n\n" + block
 
 
 def test_a_retried_append_lands_the_restatement_once(proj):
