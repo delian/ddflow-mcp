@@ -9,9 +9,11 @@ out to be two concerns, rather than abandoning it and filing two new ones.
 Two things make an item safe to hand out, and both are declared on it:
 
 - **`--needs`** — the ids it waits for. Inherited: a phase's dependency governs every
-  task inside it, so you declare it once. An id that does not exist is treated as
-  UNMET, deliberately, so a typo surfaces as blocked work rather than as work that
-  starts early.
+  task inside it, so you declare it once. `ddflow task add` (and `ddflow update
+  --needs`) refuses an id that does not exist — `no such id`, with a "did you mean"
+  when one is close — so a typo surfaces straight away instead of as work waiting on a
+  ghost. An imported queue is the one exception: a dependency nothing produced is kept
+  as a dangling need that stays unmet, deliberately.
 - **`--globs`** — the files it writes. This is what lets two agents run at once:
   `ddflow claim` refuses an item whose globs overlap something already in flight. A
   task with no globs is one the conflict detector cannot protect.
