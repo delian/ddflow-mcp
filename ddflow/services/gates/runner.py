@@ -406,7 +406,9 @@ def _keep_cut_failing_ids(gdef: GateDef, cwd: Path, out: str, ev: dict[str, Any]
     from .baseline import write_full  # deferred, as run_log_writer does
 
     try:
-        stub = write_full(W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)])
+        stub = write_full(
+            W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)]
+        )
     except (OSError, ValueError, KeyError):
         return
     if stub:
