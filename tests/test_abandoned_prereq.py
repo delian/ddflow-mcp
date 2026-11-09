@@ -23,7 +23,7 @@ def _seed(repo, needs="D1,D2"):
     run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "t.py", "--needs", needs)
 
 
-def test_doctor_reports_a_need_on_an_abandoned_item(repo):
+def test_doctor_does_not_report_a_need_on_an_abandoned_item(repo):
     """An abandoned need is settled (satisfies its dependent), so doctor must NOT report it as
     a stuck edge (B740b7f8cf4); a removed need is (see the removed test below)."""
     _seed(repo)
