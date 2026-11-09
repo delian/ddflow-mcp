@@ -1,8 +1,9 @@
 """The `lanes` command, declared once: the lane ledger, a lane's brief and the advisor.
 
 `surfaces/parsers/lanes.py` registers the command-line half and `surfaces/tools/__init__.py`
-takes the MCP entry (D-unify 4). Read-only by construction: it never spawns or kills a
-process and starts no daemon (D-sched-no-daemon). Acting on a lane (starting, resuming) is a different command
+takes the MCP entry (D-unify 4). Read-only by construction except `view=approve`, a person's
+act that records a lane-template approval and spawns no process, kills nothing and starts no
+daemon (D-sched-no-daemon). Acting on a lane (starting, resuming) is a different command
 (P-agent-parity.launcher).
 """
 
@@ -48,11 +49,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane).",
-                cli_help="state (default), brief <lane>, advise, fleet or resume <lane>",
+                help="state (default), brief, advise, fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template).",
+                cli_help="state (default), brief <lane>, advise, fleet, resume <lane> or approve <template>",
                 positional=True,
                 nargs="?",
-                choices=("state", "brief", "advise", "fleet", "resume"),
+                choices=("state", "brief", "advise", "fleet", "resume", "approve"),
                 default=None,
             ),
             Param(

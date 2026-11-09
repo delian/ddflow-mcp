@@ -23,6 +23,8 @@ from ddflow.services.swarm import score
 from ddflow.services.swarm import seedpack as SP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conftest import run_cli
+
 from lanes_fixture import T0, Log
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
@@ -200,6 +202,37 @@ def test_an_agent_made_grant_or_an_edited_template_is_not_approved():
     grant(log, t.subject, t.digest(), human=False)
     assert not T.approved(fold(list(log.events), strict=False), t).ok
     assert not T.approved(state(t), tpl(budget_usd=3.0)).ok  # edited after approval
+
+
+def test_consent_names_the_working_approve_command():
+    """B8647b69e06: `consent.how` must name a command that can actually record the grant --
+    `ddflow lanes approve <name>` -- not `ddflow approvals request` (which has no subject or
+    digest argument, so no person could ever follow it and `approved()` never passes)."""
+    got = T.consent(tpl()).how
+    assert f"ddflow lanes approve {tpl().name}" in got
+    assert "approvals request" not in got
+
+
+def test_lane_template_approve_is_a_persons_cli_command(repo, tmp_path):
+    """`ddflow lanes approve <name>` is the missing caller of `launch_template.approve`
+    (B8647b69e06): after a person runs it the template is approved at its current digest,
+    and before it no caller existed so `approved()` could never pass outside a test."""
+    run_cli(repo, "init")
+    tmp = tmp_path / "lane-templates.toml"
+    tmp.write_text(
+        '[template.ds]\nharness="kilo"\nroute="r"\nfamily="deepseek"\n'
+        "budget_usd=1.0\ntrust=1\nprice_in=1.0\nprice_out=2.0\n"
+    )
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[swarm]\nlaunch_templates_file = '{tmp}'\n")
+    code, out, err = run_cli(repo, "lanes", "approve", "ds")
+    assert code == 0, (out, err)
+    # The grant is now recorded for the subject at the current digest, so approved() passes.
+    from ddflow.infra.log import EventLog
+
+    log = EventLog(repo, "")
+    t = T.load(tmp)[0]["ds"]
+    assert T.approved(fold(log.read_all(), strict=False), t).ok
 
 
 # --- launch: refusals start nothing -----------------------------------------------------------
