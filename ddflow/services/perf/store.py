@@ -80,11 +80,7 @@ def _series_file(series: str) -> str:
     """A series key is a single path-sane token; anything that could resolve outside the
     ring directory is refused (a metric name never needs a separator, ``..``, or a drive
     prefix on any host)."""
-    if (
-        not series
-        or series in (".", "..")
-        or any(c in series for c in ("/", "\\", ":", ".."))
-    ):
+    if not series or series in (".", "..") or any(c in series for c in ("/", "\\", ":", "..")):
         raise ValueError(f"series must be a plain name, got {series!r}")
     return series + ".jsonl"
 
@@ -117,11 +113,18 @@ def rollup(samples: Iterable[Sample], minimum: int) -> Rollup:
 
 
 def _append_line(path: Path, line: str) -> None:
-    """One whole line appended to an O_APPEND descriptor: either lands whole or is lost."""
+    """One whole line appended to an O_APPEND descriptor; a short write is retried so a
+    torn tail cannot glue onto the next line."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
     try:
-        os.write(fd, (line + "\n").encode("utf-8"))
+        data = (line + "\n").encode("utf-8")
+        written = 0
+        while written < len(data):
+            n = os.write(fd, data[written:])
+            if n <= 0:
+                break
+            written += n
     finally:
         os.close(fd)
 
@@ -187,10 +190,16 @@ def trim(repo: Path, series: str, now: float, cfg: PerfMetricsConfig | None = No
     path = ring_path(repo, series)
     if not path.exists():  # a missing ring (fresh repo, detached dir) keeps zero, never raises
         return 0
-    fresh = [s for s in _read_ring(repo, series) if s.t >= now - cfg.ring_max_age_s]
+    # Newest BY TIME first (append order is not time order under concurrent writers), so the
+    # byte cap drops the oldest measurement first even when a slow appender wrote it last.
+    fresh = sorted(
+        (s for s in _read_ring(repo, series) if s.t >= now - cfg.ring_max_age_s),
+        key=lambda s: s.t,
+        reverse=True,
+    )
     kept_lines: list[str] = []
     total = 0
-    for s in reversed(fresh):  # newest first: keep from the newest until the byte cap
+    for s in fresh:  # newest first: keep from the newest until the byte cap
         line = json.dumps(
             {"t": s.t, "env": s.env, "value": s.value, "gate": s.gate, "digest": s.digest},
             separators=(",", ":"),
@@ -248,6 +257,45 @@ def merge_series(
     return sorted(rows, key=lambda r: r["t"])
 
 
+#: The committed daily aggregates, keyed by series then UTC day -- NOT under the git-ignored
+#: ``.ddflow/local``, so the compacted numbers survive a lost ring (only raw detail is lost).
+AGGREGATE_DIR = ".ddflow" + os.sep + "metrics" + os.sep + "perf"
+
+
+def aggregate_path(repo: Path, series: str, day: float) -> Path:
+    """The committed file a tick writes one day's aggregate to (``<series>/<day>.json``)."""
+    name = _series_file(series).removesuffix(".jsonl")
+    return repo / AGGREGATE_DIR / name / f"{int(day)}.json"
+
+
+def write_aggregate(
+    repo: Path, series: str, day: float, cfg: PerfMetricsConfig | None = None
+) -> dict[str, dict[str, Any]]:
+    """Compute the day's aggregate and write it to the committed path, idempotently (the
+    same ring recomputes the same numbers). The report/tick calls this; the event log keeps
+    the per-run rollups in gate evidence, and this file keeps the daily aggregate."""
+    agg = daily_aggregate(repo, series, day, cfg)
+    path = aggregate_path(repo, series, day)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, json.dumps(agg, sort_keys=True, separators=(",", ":")) + "\n")
+    return agg
+
+
+def read_aggregates(repo: Path, series: str) -> list[tuple[float, dict[str, dict[str, Any]]]]:
+    """Every committed daily aggregate of a series, oldest first, for the merged series API."""
+    path = aggregate_path(repo, series, 0.0)
+    out: list[tuple[float, dict[str, dict[str, Any]]]] = []
+    for file in sorted(path.parent.glob("*.json")):
+        try:
+            day = float(file.stem)
+            d = json.loads(file.read_text("utf-8"))
+            if isinstance(d, dict):
+                out.append((day, d))
+        except (ValueError, OSError):
+            continue
+    return out
+
+
 class Store:
     """The one facade the detectors use: append samples, trim, read a merged series."""
 
@@ -282,10 +330,13 @@ __all__ = [
     "Rollup",
     "Sample",
     "Store",
+    "aggregate_path",
     "append",
     "daily_aggregate",
     "merge_series",
+    "read_aggregates",
     "ring_path",
     "rollup",
     "trim",
+    "write_aggregate",
 ]

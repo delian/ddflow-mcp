@@ -129,3 +129,16 @@ def test_a_series_key_cannot_resolve_outside_the_ring_dir(repo: Path):
 
 def test_trim_on_a_missing_ring_keeps_zero(repo: Path):
     assert trim(repo, "absent", 1_000_000.0) == 0  # no mkdir, no raise
+
+
+def test_the_daily_aggregate_is_written_committed_and_reads_back(repo: Path):
+    from ddflow.services.perf.store import aggregate_path, read_aggregates, write_aggregate
+
+    day = 1_700_000_000.0
+    append(repo, "rss", Sample(day + 1, "env:a", 5.0))
+    append(repo, "rss", Sample(day + 2, "env:a", 6.0))
+    write_aggregate(repo, "rss", day, PerfMetricsConfig(aggregate_min_samples=1))
+    path = aggregate_path(repo, "rss", day)
+    assert ".ddflow/metrics/perf" in str(path) and path.exists()  # committed, not .ddflow/local
+    back = read_aggregates(repo, "rss")
+    assert back == [(day, {"env:a": {"count": 2, "p50": 5.5, "p90": 5.9, "max": 6.0}})]
