@@ -293,10 +293,12 @@ def _judge_job(st, job_id: str, now: float) -> dict[str, Any]:
             "why": f"{job_id} runs on {j.host}, which cannot be checked from here; "
             "wait there instead",
         }
-    if s.state == "gone":
-        # Killed with no exit recorded in its log: a detached review records its round
-        # BEFORE it returns, so a process that died without writing an exit never recorded
-        # one, and no further waiting records it either -- someone has to re-run the review.
+    if s.state == "gone" or (s.state == "exited" and (s.exit_code or 0) >= 128):
+        # Killed, whether with no exit line at all ("gone") or with a signal exit code in
+        # its log (128+N, which the launch wrapper still writes when the command is sent a
+        # signal): a detached review records its round BEFORE it returns, so a process that
+        # was killed never recorded one, and no further waiting records it either --
+        # someone has to re-run the review.
         return {
             **out,
             "status": "hopeless",

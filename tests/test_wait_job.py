@@ -77,6 +77,19 @@ def test_a_job_killed_before_recording_its_round_is_hopeless_not_ready(repo, mon
     assert out.data["next_actions"] == []
 
 
+def test_a_job_killed_by_signal_logs_an_exit_but_recorded_no_round(repo, monkeypatch):
+    # A signal kill still writes a 128+N exit line (the launch wrapper writes it), so
+    # `J.status` says "exited 137" -- the process returned with a signal code, not a
+    # recorded round. The wait must refuse it as hopeless, not wake READY.
+    _started(_log(repo))
+    monkeypatch.setattr(
+        J, "status", lambda job: J.Status("exited", "exited 137 (from its log)", 137)
+    )
+    out = A.wait(repo, job="J1", timeout_s=5, poll_s=0.05, agent="asker")
+    assert out.exit == O.NOTHING and "killed before its round was recorded" in out.reason
+    assert out.data["next_actions"] == []
+
+
 def test_an_unknown_job_is_hopeless(repo):
     out = A.wait(repo, job="J1", timeout_s=5, agent="asker")
     assert out.exit == O.NOTHING and "no such job" in out.reason
