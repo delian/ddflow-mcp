@@ -62,13 +62,22 @@ def _reviewer_redact_names(root: Path) -> list[str]:
 
 
 def _is_local_endpoint(base_url: str) -> bool:
-    """``True`` when ``base_url`` names a private/loopback/link-local address."""
+    """``True`` when ``base_url`` names a private/loopback/link-local address or host."""
     try:
         from urllib.parse import urlparse
 
-        host = urlparse(base_url).hostname
-        return bool(host) and not ipaddress.ip_address(host).is_global
+        host = (urlparse(base_url).hostname or "").lower()
     except Exception:
+        return False
+    if not host:
+        return False
+    if host in ("localhost", "localdomain") or host.endswith(
+        (".local", ".internal", ".lan", ".home.arpa")
+    ):
+        return True
+    try:
+        return not ipaddress.ip_address(host).is_global
+    except ValueError:
         return False
 
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,

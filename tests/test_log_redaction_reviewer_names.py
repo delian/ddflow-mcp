@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ddflow.core.model import State
 from ddflow.infra.log import EventLog
+from ddflow.services.gates.reviewers import _unapproved_reviewer
 
 NAME = "local-reviewer-f8f8"  # a service name only the ignored reviewers.toml holds
 MODEL = "Local/Reviewer-Flash"  # its model string
@@ -67,3 +69,13 @@ def test_the_configured_subject_keeps_the_name_for_the_trust_readback(tmp_path):
     shard = _shard(root)
     assert f'"subject":"{NAME}"' in shard, "the verbatim subject must keep the name"
     assert '"[REDACTED:name]"' not in shard, "a verbatim subject is not redacted"
+
+
+def test_the_unapproved_reviewer_hint_reads_the_subject_not_the_redacted_evidence():
+    dig = "d" * 16
+    state = State()
+    state.reviewer_writes[dig] = {"name": NAME}
+    got = _unapproved_reviewer(
+        state, {"reviewer": "[REDACTED:name]", "reviewer_digest": dig}
+    )
+    assert got == NAME
