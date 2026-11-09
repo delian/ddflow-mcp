@@ -76,8 +76,16 @@ class Rollup:
         return {"count": self.count, "p50": self.p50, "p90": self.p90, "max": self.max}
 
 
+def _series_file(series: str) -> str:
+    """A series key is a single path-sane token; anything that could resolve outside the
+    ring directory is refused (a metric name never needs a separator)."""
+    if not series or series in (".", "..") or "/" in series or "\\" in series or ".." in series:
+        raise ValueError(f"series must be a plain name, got {series!r}")
+    return series + ".jsonl"
+
+
 def ring_path(repo: Path, series: str) -> Path:
-    return repo / ".ddflow" / "local" / LOCAL_DIR / f"{series}.jsonl"
+    return repo / ".ddflow" / "local" / LOCAL_DIR / _series_file(series)
 
 
 def _pct(values: Sequence[float], p: float, minimum: int) -> float | None:
@@ -166,8 +174,14 @@ def append(repo: Path, series: str, sample: Sample) -> None:
 
 def trim(repo: Path, series: str, now: float, cfg: PerfMetricsConfig | None = None) -> int:
     """Drop samples older than ``ring_max_age_s`` then the oldest until the ring fits
-    ``ring_max_bytes`` (newest kept first). Returns the number kept."""
+    ``ring_max_bytes`` (newest kept first). Returns the number kept. Best-effort for
+    retention only: it rewrites from a snapshot, so a sample appended DURING the rewrite
+    may be dropped -- the same accepted contract as ``flowstate``'s ring, which throttles
+    trim so it is rare. Idempotent: on a missing ring it keeps zero, never raises."""
     cfg = cfg or PerfMetricsConfig()
+    path = ring_path(repo, series)
+    if not path.exists():  # a missing ring (fresh repo, detached dir) keeps zero, never raises
+        return 0
     fresh = [s for s in _read_ring(repo, series) if s.t >= now - cfg.ring_max_age_s]
     kept_lines: list[str] = []
     total = 0
@@ -245,12 +259,16 @@ class Store:
     def append(self, series: str, env: str, value: float, gate: str = "", digest: str = "") -> None:
         append(self.repo, series, Sample(self._now(), env, float(value), gate, digest))
 
-    def rollup(self, series: str) -> Rollup:
-        return rollup(_read_ring(self.repo, series), self.cfg.aggregate_min_samples)
+    def trim(self, series: str) -> int:
+        return trim(self.repo, series, self._now(), self.cfg)
 
     def aggregates(
         self, series: str, days: Sequence[float]
     ) -> list[tuple[float, dict[str, dict[str, Any]]]]:
+        """The daily aggregate per day; the report writes these to the committed log.
+
+        A per-run rollup is ``rollup(run_samples, minimum)`` called by the caller on THAT
+        run's samples (the numbers that ride in gate evidence), never the whole ring."""
         return [(day, daily_aggregate(self.repo, series, day, self.cfg)) for day in days]
 
 

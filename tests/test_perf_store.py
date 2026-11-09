@@ -110,8 +110,22 @@ def test_the_reader_merges_rollups_and_aggregates_oldest_first(repo: Path):
 
     rows = merge_series(
         [(2000.0, Rollup(4, 25.0, 37.0, 40.0))],
-        [(1000.0, {"env:a": {"count": 3, "p50": 2.0, "p90": 3.0, "max": 3.0}})],
+        [(1000.0, {"env:a": {"count": 3, "p50": 2.0, "p90": 2.8, "max": 3.0}})],
         "rss",
     )
     assert [r["t"] for r in rows] == [1000.0, 2000.0]
     assert rows[0]["kind"] == "aggregate" and rows[1]["kind"] == "rollup"
+
+
+def test_a_series_key_cannot_resolve_outside_the_ring_dir(repo: Path):
+    from ddflow.services.perf.store import ring_path
+
+    with pytest.raises(ValueError):
+        ring_path(repo, "../../../tmp/exfil")
+    with pytest.raises(ValueError):
+        ring_path(repo, "a/b")
+    assert ring_path(repo, "rss").name == "rss.jsonl"
+
+
+def test_trim_on_a_missing_ring_keeps_zero(repo: Path):
+    assert trim(repo, "absent", 1_000_000.0) == 0  # no mkdir, no raise
