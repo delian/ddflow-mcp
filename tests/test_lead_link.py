@@ -74,3 +74,14 @@ def test_answer_carries_the_asks_item_when_answer_omits_it(repo):
     assert LD.message(repo, "lead", "which?", sender="lane", item="A")[0] is not None
     reply, why = LD.answer(repo, "lane", "take A", sender="lead")
     assert reply is not None and reply.item == "A", why
+
+
+def test_lead_view_reports_held_inbox_when_the_cap_is_zero(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "X", "--title", "X", "--globs", "x.py")
+    assert run_cli(repo, "claim", "X", "--no-worktree", agent="holder")[0] == 0
+    assert run_cli(repo, "config", "lanes.advise_max", "0")[0] == 0
+    assert LD.message(repo, "lead", "which?", sender="lane", item="A")[0] is not None
+    code, out, _ = run_cli(repo, "lanes", "lead", agent="lead")
+    assert code == 0
+    assert "all 1 held" in out and "more not shown" not in out
