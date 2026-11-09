@@ -46,6 +46,16 @@ class Verdict:
     overlapping: tuple[str, ...] = ()
 
 
+_SHOWN = 8  # how many path names one verdict lists before counting the rest
+
+
+def _names(paths: Sequence[str]) -> str:
+    """The first `_SHOWN` path names and the count of the rest, for a verdict's ``why``."""
+    return ", ".join(paths[:_SHOWN]) + (
+        f" (+{len(paths) - _SHOWN} more)" if len(paths) > _SHOWN else ""
+    )
+
+
 def own_patch_id(repo: Path, base: str, tip: str, paths: Sequence[str]) -> str:
     """`git patch-id --stable` of the item's OWN change -- its ``base..tip`` diff restricted
     to ``paths`` (the item's changed files, so another item's commits and main's drift are
@@ -99,8 +109,7 @@ def classify(
     # overlap -- it is stale, not a delta of the covered files.
     added = sorted(p for p in set(changed) - seen if not ignorable(p, recorded, ignore, docs, gone))
     if added:
-        shown = ", ".join(added[:8]) + (f" (+{len(added) - 8} more)" if len(added) > 8 else "")  # noqa: PLR2004
-        return Verdict(STALE, f"the item now changes file(s) the review never saw: {shown}")
+        return Verdict(STALE, f"the item now changes file(s) the review never saw: {_names(added)}")
     overlap = sorted(
         p
         for p in seen
@@ -108,10 +117,9 @@ def classify(
         and not ignorable(p, recorded, ignore, docs, gone)
     )
     if overlap:
-        shown = ", ".join(overlap[:8]) + (
-            f" (+{len(overlap) - 8} more)" if len(overlap) > 8 else ""
-        )  # noqa: PLR2004
-        return Verdict(DELTA, f"re-review only the overlapping files: {shown}", tuple(overlap))
+        return Verdict(
+            DELTA, f"re-review only the overlapping files: {_names(overlap)}", tuple(overlap)
+        )
     return Verdict(
         KEEP,
         f"every file this review covered is unchanged in the tree being completed (the item's "
