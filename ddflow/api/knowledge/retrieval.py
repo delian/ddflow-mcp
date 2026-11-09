@@ -160,7 +160,9 @@ def _semantic_bug_rows(repo: Path, cfg, st, text: str, rows: list[dict]) -> str:
     return note
 
 
-def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Outcome:
+def similar(
+    repo: Path, text: str, *, kinds: str = "", floor: float | None = None, agent: str = ""
+) -> O.Outcome:
     """ "Is this already filed?" -- the records most like ``text``, before it is added.
 
     Read-only: the same engine and the same ``[dedupe]`` knobs (``show_floor``,
@@ -170,7 +172,9 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     worth catching. Each says what it is, where it stands, how close it scored and which
     words it shares, so the match can be judged without opening it. Always runs, whatever
     ``[dedupe].on_match`` says: that setting governs what an ADD does, not whether one may
-    look. ``kinds`` narrows to some of ``[dedupe].kinds``.
+    look. ``kinds`` narrows to some of ``[dedupe].kinds``. ``floor`` overrides the score
+    show floor for this call (None = ``[dedupe].show_floor``), so a near miss below the
+    default is still surfaced (B76826fc2be).
     """
 
     text = (text or "").strip()
@@ -194,17 +198,19 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     store = _store(repo, log, cfg)
     # The policy engine with the add-time switch forced on and the kinds narrowed.
     dd = dataclasses.replace(cfg.dedupe, on_match="ask", kinds=scope)
+    if floor is not None:
+        dd = dataclasses.replace(dd, show_floor=float(floor))
     scoped = dataclasses.replace(cfg, dedupe=dd)
     with SC.matcher(store) as matcher:
         found = sim.assess(matcher, {"kind": scope[0], "title": text, "body": ""}, scoped)
         # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
         cands = [c for c in found.candidates if c.kind in scope]
         rows = DD.rows(st, matcher, cands, text, grace_s=cfg.lease.grace_s)
-        note = _semantic_bug_rows(repo, cfg, st, text, rows) if "bug" in scope else ""
+        note = _semantic_bug_rows(repo, scoped, st, text, rows) if "bug" in scope else ""
     data = {
         "text": text,
         "kinds": scope,
-        "show_floor": cfg.dedupe.show_floor,
+        "show_floor": dd.show_floor,
         "candidates": rows,
         "count": len(rows),
     }
@@ -213,8 +219,7 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     if not rows:
         return O.nothing(
             "similar",
-            f"Nothing in {', '.join(scope)} scores {cfg.dedupe.show_floor:g} or more "
-            "against that text.",
+            f"Nothing in {', '.join(scope)} scores {dd.show_floor:g} or more against that text.",
             **data,
         )
     return O.ok("similar", **data)

@@ -1917,12 +1917,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,swarm}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,swarm}
-                          summary (default), forecast, retro <id>, skips, lanes, stages, locks or
-                          swarm
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm}
+                          summary (default), forecast, retro <id>, skips, lanes, stages, locks,
+                          tiny, paths or swarm
     item                  with retro: the item id
   
   options:
@@ -3067,15 +3067,16 @@
 # ---
 # name: test_help[ddflow similar]
   '''
-  usage: ddflow similar [-h] [--kind KIND] text
+  usage: ddflow similar [-h] [--kind KIND] [--floor FLOOR] text
   
   positional arguments:
-    text         the title or summary of the record you are about to file
+    text           the title or summary of the record you are about to file
   
   options:
-    -h, --help   show this help message and exit
-    --kind KIND  comma-separated subset of [dedupe].kinds:
-                 bug,task,phase,lesson,decision,research,memory (default: all of them)
+    -h, --help     show this help message and exit
+    --kind KIND    comma-separated subset of [dedupe].kinds:
+                   bug,task,phase,lesson,decision,research,memory (default: all of them)
+    --floor FLOOR  minimum score to report (default: [dedupe].show_floor)
   
   '''
 # ---
