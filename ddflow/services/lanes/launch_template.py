@@ -92,8 +92,8 @@ def consent(t: Template) -> Consent:
     diff = "".join(difflib.unified_diff([], lines, "/dev/null", f"templates/{t.name}"))
     how = (
         f"Launching lanes from template {t.name!r} needs a person's approval, once per template and "
-        f"digest: `ddflow approvals request` for {t.subject} at digest {t.digest()}, then re-run. "
-        "An agent never approves it."
+        f"digest: `ddflow lanes approve {t.name}` records the approval at the template's current "
+        f"digest {t.digest()}, then re-run. An agent never approves it."
     )
     return Consent(t.subject, t.digest(), diff, how)
 

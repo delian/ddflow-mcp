@@ -148,9 +148,33 @@ def _outcome(answer: str, ask_id: str) -> str | None:
     return E.DENIED if answer == no else None
 
 
+def _surfaced_question(row: dict[str, Any]) -> str:
+    """The exact question text the payload puts in the tool input. An approval's stored text
+    already carries its id; a question's does not, so it is embedded here -- the transcript
+    scanners filter on the ask id, and a question whose surface omits it is never found."""
+    if row["type"] == E.QUESTION:
+        return f"{row['text']} [{row['id']}]"
+    return row["text"]
+
+
 def payload(row: dict[str, Any], cfg: Config) -> dict[str, Any]:
-    """The AskUserQuestion input the agent must send, unaltered. A generic request also offers
-    the standing-window choice (approve + open the window for the generic T2 class)."""
+    """The AskUserQuestion input the agent must send, unaltered. An approval offers
+    approve/deny (a generic request also the standing-window choice); a question offers its
+    preset options (one is the answer) when it has them, else a free-text answer for exactly
+    its text (no `options` key: the person types the answer)."""
+    if row["type"] == E.QUESTION:
+        q: dict[str, Any] = {
+            "question": _surfaced_question(row),
+            "header": "Question",
+            "multiSelect": False,
+        }
+        opts = row.get("options") or []
+        if opts:
+            q["options"] = [
+                {"label": str(o), "description": "answer the question with this option"}
+                for o in opts
+            ]
+        return {"questions": [q]}
     yes, no = labels(row["id"])
     options = [
         {"label": yes, "description": "approve exactly this command, once"},
@@ -390,11 +414,12 @@ def find_all(cfg: Config, row: dict[str, Any]) -> list[Attested]:
     sit before one read before it)."""
     since = clock.epoch(row["requested_at"], default=0.0)
     hits: list[Attested] = []
+    surfaced = _surfaced_question(row)
     for path in _files(cfg, since):
-        hits += scan(path, row["text"], row["id"])
+        hits += scan(path, surfaced, row["id"])
         hits += scan_typed(path, row, cfg.approvals.min_digest_chars)
     for db in _kilo_dbs(cfg):
-        hits += scan_kilo(db, row["text"], row["id"], since)
+        hits += scan_kilo(db, surfaced, row["id"], since)
     hits.sort(key=lambda h: clock.epoch(h.at, default=0.0))
     return hits
 
@@ -409,8 +434,20 @@ def find(cfg: Config, row: dict[str, Any], *, typed_only: bool = False) -> Attes
 
 def verify(row: dict[str, Any], cfg: Config) -> bool:
     """Re-check a recorded harness answer from the transcript (the level verifier): the proof
-    tool_use id must still be there, answered the way the row records (approve, +window, or
-    deny). A later duplicate answer to the same question does not undo it."""
+    tool_use id must still be there, answered the way the row records (approve, +window,
+    deny, a question's chosen option, or a question's free text). A later duplicate answer to
+    the same question does not undo it."""
+    if row.get("type") == E.QUESTION:
+        if row.get("options"):
+            # a multiple-choice question records the selected option as the outcome
+            return any(
+                h.tool_use_id == row.get("proof") and h.answer == row.get("outcome")
+                for h in find_all(cfg, row)
+            )
+        return any(
+            h.tool_use_id == row.get("proof") and h.answer == row.get("answer")
+            for h in find_all(cfg, row)
+        )
     return any(
         h.tool_use_id == row.get("proof") and _outcome(h.answer, row["id"]) == row.get("outcome")
         for h in find_all(cfg, row)
@@ -435,9 +472,9 @@ def attest(
     if not cfg.approvals.accept_harness:
         return False, "the harness channel is off ([approvals].accept_harness)"
     row = E.get(fold(log.read_all(), strict=False), ask_id)
-    if row is None or not row["verb"]:
-        return False, f"no approval request {ask_id}"
-    t3 = row["min_level"] > LEVEL
+    if row is None:
+        return False, f"no ask {ask_id}"
+    t3 = row.get("min_level", 0) > LEVEL
     if t3 and not chat_t3(cfg):
         return False, t3_refusal(row)
     if E.status(row, now) != E.PENDING:
@@ -448,9 +485,18 @@ def attest(
             f"no answer to {ask_id} in the transcripts under {', '.join(cfg.approvals.transcript_dirs)}"
             f": put `ddflow approvals ask {ask_id}` to the person with AskUserQuestion first"
         )
-    outcome = _outcome(hit.answer, ask_id)
-    if outcome is None:
-        return False, f"the answer {hit.answer!r} is none of the labels for {ask_id}"
+    if row["type"] == E.QUESTION:
+        if row.get("options"):
+            outcome = hit.answer  # a multiple-choice question: the selected option IS the outcome
+            text = ""
+        else:
+            outcome = E.ANSWERED_WORD  # a free-text question: the text is the answer, not a label
+            text = hit.answer
+    else:
+        outcome = _outcome(hit.answer, ask_id)
+        if outcome is None:
+            return False, f"the answer {hit.answer!r} is none of the labels for {ask_id}"
+        text = ""
     actor = resolve_actor(
         cfg,
         f"harness:{Path(hit.file).stem}",
@@ -459,7 +505,7 @@ def attest(
     )
     try:
         E.answer(
-            log, cfg, ask_id, outcome, actor=actor, digest=row["digest"],
+            log, cfg, ask_id, outcome, actor=actor, digest=row["digest"], text=text,
             via=VIA, level=LEVEL, proof=hit.tool_use_id, now=now,
         )  # fmt: skip
     except E.AskRefused as exc:
