@@ -13,7 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.api.decide import _append_block
+from ddflow.api.decide import _append_block, render
 from ddflow.core.autoorder import is_decide
 from ddflow.core.model import fold
 from ddflow.core.schedule import inherited_deps
@@ -205,6 +205,30 @@ def test_decide_appending_is_idempotent_on_a_retry():
     assert _append_block(block, block) == block
     proposal = "# Proposal\n\nAlready drafted.\n"
     assert _append_block(proposal, block) == proposal.rstrip("\n") + "\n\n" + block
+
+
+def test_a_retried_append_lands_the_restatement_once(proj):
+    # A first `--append --body` wrote the restatement and Q-and-A, then its commit was
+    # refused, leaving the file behind; the retry must not write either a second time.
+    _queue_doc(proj, "docs/ddflow/decisions/x.md")
+    run_cli(proj, "decision", "add", "--id", "D-x", "--title", "t", "--decision", "d", "--new")
+    assert run_cli(proj, "chore", "approve")[0] == 0
+    assert run_cli(proj, "claim", "X-decide")[0] == 0
+    st = _state(proj)
+    wt = Path(st.items["X-decide"].worktree)
+    wt = wt if wt.is_absolute() else (proj / wt).resolve()
+    doc = wt / "docs/ddflow/decisions/x.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(
+        render("X-decide", st.decisions["D-x"]).rstrip("\n") + "\n\nQ: left open?\nA: settled now.\n"
+    )
+    code, _out, err = run_cli(
+        proj, "--json", "decide", "X-decide", "--decision-id", "D-x",
+        "--append", "--body", "Q: left open?\nA: settled now.",
+    )  # fmt: skip
+    assert code == 0, err
+    landed = _git(proj, "show", "HEAD:docs/ddflow/decisions/x.md")
+    assert landed.count("Q: left open?") == 1 and landed.count("## D-x: t") == 1
 
 
 def test_decide_a_pattern_glob_still_lands_at_the_slug(proj):
