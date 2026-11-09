@@ -6,9 +6,9 @@ takes the MCP entry (D-unify 4). Read-only: it appends no event and starts no pr
 
 from __future__ import annotations
 
+from ...core.metrics import VIEWS
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
-from ...services.metrics.service import VIEWS
 
 
 def _text(out, a) -> str:
