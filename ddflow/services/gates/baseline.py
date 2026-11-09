@@ -141,7 +141,10 @@ def cache_store(
 ) -> None:
     """Merge ``results`` into the cache of ``sha`` and ``command``, each id stamped with the
     time it was measured (best effort: a failed write costs a rerun). ``sigs`` (id -> failure
-    text) is stored beside the bool, so a later change keeps comparing against the text."""
+    text) is stored beside the bool, so a later change keeps comparing against the text. Each
+    ``sigs`` value is the WHOLE reason: ``on_base``'s only producer ``_base_signatures`` reads
+    ``flakes.failed_reasons``, which keeps a reason WHOLE (FAILED and ERROR alike), so the WHOLE
+    marker stored beside it is honest."""
     if ttl_s <= 0 or not results:
         return
     try:
