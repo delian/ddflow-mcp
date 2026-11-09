@@ -11,8 +11,22 @@ durations and cost only, marked approximate and versioned (those formats change)
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from dataclasses import dataclass
+
+
+def _js(parts: list[str]) -> str:
+    return json.dumps(parts, separators=(",", ":"))
+
+
+def _unjs(s: str) -> list[str]:
+    try:
+        out = json.loads(s)
+        return ([*out, "", "", ""])[:3] if isinstance(out, list) else [s, "", ""]
+    except ValueError:
+        return [s, "", ""]
+
 
 #: The tool-name CLASS recorded (a classification, never the call's arguments or output).
 TOOL_CLASSES = ("shell", "edit", "read", "write", "search", "gate", "mcp", "other")
@@ -59,7 +73,7 @@ def record(repo, source: str, tc: ToolCall) -> None:
         "agent_calls",
         store.Sample(
             time.time(),
-            f"{tc.agent}:{tc.lane}:{tc.item}",
+            _js([tc.agent, tc.lane, tc.item]),
             tc.duration_s if tc.duration_s is not None else -1.0,
             tc.tool_class,
             f"{source}:{1 if tc.ok else 0}",
@@ -75,7 +89,7 @@ def rollup(repo) -> list[dict]:
         lambda: {"count": 0, "ok": 0, "timed": 0, "total_s": 0.0}
     )
     for s in store._read_ring(repo, "agent_calls"):
-        agent, lane, item = ([*s.env.split(":"), "", "", ""])[:3]
+        agent, lane, item = _unjs(s.env)
         b = by[(agent, lane, item, s.gate)]
         b["count"] += 1
         b["ok"] += int(s.digest.endswith(":1"))  # a missing digest is not a success
@@ -106,7 +120,7 @@ def doctor(repo) -> list[dict]:
     hook_n = len(store._read_ring(repo, "agent_calls"))
     out = [{"source": "hook", "in_use": hook_n > 0, "count": hook_n, "off": "remove the post-tool hook call"}]
     out += [
-        {"source": name, "in_use": False, "count": 0, "off": why}
+        {"source": name, "in_use": False, "unavailable": True, "off": why}
         for name, why in sorted(NOT_COLLECTED.items())
     ]
     return out
