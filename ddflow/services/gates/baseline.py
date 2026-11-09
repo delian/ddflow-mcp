@@ -81,34 +81,6 @@ def cache_signatures(
     }
 
 
-def cache_whole(
-    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
-) -> dict[str, bool]:
-    """``{test id: True}`` for ids whose cached failure text is marked WHOLE (``SIG_WHOLE``), so
-    ``on_base`` trusts a whole text even when its length is exactly ``flakes.LINE_CHARS``; an
-    entry WITHOUT the marker is the legacy cut-to-that-length shape and is re-measured instead
-    (B60e9e09308). An id with no text is absent here, as in ``cache_signatures``."""
-    return {
-        k: True
-        for k, v in _entries(repo, sha, ttl_s, now, command).items()
-        if len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]
-    }
-
-
-def cache_whole(
-    repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
-) -> dict[str, bool]:
-    """``{test id: True}`` for ids whose cached failure text is marked WHOLE (``SIG_WHOLE``), so
-    ``on_base`` trusts a whole text even when its length is exactly ``flakes.LINE_CHARS``; an
-    entry WITHOUT the marker is the legacy cut-to-that-length shape and is re-measured instead
-    (B60e9e09308). An id with no text is absent here, as in ``cache_signatures``."""
-    return {
-        k: True
-        for k, v in _entries(repo, sha, ttl_s, now, command).items()
-        if len(v) > SIG_WHOLE_AT and v[SIG_WHOLE_AT]
-    }
-
-
 def cache_snapshot(
     repo: Path, sha: str, ttl_s: int, now: float | None = None, command: str = ""
 ) -> tuple[dict[str, bool], dict[str, str], dict[str, bool]]:
@@ -129,6 +101,11 @@ def _fresh(entry, now: float, ttl_s: int) -> bool:
         return now - float(entry[1]) <= ttl_s
     except (TypeError, ValueError, IndexError, KeyError):
         return False
+    """Is a held ``[failed, measured_at]`` entry well formed and still within the ttl?"""
+    try:
+        return now - float(entry[1]) <= ttl_s
+    except (TypeError, ValueError, IndexError, KeyError):
+        return False
 
 
 def cache_store(
@@ -142,9 +119,9 @@ def cache_store(
     """Merge ``results`` into the cache of ``sha`` and ``command``, each id stamped with the
     time it was measured (best effort: a failed write costs a rerun). ``sigs`` (id -> failure
     text) is stored beside the bool, so a later change keeps comparing against the text. Each
-    ``sigs`` value is the WHOLE reason: ``on_base``'s only producer ``_base_signatures`` reads
-    ``flakes.failed_reasons``, which keeps a reason WHOLE (FAILED and ERROR alike), so the WHOLE
-    marker stored beside it is honest."""
+    ``sigs`` value is what ``flakes.failed_reasons`` kept for comparison -- a FAILED reason's
+    whole summary line, or an ERROR reason's own reason (kept whole by ``flakes._error_fields``);
+    the WHOLE marker stamped beside it records that provenance."""
     if ttl_s <= 0 or not results:
         return
     try:

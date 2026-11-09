@@ -41,7 +41,6 @@ from .baseline import (  # noqa: F401
     cache_snapshot,
     cache_signatures,
     cache_store,
-    cache_whole,
     only_tests_failed,
     read_full,
     test_files_of,
