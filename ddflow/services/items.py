@@ -269,9 +269,10 @@ def add_task(
     """
     if not hasattr(dedupe, "fields") and not (isinstance(dedupe, str) and dedupe.strip()):
         raise ValueError("add_task: dedupe is a settled check, or the reason there is none")
+    closed = closed_phase_parent(st, draft.parent)
     bad = problem_of(draft) or missing_parent(st, draft.parent)
     if bad:
-        return Added(draft.id, bad, refused=bool(closed_phase_parent(st, draft.parent)))
+        return Added(draft.id, bad, refused=bad == closed)
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)
