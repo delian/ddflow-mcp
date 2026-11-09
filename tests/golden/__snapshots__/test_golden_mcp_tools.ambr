@@ -1325,7 +1325,7 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks or swarm."
+          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm."
          },
          "lane": {
           "type": "string",
