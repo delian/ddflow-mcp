@@ -66,8 +66,8 @@ class PerfMetricsConfig:
         doc="The EWMA alpha for slow creep that a fixed threshold never sees (1% a week is invisible step-wise); the detector flags an EWMA that drifted past the relative threshold across the window.",
         check=lambda v: (
             ""
-            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
-            else "must be a number >= 0"
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 < v <= 1
+            else "must be a number in (0, 1]"
         ),
     )
     detect_creep_threshold: float = knob(
