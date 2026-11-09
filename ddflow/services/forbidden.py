@@ -290,7 +290,13 @@ def _param_end(text: str, n: int, bodies: list[str], sub_close: set[int], k: int
 
 
 def _find_body(
-    text: str, n: int, bodies: list[str], sub_close: set[int], j: int, closer: str, case_ok: bool = True
+    text: str,
+    n: int,
+    bodies: list[str],
+    sub_close: set[int],
+    j: int,
+    closer: str,
+    case_ok: bool = True,
 ) -> int:
     """The index of `closer` for the `$(` / backtick opened before `j`; nested quotes,
     substitutions and a nested `( ... )` subshell inside are navigated (so the first plain `)`
@@ -307,7 +313,14 @@ def _find_body(
 
 
 def _skip_span(
-    text: str, n: int, bodies: list[str], sub_close: set[int], k: int, j: int, closer: str, case_ok: bool = True
+    text: str,
+    n: int,
+    bodies: list[str],
+    sub_close: set[int],
+    k: int,
+    j: int,
+    closer: str,
+    case_ok: bool = True,
 ) -> int:
     """Index after the span that starts at `k` when it is data, not `closer`: a comment (its
     `)` is text), a nested `( ... )` subshell, a `case` statement, a quote, an escape, a
@@ -322,7 +335,9 @@ def _skip_span(
         # close, so skip to one past it (groq critic: `echo $( (echo hi) )#; git push`).
         return _find_body(text, n, bodies, sub_close, k + 1, ")", case_ok) + 1
     if case_ok and closer == ")" and _bare_word(text, n, k, "case") and _has_esac(text, n, k):
-        return _case_end(text, n, k, bodies, sub_close)  # a case's `)` separators end patterns, not this `$(` body
+        return _case_end(
+            text, n, k, bodies, sub_close
+        )  # a case's `)` separators end patterns, not this `$(` body
     if c == "'":
         k2 = text.find("'", k + 1)
         return k + 1 if k2 < 0 else k2 + 1
@@ -333,7 +348,9 @@ def _skip_span(
     if c == "\\":  # an escaped closer (\) / \`) is not the end of the body
         return k + 2 if k + 1 < n else k + 1
     if text[k : k + 2] == "${":
-        return _param_end(text, n, bodies, sub_close, k)  # a `)` inside ${...} is not this body's close
+        return _param_end(
+            text, n, bodies, sub_close, k
+        )  # a `)` inside ${...} is not this body's close
     if c == "`" or text[k : k + 2] in ("$(", "<(", ">("):
         return _sub_body(text, n, bodies, sub_close, k)
     return k + 1
