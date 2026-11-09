@@ -95,6 +95,11 @@ def _cut_ready(
         p.blocked.append(Blocked(it.id, "state", why, sorted(live_items)))
         p.capped.append(it.id)
     if cut:
+        # `claim` never applies the cap to a NAMED item (an explicit `ddflow claim <id>` is
+        # granted whatever the cap, pinned by test_a_cap_blocked_item_wait_agrees_with_claim): the
+        # cap trims this offered READY SET only. Say so, or a lane cannot tell a wait for a slot
+        # from an item it could claim right now (B30f9d383ba).
+        named = "a named `ddflow claim` of it is not capped and grants it now"
         if slots:
             # NOT "cap reached": a slot is free, and a higher-ranked item is offered it.
             # Said as "reached", an agent waiting for the message to clear waited hours
@@ -102,11 +107,11 @@ def _cut_ready(
             names = ", ".join(i.id for i in taken)
             why = (
                 f"held by {p.cap_note}: {live_note}; {slots} slot(s) free, offered to "
-                f"higher-ranked {names}"
+                f"higher-ranked {names}; {named}"
             )
         else:
             # `_blocking_leases` (api.lifecycle) keys on "cap reached".
-            why = f"{reached}; {live_note}"
+            why = f"{reached}; {live_note}; {named}"
         # Any release frees a slot, so a cap-held item waits on every item in flight --
         # named here, so that a waiter registers against all of them whatever the wording
         # (the free-slot wording no longer says "cap reached").

@@ -52,8 +52,9 @@ def _setup(repo: Path, tmp_path: Path, review_toml: str = "") -> Path:
     cli.write_text(
         "#!/bin/sh\nin=$(cat)\n"
         f"printf 'call\\n' >> '{seen}'\n"
-        'case "$in" in *FINDME-B*) printf \'FINDING MEDIUM y.py:1\\nsecond problem\\n\\n'
+        'case "$in" in *FINDME-H*) printf \'FINDING HIGH z.py:1\\nnew high problem\\n\\n'
         "STATUS: FINDINGS 1\\n';; "
+        "*FINDME-B*) printf 'FINDING MEDIUM y.py:1\\nsecond problem\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*FINDME*) printf 'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac\n"
     )
@@ -699,7 +700,9 @@ def test_a_failed_delta_that_is_not_the_hold_is_never_released(repo, tmp_path):
     clear `fail` without the hold (the marker is what releases, and it is absent)."""
     _setup(repo, tmp_path)
     _review(repo)  # finding #1
-    _fix(repo, "y.py", "y = 1  # FINDME-B\n")  # finding #2, the delta's own: failed, NOT held
+    _fix(
+        repo, "z.py", "z = 1  # FINDME-H\n"
+    )  # finding #2 (HIGH), the delta's own: failed, NOT held
     held = _review(repo)
     assert held.data["outcome"] == "failed" and "held_pass" not in _ev(repo), held.data
     assert api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="p").exit == OK

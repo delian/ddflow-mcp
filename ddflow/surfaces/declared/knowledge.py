@@ -87,6 +87,12 @@ def _applicable_text(out, a) -> str:
         f"  [{d['id']}] {d['title']}  (project-wide)\n      {d['decision']}"
         for d in out.data["project_wide"]
     ]
+    if out.data.get("path_matching"):
+        if lines:
+            lines.append("")
+        lines.append("path matching could not run: the item declares no globs")
+        if not out.data["applicable"] and not out.data["project_wide"]:
+            lines.append("no project-wide decisions recorded either")
     return "\n".join(lines)
 
 
@@ -643,7 +649,7 @@ COMMANDS: tuple[Command, ...] = (
         "writing the code, without them having to know it exists. Returns "
         "project-wide decisions too.",
         call=lambda repo, a, agent: _api().decision_applicable(repo, a["id"]),
-        payload=("applicable", "project_wide"),
+        payload=("applicable", "project_wide", "path_matching"),
         params=(Param("id", help="Item id.", cli_help="", positional=True),),
     ),
     Command(

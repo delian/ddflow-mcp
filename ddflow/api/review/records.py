@@ -411,7 +411,7 @@ def _blocking_findings(
     return blocking, discounted, converged_round
 
 
-def _gate_outcome(
+def _gate_outcome(  # noqa: PLR0913 -- the identifying pass + results + item + cfg + evidence + say
     best,
     results,
     it,
@@ -421,17 +421,20 @@ def _gate_outcome(
     cfg,
     extra_evidence,
     say,
+    *,
     author_model: str = "",
+    kind: str = "",
 ) -> tuple[str, dict | None]:
     """(outcome, extra_evidence) -- the review's outcome and the (possibly updated) extra
-    evidence; a converged full re-review passes with a `converged` flag on the evidence, and
-    a round whose only findings are a same-family reviewer's (over a clean cross-family
-    verdict) passes with a `same_family_discounted` flag (bug B7dbf432caa).
+    evidence; a converged full or delta re-review passes with a `converged` flag on the
+    evidence, and a round whose only findings are a same-family reviewer's (over a clean
+    cross-family verdict) passes with a `same_family_discounted` flag (bug B7dbf432caa).
 
-    The convergence floor (bug Bf797745b5a) applies to a FULL re-review only: a delta or
-    fix round shows only NEW code, so its own finding is a real defect of the change and
-    blocks at any severity -- while a full re-review re-sends the whole diff the author
-    has already seen, so a new below-floor nit does not re-open the gate.
+    The convergence floor (bug Bf797745b5a) applies to a full or delta re-review: only a
+    fix round (or a chunk re-run) shows new code alone, where its own finding is a real
+    defect, so that still blocks at any severity -- while a re-review re-reads the change
+    the author has already seen, so a new below-floor nit does not re-open the gate (bug
+    B-review-delta-rounds-do-not-converge).
     """
     if best.status != RV.REVIEWED:
         return (
@@ -450,11 +453,18 @@ def _gate_outcome(
     )
     if blocking:
         return "failed", extra_evidence
-    # A full re-review must not converge (pass on below-floor findings) while a confirmed
+    # A converged FULL re-review must not pass (on below-floor findings) while a confirmed
     # finding the gate has ever recorded still awaits a later delta round (bug
-    # B-push-failed-review-delta). A same-family confirmed finding is discounted over a
-    # clean cross-family verdict inside `_confirmed_unrechecked` (bug B7dbf432caa).
-    if converged_round and _confirmed_unrechecked(it, gate, results, cfg, author_model):
+    # B-push-failed-review-delta): a full round that does not raise it has not re-checked the
+    # fix. A DELTA round IS the re-check -- the findings it does not raise are the ones it
+    # cleared -- so only a full round applies the guard (bug
+    # B-review-delta-rounds-do-not-converge). A same-family confirmed finding is discounted
+    # over a clean cross-family verdict inside `_confirmed_unrechecked` (bug B7dbf432caa).
+    if (
+        converged_round
+        and kind != "delta"
+        and _confirmed_unrechecked(it, gate, results, cfg, author_model)
+    ):
         return "failed", extra_evidence
     # A same-family reviewer's finding does not hold the pass open when a cross-family
     # reviewer came back clean: cross-family clean is authoritative (bug B7dbf432caa). The
@@ -479,6 +489,6 @@ def _gate_outcome(
     }
     say(
         f"→ {converged['findings_below_floor']} finding(s) below [review].converge_floor "
-        f"({converged['floor']}) recorded but not blocking: the full re-review passes (converged)"
+        f"({converged['floor']}) recorded but not blocking: the re-review passes (converged)"
     )
     return "passed", {**(extra_evidence or {}), "converged": converged}

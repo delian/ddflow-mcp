@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ...adapters.clock import DEFAULT as CLOCK
+from ...core import globs
 from ...core.digest import content_digest as digest
 from ...infra import fsio
 from ...infra.tomlcfg import atomic_write
@@ -157,6 +158,16 @@ def test_files_of(ids: list[str]) -> list[str]:
     return sorted({i.split("::", 1)[0] for i in ids})
 
 
+def _always_guard_files(cfg, files: list[str]) -> set[str]:
+    """The failing files that are always-run guards (`[ci].always_tests`): they run for every
+    item whatever the change reaches, so their presence in the selection is never evidence this
+    change caused the failure (B-baseline-red-reach-counts-whole-tree-guards). Matching their
+    DECLARED globs, not importing `ci_scope` (a module-level import would cycle through
+    `gates`; a local one is a deferred import the architecture ratchet forbids)."""
+    ci_globs = tuple(getattr(getattr(cfg, "ci", None), "always_tests", None) or ())
+    return {f for f in files if any(globs.match(f, g) for g in ci_globs)}
+
+
 def auto_decision(
     cfg, tree: Path, base: str, ids: list[str], found: dict[str, Any], limits: dict[str, int]
 ) -> dict[str, Any]:
@@ -166,10 +177,13 @@ def auto_decision(
     only because it DECLARES it governs the changed path (a whole-tree guard such as
     `tests/test_architecture_guards.py` with ``GOVERNS = ("ddflow/**", ...)``) is reached
     trivially -- it governs the whole tree, so its presence in the selection is not itself
-    evidence this change caused its failure. Such a guard blocks only when the guard file
+    evidence this change caused its failure. Same for an always-run guard (`[ci].always_tests`):
+    it runs for every item, so reach there is trivial too. Such a guard
+    blocks only when the guard file
     itself changed; the guard's own violation sites are compared against the base separately
     in `baseline_red` (a new offender is already not ``red``), so the reach check never has to
-    look inside its output (B-baseline-reach-blocks-red-main-fix)."""
+    look inside its output (B-baseline-reach-blocks-red-main-fix, B-baseline-red-reach-counts-
+    whole-tree-guards)."""
     out: dict[str, Any] = {"accepted": False, "ids": list(ids)}
     if getattr(cfg.gates, KNOB) != "on":
         return {**out, "why": f"[gates].{KNOB} is off: a person accepts it"}
@@ -179,11 +193,40 @@ def auto_decision(
     if sel is None:
         return {**out, "why": "git could not say what the item changed, so none is excluded"}
     if sel.full:
+        # A hub-module (or test-infrastructure) change cut the reach walk, so which test files
+        # it would reach by import or governing cannot be told. What IS still known is the
+        # changed-file list (`sel.changed`) and the measurement itself: `red` (checked above)
+        # already means every failing test was measured on the base, so `unmeasured` is empty
+        # and only two guards remain real -- the comparison was whole-vs-whole (`uncompared`
+        # empty: a missing branch or base text is an absence of evidence, not a match) and no
+        # failing test FILE is itself changed. Reach is then only needed to attribute a failure
+        # to a changed file (B0f41a2f1d6).
+        changed = set(sel.changed)
+        uncompared = found.get("uncompared")
+        # `uncompared` is always set on the one path that yields `red` (`_tally`), so an ABSENT
+        # list must decline rather than read as "all compared" (B0f41a2f1d6).
+        if (
+            uncompared is not None
+            and not uncompared
+            and not [f for f in test_files_of(ids) if f in changed]
+        ):
+            return {
+                **out,
+                "accepted": True,
+                "why": "every failing test was measured on the base "
+                f"(a hub cut the reach walk; nothing is left to attribute): {sel.full}",
+            }
         return {**out, "why": f"the import reach cannot be told ({sel.full})"}
     changed = set(sel.changed)
     governs = {t.path for t in (*sel.tests, *sel.cut) if t.reason.startswith("governs ")}
     reached = {t.path for t in (*sel.tests, *sel.cut)}
-    inside = [f for f in test_files_of(ids) if f in changed or (f in reached and f not in governs)]
+    files = test_files_of(ids)
+    excluded = governs | _always_guard_files(cfg, files)
+    # The non-full path has the reach guard the `full` branch lacks, so it does NOT also consult
+    # `uncompared`: a failing test whose text was missing (an indeterminate "new offender") is
+    # still declined here when the change reaches it, and an unreached one cannot be caused by
+    # the change. The `full` branch above substitutes `uncompared` for that missing reach guard.
+    inside = [f for f in files if f in changed or (f in reached and f not in excluded)]
     if inside:
         return {
             **out,

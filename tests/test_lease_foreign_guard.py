@@ -7,8 +7,11 @@ and bob's `gate run T1 unit_tests` wrote gate.unavailable over alice's recorded 
 every clone (last event wins). A lease is evidence of intent, not a lock, so the override
 stays possible -- but it needs `--force` with a reason and is recorded.
 
-The guard is per CLONE (operator decision D-mu-bugfix-answers): agents of the same clone,
-the holder itself, an expired lease and a lease with no recorded clone are unchanged.
+The guard is per CLONE (operator decision D-mu-bugfix-answers): an expired lease and a
+lease with no recorded clone are unchanged. A SAME-clone release is guarded by AGENT too
+(B59a07c283d): an agent releasing a PEER agent's live lease needs `--force --reason` like a
+foreign clone's, though the holder itself and the operator releasing a crashed agent's lease
+do not.
 """
 
 from __future__ import annotations
@@ -71,6 +74,12 @@ def test_a_lease_with_no_recorded_clone_is_not_foreign(tmp_path):
     log = _log(tmp_path, "bbbbbb")
     _lease(log, clone=None, at=time.time())
     assert LS.foreign_live_lease(log, Config(), "T", "bob") is None
+
+
+def test_a_lease_with_no_recorded_clone_is_not_a_peer(tmp_path):
+    log = _log(tmp_path, "aaaaaa")
+    _lease(log, clone=None, at=time.time())
+    assert LS.peer_live_lease(log, Config(), "T", "bob") is None
 
 
 def test_an_expired_foreign_lease_is_not_foreign_live(tmp_path):
@@ -172,11 +181,43 @@ def test_release_force_with_a_reason_releases_and_records_it(clones):
 
 def test_the_holder_and_its_own_clone_release_without_force(clones):
     a, _b = clones
-    # another agent of alice's clone (a coordinator clearing a crashed sub-agent)
+    # another agent of alice's clone releasing a PEER's live lease is refused (B59a07c283d):
+    # a lane sharing the clone must not drop a peer lane's lease and refuse its later writes.
     code, out, err = run_cli(a, "release", "T1", agent="coordinator")
-    assert code == 0, out + err
+    assert code == REFUSED and "--force" in out + err, out + err
+    # the holder itself still releases its own lease freely
     code, out, err = run_cli(a, "release", "T2", agent="U9")
     assert code == 0, out + err
+
+
+def test_a_peer_agent_force_needs_a_reason(clones):
+    a, _b = clones
+    before = _events(a)
+    code, out, err = run_cli(a, "release", "T1", "--force", agent="coordinator")
+    assert code == REFUSED and "reason" in (out + err).lower(), out + err
+    assert _events(a) == before
+    assert _lease_of(a, "T1") is not None
+
+
+def test_a_peer_agent_force_with_a_reason_releases_and_records_it(clones):
+    a, _b = clones
+    code, out, err = run_cli(
+        a, "release", "T1", "--force", "--reason", "U9 is gone", agent="coordinator"
+    )
+    assert code == 0, out + err
+    ev = [e for e in _events(a) if e["kind"] == "lease.released"][-1]
+    assert ev["data"]["forced"] is True
+    assert "U9 is gone" in ev["data"]["note"]
+    assert _lease_of(a, "T1") is None
+
+
+def test_the_operator_release_of_a_peer_lease_stays_free(clones):
+    a, _b = clones
+    # No --agent (an operator at a terminal) releasing a crashed agent's lease stays the
+    # normal recovery case, no --force --reason needed (B59a07c283d keeps the operator free).
+    code, out, err = run_cli(a, "release", "T1")
+    assert code == 0, out + err
+    assert _lease_of(a, "T1") is None
 
 
 @pytest.mark.parametrize(

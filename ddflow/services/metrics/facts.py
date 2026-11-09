@@ -46,6 +46,18 @@ class Outcome:
     #: A review's independence tier (family | model | none), "" for an older log or a
     #: gate no reviewer judged (D-reviewer-independence-soft).
     tier: str = ""
+    #: A review round's number, when the verdict named it (``round`` or ``rounds``); None
+    #: for a gate that runs no review rounds or an older log.
+    round: int | None = None
+    #: The tree (or reviewed head) a review round covered; "" when the verdict carried none.
+    tree_sha: str = ""
+    #: A merged review's id (``review_id``), "" when the verdict recorded one gate not a merge.
+    review_id: str = ""
+    #: The gates merged into one recorded call (``combined_gates``), oldest first; empty for
+    #: a verdict that recorded a single gate (D-path-merge-answers merges bookkeeping gates).
+    combined_gates: tuple[str, ...] = ()
+    #: A merged / covered-by note the evidence carried (``note``), "" when it had none.
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -56,6 +68,17 @@ class Landing:
     before: str = ""  # the target branch before the merge
     after: str = ""  # ... and after it
     head: str = ""  # the branch tip that was merged
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One `review.triaged` event: a review finding and what the author did with it."""
+
+    item: str
+    gate: str
+    severity: str = ""  # HIGH | MEDIUM | LOW | "" when the reviewer did not grade it
+    verdict: str = ""  # confirmed | refuted
+    at: float = 0.0
 
 
 @dataclass
@@ -105,6 +128,8 @@ class Facts:
     merges: dict[str, list[float]] = field(default_factory=dict)
     #: item -> each `worktree.merged` with the commits it recorded (same order as ``merges``).
     landings: dict[str, list[Landing]] = field(default_factory=dict)
+    #: every `review.triaged`: a finding and its verdict, oldest first.
+    findings: list[Finding] = field(default_factory=list)
     state: State | None = None
 
     def starts_of(self, item: str) -> list[float]:
@@ -156,7 +181,22 @@ def _outcome(at: float, ev: Event) -> Outcome | None:
         waited_s=_float(evidence.get("waited_s")),
         changed_lines=_changed_lines(evidence),
         tier=str(evidence.get("independence_tier") or ""),
+        round=_round_number(evidence),
+        tree_sha=str(evidence.get("tree_sha") or evidence.get("reviewed_head") or ""),
+        review_id=str(evidence.get("review_id") or ""),
+        note=str(evidence.get("note") or ""),
+        combined_gates=tuple(
+            g for g in (evidence.get("combined_gates") or ()) if isinstance(g, str)
+        ),
     )
+
+
+def _round_number(evidence: dict) -> int | None:
+    """A review round's number from its evidence (``round`` else ``rounds``), None for none."""
+    v = _float(evidence.get("round"))
+    if v is None:
+        v = _float(evidence.get("rounds"))
+    return int(v) if v is not None else None
 
 
 def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str, Lease]) -> None:
@@ -172,6 +212,17 @@ def _lease_event(facts: Facts, span: Span, at: float, ev: Event, held: dict[str,
         facts.leases.append(lease)
     elif ev.subject in held:  # released, expired, abandoned, completed: the hold ends
         held.pop(ev.subject).end = at
+
+
+def _finding(at: float, ev: Event) -> Finding:
+    d = ev.data if isinstance(ev.data, dict) else {}
+    return Finding(
+        ev.subject,
+        str(d.get("gate") or ""),
+        str(d.get("severity") or ""),
+        str(d.get("verdict") or ""),
+        at,
+    )
 
 
 def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
@@ -198,6 +249,8 @@ def _absorb(facts: Facts, at: float, ev: Event, held: dict[str, Lease]) -> None:
         )
     elif kind == "bug.found" and isinstance(d.get("item"), str) and d["item"]:
         facts.bugs.append((d["item"], at))
+    elif kind == "review.triaged":
+        facts.findings.append(_finding(at, ev))
     elif kind.startswith("gate."):
         out = _outcome(at, ev)
         if out is not None:

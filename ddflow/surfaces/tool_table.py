@@ -42,10 +42,12 @@ def overview() -> str:
     for name, fam in F.FAMILIES.items():
         if fam.single:
             continue
-        actions = ", ".join(
+        action_bits: list[str] = [
             f"`{a}`" if old == name else f"`{a}` (was `{old}`)" for a, old in fam.members.items()
-        )
-        families.append(f"- `{name}` ({len(fam.members)} actions): {actions}")
+        ]
+        action_bits += [f"`{a}`" for a in fam.pinned]
+        actions = ", ".join(action_bits)
+        families.append(f"- `{name}` ({len(fam.actions())} actions): {actions}")
     return "\n".join(
         [
             "**Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and "
