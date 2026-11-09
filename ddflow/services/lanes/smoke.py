@@ -87,12 +87,19 @@ def is_guard_refusal(text: str) -> bool:
 
 
 def _refusal(output: Any) -> str:
-    """The reason of a ddflow refusal at the head of a tool's output, or "". A heartbeat that
-    renewed nothing is one: it exits 2, not 3, but the lane has no lease to go on with."""
-    if not isinstance(output, str) or not output.lstrip().startswith("{"):
+    """The reason of a ddflow refusal in a tool's output, or "". A heartbeat that renewed nothing
+    is one: it exits 2, not 3, but the lane has no lease to go on with. The refusal JSON may
+    follow leading prose (a warning line); only its own text matters."""
+    if not isinstance(output, str):
         return ""
+    text = output.lstrip()
+    if not text.startswith("{"):
+        first = text.find("{")
+        if first < 0:
+            return ""
+        text = text[first:]
     try:
-        head, _ = json.JSONDecoder().raw_decode(output.lstrip())
+        head, _ = json.JSONDecoder().raw_decode(text)
     except ValueError:
         return ""
     if not isinstance(head, dict):
@@ -196,27 +203,34 @@ def _stop(calls: Sequence[Call], past: list[Any], exit_code: int | None) -> Chec
 
 def judge(
     stream: Stream,
-    events: Iterable[Any],
+    events: Iterable[Any] | None,
     *,
     item: str,
     lane: str,
     commits: int | None,
     exit_code: int | None,
 ) -> Verdict:
-    """One run. ``events`` is the event log, ``commits`` the branch's count ahead of its base
-    (None when unread), ``exit_code`` the lane's (None when it was not seen to end)."""
-    own = [e for e in events if e.subject == item and e.agent == lane]
+    """One run. ``events`` is the event log (``None`` when it could not be read), ``commits`` the
+    branch's count ahead of its base (``None`` when unread), ``exit_code`` the lane's (``None``
+    when it was not seen to end). An unreadable log grades the claim and gate-record steps
+    unavailable, not failed: a torn or missing log never reads as a failed run."""
+    own = [e for e in events if e.subject == item and e.agent == lane] if events is not None else []
 
     def of(*kinds: str) -> list[Any]:
         return [e for e in own if e.kind in kinds]
 
+    def logged(step: str, hits: list[Any], what: str) -> Check:
+        if events is None:
+            return Check(step, UNAVAILABLE, "the event log could not be read")
+        return _logged(step, hits, what)
+
     return Verdict(
         (
-            _logged("claim", of("lease.acquired"), "lease.acquired"),
+            logged("claim", of("lease.acquired"), "lease.acquired"),
             _edit(stream.calls),
             _commit(commits),
             _heartbeat(stream.calls),
-            _logged("gate_record", of(*_GATE_KINDS), "gate outcome"),
+            logged("gate_record", of(*_GATE_KINDS), "gate outcome"),
             _stop(stream.calls, of(*PAST_THE_LEASE), exit_code),
         ),
         reliability(stream.calls),

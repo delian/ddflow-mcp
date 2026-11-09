@@ -47,10 +47,13 @@ def log():
     return [ev("lease.acquired", holder=LANE), ev("gate.passed", gate="implement")]
 
 
-def judged(lines=GOOD, events=None, commits=1, exit_code=0):
+_UNSET = object()
+
+
+def judged(lines=GOOD, events=_UNSET, commits=1, exit_code=0):
     return S.judge(
         S.read_stream(lines),
-        log() if events is None else events,
+        log() if events is _UNSET else events,
         item=ITEM,
         lane=LANE,
         commits=commits,
@@ -99,6 +102,14 @@ def test_a_ddflow_refusal_inside_a_completed_call_is_a_refusal():
 def test_a_refusal_with_no_reason_is_still_a_refusal():
     s = S.read_stream([tool("ddflow_ddflow_heartbeat", out='{"refusal":{"reason":""}}')])
     assert s.calls[0].status == S.REFUSED
+
+
+def test_a_refusal_after_leading_text_is_still_a_refusal():
+    """A refusal's JSON may follow prose (a warning line); it must not grade as ok."""
+    out = 'Warning: stale lock\n{"refusal":{"reason":"no commit ahead"},"schema":"x"}'
+    s = S.read_stream([tool("ddflow_ddflow_gate", out=out, action="record")])
+    assert s.calls[0].status == S.REFUSED
+    assert "no commit ahead" in s.calls[0].detail
 
 
 def test_a_lease_hook_error_is_a_guard_refusal_not_a_bad_call():
@@ -232,6 +243,19 @@ def test_going_past_the_brief_fails_even_when_the_exit_was_not_seen():
 def test_a_lane_killed_or_failed_did_not_stop():
     assert outcomes(judged(exit_code=1))["stop"] == S.FAILED
     assert outcomes(judged(exit_code=None))["stop"] == S.UNAVAILABLE
+
+
+def test_an_unreadable_event_log_is_unavailable_not_failed():
+    """A caller that could not read the log passes None, not an empty list: claim and
+    gate_record grade unavailable, so a torn or unread log never reads as a failed run."""
+    v = judged(events=None)
+    assert outcomes(v)["claim"] == S.UNAVAILABLE
+    assert outcomes(v)["gate_record"] == S.UNAVAILABLE
+
+
+def test_an_unreadable_log_with_nothing_else_observed_is_unavailable():
+    v = judged(events=None, commits=None, exit_code=None)
+    assert v.outcome == S.UNAVAILABLE
 
 
 def test_a_failure_outranks_unavailable():
