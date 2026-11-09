@@ -41,6 +41,8 @@ class FakeManagedFile(ManagedFile):
         marker = data.get(OWNER_KEY)
         keys = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
         hashes = keys if isinstance(keys, dict) else {}
+        if not hashes:  # a legacy name-only marker: drift is unknown, so every name is current
+            return dict.fromkeys(_owned_keys(data), "current")
         return {
             k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
             for k in _owned_keys(data)

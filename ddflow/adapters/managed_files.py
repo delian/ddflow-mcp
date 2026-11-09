@@ -126,6 +126,8 @@ class JsonManagedFile:
         keys = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
         # a legacy marker lists names only (no digests): a name is "current", drift is not known
         hashes = keys if isinstance(keys, dict) else {}
+        if not hashes:  # a legacy name-only marker: drift is unknown, so every name is current
+            return dict.fromkeys(_owned_keys(data), "current")
         return {
             k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
             for k in _owned_keys(data)
