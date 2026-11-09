@@ -84,9 +84,12 @@ def rollup(cases: list[TestCase], workers: int, top_n: int = 10) -> dict:
     }
 
 
-def fold(cases: list[TestCase], repo, gate: str) -> None:
-    """Append one ring sample per timed test (the raw durations) to the ``gate`` series; only
-    the rollup reaches evidence. A case with no duration is not a sample."""
+def fold(cases: list[TestCase], repo, gate: str, env: str = "") -> None:
+    """Append one ring sample per timed test to the ``gate`` series. ``env`` is the machine
+    fingerprint class (empty when unknown); the file/test id is folded into a content HASH in
+    the digest (never a raw path in the ``env`` or ``digest`` slots). Only the rollup reaches
+    evidence. A case with no duration is not a sample."""
+    import hashlib
     import time
 
     from ddflow.services.perf import store
@@ -94,10 +97,11 @@ def fold(cases: list[TestCase], repo, gate: str) -> None:
     for c in cases:
         if c.duration_s is None:
             continue
+        digest = hashlib.sha256(f"{c.file}:{c.test_id}".encode()).hexdigest()[:16]
         store.append(
             repo,
             "test_durations",
-            store.Sample(time.time(), c.file, c.duration_s, gate, c.test_id),
+            store.Sample(time.time(), env, c.duration_s, gate, digest),
         )
 
 
