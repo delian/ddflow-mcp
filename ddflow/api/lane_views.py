@@ -43,7 +43,7 @@ def lane_template_approve(
     outside a test. Refused under an agent identity."""
     if not name:
         return O.failed("lanes", "a template name is required: `ddflow lanes approve <name>`")
-    templates, notes = T.load(Path(repo) / cfg.swarm.launch_templates_file)
+    templates, _notes = T.load(Path(repo) / cfg.swarm.launch_templates_file)
     t = templates.get(name)
     if t is None:
         known = ", ".join(sorted(templates)) or "none"
