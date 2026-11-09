@@ -48,7 +48,8 @@ class FakeImporter(Importer):
 
 def record(repo, source: str, tc: ToolCall) -> None:
     """Append one tool call to the local ring under ``agent_calls`` (the caller is the
-    post-tool hook). ``source`` names which harness/feed saw it (for the doctor listing)."""
+    post-tool hook). ``source`` names the harness/feed; ``ok`` is encoded into the digest and
+    a missing duration is the -1 sentinel, never a fabricated 0."""
     import time
 
     from ddflow.services.perf import store
@@ -59,40 +60,39 @@ def record(repo, source: str, tc: ToolCall) -> None:
         store.Sample(
             time.time(),
             f"{tc.agent}:{tc.lane}:{tc.item}",
-            tc.duration_s
-            if tc.duration_s is not None
-            else 1.0,  # a count is 1, a duration its seconds
+            tc.duration_s if tc.duration_s is not None else -1.0,
             tc.tool_class,
-            source,
+            f"{source}:{1 if tc.ok else 0}",
         ),
     )
 
 
 def rollup(repo) -> list[dict]:
-    """tool-class -> {count, ok, failed, total_s} over the local ring, per agent/lane/item."""
+    """per agent/lane/item/tool-class: {count, ok, failed, total_s} from the local ring."""
     from ddflow.services.perf import store
 
-    rows = store._read_ring(repo, "agent_calls")
-    by: dict[tuple[str, str, str], dict] = defaultdict(
+    by: dict[tuple[str, str, str, str], dict] = defaultdict(
         lambda: {"count": 0, "ok": 0, "total_s": 0.0}
     )
-    for s in rows:
-        agent, lane, _item = ([*s.env.split(":"), "", "", ""])[:3]
-        b = by[(agent, lane, s.gate)]
+    for s in store._read_ring(repo, "agent_calls"):
+        agent, lane, item = ([*s.env.split(":"), "", "", ""])[:3]
+        b = by[(agent, lane, item, s.gate)]
         b["count"] += 1
-        b["ok"] += int(s.digest and not getattr(s, "digest", "") == "err")
-        if s.value != 1.0:
+        b["ok"] += int(s.digest.endswith(":1") if s.digest else True)
+        if s.value >= 0:  # a recorded duration (the -1 sentinel is a count-only call)
             b["total_s"] += s.value
     return [
         {
             "agent": a,
             "lane": ln,
+            "item": it,
             "tool_class": tc,
             "count": b["count"],
             "ok": b["ok"],
+            "failed": b["count"] - b["ok"],
             "total_s": b["total_s"],
         }
-        for (a, ln, tc), b in sorted(by.items())
+        for (a, ln, it, tc), b in sorted(by.items())
     ]
 
 
