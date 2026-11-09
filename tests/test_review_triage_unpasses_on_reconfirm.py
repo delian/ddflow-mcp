@@ -47,8 +47,9 @@ def test_retriage_to_confirmed_revokes_the_pass_on_refutation(repo, tmp_path):
 
 
 def test_noop_retriage_keeps_the_pass_on_refutation(repo, tmp_path):
-    """A re-triage that does not grow the confirmed count is a no-op: the guard uses <= so a
-    finding re-triaged to its existing verdicts never revokes the refundation pass."""
+    """A re-triage to a verdict other than ``confirmed`` is a no-op: `_revoke_refutation_pass`
+    returns before the revocation path, so re-triaging an already-refuted finding as refuted
+    again never revokes the refutation pass."""
     _setup(repo, tmp_path)
     _full_review(repo)
     _tri(repo, 1)
