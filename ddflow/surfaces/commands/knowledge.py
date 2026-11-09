@@ -477,6 +477,12 @@ def _where(d: dict) -> str:
     return f" in session {d['session']} ({label})"
 
 
+def _on_item(d: dict) -> str:
+    """' on item ID' for a note attached to an item; '' when the caller named none."""
+    item = d.get("item") or ""
+    return f" on item {item}" if item else ""
+
+
 def cmd_session(a, c: Ctx) -> int:
     if a.session_cmd == "start":
         out = A.session_start(
@@ -513,8 +519,7 @@ def cmd_session(a, c: Ctx) -> int:
                 out.body(("redactions", "session", "how")),
             )
         else:
-            on = f" on item {out.data['item']}" if out.data.get("item") else ""
-            c.out(f"noted{on}{where}", out.body(("session", "how", "item")))
+            c.out(f"noted{_on_item(out.data)}{where}", out.body(("session", "how", "item")))
         return OK
     if a.session_cmd == "adopt-orphans":
         out = A.session_adopt_orphans(c.repo, agent=c.requested_agent)
