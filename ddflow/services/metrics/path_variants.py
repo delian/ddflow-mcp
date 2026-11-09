@@ -14,6 +14,7 @@ import itertools
 from collections import defaultdict
 from statistics import median
 
+from ...core import clock
 from .providers import Context
 
 #: The canonical gate order (a task pipeline); a gate out of order is one that ran before a
@@ -78,17 +79,6 @@ def variants(ctx: Context) -> list[dict]:
     ]
 
 
-def overlap(ctx: Context) -> dict:
-    """the burst overlap: the summed process time vs its union (what the concurrent view saves)."""
-    from . import paths
-
-    u = paths.build(ctx)["process_union"]
-    return {
-        "union": u.get("union"),
-        "saved_by_union": u.get("saved_by_union"),
-    }
-
-
 def superseded_passes(ctx: Context) -> list[dict]:
     """a PASS superseded by a later tree change on the same item (the later run re-reviewed a
     moved tree, so the earlier pass counted for nothing)."""
@@ -107,20 +97,33 @@ def superseded_passes(ctx: Context) -> list[dict]:
 
 
 def out_of_order(ctx: Context) -> list[dict]:
-    """a gate run recorded before an earlier canonical step on the same item (the item skipped
-    or re-ordered its pipeline)."""
+    """a gate run recorded before an EARLIER canonical step on the same item (it ran ahead of
+    its prerequisite -- e.g. critic before rubber_duck)."""
     rank = {g: i for i, g in enumerate(CANON)}
     out = []
     for item, rows in _items(ctx).items():
-        seen_max = -1
-        for o in rows:
-            r = rank.get(o.gate)
-            if r is None:
-                continue
-            if r < seen_max:
-                out.append({"item": item, "gate": o.gate, "at": o.at})
-            seen_max = max(seen_max, r)
+        rrows = [(o.at, o.gate) for o in rows if o.gate in rank]
+        for i, (at, gate) in enumerate(rrows):
+            if any(rank[g] < rank[gate] for t2, g in rrows[i + 1 :]):
+                out.append({"item": item, "gate": gate, "at": at})
     return out
+
+
+def overlap(ctx: Context) -> dict:
+    """the burst overlap: the summed process time vs its union (what the concurrent view saves),
+    and the overlap share (the union's fraction of the sum)."""
+    from . import paths
+
+    u = paths.build(ctx)["process_union"]
+    union_s = u.get("union", {}).get("p50_s")
+    saved_s = u.get("saved_by_union", {}).get("p50_s")
+    total = union_s + saved_s if union_s is not None and saved_s is not None else None
+    return {
+        "union_p50_s": union_s,
+        "saved_p50_s": saved_s,
+        "sum_p50_s": total,
+        "burst_share": union_s / total if union_s and total else None,
+    }
 
 
 def build(ctx: Context) -> dict:
@@ -149,10 +152,20 @@ def text(data: dict) -> str:
         )
     out.append("top variants")
     out += [f"  {' -> '.join(r['sequence'])}: {r['n']}" for r in data["variants"][:8]]
+    ov = data["overlap"]
+    if ov.get("burst_share") is not None:
+        out.append(f"  burst overlap: union {_d(ov['union_p50_s'])} of sum {_d(ov['sum_p50_s'])} ({ov['burst_share']:.0%})")
     out.append(f"  superseded passes: {len(data['superseded_passes'])}")
     out.append(f"  out-of-order runs: {len(data['out_of_order'])}")
     out.append(f"next: {data['next']['cli']}  |  {data['next']['mcp']}")
     return "\n".join(out)
+
+
+def _d(seconds) -> str:
+    if seconds is None:
+        return "n/a"
+    minute = clock.DURATION_UNITS["m"]
+    return f"{seconds / minute:.0f}m" if seconds >= minute else f"{seconds:.0f}s"
 
 
 __all__ = [
