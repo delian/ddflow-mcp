@@ -48,7 +48,7 @@ def _lead_text(ledger, st, at: float, agent: str, max_asks: int, repo: Path) -> 
     head = f"your inbox ({len(msgs)}):"
     if not rows:
         head += f" all {len(msgs)} held (lanes.advise_max is 0)"
-    if len(shown) < len(msgs):
+    elif len(shown) < len(msgs):
         head += f" ({len(msgs) - len(shown)} more not shown)"
     body = "\n".join(rows)
     return text + "\n\n" + head + ("\n" + body if body else "")
