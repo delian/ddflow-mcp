@@ -17,3 +17,4 @@
 {"agent":"recover-3j","data":{"at":1794212580.2921124,"holder":"recover-3j"},"id":"e2df751e680442c67793e0ab7","kind":"lease.renewed","lamport":160501,"schema":1,"subject":"fix-B31e91454f8","ts":"2026-11-09T08:23:00.374068Z"}
 {"agent":"recover-3j","data":{"at":1794212595.5679486,"holder":"recover-3j"},"id":"e2af5b182423e06f6cad08da6","kind":"lease.renewed","lamport":160504,"schema":1,"subject":"fix-B740b7f8cf4","ts":"2026-11-09T08:23:15.683355Z"}
 {"agent":"recover-3j","data":{"at":1794212611.7915046,"holder":"recover-3j"},"id":"ee74f1f297df727554c13507b","kind":"lease.renewed","lamport":160505,"schema":1,"subject":"fix-B36819b6c73","ts":"2026-11-09T08:23:31.904047Z"}
+{"agent":"recover-3j","data":{"gate":"ci"},"id":"e8cd7eef4f00b0b7d6eaf820a","kind":"gate.started","lamport":160510,"schema":1,"subject":"fix-B740b7f8cf4","ts":"2026-11-09T08:24:26.321382Z"}
