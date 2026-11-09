@@ -149,7 +149,9 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     # complexity ratchet).
     src = inspect.getsource(A._review_gate)
     assert "_gate_outcome(" in src
-    assert "_answer_outcome(" in src  # the dispatch must reach the ANSWER tail, not a hard-coded one
+    assert (
+        "_answer_outcome(" in src
+    )  # the dispatch must reach the ANSWER tail, not a hard-coded one
     assert outcome(R.PARTIAL) == "partial"
     assert outcome(R.UNAVAILABLE) == "unavailable"
     assert outcome(R.ERROR) == "unavailable"
