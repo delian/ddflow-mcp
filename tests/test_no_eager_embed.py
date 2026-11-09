@@ -46,17 +46,13 @@ def test_cli_main_caps_blas_threads_unless_the_user_set_them():
     assert _run(["-c", main], OPENBLAS_NUM_THREADS="4")[1] == "4"
 
 
-def test_extra_installed_reports_a_valid_extra_as_installed(tmp_path):
+def test_extra_installed_does_not_import_the_extra(tmp_path):
     (tmp_path / "model2vec.py").write_text("class StaticModel: ...\n")
-    probe = "from ddflow.services import embed; print(embed.extra_installed())"
-    assert _run(["-c", probe], tmp_path)[0] == "True"
-
-
-def test_extra_installed_reports_a_broken_install_as_not_installed(tmp_path):
-    # "findable" is not "installed": the probe finds the package, but the import itself fails.
-    (tmp_path / "model2vec.py").write_text("import this_module_does_not_exist\n")
-    probe = "from ddflow.services import embed; print(embed.extra_installed())"
-    assert _run(["-c", probe], tmp_path)[0] == "False"
+    probe = (
+        "import sys; from ddflow.services import embed; print(embed.extra_installed()); "
+        "print('model2vec' in sys.modules)"
+    )
+    assert _run(["-c", probe], tmp_path)[:2] == ["True", "False"]
 
 
 def test_cap_blas_threads_writes_through_the_env_port():
