@@ -36,13 +36,18 @@ def suggest(
     commit: str = "",
     diff: str = "",
     blob: str = "",
+    evidence: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Send ``--commit``/``--diff``/``--blob`` to ``item``'s holder and report the ref."""
     log, cfg, st = _load(repo, agent)
     to_agent = _holder_agent(st, item)
     if not to_agent:
-        return O.failed("handoff.suggest", f"{item} has no live lease holder to suggest to")
+        return O.failed(
+            "handoff.suggest",
+            f"{item} has no live lease holder to suggest to; wait for the lease "
+            f"(CLI `ddflow wait --item {item}`, MCP ddflow_wait item={item})",
+        )
     tip = _owner_tip(repo, item, st)
     try:
         out = send.suggest(
@@ -55,21 +60,24 @@ def suggest(
             commit=commit,
             diff=diff,
             blob=blob,
+            evidence=evidence,
             from_item="",
             base=tip,
         )
     except send.SuggestError as exc:
         return O.failed("handoff.suggest", str(exc))
-    apply_txt = (
-        f"ddflow suggest apply {out.ref}"
-        if out.ref
-        else "ddflow apply via patch-id (no base: blob-only suggestion)"
-    )
+    if out.ref:
+        owner_nxt = (
+            f"apply: ddflow suggest apply {out.ref}  (MCP: ddflow_suggest action=apply ref={out.ref}); "
+            f"reject: ddflow suggest reject {out.ref}; show: ddflow suggest show {out.ref}"
+        )
+    else:
+        owner_nxt = "no ref (blob-only): the owner applies by patch-id; re-run with a base to cut a ref"
     text = (
         f"suggested to {to_agent} on {item}\n"
         f"probe: {out.probe}\n"
         f"ref: {out.ref or '(no base: blob stored)'}\n"
         f"blob: {out.blob}\n"
-        f"owner: {apply_txt}"
+        f"owner next ({owner_nxt})"
     )
     return O.ok("handoff.suggest", ref=out.ref, probe=out.probe, blob=out.blob, text=text)

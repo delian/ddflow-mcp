@@ -17,6 +17,7 @@ def _suggest(repo, a, agent):
         commit=a.get("commit", "") or "",
         diff=a.get("diff", "") or "",
         blob=a.get("blob", "") or "",
+        evidence=a.get("evidence", "") or "",
         agent=agent,
     )
 
@@ -76,8 +77,14 @@ COMMANDS: tuple[Command, ...] = (
                 help="Optional kind (e.g. gate_fix).",
                 cli_help="optional suggestion kind",
             ),
+            Param(
+                "evidence",
+                default="",
+                help="For gate_fix: CMD,EXIT the owner's re-run must reproduce.",
+                cli_help="gate_fix: CMD,EXIT the re-run must reproduce",
+            ),
         ),
-        tool_order=("item", "reason", "commit", "diff", "blob", "kind"),
+        tool_order=("item", "reason", "commit", "diff", "blob", "kind", "evidence"),
         call=_suggest,
         payload=("ref", "probe", "blob"),
         render=_suggest_text,

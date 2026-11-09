@@ -53,14 +53,23 @@ def resolve_patch(
         show = git.run(repo, "show", "--format=", "--binary", commit)
         if show.unavailable or not show.ok:
             raise SuggestError(f"git could not show {commit}: {show.err}")
+        if not show.out.lstrip().startswith("diff --git"):
+            raise SuggestError(
+                f"{commit}: git show gives no replayable patch (an empty or merge commit); "
+                "name the change's diff with --diff FILE, or the parent with --commit "
+                "COMMIT^"
+            )
         return show.out
     src = Path(diff or blob)
     try:
         text = src.read_text("utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise SuggestError(f"could not read {src}: {exc}") from exc
     if not text.lstrip().startswith("diff --git"):
-        raise SuggestError(f"{src}: a suggestion is a git diff patch (starts with 'diff --git')")
+        raise SuggestError(
+            f"{src}: a suggestion is a git diff patch (starts with 'diff --git'); "
+            f"regenerate with `git diff` (CLI), or `ddflow_diff`"
+        )
     return text
 
 
@@ -77,12 +86,14 @@ def suggest(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
     to_agent: str = "",
     from_item: str = "",
     base: str = "",
+    evidence: str = "",
 ) -> Suggested:
     """Send a change to the owner of ``to_item``: resolve the input and hand it to `propose`.
 
     ``to_agent`` is the lease holder that must answer; ``base`` is the owner's tip the patch
-    is re-cut onto (the API resolves it from the owner's branch). With no base no ref is cut,
-    but the blob is still recorded and the patch-id taken."""
+    is re-cut onto (the API resolves it from the owner's branch); ``evidence`` is the
+    ``CMD,EXIT`` a ``gate_fix`` re-run must reproduce. With no base no ref is cut, but the
+    blob is still recorded and the patch-id taken."""
     patch = resolve_patch(log.root, commit=commit, diff=diff, blob=blob)
     if not reason.strip():
         raise SuggestError("a suggestion needs --reason: why the owner should take it")
@@ -97,6 +108,7 @@ def suggest(  # noqa: PLR0913 -- one keyword per facet of a suggestion; all keyw
             kind=kind,
             reason=reason,
             base=base,
+            evidence=evidence,
             repo=log.root,
         )
     except SuggestionRefused as exc:
