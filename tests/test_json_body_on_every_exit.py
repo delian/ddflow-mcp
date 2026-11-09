@@ -133,8 +133,8 @@ def test_no_fallback_body_after_a_command_that_printed_text(repo):
 @pytest.mark.parametrize(
     "argv",
     [
-        ("show",),          # a required argument is missing
-        ("complete",),      # a required argument is missing
+        ("show",),  # a required argument is missing
+        ("complete",),  # a required argument is missing
         ("nosuchcommand",),  # the command word does not exist
         ("ci", "--item", "X"),  # a flag the command does not take
     ],
