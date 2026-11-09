@@ -2710,6 +2710,22 @@
           (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe
           fall back to a scratch merge in a throwaway worktree, slower and the same
           answer.
+      locks.review_reuse = 'off'   [default]
+          Whether a recorded review may be REUSED after the tree it covered moved
+          (main merged in or a rebase) instead of running it whole (LK-review-reuse).
+          'off' (default, until measured) never reuses: a review whose recorded tree
+          no longer matches is re-reviewed. 'disjoint' classifies each review gate
+          with `git patch-id --stable` of the item's own change plus disjoint changed
+          files -- when the item's own change is unchanged and the files main changed
+          are disjoint from the files the reviewer saw, the review is kept and the
+          reason recorded; when they overlap, only the overlapping files are re-
+          reviewed as a delta; anything git cannot tell invalidates (fail closed,
+          never a guess). Measured by the wrong-keep rate (a kept review followed by a
+          finding on the same files). An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'off', the strictest (reuse is
+          off: a tree that moved invalidates the review); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
