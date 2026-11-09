@@ -153,6 +153,35 @@ def _email(settings: Settings, env: ENV.Env, scrub) -> Any:
     )
 
 
+def settings_from(cfg: Config) -> Settings:
+    """Build `Settings` from the `[notify]` knobs; ``committed`` names the fields whose value came
+    from a committed layer, so an address there makes its adapter unavailable (r-secrets)."""
+    n = cfg.notify
+    fields = (
+        "channel", "ask_channel", "endpoints", "token_env", "send_timeout_s", "ask_timeout_s",
+        "ask_attempts", "email_host", "email_port", "email_from", "email_to", "email_user",
+        "email_password_env", "email_tls",
+    )
+    committed = frozenset(f for f in fields if cfg.sources.get(f"notify.{f}") == "file")
+    return Settings(
+        channel=n.channel,
+        ask_channel=n.ask_channel,
+        endpoints=dict(n.endpoints),
+        token_env=dict(n.token_env),
+        send_timeout_s=n.send_timeout_s,
+        ask_timeout_s=n.ask_timeout_s,
+        ask_attempts=n.ask_attempts,
+        email_host=n.email_host,
+        email_port=n.email_port,
+        email_from=n.email_from,
+        email_to=n.email_to,
+        email_user=n.email_user,
+        email_password_env=n.email_password_env,
+        email_tls=n.email_tls,
+        committed=committed,
+    )
+
+
 def open_channel(
     log,
     cfg: Config,
@@ -168,7 +197,7 @@ def open_channel(
     """The adapter ``name``, built from ``settings``, or an `UnavailableChannel` that says why it
     may not be used. An unknown name raises the registry's `UnknownName`, which lists those known."""
     cls = N.CHANNELS[name]
-    n = settings or Settings()
+    n = settings or settings_from(cfg)
     if name == "terminal":
         return cls(
             person=person or approval.os_user(),
