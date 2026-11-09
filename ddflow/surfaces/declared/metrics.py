@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ..registry import Command, Param, by_tool
 from ..tools._common import _api
+from ...services.metrics.service import VIEWS
 
 
 def _text(out, a) -> str:
@@ -53,20 +54,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes, stages, locks or swarm.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks or swarm",
+                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths or swarm",
                 positional=True,
                 nargs="?",
-                choices=(
-                    "summary",
-                    "forecast",
-                    "retro",
-                    "skips",
-                    "lanes",
-                    "stages",
-                    "locks",
-                    "swarm",
-                ),
+                choices=VIEWS,
                 default=None,
             ),
             Param(

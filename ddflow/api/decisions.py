@@ -196,8 +196,9 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
             applicable=[],
             project_wide=[],
         )
-    hits, wide = governing(st, it.globs)
+    hits, wide = governing(st, list(it.globs))
     rivals = unreconciled_with(st)
+    no_globs = not it.globs
     data: dict[str, Any] = {
         "id": item,
         "globs": list(it.globs),
@@ -207,6 +208,13 @@ def decision_applicable(repo: Path, item: str) -> O.Outcome:
         ],
         "project_wide": [_plain(d) for d in wide],
     }
+    if no_globs:
+        # B5279acad6f: an item that declares no globs matches nothing by path, so the
+        # glob-governed decisions (the ones that actually overlap the work) are never
+        # matched. One project-wide row then reads as the complete answer; say the path
+        # check could not run instead of returning it as success. The project-wide
+        # decisions still apply, so this stays O.ok -- only the warning is added.
+        data["path_matching"] = "unreachable"
     if not hits and not wide:
         return O.nothing(
             "decision.applicable",
