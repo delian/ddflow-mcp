@@ -47,15 +47,14 @@ def run(h) -> dict:
             h.hooks.inject,
             dict(h.hooks.events),
         )
-        unresolved = []
-        if not isinstance(plan.normalizer, hookio.FieldMap):
-            unresolved.append("normalizer")
+        # The field map resolves for any `[hooks.fields]` table (missing facts default,
+        # unknown names drop), so the emit variant is the descriptor resolution that can
+        # fail; the named-normalizer/emitter tables it replaced are gone by design
+        # (tests/test_hook_core.py pins their removal).
         if plan.emitter not in hookio.EMIT_VARIANTS:
-            unresolved.append("emitter")
-        if unresolved:
             checks["hooks"] = {
                 "status": "failed",
-                "detail": f"unresolved {', '.join(unresolved)}",
+                "detail": f"unresolved emit variant {plan.emitter!r}",
             }
         else:
             checks["hooks"] = {
