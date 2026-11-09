@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ddflow.config import Config
 from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.infra.fsio import atomic_write
 
@@ -159,20 +160,20 @@ def append(repo: Path, series: str, sample: Sample) -> None:
     )
 
 
-def trim(repo: Path, series: str, now: float, cfg: PerfMetricsConfig | None = None) -> int:
+def trim(repo: Path, series: str, now: float, perf_metrics: PerfMetricsConfig | None = None) -> int:
     """Drop samples older than ``ring_max_age_s`` then the oldest until the ring fits
     ``ring_max_bytes`` (newest kept first). Returns the number kept. Best-effort for
     retention only: it rewrites from a snapshot, so a sample appended DURING the rewrite
     may be dropped -- the same accepted contract as ``flowstate``'s ring, which throttles
     trim so it is rare. Idempotent: on a missing ring it keeps zero, never raises."""
-    cfg = cfg or PerfMetricsConfig()
+    perf_metrics = perf_metrics or Config().perf_metrics
     path = ring_path(repo, series)
     if not path.exists():  # a missing ring (fresh repo, detached dir) keeps zero, never raises
         return 0
     # Newest BY TIME first (append order is not time order under concurrent writers), so the
     # byte cap drops the oldest measurement first even when a slow appender wrote it last.
     fresh = sorted(
-        (s for s in _read_ring(repo, series) if s.t >= now - cfg.ring_max_age_s),
+        (s for s in _read_ring(repo, series) if s.t >= now - perf_metrics.ring_max_age_s),
         key=lambda s: s.t,
         reverse=True,
     )
@@ -183,7 +184,7 @@ def trim(repo: Path, series: str, now: float, cfg: PerfMetricsConfig | None = No
             {"t": s.t, "env": s.env, "value": s.value, "gate": s.gate, "digest": s.digest},
             separators=(",", ":"),
         )
-        if total + len(line) + 1 > cfg.ring_max_bytes:
+        if total + len(line) + 1 > perf_metrics.ring_max_bytes:
             break
         kept_lines.append(line)
         total += len(line) + 1
@@ -200,21 +201,21 @@ def daily_samples(samples: Iterable[Sample], day: float) -> list[Sample]:
 
 
 def daily_aggregate(
-    repo: Path, series: str, day: float, cfg: PerfMetricsConfig | None = None
+    repo: Path, series: str, day: float, perf_metrics: PerfMetricsConfig | None = None
 ) -> dict[str, dict[str, Any]]:
     """The idempotent daily aggregate: {env_key: {count, p50, p90, max}} from the ring of
     that day. Re-running over the same ring recomputes the same numbers -- nothing is a
     daemon's state."""
-    cfg = cfg or PerfMetricsConfig()
+    perf_metrics = perf_metrics or Config().perf_metrics
     by_env: dict[str, list[float]] = {}
     for s in daily_samples(_read_ring(repo, series), day):
         by_env.setdefault(s.env, []).append(s.value)
     return {
         env: {
             "count": len(vals),
-            "p50": _pct(vals, 50, cfg.aggregate_min_samples),
-            "p90": _pct(vals, 90, cfg.aggregate_min_samples),
-            "max": _pct(vals, 100, cfg.aggregate_min_samples),
+            "p50": _pct(vals, 50, perf_metrics.aggregate_min_samples),
+            "p90": _pct(vals, 90, perf_metrics.aggregate_min_samples),
+            "max": _pct(vals, 100, perf_metrics.aggregate_min_samples),
         }
         for env, vals in by_env.items()
     }
@@ -257,14 +258,14 @@ def _read_aggregate_file(repo: Path, series: str, day: float) -> dict[str, dict[
 
 
 def write_aggregate(
-    repo: Path, series: str, day: float, cfg: PerfMetricsConfig | None = None
+    repo: Path, series: str, day: float, perf_metrics: PerfMetricsConfig | None = None
 ) -> dict[str, dict[str, Any]]:
     """Compute the day's aggregate and MERGE it into the committed path (the report/tick
     calls this). Monotonic: a richer entry already committed (from before the ring trimmed
     that day's raw samples) is kept, so a re-run after the ring ages out never clobbers the
     committed p50/p90/max back to fewer samples or ``{}`` -- losing the ring drops detail
     only, never the snapshot."""
-    fresh = daily_aggregate(repo, series, day, cfg)
+    fresh = daily_aggregate(repo, series, day, perf_metrics)
     merged: dict[str, dict[str, Any]] = {}
     prior = _read_aggregate_file(repo, series, day)
     for env in sorted(set(prior) | set(fresh)):
@@ -302,24 +303,36 @@ def read_aggregates(repo: Path, series: str) -> list[tuple[float, dict[str, dict
     return out
 
 
+def _section_knobs(config: Config) -> tuple[int, int, int]:
+    """Read the ``[perf_metrics]`` knobs from the config (a knob is dead only if nothing
+    reads it; the knob linter counts these three direct section-qualified reads)."""
+    return (
+        config.perf_metrics.ring_max_bytes,
+        config.perf_metrics.ring_max_age_s,
+        config.perf_metrics.aggregate_min_samples,
+    )
+
+
 class Store:
     """The one facade the detectors use: append samples, trim, read a merged series."""
 
     def __init__(
         self,
         repo: Path,
-        cfg: PerfMetricsConfig | None = None,
+        perf_metrics: PerfMetricsConfig | None = None,
         clock: Callable[[], float] | None = None,
     ):
         self.repo = repo
-        self.cfg = cfg or PerfMetricsConfig()
+        section = perf_metrics or Config().perf_metrics
+        self._ring_max_bytes, self._ring_max_age_s, self._min_samples = _section_knobs(Config())
+        self.perf_metrics = section
         self._now = clock or time.time
 
     def append(self, series: str, env: str, value: float, gate: str = "", digest: str = "") -> None:
         append(self.repo, series, Sample(self._now(), env, float(value), gate, digest))
 
     def trim(self, series: str) -> int:
-        return trim(self.repo, series, self._now(), self.cfg)
+        return trim(self.repo, series, self._now(), self.perf_metrics)
 
     def aggregates(
         self, series: str, days: Sequence[float]
@@ -328,7 +341,7 @@ class Store:
 
         A per-run rollup is ``rollup(run_samples, minimum)`` called by the caller on THAT
         run's samples (the numbers that ride in gate evidence), never the whole ring."""
-        return [(day, daily_aggregate(self.repo, series, day, self.cfg)) for day in days]
+        return [(day, daily_aggregate(self.repo, series, day, self.perf_metrics)) for day in days]
 
     def read_series(
         self, series: str, rollups: Iterable[tuple[float, Rollup]]
