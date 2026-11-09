@@ -37,19 +37,19 @@ class FakeFsio(Fsio):
         return tempfile.TemporaryDirectory()
 
     def temp_text(self, text: str, suffix: str = "") -> Iterator[Path]:
-        with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False) as handle:
-            handle.write(text)
-            return _ctx(Path(handle.name))
+        return _TempText(text, suffix)
 
 
-class _ctx:
-    """A one-shot context manager so `temp_text`/`scratch_dir` `yield` a path like the real one."""
+class _TempText:
+    """A `temp_text` that writes to a real temp dir and removes it on exit (no leak)."""
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __init__(self, text: str, suffix: str) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        self.path = Path(self._dir.name) / f"text{suffix}"
+        self.path.write_text(text)
 
     def __enter__(self) -> Path:
         return self.path
 
     def __exit__(self, *exc: object) -> None:
-        return None
+        self._dir.cleanup()
