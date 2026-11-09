@@ -241,13 +241,23 @@ def _claim_by_approval(repo: Path, item: str, refused: O.Outcome, approval: str,
                 "(the forced claim still refused); run again once it can land.",
                 id=item, alternatives=[],
             )
-        CN.spend(log, canon, approval, cfg=cfg)
+        spent = CN.spend(log, canon, approval, cfg=cfg)
+        if not spent.ok:
+            # `check` validated this answer moments ago against this same pre-claim canon, so this
+            # cannot fail in practice; a spend that does fail (a TTL lapse, a concurrent identical
+            # spend) is surfaced in the answer rather than silently dropping the use.
+            out.data["approval_not_consumed"] = spent.message
         return out
-    # No id (a steering refusal) or `--approval request` files the request: nothing is spent.
+    # No id (a steering refusal, or a standing rule may answer) or `--approval request` files the
+    # request: exactly the operator_gate path, whose standing-rule stamp may still auto-approve.
     decision = CN.operator_gate(log, cfg, canon, approval_id=approval, auto=False)
-    return O.refused(
-        "item.claimed", f"{refused.reason}\n{decision.message}", id=item, alternatives=[]
-    )
+    if not decision.ok:
+        return O.refused(
+            "item.claimed", f"{refused.reason}\n{decision.message}", id=item, alternatives=[]
+        )
+    stamp = decision.stamp
+    why = f"{note} [operator approval {stamp['ask']} by {stamp['approved_by']} via {stamp['via']}]"
+    return _claim_once(repo, item, note=why.strip(), force=True, **kw)
 
 
 def _claim_once(  # noqa: PLR0913 -- the door's own flags
