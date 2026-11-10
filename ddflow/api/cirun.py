@@ -151,15 +151,13 @@ def _keep_failing_ids(repo: Path, res) -> dict:
     kept = BL.write_full(repo, res.sha, everyone)
     if kept:
         out["failing_ids"] = kept
+    notes: list[str] = []
     if non_test:
-        names = ", ".join(non_test)
-        out["failing_ids_note"] = f"a check other than the tests also failed ({names}); " + (
-            "the failing tests are kept aside for the baseline split"
-            if kept
-            else "the failing tests were not kept aside"
-        )
-    elif not kept:
-        out["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
+        notes.append(f"a check other than the tests also failed ({', '.join(non_test)})")
+    if not kept:
+        notes.append(f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})")
+    if notes:
+        out["failing_ids_note"] = "; ".join(notes)
     return out
 
 
