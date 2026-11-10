@@ -77,7 +77,8 @@ def rates(
     window = max(1.0, window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in window_rows(rows, now, window):
-        by_test[str(r["test"])].append(r)
+        if r.get("test"):
+            by_test[str(r["test"])].append(r)
     per_test = [
         {
             "test": test,
@@ -128,7 +129,8 @@ def proposals(
     window = max(1.0, window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in window_rows(rows, now, window):
-        by_test[str(r["test"])].append(r)
+        if r.get("test"):
+            by_test[str(r["test"])].append(r)
     expiry = clock.iso_at(now + quarantine_expiry_s)
     out: list[dict[str, Any]] = []
     for test, rs in sorted(by_test.items()):
