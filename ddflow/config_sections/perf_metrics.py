@@ -79,3 +79,27 @@ class PerfMetricsConfig:
             else "must be a number >= 0"
         ),
     )
+    flaky_window_s: int = knob(
+        7 * 86400,
+        doc="The rolling window the flaky-rate view (services/perf/flakyrate.py) measures flake counts and quarantine proposals over; a flake older than this does not count.",
+        check=int_at_least(1),
+    )
+    flaky_quarantine_after: int = knob(
+        3,
+        doc="Flake count of one test within flaky_window_s at which the rate view proposes a quarantine (B-sched-flaky owns the lane; PM-flaky only measures and proposes).",
+        check=int_at_least(2),
+    )
+    flaky_quarantine_expiry_s: int = knob(
+        30 * 86400,
+        doc="Seconds a quarantine proposal stays open (its expiry); after this the test is re-evaluated rather than quarantined forever.",
+        check=int_at_least(1),
+    )
+    flaky_retry_cost_s: float = knob(
+        60.0,
+        doc="Estimated wall seconds one failed->rerun cycle costs; the rate view multiplies flakes in the window by this for retry cost (the flake log stores no per-retry duration).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
+            else "must be a number >= 0"
+        ),
+    )
