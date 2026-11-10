@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import json
 import tomllib
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -115,9 +116,7 @@ def load_workloads(source: str | Path | None = None) -> dict[str, Workload]:
         rule_raw = block.get("pass_rule", {})
         kind = str(rule_raw.get("kind", ""))
         if kind not in _PASS_RULE_KINDS:
-            raise ValueError(
-                f"workload {block.get('id')!r} has unknown pass_rule.kind {kind!r}"
-            )
+            raise ValueError(f"workload {block.get('id')!r} has unknown pass_rule.kind {kind!r}")
         rule = PassRule(
             kind=kind,
             item=str(rule_raw.get("item", "")),
@@ -146,8 +145,8 @@ def records_from_log(root: str | Path) -> tuple[Record, ...]:
         return ()
     out: list[Record] = []
     for shard in sorted(events_dir.glob("*.jsonl")):
-        for line in shard.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
+        for raw_line in shard.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
             if not line:
                 continue
             try:
@@ -207,9 +206,7 @@ def _has_regression_test(data: dict[str, Any]) -> bool:
     if isinstance(test, str) and test.strip():
         return True
     tests = data.get("regression_tests")
-    return isinstance(tests, (list, tuple)) and any(
-        isinstance(t, str) and t.strip() for t in tests
-    )
+    return isinstance(tests, (list, tuple)) and any(isinstance(t, str) and t.strip() for t in tests)
 
 
 def _rule_bug_with_test(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
@@ -235,7 +232,9 @@ def _rule_refusal_resolved(rule: PassRule, rs: list[Record]) -> tuple[bool, list
     return not missing, refused + passed, missing
 
 
-def _evaluate_rule(rule: PassRule, records: Iterable[Record]) -> tuple[bool, list[Record], list[str]]:
+def _evaluate_rule(
+    rule: PassRule, records: Iterable[Record]
+) -> tuple[bool, list[Record], list[str]]:
     """Consult ddflow's records only; there is no agent-words input (the falsifier)."""
     return _RULE_APPLY.get(rule.kind, _rule_unknown)(rule, list(records))
 
@@ -262,8 +261,13 @@ def evaluate(workload: Workload, records: Iterable[Record]) -> Report:
         if ok
         else f"{workload.name}: missing " + ", ".join(missing)
     )
-    return Report(workflow_id=workload.id, outcome=outcome, reason=reason,
-                  matched=tuple(matched), missing=tuple(missing))
+    return Report(
+        workflow_id=workload.id,
+        outcome=outcome,
+        reason=reason,
+        matched=tuple(matched),
+        missing=tuple(missing),
+    )
 
 
 def _scripted_records(workload: Workload) -> tuple[Record, ...]:

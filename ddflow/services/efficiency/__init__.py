@@ -6,13 +6,13 @@ imports so the workload runner stays cheap enough for CI at no spend.
 """
 
 from . import workloads as work  # noqa: F401
-from .workloads import (  # noqa: F401
+from .workloads import (
     FAIL,
     PASS,
     UNRUN,
     LiveRunRefused,
-    Report,
     Record,
+    Report,
     Workload,
     evaluate,
     load_workloads,
@@ -23,12 +23,12 @@ from .workloads import (  # noqa: F401
 )
 
 __all__ = [
-    "PASS",
     "FAIL",
+    "PASS",
     "UNRUN",
     "LiveRunRefused",
-    "Report",
     "Record",
+    "Report",
     "Workload",
     "evaluate",
     "load_workloads",
