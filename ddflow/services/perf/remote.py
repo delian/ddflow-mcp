@@ -108,11 +108,12 @@ def measure(
     )
 
 
-def parse_line(line: str, *, trust: str = TRUST_AGENT) -> CommandSample:
-    """Parse the single JSON line the wrapper (or an unwrapped agent run) reported. An
-    agent-reported line keeps ``trust = agent-reported``; the wrapper's own line already
-    carries ``measured`` and is accepted unchanged."""
+def parse_line(line: str) -> CommandSample:
+    """Parse the single JSON line the wrapper (or an unwrapped agent run) reported. The
+    trust level comes from the line itself: `measured` only when the wrapper wrote it, else
+    `agent-reported` -- a caller cannot promote a self-reported line to `measured`."""
     data = json.loads(line)
+    trust = TRUST_MEASURED if data.get("trust") == TRUST_MEASURED else TRUST_AGENT
     return CommandSample(
         wall_s=float(data["wall_s"]),
         cpu_s=data.get("cpu_s"),
@@ -124,11 +125,18 @@ def parse_line(line: str, *, trust: str = TRUST_AGENT) -> CommandSample:
     )
 
 
-def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None) -> str:
-    """The container/VM flags added to the env fingerprint key so a cgroup-limited series
-    is never mixed with a bare-metal one (false when not in a container, named unavailable
-    when it could not be probed)."""
-    flag = UNAVAILABLE if in_ctr is None else ("container" if in_ctr else "bare")
+def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None, vm: bool | None = False) -> str:
+    """The container/VM flags added to the env fingerprint key so a cgroup-limited series is
+    never mixed with a bare-metal one, and a VM (a macOS Docker VM has no ``/.dockerenv``)
+    never keys as bare metal. ``None`` means the probe could not run (named, never guessed)."""
+    if in_ctr is None:
+        flag = UNAVAILABLE
+    elif in_ctr:
+        flag = "container"
+    elif vm:
+        flag = "vm"
+    else:
+        flag = "bare"
     return f"{fp.stamp()} container={flag}"
 
 

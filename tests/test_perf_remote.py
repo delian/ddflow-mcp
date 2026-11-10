@@ -50,10 +50,21 @@ def test_measure_names_unavailable_when_no_rung_reports():
 
 def test_the_one_json_line_round_trips():
     s = CommandSample(1.5, 0.9, 50.0, None, "psutil", TRUST_MEASURED, container=False)
-    back = parse_line(s.one_line(), trust=TRUST_AGENT)
+    back = parse_line(s.one_line())
     assert back.wall_s == 1.5 and back.cpu_s == 0.9
-    # an unwrapped/agent run keeps the agent-reported trust: shown separately, never evidence
-    assert back.trust == TRUST_AGENT
+    # the wrapper's own line is accepted as measured (never demoted)
+    assert back.trust == TRUST_MEASURED
+
+
+def test_an_agent_line_cannot_be_promoted_to_measured():
+    forged = CommandSample(1.0, None, None, None, "wait4", TRUST_MEASURED, container=False)
+    # a line without the wrapper's own `trust` field is agent-reported, never measured
+    assert (
+        parse_line(
+            forged.one_line().replace('"trust": "measured"', '"trust": "agent-reported"')
+        ).trust
+        == TRUST_AGENT
+    )
 
 
 def test_wrap_command_names_the_exact_command():

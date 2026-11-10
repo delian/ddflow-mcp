@@ -17,7 +17,7 @@ def _call(repo, a, agent):
     if action == "env":
         return _api().run_perf_env(repo, agent=agent)
     if action == "run":
-        return _api().run_perf_run(repo, agent=agent)
+        return _api().run_perf_run(repo, cmd=a.get("cmd") or "", agent=agent)
     return _api().run_perf_ingest(repo, line=a.get("line") or "", agent=agent)
 
 
@@ -55,6 +55,11 @@ COMMANDS: tuple[Command, ...] = (
                 "line",
                 help="with action=ingest: the wrapper's one JSON line to accept.",
                 cli_help="with ingest: the sample line",
+            ),
+            Param(
+                "cmd",
+                help="with action=run: the command to measure (after `--`).",
+                cli_help="with run: the command to measure",
             ),
         ),
     ),
