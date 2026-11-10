@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import re
 from pathlib import Path
 
 from ..infra import fsio
@@ -164,11 +165,38 @@ def _one_safe(repo, log, agent, a, L, MQ) -> dict:
         return {"item": a.item, "applied": out.exit == 0, "note": out.reason}
     if a.evidence.get("effect") == "requeue":
         return _requeue(repo, agent, a, MQ)
+    if a.evidence.get("effect") == "repair_base_ref":
+        return _repair_base_ref(repo, a)
     return {
         "item": a.item,
         "applied": False,
         "note": f"unknown effect {a.evidence.get('effect')!r}",
     }
+
+
+def _repair_base_ref(repo: Path, a) -> dict:
+    """Reset a worktree's own `.ddflow/config.toml` `base_ref = "--flag"` to the default
+    (auto-detect). Targets the single base_ref line and nothing else, so it is idempotent
+    and never touches a comment or another section."""
+    worktree = a.evidence.get("worktree", "")
+    path = Path(repo) / worktree / ".ddflow" / "config.toml" if worktree else None
+    if not path or not path.exists():
+        return {"item": a.item, "applied": False, "note": "its worktree has no local config to repair"}
+    try:
+        text = path.read_text("utf-8")
+        new, n = re.subn(
+            r'^(\s*base_ref\s*=\s*)["\'][^"\']*["\'](\s*(?:#.*)?)$',
+            r'\1""\2',
+            text,
+            count=1,
+            flags=re.M,
+        )
+        if n == 0:
+            return {"item": a.item, "applied": False, "note": "no base_ref line to repair"}
+        path.write_text(new, "utf-8")
+        return {"item": a.item, "applied": True, "note": a.reason}
+    except Exception as e:
+        return {"item": a.item, "applied": False, "note": f"failed: {e!r}"}
 
 
 def _requeue(repo, agent, a, MQ) -> dict:

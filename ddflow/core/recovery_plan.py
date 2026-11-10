@@ -131,6 +131,25 @@ def _resume(r: dict[str, Any], attempts: int) -> Action:
     )
 
 
+def _repair_base_ref(r: dict[str, Any], attempts: int) -> Action:
+    """A worktree whose own `.ddflow/config.toml` holds a flag-valued `base_ref`
+    (Bda0ba7b9eb): reset it to the default, the one repair `recover --apply` may run —
+    idempotent and losing nothing, because a ref never starts with `-`."""
+    return Action(
+        r["item"],
+        SAFE_AUTO,
+        f"reset the stale worktree.base_ref = {r.get('stale_base_ref')!r} to the default",
+        f"{r['item']}'s worktree config holds base_ref = {r.get('stale_base_ref')!r} "
+        "(a CLI flag, refused); resetting to the auto-detect default loses nothing",
+        attempts,
+        {
+            "effect": "repair_base_ref",
+            "worktree": r.get("worktree", ""),
+            "stale_base_ref": r.get("stale_base_ref", ""),
+        },
+    )
+
+
 def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
     out: list[Action] = []
     # The cap gates RESUME- and EXPIRY-shaped recoveries. A clean orphan is never
@@ -144,6 +163,10 @@ def _recovery_actions(facts: Facts, limits: Limits) -> list[Action]:
         if r["item"] in capped:
             continue
         attempts = facts.attempts.get(r["item"], 0) + spent.get(r["item"], 0)
+        if r.get("stale_base_ref"):
+            # A stale flag-valued base_ref is repaired whatever the salvage verdict:
+            # the value is invalid today, so resetting it cannot hide real work.
+            out.append(_repair_base_ref(r, attempts))
         if r.get("kind") == "expired_lease":
             if attempts >= limits.max_attempts:
                 out.append(_capped(r["item"], attempts, limits))

@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from ...config import Config
+from ...config_sections._layers import read_toml
 from ...core import schedule
 from ...core.model import REVIEW, Item, State
 from ...infra import git as G
@@ -347,6 +348,18 @@ def _gone_tree(
     )
 
 
+def _stale_base_ref(wt: Path) -> str:
+    """The worktree's own ``[worktree] base_ref`` when it is a CLI flag (``--local``),
+    which the `base_ref` knob now refuses to load; empty when the tree is clean, has no
+    config, or its config cannot be read (that last is a separate finding, never here)."""
+    try:
+        raw = read_toml(Path(wt) / ".ddflow" / "config.toml")
+    except Exception:
+        return ""
+    value = (raw.get("worktree") or {}).get("base_ref", "")
+    return value if isinstance(value, str) and value.startswith("-") else ""
+
+
 def _measure(
     rec: Recovery,
     repo: Path,
@@ -375,6 +388,7 @@ def _measure(
     if not wt or not wt.exists():
         _gone_tree(rec, repo, cfg, facts, held)
         return
+    rec.stale_base_ref = _stale_base_ref(wt)
     if budget is not None and not budget.take_tree():
         rec.salvageable = None  # not measured: unknown is never clean
         rec.advice = (
@@ -426,6 +440,12 @@ def _measure(
         # merged tree, a live agent's freshly claimed one included (B5a009b185a).
         rec.advice = f"clean and fully merged — safe to remove: `git worktree remove {wt}`" + (
             f" then `ddflow release {rec.item}`." if held else " (no lease is held on it)."
+        )
+    if rec.stale_base_ref:
+        rec.advice += (
+            f" Its .ddflow/config.toml holds stale worktree.base_ref = "
+            f"{rec.stale_base_ref!r} (a CLI flag, refused) — `ddflow recover --apply` "
+            "repairs it to the default."
         )
 
 
