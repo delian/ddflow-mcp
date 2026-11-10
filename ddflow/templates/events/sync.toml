@@ -1,0 +1,8 @@
+# Event kinds owned by sync. One [[kind]] per kind.
+
+[[kind]]
+name = "branch.synced"
+doc = "A base was merged into an item's branch by ddflow sync, with the commits brought in and the gate outcomes still valid or stale."
+fields = { "base" = ["str"], "commits" = ["list"], "gates_stale" = ["list"], "gates_valid" = ["list"], "relevant" = ["int"] }
+lookup = { "base" = "the base sha merged", "commits" = "the shas the sync merged", "gates_stale" = "gates recorded stale by the sync", "gates_valid" = "gates still valid after the sync" }
+exempt = "a state change of an item's branch; it adds no authored text to compare"
