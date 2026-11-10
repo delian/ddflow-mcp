@@ -70,3 +70,4 @@
 {"agent":"pperf8","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e06900d6e05c61389ce950b21","kind":"job.ended","lamport":167487,"schema":1,"subject":"Jef6b7683ba","ts":"2026-11-10T17:09:50.561884Z"}
 {"agent":"pperf8","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e808c70ef8d2ea3f41d58f606","kind":"job.ended","lamport":167488,"schema":1,"subject":"J6d5f31eda8","ts":"2026-11-10T17:09:50.643388Z"}
 {"agent":"pperf8","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e4da299bc227f8acfd6d623d7","kind":"job.ended","lamport":167489,"schema":1,"subject":"J282cd1b6b4","ts":"2026-11-10T17:09:50.724779Z"}
+{"agent":"pperf8","data":{"tags":["perf","metrics","wave:0"]},"id":"e95ac99ed2ee71b526bf70c6d","kind":"task.updated","lamport":167490,"schema":1,"subject":"PM-report-prompt","ts":"2026-11-10T17:10:05.616850Z"}
