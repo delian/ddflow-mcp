@@ -16,9 +16,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .forge import ForgeError, ForgeUnavailable, _check, _run
-
 from ..config import Config
+from .forge import ForgeError, ForgeUnavailable, _check, _run
 
 Runner = Callable[..., Any]
 
