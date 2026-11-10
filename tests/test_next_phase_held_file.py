@@ -43,7 +43,9 @@ def _pinned_scenario(log):
 
 def test_next_phase_blocks_an_item_whose_file_is_under_a_live_lease(log, repo):
     _pinned_scenario(log)
-    code, out, _err = run_cli(repo, "next", "--phase", "P-config-engine", "--json", agent="sw-cedefaults")
+    code, out, _err = run_cli(
+        repo, "next", "--phase", "P-config-engine", "--json", agent="sw-cedefaults"
+    )
     assert code == 2, out
     data = json.loads(out)
     assert data["ready"] == [], out
@@ -60,7 +62,9 @@ def test_next_phase_still_offers_an_independent_item_beside_the_held_file(log, r
         "CE-independent",
         {"parent": "P-config-engine", "priority": 2, "globs": ["ddflow/config/_core.py"]},
     )
-    code, out, _err = run_cli(repo, "next", "--phase", "P-config-engine", "--json", agent="sw-cedefaults")
+    code, out, _err = run_cli(
+        repo, "next", "--phase", "P-config-engine", "--json", agent="sw-cedefaults"
+    )
     assert code == 0, out
     data = json.loads(out)
     assert [r["id"] for r in data["ready"]] == ["CE-independent"], out
