@@ -38,6 +38,11 @@ COMMANDS: tuple[Command, ...] = (
             "falsifiers tripped, with the call that switches back to strict locking. "
             "view=swarm: the baseline a lane fleet must beat: merged items per hour, rework rate, "
             "agent-hours per item, critical-path slack. "
+            "view=tiny: one-line versions of the summary figures. "
+            "view=paths: each item's workflow path (process vs record steps) and the burst union of "
+            "concurrent process time. view=variants: the directly-follows gate graph, top variants, "
+            "burst overlap, superseded passes and out-of-order runs. "
+            "view=slo: the service-level indicators ddflow tracks for itself. "
             "A figure under [metrics].min_samples is n/a, never 0; exit 2 = not enough data."
         ),
         call=lambda repo, a, agent: _api().run_metrics(

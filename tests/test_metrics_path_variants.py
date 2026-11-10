@@ -53,9 +53,11 @@ def seeded() -> Log:
 
 
 def test_directly_follows_counts_a_gate_pair_and_its_gap(log=None):
-    rows = {r["a"]: r for r in directly_follows(ctx_of(seeded()))}
-    assert rows["rubber_duck"]["n"] == 1  # only A goes rubber_duck -> critic
-    assert rows["critic"]["n"] == 1  # B goes critic -> rubber_duck
+    row = {(r["a"], r["b"]): r for r in directly_follows(ctx_of(seeded()))}
+    assert row[("rubber_duck", "critic")] == {"a": "rubber_duck", "b": "critic", "n": 1, "median_gap_s": 100}
+    assert row[("critic", "rubber_duck")]["n"] == 1
+    assert row[("critic", "rubber_duck")]["median_gap_s"] == 50
+    assert row[("research", "rubber_duck")]["median_gap_s"] == 200
 
 
 def test_a_gate_run_before_an_earlier_canonical_step_is_out_of_order():

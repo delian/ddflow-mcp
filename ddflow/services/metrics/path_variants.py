@@ -155,8 +155,11 @@ def build(ctx: Context) -> dict:
         },
     }
 
-
 def has_figures(data: dict) -> bool:
+    """True when the graph has any gate-to-gate transition to show. Unlike the ``paths`` burst
+    view, this lens HAS a figure below ``min_samples`` -- the descriptive graph is presentable
+    at any non-empty log -- so it exits 0; the ``overlap`` sub-figure alone is withheld
+    (``unavailable``, never a fabricated zero)."""
     return bool(data["directly_follows"] or data["variants"])
 
 
