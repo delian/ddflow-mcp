@@ -18,11 +18,17 @@ from . import fake
 class FakeIndexStore(SqliteIndexStore):
     """An `IndexStore` whose connections are in-memory databases, one per path."""
 
+    def __init__(self) -> None:
+        #: path -> the one long-lived connection kept open per path. A shared-cache
+        #: in-memory database dies when its last connection closes, so holding the
+        #: keeper open is what lets a reconnect after `close()` still see the rows
+        #: written earlier, like reopening one file whose data persists on disk.
+        self._keepers: dict[str, Connection] = {}
+
     def connect(self, path: Path | str = ":memory:") -> Connection:
-        # One shared-cache in-memory database per path, keyed to this instance, so a
-        # reconnect to a path sees the same rows (like the default reopening its file)
-        # instead of a fresh empty database with no tmpdir.
-        con = connect_memory(name=f"{id(self)}:{path}")
+        key = f"{id(self)}:{path}"
+        self._keepers.setdefault(key, connect_memory(name=key))
+        con = connect_memory(name=key)
         self.pragmas(con)
         return con
 

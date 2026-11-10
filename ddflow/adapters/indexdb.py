@@ -75,14 +75,16 @@ def connect_memory(name: str = ":memory:", timeout: float = 30.0) -> Connection:
     It lives here (not in the fake) so the `sqlite-home` contract keeps `sqlite3` in
     this one module while the fake still opens an in-memory database without its own
     import. `name` keys a *shared-cache* in-memory database, so two connections with the
-    same name see the same rows (like reopening one file); the bare `":memory:"` opens a
-    private database that a reconnect starts empty.
+    same name see the same rows (the bare `":memory:"` opens a private database that a
+    reconnect starts empty). The name is reduced to URI-safe characters first, so a `?`
+    or `#` in a path cannot cut the ``mode`` off the connection URI.
     """
     if name == ":memory:":
         con = sqlite3.connect(":memory:", timeout=timeout, isolation_level=None)
     else:
+        key = "".join(c if c.isalnum() else "_" for c in name)
         con = sqlite3.connect(
-            f"file:db_{name}?mode=memory&cache=shared",
+            f"file:db_{key}?mode=memory&cache=shared",
             uri=True,
             timeout=timeout,
             isolation_level=None,
