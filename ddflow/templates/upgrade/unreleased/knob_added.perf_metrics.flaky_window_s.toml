@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.flaky_window_s"
+new = "604800"
+why = "The rolling window the flaky-rate view (services/perf/flakyrate.py) measures flake counts and quarantine proposals over; a flake older than this does not count."
+impact = "additive"

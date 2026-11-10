@@ -2015,6 +2015,26 @@
   
   '''
 # ---
+# name: test_help[ddflow perf]
+  '''
+  usage: ddflow perf [-h] [--cmd CMD] [--line LINE] [--window WINDOW] [--filters FILTERS] [--format {text,md,json,svg,html}] [--out OUT] [{env,run,ingest,report}]
+  
+  positional arguments:
+    {env,run,ingest,report}
+                          env (default), run, ingest or report
+  
+  options:
+    -h, --help            show this help message and exit
+    --cmd CMD             with run: the command to measure
+    --line LINE           with ingest: the sample line
+    --window WINDOW       with report: a duration back (7d, 12h) or a date YYYY-MM-DD
+    --filters FILTERS     with report: only phase=<id>
+    --format {text,md,json,svg,html}
+                          with report: text (default), md, json, svg or html
+    --out OUT             with report svg/html: the file path
+  
+  '''
+# ---
 # name: test_help[ddflow phase add]
   '''
   usage: ddflow phase add [-h] [--title TITLE] [--needs NEEDS] [--globs GLOBS] [--tags TAGS] [--body BODY] [--priority PRIORITY] [--line LINE] [--readd] [--allow-unknown-needs] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] id
@@ -3677,13 +3697,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,perf,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3803,6 +3823,8 @@
       suggest             send a bounded change to the lease holder of an item, as a suggestion
       paths               workflow-path variants: directly-follows, top variants, burst overlap,
                           superseded passes, out-of-order
+      perf                perf of the host (fingerprint, measuring wrapper) and the perf report
+                          (window, filters, format)
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
       digest              the operator queue: what waits on a person, as askable entries
@@ -3959,6 +3981,7 @@
     'ddflow onboard',
     'ddflow pair',
     'ddflow paths',
+    'ddflow perf',
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',

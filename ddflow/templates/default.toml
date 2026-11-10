@@ -517,6 +517,9 @@ prop_min_observations = 3
 prop_marginal_gain = 0.25
 prop_batch_dominance = 2.0
 prop_retire_payback = 2.0
+report_default_window = "28d"
+report_max_rows = 20
+report_width = 76
 
 [pins]
 recipes_file = ".ddflow/pins.toml"
@@ -682,6 +685,9 @@ target_review_finding_rate = 0.6
 burn_rate_window_s = 2592000
 burn_rate_exhaust_s = 3600.0
 
+[store]
+stale_index_days = 7.0
+
 [swarm]
 w_critical = 3.0
 w_fit = 2.0
@@ -737,6 +743,9 @@ index_url = ""
 prereleases = false
 self = "ask"
 
+[upstream_gh]
+error_max = 400
+
 [waves]
 auto_stamp = true
 
@@ -750,6 +759,8 @@ remove_on_merge = true
 dispose_finished = true
 sweep_min_age_s = 3600
 sweep_interval_s = 900
+stash_retries = 4
+stash_retry_pause_s = 0.25
 max_parallel = 0
 sync_before_start = true
 adopt_existing = true

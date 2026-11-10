@@ -11,7 +11,7 @@ from pathlib import Path
 from ...config import Config
 from ...core import clock
 from ...core import globs as GL
-from ...core.admission import conflicts, glob_conflict, is_shared
+from ...core.admission import conflicts, glob_conflict, real_overlap
 from ...core.admission import glob_clashes as _glob_clashes
 from ...core.flow import branch_name, line_key
 from ...core.model import Item, Lease, State, fold
@@ -181,7 +181,9 @@ def optimistic_clashes(
     # clean against one holder and a real conflict on `src/a.py` against another never half-
     # shares the file.
     kept_mine = [m for _o, _lz, (m, _t) in kept]
-    optimistic = [g for g in dict.fromkeys(optimistic) if not any(GL.overlap(g, m) for m in kept_mine)]
+    optimistic = [
+        g for g in dict.fromkeys(optimistic) if not any(GL.overlap(g, m) for m in kept_mine)
+    ]
     return kept, optimistic
 
 
@@ -243,15 +245,11 @@ def _live_pairs(
     log: EventLog, other: Item, lz: Lease, globs: list[str], shared: list[str]
 ) -> list[tuple[str, str]]:
     """The (mine, theirs) glob pairs that really clash with ``lz``, once the files its
-    holder has changed are compared. Only a WILDCARD lease glob can cover files its holder
-    never touches: an exact path it claimed is declared work, changed yet or not."""
+    holder has changed are compared (`AD.real_overlap`, DX-lease-real-overlap): a WILDCARD
+    lease glob can cover files its holder never touches; an exact path it claimed is
+    declared work, changed yet or not. The git read costs a refusal, never a claim."""
     pairs = conflicts(globs, lz.globs, shared)
-    changed = _leases.holder_changed_paths(log, other) if pairs else None
-    if changed is None:
+    if not pairs:
         return pairs
-    real = [p for p in changed if not is_shared(p, shared)]
-    return [
-        (a, b)
-        for a, b in pairs
-        if not any(c in b for c in "*?[") or any(GL.match(p, a) for p in real)
-    ]
+    changed = _leases.holder_changed_paths(log, other)
+    return real_overlap(globs, lz.globs, changed, shared)

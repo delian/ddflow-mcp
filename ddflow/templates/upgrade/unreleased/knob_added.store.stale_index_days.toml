@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "store.stale_index_days"
+new = "7.0"
+why = "How long an index built by OTHER code (a different fingerprint, or the pre-fingerprint `index.db`) is kept after its last write before a rebuild garbage-coll..."
+impact = "additive"
