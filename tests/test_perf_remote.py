@@ -65,6 +65,12 @@ def test_parse_line_coerces_the_reported_numbers_to_floats():
     assert parse_line('{"wall_s": "1.5", "cpu_s": "two"}').cpu_s is None
 
 
+def test_a_posted_env_key_that_is_not_a_digest_is_dropped():
+    # a hostname or username is not a machine-class digest: dropped, never mixed into a key
+    assert parse_line('{"wall_s": 1, "env": "webserver01"}').env == ""
+    assert parse_line('{"wall_s": 1, "env": "abcdef012345"}').env == "abcdef012345"
+
+
 def test_an_agent_line_cannot_be_promoted_to_measured():
     forged = CommandSample(1.0, None, None, None, "wait4", TRUST_MEASURED, container=False)
     # the self-declared trust field is ignored -- only measure() produces `measured`
@@ -72,7 +78,8 @@ def test_an_agent_line_cannot_be_promoted_to_measured():
 
 
 def test_wrap_command_names_the_exact_command():
-    assert wrap_command("pytest -q", program="ddflow") == "ddflow perf run --cmd pytest -q"
+    # shell-quoted, so --cmd binds the whole command as one token
+    assert wrap_command("pytest -q", program="ddflow") == "ddflow perf run --cmd 'pytest -q'"
 
 
 def test_fingerprint_container_never_mixes_container_with_bare_metal():

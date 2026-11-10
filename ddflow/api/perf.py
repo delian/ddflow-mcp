@@ -10,7 +10,7 @@ counted as gate evidence of a pass (D-perf-metrics-answers).
 from __future__ import annotations
 
 import json
-import resource
+import os
 import shlex
 import subprocess
 import sys
@@ -24,32 +24,13 @@ from ..services.perf import store
 from ._base import _load
 
 
-def _rss_mb(ru: resource.struct_rusage) -> float | None:
-    """``ru_maxrss`` is KB on Linux and bytes on macOS; scale to MB per platform so one
-    wrapper reports the same number on the two sides the fingerprint distinguishes."""
+def _rss_mb(ru) -> float | None:
+    """``ru`` is a ``resource.struct_rusage``; ``ru_maxrss`` is KB on Linux and bytes on
+    macOS, scaled to MB per platform so one wrapper reports the same number on the two sides
+    the fingerprint distinguishes."""
     if not ru.ru_maxrss:
         return None
     return ru.ru_maxrss / 1048576.0 if sys.platform == "darwin" else ru.ru_maxrss / 1024.0
-
-
-def _wait4_delta(before: resource.struct_rusage):
-    """The stdlib rung of the probe ladder (``resource.ru`` = wait4) as a ``measure`` probe:
-    CPU and block IO are per-run DELTAS against ``before`` (never the process's lifetime
-    total); RSS is the wait4 high-water mark (``ru_maxrss``, the only RSS number wait4 gives).
-    The cgroup/psutil/proc rungs are not wired here, so they report ``None`` and the ladder
-    records ``wait4`` as the surviving source."""
-
-    def probe(rung: str) -> dict[str, float | None] | None:
-        if rung != "wait4":
-            return None
-        after = resource.getrusage(resource.RUSAGE_CHILDREN)
-        return {
-            "cpu_s": (after.ru_utime + after.ru_stime) - (before.ru_utime + before.ru_stime),
-            "rss_mb": _rss_mb(after),
-            "io_rw": (after.ru_inblock + after.ru_oublock) - (before.ru_inblock + before.ru_oublock),
-        }
-
-    return probe
 
 
 def run_perf_env(repo: Path, *, agent: str = "") -> O.Outcome:
@@ -62,10 +43,10 @@ def run_perf_env(repo: Path, *, agent: str = "") -> O.Outcome:
 def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
     """Run ``cmd`` (an argv string, split with the shell rules) through the measuring wrapper
     and return its one JSON line, or a refused/failed outcome when it could not run or exited
-    non-zero. Duration is a monotonic clock on this host; CPU and block IO are per-run
-    ``RUSAGE_CHILDREN`` deltas (never the process's lifetime total); RSS is the wait4
-    high-water mark; ``source`` is the ladder rung the numbers came from. The env key is the
-    receiver's own machine class."""
+    non-zero. The resource numbers come from THIS child's own ``wait4`` rusage (per-child, not
+    the process-global ``RUSAGE_CHILDREN`` aggregate); duration is a monotonic clock on this
+    host; ``source`` is the ladder rung the numbers came from. The env key is the receiver's
+    own machine class."""
     _, _cfg, _st = _load(repo, agent)
     if not cmd.strip():
         return O.refused("perf_run", "a command to measure")
@@ -73,22 +54,37 @@ def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
         argv = shlex.split(cmd)
     except ValueError:
         return O.refused("perf_run", "a well-quoted command")
-    before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    child: dict[str, float | None] = {}
     ran: dict[str, int] = {}
     missing: dict[str, str] = {}
 
     def run() -> None:
         try:
-            proc = subprocess.run(argv, capture_output=True)
-        except FileNotFoundError:
-            missing["argv0"] = argv[0]
+            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError:
+            missing["argv0"] = argv[0] if argv else "?"
             raise
-        ran["returncode"] = proc.returncode
+        try:
+            _, status, ru = os.wait4(proc.pid, 0)
+        except OSError:
+            missing["argv0"] = argv[0] if argv else "?"
+            raise
+        ran["returncode"] = proc.returncode = os.waitstatus_to_exitcode(status)
+        child.update(
+            {
+                "cpu_s": ru.ru_utime + ru.ru_stime,
+                "rss_mb": _rss_mb(ru),
+                "io_rw": ru.ru_inblock + ru.ru_oublock,
+            }
+        )
+
+    def probe(rung: str) -> dict[str, float | None] | None:
+        return child if rung == "wait4" else None
 
     try:
-        sample = R.measure(run, probe=_wait4_delta(before), env=_fingerprint_key(repo))
-    except FileNotFoundError:
-        return O.refused("perf_run", f"no such command: {missing['argv0']}")
+        sample = R.measure(run, probe=probe, env_key=_fingerprint_key(repo))
+    except OSError:
+        return O.refused("perf_run", f"could not run: {missing.get('argv0', '?')}")
     if ran["returncode"] != 0:
         return O.failed("perf_run", f"command exited {ran['returncode']}", text=sample.one_line())
     return O.ok("perf_run", text=sample.one_line())

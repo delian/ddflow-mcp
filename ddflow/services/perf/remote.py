@@ -16,6 +16,8 @@ only with a monotonic clock; no subtraction of two hosts' timestamps ever happen
 from __future__ import annotations
 
 import json
+import re
+import shlex
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -74,8 +76,10 @@ class CommandSample:
 
 def wrap_command(cmd: str, *, program: str = "ddflow") -> str:
     """The exact wrapped command a shell-less server returns in its next-actions envelope:
-    ``ddflow perf run --cmd CMD`` (the agent runs it; ddflow never guesses the shell)."""
-    return f"{program} perf run --cmd {cmd}"
+    ``ddflow perf run --cmd CMD`` with ``CMD`` shell-quoted, so the single ``--cmd`` flag
+    binds the whole command as one token (the agent runs it verbatim; ddflow never guesses
+    the shell)."""
+    return f"{program} perf run --cmd {shlex.quote(cmd)}"
 
 
 def measure(
@@ -148,10 +152,13 @@ def _maybe_float(value: object) -> float | None:
 
 def _valid_env_key(env: str) -> str:
     """An env key is a machine-class digest, never a hostname, user or path. A posted line
-    must not inject identity, so any key carrying a path/address marker is dropped."""
+    must not inject identity, so any key carrying a path/address marker, or whose base is
+    not a hex digest (a hostname or username), is dropped."""
     if not env:
         return ""
     if any(c in env for c in ("/", "\\", ":", "@", " ", "\n")):
+        return ""
+    if not re.fullmatch(r"[0-9a-f]+", env.split(".", 1)[0]):
         return ""
     return env
 
