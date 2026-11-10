@@ -275,6 +275,44 @@ def _gh_checks(rollup: list[dict[str, Any]] | None) -> str:
     return "pending" if pending else "passing"
 
 
+def _gh_review(review_decision: str, states: list[str]) -> str:
+    """One review word from `reviewDecision` and the `latestReviews` states.
+
+    `reviewDecision` is null on a branch with no required-review rule, so the decision
+    has to be read from the reviews themselves -- otherwise, in exactly the
+    lightly-protected repos, no approval and no change request is ever seen.
+    """
+    review = {
+        "APPROVED": "approved",
+        "CHANGES_REQUESTED": "changes_requested",
+        "REVIEW_REQUIRED": "pending",
+    }.get(review_decision, "")
+    if not review:
+        if "CHANGES_REQUESTED" in states:
+            review = "changes_requested"
+        elif "APPROVED" in states:
+            review = "approved"
+    return review
+
+
+def _gh_review_sha(reviews: list[dict[str, Any]], states: list[str], review: str) -> str:
+    """The commit the deciding review was made on ("" when none says)."""
+    want = {"approved": "APPROVED", "changes_requested": "CHANGES_REQUESTED"}.get(review, "")
+    deciding = [r for r, st in zip(reviews, states, strict=True) if st == want]
+    return ((deciding[-1].get("commit") or {}).get("oid") or "") if deciding else ""
+
+
+def _gh_feedback(reviews: list[dict[str, Any]]) -> list[str]:
+    """The change-request/comment review bodies, one clipped line each."""
+    return [
+        f"{(r.get('author') or {}).get('login', '?')} ({r.get('state', '').lower()}): "
+        f"{r.get('body', '')}"
+        for r in reviews
+        if (r.get("state") or "").upper() in ("CHANGES_REQUESTED", "COMMENTED")
+        and (r.get("body") or "").strip()
+    ]
+
+
 #: The merge queue is not in `gh pr view --json`'s documented fields; it is GraphQL's
 #: `PullRequest.isInMergeQueue` / `mergeQueueEntry`, asked through `gh api graphql` (whose
 #: `{owner}`/`{repo}` placeholders gh fills in from the repository it runs in).
@@ -384,31 +422,9 @@ class GitHub:
         return "queued", int(entry.get("position") or 0), str(entry.get("state") or "")
 
     def _info(self, d: dict[str, Any]) -> PRInfo:
-        review = {
-            "APPROVED": "approved",
-            "CHANGES_REQUESTED": "changes_requested",
-            "REVIEW_REQUIRED": "pending",
-        }.get((d.get("reviewDecision") or "").upper(), "")
         reviews = d.get("latestReviews") or []
         states = [(r.get("state") or "").upper() for r in reviews]
-        if not review:
-            # `reviewDecision` is null on a branch with no required-review rule, so the
-            # decision has to be read from the reviews themselves -- otherwise, in exactly
-            # the lightly-protected repos, no approval and no change request is ever seen.
-            if "CHANGES_REQUESTED" in states:
-                review = "changes_requested"
-            elif "APPROVED" in states:
-                review = "approved"
-        want = {"approved": "APPROVED", "changes_requested": "CHANGES_REQUESTED"}.get(review, "")
-        deciding = [r for r, st in zip(reviews, states, strict=True) if st == want]
-        review_sha = ((deciding[-1].get("commit") or {}).get("oid") or "") if deciding else ""
-        feedback = [
-            f"{(r.get('author') or {}).get('login', '?')} ({r.get('state', '').lower()}): "
-            f"{r.get('body', '')}"
-            for r in d.get("latestReviews") or []
-            if (r.get("state") or "").upper() in ("CHANGES_REQUESTED", "COMMENTED")
-            and (r.get("body") or "").strip()
-        ]
+        review = _gh_review((d.get("reviewDecision") or "").upper(), states)
         return PRInfo(
             number=int(d.get("number") or 0),
             url=d.get("url", ""),
@@ -420,8 +436,8 @@ class GitHub:
             head_sha=d.get("headRefOid", ""),
             merge_sha=((d.get("mergeCommit") or {}).get("oid") or ""),
             draft=bool(d.get("isDraft")),
-            feedback=_clip(feedback),
-            review_sha=review_sha,
+            feedback=_clip(_gh_feedback(reviews)),
+            review_sha=_gh_review_sha(reviews, states, review),
             commits=_count(d.get("commits")),
         )
 

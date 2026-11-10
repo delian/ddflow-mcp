@@ -10,21 +10,20 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 
 from ddflow.adapters.forge import (  # noqa: F401  # re-exported for the flow services
+    FORGES,  # the registry, for callers that name a forge
+    GITHUB,
+    GITLAB,
     Forge,
     ForgeError,
     ForgeUnavailable,
-    GITHUB,
-    GITLAB,
     GitHub,
     PRInfo,
     Thread,
     _check,
     _run,
 )
-from ddflow.adapters.forge import FORGES  # noqa: F401  # the registry, for callers that name a forge
 from ddflow.adapters.registry import UnknownName
 
 from ..config import Config

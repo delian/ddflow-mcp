@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from .forge import (
-    ForgeUnavailable,
     GITLAB,
+    THREAD_BODY_MAX,
+    ForgeUnavailable,
     PRInfo,
     Thread,
-    THREAD_BODY_MAX,
     _check,
     _clip,
     _json,

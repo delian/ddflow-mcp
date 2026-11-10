@@ -11,8 +11,8 @@ from pathlib import Path
 
 from ddflow.adapters import forge as FG
 from ddflow.adapters.fakes import FAKES
-from ddflow.adapters.forge import ForgeError, ForgeUnavailable, GitHub, PRInfo, Thread
 from ddflow.adapters.fakes.forge import FakeForge
+from ddflow.adapters.forge import ForgeError, ForgeUnavailable, GitHub, PRInfo, Thread
 
 _PR = {
     "number": 1,
@@ -30,7 +30,7 @@ _PR = {
 }
 
 
-def _proc(stdout: str) -> "_Proc":
+def _proc(stdout: str) -> _Proc:
     return _Proc(stdout)
 
 
@@ -60,12 +60,24 @@ def _gh_run(repo, argv, *, timeout: int = 120):
                 )
             )
         if "addPullRequestReviewThreadReply" in joined:
-            return _Proc(json.dumps({"data": {"addPullRequestReviewThreadReply": {"comment": {"id": "c"}}}}))
+            return _Proc(
+                json.dumps({"data": {"addPullRequestReviewThreadReply": {"comment": {"id": "c"}}}})
+            )
         if "resolveReviewThread" in joined:
-            return _Proc(json.dumps({"data": {"resolveReviewThread": {"thread": {"id": "t", "isResolved": True}}}}))
+            return _Proc(
+                json.dumps(
+                    {"data": {"resolveReviewThread": {"thread": {"id": "t", "isResolved": True}}}}
+                )
+            )
         return _Proc(
             json.dumps(
-                {"data": {"repository": {"pullRequest": {"isInMergeQueue": False, "mergeQueueEntry": None}}}}
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {"isInMergeQueue": False, "mergeQueueEntry": None}
+                        }
+                    }
+                }
             )
         )
     return _Proc("")
@@ -83,18 +95,17 @@ def forge_cases(io) -> None:
     io.resolve(1, "tid")
 
 
-CONFORMANCE = {
-    "Forge": {
-        "real": lambda monkeypatch: _scripted_github(monkeypatch),
-        "cases": forge_cases,
-        "fake": lambda cls: cls(),
-    }
-}
-
-
 def _scripted_github(monkeypatch) -> GitHub:
     monkeypatch.setattr(FG, "_run", _gh_run)
     return GitHub(Path("."))
+
+
+CONFORMANCE = {
+    "Forge": {
+        "real": _scripted_github,
+        "cases": forge_cases,
+    }
+}
 
 
 def test_the_adapter_and_the_fake_are_registered_and_satisfy_the_port():
