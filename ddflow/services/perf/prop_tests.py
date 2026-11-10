@@ -104,6 +104,8 @@ def propose_split_files(
     out: list[Proposal] = []
     if floor is None:
         return out
+    if max_file_bytes <= 0:
+        return out  # the size rule was never supplied: no file can be "over the rule"
     for file, secs in sorted((rollup.get("per_file") or {}).items()):
         if secs / floor < share:
             continue
@@ -194,7 +196,7 @@ def propose_selection(
     cfg = cfg or _section_knobs(Config())
     if len(runs) < cfg.prop_select_min_runs:
         return None  # one set of misses on too few runs: not-enough-data
-    misses = _count_misses(runs)
+    misses, measured = _count_misses(runs)
     if misses >= cfg.prop_select_miss_min:
         fraction = sorted(f for r in runs if (f := _fraction(r)) is not None) or None
         return Proposal(
@@ -208,8 +210,8 @@ def propose_selection(
             risk="a wider selection runs a larger fraction of the suite per change: it is wider, not the suite",
             because=f"{misses} missed failure(s) across {len(runs)} runs: widen the selection",
         )
-    if all(_fraction(r) == 1.0 for r in runs):
-        # Every run selected the whole suite and missed nothing: the selection can narrow.
+    if measured and all(_fraction(r) == 1.0 for r in runs):
+        # Every run selected the whole suite AND missed nothing (misses was measured): narrow.
         return Proposal(
             "selection",
             "narrow",
@@ -237,16 +239,20 @@ def _fraction(run: dict) -> float | None:
     return None
 
 
-def _count_misses(runs: list[dict[str, Any]]) -> int:
-    """The misses across runs. A missing or non-numeric count is UNAVAILABLE, and is not a
-    measured miss either: it neither adds to the widening trigger nor forces a NARROW, so a
-    run that never recorded misses keeps the claim honest."""
+def _count_misses(runs: list[dict[str, Any]]) -> tuple[int, bool]:
+    """(counted misses, every run MEASURED its misses). A missing or non-numeric count is
+    UNAVAILABLE, and is not a measured miss: it neither adds to the widening trigger nor
+    count toward a NARROW, so a run that never recorded misses neither forces a NARROW nor
+    a silent 0."""
     total = 0
+    measured = True
     for r in runs:
         m = r.get("misses")
         if isinstance(m, (int, float)) and not isinstance(m, bool):
             total += int(m)
-    return total
+        else:
+            measured = False
+    return total, measured
 
 
 __all__ = [
