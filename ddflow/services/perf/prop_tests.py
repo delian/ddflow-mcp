@@ -115,6 +115,8 @@ def propose_split_files(
     if max_file_bytes <= 0:
         return out  # the size rule was never supplied: no file can be "over the rule"
     for file, secs in sorted((rollup.get("per_file") or {}).items()):
+        if not isinstance(secs, (int, float)) or isinstance(secs, bool) or not _is_finite(secs):
+            continue  # an unmeasured or non-finite duration is not a sample
         if secs / floor < share:
             continue
         size = (sizes or {}).get(file)
@@ -162,9 +164,13 @@ def propose_shard_or_workers(
     if floor is None or not per_file:
         return None
     slowest = max(per_file, key=lambda f: per_file[f])
-    skew = float(rollup.get("skew")) if isinstance(rollup.get("skew"), (int, float)) else None
-    if skew is None:
-        skew = per_file[slowest] / floor
+    skew = rollup.get("skew")
+    if not isinstance(skew, (int, float)) or isinstance(skew, bool) or not _is_finite(skew):
+        return None  # an unmeasured or non-finite skew is unavailable, never a shard or raise
+    slowest_s = per_file[slowest]
+    if slowest_s != slowest_s or slowest_s == float("inf"):
+        return None  # the slowest file was never measured: a non-finite duration is not a sample
+    skew = float(skew)
     if skew >= cfg.prop_shard_skew:
         return Proposal(
             "shard",
@@ -256,7 +262,7 @@ def _count_misses(runs: list[dict[str, Any]]) -> tuple[int, bool]:
     measured = True
     for r in runs:
         m = r.get("misses")
-        if isinstance(m, (int, float)) and not isinstance(m, bool):
+        if isinstance(m, (int, float)) and not isinstance(m, bool) and _is_finite(m) and m >= 0:
             total += int(m)
         else:
             measured = False
