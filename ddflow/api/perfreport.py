@@ -98,7 +98,9 @@ def _svg_doc(charts: dict[str, str]) -> str:
     nests each chart (its own ``<svg>``) at its own ``y``, or an empty canvas when the log
     supports no figure (never two root elements, and never an empty file)."""
     if not charts:
-        return CH.viewbox(600, 200) + "<title>perf report</title><desc>no figures to draw</desc></svg>"
+        return (
+            CH.viewbox(600, 200) + "<title>perf report</title><desc>no figures to draw</desc></svg>"
+        )
     height = 220
     rows = "".join(
         f'<svg x="0" y="{i * height}" width="600" height="{height}">{charts[k]}</svg>'
@@ -140,9 +142,7 @@ def run_perf_report(
     at = time.time() if now is None else now
     fmt = (format or "text").strip().lower()
     if fmt not in FORMATS:
-        return O.refused(
-            "perf_report", f"format {format!r}: one of {', '.join(FORMATS)}"
-        )
+        return O.refused("perf_report", f"format {format!r}: one of {', '.join(FORMATS)}")
     win = (window or "").strip() or cfg.perf_metrics.report_default_window
     try:
         since = MS.parse_since(win, at)
@@ -178,7 +178,9 @@ def run_perf_report(
         # fixed-precision bar charts over the finite gate and model row sets -- and the
         # path names where the same bytes are written, with the exact next calls.
         body = f"{doc}\npath: {path}\n{_footer(fmt, str(path), win)}"
-    return O.ok("perf_report", text=body, format=fmt, window=win, out=out, report=RT.to_json(report))
+    return O.ok(
+        "perf_report", text=body, format=fmt, window=win, out=out, report=RT.to_json(report)
+    )
 
 
 __all__ = ["FORMATS", "OUT_DIR", "run_perf_report"]
