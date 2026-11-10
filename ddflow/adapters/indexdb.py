@@ -69,13 +69,24 @@ class SqliteIndexStore:
         con.execute("insert or replace into meta values('schema', ?)", (str(schema),))
 
 
-def connect_memory(timeout: float = 30.0) -> Connection:
-    """A fresh `:memory:` connection with `Row` rows: `FakeIndexStore`'s seam.
+def connect_memory(name: str = ":memory:", timeout: float = 30.0) -> Connection:
+    """An in-memory connection with `Row` rows: `FakeIndexStore`'s seam.
 
     It lives here (not in the fake) so the `sqlite-home` contract keeps `sqlite3` in
-    this one module while the fake still opens an in-memory database without its own import.
+    this one module while the fake still opens an in-memory database without its own
+    import. `name` keys a *shared-cache* in-memory database, so two connections with the
+    same name see the same rows (like reopening one file); the bare `":memory:"` opens a
+    private database that a reconnect starts empty.
     """
-    con = sqlite3.connect(":memory:", timeout=timeout, isolation_level=None)
+    if name == ":memory:":
+        con = sqlite3.connect(":memory:", timeout=timeout, isolation_level=None)
+    else:
+        con = sqlite3.connect(
+            f"file:db_{name}?mode=memory&cache=shared",
+            uri=True,
+            timeout=timeout,
+            isolation_level=None,
+        )
     con.row_factory = Row
     return con
 

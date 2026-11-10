@@ -16,11 +16,13 @@ from . import fake
 
 @fake
 class FakeIndexStore(SqliteIndexStore):
-    """An `IndexStore` whose connections are `:memory:` databases."""
+    """An `IndexStore` whose connections are in-memory databases, one per path."""
 
     def connect(self, path: Path | str = ":memory:") -> Connection:
-        # The argument is ignored: an in-memory database has no path to open.
-        con = connect_memory()
+        # One shared-cache in-memory database per path, keyed to this instance, so a
+        # reconnect to a path sees the same rows (like the default reopening its file)
+        # instead of a fresh empty database with no tmpdir.
+        con = connect_memory(name=f"{id(self)}:{path}")
         self.pragmas(con)
         return con
 

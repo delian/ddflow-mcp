@@ -11,9 +11,7 @@ from ddflow.adapters.indexdb import DEFAULT, IndexStore, SqliteIndexStore
 
 def _schema(con) -> str:
     """The schema version `migrate` recorded, or "" before it ran (or the table exists not)."""
-    made = con.execute(
-        "select 1 from sqlite_master where type='table' and name='meta'"
-    ).fetchone()
+    made = con.execute("select 1 from sqlite_master where type='table' and name='meta'").fetchone()
     if not made:
         return ""
     row = con.execute("select v from meta where k='schema'").fetchone()
