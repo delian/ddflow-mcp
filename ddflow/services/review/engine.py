@@ -47,6 +47,40 @@ _FINDING_RE = re.compile(
     re.M | re.I | re.S,
 )
 
+#: A finding's location must be a citation: a bare path, ``path:line``, ``path:line-line``
+#: or ``path:symbol``. Anything else -- a question mark, an ellipsis, prose after a line
+#: number -- is the reviewer thinking in the location field, not naming a defect
+#: (B-review-finding-is-unfinished-reasoning). The path part excludes whitespace, ``:``,
+#: ``?`` and ``;`` so a sentence can never read as a path; the anchor is a line (with an
+#: optional range) or a symbol (``path::func`` pytest-style nodes included).
+_SYMBOL = r"[A-Za-z_][A-Za-z0-9_.()]*"
+_CITATION_RE = re.compile(rf"^[^\s:?;]+(?::?{_SYMBOL}|:\d+(?:[-\u2013]\d+)?)?$")
+
+#: A finding paragraph that is the reviewer talking about HOW it is writing the finding
+#: (citing a line, "let me", "note to self") rather than stating a defect. Combined with
+#: the absence of a defect word it is unfinished reasoning, not a finding.
+_META_REASONS = re.compile(
+    r"\b(?:cite (?:a |the )?line(?: number)?|let me\b|i'?ll\b|note to self\b)", re.I
+)
+_DEFECT_WORDS = re.compile(
+    r"\b(?:fails?|crashes?|raises?|leaks?|missing|never|wrong|breaks?|incorrect|"
+    r"shouldn'?t|mustn'?t|cannot|can'?t|unreachable|dead|bug|error|lost)\b",
+    re.I,
+)
+
+
+def _malformed_reason(location: str, detail: str) -> str:
+    """Why a finding is reasoning rather than a defect, or "" when it is a real finding.
+
+    Two independent signals (B-review-finding-is-unfinished-reasoning): a location that is
+    not a ``path:line``/``path:symbol`` citation, and a paragraph of reasoning that states
+    no defect. Either alone marks the finding malformed."""
+    if location and not _CITATION_RE.match(location):
+        return "location is prose, not a path:line or path:symbol"
+    if detail and _META_REASONS.search(detail) and not _DEFECT_WORDS.search(detail):
+        return "the paragraph states no defect (unfinished reasoning)"
+    return ""
+
 
 def diff_fence(diff: str) -> str:
     """The backtick fence that holds ``diff`` in the reviewer's prompt: one longer than
@@ -519,6 +553,7 @@ def parse(text: str) -> tuple[list[Finding], bool]:
                 location=location,
                 title=title,
                 detail=detail,
+                malformed=_malformed_reason(location, detail),
             )
         )
     return findings, status is not None

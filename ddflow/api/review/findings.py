@@ -375,6 +375,7 @@ def _untriaged(
         if f.get("digest") not in gone
         and f.get("digest") not in carried_set
         and f.get("digest") not in new
+        and not f.get("malformed")
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
 
