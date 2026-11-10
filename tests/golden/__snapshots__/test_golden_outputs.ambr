@@ -3284,6 +3284,21 @@
       perf_metrics.detect_creep_threshold = 0.1   [default]
           The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar
           never catches 1% a week; the creep bar does, accumulated over the window).
+      perf_metrics.flaky_window_s = 604800   [default]
+          The rolling window the flaky-rate view (services/perf/flakyrate.py) measures
+          flake counts and quarantine proposals over; a flake older than this does not
+          count.
+      perf_metrics.flaky_quarantine_after = 3   [default]
+          Flake count of one test within flaky_window_s at which the rate view
+          proposes a quarantine (B-sched-flaky owns the lane; PM-flaky only measures
+          and proposes).
+      perf_metrics.flaky_quarantine_expiry_s = 2592000   [default]
+          Seconds a quarantine proposal stays open (its expiry); after this the test
+          is re-evaluated rather than quarantined forever.
+      perf_metrics.flaky_retry_cost_s = 60.0   [default]
+          Estimated wall seconds one failed->rerun cycle costs; the rate view
+          multiplies flakes in the window by this for retry cost (the flake log stores
+          no per-retry duration).
       perf_metrics.budget_gate_p90_s = 180.0   [default]
           A gate wall-time budget: the p90 seconds one gate may take in a window
           before it is over budget (PM-budgets). The floor only tightens; raising it

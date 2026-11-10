@@ -21,6 +21,9 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
+from .path_variants import build as variants_build
+from .path_variants import has_figures as variants_ok
+from .path_variants import text as variants_text
 from .paths import build as paths_build
 from .paths import has_figures as paths_ok
 from .paths import text as paths_text
@@ -112,6 +115,10 @@ def _paths(ctx: Context) -> Answer:
     return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
 
 
+def _variants(ctx: Context) -> Answer:
+    return _figure(ctx, variants_build, variants_ok, variants_text, "figure")
+
+
 def _retro(item: str, events: Sequence[Event], facts: Any, state: State) -> Answer:
     """The ``retro`` view: one item's timeline, refused without an id or a known item."""
     if not item:
@@ -170,6 +177,8 @@ def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Ser
         return _tiny(ctx)
     if view == "paths":
         return _paths(ctx)
+    if view == "variants":
+        return _variants(ctx)
     if view == "slo":
         return _figure(ctx, slo_assess, slo_ok, slo_text, "service-level indicator")
     if view == "skips":
