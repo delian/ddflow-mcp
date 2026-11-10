@@ -33,9 +33,9 @@ note = "The lean MCP tool profile is a ddflow-side [mcp].tools knob; the descrip
 [[in_agent]]
 feature = "session-start-brief"
 title = "Session-start brief path"
-descriptor_fields = []
+descriptor_fields = ["orchestration"]
 checks = ["facts"]
-note = "The brief path is ddflow-side session config; the descriptor carries no field for it."
+note = "The brief path is ddflow-side session config; the descriptor's [orchestration] carries the launch/loop primitives the session-start brief renders (the path itself is not a per-agent field)."
 
 [[in_agent]]
 feature = "pre-tool-enforcement"
@@ -117,9 +117,9 @@ note = "A per-lane worktree directory isolates each claim's edits."
 [[orchestrator]]
 feature = "key-by-env-name"
 title = "Key by env name"
-descriptor_fields = []
+descriptor_fields = ["env"]
 checks = ["facts"]
-note = "Endpoint addresses and key env names live in ddflow/modelreg and .ddflow/local/models.toml, not a per-agent descriptor field."
+note = "The endpoint addresses and API-key env NAME live in ddflow/modelreg and .ddflow/local/models.toml; the descriptor's [env] section is its env-var surface (the key names themselves are not per-agent fields)."
 
 [[orchestrator]]
 feature = "permission-mode"

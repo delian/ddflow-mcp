@@ -63,15 +63,24 @@ def test_the_catalog_cites_the_existing_checks_it_must_reuse():
     assert any(c.startswith("hook:") and c.partition(":")[2] in HR.CANONICAL_EVENTS for c in cited)
     # the descriptor-only checks and the lane conformance levels are reused, not rebuilt
     assert {"facts", "hooks"} <= cited
-    assert "lane" in cited and CF.CHECKS, "the lane check cites the real levels 1-7"
+    # the lane check is cited for the conformance-levels feature, and the levels it grades
+    # are the real swarm-conformance ladder (1-7), not the bare token
+    levels_row = C.load().by_feature("conformance-levels-1-7")
+    assert "lane" in levels_row.checks
+    assert CF.CHECKS and len(CF.CHECKS) == 7  # launch claim heartbeat gate_record hook lease_stop tool_accuracy
 
 
 def test_lane_and_declared_check_modules_exist_and_are_the_single_owner():
     # The catalog reuses these; if they moved or emptied, the catalog would silently cite a
-    # check nobody runs. Assert the owners are still present with their real names.
+    # check nobody runs. Import the declared-check owner and pin its kind constants, so a
+    # catalog citing `argv`/`stream`/`hook:` is provably cited from THIS module, not forged.
+    from harness_conformance import declared as D
+
     assert HR.CANONICAL_EVENTS
     assert CF.CHECKS
     assert C.FIXED_CHECKS == ("facts", "hooks")
+    assert D.HOOK == "hook" and D.ARGV == "argv" and D.STREAM == "stream"
+    assert set(C.DECLARED_CHECKS) == {D.ARGV, D.STREAM}
 
 
 def test_rows_are_data_not_code():
@@ -95,3 +104,33 @@ def test_the_catalog_files_stay_under_the_size_ratchet():
     for rel in ("ddflow/harnesses/catalog.toml", "ddflow/services/parity/catalog.py"):
         size = (ROOT / rel).stat().st_size
         assert size < 20 * 1024, (rel, size)
+
+
+def test_a_row_with_no_check_is_refused(tmp_path):
+    _write(tmp_path, "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = []\n")
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def test_a_live_row_without_an_add_history_entry_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def test_a_non_string_check_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [1]\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def _write(tmp_path, body: str) -> None:
+    (tmp_path / "catalog.toml").write_text(body)
+
+

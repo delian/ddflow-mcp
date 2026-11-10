@@ -77,6 +77,7 @@ def field_paths() -> frozenset[str]:
     """
     out: set[str] = {"id", "rank", "family", "title", "delta"}
     for name, cls in _sections():
+        out.add(name)
         out.update(f"{name}.{f.name}" for f in dc_fields(cls))
     out.update(HV.RESERVED_SECTIONS)
     return frozenset(out)
@@ -138,6 +139,10 @@ def _parse_row(raw: dict[str, Any], axis: str, where: str) -> Row:
     _require(isinstance(feature, str) and feature, where, "a row needs a non-empty `feature` slug")
     _require(isinstance(fields_, list), where, "descriptor_fields must be a list")
     _require(isinstance(checks, list), where, "checks must be a list")
+    _require(all(isinstance(f, str) for f in fields_), where, "descriptor_fields must be strings")
+    _require(all(isinstance(c, str) for c in checks), where, "checks must be strings")
+    _require(bool(fields_), where, f"row {feature!r} names no descriptor field")
+    _require(bool(checks), where, f"row {feature!r} names no offline check")
     paths = field_paths()
     for path in fields_:
         _require(path in paths, where, f"unknown descriptor field {path!r} (feature {feature!r})")
@@ -190,5 +195,18 @@ def load(path: str | Path | None = None) -> Catalog:
         )
         _require(isinstance(date, str) and date, p.name, f"history for {feature!r} needs a date")
         history.append(HistoryEntry(feature=feature, action=action, date=date, note=note))
+
+    # A managed record's ledger is tied to its rows: a live row was added, and a retired
+    # feature is not live (a later "add" after a "retire" re-lives it, so the latest action
+    # for a live slug is "add" and for a gone slug is "retire").
+    latest_action: dict[str, str] = {}
+    for entry in history:
+        latest_action[entry.feature] = entry.action
+    for row in rows:
+        _require(
+            latest_action.get(row.feature) == "add",
+            row.feature,
+            f"live row needs an `add` history entry (latest action: {latest_action.get(row.feature)!r})",
+        )
 
     return Catalog(rows=tuple(rows), history=tuple(history))
