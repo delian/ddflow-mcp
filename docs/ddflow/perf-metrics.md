@@ -18,7 +18,7 @@ Raw samples stay in `.ddflow/local`; only small per-run rollups reach the commit
 | The operator asks | Run |
 | --- | --- |
 | how slow, which gate is slowest, where the time goes | `ddflow perf report` |
-| a trend — is the suite slower this month | `ddflow perf report --window 56d` (deltas are named, not yet computed) |
+| a trend — is the suite slower this month | `ddflow perf report` over each window, compared by hand; deltas are named, not yet computed |
 | which reviewer, model or agent is worth it | `ddflow perf report --format text` (the comparison rows) |
 | one phase only | `ddflow perf report --filters phase=<id>` |
 | a chart to open or send | `ddflow perf report --format html --out report.html` |

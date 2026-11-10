@@ -20,7 +20,7 @@ Map the words the operator actually uses:
 | The operator asks | Run |
 | --- | --- |
 | how slow, which gate is slowest, where the time goes | `ddflow perf report --format text` |
-| a trend — is the suite slower this month | `ddflow perf report --window 56d` and read the not-collected note on deltas |
+| a trend — is the suite slower this month | `ddflow perf report` over each window, compared by hand; the delta section is named, not computed |
 | which reviewer, model or agent passes first time | `ddflow perf report --format text` (the comparison rows) |
 | one phase in isolation | `ddflow perf report --filters phase=<id>` |
 | every number, for a tool to use | `ddflow perf report --format json` |
@@ -54,7 +54,11 @@ html, narrow the window, export the json). Quote that; do not invent a different
 
 ## 4. Close out
 
-Repeat the next call the footer gave, in both forms:
+Quote the footer's next call for the question asked — it already carries the format, the
+window and (for `svg`/`html`) the out path, with the MCP form beside the CLI one:
 
     ddflow perf report --format text --window 28d
     ddflow_view action=perf format=text window=28d
+
+Do not substitute a fixed call: the window is the one asked for, and a `--filters
+phase=<id>` stays in the call that scoped it.
