@@ -422,9 +422,24 @@ def _measure(
         return
     if budget is not None and not budget.take_tree():
         # This tree was past the view's measurement cap, AFTER every higher-signal tree was
-        # measured (the scan ranks unmerged first). It is NOT "clean" -- `salvageable` stays
-        # None, so `sweep` can never delete it -- but it is also not the "could not measure"
-        # alarm: the brief counts these quietly and points at the uncapped `ddflow recover`.
+        # measured (the scan ranks unmerged first). The status budget is spent, but the
+        # unmerged count is not budgeted -- ``RepoFacts.ahead`` was already answered for
+        # free -- so a tree the scan KNOWS holds unmerged commits is still reported as
+        # holding work, not as the "past the cap" unknown (Bfb4b6306d1).
+        base = facts.base(cfg.worktree.base_ref)
+        ahead = facts.ahead(wt, base)
+        if ahead > 0:
+            rec.unmerged_commits = ahead
+            rec.salvageable = True
+            rec.advice = (
+                f"known to hold {ahead} unmerged commit(s) (counted past the cap; "
+                f"`ddflow recover` weighs it fully): `git -C {wt} log {base}..HEAD`."
+            )
+            return
+        # Only "could also be mere uncommitted files" remains, and that needs `git status`,
+        # the capped process. It is NOT "clean" -- `salvageable` stays None, so `sweep` can
+        # never delete it -- but it is also not the "could not measure" alarm: the brief
+        # counts these quietly and points at the uncapped `ddflow recover`.
         rec.salvageable = None
         rec.budget_capped = True
         rec.advice = (

@@ -90,6 +90,24 @@ def test_a_tree_holding_unmerged_work_is_measured_before_clean_leftovers(repo):
     assert capped, "the clean leftovers past the cap are budget-capped, not unmeasurable"
 
 
+def test_a_tree_known_to_hold_unmerged_work_is_not_demoted_to_capped(repo):
+    """The scan ranks by the free unmerged count; a tree the scan already KNOWS holds
+    unmerged commits must be reported as holding work even when the status budget is spent,
+    never marked the "past the cap" unknown."""
+    _seed(repo, ["A", "B"])
+    _commit_work(_orphan(repo, "A"), "work A")
+    _commit_work(_orphan(repo, "B"), "work B")
+
+    cfg = Config.load(repo)
+    cfg.lease.scan_view_trees_max = 1
+    recs = L.scan(EventLog(repo, "scanner"), cfg, repo, view=True)
+
+    for r in recs:
+        assert r.unmerged_commits > 0, r.item
+        assert r.salvageable is True, r.item
+        assert not r.budget_capped, r.item
+
+
 def test_capped_trees_get_a_distinct_note_not_the_alarm_and_not_salvage_clean():
     """The view on its own: budget-capped trees are a DISTINCT note -- neither the RESUME
     alarm nor "nothing to salvage" -- and the alarm wording is absent."""
