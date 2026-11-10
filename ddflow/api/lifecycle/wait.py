@@ -230,8 +230,17 @@ def _ready_advice(v: dict[str, Any], lease: str) -> str:
     """What to do on waking: claim the item, or (waiting on a lease) go on."""
     if lease:
         return f"{lease} is free of other agents' leases: claim what you need now."
-    note = f" Note: `next` withholds it as {v['note']}." if v.get("note") else ""
-    return f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same release woke too.{note}"
+    ready = v["ready"][0]
+    if v.get("note"):
+        # A named claim of an offer-overlapped item still succeeds (it ignores the plan's
+        # overlap), so READY holds; `next` would call it blocked. Lead with that, or the
+        # wake still reads as an order to claim what `next` withholds (B-wait-ready-
+        # contradicts-next-blocked).
+        return (
+            f"`ddflow claim {ready}` would now succeed, but `next` withholds {ready} as "
+            f"{v['note']}; claim it only if you intend to take that item's place."
+        )
+    return f"`ddflow claim {ready}` now: anyone else waiting on the same release woke too."
 
 
 def _judge_any(
