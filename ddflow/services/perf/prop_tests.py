@@ -98,7 +98,9 @@ def _floor(rollup: dict) -> float | None:
 
 
 def _is_finite(value: float) -> bool:
-    return value == value and value not in (float("inf"), float("-inf"))
+    import math
+
+    return math.isfinite(value)
 
 
 def propose_split_files(
@@ -135,7 +137,10 @@ def propose_split_files(
             Proposal(
                 "split_file",
                 {"file": file, "serial_s": secs, "floor_s": floor, "size_bytes": size},
-                evidence={"share_of_floor": secs / floor, "files": len(rollup.get("per_file") or {})},
+                evidence={
+                    "share_of_floor": secs / floor,
+                    "files": len(rollup.get("per_file") or {}),
+                },
                 sample_size=len(rollup.get("per_file") or {}),
                 effect_size=secs / floor,
                 expected_saving_s_run=saving,
@@ -177,12 +182,19 @@ def propose_shard_or_workers(
         return None
     slowest = max(per_file, key=lambda f: per_file[f])
     slowest_s = per_file[slowest]
-    skew = slowest_s / floor  # the slowest file's OWN share of the floor (never a stale rollup skew)
+    skew = (
+        slowest_s / floor
+    )  # the slowest file's OWN share of the floor (never a stale rollup skew)
     if skew >= cfg.prop_shard_skew:
         return Proposal(
             "shard",
             {"kind": "shard", "file": slowest},
-            evidence={"share": skew, "floor_s": floor, "file_s": slowest_s, "workers": rollup.get("workers")},
+            evidence={
+                "share": skew,
+                "floor_s": floor,
+                "file_s": slowest_s,
+                "workers": rollup.get("workers"),
+            },
             sample_size=len(per_file),
             effect_size=skew,
             expected_saving_s_run=slowest_s - slowest_s / max(1, _workers(rollup)),
