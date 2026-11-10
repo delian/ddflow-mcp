@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 from pathlib import Path
+from posixpath import normpath
 from typing import Any
 
 import ddflow.api._dedupe as DD
@@ -295,11 +296,11 @@ def missing_loud(root: Path, globs: list[str]) -> list[str]:
     tracked: list[str] = GIT.files(root, "tracked") or []
     out: list[str] = []
     for raw in dict.fromkeys(globs):
-        rel = raw.lstrip("/")
-        if not rel or any(c in rel for c in "*?["):
+        if not raw or any(c in raw for c in "*?["):
             continue  # a pattern: a new file behind it cannot be told from a typo
+        rel = normpath(raw.lstrip("/"))
         if rel in tracked:
-            continue  # a tracked file IS the scope, however the worktree stands now
+            continue  # a tracked file IS the scope, however the path is spelled
         near = difflib.get_close_matches(rel, tracked, n=3, cutoff=0.6)
         hint = f"; nearest: {', '.join(near)}" if near else ""
         out.append(f"{raw!r} names no tracked file{hint}")

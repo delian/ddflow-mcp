@@ -58,11 +58,12 @@ def test_an_explicit_glob_is_kept_even_when_it_names_a_file_the_fix_creates(repo
 def test_an_explicit_glob_naming_no_file_is_loudly_flagged(repo):
     """Bf839186cee: `--globs` naming a file that names no tracked file held a lease on a
     path nobody writes while the real file stayed unprotected, and nothing said so at
-    filing. The check is tracked-file membership, not worktree existence: a stray on-disk
-    file is not a scope, and a tracked file deleted from the worktree still is."""
+    filing. A TRACKED file deleted from the worktree is still its path (in scope, no
+    warning); a path that names no tracked file is a wrong scope (warned)."""
     _seed(repo)
     subprocess.run(["git", "-C", str(repo), "add", "src/real.py"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "track real"], check=True)
+    (repo / "src" / "real.py").unlink()  # tracked but gone from the worktree: still the scope
     out = K.bug_found(
         repo, summary="s", id="Bz", agent="a",
         globs="src/real.py,src/guessed/standards.py",
