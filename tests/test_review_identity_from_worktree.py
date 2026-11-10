@@ -116,6 +116,11 @@ def test_review_help_names_the_agent_flag():
         if name == "review"
     )
     assert "--agent AGENT" in review.format_help()
+    # The flag the help documents is REAL on this subparser, not just prose: `--agent`
+    # after `review` parses to the requested agent (mirrored by
+    # `_accept_global_options_anywhere`), so passing it does record the review under that
+    # name rather than a derived `{host}-{tree}` id.
+    assert root.parse_args(["review", "T1", "--agent", "impl-ra-mcp"]).agent == "impl-ra-mcp"
 
 
 @pytest.mark.parametrize("identity", ["sz-dry-run", "-dry-run"])
