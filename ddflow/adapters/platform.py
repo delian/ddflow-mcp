@@ -87,7 +87,7 @@ class Windows:
 
     @staticmethod
     def _refuse(verb: str) -> None:
-        raise NotImplementedError(f"Platform.{verb} is unavailable on {os.name} (Windows)")
+        raise NotImplementedError(f"Platform.{verb} is unavailable on Windows (unsupported)")
 
     def file_lock(self, path: Path | str, **kwargs: Any) -> Iterator[None]:
         self._refuse("file_lock")
