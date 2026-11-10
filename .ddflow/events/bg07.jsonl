@@ -1,0 +1,2 @@
+{"agent":"bg07","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e8a3c715a1604405dc35cca22","kind":"ddflow.seen","lamport":165161,"schema":1,"subject":"ddflow","ts":"2026-11-10T03:03:00.347908Z"}
+{"agent":"bg07","data":{"at":1794279773.1809564,"branch":"","clone":"7267fe","globs":["tests/test_fix_task_globs_exist.py"],"holder":"bg07","kind":"task","note":"","resources":[],"ttl_s":5400,"worktree":""},"id":"e13c6b570f2b3cc2a051284a1","kind":"lease.acquired","lamport":165162,"schema":1,"subject":"fix-Bfcb327570c","ts":"2026-11-10T03:03:00.407025Z"}

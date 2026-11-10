@@ -1,0 +1,2 @@
+{"agent":"rec5","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e27d0ef8dd0e7518546be86e4","kind":"ddflow.seen","lamport":165159,"schema":1,"subject":"ddflow","ts":"2026-11-10T03:02:54.641005Z"}
+{"agent":"rec5","data":{"by":"rec5","event":"efe410d66de9f94b30b4d48d1","holder":"pgreen","note":"salvaged"},"id":"e766589933a1e7a869339b253","kind":"lease.released","lamport":165160,"schema":1,"subject":"GM-pins","ts":"2026-11-10T03:02:55.366962Z"}

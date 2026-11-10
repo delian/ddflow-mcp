@@ -65,7 +65,10 @@ def test_an_explicit_glob_naming_no_file_is_loudly_flagged(repo):
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "track real"], check=True)
     (repo / "src" / "real.py").unlink()  # tracked but gone from the worktree: still the scope
     out = K.bug_found(
-        repo, summary="s", id="Bz", agent="a",
+        repo,
+        summary="s",
+        id="Bz",
+        agent="a",
         globs="src/real.py,src/guessed/standards.py",
     )
     assert out.exit == 0, out.reason

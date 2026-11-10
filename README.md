@@ -1123,7 +1123,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 613 knobs.
+cadences, and the rest of the 623 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5422,7 +5422,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 613): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 623): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6010,7 +6010,7 @@ declared once and persists — see
 
 ## Configuration
 
-613 knobs across 56 sections, every one documented in place and listed, with its default
+623 knobs across 56 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6077,8 +6077,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=385f3cb87e0c -->
-<details><summary>All 613 knobs across 56 sections</summary>
+<!-- ddflow:begin README/knobs sha=f1c33cccdf53 -->
+<details><summary>All 623 knobs across 56 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6508,6 +6508,16 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.detect_persistence_windows` | `2` |  |
 | `perf_metrics.detect_creep_alpha` | `0.1` |  |
 | `perf_metrics.detect_creep_threshold` | `0.1` |  |
+| `perf_metrics.budget_gate_p90_s` | `180.0` |  |
+| `perf_metrics.budget_test_file_s` | `120.0` |  |
+| `perf_metrics.budget_stage_lease_wait_s` | `120.0` |  |
+| `perf_metrics.budget_stage_merge_wait_s` | `120.0` |  |
+| `perf_metrics.budget_breach_min_samples` | `3` |  |
+| `perf_metrics.budget_severity` | `"warn"` | `warn` \| `block` |
+| `perf_metrics.prop_min_observations` | `3` |  |
+| `perf_metrics.prop_marginal_gain` | `0.25` |  |
+| `perf_metrics.prop_batch_dominance` | `2.0` |  |
+| `perf_metrics.prop_retire_payback` | `2.0` |  |
 | `pins.recipes_file` | `".ddflow/pins.toml"` |  |
 | `pins.timeout_s` | `900` |  |
 | `pins.after_merge_timeout_s` | `120` |  |
