@@ -55,9 +55,7 @@ def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) ->
     }
 
 
-def _overlap_note(
-    st, cfg, me: str, it, kind: str, now: float, repo: Path | None
-) -> str:
+def _overlap_note(st, cfg, me: str, it, kind: str, now: float, repo: Path | None) -> str:
     """The `globs overlap X offered in this plan` detail `next --phase <its phase>` reports
     for ``it``, or "". `claim` of a named item ignores the offered-overlap, so
     `_claim_blocker` alone calls it claimable; the plan scoped to the item's own phase is
@@ -81,7 +79,6 @@ def _overlap_note(
         if b.item == it.id and b.reason == "conflict" and "offered in this plan" in b.detail:
             return b.detail
     return ""
-
 
 
 def _judge_wait(
