@@ -38,6 +38,20 @@ def taken_over_note(it) -> str:
     )
 
 
+def _stale_worktree_note(c, it, wt) -> str:
+    """A note when the recorded worktree and branch are both gone (Bf3c93a0759).
+
+    `show` used to print the item's recorded worktree and branch even after the tree and
+    branch no longer exist, so a reader believed parked work was still there. An open item
+    keeps the fields (a re-claim reuses them), so the truthful thing is to say they are
+    recorded, not present."""
+    if wt.is_dir():
+        return ""
+    if it.branch and W.branch_exists(c.repo, it.branch):
+        return ""
+    return "  (recorded, but gone: no such worktree or branch)"
+
+
 def _taken(r, iid: str) -> str:
     """ " (previously taken over, first by X)" for an item `status` lists as taken over."""
     by = r.get("taken_over", {}).get(iid)
@@ -305,12 +319,7 @@ def _show(a, c: Ctx, only: str = "") -> int:
         )
     if it.worktree:
         wt = R.worktree_path(c.repo, it.worktree)
-        gone = (
-            ""
-            if wt.is_dir() or (it.branch and W.branch_exists(c.repo, it.branch))
-            else "  (recorded, but gone: no such worktree or branch)"
-        )
-        print(f"  worktree {wt} [{it.branch}]{gone}")
+        print(f"  worktree {wt} [{it.branch}]{_stale_worktree_note(c, it, wt)}")
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())
