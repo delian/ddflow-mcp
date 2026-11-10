@@ -25,7 +25,7 @@ from ...services.gates import (
     required_gates,
 )
 from ...services.pipeline_diff import effective_pipeline
-from .report import _HOLDING, _RECOVERY_SHOWN, _UNHELD, _UNMEASURED, recovery_band
+from .report import _CAPPED, _HOLDING, _RECOVERY_SHOWN, _UNHELD, _UNMEASURED, recovery_band
 
 
 def _own_recovery(bands: dict[str, list], item: str) -> list:
@@ -69,9 +69,15 @@ def _brief_recovery(
     start = len(out)
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
+    capped = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
         band = recovery_band(r)
-        if band is not None:
+        if band is _CAPPED:
+            # Past the measurement cap, after every higher-signal tree was measured: it is
+            # still unknown (may hold work), but it is not the "could not be measured"
+            # alarm -- counted with the leftovers, and `recover` measures every tree.
+            capped += 1
+        elif band is not None:
             bands[band].append(r)
         else:
             quiet += 1
@@ -80,9 +86,15 @@ def _brief_recovery(
         if quiet
         else ""
     )
+    capped_note = (
+        f"{capped} tree(s) past the measurement cap: `ddflow recover` measures them."
+        if capped
+        else ""
+    )
+    quiet_notes = [n for n in (count, capped_note) if n]
     if not any(bands.values()):
-        if count:
-            out += [f"_{count}_", ""]
+        for note in quiet_notes:
+            out += [f"_{note}_", ""]
         return out[start:]
     out += [
         "## ⚠ RESUME: recoverable work found",
@@ -111,8 +123,8 @@ def _brief_recovery(
             if len(band) > _RECOVERY_SHOWN:
                 more = len(band) - _RECOVERY_SHOWN
                 out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
-    if count:
-        out.append(f"- _{count}_")
+    for note in quiet_notes:
+        out.append(f"- _{note}_")
     out.append("")
     return out[start:]
 
