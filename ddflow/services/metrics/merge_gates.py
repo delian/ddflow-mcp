@@ -88,14 +88,16 @@ def gate_merge_candidates(state: State, cfg, item) -> dict:
         for gates in groups:
             if all(g in present for g in gates) and any(g in evidence for g in gates):
                 refused.append(
-                    {"gates": list(gates), "input": kind, "why": "a member needs its own run evidence"}
+                    {
+                        "gates": list(gates),
+                        "input": kind,
+                        "why": "a member needs its own run evidence",
+                    }
                 )
     covered = [
         {"gate": covered, "by": covering, "input": COVERED_INPUT}
         for covered, covering in COVERED_BY.items()
-        if covered in present
-        and covering in present
-        and pipe.index(covering) < pipe.index(covered)
+        if covered in present and covering in present and pipe.index(covering) < pipe.index(covered)
     ]
     return {
         "run_together": _groups(REVIEW_PAIR_INPUT, RUN_TOGETHER, present, evidence),
