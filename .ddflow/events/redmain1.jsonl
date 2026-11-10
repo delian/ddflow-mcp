@@ -19,3 +19,4 @@
 {"agent":"redmain1","data":{"gate":"ci"},"id":"ee81312f2308289a754382751","kind":"gate.started","lamport":167381,"schema":1,"subject":"fix-Bd36c862704","ts":"2026-11-10T16:35:41.670928Z"}
 {"agent":"redmain1","data":{"by":"redmain1","evidence":{"started_tree_sha":"9f5809182282+clean","terminated_by":"SIGTERM"},"gate":"ci","reason":"the run was terminated by SIGTERM before its command finished"},"id":"e17cdef21bdbee521a6012958","kind":"gate.unavailable","lamport":167424,"schema":1,"subject":"fix-Bd36c862704","ts":"2026-11-10T16:45:36.316363Z"}
 {"agent":"redmain1","data":{"gate":"ci"},"id":"e76406de98b76492572d6c086","kind":"gate.started","lamport":167432,"schema":1,"subject":"fix-Bd36c862704","ts":"2026-11-10T16:49:49.816542Z"}
+{"agent":"redmain1","data":{"at":1794330292.8344095,"holder":"redmain1"},"id":"e402d570cde0dd348d12c92af","kind":"lease.renewed","lamport":167459,"schema":1,"subject":"fix-Bd36c862704","ts":"2026-11-10T17:04:52.922199Z"}
