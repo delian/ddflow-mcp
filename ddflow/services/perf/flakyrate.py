@@ -26,12 +26,15 @@ from ddflow.core import clock
 from ddflow.services import flakes
 
 
-def _section(perf_metrics: PerfMetricsConfig | None) -> PerfMetricsConfig:
-    """``perf_metrics`` or ``Config().perf_metrics`` -- naming each flaky knob once so the
-    dead-knob linter counts the name-based read (the ``store._section_knobs`` precedent)."""
+def _section(
+    perf_metrics: PerfMetricsConfig | None, repo: Path | None = None
+) -> PerfMetricsConfig:
+    """``perf_metrics`` or the config of ``repo`` (default: the CWD repo) -- naming each flaky
+    knob once so the dead-knob linter counts the name-based read (``store._section_knobs``
+    precedent). A caller that read a repo's flake log must score it with THAT repo's knobs."""
     if perf_metrics is not None:
         return perf_metrics
-    config = Config()
+    config = Config.load(repo)
     _ = (
         config.perf_metrics.flaky_window_s,
         config.perf_metrics.flaky_quarantine_after,
@@ -174,7 +177,7 @@ def report(
     """The rate view read from ``repo``'s flake log: rates + proposals, in one dict.
 
     A log that cannot be read is ``{"unavailable": True}`` -- never an empty (zero) view."""
-    cfg = _section(perf_metrics)
+    cfg = _section(perf_metrics, repo)
     try:
         rows = flakes.read(repo)
     except OSError:
