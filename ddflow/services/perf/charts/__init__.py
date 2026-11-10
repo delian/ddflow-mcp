@@ -78,8 +78,7 @@ def line_trend(
     lo, hi = scale(bounds)
     fg = "#d6d6d6" if dark else "#1a1a1a"
 
-    def x(i: int) -> float:
-        n = len(series)
+    def x(i: int, n: int) -> float:
         return pad + (width - 2 * pad) * (i / (n - 1) if n > 1 else 0.5)
 
     def y(v: float) -> float:
@@ -88,7 +87,8 @@ def line_trend(
     def poly(xs: list[float | None], *, colour: str, dash: bool = False) -> str:
         # a gap is a break: one stroke per contiguous run, and a lone sample is a marker
         # (SVG does not stroke a one-point polyline), so a missing sample draws nothing
-        # and a single present sample is still visible
+        # and a single present sample is still visible. Each run is sized by its own length.
+        n = len(xs)
         runs: list[list[tuple[float, float]]] = []
         cur: list[tuple[float, float]] = []
         for i, v in enumerate(xs):
@@ -97,7 +97,7 @@ def line_trend(
                     runs.append(cur)
                     cur = []
                 continue
-            cur.append((x(i), y(v)))
+            cur.append((x(i, n), y(v)))
         if cur:
             runs.append(cur)
         dash_attr = ' stroke-dasharray="4 4"' if dash else ""
