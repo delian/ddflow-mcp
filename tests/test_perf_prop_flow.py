@@ -80,6 +80,12 @@ def test_batch_gates_stays_quiet_when_the_lock_does_not_dominate():
     assert prop_flow.propose_batch_gates(20.0, 25.0, cfg=cfg) is None
 
 
+def test_batch_gates_fires_when_a_zero_gate_run_has_any_lock_wait():
+    cfg = PerfMetricsConfig(prop_batch_dominance=2.0)
+    p = prop_flow.propose_batch_gates(0.0, 30.0, cfg=cfg)
+    assert p is not None  # a zero gate run is the strongest dominance, never not-enough-data
+
+
 def test_retire_stage_proposes_when_the_wait_is_not_paid_back():
     cfg = PerfMetricsConfig(prop_retire_payback=2.0)
     p = prop_flow.propose_retire_stage("review_wait", 200.0, 50.0, cfg=cfg)

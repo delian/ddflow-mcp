@@ -126,7 +126,11 @@ def propose_narrow_globs(
     cfg: PerfMetricsConfig | None = None,
 ) -> Proposal | None:
     """The file whose lease wait exceeds the lease-wait budget: the narrow-globs/split
-    candidate. None when no wait exceeds the budget (nothing to narrow)."""
+    candidate. None when no wait exceeds the budget (nothing to narrow).
+
+    ``lease_waits`` keys are PROJECT-RELATIVE globs (a repo file id, like the store's ``file``
+    field); a host/absolute user path must never be passed -- the module documents that these
+    are ids, not content (r-telemetry-ids-not-content)."""
     cfg = cfg or _section_knobs(Config())
     if not lease_waits:
         return None
@@ -148,18 +152,17 @@ def propose_batch_gates(
     cfg: PerfMetricsConfig | None = None,
 ) -> Proposal | None:
     """Batch gates when the suite lock wait dominates the gate run by at least
-    ``prop_batch_dominance`` (batching would amortise the lock). None otherwise."""
+    ``prop_batch_dominance`` (batching would amortise the lock). None otherwise. A zero gate
+    run is the STRONGEST dominance case, never "not enough data"."""
     cfg = cfg or _section_knobs(Config())
-    if gate_run_s <= 0:
+    if suite_lock_wait_s < cfg.prop_batch_dominance * gate_run_s:
         return None
-    ratio = suite_lock_wait_s / gate_run_s
-    if ratio < cfg.prop_batch_dominance:
-        return None
+    ratio = suite_lock_wait_s / gate_run_s if gate_run_s > 0 else None
     return Proposal(
         "batch_gates",
         ratio,
         {"gate_run_s": gate_run_s, "suite_lock_wait_s": suite_lock_wait_s},
-        f"suite lock wait {suite_lock_wait_s:.1f}s is {ratio:.1f}x the gate run {gate_run_s:.1f}s: batch gates",
+        f"suite lock wait {suite_lock_wait_s:.1f}s dominates the gate run {gate_run_s:.1f}s: batch gates",
     )
 
 
@@ -169,10 +172,11 @@ def propose_retire_stage(
     paid_back_s: float,
     cfg: PerfMetricsConfig | None = None,
 ) -> Proposal | None:
-    """Retire a stage whose wait exceeds ``prop_retire_payback`` times what it buys back. None
-    when the wait is paid back. (A stage that buys nothing back is exactly the retire case.)"""
+    """Retire a stage whose wait EXCEEDS ``prop_retire_payback`` times what it buys back (its
+    wait is not paid back). None when the wait is paid back or exactly bought back. (A stage
+    that buys nothing back is exactly the retire case.)"""
     cfg = cfg or _section_knobs(Config())
-    if wait_s < cfg.prop_retire_payback * paid_back_s:
+    if wait_s <= cfg.prop_retire_payback * paid_back_s:
         return None
     return Proposal(
         "retire_stage",
