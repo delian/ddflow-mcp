@@ -60,6 +60,16 @@ def test_parse_accepts_a_line_column_citation():
     assert not f.malformed, "a `path:line:col` is a citation, not prose"
 
 
+def test_parse_keeps_a_citation_ending_in_a_question_mark():
+    # A bare `path:line?` is uncertainty about the line, not prose: it stays a citation.
+    text = (
+        "FINDING MEDIUM ddflow/api/lifecycle/leaving.py:257?\n"
+        "_leave dereferences _mine\n\nSTATUS: FINDINGS 1"
+    )
+    (f,) = RV.parse(text)[0]
+    assert not f.malformed, "a citation with a trailing `?` is a spot, not prose"
+
+
 def test_a_valid_finding_is_not_marked_malformed():
     (f,) = RV.parse(VALID)[0]
     assert not f.malformed

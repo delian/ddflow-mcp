@@ -33,6 +33,7 @@ def _finding_listing(it, gate: str) -> str:
         lines += [
             f"  {g} #{n} [{f.get('severity', '')}] {f.get('location', '')} "
             f"{f.get('title', '')} -- {mine.get(f['digest'], {}).get('verdict') or 'untriaged'}"
+            f"{' [malformed: ' + f['malformed'] + ']' if f.get('malformed') else ''}"
             for n, f in enumerate(found, 1)
         ]
     return "\nfindings:\n" + "\n".join(lines) if lines else ""

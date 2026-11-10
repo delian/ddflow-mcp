@@ -47,19 +47,21 @@ _FINDING_RE = re.compile(
     re.M | re.I | re.S,
 )
 
-#: A citation has NO whitespace and none of these prose marks: a ``path``, ``path:line``,
-#: ``path:line:col``, ``path:line-line`` or ``path::symbol`` (nested ``::`` and col:
-#: positions included) is one token. A ``?``, ``;`` or ellipsis, or any whitespace, is the
-#: reviewer thinking aloud in the location field (B-review-finding-is-unfinished-reasoning).
-_PROSE_LOCATION = re.compile(r"\s|[?;\u2026]|\.\.\.")
+#: A citation is ONE token -- a ``path``, ``path:line``, ``path:line:col``,
+#: ``path:line-line`` or ``path::symbol`` (nested ``::`` included) -- so it has no
+#: whitespace. Whitespace is what shows the reviewer writing a SENTENCE in the location
+#: field rather than citing one spot (B-review-finding-is-unfinished-reasoning). A lone
+#: ``?``/``;``/``...`` is NOT prose on its own: a ``path:257?`` carries uncertainty about
+#: the line, it does not stop being a citation, so it is kept (fail-closed).
+_PROSE_LOCATION = re.compile(r"\s")
 
 
 def _malformed_reason(location: str) -> str:
     """Why a finding is reasoning rather than a defect, or "" when it is a real finding.
 
     One deterministic signal (B-review-finding-is-unfinished-reasoning): a location that is
-    not a ``path:line``/``path:symbol`` citation -- one carrying whitespace, a ``?``, ``;``
-    or an ellipsis -- records but does not count.
+    not a ``path:line``/``path:symbol`` citation -- one carrying whitespace -- records but
+    does not count.
 
     The bug also names "the text is reasoning with no failure stated". That half is
     deliberately left alone: whether a paragraph states a defect is semantic, and a word
