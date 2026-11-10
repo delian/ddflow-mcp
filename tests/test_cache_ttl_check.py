@@ -154,6 +154,25 @@ def test_a_one_hour_knob_on_old_claude_code_is_reported_as_five_minutes():
     assert CTL.SUBAGENT_TTL_ENV in CTL._five_minute_remedy(v)
 
 
+def test_a_blank_subagent_setting_is_unset_and_enable_still_applies():
+    # A blank subagentPromptCacheTtl reads the same as an absent one: it must not beat
+    # ENABLE_PROMPT_CACHING_1H (grok rubber_duck: the env path treats "" as unset, the
+    # setting path must too, or the remedy tells the operator to set a knob already present).
+    v = CTL.effective_subagent_ttl(
+        {"ENABLE_PROMPT_CACHING_1H": "1"}, {"subagentPromptCacheTtl": ""}, "2.1.300"
+    )
+    assert v.ttl == "1h"
+    assert v.source == "enable_1h"
+
+
+def test_subagent_setting_wins_over_enable_when_it_names_a_ttl():
+    v = CTL.effective_subagent_ttl(
+        {"ENABLE_PROMPT_CACHING_1H": "1"}, {"subagentPromptCacheTtl": "1h"}, "2.1.300"
+    )
+    assert v.ttl == "1h"
+    assert v.source == "subagent_setting"
+
+
 def test_a_one_hour_knob_on_old_claude_code_names_the_upgrade():
     v = CTL.effective_subagent_ttl(
         {"ENABLE_PROMPT_CACHING_1H": "1"}, {}, "2.1.100"

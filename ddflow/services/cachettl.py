@@ -164,8 +164,11 @@ def effective_subagent_ttl(
         return SubagentTTL(ttl, "subagent_env", version=version_tuple)
 
     subagent_setting = settings.get(SUBAGENT_TTL_SETTING)
-    if subagent_setting is not None:
-        ttl = "1h" if str(subagent_setting).strip().lower().startswith("1h") else "5m"
+    subagent_value = (
+        str(subagent_setting).strip().lower() if subagent_setting is not None else ""
+    )
+    if subagent_value:
+        ttl = "1h" if subagent_value.startswith("1h") else "5m"
         if ttl == "1h" and too_old:
             return SubagentTTL("5m", "subagent_setting", version=version_tuple, ignored_1h=True)
         return SubagentTTL(ttl, "subagent_setting", version=version_tuple)
