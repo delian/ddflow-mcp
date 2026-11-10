@@ -36,9 +36,15 @@ def test_posix_chmod_private_is_owner_only(tmp_path):
 
 
 def test_posix_file_lock_holds_an_advisory_lock(tmp_path):
+    from ddflow.adapters import fsio
+
     lock = tmp_path / "held.lock"
     with P.DEFAULT.file_lock(lock):
-        assert lock.exists()
+        # A second fill for the whole path must time out immediately: a touch-and-yield
+        # would not, so this is what distinguishes a real advisory hold.
+        with pytest.raises(fsio.LockTimeout):
+            with P.DEFAULT.file_lock(lock, timeout_s=0):
+                pass
 
 
 def test_the_windows_adapter_reports_unavailable():
