@@ -146,7 +146,9 @@ def propose_split_files(
 
 def _workers(rollup: dict) -> int:
     w = rollup.get("workers")
-    return int(w) if isinstance(w, int) and w > 0 else 1
+    if isinstance(w, bool) or not isinstance(w, (int, float)) or not _is_finite(w) or w <= 0:
+        return 1
+    return int(w)
 
 
 def propose_shard_or_workers(
