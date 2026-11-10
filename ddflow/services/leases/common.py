@@ -177,10 +177,11 @@ def optimistic_clashes(
         else:
             kept.append((other_id, lz, (mine, theirs)))
     # A glob granted optimistic for one holder is NOT optimistic if another holder's pair
-    # on the same glob stays exclusive (a clean merge with one agent and a real conflict with
-    # another): the file is exclusive then, never half-shared.
-    conflicted = {m for _o, _lz, (m, _t) in kept}
-    optimistic = [g for g in dict.fromkeys(optimistic) if g not in conflicted]
+    # still clashes on it -- overlapped, not merely the same string, so a broad `src/**`
+    # clean against one holder and a real conflict on `src/a.py` against another never half-
+    # shares the file.
+    kept_mine = [m for _o, _lz, (m, _t) in kept]
+    optimistic = [g for g in dict.fromkeys(optimistic) if not any(GL.overlap(g, m) for m in kept_mine)]
     return kept, optimistic
 
 
