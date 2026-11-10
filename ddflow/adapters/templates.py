@@ -45,7 +45,11 @@ class Templates(Protocol):
 
 
 def _read(directory: Path | str, name: str) -> str:
-    return (Path(directory) / name).read_text(encoding="utf-8")
+    path = Path(directory) / name
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise TemplateError(f"template file {path}: {exc}") from exc
 
 
 class JinjaRenderer:
@@ -67,10 +71,12 @@ class JinjaRenderer:
             raise TemplateError(str(exc)) from exc
 
     def render_from(self, directory: Path | str, name: str, **vars: Any) -> str:
+        # File layouts keep their trailing newline and their block newlines (the lane
+        # provider blocks are JSON, the instructions are markdown); both engines agree.
         try:
             import jinja2
         except ImportError:
-            return _render_stdlib(_read(directory, name), vars)
+            return _render_file_stdlib(_read(directory, name), vars)
         env = jinja2.Environment(  # nosec B701
             loader=jinja2.FileSystemLoader(str(directory)),
             undefined=jinja2.StrictUndefined,
@@ -118,18 +124,18 @@ def _lookup(vars: dict[str, Any], dotted: str) -> Any:
     return cur
 
 
-def _tokenize(text: str) -> list[tuple[str, str]]:
+def _tokenize(text: str, trim_blocks: bool = True, lstrip_blocks: bool = True) -> list[tuple[str, str]]:
     """Source -> a flat token list, applying Jinja's `trim_blocks` + `lstrip_blocks`."""
     out: list[tuple[str, str]] = []
     pos = 0
     for m in _TOKEN.finditer(text):
         chunk = text[pos : m.start()]
         pos = m.end()
-        if m.group("expr") is None:
+        if m.group("expr") is None and (trim_blocks or lstrip_blocks):
             cut = chunk.rfind("\n")
-            if not chunk[cut + 1 :].strip():
+            if lstrip_blocks and not chunk[cut + 1 :].strip():
                 chunk = chunk[: cut + 1]  # lstrip_blocks; cut == -1 leaves ""
-            if text[pos : pos + 1] == "\n":
+            if trim_blocks and text[pos : pos + 1] == "\n":
                 pos += 1  # trim_blocks
         if chunk:
             out.append(("text", chunk))
@@ -227,10 +233,17 @@ def _emit(nodes: list, vars: dict[str, Any]) -> str:
     return "".join(out)
 
 
-def _render_stdlib(text: str, vars: dict[str, Any]) -> str:
-    """Jinja's common subset, without Jinja, matched to the Jinja environment above."""
-    if text.endswith("\r\n"):
-        text = text[:-2]
-    elif text.endswith("\n"):
-        text = text[:-1]
-    return _emit(_parse(_tokenize(text)), vars)
+def _render_stdlib(text: str, vars: dict[str, Any], keep_trailing_newline: bool = False) -> str:
+    """Jinja's common subset, without Jinja, matched to the Jinja `render` environment."""
+    if not keep_trailing_newline:
+        if text.endswith("\r\n"):
+            text = text[:-2]
+        elif text.endswith("\n"):
+            text = text[:-1]
+    return _emit(_parse(_tokenize(text, True, True)), vars)
+
+
+def _render_file_stdlib(text: str, vars: dict[str, Any]) -> str:
+    """`_render_stdlib` in file mode: keep the trailing newline, no trim/lstrip (Jinja's
+    `render_from` environment)."""
+    return _emit(_parse(_tokenize(text, False, False)), vars)
