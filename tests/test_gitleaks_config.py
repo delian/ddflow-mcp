@@ -78,7 +78,7 @@ def test_a_decision_id_after_a_token_named_id_is_not_a_secret(tmp_path):
     # name holds the word "auth-token"; the generic-api-key rule reads _DECISION_ID as the
     # secret after that keyword. The allowlist names that exact value.
     token_named = "D-auth" + "-token" + "-defaults"
-    body = '{"body":"decisions ' + token_named + ', ' + _DECISION_ID + '"}\n'
+    body = '{"body":"decisions ' + token_named + ", " + _DECISION_ID + '"}\n'
     assert _scan(tmp_path, body) == 0
 
 
@@ -89,7 +89,7 @@ def test_a_credential_lookalike_after_a_token_named_id_still_fires(tmp_path):
     # Only that one decision id is allowlisted, not a dash shape: a credential-shaped value
     # in its place still fires, so a broad shape allowlist cannot regress in unnoticed.
     token_named = "D-auth" + "-token" + "-defaults"
-    body = '{"body":"decisions ' + token_named + ', ' + _LOOKALIKE + '"}\n'
+    body = '{"body":"decisions ' + token_named + ", " + _LOOKALIKE + '"}\n'
     assert _scan_committed(tmp_path, ".ddflow/events/padapt2.jsonl", body) != 0
 
 
