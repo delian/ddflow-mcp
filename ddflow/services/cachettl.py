@@ -79,7 +79,9 @@ def read_settings(repo: Path) -> Mapping[str, Any]:
         home = None
     if home is not None:
         paths.append(home / ".claude" / "settings.json")
-    paths.append(repo / ".claude" / "settings.json")
+    # Claude Code's own merge: user settings, then project settings, then the project-local
+    # `.claude/settings.local.json` on top; a later file wins for the same key.
+    paths += [repo / ".claude" / "settings.json", repo / ".claude" / "settings.local.json"]
     for path in paths:
         try:
             if path.is_file():
@@ -160,10 +162,17 @@ def effective_subagent_ttl(
     version_tuple = parse_version(version)
     too_old = version_tuple is not None and version_tuple < MIN_1H_VERSION
 
-    if _is_on(env.get(FORCE_5M_ENV)):
+    # A settings `env` block names env vars Claude Code sets for the process it launches; a
+    # var already in the process env wins over it (D-agent-token-features, settings vs shell).
+    settings_env = settings.get("env")
+    effective_env = (
+        {**settings_env, **dict(env)} if isinstance(settings_env, dict) else dict(env)
+    )
+
+    if _is_on(effective_env.get(FORCE_5M_ENV)):
         return SubagentTTL("5m", "forced_5m", forced=True, version=version_tuple)
 
-    subagent_env = (env.get(SUBAGENT_TTL_ENV) or "").strip().lower()
+    subagent_env = (effective_env.get(SUBAGENT_TTL_ENV) or "").strip().lower()
     if subagent_env:
         ttl = "1h" if subagent_env.startswith("1h") else "5m"
         if ttl == "1h" and too_old:  # the knob exists but this Claude Code ignores it
@@ -180,7 +189,7 @@ def effective_subagent_ttl(
             return SubagentTTL("5m", "subagent_setting", version=version_tuple, ignored_1h=True)
         return SubagentTTL(ttl, "subagent_setting", version=version_tuple)
 
-    if _is_on(env.get(ENABLE_1H_ENV)):
+    if _is_on(effective_env.get(ENABLE_1H_ENV)):
         if too_old:
             return SubagentTTL("5m", "enable_1h", version=version_tuple, ignored_1h=True)
         return SubagentTTL("1h", "enable_1h", version=version_tuple)

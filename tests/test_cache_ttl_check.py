@@ -183,9 +183,29 @@ def test_a_one_hour_knob_on_old_claude_code_names_the_upgrade():
     assert "upgrade" in CTL._five_minute_remedy(v)
 
 
+def test_settings_env_block_supplies_the_subagent_ttl():
+    # Claude Code injects a settings `env` object into the process; with the variable absent
+    # from the process env, the settings env block still raises the TTL (settings env loses
+    # to a var already in the process env, which test_process_env_wins... pins).
+    v = CTL.effective_subagent_ttl(
+        {}, {"env": {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"}}, "2.1.300"
+    )
+    assert v.ttl == "1h"
+    assert v.source == "subagent_env"
+
+
+def test_process_env_wins_over_the_settings_env_block():
+    v = CTL.effective_subagent_ttl(
+        {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"},
+        {"env": {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "5m"}},
+        "2.1.300",
+    )
+    assert v.ttl == "1h"
+
+
 def test_forced_on_old_claude_code_does_not_advise_a_useless_1h_knob():
-    # On an old Claude Code the 1h knob is ignored, so "unset the force, set 1h" would not
-    # raise the TTL; the remedy must say so instead of advising a change that does nothing.
+    # On an old Claude Code the 1h knob is ignored; the remedy must say so instead of
+    # advising "unset the force, set 1h", which still leaves subagents on 5m.
     v = CTL.effective_subagent_ttl(
         {"FORCE_PROMPT_CACHING_5M": "1", "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"},
         {},
