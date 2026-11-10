@@ -159,9 +159,10 @@ def fix_task_globs(
     files -- the bug's own found scope (`found_scope`, B45b80286d2: two narrow sibling bugs
     no longer inherit one wide item glob and exclude each other), else the ones inherited
     from the source item, cut to those that exist in the tree (only a guess can be wrong
-    about the tree). A test file the bug names is always carried -- `found_scope` holds it
-    when it runs (a named test file is part of the found scope), and `named_test_globs`
-    adds it on the fall-through path -- so the implementer edits it without widening."""
+    about the tree). A test file the bug names and that exists in the tree is carried on
+    the non-explicit paths -- `found_scope` holds it when it runs (a named test file is
+    part of the found scope), and `named_test_globs` adds it on the fall-through path --
+    so the implementer edits it without widening."""
     if globs:
         return GS.parse(globs), []
     named = sorted(
