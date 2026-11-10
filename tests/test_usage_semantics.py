@@ -61,6 +61,13 @@ def test_a_missing_or_corrupt_table_reads_none_not_a_raise():
     assert U.semantics_for("claude-code", "/no/such/file.toml").mode == U.NONE
     assert U.resolve_figure("claude-code", [1], source="/no/such/file.toml") is None
 
+    import tempfile
+
+    bad = tempfile.NamedTemporaryFile(suffix=".toml", delete=False)
+    bad.write(b"\xff\xfe not utf-8")
+    bad.close()
+    assert U.semantics_for("claude-code", bad.name).mode == U.NONE
+
 
 def test_resolve_figure_for_a_cumulative_harness():
     assert U.resolve_figure("claude-code", [7, 7, 9]) == 9

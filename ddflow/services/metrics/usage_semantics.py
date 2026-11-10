@@ -71,7 +71,9 @@ def semantics_for(harness: str, source: str | Path | None = None) -> UsageSemant
     """
     try:
         facts = load(source)
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, ValueError):
+        # A missing file (OSError), bad TOML (TOMLDecodeError) or non-UTF-8 bytes
+        # (UnicodeDecodeError) is the same read: unavailable.
         facts = {}
     if harness not in facts:
         return UsageSemantics(
