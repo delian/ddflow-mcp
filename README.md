@@ -6082,8 +6082,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=f1c33cccdf53 -->
-<details><summary>All 623 knobs across 56 sections</summary>
+<!-- ddflow:begin README/knobs sha=36460ea37895 -->
+<details><summary>All 637 knobs across 57 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6513,6 +6513,10 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.detect_persistence_windows` | `2` |  |
 | `perf_metrics.detect_creep_alpha` | `0.1` |  |
 | `perf_metrics.detect_creep_threshold` | `0.1` |  |
+| `perf_metrics.flaky_window_s` | `604800` |  |
+| `perf_metrics.flaky_quarantine_after` | `3` |  |
+| `perf_metrics.flaky_quarantine_expiry_s` | `2592000` |  |
+| `perf_metrics.flaky_retry_cost_s` | `60.0` |  |
 | `perf_metrics.budget_gate_p90_s` | `180.0` |  |
 | `perf_metrics.budget_test_file_s` | `120.0` |  |
 | `perf_metrics.budget_stage_lease_wait_s` | `120.0` |  |
@@ -6647,6 +6651,16 @@ long default is left to `ddflow config --explain`.
 | `session.report_test_files` | `12` |  |
 | `session.agent_brief_lessons` | `3` |  |
 | `session.agent_brief_extra` | `""` |  |
+| `slo.target_command_p95_s` | `2.0` |  |
+| `slo.target_gate_p90_s` | `300.0` |  |
+| `slo.target_queue_age_s` | `600.0` |  |
+| `slo.target_unavailable_rate` | `0.25` |  |
+| `slo.target_stuck_lanes` | `2` |  |
+| `slo.target_ci_false_red_rate` | `0.1` |  |
+| `slo.target_log_events_per_item` | `30.0` |  |
+| `slo.target_review_finding_rate` | `0.6` |  |
+| `slo.burn_rate_window_s` | `2592000` |  |
+| `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
