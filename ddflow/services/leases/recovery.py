@@ -63,6 +63,7 @@ def scan(
     live = state.active_leases(now, cfg.lease.grace_s)
     out: list[Recovery] = []
     facts = RepoFacts(repo)
+    cache: dict = {}
     budget = _Budget(
         cfg.lease.scan_view_trees_max if view else None,
         cfg.lease.scan_view_verdicts_max if view else None,
@@ -97,7 +98,7 @@ def scan(
                 )
             else:
                 _measure(rec, repo, cfg, facts, budget)
-                _note_landed(rec, it, state, cfg, repo, facts, budget)
+                _note_landed(rec, it, state, cfg, repo, facts, budget, cache=cache)
             out.append(rec)
         elif not lease and it.worktree and it.state != REVIEW:
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
@@ -118,7 +119,7 @@ def scan(
                 branch=it.branch,
             )
             _measure(rec, repo, cfg, facts, budget)
-            _note_landed(rec, it, state, cfg, repo, facts, budget)
+            _note_landed(rec, it, state, cfg, repo, facts, budget, cache=cache)
             out.append(rec)
         elif schedule.interrupted(state, it, live):
             # Same predicate the scheduler uses, so `recover` and `next` cannot
@@ -216,6 +217,7 @@ def _note_landed(
     repo: Path,
     facts: RepoFacts | None = None,
     budget: _Budget | None = None,
+    cache: dict | None = None,
 ) -> None:
     """An item whose merge gate is done and whose commit is on the base, with nothing left in
     its tree, needs COMPLETING, not releasing (Ba2eff5726b): `release` only returned it to the
@@ -242,7 +244,7 @@ def _note_landed(
     # independence against it); whoever completes may not be the holder, so the advice says to
     # pass `--model`.
     model = open_session_model(state, rec.holder)
-    v = CM.verdict(state, cfg, it.id, repo=repo, model=model)
+    v = CM.verdict(state, cfg, it.id, repo=repo, model=model, cache=cache)
     head = f"merged to the base ({sha[:9]}, merge gate passed); nothing left to salvage. "
     if v.may_complete:
         rec.advice = (

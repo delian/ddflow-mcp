@@ -21,6 +21,9 @@ from .lockgit import Probes
 from .locks import build as locks_build
 from .locks import has_figures as locks_ok
 from .locks import text as locks_text
+from .path_variants import build as variants_build
+from .path_variants import has_figures as variants_ok
+from .path_variants import text as variants_text
 from .paths import build as paths_build
 from .paths import has_figures as paths_ok
 from .paths import text as paths_text
@@ -32,6 +35,9 @@ from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
 from .skips import audit
+from .slo import assess as slo_assess
+from .slo import ok as slo_ok
+from .slo import text as slo_text
 from .stages import build as stages_build
 from .stages import has_figures as stages_ok
 from .stages import text as stages_text
@@ -109,6 +115,10 @@ def _paths(ctx: Context) -> Answer:
     return _figure(ctx, paths_build, paths_ok, paths_text, "figure")
 
 
+def _variants(ctx: Context) -> Answer:
+    return _figure(ctx, variants_build, variants_ok, variants_text, "figure")
+
+
 def _retro(item: str, events: Sequence[Event], facts: Any, state: State) -> Answer:
     """The ``retro`` view: one item's timeline, refused without an id or a known item."""
     if not item:
@@ -128,7 +138,7 @@ def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None
     return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
 
 
-def run(
+def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
     events: Sequence[Event],
     state: State,
     cfg: Config,
@@ -167,6 +177,10 @@ def run(
         return _tiny(ctx)
     if view == "paths":
         return _paths(ctx)
+    if view == "variants":
+        return _variants(ctx)
+    if view == "slo":
+        return _figure(ctx, slo_assess, slo_ok, slo_text, "service-level indicator")
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))

@@ -86,7 +86,7 @@
  ],
  "--json link L-one": [
   2,
-  "",
+  "{\n  \"refusal\": {\n    \"reason\": \"usage error\",\n    \"outcome\": \"nothing\",\n    \"exit\": 2\n  }\n}\n",
   "usage: ddflow link [-h] (--extends ID | --duplicate-of ID | --related ID |\n                   --distinct ID) [--reason REASON]\n                   subject\nddflow link: error: one of the arguments --extends --duplicate-of --related --distinct is required\n"
  ],
  "--json link L-one --related L-one": [

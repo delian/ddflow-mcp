@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.detect_min_samples"
+new = "8"
+why = "Perf drift detector (D-perf-metrics-answers): fewest samples before the detector calls a change."
+impact = "additive"

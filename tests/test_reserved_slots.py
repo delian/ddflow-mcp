@@ -345,6 +345,32 @@ def test_a_reservation_hold_does_not_blame_a_cap_that_was_not_reached(log, cfg):
     assert "1 held" not in p.summary() and "2 held by schedule.reserved_slots" in p.summary()
 
 
+def test_the_note_names_the_worktree_share_when_trees_bind_below_the_limit(log, cfg):
+    """DX-reserved-note-tree: with worktree.max_parallel tighter than the limit, the
+    reservation is a share of the TREE cap, and the summary names that share, not the
+    flight share ("1 of 8")."""
+    _queue(log, "F1", "F2")
+    _hold(log, "F1", worktree="/t/f1")
+    _reserve(cfg, cap=8)
+    cfg.worktree.max_parallel = 2
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert "1 of 2 worktree slot(s) reserved" in p.summary(), p.summary()
+    assert "1 of 8" not in p.summary(), p.summary()
+
+
+def test_the_note_names_the_flight_share_when_the_tree_cap_does_not_bind(log, cfg):
+    """DX-reserved-note-tree (roborev 4508): no-worktree leases keep the FLIGHT limit binding
+    even with a tighter worktree cap, so the note must name the flight share, not worktrees."""
+    _queue(log, "F1", "F2", "F3", "F4", "F5", "F6")
+    for n in ("F1", "F2", "F3", "F4", "F5", "F6"):
+        _hold(log, n, worktree="")
+    _reserve(cfg, cap=8, reserved=2)
+    cfg.worktree.max_parallel = 2
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert "worktree slot(s)" not in p.reserved_note, p.reserved_note
+    assert "2 of 8 slot(s) reserved" in p.reserved_note, p.reserved_note
+
+
 def test_the_cap_note_names_both_when_both_held_something(log, cfg):
     """F3 meets a free slot that is reserved; fix-A then takes it, and F4 meets a full cap."""
     log.append("phase.added", "P", {"title": "phase"})

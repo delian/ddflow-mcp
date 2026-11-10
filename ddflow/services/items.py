@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from ..core import globspec as GS
 from ..core import schedule as SCH
 from ..core.defaults import DEFAULT_PRIORITY
-from ..core.model import WORK_KINDS, Item
+from ..core.model import DONE, WORK_KINDS, Item
 from . import leases as L
 from . import priority as P
 
@@ -189,6 +189,34 @@ def missing_parent(st: State, parent: str | None) -> str:
     return ""
 
 
+def closed_phase_parent(
+    st: State, parent: str | None, *, readd: bool = False, item: str = ""
+) -> str:
+    """Why a NEW open task under ``parent`` is REFUSED, or "" (bug B86e99de0c6): a
+    truly-closed phase -- one the importer wrote (or `phase close`d), which reports done
+    with ``imported`` authority -- cannot take an open task, or the task would sit beneath
+    a closed phase. The operator re-opens it first (`ddflow verify --reopen <phase>`); a
+    phase completed normally re-opens on its own when it gains an open task (see
+    ``handlers.items._reopen_done_parent``).
+
+    A ``readd`` that restores a still-settled task is NOT refused: it adds no open work
+    under the phase, so it may land beneath a closed phase without violating the invariant.
+    """
+    if not parent:
+        return ""
+    holder = st.items.get(parent)
+    if holder is None or holder.kind != "phase" or holder.state != DONE:
+        return ""
+    if holder.id not in st.imported_done:
+        return ""
+    if readd and (existing := st.items.get(item)) is not None and existing.terminal:
+        return ""
+    return (
+        f"phase {parent!r} is closed (imported): re-open it before filing a task under "
+        f"it (`ddflow verify --reopen {parent}`)"
+    )
+
+
 def unknown_needs(st: State, needs: list[str] | None) -> str:
     """Why any of ``needs`` names no id in the queue -- a typo that would wait on an id
     that never exists -- with a 'did you mean', or "". Checked on `task add` and on
@@ -222,6 +250,19 @@ def release_umbrella(
     return True
 
 
+def _validation_refusal(st: State, draft: TaskDraft, readd: bool) -> Added | None:
+    """The ``got refused / failed`` for a draft that cannot be filed, or None when the id,
+    globs, kind, or parent are all acceptable. Broken out of ``add_task`` so the closed-
+    phase refusal and the shape checks live beside it here, in one loop count."""
+    closed = closed_phase_parent(st, draft.parent, readd=readd, item=draft.id)
+    if closed:
+        return Added(draft.id, closed, refused=True)
+    bad = problem_of(draft) or missing_parent(st, draft.parent)
+    if bad:
+        return Added(draft.id, bad)
+    return None
+
+
 def add_task(
     log: EventLog,
     st: State,
@@ -246,9 +287,9 @@ def add_task(
     """
     if not hasattr(dedupe, "fields") and not (isinstance(dedupe, str) and dedupe.strip()):
         raise ValueError("add_task: dedupe is a settled check, or the reason there is none")
-    bad = problem_of(draft) or missing_parent(st, draft.parent)
-    if bad:
-        return Added(draft.id, bad)
+    refused = _validation_refusal(st, draft, readd)
+    if refused is not None:
+        return refused
     held = taken(st, draft.id, readd=readd)
     if held:
         return Added(draft.id, held, refused=True)

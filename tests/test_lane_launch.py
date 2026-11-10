@@ -23,6 +23,7 @@ from ddflow.services.swarm import score
 from ddflow.services.swarm import seedpack as SP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from conftest import run_cli
 from lanes_fixture import T0, Log
 
 EXAMPLE = paths.package_dir() / "models" / "routes" / "local.example.toml"
@@ -95,6 +96,13 @@ def state(*approved: T.Template, plugin=True, extra_tasks=(), live=()):
 def cat(tmp_path):
     t = EXAMPLE.read_text().replace('s = "unverified"', 's = "verified"')
     (tmp_path / "models.toml").write_text(t)
+    return modelreg.load(local_dir=tmp_path)
+
+
+def cat_unverified(tmp_path):
+    """The example catalog AS SHIPPED: the lane route's tool_call fact is `unverified`
+    (its note says it becomes verified only after the live probe)."""
+    (tmp_path / "models.toml").write_text(EXAMPLE.read_text())
     return modelreg.load(local_dir=tmp_path)
 
 
@@ -193,6 +201,33 @@ def test_an_agent_made_grant_or_an_edited_template_is_not_approved():
     grant(log, t.subject, t.digest(), human=False)
     assert not T.approved(fold(list(log.events), strict=False), t).ok
     assert not T.approved(state(t), tpl(budget_usd=3.0)).ok  # edited after approval
+
+
+def test_consent_names_the_working_approve_command():
+    """B8647b69e06: `consent.how` must name a command that can actually record the grant --
+    `ddflow lanes approve <name>` -- not `ddflow approvals request` (which has no subject or
+    digest argument, so no person could ever follow it and `approved()` never passes)."""
+    got = T.consent(tpl()).how
+    assert f"ddflow lanes approve {tpl().name}" in got
+    assert "approvals request" not in got
+
+
+def test_lanes_approve_is_wired_to_the_person_only_act(repo, tmp_path):
+    """`ddflow lanes approve <name>` is the missing caller of `launch_template.approve`
+    (B8647b69e06). Before the fix `approve` was not a lane view, so argparse refused the
+    word itself; now the route reaches the approval engine, which refuses the agent identity
+    ``run_cli`` inherits (exit 3, a person's act). A person at their own terminal makes the
+    same call and `launch_template.approve` records the grant at the current digest."""
+    run_cli(repo, "init")
+    tmp = tmp_path / "lane-templates.toml"
+    tmp.write_text(
+        '[template.ds]\nharness="kilo"\nroute="r"\nfamily="deepseek"\n'
+        "budget_usd=1.0\ntrust=1\nprice_in=1.0\nprice_out=2.0\n"
+    )
+    cfgfile = repo / ".ddflow" / "config.toml"
+    cfgfile.write_text(cfgfile.read_text() + f"\n[swarm]\nlaunch_templates_file = '{tmp}'\n")
+    code, out, err = run_cli(repo, "lanes", "approve", "ds")
+    assert code == 3 and "person's act" in err, (out, err)  # routed; refused for an agent
 
 
 # --- launch: refusals start nothing -----------------------------------------------------------
@@ -352,6 +387,18 @@ def test_a_binary_of_another_harness_than_the_approved_one_is_refused(tmp_path, 
     r = LN.launch(request(tmp_path, tree, binary=other))
     assert isinstance(r, LN.Refused) and "approved template's harness" in r.reasons[0]
     assert not (tmp_path / "record.json").exists()
+
+
+def test_a_probe_route_with_unverified_tool_calls_launches(tmp_path, tree):
+    """Bc64f9048f5: a route whose tool_call is only `unverified` must still launch —
+    the launch IS the live probe that verifies it. launch() refuses it today because
+    it calls prepare() on its require_tools=True default while its own slot checks
+    already resolve the endpoint with require_tools=False."""
+    req = request(tmp_path, tree, cat=cat_unverified(tmp_path))
+    r = LN.launch(req)
+    assert isinstance(r, LN.Launched), r
+    r.driver.stop(r.handle)
+    LN.OC.cleanup(tree[2])
 
 
 def test_hostile_template_values_are_notes_not_crashes_or_loopholes(tmp_path):

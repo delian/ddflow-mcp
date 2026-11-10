@@ -221,6 +221,13 @@ def plan(
             note = interrupted(state, it, live)
             if note:
                 p.interrupted.append(note)
+                # An INTERRUPTED item (RUNNING, no live lease) is nobody's work right now:
+                # `ddflow recover` resumes it, `claim` refuses it. It is still in flight, so
+                # it is reported under `running`, never offered a free ready slot -- a slot it
+                # took hid CLAIMABLE work behind "held by the cap" with no one to run the
+                # slot (Bcec3b3229f).
+                p.running.append(it)
+                continue
             p.ready.append(it)
 
     # TWO caps, because they are two different statements and `min()` of them was one
@@ -252,12 +259,14 @@ def plan(
         live_note = f"{in_flight} in flight across the queue"
         p.cap_note = f"the parallelism cap ({cap})"
         reached = f"parallelism cap reached ({cap})"
+        tree_binds = False
     else:
         cap = f"worktree.max_parallel={cfg.worktree.max_parallel}"
         live_note = f"{with_trees} worktrees live across the queue"
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
-    p.reserved_note = reserved_note(cfg, limit)
+        tree_binds = True
+    p.reserved_note = reserved_note(cfg, limit, tree_binds=tree_binds)
     free, reserved = open_slots(state, cfg, live, live_items, limit, flight_slots, tree_slots)
     _cut_ready(state, cfg, p, slots, free, reserved, live_items, live_note, reached, hold)
     if parallel is not None:

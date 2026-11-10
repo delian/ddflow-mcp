@@ -446,6 +446,11 @@ def _gate_outcome(  # noqa: PLR0913 -- the identifying pass + results + item + c
     # Every heard reviewer's findings count: a below-floor nit (or no finding) from the
     # status-minimal one must not hide a HIGH one from another reviewer.
     found = [f for r in results if r.status in _HEARD for f in r.findings]
+    #: Findings `parse` marked malformed (reasoning, not a defect) are recorded but never
+    #: block, so this round is not "failed" on them -- but a pass over ONLY malformed
+    #: reasoning must not read as a clean review (a verdict of "no defect"). The count is
+    #: surfaced on the passed evidence, mirroring `same_family_discounted`.
+    malformed = [f for f in found if getattr(f, "malformed", "")]
     if not found:
         return "passed", extra_evidence
     blocking, discounted, converged_round = _blocking_findings(
@@ -478,15 +483,29 @@ def _gate_outcome(  # noqa: PLR0913 -- the identifying pass + results + item + c
                 "note": "a cross-family reviewer passed clean",
             },
         }
+        if malformed:
+            extra["malformed_findings"] = len(malformed)
         say(
             f"→ {len(discounted)} finding(s) from a same-family/unrecognized reviewer "
             "recorded but not blocking: a cross-family reviewer passed clean"
         )
         return "passed", extra
+    #: Malformed findings are recorded but never blocking; a pass over them (a first round
+    #: whose only output is reasoning) must not read as a clean review, and a below-floor
+    #: converged re-review must not count them as real findings (B-review-finding-is-
+    #: unfinished-reasoning).
     converged = {
-        "findings_below_floor": len(found),
+        "findings_below_floor": len(found) - len(malformed),
         "floor": cfg.review.converge_floor,
     }
+    extra = {**(extra_evidence or {}), "converged": converged}
+    if malformed:
+        extra["malformed_findings"] = len(malformed)
+        say(
+            f"→ {len(malformed)} malformed finding(s) recorded but not blocking "
+            "(reasoning, not a defect)"
+        )
+        return "passed", extra
     say(
         f"→ {converged['findings_below_floor']} finding(s) below [review].converge_floor "
         f"({converged['floor']}) recorded but not blocking: the re-review passes (converged)"

@@ -19,10 +19,12 @@ from ...infra import fsio
 from ...infra import worktree as W
 from .. import cmdrunner
 from .. import suitelock as SL
+from .. import tree_bin as TB
 from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
+from ..perf import testtimes
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .drift import _account_for_drift
 from .evidence import diff_stat, digest, tree_identity
@@ -237,6 +239,19 @@ def _run_holding_the_suite_lock(gdef, cwd, cfg, env, on_tick, tick_s):
         lock_wait = round(time.monotonic() - queued_at, 6) if holds else None
         command, auto = WK.resolve(gdef.command, cfg, holding_suite=holds)
         timeout_s = WK.timeout_for(gdef.timeout_s, auto, cfg)
+        if timeout_s > 0 and _runs_ddflow_ci(command):
+            # A `ddflow ci run` command queues for the host suite lock ITSELF (this runner
+            # never takes it: `_runs_whole_suite` leaves `ci` alone, and taking it here too
+            # would wait on ourselves) and budgets the run after the wait alone, printing its
+            # queue time as `ddflow-suite-wait` (B4f35548c0a). The queue wait is bounded by
+            # `[ci].suite_wait_s` and never comes off the run budget, so the wrapping gate
+            # timeout must ADD that wait to the budget it enforces: a run that queued near
+            # the gate's own limit was killed at 3600s before it started, and
+            # `[ci].suite_wait_s`/`DDFLOW_CI_SUITE_WAIT_S` was unreachable past that
+            # (B83c7a5eb50). A `0`/negative budget stays unlimited; the wait is clamped to
+            # 0 like the `SL.hold` consumer that applies it does, so a negative
+            # [ci].suite_wait_s cannot SHRINK the run budget it is meant to extend.
+            timeout_s += max(0, int(cfg.ci.suite_wait_s))
         ticking = on_tick is not None and tick_s > 0
         p = cmdrunner.CommandRunner().run(
             cmdrunner.Declared(command, f"gates.toml [gate.{gdef.id}]"),
@@ -314,6 +329,10 @@ def run_command_gate(
             **gdef.env,
             **(env or {}),
         }
+        # A gate command that runs `ddflow ...` must get THIS tree's code, not the primary
+        # checkout's on PATH: the shim only shadows the `ddflow` name, so the branch's gate
+        # logic (runner, baseline, ci_marker) is what its own gate runs exercise (B627636de73).
+        full_env = TB.with_shim_on_path(full_env, cwd)
         # A command gate IS a shell command line the operator wrote in gates.toml, run by the
         # one CommandRunner: it checks the executable is installed BEFORE running (under
         # `shell=True` a missing binary exits 127, indistinguishable from a suite that chose
@@ -382,18 +401,24 @@ def run_command_gate(
 
 
 def _keep_cut_failing_ids(gdef: GateDef, cwd: Path, out: str, ev: dict[str, Any]) -> None:
-    """Keep a unit_tests full-suite failure's WHOLE failing list aside for the run's own tree
-    (the evidence caps it to a sample): ``gate_baseline`` reads it to measure the failure on
-    the base, so ``[gates].baseline_red_auto`` can accept it (B69d1c0ff00). A run that could
-    not be kept is dropped: the outcome it follows is unchanged."""
-    if gdef.id != "unit_tests" or not ev.get("failed_tests_more"):
+    """Keep a ci / unit_tests full-suite failure's WHOLE failing list aside as a committed blob,
+    linked from the evidence as ``failing_ids`` (the evidence caps the list to a sample):
+    ``gate_baseline`` reads it back to measure the failure on the base, so
+    ``[gates].baseline_red_auto`` can accept it, and a teammate reads all ids from the record
+    (B86370c6924, after B69d1c0ff00). A run that could not be kept is dropped: the outcome it
+    follows is unchanged."""
+    if gdef.id not in ("ci", "unit_tests") or not ev.get("failed_tests_more"):
         return
     from .baseline import write_full  # deferred, as run_log_writer does
 
     try:
-        write_full(W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)])
+        stub = write_full(
+            W.repo_root(cwd), str(ev["tree_sha"]), [f["id"] for f in failed_tests(out)]
+        )
     except (OSError, ValueError, KeyError):
         return
+    if stub:
+        ev["failing_ids"] = stub
 
 
 class Classified(NamedTuple):
@@ -506,3 +531,17 @@ _SHELL_META = cmdrunner.SHELL_META
 _SHELL_BUILTINS = cmdrunner.SHELL_WORDS
 _missing_executable = cmdrunner.executable_missing
 _looks_like_not_found = cmdrunner.looks_like_not_found
+
+
+def capture_test_durations(repo, item_id: str, gate: str, xml_report: str, workers: int) -> dict:
+    """PM-test-durations: parse a gate's junit report, fold the per-test durations into the
+    local ring, and return only the ROLLUP (count, top slowest, per-file totals, skew,
+    serial-equivalent seconds, critical-path floor) to ride the gate's evidence. The runner's
+    own pytest/junit output feeds this; other stacks plug the same parse_junit port. A report
+    that cannot be parsed is ``{"unavailable": True}``, never zero."""
+    try:
+        cases = testtimes.parse_junit(xml_report)
+        testtimes.fold(cases, repo, gate)
+        return testtimes.rollup(cases, workers)
+    except (OSError, ValueError, SyntaxError):  # ElementTree.ParseError is a SyntaxError
+        return {"unavailable": True, "item": item_id, "gate": gate}

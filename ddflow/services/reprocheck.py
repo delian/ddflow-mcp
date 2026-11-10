@@ -2,8 +2,8 @@
 
 The reproduction bundle stores the command stamped "given, not executed" (the bundle
 task); this module is the execution the verify item adds: `check` runs the command in a
-throwaway checkout of the sha recorded with the bug (`infra.worktree.scratch_tree`, the
-same machinery the regression verify reuses), the caller decides how many runs the
+throwaway checkout of the sha recorded with the bug (a full standalone clone -- see
+`_isolated_clone` -- not a linked worktree), the caller decides how many runs the
 reading needs (`[bugs] repro_runs`), and the record the bug stores says only what the
 runs answered:
 
@@ -29,15 +29,16 @@ the bug's ``evidence`` text instead and is STORED, never executed here.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 import shlex
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from ..infra import fsio as F
 from ..infra import git as G
-from ..infra import worktree as W
 from . import cmdrunner as CR
 
 
@@ -76,42 +77,41 @@ def _run_at(
     load_start = _first_load()
     keep = max(0, int(tail_bytes))
     with F.scratch_dir(prefix="ddflow-repro-", ignore_cleanup_errors=True) as tails:
-        with W.scratch_tree(repo, sha, detach=True, prefix="ddflow-repro-", quiet=True) as s:
-            if s.path is None:
-                return {
-                    "unavailable": f"no scratch checkout of {sha[:12]}: {s.error}",
-                    "load": load_start,
-                }
-            pristine_gitfile = _gitfile_bytes(s.path)
-            codes: list[int] = []
-            out: list[bytes] = []
-            bigger = False
-            unreached = 0
-            for _ in range(count):
-                if pristine_gitfile is None or not _prime_scratch(s.path, sha, pristine_gitfile):
+        codes: list[int] = []
+        out: list[bytes] = []
+        bigger = False
+        unreached = 0
+        for nth in range(count):
+            # A fresh clone PER RUN, at an unpredictable name per run: a poisoned run that
+            # mkdir'd the NEXT clone's path cannot know the name (it was never on any argv
+            # line, and this run's own clone is removed before the next is made). A stateful
+            # line can mutate its clone's config and tree all it likes and no later run
+            # inherits it, and a run that rewired ``.git`` (a symlink, ``core.worktree``
+            # pointing elsewhere) cannot steer any later run's reset onto another checkout:
+            # there is no reset, each run starts from a fresh throwaway clone.
+            with _isolated_clone(repo, sha, tails / f"run-{nth}-{secrets.token_hex(6)}") as clone:
+                if clone is None:
                     unreached += 1
                     continue
-                # One unpredictable name per run: a poisoned run that mkdir'd the NEXT
-                # run's path cannot know the name (it was never on any argv line).
                 code, tailed, size = _one_run(
-                    s.path, tails / secrets.token_hex(6), line, keep, timeout_s
+                    clone, tails / secrets.token_hex(6), line, keep, timeout_s
                 )
-                if code is None:
-                    unreached += 1
-                    continue
-                codes.append(code)
-                if tailed:
-                    out.append(tailed)
-                bigger = bigger or size > keep
-    if not codes:
-        why = "every run was cut off before an exit code" if unreached else "no run"
-        record: dict[str, Any] = {
-            "executed": False,
-            "unavailable": f"{why} reached an exit code to read",
-        }
-        record["unreached"] = unreached
-        record["load"] = load_start
-        return record
+            if code is None:
+                unreached += 1
+                continue
+            codes.append(code)
+            if tailed:
+                out.append(tailed)
+            bigger = bigger or size > keep
+        if not codes:
+            why = "every run was cut off before an exit code" if unreached else "no run"
+            record: dict[str, Any] = {
+                "executed": False,
+                "unavailable": f"{why} reached an exit code to read",
+            }
+            record["unreached"] = unreached
+            record["load"] = load_start
+            return record
     failed = [c for c in codes if c != 0]
     record = {
         "executed": True,
@@ -136,57 +136,58 @@ def _run_at(
     return record
 
 
-def _prime_scratch(scratch: Path, sha: str, pristine: bytes) -> bool:
-    """Reset the scratch checkout to ``sha`` BEFORE one run; False when the reset could
-    not be guaranteed (with no fresh checkout there is no run to read).
+@contextlib.contextmanager
+def _isolated_clone(repo: Path, sha: str, dst: Path) -> Iterator[Path | None]:
+    """A throwaway FULL clone of ``repo`` checked out at ``sha``, in its own directory under
+    the throwaway tails dir; None when the clone could not be made.
 
-    The scratch is a LINKED worktree (`git worktree add`): its ``.git`` is a FILE -- the
-    gitdir pointer -- never a directory, so the pointer is restored from ``pristine``
-    (the bytes read fresh after ``worktree add``) FIRST, before any git command runs: a
-    run that overwrote the pointer must not steer the reset onto another repository's
-    git dir, and a poisoned pointer brokenly resolved would be one that corrupts the
-    operator's tree. ``git clean -xdfq -f`` then removes ignored files AND nested
-    repositories a stateful run left (git skips a nested ``.git`` directory on one
-    ``-f``), and ``git reset --hard sha`` returns the tree to the recorded commit. An
-    untracked directory squatting a tracked path can fail a reset: cleaning first (and
-    once more after a failed reset) lets the reset land on the tree the clean freed.
-    Any filesystem surprise the line left degrades to False -- the run is unreached,
-    the filing never crashes on it."""
+    A full clone -- not `git worktree add` -- is the isolation the repro needs (bug
+    Bc771f31635): a linked worktree's ``.git`` is a gitdir POINTER into the primary's own
+    metadata, so a repro command that runs `ddflow` from inside it (`ddflow cadence
+    --ran NOPE`) resolves the primary checkout and appends its events to the REAL committed
+    ``.ddflow/events``. A clone's ``.git`` is a directory in the throwaway, so the child's
+    repo root is the clone itself, its events land in the clone's own ``.ddflow/events``,
+    and the whole directory is removed whatever happened. ``--local --no-hardlinks`` copies
+    objects, so the clone never dangles on the operator's pack being GC'd mid-run, and every
+    remote the clone recorded is dropped (by its own name): the throwaway has no business
+    reaching the operator's repository, and a repro command reading the remotes learns no
+    path back to it."""
+    clone = G.run(
+        repo,
+        "clone",
+        "--local",
+        "--no-hardlinks",
+        "--no-checkout",
+        "--quiet",
+        str(repo),
+        str(dst),
+        timeout=180.0,
+    )
+    if not clone.ok:
+        yield None
+        return
+    _drop_remotes(dst)
+    out = G.run(dst, "checkout", "--detach", sha, timeout=120.0)
+    if not out.ok:
+        F.rmtree(dst)
+        yield None
+        return
     try:
-        gitfile = scratch / ".git"
-        if gitfile.is_symlink():
-            return False
-        _write_gitfile(gitfile, pristine)
-        cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
-        reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
-        if reset.code != 0:
-            cleaned = G.run(scratch, "clean", "-xdfq", "-f", timeout=60.0)
-            reset = G.run(scratch, "reset", "--hard", sha, timeout=60.0)
-        return reset.code == 0 and cleaned.code == 0
-    except OSError:
-        return False
+        yield dst
+    finally:
+        F.rmtree(dst)
 
 
-def _gitfile_bytes(scratch: Path) -> bytes | None:
-    """The scratch's ``.git`` gitdir-pointer bytes, fresh from ``git worktree add`` (so
-    they are pristine, the pointer belonged to THIS scratch's own metadata dir), or None
-    when the file is not a plain file to read (a symlink planted there is never written
-    through). Restoring these bytes is what returns a pointer the run overwrote."""
-    try:
-        gitfile = scratch / ".git"
-        if gitfile.is_symlink() or not gitfile.is_file():
-            return None
-        return gitfile.read_bytes()
-    except OSError:
-        return None
-
-
-def _write_gitfile(gitfile: Path, pristine: bytes) -> None:
-    """Write ``pristine`` back onto the ``.git`` gitdir pointer atomically: ``fsio.atomic_write``
-    stages the bytes at an unpredictable name beside the pointer and ``os.replace``s them into
-    place, so a symlink planted where the pointer goes is swapped whole (its target is never
-    written) and a poisoned pointer cannot survive to the reset that follows."""
-    F.atomic_write(gitfile, pristine, mode=0o644)
+def _drop_remotes(dst: Path) -> None:
+    """Remove every remote the clone's config recorded, by each remote's OWN name (never the
+    assumed name ``origin``: `clone.defaultRemoteName` renames it, and a URL left behind is a
+    path a repro command CAN read back to the operator repo). The throwaway has no business
+    reaching the operator's repository; a clone already copied its objects, so no remote is
+    needed to check the recorded commit out."""
+    listed = G.run(dst, "remote", timeout=30.0)
+    for name in (listed.out or "").splitlines():
+        if name.strip():
+            G.run(dst, "remote", "remove", name.strip(), timeout=30.0)
 
 
 def _one_run(

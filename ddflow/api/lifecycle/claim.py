@@ -170,9 +170,19 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     }  # fmt: skip
     force = force and not _agent_marker_of(agent)  # B49fa10bbb1: an agent's route is --approval
     out = _claim_once(repo, item, note=note, force=force, **kw)
-    if force or out.exit != O.REFUSED or "--force" not in (out.reason or ""):
+    if force or out.exit != O.REFUSED or not _names_claim_override(out.reason or ""):
         return out
     return _claim_by_approval(repo, item, out, approval, note, kw)
+
+
+def _names_claim_override(reason: str) -> bool:
+    """Whether a claim refusal names a route the approval gate can stand in for a person's
+    `--force`: that flag itself, or an agent's `--approval request` (`_take_over` names the
+    agent's route, never `--force`, which `claim()` drops for an agent). Before the second
+    marker, a claim refused only for a foreign expired lease -- whose refusal names
+    `--approval request` -- was swallowed: the request returned exit 3 with nothing filed
+    (Be62e44611e)."""
+    return "--force" in reason or "--approval request" in reason
 
 
 def _correct_stale_package_globs(
@@ -320,6 +330,7 @@ def _claim_once(  # noqa: PLR0913 -- the door's own flags
         note,
         force,
         resources,
+        agent,
         queue,
         {"break_lease": break_lease, "broke": broke},
     )
@@ -400,7 +411,19 @@ def _claimed(cfg, st, item, lz, bound: _Bound, port, target_item, stands: Path, 
 
 
 def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
-    repo: Path, log, cfg, st, item: str, want, prior, note, force, resources, queue=False, brk=None
+    repo: Path,
+    log,
+    cfg,
+    st,
+    item: str,
+    want,
+    prior,
+    note,
+    force,
+    resources,
+    agent="",
+    queue=False,
+    brk=None,
 ):
     """The lease for ``item``, or the refusal (an `Outcome`) naming who holds it."""
     try:
@@ -412,6 +435,7 @@ def _acquire(  # noqa: PLR0913, PLR0917 -- the claim's own fields
             note=note,
             force=force,
             resources=csv_list(resources) or None,
+            agent=agent,
             offer=alternatives_offer(repo, log, cfg),
             **(brk or {}),
         )

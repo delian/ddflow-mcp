@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
+from posixpath import normpath
 from typing import Any
 
 import ddflow.api._dedupe as DD
@@ -13,6 +15,7 @@ from ...core import outcome as O
 from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
+from ...infra import git as GIT
 from ...services import reprobundle as RB
 from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
@@ -169,6 +172,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     more: dict[str, Any] = {"offer": offer} if offer else {}
     more["fix_task"] = fix["fix_task"] or (prior.fix_task if prior else "")
     more["fix_task_filed"] = fix["filed"]
+    more["glob_warnings"] = fix.get("glob_warnings", [])
     more["repro"] = repro.get("repro", {})
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
@@ -280,6 +284,34 @@ def _bugs_parent(log, cfg, st) -> tuple[str, str]:
     return parent, phase_made
 
 
+def missing_loud(root: Path, globs: list[str]) -> list[str]:
+    """One warning per literal glob that names no TRACKED file (Bf839186cee): a fix task filed
+    with such a glob holds a lease on a path nobody writes, while the file the reporter
+    really means stays unprotected, and `bug found` used to let the wrong scope stand
+    silently. A TRACKED file is the scope however the worktree stands, and a wildcard
+    pattern is not a warning (a new file behind it cannot be told from a typo). Whether the
+    path happens to exist on disk is not the test: a stray untracked file is a wrong scope
+    too, and a tracked file deleted from the worktree is still its path. Loud, never a
+    refusal: an explicit scope may still name a file the fix creates."""
+    tracked: list[str] = GIT.files(root, "tracked") or []
+    root_posix = root.resolve().as_posix().rstrip("/")
+    out: list[str] = []
+    for raw in dict.fromkeys(globs):
+        if not raw or any(c in raw for c in "*?["):
+            continue  # a pattern: a new file behind it cannot be told from a typo
+        rel = normpath(raw)
+        if rel.startswith(root_posix + "/"):
+            rel = rel[len(root_posix) + 1 :]  # a host-absolute path inside the repo
+        elif rel.startswith("/"):
+            rel = rel.lstrip("/")  # a leading slash anchors to the repo root (`existing_globs`)
+        if rel in tracked:
+            continue  # a tracked file IS the scope, however the path is spelled
+        near = difflib.get_close_matches(rel, tracked, n=3, cutoff=0.6)
+        hint = f"; nearest: {', '.join(near)}" if near else ""
+        out.append(f"{raw!r} names no tracked file{hint}")
+    return out
+
+
 def _file_fix_task(
     log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str, scope: str = ""
 ) -> dict[str, Any]:
@@ -301,7 +333,7 @@ def _file_fix_task(
 
     tid = _fix_task_id(st, cfg, bug_id, item)
     if _has_fix_task(st, cfg, bug_id, item):
-        return {"fix_task": tid, "filed": False, "phase_made": ""}
+        return {"fix_task": tid, "filed": False, "phase_made": "", "glob_warnings": []}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
     # globs are what makes a feature on them wait. The parent is the standing bugs phase,
@@ -333,6 +365,7 @@ def _file_fix_task(
         tool_bug=scope == "ddflow",
         named_scope_at=cfg.bugs.named_scope_at,
     )
+    warnings = missing_loud(log.root, kept) if globs else []
     if dropped:
         body += f"\n\nNot attached, they match nothing in the tree: {', '.join(dropped)}."
     draft = TaskDraft(
@@ -356,7 +389,7 @@ def _file_fix_task(
     )
     if not added.ok:  # the globs were checked by the caller; an id has no colon
         raise ValueError(added.problem)
-    return {"fix_task": tid, "filed": True, "phase_made": phase_made}
+    return {"fix_task": tid, "filed": True, "phase_made": phase_made, "glob_warnings": warnings}
 
 
 def _live(st, item: str) -> bool:

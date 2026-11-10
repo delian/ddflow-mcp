@@ -13,7 +13,6 @@ from ...core import blobref as B
 from ...core.model import State
 from .. import logblobs as LB
 from .defs import DEFAULT_GATES, GateDef, pipeline_for
-from .outcomes import is_triageable, triage_counts
 
 #: How a blocker of `failed_review_blockers` begins; `complete` never lifts these with
 #: `--force` (decision D-failed-review-gate): only the operator's `gate skip --reason` does.
@@ -21,6 +20,8 @@ FAILED_REVIEW_BLOCKER = "review gate(s) failed with findings not re-reviewed: "
 
 
 def _digests_of(evidence: Mapping[str, Any]) -> set[str]:
+    from .outcomes import is_triageable  # lazy: outcomes imports us back (see below)
+
     found = LB.full(evidence or {}).get("chunk_findings")
     if not is_triageable(found):
         return set()
@@ -60,6 +61,8 @@ def unresolved_review_failure(it, gate: str, *, confirmed_only: bool = False) ->
     are not: nothing re-reviewed them. ``confirmed_only`` looks at the confirmed findings
     alone: a hand PASS over findings nobody has triaged yet is an established way to settle
     them (B29667ba4b4), a hand PASS over a CONFIRMED defect nobody re-checked is not."""
+    from .outcomes import is_triageable, triage_counts  # lazy: outcomes imports us back
+
     if it.gate_outcome(gate) != "failed":
         return ""
     counts = triage_counts(it, gate)

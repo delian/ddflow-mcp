@@ -20,10 +20,13 @@ from pathlib import Path
 from typing import Any
 
 from ...adapters.clock import DEFAULT as CLOCK
+from ...core import blobref as B
 from ...core import globs
 from ...core.digest import content_digest as digest
 from ...infra import fsio
+from ...infra.blobstore import BlobStore
 from ...infra.tomlcfg import atomic_write
+from .. import logblobs
 from .. import testselect as TS
 
 CACHE_DIR = Path(".ddflow") / "local" / "baseline"
@@ -147,36 +150,41 @@ def cache_store(
         return
 
 
-FULL_DIR = Path(".ddflow") / "local" / "ci-failing"
-#: What the outcome evidence keeps of a long failing list; the whole list is in a file.
+#: What the outcome evidence keeps of a long failing list; the whole list is in a blob.
 SAMPLE = 50
 
 
-def write_full(repo: Path, sha: str, ids: list[str]) -> str:
-    """Keep EVERY failing test id of a run on ``sha`` in a local file (the gate evidence holds
-    only a capped sample): returns its path relative to ``repo``, "" when it could not be
-    written. A large red suite spills here instead of being cut."""
+def write_full(repo: Path, sha: str, ids: list[str]) -> dict[str, Any]:
+    """Keep EVERY failing test id of a run on ``sha`` as a content-addressed blob in
+    ``.ddflow/blobs/`` (committed with the log), since the gate evidence caps the list to a
+    sample. Returns the evidence stub that links the blob (``{"$blob": ref, "bytes": n}``), {}
+    when it could not be stored (no sha, no ids, or the store refused the write). A large red
+    suite spills into a blob any clone reads, instead of a machine-local file only the run's own
+    record could name (B86370c6924)."""
     if not sha or not ids:
-        return ""
-    rel = FULL_DIR / f"{sha[:40]}.json"
+        return {}
+    raw = B.body({"sha": sha, "ids": list(dict.fromkeys(ids))})
+    ref = B.address(raw)
     try:
-        path = Path(repo) / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fsio.ensure_ignored_dir(path.parent)
-        atomic_write(path, json.dumps({"sha": sha, "ids": list(dict.fromkeys(ids))}))
-    except OSError:
-        return ""
-    return str(rel)
+        BlobStore(repo).put(ref, raw)
+    except (OSError, ValueError):
+        return {}
+    return {B.KEY: ref, "bytes": len(raw)}
 
 
-def read_full(repo: Path, sha: str) -> list[str]:
-    """The whole failing list `write_full` kept for ``sha`` ([] when there is none)."""
-    try:
-        data = json.loads((Path(repo) / FULL_DIR / f"{sha[:40]}.json").read_text(encoding="utf-8"))
-        ids = data["ids"]
-    except (OSError, ValueError, KeyError, TypeError):
+def read_full(repo: Path, link: Any) -> list[str]:
+    """The whole failing list a gate's ``failing_ids`` evidence stub names, else [] (no stub,
+    or a blob that is missing or altered: the list is then absent, never a wrong one)."""
+    if not (isinstance(link, dict) and isinstance(link.get(B.KEY), str)):
         return []
-    return [str(i) for i in ids] if sha and data.get("sha") == sha and isinstance(ids, list) else []
+    try:
+        got = logblobs.fetch(BlobStore(repo), str(link[B.KEY]))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(got, dict):
+        return []
+    ids = got.get("ids")
+    return [str(i) for i in ids] if isinstance(ids, list) else []
 
 
 def only_tests_failed(checks) -> bool:

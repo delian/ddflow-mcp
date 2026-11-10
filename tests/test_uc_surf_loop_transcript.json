@@ -633,7 +633,7 @@
   ],
   2,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
+  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json]\n              [--allow-older-version] [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,probe,digest,pair,tokens,sync,watch,waves} ...\nddflow: error: unrecognized arguments: --item T1\n"
  ],
  [
   [
@@ -925,16 +925,16 @@
    "claim",
    "T2"
   ],
-  3,
-  "",
-  "T2 is not ready: deps — T1 is abandoned\nUse --force only if you mean to start it anyway.\nrefusing: to ask the operator to approve 'claim.force' for T2, re-run with `--approval request`: a request id comes back and the operator answers it in chat.\n"
+  0,
+  "claimed T2 (lease <n>s, renew every <n>s)\n  worktree: <repo>/.ddflow/worktrees/T2\n  branch:   ddflow/T2 (from main)\n  a tree of its own, because you are not standing in a linked worktree of this repository (the primary checkout, or a detached HEAD).\n  cd there and work.\n  globs:    b/*\n",
+  ""
  ],
  [
   [
    "next"
   ],
   2,
-  "Nothing actionable (0 ready, 0 running, 3 blocked).\n  T2: deps — T1 is abandoned\n  T3: state — merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\n  T5: state — merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\n",
+  "Nothing actionable (0 ready, 1 running, 2 blocked).\n  T3: state — merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\n  T5: state — merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\n",
   ""
  ],
  [
@@ -943,7 +943,7 @@
    "next"
   ],
   2,
-  "{\n  \"schema\": \"next@1\",\n  \"review\": [],\n  \"synced\": {},\n  \"promoted\": [],\n  \"ready\": [],\n  \"blocked\": [\n    {\n      \"item\": \"T2\",\n      \"reason\": \"deps\",\n      \"detail\": \"T1 is abandoned\",\n      \"waiting_on\": [\n        \"T1\"\n      ]\n    },\n    {\n      \"item\": \"T3\",\n      \"reason\": \"state\",\n      \"detail\": \"merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n      \"waiting_on\": []\n    },\n    {\n      \"item\": \"T5\",\n      \"reason\": \"state\",\n      \"detail\": \"merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n      \"waiting_on\": []\n    }\n  ],\n  \"running\": [],\n  \"cycles\": [],\n  \"interrupted\": [],\n  \"critical_path\": [\n    \"T1\",\n    \"T2\"\n  ],\n  \"finished_phases\": []\n}\n",
+  "{\n  \"schema\": \"next@1\",\n  \"review\": [],\n  \"synced\": {},\n  \"promoted\": [],\n  \"ready\": [],\n  \"blocked\": [\n    {\n      \"item\": \"T3\",\n      \"reason\": \"state\",\n      \"detail\": \"merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n      \"waiting_on\": []\n    },\n    {\n      \"item\": \"T5\",\n      \"reason\": \"state\",\n      \"detail\": \"merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n      \"waiting_on\": []\n    }\n  ],\n  \"running\": [\n    \"T2\"\n  ],\n  \"cycles\": [],\n  \"interrupted\": [],\n  \"critical_path\": [\n    \"T1\",\n    \"T2\"\n  ],\n  \"finished_phases\": []\n}\n",
   ""
  ],
  [
@@ -953,7 +953,7 @@
    "T2"
   ],
   0,
-  "## ⚠ RESUME: recoverable work found\n\nHandle these BEFORE starting anything new — a crashed agent's worktree often\nholds finished work that exists nowhere else.\n\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST — 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\nNOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides · gates done: merge · next gate: research\n\n# ddflow brief\n\n## Current: T2 — two\n\n- kind `task` · state `open`\n- needs: `T1`\n- writes: `b/*`\n- gates remaining: research → rules → implement → rubber_duck → critic → standards → unit_tests → bug_hunt → dedupe → merge\n- docs: README check could not run: git could not report this task's diff (no worktree, branch or landed commit to read, or its base is unreadable), so whether the README moved is unknown.\n\n## Ready now\n\n_Nothing ready._\n\nparallel: 4 (fixed)\n\n## Blocked (and why)\n\n- `T2` — deps: T1 is abandoned\n- `T3` — state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\n- `T5` — state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\n",
+  "## ⚠ RESUME: recoverable work found\n\nHandle these BEFORE starting anything new — a crashed agent's worktree often\nholds finished work that exists nowhere else.\n\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST — 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\nNOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides · gates done: merge · next gate: research\n\n# ddflow brief\n\n## Current: T2 — two\n\n- kind `task` · state `running` · held by `u5pin`\n- needs: `T1`\n- writes: `b/*`\n- worktree: `<repo>/.ddflow/worktrees/T2` on `ddflow/T2`\n- gates remaining: research → rules → implement → rubber_duck → critic → standards → unit_tests → bug_hunt → dedupe → merge\n\n## Ready now\n\n_Nothing ready._\n\nparallel: 4 (fixed)\n\n## Blocked (and why)\n\n- `T3` — state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\n- `T5` — state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\n",
   ""
  ],
  [
@@ -964,7 +964,7 @@
    "T2"
   ],
   0,
-  "{\n  \"schema\": \"brief@1\",\n  \"brief\": \"## \\u26a0 RESUME: recoverable work found\\n\\nHandle these BEFORE starting anything new \\u2014 a crashed agent's worktree often\\nholds finished work that exists nowhere else.\\n\\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST \\u2014 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\\nNOT resumed: ddflow applies only safe actions, this one is not safe \\u2014 one answer decides \\u00b7 gates done: merge \\u00b7 next gate: research\\n\\n# ddflow brief\\n\\n## Current: T2 \\u2014 two\\n\\n- kind `task` \\u00b7 state `open`\\n- needs: `T1`\\n- writes: `b/*`\\n- gates remaining: research \\u2192 rules \\u2192 implement \\u2192 rubber_duck \\u2192 critic \\u2192 standards \\u2192 unit_tests \\u2192 bug_hunt \\u2192 dedupe \\u2192 merge\\n- docs: README check could not run: git could not report this task's diff (no worktree, branch or landed commit to read, or its base is unreadable), so whether the README moved is unknown.\\n\\n## Ready now\\n\\n_Nothing ready._\\n\\nparallel: 4 (fixed)\\n\\n## Blocked (and why)\\n\\n- `T2` \\u2014 deps: T1 is abandoned\\n- `T3` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\\n- `T5` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n  \"item\": \"T2\",\n  \"ready\": [],\n  \"approx_tokens\": <n>\n}\n",
+  "{\n  \"schema\": \"brief@1\",\n  \"brief\": \"## \\u26a0 RESUME: recoverable work found\\n\\nHandle these BEFORE starting anything new \\u2014 a crashed agent's worktree often\\nholds finished work that exists nowhere else.\\n\\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST \\u2014 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\\nNOT resumed: ddflow applies only safe actions, this one is not safe \\u2014 one answer decides \\u00b7 gates done: merge \\u00b7 next gate: research\\n\\n# ddflow brief\\n\\n## Current: T2 \\u2014 two\\n\\n- kind `task` \\u00b7 state `running` \\u00b7 held by `u5pin`\\n- needs: `T1`\\n- writes: `b/*`\\n- worktree: `<repo>/.ddflow/worktrees/T2` on `ddflow/T2`\\n- gates remaining: research \\u2192 rules \\u2192 implement \\u2192 rubber_duck \\u2192 critic \\u2192 standards \\u2192 unit_tests \\u2192 bug_hunt \\u2192 dedupe \\u2192 merge\\n\\n## Ready now\\n\\n_Nothing ready._\\n\\nparallel: 4 (fixed)\\n\\n## Blocked (and why)\\n\\n- `T3` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\\n- `T5` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n  \"item\": \"T2\",\n  \"ready\": [],\n  \"approx_tokens\": <n>\n}\n",
   ""
  ],
  [
@@ -1063,7 +1063,7 @@
    "brief"
   ],
   0,
-  "## ⚠ RESUME: recoverable work found\n\nHandle these BEFORE starting anything new — a crashed agent's worktree often\nholds finished work that exists nowhere else.\n\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST — 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\nNOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides · gates done: merge · next gate: research\n- _1 leftover(s) with nothing to salvage: `ddflow recover` lists them._\n\n# ddflow brief\n\n## Ready now\n\n_Nothing ready._\n\nparallel: 4 (fixed)\n\n## Blocked (and why)\n\n- `T2` — deps: T1 is abandoned\n- `T3` — state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\n- `T5` — state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\n- `T9` — state: merged (<hex>) but not completed; `ddflow complete T9` records it. Re-claim as the merged lane (or `--force`) to rework it.\n",
+  "## ⚠ RESUME: recoverable work found\n\nHandle these BEFORE starting anything new — a crashed agent's worktree often\nholds finished work that exists nowhere else.\n\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST — 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\nNOT resumed: ddflow applies only safe actions, this one is not safe — one answer decides · gates done: merge · next gate: research\n- _1 leftover(s) with nothing to salvage: `ddflow recover` lists them._\n\n# ddflow brief\n\n## Current: T2 — two\n\n- kind `task` · state `running` · held by `u5pin`\n- needs: `T1`\n- writes: `b/*`\n- worktree: `<repo>/.ddflow/worktrees/T2` on `ddflow/T2`\n- gates remaining: research → rules → implement → rubber_duck → critic → standards → unit_tests → bug_hunt → dedupe → merge\n\n## Ready now\n\n_Nothing ready._\n\nparallel: 4 (fixed)\n\n## Blocked (and why)\n\n- `T3` — state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\n- `T5` — state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\n- `T9` — state: merged (<hex>) but not completed; `ddflow complete T9` records it. Re-claim as the merged lane (or `--force`) to rework it.\n",
   ""
  ],
  [
@@ -1073,7 +1073,7 @@
    "--check-recovery"
   ],
   0,
-  "{\n  \"schema\": \"brief@1\",\n  \"brief\": \"## \\u26a0 RESUME: recoverable work found\\n\\nHandle these BEFORE starting anything new \\u2014 a crashed agent's worktree often\\nholds finished work that exists nowhere else.\\n\\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST \\u2014 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\\nNOT resumed: ddflow applies only safe actions, this one is not safe \\u2014 one answer decides \\u00b7 gates done: merge \\u00b7 next gate: research\\n- _1 leftover(s) with nothing to salvage: `ddflow recover` lists them._\\n\\n# ddflow brief\\n\\n## Ready now\\n\\n_Nothing ready._\\n\\nparallel: 4 (fixed)\\n\\n## Blocked (and why)\\n\\n- `T2` \\u2014 deps: T1 is abandoned\\n- `T3` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\\n- `T5` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\\n- `T9` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T9` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n  \"item\": \"\",\n  \"ready\": [],\n  \"approx_tokens\": <n>\n}\n",
+  "{\n  \"schema\": \"brief@1\",\n  \"brief\": \"## \\u26a0 RESUME: recoverable work found\\n\\nHandle these BEFORE starting anything new \\u2014 a crashed agent's worktree often\\nholds finished work that exists nowhere else.\\n\\n- **T5** (orphan_worktree, was (none)): INSPECT FIRST \\u2014 1 uncommitted file(s), 0 unmerged commit(s). `git -C <repo>/.ddflow/worktrees/T5 diff main` then salvage.\\nNOT resumed: ddflow applies only safe actions, this one is not safe \\u2014 one answer decides \\u00b7 gates done: merge \\u00b7 next gate: research\\n- _1 leftover(s) with nothing to salvage: `ddflow recover` lists them._\\n\\n# ddflow brief\\n\\n## Current: T2 \\u2014 two\\n\\n- kind `task` \\u00b7 state `running` \\u00b7 held by `u5pin`\\n- needs: `T1`\\n- writes: `b/*`\\n- worktree: `<repo>/.ddflow/worktrees/T2` on `ddflow/T2`\\n- gates remaining: research \\u2192 rules \\u2192 implement \\u2192 rubber_duck \\u2192 critic \\u2192 standards \\u2192 unit_tests \\u2192 bug_hunt \\u2192 dedupe \\u2192 merge\\n\\n## Ready now\\n\\n_Nothing ready._\\n\\nparallel: 4 (fixed)\\n\\n## Blocked (and why)\\n\\n- `T3` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T3` records it. Re-claim as the merged lane (or `--force`) to rework it.\\n- `T5` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T5` records it. Re-claim as the merged lane (or `--force`) to rework it.\\n- `T9` \\u2014 state: merged (<hex>) but not completed; `ddflow complete T9` records it. Re-claim as the merged lane (or `--force`) to rework it.\",\n  \"item\": \"T2\",\n  \"ready\": [],\n  \"approx_tokens\": <n>\n}\n",
   ""
  ],
  [
@@ -1417,7 +1417,7 @@
    "trunk"
   ],
   0,
-  "{\n  \"schema\": \"flow_choose@1\",\n  \"knob\": \"model\",\n  \"value\": \"trunk\",\n  \"in_effect\": true,\n  \"note\": \"\"\n}\n",
+  "{\n  \"schema\": \"flow_choose@1\",\n  \"knob\": \"model\",\n  \"value\": \"trunk\",\n  \"in_effect\": true,\n  \"note\": \"1 item(s) in flight (T2) were started under the previous value and keep their branches; the new value applies to new work.\"\n}\n",
   ""
  ],
  [

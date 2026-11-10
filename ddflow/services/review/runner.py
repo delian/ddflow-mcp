@@ -720,6 +720,7 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
                 digest=f.get("digest", ""),
                 reviewer=f.get("reviewer", ""),
                 family=f.get("family", ""),
+                malformed=f.get("malformed", ""),
             )
             for f in prior.get("chunk_findings", [])
             if _kept_over_rerun(prior, f, again, res.reviewer)

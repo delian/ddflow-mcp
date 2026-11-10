@@ -144,7 +144,6 @@ def test_no_mcp_or_api_module_can_record_an_answer():
     ]
     assert sorted(writers) == [
         "ddflow/core/handlers/asks.py",
-        "ddflow/core/redact/log.py",  # classifies the fields; writes nothing
         "ddflow/services/ask/engine.py",
     ]
     for sub in ("surfaces/mcp.py", "surfaces/tools", "api"):

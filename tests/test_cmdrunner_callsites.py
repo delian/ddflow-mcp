@@ -17,13 +17,16 @@ GOVERNS = ("ddflow/**",)
 
 PKG = Path(__file__).resolve().parents[1] / "ddflow"
 
-#: The two modules that own shell-line execution.
-HOMES = frozenset({"infra/proc.py", "services/cmdrunner.py"})
+#: The modules that own shell-line execution (adapters/proc.py and adapters/proc_server.py
+#: are the D-unify process layer; infra/proc.py is the legacy one being moved onto it).
+HOMES = frozenset(
+    {"infra/proc.py", "adapters/proc.py", "adapters/proc_server.py", "services/cmdrunner.py"}
+)
 
 #: `which` on the first element of an argv ddflow built itself (never an operator's line).
 EXEMPT = {
     ("api/operations.py", "which(<command>[i])"): "pre-commit execs shlex.split(entry), no shell",
-    ("infra/forge.py", "which(<command>[i])"): "argv[0] of a gh/glab call ddflow assembled",
+    ("adapters/forge.py", "which(<command>[i])"): "argv[0] of a gh/glab call ddflow assembled",
     ("services/companions/model.py", "which(<command>[i])"): "a companion's own detect argv",
 }
 

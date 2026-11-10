@@ -104,6 +104,7 @@ def _record_gate(repo: Path, item: str, res: CI.Result, agent: str, called_from,
             waited_s=res.waited_s,
             elapsed_s=res.elapsed_s,
             ran_by=CI_RUN,
+            failing_ids=data.get("failing_ids"),
         ),
         agent=agent,
         called_from=called_from,
@@ -146,7 +147,7 @@ def _keep_failing_ids(repo: Path, res) -> dict:
         names = ", ".join(c.id for c in res.checks if not c.ok)
         out["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
     elif kept := BL.write_full(repo, res.sha, everyone):
-        out["failing_ids_file"] = kept
+        out["failing_ids"] = kept
     else:
         out["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
     return out

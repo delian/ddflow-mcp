@@ -233,7 +233,7 @@
          },
          "force": {
           "type": "boolean",
-          "description": "Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded."
+          "description": "Override a refusal -- a person's route; an agent's `force` is dropped, so an agent files `approval=request` instead. A forced claim past a dependency or live lease lets two agents write one file. Recorded."
          },
          "approval": {
           "type": "string",
@@ -1163,7 +1163,7 @@
     'ddflow_view': '''
       {
        "name": "ddflow_view",
-       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, digest, waves.",
+       "description": "Read the queue, history and reports. Set `action`; required arguments in brackets: queue, board, progress, loops, status, render, list(kind), history, cadence, pins(document), lanes, metrics, health, docs, archdeps, vigil, paths, digest, waves.",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -1325,11 +1325,11 @@
          },
          "view": {
           "type": "string",
-          "description": "lanes: state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm."
+          "description": "lanes: state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template). metrics: summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm or slo."
          },
          "lane": {
           "type": "string",
-          "description": "Lane name (or a unique part); with view=brief or resume."
+          "description": "Lane name (or a unique part); with view=brief, resume or approve."
          },
          "group_by": {
           "type": "string",
@@ -1382,6 +1382,7 @@
            "docs",
            "archdeps",
            "vigil",
+           "paths",
            "digest",
            "waves"
           ],

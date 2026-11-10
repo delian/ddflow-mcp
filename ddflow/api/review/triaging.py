@@ -201,6 +201,7 @@ def triage(
         severity=f.get("severity", ""),
         title=f.get("title", ""),
         location=f.get("location", ""),
+        detail=f.get("detail", ""),
     )
     log, cfg, st = _load(repo, agent)
     counts = GD.triage_counts(st.items[item], gate) or {}

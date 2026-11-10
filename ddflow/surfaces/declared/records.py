@@ -192,7 +192,7 @@ COMMANDS: tuple[Command, ...] = (
             agent=agent,
             evidence=a.get("evidence", "") or "",
         ),
-        payload=("id", "offer", "fix_task", "fix_task_filed"),
+        payload=("id", "offer", "fix_task", "fix_task_filed", "glob_warnings"),
         params=(
             Param(
                 "id",
@@ -659,7 +659,7 @@ COMMANDS: tuple[Command, ...] = (
             item=a.get("item", "") or "",
             agent=agent,
         ),
-        payload=("session", "how"),
+        payload=("session", "how", "item"),
         params=(
             Param(
                 "session",

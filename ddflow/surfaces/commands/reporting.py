@@ -262,6 +262,12 @@ def cmd_bug_show(a, c: Ctx) -> int:
     return _show(a, c, only="bug")
 
 
+def cmd_research_show(a, c: Ctx) -> int:
+    """`ddflow research show <id>`: `show`, for a research note only (the id of anything
+    else is refused)."""
+    return _show(a, c, only="research")
+
+
 def _show(a, c: Ctx, only: str = "") -> int:
     out = A.show(c.repo, a.id, agent=c.requested_agent)
     if out.exit == FAIL:
@@ -269,6 +275,9 @@ def _show(a, c: Ctx, only: str = "") -> int:
         return FAIL
     if only == "bug" and "bug" not in out.data["_render"]:
         print(f"{a.id} is not a bug (`ddflow show {a.id}` reads it)", file=sys.stderr)
+        return REFUSED
+    if only == "research" and "research" not in out.data["_render"]:
+        print(f"{a.id} is not a research note (`ddflow show {a.id}` reads it)", file=sys.stderr)
         return REFUSED
     if c.json:
         emit_json(out.body("item"))

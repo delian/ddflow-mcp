@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..managed_files import OWNER_KEY, ManagedFile, _digest, _dump, _owned_keys, _parse
+from ..managed_files import OWNER_KEY, ManagedFile, _digest, _drift, _dump, _owned_keys, _parse
 from . import fake
 
 
@@ -37,16 +37,7 @@ class FakeManagedFile(ManagedFile):
         self.files[path] = _dump(data)
 
     def owned(self, path: str) -> dict[str, str]:
-        data = _parse(self.files.get(path, ""))
-        marker = data.get(OWNER_KEY)
-        keys = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
-        hashes = keys if isinstance(keys, dict) else {}
-        if not hashes:  # a legacy name-only marker: drift is unknown, so every name is current
-            return dict.fromkeys(_owned_keys(data), "current")
-        return {
-            k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
-            for k in _owned_keys(data)
-        }
+        return _drift(_parse(self.files.get(path, "")))
 
     def text(self, path: str, key: str) -> Any:
         return _parse(self.files.get(path, "")).get(key)

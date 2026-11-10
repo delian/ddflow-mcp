@@ -200,7 +200,7 @@ COMMANDS: tuple[Command, ...] = (
             Param(
                 "force",
                 type="boolean",
-                help="Override a refusal; only to retry after `ddflow_recover` said a crashed agent's tree holds nothing. Forcing past a dependency or live lease lets two agents write one file. Recorded.",
+                help="Override a refusal -- a person's route; an agent's `force` is dropped, so an agent files `approval=request` instead. A forced claim past a dependency or live lease lets two agents write one file. Recorded.",
                 cli_help="",
             ),
             Param(
@@ -330,6 +330,8 @@ COMMANDS: tuple[Command, ...] = (
             lease=a.get("lease", "") or "",
             token=a.get("token", "") or "",
             approval=a.get("approval", "") or "",
+            job=a.get("job", "") or "",
+            notify=a.get("notify", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -379,9 +381,23 @@ COMMANDS: tuple[Command, ...] = (
                 default="",
             ),
             Param(
+                "job",
+                help="Wait for a JOB instead of an item, lease or approval: the run handle a detached review (`ddflow review --detach`) returns, until its process is over and the round is recorded. Ready then means read the round (next_actions) and act on it.",
+                cli_help="wait for a job (a detached review's run handle) instead of an item, lease or "
+                "approval: until its process is over and its round is recorded",
+                default="",
+            ),
+            Param(
                 "token",
                 help="The resume token a bounded wait returned (`wake.token`): asks the same question again; item, phase, lease and globs given with it win.",
                 cli_help="resume token from an earlier wait",
+                default="",
+            ),
+            Param(
+                "notify",
+                help="Register how to reach this waiter when its wake fires, surfaced to the holder's release/complete (`woke`): '' = it polls `ddflow wait`; `send_message:<session-id>` = the harness session to resume (SendMessage); `watch:<url>` = an inbound URL to POST the wake to.",
+                cli_help="how to reach this waiter when its wake fires: empty (poll ddflow wait), "
+                "`send_message:<session-id>` (harness session to resume) or `watch:<url>` (inbound URL to post to)",
                 default="",
             ),
             Param(

@@ -32,7 +32,9 @@ def _finding_listing(it, gate: str) -> str:
         mine = it.triage.get(g, {})
         lines += [
             f"  {g} #{n} [{f.get('severity', '')}] {f.get('location', '')} "
-            f"{f.get('title', '')} -- {mine.get(f['digest'], {}).get('verdict') or 'untriaged'}"
+            f"{f.get('title', '')} -- "
+            f"{mine.get(f['digest'], {}).get('verdict') or ('malformed' if f.get('malformed') else 'untriaged')}"
+            f"{(' (' + f['malformed'] + ')') if f.get('malformed') else ''}"
             for n, f in enumerate(found, 1)
         ]
     return "\nfindings:\n" + "\n".join(lines) if lines else ""
@@ -122,6 +124,27 @@ def _link_refuted(log, it, gate: str, findings) -> list[str]:
     return linked
 
 
+def _match_sibling(found: list[dict], digest: str, point: str, claim: str) -> int:
+    """The 1-based place in ``found`` of the finding this triage answers: the one under
+    ``digest`` -- the byte-identical copy a combined review stores under every gate -- else
+    one at the SAME design point with the same claim under a DIFFERENT digest (a re-worded
+    or shifted-line re-raise of the same finding, bug Bbd391bfef5); 0 when neither matches.
+    """
+    by_digest = next((i for i, f in enumerate(found, 1) if f.get("digest") == digest), 0)
+    if by_digest or not point or not claim:
+        return by_digest
+    return next(
+        (
+            i
+            for i, f in enumerate(found, 1)
+            if f.get("digest") != digest
+            and _design_point(_finding_field(f, "location")) == point
+            and _claim_text(f) == claim
+        ),
+        0,
+    )
+
+
 def _mirror_sibling_gates(
     log,
     it,
@@ -133,27 +156,35 @@ def _mirror_sibling_gates(
     severity: str,
     title: str,
     location: str,
+    detail: str = "",
 ) -> list[str]:
     """A combined review stores each finding under every gate it stands for; when a triage
     gives one gate's copy its verdict, the SAME finding under the other gates answers too
-    (bug B-combined-review-findings-triaged-twice). Appends a `review.triaged` for each
-    sibling gate that carries ``digest`` with no settled verdict yet. Returns those gates.
+    (bug B-combined-review-findings-triaged-twice). The same finding can sit under a
+    different digest per gate (its cited line shifted, its wording re-written), so a
+    sibling copy that matches the finding's design point and claim carries the verdict
+    under ITS OWN digest (bug Bbd391bfef5). Appends a `review.triaged` for each sibling
+    gate that carries the finding with no settled verdict yet. Returns those gates.
     """
     if it is None:
         return []
+    point = _design_point(location)
+    claim = _claim_text({"detail": detail, "title": title})
     mirrored: list[str] = []
     for g2 in sorted(it.gates or {}):
         if g2 == gate:
             continue
         mine = it.triage.get(g2, {})
-        if mine.get(digest, {}).get("verdict", "") in _SETTLED:
-            continue
         rec = it.gates.get(g2)
         found = LB.full(rec.evidence or {}).get("chunk_findings") if rec else None
         if not GD.is_triageable(found):
             continue
-        n = next((i for i, f in enumerate(found, 1) if f.get("digest") == digest), 0)
+        n = _match_sibling(found, digest, point, claim)
         if not n:
+            continue
+        sibling = found[n - 1]
+        sib_digest = str(_finding_field(sibling, "digest") or "")
+        if mine.get(sib_digest, {}).get("verdict", "") in _SETTLED:
             continue
         log.append(
             "review.triaged",
@@ -161,12 +192,12 @@ def _mirror_sibling_gates(
             {
                 "gate": g2,
                 "finding": n,
-                "digest": digest,
+                "digest": sib_digest,
                 "verdict": verdict,
                 "probe": probe,
-                "severity": severity,
-                "title": title,
-                "location": location,
+                "severity": _finding_field(sibling, "severity"),
+                "title": _finding_field(sibling, "title"),
+                "location": _finding_field(sibling, "location"),
             },
         )
         mirrored.append(g2)
@@ -346,6 +377,7 @@ def _untriaged(
         if f.get("digest") not in gone
         and f.get("digest") not in carried_set
         and f.get("digest") not in new
+        and not f.get("malformed")
         and verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED
     )
 

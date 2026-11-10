@@ -83,6 +83,11 @@ class Waiter:
     #: Refusals of a polling claim (0 for a `wait`). One ask is only a pending place: it
     #: reserves nothing until the agent asks AGAIN (see `reserves`).
     asks: int = 0
+    #: How to reach this waiter when its wake fires (`wait --notify`): "" = it polls with
+    #: `ddflow wait`; ``send_message:<session-id>`` = the harness session to resume
+    #: (SendMessage); ``watch:<url>`` = an inbound URL to POST the wake to (R-wait-wake,
+    #: DX-wake-waiters). Advisory: a mechanism ddflow cannot drive is surfaced, not sent.
+    notify: str = ""
     path: str = ""  #: the registration file; not serialised
 
     def live(self, now: float | None = None) -> bool:
@@ -112,6 +117,7 @@ class Waiter:
             "phase": self.phase,
             "waiting_on": list(self.waiting_on),
             "waiting_s": round(max(0.0, now - self.since)),
+            "notify": self.notify,
         }
 
 
@@ -289,6 +295,7 @@ def _well_formed(w: Waiter) -> bool:
 
     return (
         all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host, w.pid_start))
+        and isinstance(w.notify, str)
         and isinstance(w.waiting_on, list)
         and all(isinstance(i, str) for i in w.waiting_on)
         and num(w.since)

@@ -29,7 +29,7 @@ from ..autoorder import is_decide
 from ..flow import stack_base, unknown_line
 from ..globs import inside as path_in_glob
 from ..graph import find_cycles
-from ..model import BLOCKED, DONE, REVIEW, Item, State
+from ..model import ABANDONED, BLOCKED, DONE, REVIEW, Item, State
 
 
 @dataclass
@@ -234,8 +234,15 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
         if cfg.schedule.unknown_dep_policy == "block":
             return False, f"unknown dependency {dep!r} (typo? or not yet added)"
         return True, f"unknown dependency {dep!r} ignored by policy"
-    if it.state == DONE:
-        return True, ""
+    if it.terminal:  # settled: done, or abandoned (decided NOT done)
+        # An abandoned need is settled too: nothing will ever finish it, so a dependent
+        # must not wait on it forever (B740b7f8cf4). An abandoned phase with orphaned
+        # sub-tasks satisfies the same way: its dependents are not the place to resolve
+        # those orphans.
+        note = {ABANDONED: f"{dep} was abandoned; its dependents are not blocked by it"}.get(
+            it.state, ""
+        )
+        return True, note
     if it.state == REVIEW:
         # Satisfied only for STACKING, which `plan_blocker` then checks is possible --
         # the dependent forks from this branch. Without stacking, work waits for the merge.

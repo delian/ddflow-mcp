@@ -1,8 +1,9 @@
 """The `lanes` command, declared once: the lane ledger, a lane's brief and the advisor.
 
 `surfaces/parsers/lanes.py` registers the command-line half and `surfaces/tools/__init__.py`
-takes the MCP entry (D-unify 4). Read-only by construction: it never spawns or kills a
-process and starts no daemon (D-sched-no-daemon). Acting on a lane (starting, resuming) is a different command
+takes the MCP entry (D-unify 4). Read-only by construction except `view=approve`, a person's
+act that records a lane-template approval and spawns no process, kills nothing and starts no
+daemon (D-sched-no-daemon). Acting on a lane (starting, resuming) is a different command
 (P-agent-parity.launcher).
 """
 
@@ -20,13 +21,14 @@ def _text(out, a) -> str:
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("lanes",),
-        summary="the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`",
+        summary="the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`, `lanes lead`",
         tool="ddflow_lanes",
         description=(
             "Agent lanes from the log, read-only: harness, model, item, heartbeat and state "
             "(working, stale, waiting-on-glob naming the holder, idle-with-ready-work, "
             "stopped). view=brief + lane: that lane's whole first prompt. view=advise: "
-            "concrete moves. Never starts or stops an agent. Exit 2: nothing to show."
+            "concrete moves. view=lead: states with each lane's honest ETA and your pending "
+            "asks. Never starts or stops an agent. Exit 2: nothing to show."
         ),
         call=lambda repo, a, agent: _api().lanes(
             repo, view=a.get("view") or "state", lane=a.get("lane") or "", agent=agent
@@ -48,17 +50,17 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="state (default), brief, advise, fleet (every agent seen) or resume (how to resume lane).",
-                cli_help="state (default), brief <lane>, advise, fleet or resume <lane>",
+                help="state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template).",
+                cli_help="state (default), brief <lane>, advise, lead, fleet, resume <lane> or approve <template>",
                 positional=True,
                 nargs="?",
-                choices=("state", "brief", "advise", "fleet", "resume"),
+                choices=("state", "brief", "advise", "fleet", "resume", "lead", "approve"),
                 default=None,
             ),
             Param(
                 "lane",
-                help="Lane name (or a unique part); with view=brief or resume.",
-                cli_help="with brief or resume: the lane name, or a unique part of it",
+                help="Lane name (or a unique part); with view=brief, resume or approve.",
+                cli_help="with brief, resume or approve: the lane name (for approve, the template name), or a unique part of it",
                 positional=True,
                 nargs="?",
                 default=None,

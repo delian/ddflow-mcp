@@ -1,7 +1,8 @@
-"""`ddflow lanes`: the lane ledger, a lane's brief and the advisor, read-only.
+"""`ddflow lanes`: the lane ledger, a lane's brief and the advisor; `lanes approve` a person's act.
 
-Nothing here writes an event, starts a process or opens a socket; the three views are
-projections of the log as read now.
+The state/brief/advise/fleet/resume views are read-only: nothing in them writes an event,
+starts a process or opens a socket. `lane_template_approve` (view ``approve``) is the one
+write -- a PERSON approving a lane template -- which records an approval event and nothing else.
 """
 
 from __future__ import annotations
@@ -10,18 +11,89 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
+from ..services import approval as AP
 from ..services import fleet as FR
 from ..services import flowstate as FL
 from ..services import lanes as LN
+from ..services.lanes import launch_template as T
+from ..services.lanes import lead as LD
 from ..services.lanes.redraw import watch as _watch
 from ._base import _load
 from .fleet import fleet_view
 from .lifecycle.planning import plan_for
 from .reporting.waitcycles import wait_moves, wait_report
 
-VIEWS = ("state", "brief", "advise", "fleet", "resume")
+VIEWS = ("state", "brief", "advise", "fleet", "resume", "lead", "approve")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
 NOBODY = "\0lanes"
+
+
+def _lead_text(ledger, st, at: float, agent: str, max_asks: int, repo: Path) -> str:
+    """The lead rollup: the ledger with every lane's honest ETA, then its inbox."""
+    text = LD.summary(ledger, st, at)
+    if not agent:
+        return text
+    msgs = LD.pending(repo, agent)
+    if not msgs:
+        return text
+    shown = msgs[:max_asks] if max_asks > 0 else []
+    rows = [
+        f"  {'ask' if m.reason == 'message' else m.reason} {i}. from "
+        f"{LD.safe(m.sender) or 'a lane'}"
+        + (f" about {LD.safe(m.item)}" if m.item else "")
+        + ": "
+        + m.text.replace("\n", " ")[:200]
+        for i, m in enumerate(shown, 1)
+    ]
+    head = f"your inbox ({len(msgs)}):"
+    if not rows:
+        head += f" all {len(msgs)} held (lanes.advise_max is 0)"
+    elif len(shown) < len(msgs):
+        head += f" ({len(msgs) - len(shown)} more not shown)"
+    body = "\n".join(rows)
+    return text + "\n\n" + head + ("\n" + body if body else "")
+
+
+def _lead_outcome(ledger, st, at: float, agent: str, cfg, repo: Path, data: dict) -> O.Outcome:
+    """`view=lead`: the summary text, exit 2 with no lanes, else ok."""
+    data["text"] = _lead_text(ledger, st, at, agent, cfg.lanes.advise_max, repo)
+    if not ledger:
+        return O.nothing("lanes", "no lanes active in the window", **data)
+    return O.ok("lanes", **data)
+
+
+def lane_template_approve(
+    repo: Path,
+    name: str,
+    cfg,
+    log,
+    st,
+    *,
+    agent: str = "",
+) -> O.Outcome:
+    """`lanes approve <name>`: a PERSON approves the lane template as it is now (B8647b69e06).
+
+    The only writer of `approval.granted` under the subject ``lane-template:<name>``; until this
+    command was wired, `launch_template.approve` had no caller and `approved()` could never pass
+    outside a test. Refused under an agent identity."""
+    if not name:
+        return O.failed("lanes", "a template name is required: `ddflow lanes approve <name>`")
+    templates, _notes = T.load(Path(repo) / cfg.swarm.launch_templates_file)
+    t = templates.get(name)
+    if t is None:
+        known = ", ".join(sorted(templates)) or "none"
+        return O.failed("lanes", f"no template {name!r} (templates: {known})")
+    try:
+        granted = T.approve(log, t, requested_agent=agent)
+    except AP.ApprovalRefused as exc:  # a person's act: refused under an agent identity
+        return O.refused("lanes.approve", str(exc))
+    return O.ok(
+        "lanes.approve",
+        name=name,
+        digest=t.digest(),
+        approved_by=granted.actor.user,
+        text=f"template {name!r} approved at digest {t.digest()} by {granted.actor.user}",
+    )
 
 
 def lanes(
@@ -32,6 +104,8 @@ def lanes(
     if view not in VIEWS:
         return O.failed("lanes", f"unknown view {view!r}: one of {', '.join(VIEWS)}")
     log, cfg, st = _load(repo, agent)
+    if view == "approve":
+        return lane_template_approve(Path(repo), lane, cfg, log, st, agent=agent)
     at = time.time() if now is None else now
     limit = FL.limit_for(Path(repo), cfg, st, log.read_all)
     events = log.read_all()
@@ -77,6 +151,8 @@ def lanes(
         if not moves:
             return O.nothing("lanes", "no lane needs a move", **data)
         return O.ok("lanes", **data)
+    if view == "lead":
+        return _lead_outcome(ledger, st, at, agent, cfg, Path(repo), data)
     data["text"] = LN.render_ledger(ledger, at)
     if not ledger:
         return O.nothing("lanes", "no lanes active in the window", **data)

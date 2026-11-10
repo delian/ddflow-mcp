@@ -7,6 +7,7 @@ to replace them with `--globs`.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from helpers import state_as_reader as state
 
 from ddflow.api import knowledge as K
 from ddflow.infra.log import EventLog
-from ddflow.services.bug_globs import inherit_globs
+from ddflow.services.bug_globs import fix_task_globs, inherit_globs
 
 SRC = ["ddflow/api/lifecycle/claim.py", "ddflow/services/bug_globs.py", "tests/test_claim.py"]
 
@@ -71,3 +72,45 @@ def test_a_named_path_does_not_match_the_same_basename_elsewhere():
 
 def test_a_bare_named_file_matches_a_wildcard_basename_glob():
     assert inherit_globs(["ddflow/services/*.py"], "config.py is slow") == ["ddflow/services/*.py"]
+
+
+def _tracked(repo: Path, rel: str, text: str = "") -> None:
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text(text)
+    subprocess.run(["git", "-C", str(repo), "add", rel], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "seed", "--no-verify"], check=True)
+
+
+def test_a_tool_bug_naming_a_test_file_gets_that_test_file(repo):
+    """DX-fixtask-edit-existing-test-glob: a ddflow-scoped bug inherits no source files,
+    but the test file its summary names is where the regression test goes, so the fix
+    task's globs carry it and the edit commits without `ddflow update --globs`."""
+    _tracked(repo, "tests/test_claim.py")
+    kept, _dropped = fix_task_globs(
+        repo,
+        "",
+        ["ddflow/api/lifecycle/claim.py"],
+        "the brief lists claim.py; the regression test goes in tests/test_claim.py",
+        tool_bug=True,
+        named_scope_at=20,
+    )
+    assert "tests/test_claim.py" in kept
+    assert "ddflow/api/lifecycle/claim.py" not in kept
+
+
+def test_a_named_test_file_is_kept_in_the_found_scope_too(repo):
+    """The found-scope path (a non-tool bug naming few files) already holds the named
+    test file, so the regression-test edit is covered there too (from `_named_files`,
+    not only from `named_test_globs`)."""
+    _tracked(repo, "ddflow/api/lifecycle/claim.py")
+    _tracked(repo, "tests/test_claim.py")
+    kept, _dropped = fix_task_globs(
+        repo,
+        "",
+        ["ddflow/api/lifecycle/claim.py"],
+        "the brief lists claim.py; the regression test goes in tests/test_claim.py",
+        tool_bug=False,
+        named_scope_at=20,
+    )
+    assert "tests/test_claim.py" in kept
+    assert "ddflow/api/lifecycle/claim.py" in kept

@@ -124,11 +124,12 @@ def test_recover_still_measures_every_tree(repo):
 
 def test_an_unknown_commit_is_not_reported_as_off_the_base(repo):
     """`merge-base --is-ancestor` exits 128 for a commit git does not know: that is
-    "could not tell", not "not an ancestor", and it is not remembered."""
+    "could not tell", not "not an ancestor": `on_base` answers None for it (never a definite
+    False a caller could read as "off the base", B-B3a93d1823), and it is not remembered."""
     from ddflow.infra.gitbatch import RepoFacts
 
     f = RepoFacts(repo)
-    assert f.on_base("0" * 40, "main") is False
+    assert f.on_base("0" * 40, "main") is None
     assert ("0" * 40, "main") not in f._on_base
 
 

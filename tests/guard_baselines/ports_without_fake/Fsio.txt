@@ -1,1 +1,0 @@
-# Fsio has no fake yet; delete this file in the change that adds ddflow/adapters/fakes/<family>.py. Never add one.

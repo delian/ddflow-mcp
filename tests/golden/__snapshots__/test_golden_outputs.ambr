@@ -2710,6 +2710,35 @@
           (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe
           fall back to a scratch merge in a throwaway worktree, slower and the same
           answer.
+      locks.optimistic = False   [default]
+          Optimistic concurrency (DX-lease-hunk-optimistic): when a plain claim's
+          globs overlap a live holder's on a non-generated file, run the `git merge-
+          tree` conflict probe between the holder's branch and the claimant's branch.
+          A clean merge conflates the two branches' disjoint hunks, so the claim is
+          GRANTED and the overlapping files are recorded `optimistic` on the lease
+          (the merge then rebases, re-running pin regeneration, instead of waiting); a
+          real conflict or a probe that could not run keeps the exclusive-lease
+          refusal (D-lease-overlap-only-by-break). Generated/pinned files
+          ([lease].shared_globs, append-only and export targets) stay exclusive. Off
+          (default) keeps the plain refusal. Change it for the project (`ddflow config
+          locks.optimistic ...`), for this machine (add --local), per run
+          (DDFLOW_LOCKS_OPTIMISTIC), or over MCP with `ddflow_configure`.
+      locks.review_reuse = 'off'   [default]
+          Whether a recorded review may be REUSED after the tree it covered moved
+          (main merged in or a rebase) instead of running it whole (LK-review-reuse).
+          'off' (default, until measured) never reuses: a review whose recorded tree
+          no longer matches is re-reviewed. 'disjoint' classifies each review gate
+          with `git patch-id --stable` of the item's own change plus disjoint changed
+          files -- when the item's own change is unchanged and the files main changed
+          are disjoint from the files the reviewer saw, the review is kept and the
+          reason recorded; when they overlap, only the overlapping files are re-
+          reviewed as a delta; anything git cannot tell invalidates (fail closed,
+          never a guess). Measured by the wrong-keep rate (a kept review followed by a
+          finding on the same files). An unrecognised value in a config file is warned
+          about, reported by `doctor` and falls back to 'off', the strictest (reuse is
+          off: a tree that moved invalidates the review); `config --set`,
+          `ddflow_configure` and the environment refuse it, and so does loading
+          ddflow's own source tree, where the file and the code are one commit.
       log.reuse_parsed = True   [default]
           Re-use already-parsed events instead of re-parsing the whole log on every
           read. Sound because the log is APPEND-ONLY: a line that has been parsed can
@@ -3147,6 +3176,54 @@
           mode under another name.
       metrics.lock_revert_value = 'strict'   [default]
           The value of `lock_revert_key` that is the strict mode.
+      notify.channel = 'terminal'   [default]
+          Where notifications go. 'terminal' writes to the operator's terminal; each
+          other choice is one network channel, reach outward (r-consent-outward), and
+          needs a grant before any adapter will send. An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to
+          'terminal', the strictest (a typo across clones is local, never a network
+          send); `config --set`, `ddflow_configure` and the environment refuse it, and
+          so does loading ddflow's own source tree, where the file and the code are
+          one commit.
+      notify.ask_channel = 'harness'   [default]
+          Where questions and approvals go. 'harness' is the in-band agent chat; each
+          other choice is one network channel and needs a grant first. An unrecognised
+          value in a config file is warned about, reported by `doctor` and falls back
+          to 'harness', the strictest (a typo across clones stays local, never a
+          network send); `config --set`, `ddflow_configure` and the environment refuse
+          it, and so does loading ddflow's own source tree, where the file and the
+          code are one commit.
+      notify.endpoints = {}   [default]
+          Adapter -> its whole hook URL. A URL here in a committed layer makes that
+          adapter unavailable.
+      notify.token_env = {}   [default]
+          Adapter -> the variable holding its token (a secret; keep it in the local
+          layer).
+      notify.send_timeout_s = 10.0   [default]
+          How long one notification send may take (a webhook POST, a mail exchange, a
+          desktop command) before it is dropped.
+      notify.ask_timeout_s = 300.0   [default]
+          How long the terminal waits for one line of an answer before it gives up
+          that attempt.
+      notify.ask_attempts = 3   [default]
+          Unusable answers the terminal takes before it gives up on a question.
+      notify.email_host = ''   [default]
+          The SMTP host mail is sent through (an address here in a committed layer
+          makes the email adapter unavailable).
+      notify.email_port = 587   [default]
+          The SMTP port.
+      notify.email_from = ''   [default]
+          The envelope sender (an address here in a committed layer makes the email
+          adapter unavailable).
+      notify.email_to = ''   [default]
+          The recipient (an address here in a committed layer makes the email adapter
+          unavailable).
+      notify.email_user = ''   [default]
+          The SMTP login (a secret; keep it in the local layer).
+      notify.email_password_env = ''   [default]
+          The variable holding the SMTP password.
+      notify.email_tls = True   [default]
+          STARTTLS on the SMTP connection; a host that cannot do it fails the send.
       output.max_rows = 50   [default]
           Rows a list shows by default in `board`, `doctor`, `recover`, `next` and
           `status` (CLI and MCP, text and `--json`). The rest is counted: the answer
@@ -3187,6 +3264,83 @@
       perf_metrics.aggregate_min_samples = 3   [default]
           Fewest samples a daily aggregate needs before its p50/p90/max are reported;
           below it the count is reported and the percentiles are None, never zero.
+      perf_metrics.detect_min_samples = 8   [default]
+          Fewest samples a series needs before the regression detector will call a
+          change; a smaller window says not-enough-data, never an alert.
+      perf_metrics.detect_relative_threshold = 0.2   [default]
+          The relative step a drift detector must exceed to fire -- the change is at
+          least this fraction above the baseline median (D-perf-metrics-answers
+          default +20%).
+      perf_metrics.detect_absolute_floor_s = 5.0   [default]
+          The absolute step (seconds) a drift detector must also exceed; a +20% change
+          smaller than this is noise, so microseconds do not alert.
+      perf_metrics.detect_persistence_windows = 2   [default]
+          How many consecutive windows must exceed both thresholds before a change
+          becomes a finding (a one-window spike is not a regression).
+      perf_metrics.detect_creep_alpha = 0.1   [default]
+          The EWMA alpha for slow creep that a fixed threshold never sees (1% a week
+          is invisible step-wise); the detector flags an EWMA that drifted past the
+          relative threshold across the window.
+      perf_metrics.detect_creep_threshold = 0.1   [default]
+          The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar
+          never catches 1% a week; the creep bar does, accumulated over the window).
+      perf_metrics.flaky_window_s = 604800   [default]
+          The rolling window the flaky-rate view (services/perf/flakyrate.py) measures
+          flake counts and quarantine proposals over; a flake older than this does not
+          count.
+      perf_metrics.flaky_quarantine_after = 3   [default]
+          Flake count of one test within flaky_window_s at which the rate view
+          proposes a quarantine (B-sched-flaky owns the lane; PM-flaky only measures
+          and proposes).
+      perf_metrics.flaky_quarantine_expiry_s = 2592000   [default]
+          Seconds a quarantine proposal stays open (its expiry); after this the test
+          is re-evaluated rather than quarantined forever.
+      perf_metrics.flaky_retry_cost_s = 60.0   [default]
+          Estimated wall seconds one failed->rerun cycle costs; the rate view
+          multiplies flakes in the window by this for retry cost (the flake log stores
+          no per-retry duration).
+      perf_metrics.budget_gate_p90_s = 180.0   [default]
+          A gate wall-time budget: the p90 seconds one gate may take in a window
+          before it is over budget (PM-budgets). The floor only tightens; raising it
+          is a recorded decision.
+      perf_metrics.budget_test_file_s = 120.0   [default]
+          A per-test-file budget: the seconds one test file's serial run may take
+          before the file is a split candidate (PM-budgets). The floor only tightens;
+          raising it is a recorded decision.
+      perf_metrics.budget_stage_lease_wait_s = 120.0   [default]
+          A lease-wait budget: the seconds an item may wait for a refused claim's
+          lease before the wait is a finding (PM-budgets). Only goes down; raising it
+          is a recorded decision.
+      perf_metrics.budget_stage_merge_wait_s = 120.0   [default]
+          A merge-wait budget: the seconds a landed branch may wait to be picked up
+          before the wait is a finding (PM-budgets). Only goes down; raising it is a
+          recorded decision.
+      perf_metrics.budget_breach_min_samples = 3   [default]
+          Fewest samples a series needs before its p90 is compared to a budget; below
+          it the check is not-enough-data, never a false clear (PM-budgets).
+      perf_metrics.budget_severity = 'warn'   [default]
+          What a budget breach does: 'warn' files a finding only; 'block' also refuses
+          and names the next call (split the file, see the slowest tests, raise with a
+          recorded reason). Ships warn (r-safe-by-default). An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to 'warn',
+          the strictest (a budget stays a finding, never a surprise refusal); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
+      perf_metrics.prop_min_observations = 3   [default]
+          Fewest observed cap values a parallel-cap proposal needs before it will
+          advise a cap (PM-prop-flow); below it the proposal is not-enough-data, never
+          a zero.
+      perf_metrics.prop_marginal_gain = 0.25   [default]
+          The fraction of the wall clock one more agent must save before its extra
+          parallelism is paid back (PM-prop-flow); below it the cap before it is the
+          proposed parallel cap.
+      perf_metrics.prop_batch_dominance = 2.0   [default]
+          The suite-lock wait as a multiple of the gate run that triggers a batch-
+          gates proposal (PM-prop-flow).
+      perf_metrics.prop_retire_payback = 2.0   [default]
+          The multiple of what a stage buys back that its wait must reach before a
+          retire-stage proposal fires (PM-prop-flow).
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the
@@ -4018,6 +4172,48 @@
           commands and rules that hold only here (how to run the full test suite, a
           forbidden path). The standard text stays in one place; this is the project's
           addition to it.
+      slo.target_command_p95_s = 2.0   [default]
+          The command-latency target: the p95 wall seconds of a brief or claim command
+          on the host. Bound from the perf store's per-command samples; below the
+          sample floor it is not-collected, never zero (PM-sampler supplies the
+          samples).
+      slo.target_gate_p90_s = 300.0   [default]
+          The gate-latency target: the p90 wall seconds one gate run may take. A gate
+          whose p90 exceeds this in the window is over target.
+      slo.target_queue_age_s = 600.0   [default]
+          The queue-age target: the p90 seconds an item waits ready-to-claimed. This
+          is the SLI that gets a burn-rate view (its window is long and its signal
+          monotone).
+      slo.target_unavailable_rate = 0.25   [default]
+          The unavailable target: the highest share of a gate's RAN verdicts that may
+          be `unavailable` (a reviewer that could not run is never `passed`). A skip
+          is not a pass and is excluded from the rate. One quarter is the contract, so
+          `ci` at ~11 percent is comfortably inside it.
+      slo.target_stuck_lanes = 2   [default]
+          The stuck-lane target: the most live lanes that may be idle past `[lanes]`
+          hold without activity before the SLI is over target. A lane that never
+          released and never renewed is waste, not progress.
+      slo.target_ci_false_red_rate = 0.1   [default]
+          The CI false-red target: the highest share of merges that produce a red-main
+          finding (a bug filed against the item within `[metrics]
+          lock_red_main_window_s` of the merge) that is not a real regression. It gets
+          a burn-rate view with queue age: a red CI is a capacity burn.
+      slo.target_log_events_per_item = 30.0   [default]
+          The log-growth target: the most committed log events one completed item may
+          add. Growth that tracks item count is healthy; growth that tracks retries is
+          rework.
+      slo.target_review_finding_rate = 0.6   [default]
+          The review-finding signal: the share of critic and rubber_duck rounds that
+          raise a finding. It is a review-quality SIGNAL, not an outage target -- the
+          SLO report shows it but never turns it into a breach (a gate that fails
+          55-57 percent is doing its job, not down).
+      slo.burn_rate_window_s = 2592000   [default]
+          The burn-rate window in seconds over which queue age and CI false-red are
+          extrapolated to a time-to-exhaustion (a 30-day budget viewed per hour).
+      slo.burn_rate_exhaust_s = 3600.0   [default]
+          The time-to-exhaustion (seconds) a burn-rate SLI must beat before it is
+          flagged `burning`: the budget is on track to be spent within this horizon.
+          The report only flags; it never refuses (r-safe-by-default).
       swarm.w_critical = 3.0   [default]
           Weight of the critical-path term in the dispatch score: an item on the
           longest dependency chain is offered before one with slack. Zero ignores the

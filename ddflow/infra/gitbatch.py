@@ -105,12 +105,14 @@ class RepoFacts:
                 if len(s) in (40, 64):
                     self._on_base[(s, base)] = s not in missing
 
-    def on_base(self, sha: str, base: str) -> bool:
-        """Is ``sha`` reachable from ``base``?"""
+    def on_base(self, sha: str, base: str) -> bool | None:
+        """Is ``sha`` reachable from ``base``? ``None`` when git could not say (an unknown
+        commit, a refused merge-base): an unknown is NOT "off the base", it is unknown, and it
+        is never remembered (Bd3a93d1823)."""
         key = (sha, base)
         if key not in self._on_base:
             known = G.is_ancestor(self.repo, sha, base)
             if known is None:
-                return False  # unknown: not remembered, and never "on the base"
+                return None
             self._on_base[key] = known
         return self._on_base[key]

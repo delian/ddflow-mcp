@@ -1,0 +1,189 @@
+"""Regression and drift detection over a perf series (PM-detect).
+
+Pure functions, no I/O. A step is a change that BOTH a relative threshold (default +20%)
+and an absolute floor (default +5 s) must exceed, on at least `detect_min_samples` samples,
+persisting across `detect_persistence_windows` consecutive windows -- against a baseline per
+env-fingerprint class, so a changed commit is separated from a changed machine. An EWMA band
+catches slow creep that a fixed threshold never sees (1% a week). Returns a Finding (series,
+window, effect size, sample size, suspected change) or None; a probe that cannot run is None,
+never zero.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from statistics import median
+
+
+def mad(values: list[float]) -> float:
+    """Median absolute deviation from the median (robust scale)."""
+    m = median(values)
+    return median([abs(v - m) for v in values])
+
+
+def _robust_sigma(values: list[float]) -> float:
+    """1.4826 * MAD as a robust sigma (matches the normal distribution's SD)."""
+    return 1.4826 * mad(values)
+
+
+def median_shift(baseline: list[float], window: list[float]) -> tuple[float, float | None, float]:
+    """(median change, relative change, robust z-score) of ``window`` against ``baseline``.
+    The relative change is None when the baseline median is 0 (division undefined)."""
+    bmed = median(baseline)
+    wmed = median(window)
+    sigma = _robust_sigma(baseline) or 1.0
+    rel = (wmed - bmed) / bmed if bmed else None
+    return wmed - bmed, rel, (wmed - bmed) / sigma
+
+
+def _percentile(values: list[float], p: float) -> float:
+    """A percentile by linear interpolation between the bracketing ranks (R-7 style)."""
+    ordered = sorted(values)
+    idx = (len(ordered) - 1) * p / 100.0
+    lo = int(idx)
+    hi = min(lo + 1, len(ordered) - 1)
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (idx - lo)
+
+
+def _ewma(values: list[float], alpha: float) -> float:
+    """Exponentially-weighted mean (``alpha`` weights the newest observation each step; the
+    final smoothed value is what the creep test compares, not the last raw sample)."""
+    out = values[0]
+    for v in values[1:]:
+        out = alpha * v + (1 - alpha) * out
+    return out
+
+
+def _creep_drift(baseline: list[float], window: list[float], alpha: float) -> float:
+    """The signed EWMA drift over the baseline median (negative = a speedup, 0 = flat)."""
+    return _ewma(window, alpha) - median(baseline)
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One detected regression: what series and window, how big, on what machine class."""
+
+    series: str
+    env: str
+    start: float
+    end: float
+    median_s: float  # the window's median
+    effect_size: float | None  # relative change vs baseline median (None when the baseline is 0)
+    absolute_s: float  # absolute change vs baseline median
+    sample_size: int
+    suspected: str
+
+
+@dataclass(frozen=True)
+class DetectKnobs:
+    """The detect thresholds this pure module needs (r-core-pure: core is handed its knobs,
+    it does not read ``config_sections``). The defaults mirror ``PerfMetricsConfig``'s; a
+    caller with a loaded config passes it in and this module reads its ``detect_*`` fields."""
+
+    detect_min_samples: int = 8
+    detect_relative_threshold: float = 0.20
+    detect_absolute_floor_s: float = 5.0
+    detect_persistence_windows: int = 2
+    detect_creep_alpha: float = 0.10
+    detect_creep_threshold: float = 0.10
+
+
+def detect_series(
+    series: str,
+    env: str,
+    baseline: list[float],
+    window: list[float],
+    start: float = 0.0,
+    end: float = 0.0,
+    *,
+    cfg: DetectKnobs | None = None,
+    suspected: str = "",
+) -> Finding | None:
+    """One step or creep over ``window`` against ``baseline``. Returns None below the sample
+    floor or under both thresholds -- the two are distinct, and a "none" is not a pass."""
+    cfg = cfg or DetectKnobs()
+    if len(baseline) < max(cfg.detect_min_samples, 2) or len(window) < max(
+        cfg.detect_min_samples, 2
+    ):
+        return None
+    abs_s, rel, _z = median_shift(baseline, window)
+    stepped = abs_s >= cfg.detect_absolute_floor_s and (
+        (rel is None and abs_s > 0) or (rel is not None and rel >= cfg.detect_relative_threshold)
+    )  # a zero baseline makes the relative gate undefined: a flat (0) delta never steps
+    drift = _creep_drift(baseline, window, cfg.detect_creep_alpha)
+    bmed = median(baseline)
+    # Creep is gated by the EWMA DRIFT (a slow slide can drift past the floor while the
+    # median shift is still under it -- 1% a week), not the median shift, and by a NONZERO
+    # median shift so a lone trailing spike (median never moved) is not a regression.
+    crept = (
+        abs_s > 0
+        and drift >= cfg.detect_absolute_floor_s
+        and drift > bmed * cfg.detect_creep_threshold
+    )
+    if not (stepped or crept):
+        return None
+    return Finding(series, env, start, end, median(window), rel, abs_s, len(window), suspected)
+
+
+def detect(
+    series: str,
+    env: str,
+    baseline: list[float],
+    windows: list[tuple[float, float, list[float]]],
+    *,
+    cfg: DetectKnobs | None = None,
+    suspected: str = "",
+) -> Finding | None:
+    """The step that PERSISTS: ``detect_persistence_windows`` consecutive windows must each
+    exceed both thresholds before the change becomes a Finding (a one-window spike is not a
+    regression)."""
+    cfg = cfg or DetectKnobs()
+    streak = 0
+    for start, end, vals in windows:
+        # A window under the sample floor is NOT a miss (an unrun probe is not a regression,
+        # and not a healthy pass either): it is skipped, so the persistence streak survives it.
+        if len(baseline) < cfg.detect_min_samples or len(vals) < cfg.detect_min_samples:
+            continue
+        hit = detect_series(series, env, baseline, vals, start, end, cfg=cfg) is not None
+        streak = streak + 1 if hit else 0
+        if streak >= cfg.detect_persistence_windows:
+            return detect_series(
+                series, env, baseline, vals, start, end, cfg=cfg, suspected=suspected
+            )
+    return None
+
+
+def burn_rate(
+    short: list[float],
+    long: list[float],
+    budget_s: float,
+    *,
+    min_samples: int = 8,
+) -> dict[str, float | int | None]:
+    """How fast a series consumes a stated budget: the p90 of a short vs a long window, the
+    short burn rate as a fraction of the budget, and whether the short window burns faster
+    than the long (so the budget runs out sooner). The SAME shape on too-few-samples: the
+    figures are None, never a second schema (a caller treats "none" by the None, not by a
+    missing key)."""
+    shape = {
+        "short_p90": None,
+        "long_p90": None,
+        "budget_left_short": None,
+        "short_n": len(short),
+        "long_n": len(long),
+        "short_burn_rate": None,
+        "short_burns_faster": None,
+    }
+    if len(short) < max(min_samples, 2) or len(long) < max(min_samples, 2):
+        return shape
+    sp90 = _percentile(short, 90)
+    lp90 = _percentile(long, 90)
+    shape["short_p90"] = sp90
+    shape["long_p90"] = lp90
+    shape["budget_left_short"] = budget_s - sp90
+    shape["short_burn_rate"] = sp90 / budget_s if budget_s else None
+    shape["short_burns_faster"] = sp90 > lp90
+    return shape
+
+
+__all__ = ["DetectKnobs", "Finding", "burn_rate", "detect", "detect_series", "mad", "median_shift"]
