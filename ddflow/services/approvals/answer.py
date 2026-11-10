@@ -15,6 +15,8 @@ from ..ask import engine as E
 ANSWER_SOURCES = E.ANSWER_SOURCES
 APPROVED = E.APPROVED
 DENIED = E.DENIED
+ANSWERED = E.ANSWERED_WORD
+QUESTION = E.QUESTION
 AskRefused = E.AskRefused
 
 
@@ -29,8 +31,10 @@ def person(cfg, agent: str) -> Actor:
     return resolve_actor(cfg, os_user(), requested_agent=agent)
 
 
-def answer(log, cfg, ask_id: str, outcome: str, *, actor: Actor, digest: str) -> None:
-    E.answer(log, cfg, ask_id, outcome, actor=actor, digest=digest, via="cli", level=1)
+def answer(
+    log, cfg, ask_id: str, outcome: str, *, actor: Actor, digest: str, text: str = ""
+) -> None:
+    E.answer(log, cfg, ask_id, outcome, actor=actor, digest=digest, text=text, via="cli", level=1)
 
 
 def revoke(log, ask_id: str, *, actor: Actor) -> None:

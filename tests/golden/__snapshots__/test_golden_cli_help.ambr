@@ -36,6 +36,19 @@
   
   '''
 # ---
+# name: test_help[ddflow approvals answer]
+  '''
+  usage: ddflow approvals answer [-h] [--text TEXT] id
+  
+  positional arguments:
+    id           the question id
+  
+  options:
+    -h, --help   show this help message and exit
+    --text TEXT  the answer: one of the question's options, or the free text
+  
+  '''
+# ---
 # name: test_help[ddflow approvals approve]
   '''
   usage: ddflow approvals approve [-h] [--all] [--digest DIGEST] [ID ...]
@@ -176,10 +189,10 @@
 # ---
 # name: test_help[ddflow approvals]
   '''
-  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw} ...
+  usage: ddflow approvals [-h] {list,pending,log,show,request,ask,attest,approve,deny,answer,revoke,withdraw} ...
   
   positional arguments:
-    {list,pending,log,show,request,ask,attest,approve,deny,revoke,withdraw}
+    {list,pending,log,show,request,ask,attest,approve,deny,answer,revoke,withdraw}
       list                the approval requests waiting for a person, and the approved ones not yet
                           spent
       pending             the requests still waiting for a person, each with its digest and its
@@ -197,6 +210,7 @@
       approve             a PERSON approves one request or every pending one, once (refused under an
                           agent identity)
       deny                a PERSON denies one request (refused under an agent identity)
+      answer              a PERSON answers a question ask: free text, or one of its options
       revoke              a PERSON takes back an approval that is not spent yet
       withdraw            the asker takes back its own request while it waits
   
@@ -3861,6 +3875,7 @@
     'ddflow abandon',
     'ddflow adopt',
     'ddflow approvals',
+    'ddflow approvals answer',
     'ddflow approvals approve',
     'ddflow approvals ask',
     'ddflow approvals attest',
