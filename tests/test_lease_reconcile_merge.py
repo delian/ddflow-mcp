@@ -84,7 +84,7 @@ def test_a_stale_pre_reconcile_pass_does_not_clear_the_guard(repo):
     assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
 
 
-def test_a_post_reconcile_full_pass_clears_the_guard_under_full(repo):
+def test_a_post_reconcile_ci_pass_does_not_clear_the_guard_under_full(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
     run_cli(repo, "config", "--set", "lease.reconcile_tests", "full")
@@ -96,3 +96,18 @@ def test_a_post_reconcile_full_pass_clears_the_guard_under_full(repo):
     st = _state(repo)
     v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
     assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
+
+
+def test_an_unknown_reconcile_fails_closed_and_still_blocks(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    # The merge could not read the changed files (git could not answer): the reconcile
+    # records `unknown` and complete stays blocked, never silently cleared.
+    EventLog(repo).append(
+        "merge.reconciled",
+        "T1",
+        {"files": [], "base": "0" * 40, "main": "0" * 40, "unknown": True},
+    )
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled" in b or "could not read" in b for b in v.blockers), v.blockers

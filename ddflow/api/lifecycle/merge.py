@@ -106,6 +106,16 @@ def _record_reconciled(
         return
     fork = it.base_sha or landed_before
     mine = CH.changed_paths(repo, fork, tip=branch_head, include=("committed",), fork=True)
+    if mine is None:
+        # git could not tell what this item changed (a lost rev, a shallow tree): fail CLOSED
+        # with a reconcile whose empty file list still blocks, so an unreconciled overlap is
+        # never silently skipped when the probe cannot answer.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": [], "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
     if not mine:
         return
     files: list[str] = []
@@ -124,6 +134,11 @@ def _record_reconciled(
             include=("committed",),
             fork=False,
         )
+        if theirs is None:
+            # git could not tell what the other changed: fail CLOSED by treating MY files as
+            # the overlap, so an unreadable rival still holds complete for a reconciled test.
+            files.extend(mine)
+            continue
         if theirs:
             files.extend(set(mine) & set(theirs))
     if files:

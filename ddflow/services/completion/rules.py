@@ -292,8 +292,11 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
     """When merge reconciled files another item changed since this one forked, complete is
     refused until the tests pass on the reconciled tree (D-lease-hold-limit-r2); "" when
     nothing is owed, the guard is off, or a pass already sits on the record."""
+    if cfg.lease.reconcile_tests == "off":
+        return ""
     files = it.reconciled.get("files", []) if it.reconciled else []
-    if not files or cfg.lease.reconcile_tests == "off":
+    unknown = bool(it.reconciled.get("unknown")) if it.reconciled else False
+    if not files and not unknown:
         return ""
     reconciled_at = it.reconciled.get("at") or ""
 
@@ -313,8 +316,14 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
         return ""
     base = (it.reconciled.get("base") or "")[:12]
     main = (it.reconciled.get("main") or "")[:12]
-    named = ", ".join(files[:8])
     scope = "full suite" if cfg.lease.reconcile_tests == "full" else "affected tests"
+    if unknown:
+        return (
+            f"merge could not read the changed files (git could not answer, base {base}, main "
+            f"{main}): the {scope} must pass on the reconciled tree before complete "
+            f"(`ddflow gate run {it.id} unit_tests`), or set [lease].reconcile_tests = off"
+        )
+    named = ", ".join(files[:8])
     return (
         f"merge reconciled {named} that another item changed since this one forked "
         f"(base {base}, main {main}): the {scope} must pass on the reconciled tree before "
