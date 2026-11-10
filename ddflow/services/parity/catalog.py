@@ -46,28 +46,12 @@ class CatalogError(ValueError):
 
 
 def _sections() -> tuple[tuple[str, type], ...]:
-    """The descriptor's typed sections, read from the live dataclasses (the schema owner)."""
-    return (
-        ("mcp", HR.Mcp),
-        ("instructions", HR.Instructions),
-        ("hooks", HR.Hooks),
-        ("plugin", HR.Plugin),
-        ("commands", HR.Commands),
-        ("skills", HR.Skills),
-        ("subagents", HR.Subagents),
-        ("env", HR.Env),
-        ("worktrees", HR.Worktrees),
-        ("transcripts", HR.Transcripts),
-        ("verified", HR.Verified),
-        ("detect", HV.Detect),
-        ("headless", HV.Headless),
-        ("continuation", HV.Continuation),
-        ("orchestration", HV.Orchestration),
-        ("meters", HV.Meters),
-        ("caps", HV.Caps),
-        ("autonomy", HV.Autonomy),
-        ("telemetry", HV.Telemetry),
-    )
+    """The descriptor's typed sections, read from the live schema owner (``harnessreg``).
+
+    ``HR._SECTIONS`` owns the section map (it spreads ``harnessv2.V2_SECTIONS``); ``mcp`` and
+    ``verified`` are built separately in ``harnessreg.parse``, so they are added here too.
+    """
+    return tuple({**HR._SECTIONS, "mcp": HR.Mcp, "verified": HR.Verified}.items())
 
 
 def field_paths() -> frozenset[str]:
@@ -192,7 +176,7 @@ def load(path: str | Path | None = None) -> Catalog:
         "(expected version, [in_agent], [orchestrator], [history])",
     )
     _require(
-        "version" not in raw or isinstance(raw.get("version"), int),
+        "version" not in raw or type(raw.get("version")) is int,
         p.name,
         "version must be an int when present",
     )

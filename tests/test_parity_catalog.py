@@ -193,6 +193,27 @@ def test_a_retired_slug_with_no_live_row_is_a_recorded_removal(tmp_path):
     assert any(h.feature == "gone" and h.action == "retire" for h in catalog.history)
 
 
+def test_a_non_int_version_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "version = \"banana\"\n[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
+        "checks = [\"facts\"]\n[[history]]\nfeature = \"x\"\naction = \"add\"\n"
+        "date = \"2026-11-10\"\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def test_a_non_string_note_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "[[in_agent]]\nfeature = \"x\"\ntitle = \"X\"\ndescriptor_fields = []\nchecks = []\n"
+        "note = 1\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
 def _write(tmp_path, body: str) -> None:
     (tmp_path / "catalog.toml").write_text(body)
 
