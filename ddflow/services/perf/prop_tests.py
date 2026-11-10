@@ -79,12 +79,20 @@ _NEXT_CALLS = {
 
 
 def _floor(rollup: dict) -> float | None:
-    """The measured critical-path floor, or ``None`` when the rollup carried none. ``None``
-    is a probe that did not run -- never a measured 0 and never a worker raise."""
+    """The measured critical-path floor, or ``None`` when the rollup carried none or a
+    non-finite one. ``None`` is a probe that did not run -- never a measured 0 and never a
+    worker raise from a floor that never measured."""
     shard_floor = rollup.get("critical_path_floor_s")
-    if not isinstance(shard_floor, (int, float)) or shard_floor <= 0:
+    if not isinstance(shard_floor, (int, float)) or isinstance(shard_floor, bool):
         return None
-    return float(shard_floor)
+    shard_floor = float(shard_floor)
+    if not _is_finite(shard_floor) or shard_floor <= 0:
+        return None
+    return shard_floor
+
+
+def _is_finite(value: float) -> bool:
+    return value == value and value not in (float("inf"), float("-inf"))
 
 
 def propose_split_files(
@@ -210,8 +218,8 @@ def propose_selection(
             risk="a wider selection runs a larger fraction of the suite per change: it is wider, not the suite",
             because=f"{misses} missed failure(s) across {len(runs)} runs: widen the selection",
         )
-    if measured and all(_fraction(r) == 1.0 for r in runs):
-        # Every run selected the whole suite AND missed nothing (misses was measured): narrow.
+    if measured and misses == 0 and all(_fraction(r) == 1.0 for r in runs):
+        # Every run selected the whole suite AND missed nothing (misses was measured AND 0): narrow.
         return Proposal(
             "selection",
             "narrow",
