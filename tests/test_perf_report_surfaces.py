@@ -113,6 +113,14 @@ def test_the_json_report_is_deterministic_for_the_same_log(repo):
     assert a == b
 
 
+def test_a_path_with_a_space_is_quoted_in_the_cli_next_call_only():
+    from ddflow.api.perfreport import _next_calls
+
+    cli, mcp = _next_calls("html", "my report.html", "7d")
+    assert cli.endswith("--out 'my report.html'")  # the shell form is one argv word
+    assert mcp.endswith("out=my report.html")  # the MCP form is key=value, not shell
+
+
 def test_report_honours_a_phase_filter(repo):
     _seed(repo)  # P1 with T1, whose ci gate passed
     run_cli(repo, "phase", "add", "P2", "--title", "Q")
