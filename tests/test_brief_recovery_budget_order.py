@@ -3,11 +3,17 @@
 
 `scan(view=True)` measured stale worktrees in state order up to
 `lease.scan_view_trees_max`; past that cap a clean merged run ate the budget and the one
-tree holding unmerged work was reported "NOT MEASURED", while the cap overflow raised the
-RESUME alarm over dozens of clean leftovers. The view now ranks candidates by their cheap
+tree holding work was reported "NOT MEASURED", while the cap overflow raised the RESUME
+alarm over dozens of clean leftovers. The view now ranks candidates by their cheap
 unmerged-commit signal (ahead of the base) before spending the budget, so the budget goes
 to likely-work first, and the clean leftovers past the cap are a quiet count line, not the
 "could not be measured" alarm.
+
+The free, batched signal is the unmerged count; uncommitted-only dirt is `git status`
+(one process per tree), the exact process the cap exists to bound, so it cannot be ranked
+without erasing the cap. A tree that holds only uncommitted files is therefore still
+`budget_capped` in the view -- but `salvageable` stays None (never clean, never swept), so
+the UNCAPPED `ddflow recover` still measures and flags it.
 """
 
 from __future__ import annotations
@@ -80,6 +86,26 @@ def test_a_tree_holding_unmerged_work_is_measured_before_clean_leftovers(repo):
     assert by["C"].unmerged_commits > 0
     capped = [r for r in recs if r.budget_capped]
     assert capped, "the clean leftovers past the cap are budget-capped, not unmeasurable"
+
+
+def test_an_uncommitted_tree_past_the_view_cap_is_still_flagged_by_recover(repo):
+    """A tree holding only UNCOMMITTED files is `git status`, the capped process, so the
+    view cannot rank it ahead of clean leftovers -- but it must still never read "clean".
+    The capped view leaves it budget_capped (salvageable None), and UNCAPPED recover
+    measures it."""
+    _seed(repo, ["A", "B", "C"])
+    _orphan(repo, "A")
+    _orphan(repo, "B")
+    dirty = _orphan(repo, "C")  # ahead == 0, but an uncommitted file
+    (dirty / "unshipped.py").write_text("# only copy\n")
+
+    cfg = Config.load(repo)
+    cfg.lease.scan_view_trees_max = 1
+    view = {r.item: r for r in L.scan(EventLog(repo, "scanner"), cfg, repo, view=True)}
+    assert view["C"].salvageable is None  # never clean
+    assert view["C"].budget_capped
+    full = {r.item: r for r in L.scan(EventLog(repo, "scanner"), cfg, repo, view=False)}
+    assert full["C"].salvageable is True, "uncapped recover must still flag the work"
 
 
 def test_capped_clean_trees_render_as_one_quiet_line_not_the_alarm():
