@@ -5,20 +5,22 @@ its KIND runs) and the gate definitions, the sets of gates that can be merged on
 tree. Three kinds of merge, one proposal set each (D-path-merge-answers):
 
 * ``run_together`` — two processes on the same tree run CONCURRENTLY instead of one after
-  the other: the rubber_duck and critic reviews (one review command reviews both, default
-  concurrent). A knob (``[review].parallel_gates``) turns this off.
+  the other: the rubber_duck and critic reviews (one review command reviews both; the
+  review runner merges them under ``[review].combined_under_lines`` lines, so this
+  proposal says they CAN share one review diff, never that they must).
 * ``record_together`` — bookkeeping gates that are RECORDED in one call, each keeping its
   OWN outcome and note (research+rules+implement, bug_hunt+dedupe); refused for a gate
-  that requires evidence of its own run.
+  in ``gates.evidence_required`` (it needs evidence of its own run, a different input).
 * ``covered_by`` — a gate a larger run already took on this tree, so it is recorded
   covered (unit_tests covered by ci on the same tree, D-test-economy-r2), never silently
-  skipped.
+  skipped; the covering run must come EARLIER in the pipeline.
 
 Falsifier: a proposal that includes a gate whose INPUTS differ. Each merge group here is
 one INPUT CLASS: bookkeeping gates record nothing (one input), the review pair shares the
 review diff of one tree, and a covered gate shares the covering run's tree. A group is
-proposed only when every member gate is present in the item's pipeline and no member's
-inputs differ from the group's.
+proposed only when every member gate is present in the item's pipeline, and no member's
+inputs differ from the group's: a bookkeeping member in ``gates.evidence_required`` has an
+own-run-evidence input and is dropped from its group.
 
 Research: R-path-merge. The controller consumes this; the proposal-record form is a later
 task (text first).
@@ -59,11 +61,14 @@ def _pipeline(cfg, item) -> list[str]:
     return list(kind_pipeline(cfg, item.kind) if item else [])
 
 
-def _groups(kind: str, groups: tuple, pipeline: set[str]) -> list[dict]:
+def _groups(kind: str, groups: tuple, pipeline: set[str], evidence: set[str]) -> list[dict]:
     """The groups fully present in the item's pipeline; a partial group is not proposed (a
-    gate the item does not run is not a candidate)."""
+    gate the item does not run is not a candidate), and a bookkeeping group whose member is
+    in ``evidence_required`` is dropped (its input is an own run, not 'none')."""
     out = []
     for gates in groups:
+        if kind == BOOKKEEPING_INPUT and any(g in evidence for g in gates):
+            continue
         if all(g in pipeline for g in gates):
             out.append({"gates": list(gates), "input": kind})
     return out
@@ -75,14 +80,17 @@ def gate_merge_candidates(state: State, cfg, item) -> dict:
     here."""
     pipe = _pipeline(cfg, item)
     present = set(pipe)
+    evidence = set(getattr(cfg.gates, "evidence_required", ()) or ())
     covered = [
         {"gate": covered, "by": covering, "input": COVERED_INPUT}
         for covered, covering in COVERED_BY.items()
-        if covered in present and covering in present
+        if covered in present
+        and covering in present
+        and pipe.index(covering) < pipe.index(covered)
     ]
     return {
-        "run_together": _groups(REVIEW_PAIR_INPUT, RUN_TOGETHER, present),
-        "record_together": _groups(BOOKKEEPING_INPUT, RECORD_TOGETHER, present),
+        "run_together": _groups(REVIEW_PAIR_INPUT, RUN_TOGETHER, present, evidence),
+        "record_together": _groups(BOOKKEEPING_INPUT, RECORD_TOGETHER, present, evidence),
         "covered_by": covered,
         "pipeline": pipe,
         "next": {

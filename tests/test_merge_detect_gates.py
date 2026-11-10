@@ -77,6 +77,21 @@ def test_covered_by_maps_each_covered_gate_to_one_coverer():
     assert COVERED_BY.get("unit_tests") == "ci"
 
 
+def test_covered_by_is_not_proposed_when_the_coverer_comes_after_the_covered_gate():
+    # ci AFTER unit_tests cannot have taken it on this tree -> no covered_by
+    reordered = ["unit_tests", "ci"]
+    data = gate_merge_candidates(None, cfg_with(reordered), task())
+    assert data["covered_by"] == []
+
+
+def test_a_bookkeeping_member_that_needs_its_own_evidence_is_dropped():
+    cfg = cfg_with(FULL)
+    cfg.gates.evidence_required = ["implement"]
+    record = gate_merge_candidates(None, cfg, task())["record_together"]
+    assert all(tuple(r["gates"]) != ("research", "rules", "implement") for r in record)
+    assert ("bug_hunt", "dedupe") in {tuple(r["gates"]) for r in record}
+
+
 def test_text_renders_proposals_and_names_the_next_call():
     out = text(gate_merge_candidates(None, cfg_with(FULL), task()))
     assert "run together: rubber_duck, critic" in out
