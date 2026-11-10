@@ -152,13 +152,14 @@ def _maybe_float(value: object) -> float | None:
 
 def _valid_env_key(env: str) -> str:
     """An env key is a machine-class digest, never a hostname, user or path. A posted line
-    must not inject identity, so any key carrying a path/address marker, or whose base is
-    not a hex digest (a hostname or username), is dropped."""
+    must not inject identity, so any key carrying a path/address marker, or that is not the
+    digest the wrapper emits (12 hex chars, optionally ``.bare|container|vm|unavailable``),
+    is dropped."""
     if not env:
         return ""
     if any(c in env for c in ("/", "\\", ":", "@", " ", "\n")):
         return ""
-    if not re.fullmatch(r"[0-9a-f]+", env.split(".", 1)[0]):
+    if not re.fullmatch(r"[0-9a-f]{12}(?:\.(?:bare|container|vm|unavailable))?", env):
         return ""
     return env
 
