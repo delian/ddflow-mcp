@@ -184,6 +184,14 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
 
 
 def launch_env(ep: Endpoint) -> dict[str, str]:
+    """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read live
+    at launch, so a revoked variable refuses the launch instead of running stale)."""
+    if not ep.api_key_env:
+        return {}
+    return {ep.api_key_env: ep.api_key_env}
+
+
+def secret_env(ep: Endpoint) -> dict[str, str]:
     """`LaunchSpec.secret_env` for the key: child variable -> resolved VALUE. The value is
     read here (its variable first, then its key file, the same resolver the reviewers use)
     and goes to the child's environment only -- never into the process environment nor the
@@ -219,13 +227,15 @@ def probe_plan(ep: Endpoint, harness: str) -> Result:
 @dataclass(frozen=True)
 class Prepared:
     """What a launcher needs of an endpoint: pass ``home`` as `LaunchSpec.home`, ``env`` as
+    `LaunchSpec.env` (child variable -> SOURCE NAME), ``secret_env`` as
     `LaunchSpec.secret_env` (a child variable -> resolved key VALUE) and ``model`` to the
     harness's model flag."""
 
     endpoint: Endpoint
     home: Path
     config: Path
-    env: dict[str, str] = field(repr=False)  #: the key env var -> resolved key VALUE (a secret)
+    env: dict[str, str]  #: the key env var -> SOURCE NAME (the value is read live at launch)
+    secret_env: dict[str, str] = field(repr=False)  #: the key env var -> resolved key VALUE (a secret)
     model: str
     probe: Result  #: the live tool-call probe: `unavailable` until the operator runs it
 
@@ -267,4 +277,4 @@ def prepare(
     cfg = write_private(ep, harness, home)
     if isinstance(cfg, Result):
         return cfg
-    return Prepared(ep, home, cfg, launch_env(ep), model_arg(ep), probe_plan(ep, harness))
+    return Prepared(ep, home, cfg, launch_env(ep), secret_env(ep), model_arg(ep), probe_plan(ep, harness))

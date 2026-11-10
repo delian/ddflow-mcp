@@ -70,7 +70,7 @@ def test_another_agents_expired_lease_names_the_one_line_takeover(repo, monkeypa
     code, out, err = run_cli(repo, "claim", "T1", "--no-worktree", agent="b")
     text = out + err
     assert code == 3, text
-    assert "ddflow recover --item T1`, then `ddflow claim T1 --force" in text, text
+    assert "ddflow recover --item T1`, then `ddflow claim T1 --approval request`" in text, text
 
 
 def _grace0(repo: Path) -> None:

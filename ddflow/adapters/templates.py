@@ -8,7 +8,7 @@ the subset both renderers agree on.
 Two shapes, one seam:
 
 - `render(text, **vars)` renders a template STRING;
-- `render_from(directory, name, **vars)` renders a template FILE under `directory`.
+- `render_from(directory, template, **vars)` renders a template FILE under `directory`.
 
 The default adapter is `JinjaRenderer` (Jinja2 when importable, a strict stdlib renderer
 otherwise); the fake `FakeTemplates` is that same strict stdlib renderer, so a test never
@@ -40,8 +40,8 @@ class Templates(Protocol):
     def render(self, text: str, **vars: Any) -> str:
         """`text` with `vars` substituted; a missing name raises `TemplateError`."""
 
-    def render_from(self, directory: Path | str, name: str, **vars: Any) -> str:
-        """Template file `name` under `directory`, rendered with `vars`; strict."""
+    def render_from(self, directory: Path | str, template: str, **vars: Any) -> str:
+        """Template file `template` under `directory`, rendered with `vars`; strict."""
 
 
 def _read(directory: Path | str, name: str) -> str:
@@ -70,20 +70,20 @@ class JinjaRenderer:
         except jinja2.TemplateError as exc:
             raise TemplateError(str(exc)) from exc
 
-    def render_from(self, directory: Path | str, name: str, **vars: Any) -> str:
+    def render_from(self, directory: Path | str, template: str, **vars: Any) -> str:
         # File layouts keep their trailing newline and their block newlines (the lane
         # provider blocks are JSON, the instructions are markdown); both engines agree.
         try:
             import jinja2
         except ImportError:
-            return _render_file_stdlib(_read(directory, name), vars)
+            return _render_file_stdlib(_read(directory, template), vars)
         env = jinja2.Environment(  # nosec B701
             loader=jinja2.FileSystemLoader(str(directory)),
             undefined=jinja2.StrictUndefined,
             keep_trailing_newline=True,
         )
         try:
-            return env.get_template(name).render(**vars)
+            return env.get_template(template).render(**vars)
         except jinja2.TemplateError as exc:
             raise TemplateError(str(exc)) from exc
 
