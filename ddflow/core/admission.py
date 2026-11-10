@@ -80,9 +80,10 @@ def real_overlap(
     so the answer falls back to the prefix rule (`conflicts`).
 
     Only a WILDCARD glob in ``theirs`` can cover files its holder never touches; that pair
-    survives only when ``mine`` covers one of the actually-changed paths. An exact
-    (wildcard-free) ``theirs`` path is declared work -- changed yet or not -- so it always
-    overlaps. ``shared`` globs overlap nothing, exactly as in `conflicts`.
+    survives only when an actually-changed path sits under BOTH ``mine`` and ``theirs`` (it
+    really is this glob's work, not another of the holder's globs) and under the claimant's
+    ``mine``. An exact (wildcard-free) ``theirs`` path is declared work -- changed yet or
+    not -- so it always overlaps. ``shared`` globs overlap nothing, exactly as in `conflicts`.
     """
     pairs = conflicts(mine, theirs, shared)
     if changed is None:
