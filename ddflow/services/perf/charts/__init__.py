@@ -81,9 +81,10 @@ def line_trend(
     def y(v: float) -> float:
         return height - pad - (height - 2 * pad) * ((v - lo) / (hi - lo))
 
-    def poly(xs: list[float | None], *, colour: str) -> str:
-        # a gap is a break: one <polyline> per contiguous run, so a missing sample draws
-        # nothing and the line does not fabricate a segment across it
+    def poly(xs: list[float | None], *, colour: str, dash: bool = False) -> str:
+        # a gap is a break: one stroke per contiguous run, and a lone sample is a marker
+        # (SVG does not stroke a one-point polyline), so a missing sample draws nothing
+        # and a single present sample is still visible
         runs: list[list[tuple[float, float]]] = []
         cur: list[tuple[float, float]] = []
         for i, v in enumerate(xs):
@@ -95,23 +96,24 @@ def line_trend(
             cur.append((x(i), y(v)))
         if cur:
             runs.append(cur)
+        dash_attr = ' stroke-dasharray="4 4"' if dash else ""
         out = []
         for seg in runs:
-            d = " ".join(f"{_fmt(px)},{_fmt(py)}" for px, py in seg)
-            out.append(f'<polyline fill="none" stroke="{colour}" stroke-width="2" points="{d}"/>')
+            if len(seg) == 1:
+                px, py = seg[0]
+                out.append(f'<circle cx="{_fmt(px)}" cy="{_fmt(py)}" r="3" fill="{colour}"/>')
+            else:
+                d = " ".join(f"{_fmt(px)},{_fmt(py)}" for px, py in seg)
+                out.append(
+                    f'<polyline fill="none" stroke="{colour}" stroke-width="2"{dash_attr} points="{d}"/>'
+                )
         return "".join(out)
 
     body = [poly(series, colour=PALETTE[0])]
     if band is not None:
         lower, upper = band
-        up = [(x(i), v) for i, v in enumerate(upper) if v is not None]
-        dn = [(x(i), v) for i, v in enumerate(lower) if v is not None]
-        if up and dn:
-            band_pts = " ".join(f"{_fmt(px)},{_fmt(y(v))}" for px, v in up + dn[::-1])
-            body.append(
-                f'<polygon fill="{PALETTE[1]}" fill-opacity="0.2" stroke="{PALETTE[1]}" '
-                f'stroke-dasharray="4 4" points="{band_pts}"/>'
-            )
+        body.append(poly(lower, colour=PALETTE[1], dash=True))
+        body.append(poly(upper, colour=PALETTE[1], dash=True))
     if budget is not None:
         by = _fmt(y(budget))
         body.append(

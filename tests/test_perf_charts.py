@@ -7,6 +7,7 @@ bytes for a fixed series, parse-gate the SVG, and check the palette and the two 
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 
 from ddflow.services.perf.charts import (
@@ -69,9 +70,10 @@ def test_dark_and_light_differ_only_in_theme():
 def test_heat_strip_encodes_share_by_opacity_not_hue():
     svg = heat_strip([None, 2.0, 1.0], title="share", desc="per-file share")
     ET.fromstring(svg)  # well formed even with a missing value
-    # every cell shares one hue; the share is encoded by opacity, not a colour per file
+    # every cell shares one hue; the share is encoded by the opacity STEP, not hue
     assert svg.count(f'fill="{PALETTE[0]}"') == 3
-    assert "fill-opacity" in svg
+    opacities = set(re.findall(r'fill-opacity="([^"]+)"', svg))
+    assert len(opacities) >= 2  # 0, 1.0, 0.5 for [None, 2.0, 1.0] -- the step carries the data
 
 
 def test_bars_and_scatter_and_stacked_are_well_formed():
