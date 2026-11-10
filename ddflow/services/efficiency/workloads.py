@@ -174,64 +174,69 @@ def _gate_outcome(records: Iterable[Record], gate: str) -> list[Record]:
     return [r for r in records if r.kind in GATE_OUTCOME_KINDS and r.data.get("gate") == gate]
 
 
+def _rule_item_completed(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
+    started = _event(rs, "item.started")
+    completed = _event(rs, "item.completed")
+    matched = [r for r in started + completed if r.subject == rule.item]
+    missing: list[str] = []
+    if not any(r.subject == rule.item for r in started):
+        missing.append(f"item.started:{rule.item}")
+    if not any(r.subject == rule.item for r in completed):
+        missing.append(f"item.completed:{rule.item}")
+    for gate in rule.gates:
+        outcomes = _gate_outcome(rs, gate)
+        if not outcomes:
+            missing.append(f"gate outcome:{gate}")
+        matched.extend(r for r in outcomes if r.subject == rule.item)
+    return not missing, matched, missing
+
+
+def _rule_gate_outcome(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
+    kind = f"gate.{rule.outcome}" if rule.outcome else ""
+    hits = [r for r in rs if r.kind == kind and r.data.get("gate") == rule.gate]
+    missing = [] if hits else [f"{kind}:{rule.gate}"]
+    return not missing, hits, missing
+
+
+def _rule_bug_with_test(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
+    found = [r for r in _event(rs, "bug.found") if r.subject == rule.bug]
+    fixed = [r for r in _event(rs, "bug.fixed") if r.subject == rule.bug]
+    with_test = [r for r in fixed if r.data.get("regression_test") or r.data.get("regression_tests")]
+    missing: list[str] = []
+    if not found:
+        missing.append(f"bug.found:{rule.bug}")
+    if not with_test:
+        missing.append(f"bug.fixed+regression-test:{rule.bug}")
+    return not missing, found + with_test, missing
+
+
+def _rule_refusal_resolved(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
+    refused = [r for r in _event(rs, "gate.failed") if r.data.get("gate") == rule.gate]
+    passed = [r for r in _event(rs, "gate.passed") if r.data.get("gate") == rule.gate]
+    missing: list[str] = []
+    if not refused:
+        missing.append(f"refusal (gate.failed):{rule.gate}")
+    if not passed:
+        missing.append(f"resolution (gate.passed):{rule.gate}")
+    return not missing, refused + passed, missing
+
+
 def _evaluate_rule(rule: PassRule, records: Iterable[Record]) -> tuple[bool, list[Record], list[str]]:
-    """Apply one pass rule to ddflow's records. Returns (pass, matched, missing-names).
+    """Consult ddflow's records only; there is no agent-words input (the falsifier)."""
+    return _RULE_APPLY.get(rule.kind, _rule_unknown)(rule, list(records))
 
-    Only records are consulted -- there is no agent-words input, which is exactly the
-    falsifier guarantee: a claimed success without the named records cannot pass here.
-    """
-    rs = list(records)
-    if rule.kind == "item-completed":
-        started = _event(rs, "item.started")
-        completed = _event(rs, "item.completed")
-        got_start = any(r.subject == rule.item for r in started)
-        got_done = any(r.subject == rule.item for r in completed)
-        missing: list[str] = []
-        if not got_start:
-            missing.append(f"item.started:{rule.item}")
-        if not got_done:
-            missing.append(f"item.completed:{rule.item}")
-        matched: list[Record] = [r for r in started + completed if r.subject == rule.item]
-        for gate in rule.gates:
-            outcomes = _gate_outcome(rs, gate)
-            if not outcomes:
-                missing.append(f"gate outcome:{gate}")
-            matched.extend(r for r in outcomes if r.subject == rule.item)
-        return not missing, matched, missing
 
-    if rule.kind == "gate-outcome-recorded":
-        kind = f"gate.{rule.outcome}" if rule.outcome else ""
-        hits = [r for r in rs if r.kind == kind and r.data.get("gate") == rule.gate]
-        missing = [] if hits else [f"{kind}:{rule.gate}"]
-        return not missing, hits, missing
-
-    if rule.kind == "bug-with-regression-test":
-        found = [r for r in _event(rs, "bug.found") if r.subject == rule.bug]
-        fixed = [r for r in _event(rs, "bug.fixed") if r.subject == rule.bug]
-        with_test = [
-            r
-            for r in fixed
-            if r.data.get("regression_test") or r.data.get("regression_tests")
-        ]
-        missing: list[str] = []
-        if not found:
-            missing.append(f"bug.found:{rule.bug}")
-        if not with_test:
-            missing.append(f"bug.fixed+regression-test:{rule.bug}")
-        return not missing, found + with_test, missing
-
-    if rule.kind == "refusal-resolved":
-        refused = [r for r in _event(rs, "gate.failed") if r.data.get("gate") == rule.gate]
-        passed = [r for r in _event(rs, "gate.passed") if r.data.get("gate") == rule.gate]
-        missing: list[str] = []
-        if not refused:
-            missing.append(f"refusal (gate.failed):{rule.gate}")
-        if not passed:
-            missing.append(f"resolution (gate.passed):{rule.gate}")
-        return not missing, refused + passed, missing
-
+def _rule_unknown(rule: PassRule, rs: list[Record]) -> tuple[bool, list[Record], list[str]]:
     # Unreachable: load_workloads refuses unknown kinds.
     return False, [], [f"unknown pass kind {rule.kind!r}"]
+
+
+_RULE_APPLY = {
+    "item-completed": _rule_item_completed,
+    "gate-outcome-recorded": _rule_gate_outcome,
+    "bug-with-regression-test": _rule_bug_with_test,
+    "refusal-resolved": _rule_refusal_resolved,
+}
 
 
 def evaluate(workload: Workload, records: Iterable[Record]) -> Report:
