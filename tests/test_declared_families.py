@@ -134,6 +134,10 @@ def test_loading_the_mcp_server_runs_the_family_check():
     assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
 
 
+def test_perf_is_placed_in_the_view_family_as_action_perf():
+    assert F.placement("ddflow_perf") == ("ddflow_view", "perf")
+
+
 def test_importing_families_with_an_unplaced_tool_in_the_registry_fails():
     import subprocess
     import sys
