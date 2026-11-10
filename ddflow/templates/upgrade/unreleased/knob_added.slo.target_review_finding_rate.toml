@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "slo.target_review_finding_rate"
+new = "0.6"
+why = "The review-finding signal: the share of critic and rubber_duck rounds that raise a finding"
+impact = "additive"
