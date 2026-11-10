@@ -2714,6 +2714,9 @@
     ddflow review show <id> [--gate G]        list the recorded round's numbered findings
   --finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the
   `triage` verb: without it they are refused, never run as a review.
+  --agent AGENT names who this review is recorded under (a global option, accepted before or
+              after `review`); pass your `as_agent` so a run from a shell is not recorded
+              under a derived {host}-{tree} identity (Bbf6e536827).
   
   '''
 # ---
