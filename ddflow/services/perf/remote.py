@@ -127,8 +127,18 @@ def parse_line(line: str) -> CommandSample:
         source=str(data.get("source") or UNAVAILABLE),
         trust=TRUST_AGENT,
         container=data.get("container"),
-        env=str(data.get("env") or ""),
+        env=_valid_env_key(str(data.get("env") or "")),
     )
+
+
+def _valid_env_key(env: str) -> str:
+    """An env key is a machine-class digest, never a hostname, user or path. A posted line
+    must not inject identity, so any key carrying a path/address marker is dropped."""
+    if not env:
+        return ""
+    if any(c in env for c in ("/", "\\", ":", "@", " ", "\n")):
+        return ""
+    return env
 
 
 def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None, vm: bool | None = None) -> str:

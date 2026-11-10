@@ -19,7 +19,9 @@ def _call(repo, a, agent):
     if action == "run":
         cmd = a.get("cmd") or ""
         if isinstance(cmd, list):
-            cmd = " ".join(cmd)
+            import shlex
+
+            cmd = " ".join(shlex.quote(part) for part in cmd)
         return _api().run_perf_run(repo, cmd=cmd, agent=agent)
     return _api().run_perf_ingest(repo, line=a.get("line") or "", agent=agent)
 
