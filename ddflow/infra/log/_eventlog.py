@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
+from ...adapters.http import local_endpoint as _is_local_endpoint
 from ...config import Config, LogConfig, SessionConfig
-from ...adapters import http as HTTP
 from ...core import redact as R
 from ...core import upcasters as UP
 from ...core.events import CAPABILITIES_KIND, SEEN_KIND, SKEW_OVERRIDDEN_KIND, Event, utcnow
@@ -68,7 +68,7 @@ def _reviewer_redact_names(root: Path) -> list[str]:
         )
         for name, spec in blocks.items():
             where = spec if isinstance(spec, dict) else {}
-            if not HTTP.local_endpoint(str(where.get("base_url") or "")):
+            if not _is_local_endpoint(str(where.get("base_url") or "")):
                 continue
             if name:
                 out.append(name)
