@@ -7,6 +7,10 @@ PASS.
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+
 import ddflow.services.efficiency as EFF
 import ddflow.services.efficiency.workloads as W
 
@@ -113,6 +117,29 @@ def test_a_live_run_without_a_runner_scores_unrun_not_pass_or_fail():
     wl = _workloads()["claim-and-finish-a-task"]
     report = W.run_live(wl, "/tmp/throwaway", budget={"max_spend": 1}, consent="recorded")
     assert report.outcome == W.UNRUN
+
+
+def test_a_live_run_does_not_score_a_throwaway_log_as_pass():
+    # The throwaway project's log already holds every pass event, but THIS run did not
+    # run its steps (no runner), so it is UNRUN -- the stale log must not read as this
+    # run's success.
+    wl = _workloads()["claim-and-finish-a-task"]
+    tmp = tempfile.mkdtemp(prefix="eff-throwaway-")
+    events_dir = os.path.join(tmp, ".ddflow", "events")
+    os.makedirs(events_dir)
+    stale = [
+        {"kind": "item.started", "subject": "demo.task", "data": {"kind": "task"}},
+        {"kind": "gate.passed", "subject": "demo.task", "data": {"gate": "implement"}},
+        {"kind": "gate.passed", "subject": "demo.task", "data": {"gate": "unit_tests"}},
+        {"kind": "item.completed", "subject": "demo.task", "data": {"kind": "task"}},
+    ]
+    with open(os.path.join(events_dir, "fake.jsonl"), "w", encoding="utf-8") as log:
+        for event in stale:
+            log.write(json.dumps(event) + "\n")
+    assert W.records_from_log(tmp), "the throwaway project must hold the stale records"
+    report = W.run_live(wl, tmp, budget={"max_spend": 1}, consent="recorded")
+    assert report.outcome == W.UNRUN
+    assert report.outcome != W.PASS
 
 
 def test_a_live_run_scores_only_the_records_the_runner_produced():
