@@ -95,8 +95,17 @@ def test_enable_1h_does_not_override_a_forced_five_minutes():
 
 
 def test_enable_1h_only_truthy_values_enable():
-    for off in ("", "0", "false", "no"):
+    for off in ("", "0", "false", "no", "yes", "on"):
         assert CTL.effective_subagent_ttl({"ENABLE_PROMPT_CACHING_1H": off}, {}, "2.1.300").ttl == "5m"
+
+
+def test_only_the_exact_1h_token_raises_the_ttl():
+    v = CTL.effective_subagent_ttl(
+        {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1hour"}, {}, "2.1.300"
+    )
+    assert v.ttl == "5m"
+    v = CTL.effective_subagent_ttl({"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1hx"}, {}, "2.1.300")
+    assert v.ttl == "5m"
 
 
 def test_main_conversation_ttl_env_does_not_govern_subagents():

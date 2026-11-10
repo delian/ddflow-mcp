@@ -44,9 +44,17 @@ def _env_mapping(env: Mapping[str, str] | None) -> Mapping[str, str]:
 
 
 def _is_on(value: str | None) -> bool:
-    """Truthy as the docs use the flag names: ``1`` or ``true`` (case-blind) enables, an empty
-    or unset value does nothing."""
-    return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
+    """Truthy as the docs spell the flag names: ``1`` or ``true`` (case-blind) enables; an
+    empty, unset, or differently spelled value does nothing. The docs name no `yes`/`on`
+    spelling, so none is honoured (a value the harness ignores must not read as enabled)."""
+    return value is not None and value.strip().lower() in {"1", "true"}
+
+
+def _as_ttl(value: object) -> str:
+    """``value`` is the 1-hour TTL exactly when it spells ``1h``; anything else (``5m``, an
+    unsupported token such as ``1hx``, a blank) is not the 1-hour TTL and reads as 5m,
+    because a value the harness does not honour leaves the subagents on the 5m default."""
+    return "1h" if value is not None and str(value).strip().lower() == "1h" else "5m"
 
 
 def parse_version(version: str | None) -> tuple[int, int, int] | None:
@@ -66,26 +74,32 @@ def supports_1h(version: str | None) -> bool | None:
 
 
 def read_settings(repo: Path) -> Mapping[str, Any]:
-    """The Claude Code settings relevant to the cache TTL, best-effort: the project
-    ``.claude/settings.json`` merged over the user's ``~/.claude/settings.json`` (the project
-    wins, matching Claude Code's own merge). Unreadable is ``{}`` -- a report must not fail on
-    its own probing, and a missing setting reads the same as an absent one (the env and the
-    doctor note, not the settings read, carry the warning)."""
+    """The Claude Code settings relevant to the cache TTL, best-effort: user
+    ``~/.claude/settings.json``, the project ``.claude/settings.json`` and the project-local
+    ``.claude/settings.local.json`` merged (the project wins, and the local wins over it, for
+    the same key -- Claude Code's own merge). A later file's ``env`` object is merged INTO the
+    earlier one key-by-key: Claude Code keeps the earlier file's env entries under a later
+    file's env, so a shallow replace would drop the user's ``CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL``
+    when a later file adds a different env var. Unreadable is an absent entry -- a report must
+    not fail on its own probing, and a missing setting reads the same as an absent one."""
     merged: dict[str, Any] = {}
     paths: list[Path] = []
     try:
         home = Path.home()
-    except RuntimeError:  # HOME unset: no user settings to read, never an error
+    except Exception:  # HOME unset or unresolvable: no user settings to read, never an error
         home = None
     if home is not None:
         paths.append(home / ".claude" / "settings.json")
-    # Claude Code's own merge: user settings, then project settings, then the project-local
-    # `.claude/settings.local.json` on top; a later file wins for the same key.
     paths += [repo / ".claude" / "settings.json", repo / ".claude" / "settings.local.json"]
     for path in paths:
         try:
             if path.is_file():
-                merged.update(json_load(path))
+                child = json_load(path)
+                if isinstance(child.get("env"), dict) and isinstance(merged.get("env"), dict):
+                    env = dict(merged["env"])
+                    env.update(child["env"])
+                    child = {**child, "env": env}
+                merged.update(child)
         except Exception:
             continue
     return merged
@@ -174,7 +188,7 @@ def effective_subagent_ttl(
 
     subagent_env = (effective_env.get(SUBAGENT_TTL_ENV) or "").strip().lower()
     if subagent_env:
-        ttl = "1h" if subagent_env.startswith("1h") else "5m"
+        ttl = _as_ttl(subagent_env)
         if ttl == "1h" and too_old:  # the knob exists but this Claude Code ignores it
             return SubagentTTL("5m", "subagent_env", version=version_tuple, ignored_1h=True)
         return SubagentTTL(ttl, "subagent_env", version=version_tuple)
@@ -184,7 +198,7 @@ def effective_subagent_ttl(
         str(subagent_setting).strip().lower() if subagent_setting is not None else ""
     )
     if subagent_value:
-        ttl = "1h" if subagent_value.startswith("1h") else "5m"
+        ttl = _as_ttl(subagent_value)
         if ttl == "1h" and too_old:
             return SubagentTTL("5m", "subagent_setting", version=version_tuple, ignored_1h=True)
         return SubagentTTL(ttl, "subagent_setting", version=version_tuple)
