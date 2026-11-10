@@ -72,7 +72,9 @@ def rates(
     or secret. ``now`` defaults to wall time."""
     cfg = perf_metrics or Config().perf_metrics
     now = time.time() if now is None else now
-    window = cfg.flaky_window_s
+    # Clamp to 1s: the [perf_metrics] knob check already refuses a non-positive window, but a
+    # hand-built PerfMetricsConfig bypasses it, and a zero window must not divide by zero.
+    window = max(1, cfg.flaky_window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in window_rows(rows, now, window):
         by_test[str(r["test"])].append(r)
@@ -122,8 +124,9 @@ def proposals(
     that this is a measure, not an action."""
     cfg = perf_metrics or Config().perf_metrics
     now = time.time() if now is None else now
+    window = max(1, cfg.flaky_window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for r in window_rows(rows, now, cfg.flaky_window_s):
+    for r in window_rows(rows, now, window):
         by_test[str(r["test"])].append(r)
     expiry = clock.iso_at(now + cfg.flaky_quarantine_expiry_s)
     out: list[dict[str, Any]] = []
@@ -158,6 +161,10 @@ def report(
         rows = flakes.read(repo)
     except OSError:
         return {"unavailable": True}
+    # One snapshot of ``now`` for BOTH views: rates and proposals must agree on the window
+    # edge, so a flake counted by one is never dropped by the other (each resolves ``now``
+    # only when it is None -- a collected view resolves it here, once).
+    now = time.time() if now is None else now
     view = rates(rows, now=now, perf_metrics=cfg)
     view["proposals"] = proposals(rows, now=now, perf_metrics=cfg)
     return view

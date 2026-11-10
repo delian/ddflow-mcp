@@ -118,3 +118,19 @@ def test_report_reads_the_flake_log_and_returns_rates_and_proposals(tmp_path: Pa
     assert [p["test"] for p in view["proposals"]] == ["tests/a.py::t1"]
     # a missing log (no file) is an empty view, not an error
     assert flakyrate.report(tmp_path / "missing", now=NOW, perf_metrics=CFG)["flakes"] == 0
+
+
+def test_a_zero_window_clamps_not_crashes():
+    zero = PerfMetricsConfig(flaky_window_s=0)
+    view = flakyrate.rates([_row("tests/a.py::t1", NOW)], now=NOW, perf_metrics=zero)
+    assert view["window_s"] == 1  # never a ZeroDivisionError on window 0
+
+
+def test_report_counts_and_proposes_a_flake_on_the_window_edge(tmp_path: Path):
+    cfg = PerfMetricsConfig(flaky_window_s=100, flaky_quarantine_after=1)
+    log = tmp_path / ".ddflow" / "local" / "flakes.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_text(json.dumps(_row("tests/a.py::t1", NOW - 100, item="I"), sort_keys=True) + "\n")
+    view = flakyrate.report(tmp_path, now=NOW, perf_metrics=cfg)
+    assert view["flakes"] == 1  # the on-edge flake is inside the window in BOTH views
+    assert len(view["proposals"]) == 1
