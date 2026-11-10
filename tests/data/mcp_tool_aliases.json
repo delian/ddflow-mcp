@@ -539,6 +539,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_suggest": [
+  "ddflow_lease action=suggest",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_sync": [
   "ddflow_admin action=sync",
   "0.2.8",
