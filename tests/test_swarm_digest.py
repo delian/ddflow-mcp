@@ -39,8 +39,9 @@ def test_a_local_route_is_free():
 
 
 def test_section_without_durations_is_unavailable_not_zero():
-    # a caller that could not measure durations must not read as "done in 0s"
-    s = DG.section(chain=["a", "b"], durations=None)
+    # a caller that could not measure durations must not read as "done in 0s": the old
+    # code folded None -> {} and an empty path summed to 0.0 here.
+    s = DG.section(chain=[], durations=None)
     assert s.eta_s is None
 
 
