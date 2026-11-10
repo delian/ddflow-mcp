@@ -65,6 +65,20 @@ def test_a_gate_run_before_an_earlier_canonical_step_is_out_of_order():
     assert not any(r["item"] == "A" for r in ooo)
 
 
+def test_a_merged_lane_that_started_earlier_is_not_a_later_prerequisite():
+    # rules@+1 and research@+10 are ONE merged lane; critic@+5 ran after that lane had already
+    # started (rules), so it did not run ahead of it -- only a lane, not a gate, is a step.
+    log = Log()
+    log.add("phase.added", "P1", "lead", T0 - 2000, title="p1", body="")
+    log.add("task.added", "A", "lead", T0 - 1000, title="A", body="", parent="P1")
+    log.claim("a1", "A", T0, "f.py")
+    log.add("gate.passed", "A", "a1", T0 + 1, gate="rules", by="a1")
+    log.add("gate.passed", "A", "a1", T0 + 5, gate="critic", by="r1")
+    log.add("gate.passed", "A", "a1", T0 + 10, gate="research", by="a1")
+    ooo = out_of_order(ctx_of(log))
+    assert not any(r["gate"] == "critic" for r in ooo)
+
+
 def test_a_pass_superseded_by_a_later_tree_change_is_listed():
     # B's critic passed on tree t2; rubber_duck then ran on t3, so the critic pass is
     # superseded (the tree changed after it). A's rubber_duck/critic share t1, so neither is.

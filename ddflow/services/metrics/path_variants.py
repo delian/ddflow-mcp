@@ -96,7 +96,9 @@ def superseded_passes(ctx: Context) -> list[dict]:
 
 def out_of_order(ctx: Context) -> list[dict]:
     """a gate whose FIRST run came before an EARLIER canonical LANE's first run (it ran ahead
-    of a prerequisite lane that had not run yet -- e.g. critic first-ran before rubber_duck)."""
+    of a prerequisite lane that had not STARTED yet -- e.g. critic first-ran before
+    rubber_duck). A lane has started when its EARLIEST member gate first ran, so two gates of
+    one merged lane never count against each other."""
     rank = _lane_rank()
     out = []
     for item, rows in _items(ctx).items():
@@ -104,12 +106,17 @@ def out_of_order(ctx: Context) -> list[dict]:
         for o in rows:
             if o.gate in rank and o.gate not in first_at:
                 first_at[o.gate] = o.at
+        lane_first: dict[int, float] = {}
+        for i, lane in enumerate(LANES):
+            times = [first_at[g] for g in lane if g in first_at]
+            if times:
+                lane_first[i] = min(times)
         for gate, r in rank.items():
             at = first_at.get(gate)
             if at is None:
                 continue
-            # a lower-rank LANE that RAN later than this one means this run was ahead of it
-            if any(r2 < r and first_at[g2] > at for g2, r2 in rank.items() if g2 in first_at):
+            # an earlier lane whose FIRST run came AFTER this run: this run was ahead of it
+            if any(j < r and lane_first[j] > at for j in lane_first):
                 out.append({"item": item, "gate": gate, "at": at})
     return out
 
