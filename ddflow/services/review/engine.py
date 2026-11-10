@@ -48,37 +48,49 @@ _FINDING_RE = re.compile(
 )
 
 #: A finding's location must be a citation: a bare path, ``path:line``, ``path:line-line``
-#: or ``path:symbol``. Anything else -- a question mark, an ellipsis, prose after a line
-#: number -- is the reviewer thinking in the location field, not naming a defect
-#: (B-review-finding-is-unfinished-reasoning). The path part excludes whitespace, ``:``,
-#: ``?`` and ``;`` so a sentence can never read as a path; the anchor is a line (with an
-#: optional range) or a symbol (``path::func`` pytest-style nodes included).
+#: or ``path:symbol`` (``path::func`` pytest-style nodes included). Anything else -- a
+#: question mark, an ellipsis, prose after a line number -- is the reviewer thinking in the
+#: location field, not naming a defect (B-review-finding-is-unfinished-reasoning). The path
+#: part excludes whitespace, ``:``, ``?`` and ``;`` so a sentence can never read as a path.
 _SYMBOL = r"[A-Za-z_][A-Za-z0-9_.()]*"
-_CITATION_RE = re.compile(rf"^[^\s:?;]+(?::?{_SYMBOL}|:\d+(?:[-\u2013]\d+)?)?$")
+_CITATION_RE = re.compile(rf"^[^\s:?;]+(?::{{1,2}}{_SYMBOL}|:\d+(?:[-\u2013]\d+)?)?$")
 
-#: A finding paragraph that is the reviewer talking about HOW it is writing the finding
-#: (citing a line, "let me", "note to self") rather than stating a defect. Combined with
-#: the absence of a defect word it is unfinished reasoning, not a finding.
-_META_REASONS = re.compile(
-    r"\b(?:cite (?:a |the )?line(?: number)?|let me\b|i'?ll\b|note to self\b)", re.I
-)
+#: A finding paragraph names a concrete failure through one of these; with none of them a
+#: paragraph is the reviewer reasoning about the diff, not a finding. Judged positively
+#: ("states a defect"), and only ever acted on when the paragraph ALSO stops mid-sentence
+#: (`_unfinished_reasoning`), so a real finding phrased around these words is recorded, not
+#: dropped, unless it does not even finish its sentence (B-review-finding-is-unfinished-
+#: reasoning).
 _DEFECT_WORDS = re.compile(
-    r"\b(?:fails?|crashes?|raises?|leaks?|missing|never|wrong|breaks?|incorrect|"
-    r"shouldn'?t|mustn'?t|cannot|can'?t|unreachable|dead|bug|error|lost)\b",
+    r"\b(?:fails?|failure|crashes?|raises?|throws?|leaks?|loses?|drops?|discards?|"
+    r"missing|misses?|never|wrong|incorrect|breaks?|corrupts?|ignores?|omits?|skips?|"
+    r"overwrites?|unreachable|dead|stale|lost|unset|undefined|uninitialized|unhandled|"
+    r"race[sd]?|timeouts?|error[s]?|bug[s]?)\b",
     re.I,
 )
+_TERMINATOR = re.compile(r"[.!?\u2026]\s*$")
 
 
-def _malformed_reason(location: str, detail: str) -> str:
+def _unfinished_reasoning(paragraph: str) -> bool:
+    """A paragraph that stops mid-sentence AND names no defect is the reviewer thinking
+    aloud, ending before it stated what a finding must state."""
+    if not paragraph or _DEFECT_WORDS.search(paragraph):
+        return False
+    return not _TERMINATOR.search(paragraph.rstrip())
+
+
+def _malformed_reason(location: str, paragraph: str) -> str:
     """Why a finding is reasoning rather than a defect, or "" when it is a real finding.
 
-    Two independent signals (B-review-finding-is-unfinished-reasoning): a location that is
-    not a ``path:line``/``path:symbol`` citation, and a paragraph of reasoning that states
-    no defect. Either alone marks the finding malformed."""
+    Two signals (B-review-finding-is-unfinished-reasoning): a location that is not a
+    ``path:line``/``path:symbol`` citation, and a paragraph of reasoning that states no
+    defect and never ends its sentence. ``paragraph`` is the reviewer's own text, never the
+    location-derived fallback, so a location-only finding stays a finding (B-review-finding-
+    empty-text)."""
     if location and not _CITATION_RE.match(location):
         return "location is prose, not a path:line or path:symbol"
-    if detail and _META_REASONS.search(detail) and not _DEFECT_WORDS.search(detail):
-        return "the paragraph states no defect (unfinished reasoning)"
+    if _unfinished_reasoning(paragraph):
+        return "the paragraph stops mid-sentence with no defect stated"
     return ""
 
 
@@ -535,11 +547,12 @@ def parse(text: str) -> tuple[list[Finding], bool]:
     findings = []
     for m in _FINDING_RE.finditer(text or ""):
         location = (m.group(2) or "").strip()
+        paragraph = (m.group(3) or "").strip()
         #: The finding's text is the reviewer's paragraph. A reviewer may write only a
         #: location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still names
         #: the spot the author must answer, so its text is derived from the location and
         #: a location-only finding is never recorded empty (B-review-finding-empty-text).
-        detail = (m.group(3) or "").strip() or location
+        detail = paragraph or location
         title = location or " ".join(detail.split())[:80]
         if not detail:
             #: The reviewer declared a finding but named no location and no paragraph.
@@ -553,7 +566,7 @@ def parse(text: str) -> tuple[list[Finding], bool]:
                 location=location,
                 title=title,
                 detail=detail,
-                malformed=_malformed_reason(location, detail),
+                malformed=_malformed_reason(location, paragraph),
             )
         )
     return findings, status is not None

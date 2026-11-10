@@ -3,8 +3,8 @@
 A reviewer can answer a chunk with a ``FINDING`` block whose location is not a citation but
 the reviewer thinking aloud -- ``leaving.py:257? The line in _leave where _mine is called ...``
 -- or whose paragraph is unfinished reasoning that states no defect (``We need cite line
-number ...``). Such a block was stored as a normal MEDIUM finding, failed the gate, and had
-to be triaged by hand.
+number``). Such a block was stored as a normal MEDIUM finding, failed the gate, and had to
+be triaged by hand.
 
 Now ``parse`` marks such a block malformed, so it is recorded (visible) but not counted
 against the gate: it neither blocks a round nor holds a later delta open.
@@ -30,7 +30,7 @@ PROSE_LOCATION = (
 
 VALID = (
     "FINDING MEDIUM ddflow/api/lifecycle/leaving.py:257\n"
-    "_leave calls _mine before it checks the flag\n\n"
+    "_leave calls _mine before the flag is set.\n\n"
     "STATUS: FINDINGS 1"
 )
 
@@ -46,7 +46,25 @@ def test_parse_marks_unfinished_reasoning_on_a_clean_location_as_malformed():
         "We need cite line number\n\nSTATUS: FINDINGS 1"
     )
     (f,) = RV.parse(text)[0]
-    assert f.malformed, "a paragraph that states no defect is reasoning, not a finding"
+    assert f.malformed, "a paragraph that states no defect and never ends is reasoning"
+
+
+def test_parse_accepts_a_pytest_style_path_symbol_as_a_citation():
+    text = (
+        "FINDING MEDIUM tests/test_parse.py::test_last_finding\n"
+        "the parser drops the last finding\n\nSTATUS: FINDINGS 1"
+    )
+    (f,) = RV.parse(text)[0]
+    assert not f.malformed, "`path::func` is a citation, not prose"
+
+
+def test_parse_accepts_a_finished_paragraph_with_no_defect_word():
+    text = (
+        "FINDING MEDIUM ddflow/api/lifecycle/leaving.py:257\n"
+        "This path is worth a second look.\n\nSTATUS: FINDINGS 1"
+    )
+    (f,) = RV.parse(text)[0]
+    assert not f.malformed, "a paragraph that ends its sentence is finished, not reasoning"
 
 
 def test_a_valid_finding_is_not_marked_malformed():
