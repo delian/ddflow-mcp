@@ -7,7 +7,7 @@ import pytest
 from ddflow.adapters import templates as T
 from ddflow.adapters.fakes import FAKES
 from ddflow.adapters.fakes.templates import FakeTemplates
-from ddflow.adapters.templates import Templates, TemplateError
+from ddflow.adapters.templates import TemplateError, Templates
 
 
 def templates_conformance(io) -> None:

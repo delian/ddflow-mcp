@@ -124,7 +124,9 @@ def _lookup(vars: dict[str, Any], dotted: str) -> Any:
     return cur
 
 
-def _tokenize(text: str, trim_blocks: bool = True, lstrip_blocks: bool = True) -> list[tuple[str, str]]:
+def _tokenize(
+    text: str, trim_blocks: bool = True, lstrip_blocks: bool = True
+) -> list[tuple[str, str]]:
     """Source -> a flat token list, applying Jinja's `trim_blocks` + `lstrip_blocks`."""
     out: list[tuple[str, str]] = []
     pos = 0
