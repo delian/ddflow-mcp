@@ -331,6 +331,20 @@ def _stale_mark(notes: Sequence[StaleNote] | None) -> dict[str, str]:
     return {n.gate: n.why for n in (notes or []) if not n.unverified}
 
 
+def _settled(
+    state, it, gates: list[str], required, na, answered: dict[str, str], cfg
+) -> dict[str, bool]:
+    """gate -> nothing left to do: not applicable, an answered review failure, a pass (or a
+    skip when not required), or a partial a person/measurement accepted."""
+    return {
+        g: g in na
+        or g in answered
+        or it.gate_satisfied(g, g in required)
+        or GA.accepted(state, it, g, cfg).ok
+        for g in gates
+    }
+
+
 def status(
     state: State,
     cfg: Config,
@@ -363,15 +377,9 @@ def status(
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]
     answered = _answered_failed_reviews(it, gates, defs)
-    settled = {
-        g: g in na
-        or g in answered
-        or it.gate_satisfied(g, g in required)
-        or GA.accepted(state, it, g, cfg).ok
-        for g in gates
-    }
+    settled = _settled(state, it, gates, required, na, answered, cfg)
     done = [g for g in gates if settled[g] and g not in na]
-    blocked = [g for g, o in rows if o == "failed" and g not in answered]
+    blocked = [g for g in _with_outcome(rows, "failed") if g not in answered]
     unavail = _with_outcome(rows, "unavailable", "partial")
     partial = _with_outcome(rows, "partial")
     skipped = _with_outcome(rows, "skipped")
