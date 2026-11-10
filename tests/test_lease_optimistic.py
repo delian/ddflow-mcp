@@ -21,6 +21,7 @@ from conftest import run_cli
 from ddflow.api import lifecycle as LC
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
+from ddflow.services import probe as PR
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -120,8 +121,13 @@ def test_a_claimant_side_the_probe_cannot_resolve_fails_closed(repo: Path, monke
     # B's branch edits the SAME line A did: a fallback to main would probe clean (each
     # branch alone merges into main) and wrongly grant, but B's true tip conflicts.
     _branch_edit(repo, "ddflow/B", "shared.txt", "one\n", "one\nB\n")
-    from ddflow.services import probe as PR
+    real_tip = PR.tip
 
-    monkeypatch.setattr(PR, "tip", lambda repo, ref, timeout_s: ("", "git timed out"))
+    def tip(repo: Path, ref: str, timeout_s: float) -> tuple[str, str]:
+        if ref == "ddflow/B":
+            return "", "git timed out"
+        return real_tip(repo, ref, timeout_s)
+
+    monkeypatch.setattr(PR, "tip", tip)
     out = LC.claim(repo, "B", agent="b", no_worktree=True)
     assert out.exit == 3, "granted on a claimant tip the probe could not resolve"
