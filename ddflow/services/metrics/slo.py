@@ -56,7 +56,9 @@ def _live_holds(ctx: Context) -> int:
     not close (its end is the read time). A held item nobody finished is waste, not
     progress; the facts proxy for a stuck lane."""
     now = ctx.now
-    return len({l.holder for l in ctx.facts.leases if l.end is None or l.end >= now})
+    return len(
+        {lease.holder for lease in ctx.facts.leases if lease.end is None or lease.end >= now}
+    )
 
 
 def _events_per_item(ctx: Context, minimum: int) -> float | None:
@@ -93,7 +95,9 @@ def _red_main(ctx: Context, minimum: int) -> float | None:
     return rate(red, len(lands), minimum)
 
 
-def _burn(value: float | None, target: float | None, window_s: float, exhaust_s: float) -> dict | None:
+def _burn(
+    value: float | None, target: float | None, window_s: float, exhaust_s: float
+) -> dict | None:
     """The burn-rate view for queue age and CI false-red: how deep the SLI already is into
     its budget and how far it is from spending it. ``value`` is the observed level for this
     window and ``target`` the budget; the SLI is `burning` when the observed level spends
@@ -199,8 +203,12 @@ def assess(ctx: Context) -> dict:
         },
     ]
     burn = {
-        "queue_age": _burn(queue, s.target_queue_age_s, s.burn_rate_window_s, s.burn_rate_exhaust_s),
-        "ci_false_red": _burn(red, s.target_ci_false_red_rate, s.burn_rate_window_s, s.burn_rate_exhaust_s),
+        "queue_age": _burn(
+            queue, s.target_queue_age_s, s.burn_rate_window_s, s.burn_rate_exhaust_s
+        ),
+        "ci_false_red": _burn(
+            red, s.target_ci_false_red_rate, s.burn_rate_window_s, s.burn_rate_exhaust_s
+        ),
     }
     breached = [r["name"] for r in rows if r["breached"] is True]
     return {"sli": rows, "burn_rate": burn, "breached": breached}

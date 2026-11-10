@@ -56,7 +56,15 @@ def _good_week() -> Log:
         _gated(log, tid, t + 20, 50.0)
         log.complete("a1", tid, t + 600)
         log.release("a1", tid, t + 601)
-        log.add("worktree.merged", tid, "a1", t + 602, landed_before="b", landed_after="a", branch_head="h")
+        log.add(
+            "worktree.merged",
+            tid,
+            "a1",
+            t + 602,
+            landed_before="b",
+            landed_after="a",
+            branch_head="h",
+        )
         t += H
     return log
 
@@ -70,7 +78,15 @@ def _bad_week() -> Log:
         log.claim("a1", tid, t, f"b{n}.py")  # ~2000s in the queue
         _gated(log, tid, t + 20, 700.0)  # gate p90 far over the 300s target
         log.complete("a1", tid, t + 3000)
-        log.add("worktree.merged", tid, "a1", t + 3002, landed_before="b", landed_after="a", branch_head="h")
+        log.add(
+            "worktree.merged",
+            tid,
+            "a1",
+            t + 3002,
+            landed_before="b",
+            landed_after="a",
+            branch_head="h",
+        )
         t += H
     for tid in ("B00", "B01", "B02"):
         # a red-main bug within a day of the merge: CI false-red
@@ -86,7 +102,6 @@ def test_the_slis_discriminate_a_good_week_from_a_bad_week():
     bad = assess(_ctx(_bad_week(), T0 + 40 * H))
 
     gate_p90_target = Config().slo.target_gate_p90_s
-    queue_target = Config().slo.target_queue_age_s
 
     good_gate = next(r for r in good["sli"] if r["name"] == "gate_p90")
     assert good_gate["value"] is not None and good_gate["value"] < gate_p90_target
@@ -113,7 +128,9 @@ def test_the_review_failure_rate_is_a_signal_never_a_breach():
         log.add("task.added", tid, "lead", t - 5, title="r", body="x", globs=[])
         log.claim("a1", tid, t, "")
         for gate in ("critic", "rubber_duck"):
-            log.add("gate.failed", tid, "r1", t + 100, gate=gate, by="r1", evidence={"model": "m-other"})
+            log.add(
+                "gate.failed", tid, "r1", t + 100, gate=gate, by="r1", evidence={"model": "m-other"}
+            )
         log.complete("a1", tid, t + 300)
         log.release("a1", tid, t + 301)
         t += H
