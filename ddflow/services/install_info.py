@@ -230,13 +230,16 @@ __all__ = [
     "DIST_NAME",
     "KINDS",
     "METHODS",
+    "ForeignLaunch",
     "InstallInfo",
+    "foreign_launch_root",
     "install_info",
     "install_method",
     "installed_from_index",
     "is_own_dev_tree",
     "normalise_path",
     "own_distribution",
+    "repoint_shared_editable",
     "running_from_source",
     "upgrade_advice",
 ]
@@ -303,3 +306,102 @@ def install_method(
     if info.kind != "index":
         return "other"
     return "pip-venv" if pre != base else "other"
+
+
+#: The editable-install ``.pth`` an installer writes next to ``ddflow_mcp``'s dist-info.
+_EDITABLE_PTH = "_editable_impl_ddflow_mcp.pth"
+
+
+@dataclass(frozen=True)
+class ForeignLaunch:
+    """A linked worktree the running package was imported FROM, and its primary checkout.
+
+    Importing from a linked worktree is only legitimate when that worktree is the
+    CALLER's own tree; imported from any OTHER lane's tree it is foreign — the shared
+    editable install was repointed at a tree that is removed when its branch merges, and
+    code from it must not run (bug B-cli-ran-code-from-another-lanes-worktree). Paths are
+    resolved real paths; `normalise_path` renders them for a message.
+    """
+
+    worktree: Path
+    primary: Path
+
+
+def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
+    """The linked worktree the running `ddflow` package was imported from, or None.
+
+    A linked worktree whose PRIMARY holds a ddflow source tree too (`primary_checkout`) is
+    a place the shared editable install must never have been pointed at, except by the
+    caller's own tree. Only that case is returned; a checkout that is not a linked worktree,
+    or a worktree of a repository that is not ddflow, is not a redirect away from anything
+    (the primary holds no package to run instead) and answers None. Pure: reads the git
+    files `primary_checkout` already reads.
+    """
+    root = Path(root) if root is not None else _paths.package_parent()
+    primary = _paths.primary_checkout(root)
+    if primary is None:
+        return None
+    return ForeignLaunch(root, primary)
+
+
+def _direct_url_path(dist) -> Path | None:
+    """The `direct_url.json` filename for ``dist``'s dist-info, or None when it has none."""
+    raw = getattr(dist, "_path", None)
+    if raw is None:
+        return None
+    try:
+        return Path(raw) / "direct_url.json"
+    except (TypeError, ValueError):
+        return None
+
+
+def repoint_shared_editable(foreign: Path, primary: Path) -> bool:
+    """Repoint the shared editable install of the tree at `foreign` back at `primary`.
+
+    A shared editable install imported from a foreign lane's worktree has its
+    `direct_url.json` URL and `_editable_impl_*.pth` pointing at that doomed tree; the
+    next console-script call then crashes once the tree is removed. Rewrite both to the
+    primary checkout so the next call imports code that outlives the tree. Returns True
+    when any file changed; a file that cannot be read or written is left alone, never
+    raised — this is a self-heal ahead of a refusal, and a failure to heal must not be a
+    second crash.
+    """
+    changed = False
+    primary_text = str(primary)
+    primary_url = primary.as_uri()
+    foreign_resolved = foreign.resolve()
+    for dist in metadata.distributions(name=DIST_NAME):
+        # `direct_url.json`: only an editable URL that names `foreign` is repointed, and
+        # `dir_info.editable` (and any other key) is kept. The URL may name `foreign`
+        # through an alias, so it is matched RESOLVED (as `_editable_record` does).
+        record = _direct_url(dist)
+        if record and _editable(record):
+            url = record.get("url", "")
+            try:
+                target = Path(url2pathname(urlparse(url).path)).resolve()
+            except (TypeError, ValueError, OSError):
+                target = None
+            if target is not None and target == foreign_resolved:
+                record = dict(record)
+                record["url"] = primary_url
+                wrote = _direct_url_path(dist)
+                try:
+                    if wrote is not None:
+                        wrote.write_text(json.dumps(record))
+                        changed = True
+                except OSError:
+                    pass
+        # The `.pth` itself: a single line naming the import root. `_direct_url_path` is
+        # `<site-packages>/<dist>.dist-info/direct_url.json`, so the `.pth` sits two levels
+        # up, beside the dist-info rather than inside it.
+        path = _direct_url_path(dist)
+        if path is None:
+            continue
+        pth = path.parent.parent / _EDITABLE_PTH
+        try:
+            if pth.is_file() and pth.read_text(encoding="utf-8").strip() == str(foreign_resolved):
+                pth.write_text(primary_text + "\n")
+                changed = True
+        except OSError:
+            pass
+    return changed
