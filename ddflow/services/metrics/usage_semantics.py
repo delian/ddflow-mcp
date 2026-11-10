@@ -66,9 +66,13 @@ def load(source: str | Path | None = None) -> dict[str, dict]:
 def semantics_for(harness: str, source: str | Path | None = None) -> UsageSemantics:
     """The declared semantics for one harness family.
 
-    An undeclared harness reads ``mode="none"`` (unavailable), never a guess.
+    An undeclared harness reads ``mode="none"`` (unavailable); a missing or corrupt
+    table reads the same, never a guess and never zero.
     """
-    facts = load(source)
+    try:
+        facts = load(source)
+    except (OSError, tomllib.TOMLDecodeError):
+        facts = {}
     if harness not in facts:
         return UsageSemantics(
             harness=harness, mode=NONE, subagents=UNKNOWN, model_named_per_event=False
@@ -93,12 +97,14 @@ def merge_figures(mode: str, values: Iterable[float | int]) -> float | int | Non
     vals = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
     if mode == NONE:
         return None
+    if not vals:
+        return None
     if mode == CUMULATIVE:
         return max(vals)
     if mode == DELTA:
         return sum(vals)
     if mode == FINAL:
-        return vals[-1] if vals else None
+        return vals[-1]
     raise ValueError(f"unknown usage mode {mode!r}; expected one of {sorted(MODES)}")
 
 

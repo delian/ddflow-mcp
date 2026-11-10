@@ -49,6 +49,19 @@ def test_none_reads_none_never_zero():
     assert U.resolve_figure("devin", [5, 5]) is None
 
 
+def test_an_empty_cumulative_reads_none_not_a_crash_or_zero():
+    # A session that has not emitted a usage event yet has no figure: None, not a
+    # max([]) crash and not zero.
+    assert U.merge_figures(U.CUMULATIVE, []) is None
+    assert U.merge_figures(U.DELTA, []) is None
+    assert U.merge_figures(U.FINAL, []) is None
+
+
+def test_a_missing_or_corrupt_table_reads_none_not_a_raise():
+    assert U.semantics_for("claude-code", "/no/such/file.toml").mode == U.NONE
+    assert U.resolve_figure("claude-code", [1], source="/no/such/file.toml") is None
+
+
 def test_resolve_figure_for_a_cumulative_harness():
     assert U.resolve_figure("claude-code", [7, 7, 9]) == 9
 
