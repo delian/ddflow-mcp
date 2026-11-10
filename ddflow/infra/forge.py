@@ -24,6 +24,7 @@ from ddflow.adapters.forge import (  # noqa: F401  # re-exported for the flow se
     _check,
     _run,
 )
+from ddflow.adapters.forge_gitlab import GitLab  # noqa: F401  # re-exported (was public here)
 from ddflow.adapters.registry import UnknownName
 
 from ..config import Config
