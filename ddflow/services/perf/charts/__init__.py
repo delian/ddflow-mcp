@@ -82,8 +82,24 @@ def line_trend(
         return height - pad - (height - 2 * pad) * ((v - lo) / (hi - lo))
 
     def poly(xs: list[float | None], *, colour: str) -> str:
-        pts = " ".join(f"{_fmt(x(i))},{_fmt(y(v))}" for i, v in enumerate(xs) if v is not None)
-        return f'<polyline fill="none" stroke="{colour}" stroke-width="2" points="{pts}"/>'
+        # a gap is a break: one <polyline> per contiguous run, so a missing sample draws
+        # nothing and the line does not fabricate a segment across it
+        runs: list[list[tuple[float, float]]] = []
+        cur: list[tuple[float, float]] = []
+        for i, v in enumerate(xs):
+            if v is None:
+                if cur:
+                    runs.append(cur)
+                    cur = []
+                continue
+            cur.append((x(i), y(v)))
+        if cur:
+            runs.append(cur)
+        out = []
+        for seg in runs:
+            d = " ".join(f"{_fmt(px)},{_fmt(py)}" for px, py in seg)
+            out.append(f'<polyline fill="none" stroke="{colour}" stroke-width="2" points="{d}"/>')
+        return "".join(out)
 
     body = [poly(series, colour=PALETTE[0])]
     if band is not None:
