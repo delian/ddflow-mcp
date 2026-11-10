@@ -132,6 +132,19 @@ def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
     return kept, dropped
 
 
+def named_test_globs(root: Path, text: str) -> list[str]:
+    """The test files the bug's text names, existing in the tree: where the maintainer
+    writes the regression test (an edit to an existing `tests/**/test_*.py`). A named test
+    file is a glob of the fix task even for a ddflow-scoped bug, which otherwise inherits
+    no files: a source file a report quotes is symptom-or-cause (Bc0b26248e3), but a test
+    file it names is where the regression test has to land (DX-fixtask-edit-existing-test-glob)."""
+    listed = GIT.files(root, "all")
+    if listed is None:
+        return []
+    files, _dropped = existing_globs(root, _named_files(_PATHISH.findall(text), listed))
+    return [f for f in files if is_test_file(f)]
+
+
 def fix_task_globs(
     root: Path,
     globs: str,
@@ -146,7 +159,10 @@ def fix_task_globs(
     files -- the bug's own found scope (`found_scope`, B45b80286d2: two narrow sibling bugs
     no longer inherit one wide item glob and exclude each other), else the ones inherited
     from the source item, cut to those that exist in the tree (only a guess can be wrong
-    about the tree)."""
+    about the tree). A test file the bug names and that exists in the tree is carried on
+    the non-explicit paths -- `found_scope` holds it when it runs (a named test file is
+    part of the found scope), and `named_test_globs` adds it on the fall-through path --
+    so the implementer edits it without widening."""
     if globs:
         return GS.parse(globs), []
     named = sorted(
@@ -156,4 +172,8 @@ def fix_task_globs(
         found = found_scope(root, text)
         if found is not None and found[0]:
             return found  # the bug's own files (an empty find: fall back and inherit)
-    return existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
+    kept, dropped = existing_globs(root, inherit_globs(source_globs, text, tool_bug=tool_bug))
+    for t in named_test_globs(root, text):
+        if t not in kept:
+            kept.append(t)
+    return kept, dropped
