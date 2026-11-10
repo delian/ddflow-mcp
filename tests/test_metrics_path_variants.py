@@ -17,6 +17,7 @@ from ddflow.services.metrics.path_variants import (
     directly_follows,
     out_of_order,
     superseded_passes,
+    variants,
 )
 from ddflow.services.metrics.providers import Context
 
@@ -92,3 +93,20 @@ def test_build_names_the_cli_and_mcp_next_call():
     assert out["next"]["cli"] == "ddflow paths"
     assert out["next"]["mcp"] == "ddflow_paths"
     assert out["variants"] and out["directly_follows"]
+
+
+def test_overlap_is_union_versus_sum_and_never_exceeds_the_sum():
+    ov = build(ctx_of(seeded()))["overlap"]
+    assert ov["n_items"] == 2
+    assert ov["saved_s"] >= 0
+    assert ov["union_s"] + ov["saved_s"] == ov["sum_s"]
+    assert ov["union_s"] <= ov["sum_s"] + 1e-9
+    assert ov["burst_share"] is None or ov["burst_share"] <= 1
+
+
+def test_variants_collapse_consecutive_reruns_into_one_step():
+    # A's sequence research -> rubber_duck -> critic; B's critic -> rubber_duck.
+    seen = variants(ctx_of(seeded()))
+    a = next(v for v in seen if v["sequence"] == ["research", "rubber_duck", "critic"])
+    b = next(v for v in seen if v["sequence"] == ["critic", "rubber_duck"])
+    assert a["n"] == 1 and b["n"] == 1

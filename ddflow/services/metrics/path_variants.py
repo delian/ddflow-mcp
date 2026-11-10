@@ -124,16 +124,20 @@ def out_of_order(ctx: Context) -> list[dict]:
 def overlap(ctx: Context) -> dict:
     """the burst overlap: the summed process time vs its union (what the concurrent view
     saves), as WINDOW TOTALS over the same per-item pairs -- never the sum of two medians of
-    different series. ``burst_share`` is the union's fraction of the sum."""
-    rows = paths.build(ctx)["paths"]
+    different series. ``burst_share`` is the union's fraction of the sum, and is ``None``
+    (``unavailable``) when the sibling ``paths`` view has too few samples to state it."""
+    data = paths.build(ctx)
+    rows = data["paths"]
     sum_s = sum(p["process_sum_s"] for p in rows)
     union_s = sum(p["process_union_s"] for p in rows)
+    unavailable = bool(data["unavailable"]) or sum_s == 0
     return {
         "union_s": union_s,
         "sum_s": sum_s,
         "saved_s": sum_s - union_s,
         "burst_share": union_s / sum_s if sum_s else None,
         "n_items": len(rows),
+        "unavailable": unavailable,
     }
 
 
@@ -168,10 +172,12 @@ def text(data: dict) -> str:
     out.append("top variants")
     out += [f"  {' -> '.join(r['sequence'])}: {r['n']}" for r in data["variants"][:8]]
     ov = data["overlap"]
-    if ov.get("burst_share") is not None:
+    if not ov.get("unavailable"):
         out.append(
-            f"  burst overlap: union {_d(ov['union_s'])} of sum {_d(ov['sum_s'])} ({ov['burst_share']:.0%})"
+            f"  burst overlap: union {_d(ov['union_s'])} of sum {_d(ov['sum_s'])} ({ov['burst_share']:.0%}, {ov['n_items']} item(s))"
         )
+    else:
+        out.append("  burst overlap: not enough data (unavailable, not zero)")
     out.append(f"  superseded passes: {len(data['superseded_passes'])}")
     out.append(f"  out-of-order runs: {len(data['out_of_order'])}")
     out.append(f"next: {data['next']['cli']}  |  {data['next']['mcp']}")
