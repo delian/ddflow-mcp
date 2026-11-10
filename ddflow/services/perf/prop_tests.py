@@ -71,7 +71,7 @@ class Proposal:
 #: The exact next call each proposal names, CLI then MCP form. None APPLIES the change:
 #: a split is code (the SZ split pattern splits the module); the rest are a person's call.
 _NEXT_CALLS = {
-    "split_file": "the SZ split pattern then splits it `ddflow split <item>` (MCP: ddflow_task action=split id=<item>)",
+    "split_file": "the SZ split pattern then splits `ddflow split <file>` (MCP: ddflow_task action=split id=<file>)",
     "shard": "shard by historical duration: record the decision `ddflow decision add` (MCP: ddflow_decision action=add)",
     "workers": "raise the worker count: record the decision `ddflow decision add` (MCP: ddflow_decision action=add)",
     "selection": "record the selection change `ddflow decision add` (MCP: ddflow_decision action=add)",
@@ -170,21 +170,16 @@ def propose_shard_or_workers(
     if floor is None or not per_file:
         return None
     slowest = max(per_file, key=lambda f: per_file[f])
-    skew = rollup.get("skew")
-    if not isinstance(skew, (int, float)) or isinstance(skew, bool) or not _is_finite(skew):
-        return None  # an unmeasured or non-finite skew is unavailable, never a shard or raise
     slowest_s = per_file[slowest]
-    if slowest_s != slowest_s or slowest_s == float("inf"):
-        return None  # the slowest file was never measured: a non-finite duration is not a sample
-    skew = float(skew)
+    skew = slowest_s / floor  # the slowest file's OWN share of the floor (never a stale rollup skew)
     if skew >= cfg.prop_shard_skew:
         return Proposal(
             "shard",
             {"kind": "shard", "file": slowest},
-            evidence={"skew": skew, "floor_s": floor, "file_s": per_file[slowest], "workers": rollup.get("workers")},
+            evidence={"share": skew, "floor_s": floor, "file_s": slowest_s, "workers": rollup.get("workers")},
             sample_size=len(per_file),
             effect_size=skew,
-            expected_saving_s_run=per_file[slowest] - per_file[slowest] / max(1, _workers(rollup)),
+            expected_saving_s_run=slowest_s - slowest_s / max(1, _workers(rollup)),
             expected_saving_s_day=None,
             risk="the shard only; it moves tests between files, the suite is ungreen until it re-passes",
             because=f"{slowest} is {skew:.2f} of the floor: shard it by historical duration",
@@ -192,7 +187,7 @@ def propose_shard_or_workers(
     return Proposal(
         "workers",
         {"kind": "raise", "workers": rollup.get("workers")},
-        evidence={"skew": skew, "floor_s": floor, "serial_s": rollup.get("serial_seconds")},
+        evidence={"share": skew, "floor_s": floor, "serial_s": rollup.get("serial_seconds")},
         sample_size=len(per_file),
         effect_size=skew,
         expected_saving_s_run=None,  # unknown without the time saved per worker
