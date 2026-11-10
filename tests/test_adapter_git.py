@@ -83,3 +83,24 @@ def test_a_temp_repo_can_be_shared_with_the_real_module():
     finally:
         tmp.remove()
 
+
+def test_temp_repo_remove_deletes_the_repository():
+    tmp = TempRepo()
+    root = tmp.path
+    assert root.is_dir()
+    tmp.remove()
+    assert not root.exists()
+
+
+def test_the_fake_records_the_shas_of_commits_missing_from():
+    io = FakeGit()
+    try:
+        sha = io.head_commit(io.repo)
+        io.commits_missing_from(io.repo, [sha, "main"], "main")
+        verb, args = io.calls[-1]
+        assert verb == "commits_missing_from"
+        assert args == (io.repo, (sha, "main"), "main")
+    finally:
+        io.temp.remove()
+
+
