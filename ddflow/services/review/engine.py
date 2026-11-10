@@ -47,28 +47,50 @@ _FINDING_RE = re.compile(
     re.M | re.I | re.S,
 )
 
-#: A finding's location must be a citation: a bare path, ``path:line``, ``path:line-line``
-#: or ``path:symbol`` (``path::func`` pytest-style nodes included). Anything else -- a
-#: question mark, an ellipsis, prose after a line number -- is the reviewer thinking in the
-#: location field, not naming a defect (B-review-finding-is-unfinished-reasoning). The path
-#: part excludes whitespace, ``:``, ``?`` and ``;`` so a sentence can never read as a path.
-_SYMBOL = r"[A-Za-z_][A-Za-z0-9_.()]*"
-_CITATION_RE = re.compile(rf"^[^\s:?;]+(?::{{1,2}}{_SYMBOL}|:\d+(?:[-\u2013]\d+)?)?$")
+#: A citation has NO whitespace and none of these prose marks: a ``path``, ``path:line``,
+#: ``path:line:col``, ``path:line-line`` or ``path::symbol`` (nested ``::`` and col:
+#: positions included) is one token. A ``?``, ``;`` or ellipsis, or any whitespace, is the
+#: reviewer thinking aloud in the location field (B-review-finding-is-unfinished-reasoning).
+_PROSE_LOCATION = re.compile(r"\s|[?;\u2026]|\.\.\.")
 
 
-def _malformed_reason(location: str) -> str:
+#: Words a finding paragraph uses when it names a CONCRETE failure. The absence of every
+#: one of these -- together with a sentence that never ends -- marks a paragraph as the
+#: reviewer thinking aloud rather than a finding. Deliberately a positive list ("names a
+#: defect"); it makes a review whose wording walks around the list and never ends its own
+#: sentence drop, which is the fail-open corner this table exists to be generous about.
+_DEFECT_WORDS = re.compile(
+    r"\b(?:fails?|failure|crashes?|raises?|throws?|leaks?|loses?|drops?|discards?|"
+    r"ignores?|omits?|skips?|overwrites?|corrupts?|breaks?|deletes?|calls twice|"
+    r"missing|misses?|wrong|incorrect|unreachable|dead|stale|lost|unset|undefined|"
+    r"uninitialized|unhandled|duplicate[sd]?|deleted|removed)\b",
+    re.I,
+)
+_TERMINATED = re.compile(r"[.!?]\s*$")
+
+
+def _unfinished_reasoning(paragraph: str) -> bool:
+    """A paragraph is the reviewer trailing off, not a finding, when it names no concrete
+    defect and does not end its sentence (an explicit trailing ellipsis included)."""
+    if not paragraph or _DEFECT_WORDS.search(paragraph):
+        return False
+    stripped = paragraph.rstrip()
+    if stripped.endswith("...") or stripped.endswith("\u2026"):
+        return True
+    return not _TERMINATED.search(stripped)
+
+
+def _malformed_reason(location: str, paragraph: str) -> str:
     """Why a finding is reasoning rather than a defect, or "" when it is a real finding.
 
-    One deterministic signal, by design (B-review-finding-is-unfinished-reasoning): a
-    location that is not a ``path:line``/``path:symbol`` citation. The bug also names "text
-    is reasoning with no failure stated", which no word list or punctuation test classifies
-    without both dropping real defects and keeping meta-talk -- the reviewer's review of
-    earlier drafts showed a list flags ``never`` in "I never finished this thought" and
-    reads an ellipsis ``...`` as a full stop -- so the paragraph is not guessed at. Only the
-    location signal is used: it is complete, and it is the reported finding's malformation.
-    """
-    if location and not _CITATION_RE.match(location):
+    Two signals, per the bug (B-review-finding-is-unfinished-reasoning): a location that is
+    not a ``path:line``/``path:symbol`` citation, and a paragraph of reasoning that states
+    no defect and never ends its sentence. A location-only finding (``paragraph`` empty)
+    keeps its location-derived text and stays a finding (B-review-finding-empty-text)."""
+    if location and _PROSE_LOCATION.search(location):
         return "location is prose, not a path:line or path:symbol"
+    if _unfinished_reasoning(paragraph):
+        return "the paragraph states no defect and never ends (unfinished reasoning)"
     return ""
 
 
@@ -525,11 +547,12 @@ def parse(text: str) -> tuple[list[Finding], bool]:
     findings = []
     for m in _FINDING_RE.finditer(text or ""):
         location = (m.group(2) or "").strip()
+        paragraph = (m.group(3) or "").strip()
         #: The finding's text is the reviewer's paragraph. A reviewer may write only a
         #: location -- `FINDING MEDIUM y.py:1` with no paragraph -- and that still names
         #: the spot the author must answer, so its text is derived from the location and
         #: a location-only finding is never recorded empty (B-review-finding-empty-text).
-        detail = (m.group(3) or "").strip() or location
+        detail = paragraph or location
         title = location or " ".join(detail.split())[:80]
         if not detail:
             #: The reviewer declared a finding but named no location and no paragraph.
@@ -543,7 +566,7 @@ def parse(text: str) -> tuple[list[Finding], bool]:
                 location=location,
                 title=title,
                 detail=detail,
-                malformed=_malformed_reason(location),
+                malformed=_malformed_reason(location, paragraph),
             )
         )
     return findings, status is not None
