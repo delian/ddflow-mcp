@@ -129,7 +129,9 @@ def test_merge_rerun_carries_the_malformed_flag_across_a_chunk_rerun():
         ],
         "unreviewed": [],
     }
-    res = RV.ReviewResult("b", "grok-4.7", "google", status=RV.REVIEWED, requested=[2], reviewed=[2])
+    res = RV.ReviewResult(
+        "b", "grok-4.7", "google", status=RV.REVIEWED, requested=[2], reviewed=[2]
+    )
     res.diff_sha = "deadbeef"
     res.max_chunk_chars = 4000
     assert RV.merge_rerun(prior, res) == ""
