@@ -3299,6 +3299,20 @@
           --set`, `ddflow_configure` and the environment refuse it, and so does
           loading ddflow's own source tree, where the file and the code are one
           commit.
+      perf_metrics.prop_min_observations = 3   [default]
+          Fewest observed cap values a parallel-cap proposal needs before it will
+          advise a cap (PM-prop-flow); below it the proposal is not-enough-data, never
+          a zero.
+      perf_metrics.prop_marginal_gain = 0.25   [default]
+          The fraction of the wall clock one more agent must save before its extra
+          parallelism is paid back (PM-prop-flow); below it the cap before it is the
+          proposed parallel cap.
+      perf_metrics.prop_batch_dominance = 2.0   [default]
+          The suite-lock wait as a multiple of the gate run that triggers a batch-
+          gates proposal (PM-prop-flow).
+      perf_metrics.prop_retire_payback = 2.0   [default]
+          The multiple of what a stage buys back that its wait must reach before a
+          retire-stage proposal fires (PM-prop-flow).
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the
