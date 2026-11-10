@@ -114,10 +114,15 @@ def test_the_json_report_is_deterministic_for_the_same_log(repo):
 
 
 def test_report_honours_a_phase_filter(repo):
-    run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--title", "P")
-    code, _out, err = run_cli(repo, "perf", "report", "--format", "json", "--filters", "phase=P1")
+    _seed(repo)  # P1 with T1, whose ci gate passed
+    run_cli(repo, "phase", "add", "P2", "--title", "Q")
+    code, out, err = run_cli(repo, "perf", "report", "--format", "json", "--filters", "phase=P1")
     assert code == 0, err
+    assert json.loads(out)["gates"], "the known phase's own gate is inside the report"
+    run_cli(repo, "task", "add", "T2", "--title", "U", "--phase", "P2", "--globs", "b.py")
+    code, out, _err = run_cli(repo, "perf", "report", "--format", "json", "--filters", "phase=P2")
+    assert code == 0, _err
+    assert json.loads(out)["gates"] == []  # P2 has no outcomes: the filter scopes, not accepts
     code, _out, err = run_cli(repo, "perf", "report", "--format", "json", "--filters", "phase=NOPE")
     assert code == 3
     assert "NOPE" in err

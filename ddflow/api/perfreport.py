@@ -77,14 +77,37 @@ def _charts(report) -> dict[str, str]:
 
 
 def _next_calls(fmt: str, out: str, win: str) -> list[str]:
-    """The exact next calls in CLI and MCP form (r-tell-dont-discover)."""
-    cli = f"ddflow perf report --format {fmt} --window {win} --out {out}"
-    mcp = f"ddflow_view action=perf format={fmt} window={win} out={out}"
+    """The exact next calls in CLI and MCP form (r-tell-dont-discover). ``out`` is only
+    named when a file is actually written (svg/html), so a text/md next call never ends
+    in a bare ``--out`` with no value."""
+    cli = f"ddflow perf report --format {fmt} --window {win}"
+    mcp = f"ddflow_view action=perf format={fmt} window={win}"
+    if out:
+        cli += f" --out {out}"
+        mcp += f" out={out}"
     return [cli, mcp]
 
 
 def _footer(fmt: str, out: str, win: str) -> str:
     return "next:\n  " + "\n  ".join(_next_calls(fmt, out, win))
+
+
+def _svg_doc(charts: dict[str, str]) -> str:
+    """One well-formed SVG document, whatever the chart set: a single root ``<svg>`` that
+    nests each chart (its own ``<svg>``) at its own ``y``, or an empty canvas when the log
+    supports no figure (never two root elements, and never an empty file)."""
+    if not charts:
+        return CH.viewbox(600, 200) + "<title>perf report</title><desc>no figures to draw</desc></svg>"
+    height = 220
+    rows = "".join(
+        f'<svg x="0" y="{i * height}" width="600" height="{height}">{charts[k]}</svg>'
+        for i, k in enumerate(sorted(charts))
+    )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="{len(charts) * height}">'
+        + rows
+        + "</svg>"
+    )
 
 
 def _target(repo: Path, fmt: str, out: str, now: float) -> Path:
@@ -143,13 +166,15 @@ def run_perf_report(
     else:
         charts = _charts(report)
         if fmt == "svg":
-            doc = "\n\n".join(charts.values())
+            doc = _svg_doc(charts)
         else:
             doc = CH.html_report(charts, title="perf report")
         path = _target(repo, fmt, out, at)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(doc, "utf-8")
-        body = f"path: {path}\n{doc}\n{_footer(fmt, str(path), win)}"
+        # The answer names the file it wrote and the next calls, not the whole document:
+        # the SVG/HTML body is bounded by the path, and the file is opened, not pasted.
+        body = f"path: {path}\n{_footer(fmt, str(path), win)}"
     return O.ok("perf_report", text=body, format=fmt, window=win, out=out, report=RT.to_json(report))
 
 
