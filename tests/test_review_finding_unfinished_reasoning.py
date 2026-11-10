@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from ddflow.api.review.findings import _untriaged
 from ddflow.services import review as RV
 
 #: The finding reported on B-hy-stop-protocol: the location field is the reviewer
@@ -89,6 +90,11 @@ def test_reasoning_on_a_clean_citation_is_kept_not_dropped():
 def test_a_malformed_finding_is_not_counted_against_the_gate():
     (f,) = RV.parse(PROSE_LOCATION)[0]
     assert RV.blocking_findings([f], converged=False, floor="HIGH") == []
+
+
+def test_a_malformed_finding_does_not_hold_a_later_delta_open():
+    kept = [{"digest": "deadbeef", "severity": "MEDIUM", "malformed": "location is prose"}]
+    assert _untriaged(kept, gone=set(), carried={}, verdicts={}) == 0
 
 
 def test_a_valid_finding_still_blocks():

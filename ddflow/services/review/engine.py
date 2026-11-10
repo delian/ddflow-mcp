@@ -49,19 +49,21 @@ _FINDING_RE = re.compile(
 
 #: A citation is ONE token -- a ``path``, ``path:line``, ``path:line:col``,
 #: ``path:line-line`` or ``path::symbol`` (nested ``::`` included) -- so it has no
-#: whitespace. Whitespace is what shows the reviewer writing a SENTENCE in the location
-#: field rather than citing one spot (B-review-finding-is-unfinished-reasoning). A lone
-#: ``?``/``;``/``...`` is NOT prose on its own: a ``path:257?`` carries uncertainty about
-#: the line, it does not stop being a citation, so it is kept (fail-closed).
-_PROSE_LOCATION = re.compile(r"\s")
+#: whitespace. A reviewer writing a SENTENCE in the location field writes whitespace too,
+#: and a ``?``, ``;`` or ellipsis together with that whitespace is what shows it thinking
+#: aloud, not citing one spot (B-review-finding-is-unfinished-reasoning). Neither signal
+#: alone is prose: a bare ``path:257?`` is uncertainty about the line (kept), and
+#: ``foo.py:10 bar.py:20`` is two cited spots (kept) -- only a whitespace-separated run
+#: that also carries a prose mark is the reviewer thinking.
+_PROSE_MARK = re.compile(r"[?;\u2026]|\.\.\.")
 
 
 def _malformed_reason(location: str) -> str:
     """Why a finding is reasoning rather than a defect, or "" when it is a real finding.
 
     One deterministic signal (B-review-finding-is-unfinished-reasoning): a location that is
-    not a ``path:line``/``path:symbol`` citation -- one carrying whitespace -- records but
-    does not count.
+    not a ``path:line``/``path:symbol`` citation -- one carrying whitespace together with a
+    ``?``, ``;`` or ellipsis -- records but does not count.
 
     The bug also names "the text is reasoning with no failure stated". That half is
     deliberately left alone: whether a paragraph states a defect is semantic, and a word
@@ -70,7 +72,7 @@ def _malformed_reason(location: str) -> str:
     full stop and keep meta-talk that ended in a full stop -- so no paragraph test acts, and
     a finding that names a real spot is never silently dropped (fail-closed).
     """
-    if location and _PROSE_LOCATION.search(location):
+    if location and re.search(r"\s", location) and _PROSE_MARK.search(location):
         return "location is prose, not a path:line or path:symbol"
     return ""
 
