@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...adapters import git as GIT
 from ...core import flow as F
 from ...core import outcome as O
 from ...core.admission import new_file_globs
@@ -91,6 +92,43 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
             "merge.forced",
             item,
             {"sha": sha, "unmet_gates": gates.awaiting(), "approval": stamp, "agent": agent},
+        )
+
+
+def _record_reconciled(
+    repo, cfg, log, st, it, item: str, landed_before: str, landed_after: str, branch_head: str
+) -> None:
+    """Record `merge.reconciled` when this landing touched a file another item changed since
+    this item forked: the reconcile-at-merge safety net of D-lease-hold-limit-r2. Complete is
+    then refused until the affected tests pass on the reconciled tree, unless
+    `[lease].reconcile_tests = off`. A clean landing over nothing records nothing."""
+    if cfg.lease.reconcile_tests == "off":
+        return
+    fork = it.base_sha or landed_before
+    mine = CH.changed_paths(repo, fork, tip=branch_head, include=("committed",), fork=True)
+    if not mine:
+        return
+    files: list[str] = []
+    for other_id, other in st.items.items():
+        if other_id == item or other.removed or not other.merged_sha:
+            continue
+        if GIT.is_ancestor(repo, other.merged_sha, fork) is not False:
+            continue  # merged at or before this item forked: nothing to reconcile
+        theirs = CH.changed_paths(
+            repo,
+            other.landed_before,
+            tip=other.landed_after,
+            include=("committed",),
+            fork=False,
+        )
+        if theirs:
+            files.extend(set(mine) & set(theirs))
+    if files:
+        files = sorted(set(files))
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": files, "base": landed_before, "main": landed_after},
         )
 
 
@@ -274,6 +312,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         landed_before=landed_before,
         landed_after=landed_after,
     )
+    _record_reconciled(repo, cfg, log, st, it, item, landed_before, landed_after, branch_head)
     return _finish_merge(
         repo,
         cfg,

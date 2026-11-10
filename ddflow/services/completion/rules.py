@@ -288,6 +288,36 @@ def _coverage_gap_blocker(cfg, gaps) -> str:
     return ""
 
 
+def _reconciled_blocker(cfg: Config, it: Item) -> str:
+    """When merge reconciled files another item changed since this one forked, complete is
+    refused until the tests pass on the reconciled tree (D-lease-hold-limit-r2); "" when
+    nothing is owed, the guard is off, or a pass already sits on the record."""
+    files = it.reconciled.get("files", []) if it.reconciled else []
+    if not files or cfg.lease.reconcile_tests == "off":
+        return ""
+    passed = it.gate_outcome("unit_tests") == GateOutcome.PASSED
+    if cfg.lease.reconcile_tests != "full":
+        passed = passed or it.gate_outcome("ci") == GateOutcome.PASSED
+    if passed:
+        return ""
+    base = (it.reconciled.get("base") or "")[:12]
+    main = (it.reconciled.get("main") or "")[:12]
+    named = ", ".join(files[:8])
+    scope = "full suite" if cfg.lease.reconcile_tests == "full" else "affected tests"
+    return (
+        f"merge reconciled {named} that another item changed since this one forked "
+        f"(base {base}, main {main}): the {scope} must pass on the reconciled tree before "
+        f"complete (`ddflow gate run {it.id} unit_tests`), or set [lease].reconcile_tests = off"
+    )
+
+
+def _push_reconciled_blocker(cfg: Config, it: Item, blockers: list[str]) -> None:
+    """Append `_reconciled_blocker`'s answer when it answers (keeps `verdict` under its
+    complexity cap: the branch lives here, not in the caller)."""
+    if blocker := _reconciled_blocker(cfg, it):
+        blockers.append(blocker)
+
+
 def verdict(
     state: State,
     cfg: Config,
@@ -340,6 +370,7 @@ def verdict(
             + ")"
             + "".join(GA.next_step(it, item_id, g) for g in missing if GA.next_step(it, item_id, g))
         )
+    _push_reconciled_blocker(cfg, it, v.blockers)
 
     # ANY item with work beneath it, not only a phase: a task split into sub-tasks is
     # an umbrella too, and completing it while its children are open marks work
