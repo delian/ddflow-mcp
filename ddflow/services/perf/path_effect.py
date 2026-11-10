@@ -101,8 +101,9 @@ def superseded_pass_hours(ctx: Context) -> dict:
     metric is per merged item, and a superseded pass on an unfinished item is not a cost of
     merged work. Returns the raw facts; the per-item value and floor are applied in
     :func:`current`."""
+    spans = completed_spans(ctx)
     by_item: dict[str, list] = defaultdict(list)
-    done = {s.item for s in completed_spans(ctx)}
+    done = {s.item for s in spans}
     for o in ctx.facts.outcomes:
         if o.item in done:
             by_item[o.item].append(o)
@@ -117,7 +118,7 @@ def superseded_pass_hours(ctx: Context) -> dict:
                 count += 1
                 if o.elapsed_s is not None:
                     seconds += o.elapsed_s
-    return {"seconds": seconds, "count": count, "n_items": len(completed_spans(ctx))}
+    return {"seconds": seconds, "count": count, "n_items": len(spans)}
 
 
 def _classify(r, c) -> str:
