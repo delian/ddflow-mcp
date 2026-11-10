@@ -39,3 +39,4 @@
 {"agent":"ptoken-kilo","data":{"tags":["skip-followup","wave:0"]},"id":"ed624b6559bb039b282a810ba","kind":"task.updated","lamport":168371,"schema":1,"subject":"gskip-PM-report-prompt-1","ts":"2026-11-10T23:03:50.544307Z"}
 {"agent":"ptoken-kilo","data":{"tags":["skip-followup","wave:0"]},"id":"e8666399aa8346a86ac3e5b8f","kind":"task.updated","lamport":168372,"schema":1,"subject":"gskip-PM-report-prompt-2","ts":"2026-11-10T23:03:50.623453Z"}
 {"agent":"ptoken-kilo","data":{"tags":["skip-followup","wave:0"]},"id":"e0d07bd81d205b8093c975155","kind":"task.updated","lamport":168373,"schema":1,"subject":"gskip-PM-report-prompt-3","ts":"2026-11-10T23:03:50.765519Z"}
+{"agent":"ptoken-kilo","data":{"gate":"ci"},"id":"ebaf4b5885be4bb19395882b7","kind":"gate.started","lamport":168375,"schema":1,"subject":"TE-subagent-ttl","ts":"2026-11-10T23:04:08.009061Z"}
