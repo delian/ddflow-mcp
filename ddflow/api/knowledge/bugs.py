@@ -284,11 +284,13 @@ def _bugs_parent(log, cfg, st) -> tuple[str, str]:
 
 
 def missing_loud(root: Path, globs: list[str]) -> list[str]:
-    """One warning per literal glob that names no TRACKED file and is not a path that exists
-    on disk (Bf839186cee): a fix task filed with such a glob holds a lease on a path nobody
-    writes, while the file the reporter really means stays unprotected, and `bug found` used
-    to let the wrong scope stand silently. A glob naming an existing file -- tracked, or a
-    new file already on disk -- and a wildcard pattern are not warnings. Loud, never a
+    """One warning per literal glob that names no TRACKED file (Bf839186cee): a fix task filed
+    with such a glob holds a lease on a path nobody writes, while the file the reporter
+    really means stays unprotected, and `bug found` used to let the wrong scope stand
+    silently. A TRACKED file is the scope however the worktree stands, and a wildcard
+    pattern is not a warning (a new file behind it cannot be told from a typo). Whether the
+    path happens to exist on disk is not the test: a stray untracked file is a wrong scope
+    too, and a tracked file deleted from the worktree is still its path. Loud, never a
     refusal: an explicit scope may still name a file the fix creates."""
     tracked: list[str] = GIT.files(root, "tracked") or []
     out: list[str] = []
@@ -296,8 +298,8 @@ def missing_loud(root: Path, globs: list[str]) -> list[str]:
         rel = raw.lstrip("/")
         if not rel or any(c in rel for c in "*?["):
             continue  # a pattern: a new file behind it cannot be told from a typo
-        if (root / rel).exists():
-            continue  # a real file (tracked, or already on disk) is not a warning
+        if rel in tracked:
+            continue  # a tracked file IS the scope, however the worktree stands now
         near = difflib.get_close_matches(rel, tracked, n=3, cutoff=0.6)
         hint = f"; nearest: {', '.join(near)}" if near else ""
         out.append(f"{raw!r} names no tracked file{hint}")

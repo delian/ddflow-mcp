@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+
 from conftest import run_cli
 from helpers import state_as_reader as state
 
@@ -54,9 +56,13 @@ def test_an_explicit_glob_is_kept_even_when_it_names_a_file_the_fix_creates(repo
 
 
 def test_an_explicit_glob_naming_no_file_is_loudly_flagged(repo):
-    """Bf839186cee: `--globs` naming a file that exists nowhere held a lease on a path
-    nobody writes while the real file stayed unprotected, and nothing said so at filing."""
+    """Bf839186cee: `--globs` naming a file that names no tracked file held a lease on a
+    path nobody writes while the real file stayed unprotected, and nothing said so at
+    filing. The check is tracked-file membership, not worktree existence: a stray on-disk
+    file is not a scope, and a tracked file deleted from the worktree still is."""
     _seed(repo)
+    subprocess.run(["git", "-C", str(repo), "add", "src/real.py"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "track real"], check=True)
     out = K.bug_found(
         repo, summary="s", id="Bz", agent="a",
         globs="src/real.py,src/guessed/standards.py",
