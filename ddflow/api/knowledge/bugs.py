@@ -294,11 +294,16 @@ def missing_loud(root: Path, globs: list[str]) -> list[str]:
     too, and a tracked file deleted from the worktree is still its path. Loud, never a
     refusal: an explicit scope may still name a file the fix creates."""
     tracked: list[str] = GIT.files(root, "tracked") or []
+    root_posix = root.resolve().as_posix().rstrip("/")
     out: list[str] = []
     for raw in dict.fromkeys(globs):
         if not raw or any(c in raw for c in "*?["):
             continue  # a pattern: a new file behind it cannot be told from a typo
-        rel = normpath(raw.lstrip("/"))
+        rel = normpath(raw)
+        if rel.startswith(root_posix + "/"):
+            rel = rel[len(root_posix) + 1 :]  # a host-absolute path inside the repo
+        elif rel.startswith("/"):
+            rel = rel.lstrip("/")  # a leading slash anchors to the repo root (`existing_globs`)
         if rel in tracked:
             continue  # a tracked file IS the scope, however the path is spelled
         near = difflib.get_close_matches(rel, tracked, n=3, cutoff=0.6)
