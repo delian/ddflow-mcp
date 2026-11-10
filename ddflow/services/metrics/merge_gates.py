@@ -126,8 +126,7 @@ def text(data: dict) -> str:
     for r in data["covered_by"]:
         out.append(f"  covered: {r['gate']} by {r['by']}")
     for r in data.get("refused", []):
-        names = ", ".join(r.get("gates") or [f"{r['gate']} by {r['by']}"])
-        out.append(f"  refused: {names} - {r['why']}")
+        out.append(f"  refused: {', '.join(r['gates'])} - {r['why']}")
     if not has_figures(data):
         if data.get("refused"):
             out.append("  (no merge candidates: the present groups were refused)")
