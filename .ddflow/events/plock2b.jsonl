@@ -1,0 +1,2 @@
+{"agent":"plock2b","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e7ff645a2cc05e14d36222063","kind":"ddflow.seen","lamport":165155,"schema":1,"subject":"ddflow","ts":"2026-11-10T03:02:00.544909Z"}
+{"agent":"plock2b","data":{"path":".ddflow/worktrees/ADP-template"},"id":"e04afb62797a17cf688957901","kind":"worktree.removed","lamport":165156,"schema":1,"subject":"ADP-template","ts":"2026-11-10T03:02:00.599664Z"}
