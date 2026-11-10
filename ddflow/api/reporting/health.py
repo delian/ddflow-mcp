@@ -19,6 +19,7 @@ from ...infra import signals as SIG
 from ...infra import worktree as W
 from ...infra.store import Store
 from ...services import adopt as AD
+from ...services import cachettl as CTL
 from ...services import cleanup as CL
 from ...services import configcompat as CC
 from ...services import embed as EMB
@@ -392,6 +393,10 @@ def doctor(
     # A NOTE: a host signal this platform cannot supply only narrows what adaptive
     # parallelism steers by; it is never a failure.
     notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
+    # The effective Claude Code subagent cache TTL, and the warning while it is 5m
+    # (TE-subagent-ttl): a host that launches Claude Code with the 1-hour knob already set is
+    # not warned; a host on the 5-minute default is told the one-line remedy.
+    notes.extend(CTL.doctor_notes(repo, cfg))
 
     # The ring the adaptive limit is folded from: unwritable or not git-ignored (notes).
     notes += [*FL.doctor_notes(repo), *FL.history_notes(cfg, events)]  # history: too little yet
