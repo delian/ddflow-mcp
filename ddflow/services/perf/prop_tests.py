@@ -65,6 +65,12 @@ class Proposal:
 
     def next_call(self) -> str:
         """The exact next call to accept this proposal, CLI and MCP form (r-tell-dont-discover)."""
+        if self.kind == "split_file" and isinstance(self.advice, dict):
+            file = self.advice.get("file", "<file>")
+            return (
+                f"the SZ split pattern then splits `ddflow split {file}`"
+                f" (MCP: ddflow_task action=split id={file})"
+            )
         return _NEXT_CALLS[self.kind]
 
 
@@ -263,8 +269,8 @@ def _count_misses(runs: list[dict[str, Any]]) -> tuple[int, bool]:
     measured = True
     for r in runs:
         m = r.get("misses")
-        if isinstance(m, (int, float)) and not isinstance(m, bool) and _is_finite(m) and m >= 0:
-            total += int(m)
+        if isinstance(m, int) and not isinstance(m, bool) and m >= 0:
+            total += m
         else:
             measured = False
     return total, measured
