@@ -207,8 +207,9 @@ def test_a_non_int_version_is_refused(tmp_path):
 def test_a_non_string_note_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ntitle = \"X\"\ndescriptor_fields = []\nchecks = []\n"
-        "note = 1\n",
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
+        "checks = [\"facts\"]\nnote = 1\n"
+        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
