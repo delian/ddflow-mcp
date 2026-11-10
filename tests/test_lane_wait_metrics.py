@@ -12,8 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lanes_fixture import T0, Log
 from metrics_fixture import frozen
 
-from ddflow.config import Config
-from ddflow.core.model import fold
 from ddflow.services import lanewait as LW
 
 H = 3600.0
@@ -58,7 +56,12 @@ def test_every_gate_that_queued_for_the_lock_is_counted():
     # the shared-lock queue, whatever the gate is named, never filtered out.
     log = seeded()
     log.add(
-        "gate.passed", "A", "a1", T0 + 300, gate="standards", by="a1",
+        "gate.passed",
+        "A",
+        "a1",
+        T0 + 300,
+        gate="standards",
+        by="a1",
         evidence={"waited_s": 180},
     )
     st, cfg, _ = frozen(log, T0 + 5 * H)

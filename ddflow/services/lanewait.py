@@ -62,21 +62,15 @@ def lane_wait(
     unavailable: dict[str, str] = {}
 
     per_gate = SUM.gate_waits(ctx)
-    gate_wait_hours = {
-        gate: sum(seconds) / 3600.0 for gate, seconds in per_gate.items() if seconds
-    }
+    gate_wait_hours = {gate: sum(seconds) / 3600.0 for gate, seconds in per_gate.items() if seconds}
 
     ready = stat(SUM.queue_waits(ctx), minimum)
     if ready["n"] < max(minimum, 1):
-        unavailable["ready_to_claimed"] = (
-            f"{ready['n']} items with a dated wait, need {minimum}"
-        )
+        unavailable["ready_to_claimed"] = f"{ready['n']} items with a dated wait, need {minimum}"
 
     ci = stat(per_gate.get("ci", []), minimum)
     if ci["n"] < max(minimum, 1):
-        unavailable["ci_lock_queue"] = (
-            f"{ci['n']} ci runs with a waited_s, need {minimum}"
-        )
+        unavailable["ci_lock_queue"] = f"{ci['n']} ci runs with a waited_s, need {minimum}"
 
     grid = GRID.sample(events, cfg, now, since)
     util = GRID.utilisation(grid["rows"])
