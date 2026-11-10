@@ -1,23 +1,15 @@
 """The one place git is run (D-unify: one process layer).
 
 ``run(repo, *args)`` is the single way to start ``git -C <repo> ...``: stdin detached
-(through `proc.run`), a default timeout, ``LC_ALL=C`` so the messages callers match on do
-not depend on the operator's locale, and a result that is NEVER an exception for "git
-could not run": a missing git or a timeout is a `GitResult` whose ``unavailable`` is true,
-so a caller cannot mistake "could not tell" for "nothing there" without writing the test
-that says so.
+(through `proc.run`), a default timeout, ``LC_ALL=C`` so messages callers match on do not
+depend on the operator's locale, and a result that is NEVER an exception for "git could
+not run": a missing git or a timeout is a `GitResult` whose ``unavailable`` is true, so a
+caller cannot mistake "could not tell" for "nothing there" without the test that says so.
 
-Three shapes of output, one function:
-
-- text (the default): ``out`` and ``err`` stripped, decoded with ``errors`` ("replace": a
-  commit subject or a blob that is not UTF-8 must not raise out of a runner that promises
-  not to; a caller that needs the exact bytes asks for ``binary``);
-- ``binary=True``: ``out_bytes`` holds stdout untouched (a file's own trailing newline is
-  its content; a diff piped to ``patch-id`` must not be re-encoded);
-- ``z=True``: ``-z`` is inserted before a ``--`` pathspec and ``paths()`` reads the NUL
-  separated names exactly as the filesystem spells them (`os.fsdecode`), which text mode
-  cannot: git C-quotes a non-ASCII name without ``-z``, and decodes a non-UTF-8 name
-  strictly with it (see `git_paths`).
+Three shapes of output, one function: text (default, ``out``/``err`` stripped and decoded
+with ``errors``); ``binary=True`` (``out_bytes`` holds stdout untouched); ``z=True``
+(``-z`` inserted before the pathspec and ``paths()`` reads NUL-separated names as the
+filesystem spells them).
 """
 
 from __future__ import annotations
@@ -49,6 +41,42 @@ class Git(Protocol):
     def unmerged(self, repo: Path | str, timeout: float | None = None) -> list[str] | None:
         """The unmerged paths of an in-progress merge; None when git could not answer."""
 
+    def files(self, repo: Path | str, *args: str, **kwargs: Any) -> list[str] | None:
+        """A work tree's files, `-z` exact; None when git could not list them."""
+
+    def status(self, repo: Path | str, *args: str, **kwargs: Any) -> list[StatusEntry] | None:
+        """`git status --porcelain -z` parsed; None when git failed."""
+
+    def status_run(self, repo: Path | str, *args: str, **kwargs: Any) -> GitResult:
+        """The `git status --porcelain -z` call; see `status`."""
+
+    def head_commit(self, repo: Path | str) -> str:
+        """The HEAD commit; "" when git cannot say."""
+
+    def commit_of(self, repo: Path | str, rev: str, **kwargs: Any) -> str:
+        """`rev` as a commit id; "" when it names none."""
+
+    def branch_tip_aheads(self, repo: Path | str, base: str) -> dict[str, int]:
+        """Commits ahead of `base` per local branch-tip object id."""
+
+    def commits_ahead(self, repo: Path | str, base: str, head: str, **kwargs: Any) -> int:
+        """Commits of `head` that `base` lacks; -1 when it could not be told."""
+
+    def commits_missing_from(self, repo: Path | str, shas: list[str], base: str) -> set[str] | None:
+        """Which of `shas` the `base` lacks; None when git refused."""
+
+    def is_ancestor(self, repo: Path | str, sha: str, base: str, **kwargs: Any) -> bool | None:
+        """Is `sha` reachable from `base`? None when git could not tell."""
+
+    def changed_paths(self, repo: Path | str, old: str, new: str, **kwargs: Any) -> list[str]:
+        """The paths that differ between two commits, renames as two."""
+
+    def bundle_create(self, repo: Path | str, dest: Path, ref: str, **kwargs: Any) -> None:
+        """Write a bundle of `ref` to `dest`."""
+
+    def bundle_heads(self, bundle: Path, **kwargs: Any) -> list[str]:
+        """The refs a bundle carries, tags too, without its HEAD line."""
+
 
 #: Seconds a git call may run unless the caller says otherwise.
 GIT_TIMEOUT = P.TIMEOUTS["git"]
@@ -63,8 +91,7 @@ UNAVAILABLE = -1
 
 class GitError(RuntimeError):
     #: Read by `core.outcome.declared_exit`: a git failure is a failure, not a bug (the
-    #: process-failure exit code `ddflow.core.outcome.FAIL`, spelled as its value here
-    #: because the adapters layer cannot import core).
+    #: value of `ddflow.core.outcome.FAIL`, spelled here because adapters cannot import core).
     exit_code = 1
 
 
@@ -73,12 +100,12 @@ class GitResult:
     code: int
     out: str
     err: str
-    #: False when a precondition refused the merge before git tried to merge the branch
-    #: (the target is missing, checked out elsewhere, or another merge is in progress): the
-    #: item's own branch was not judged, so it is not a failed merge of that branch.
+    #: False when a precondition refused the merge before git tried it (the target is
+    #: missing, checked out elsewhere, or a merge is in progress): the item's own branch
+    #: was not judged, so it is not a failed merge of that branch.
     attempted: bool = True
-    #: Raw stdout, set by ``binary=True`` / ``z=True`` (``out`` is then its lossy decoding);
-    #: None when the call did not ask for it, so `paths()` cannot read a text call as empty.
+    #: Raw stdout, set by ``binary=True`` / ``z=True``; None when the call did not ask for
+    #: it, so `paths()` cannot read a text call as empty.
     out_bytes: bytes | None = None
     #: git did not run to an exit status: not installed, or killed at its timeout.
     unavailable: bool = False
@@ -168,20 +195,10 @@ def paths(
 ) -> list[str] | None:
     """File paths git lists, EXACTLY as the filesystem names them; None if git failed.
 
-    The one way a path listing is read. A caller must treat None as "could not tell",
-    never as "no paths". Adds `-z` and reads BYTES:
-    - without `-z`, git C-quotes any non-ASCII name (`"caf\\303\\251.txt"`), so a
-      path built from it names no file and matches no glob;
-    - with `-z` but in text mode, the raw bytes are decoded strictly as UTF-8, so ONE
-      non-UTF-8 name anywhere raised out of the caller -- every commit (the hook), and
-      every `ddflow lesson add` (the inventory scan), failed; text mode also rewrote a
-      `\\r` in a name to `\\n`.
-    `os.fsdecode` (surrogateescape) round-trips any name. Both bugs were found by roborev
-    (on 40950c9 and 4f54455), the second introduced by the fix for the first, and then
-    found again in a third caller (on e8543f9) -- hence one helper rather than three.
-
-    `args` are git's arguments up to (not including) `-z`; pass any pathspec after a
-    `"--"` in ``args`` as usual -- `-z` is inserted before it.
+    The one way a path listing is read: None means "could not tell", never "no paths".
+    Adds `-z` and reads BYTES so a non-ASCII or non-UTF-8 name round-trips (git C-quotes
+    one without `-z`; strict text decoding rewrote `\\r` and raised on one byte) -- three
+    callers broke this way, hence one helper rather than three.
     """
     return run(repo, *args, z=True, timeout=timeout).paths()
 
@@ -201,10 +218,9 @@ def files(
 ) -> list[str] | None:
     """The files of a work tree, ``-z`` exact; None when git could not list them.
 
-    ``kind``: ``"tracked"`` (in the index), ``"untracked"`` (neither tracked nor ignored)
-    or ``"all"`` (both). ``exclude`` are pathspecs such as `core.bookkeeping.STATE_EXCLUDE`
-    and ``pathspec`` narrows the listing (``"."`` is the tree below ``repo``, the default
-    whenever ``exclude`` is given); ``literal`` reads ``pathspec`` as names, not globs.
+    ``kind`` is ``"tracked"``, ``"untracked"`` or ``"all"``. ``exclude`` are pathspecs
+    (such as `core.bookkeeping.STATE_EXCLUDE`); ``pathspec`` narrows the listing; ``literal``
+    reads ``pathspec`` as names, not globs.
     """
     if literal and exclude:
         raise ValueError("literal pathspecs would read an exclude pathspec as a file name")
@@ -254,8 +270,7 @@ class StatusEntry:
         return (self.path, self.orig) if self.orig else (self.path,)
 
     def line(self) -> str:
-        """The entry as a porcelain text line, ``XY path`` (``XY old -> new`` for a rename),
-        with the names as the filesystem spells them rather than C-quoted."""
+        """The entry as porcelain text, names as the filesystem spells them (not C-quoted)."""
         return f"{self.xy} {self.orig} -> {self.path}" if self.orig else f"{self.xy} {self.path}"
 
 
@@ -266,13 +281,9 @@ def status_run(
     ignored: str = "",
     timeout: float | None = GIT_TIMEOUT,
 ) -> GitResult:
-    """The `git status --porcelain -z` call itself, for a caller that needs git's own
-    message when it fails (`parse_status` reads it; `status` does both).
-
-    ``untracked`` is git's ``--untracked-files`` mode: ``"normal"`` (an untracked directory
-    is one entry), ``"all"`` (every file) or ``"no"``. ``ignored`` is git's ``--ignored`` mode
-    (``"traditional"``, ``"matching"`` or ``"no"``; "" leaves ignored files out, as git does).
-    ``pathspec`` narrows the status.
+    """The `git status --porcelain -z` call itself (`parse_status` reads it; `status` does
+    both). ``untracked`` is git's ``--untracked-files`` mode; ``ignored`` its ``--ignored``
+    mode ("" leaves ignored files out); ``pathspec`` narrows the status.
     """
     argv = ["status", "--porcelain", f"--untracked-files={untracked}"]
     if ignored:
@@ -283,8 +294,8 @@ def status_run(
 
 
 def parse_status(r: GitResult) -> list[StatusEntry] | None:
-    """The entries of a `status_run` result, names as the filesystem spells them; None when
-    git failed -- "could not tell", never "nothing changed"."""
+    """The entries of a `status_run` result, names as the filesystem spells them; None
+    when git failed -- "could not tell", never "nothing changed"."""
     if not r.ok or r.out_bytes is None:
         return None
     records = [os.fsdecode(x) for x in r.out_bytes.split(b"\0")]
@@ -332,10 +343,8 @@ def real_path(path: Path | str) -> str:
 def branch_tip_aheads(repo: Path | str, base: str) -> dict[str, int]:
     """Commits ahead of ``base`` per local branch-tip object id, one `for-each-ref`.
 
-    The base is resolved to a commit first: git ends the ``%(ahead-behind:...)`` atom at
-    the first `)`, so a base branch named e.g. ``release)1`` would make the one batched
-    call fail and the answer silently fall back to a rev-list per HEAD. Empty when git
-    could not answer, or has no ``ahead-behind`` atom (before 2.41)."""
+    The base is resolved to a commit first (git ends the ``%(ahead-behind:...)`` atom at
+    the first `)`); empty when git could not answer, or has no ``ahead-behind`` atom."""
     target = base
     if base:
         resolved = run(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
@@ -366,8 +375,7 @@ def commits_ahead(
 
 
 def commits_missing_from(repo: Path | str, shas: list[str], base: str) -> set[str] | None:
-    """Which of ``shas`` the ``base`` lacks, one `rev-list --no-walk`; None when git refused
-    (an unknown object among them)."""
+    """Which of ``shas`` the ``base`` lacks; None when git refused (an unknown object)."""
     r = run(repo, "rev-list", "--no-walk", *shas, f"^{base}", "--")
     return set(r.out.split()) if r.ok else None
 
@@ -375,15 +383,14 @@ def commits_missing_from(repo: Path | str, shas: list[str], base: str) -> set[st
 def is_ancestor(
     repo: Path | str, sha: str, base: str, *, timeout: float | None = GIT_TIMEOUT
 ) -> bool | None:
-    """Is ``sha`` reachable from ``base``? None when git could not tell: exit 128 is an
-    unknown commit, not "not an ancestor"."""
+    """Is ``sha`` reachable from ``base``? None when git could not tell."""
     r = run(repo, "merge-base", "--is-ancestor", sha, base, timeout=timeout)
     return r.ok if r.code in (0, 1) else None
 
 
 def tree_entries(repo: Path | str, rev: str, *, timeout: float | None = GIT_TIMEOUT) -> list:
-    """(mode, sha, path, size) of every entry of ``rev``, exact names; a gitlink has size 0.
-    Raises `GitError`."""
+    """(mode, sha, path, size) of every entry of ``rev``, exact names; a gitlink has size
+    0. Raises `GitError`."""
     raw = run(repo, "ls-tree", "-r", "-l", rev, z=True, timeout=timeout, check=True).out_bytes
     out = []
     for rec in (raw or b"").split(b"\0"):
