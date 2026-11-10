@@ -41,12 +41,14 @@ def checkout(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     return primary.resolve(), tree.resolve()
 
 
-def test_running_from_a_linked_worktree_is_detected_as_foreign(checkout):
+def test_running_from_a_linked_worktree_is_detected_with_its_primary(checkout):
+    """The detector names the worktree the package imported from and its primary; that it
+    is FOREIGN (not the caller's own tree) is the CLI guard's decision, tested below."""
     primary, tree = checkout
-    foreign = I.foreign_launch_root()
-    assert foreign is not None
-    assert foreign.worktree == tree
-    assert foreign.primary == primary
+    launch = I.foreign_launch_root()
+    assert launch is not None
+    assert launch.worktree == tree
+    assert launch.primary == primary
 
 
 def test_running_from_the_primary_itself_is_not_foreign(checkout, monkeypatch):

@@ -331,11 +331,12 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     """The linked worktree the running `ddflow` package was imported from, or None.
 
     A linked worktree whose PRIMARY holds a ddflow source tree too (`primary_checkout`) is
-    a place the shared editable install must never have been pointed at, except by the
-    caller's own tree. Only that case is returned; a checkout that is not a linked worktree,
-    or a worktree of a repository that is not ddflow, is not a redirect away from anything
-    (the primary holds no package to run instead) and answers None. Pure: reads the git
-    files `primary_checkout` already reads.
+    a place the shared editable install must never end up, EXCEPT in the caller's own
+    tree — the caller's own tree is legitimate, only another lane's tree is not, and the
+    caller decides which this is (it is not this function's call). A checkout that is not
+    a linked worktree, or a worktree of a repository that is not ddflow, is not a redirect
+    away from anything and answers None. Pure: reads the git files `primary_checkout`
+    already reads.
     """
     root = Path(root) if root is not None else _paths.package_parent()
     primary = _paths.primary_checkout(root)
