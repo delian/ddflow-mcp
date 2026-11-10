@@ -1,0 +1,2 @@
+{"agent":"ff8","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e41d73f47ebba542e87e59b3e","kind":"ddflow.seen","lamport":166782,"schema":1,"subject":"ddflow","ts":"2026-11-10T14:06:22.021233Z"}
+{"agent":"ff8","data":{"by":"ff8","event":"e11a31c32144777635ebb201d","holder":"ff7","note":"salvaged"},"id":"e6287928460e7a8c8a698bc0d","kind":"lease.released","lamport":166783,"schema":1,"subject":"fix-B7cb0d9f5cf","ts":"2026-11-10T14:06:22.499023Z"}
