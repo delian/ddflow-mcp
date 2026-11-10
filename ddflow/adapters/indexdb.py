@@ -102,11 +102,12 @@ def running(con: Connection) -> bool:
 
 
 def _uri_key(name: str) -> str:
-    """Percent-encode `name` for a sqlite URI filename (RFC 3986 unreserved characters
-    pass through; every other byte becomes `%HH`), so the encoding is one-to-one and a
-    `?` or `#` in a path cannot cut the URI's ``mode``/``cache`` parameters off."""
-    safe = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-    return "".join(c if c in safe else f"%{ord(c):02X}" for c in name)
+    """Percent-encode `name` for a sqlite URI filename, byte by byte on its UTF-8
+    encoding (RFC 3986 unreserved characters pass through; every other byte becomes
+    `%HH`), so the encoding is one-to-one and a `?`, `#` or non-ASCII path cannot cut
+    the URI or collapse onto another name."""
+    unreserved = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+    return "".join(chr(b) if chr(b) in unreserved else f"%{b:02X}" for b in name.encode("utf-8"))
 
 
 #: The shared default instance.
