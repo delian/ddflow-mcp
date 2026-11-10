@@ -137,20 +137,25 @@ def _parse_row(raw: dict[str, Any], axis: str, where: str) -> Row:
     checks = raw.get("checks", [])
     note = raw.get("note", "")
     _require(isinstance(feature, str) and feature, where, "a row needs a non-empty `feature` slug")
+    _require(isinstance(title, str) and title, where, "title must be a non-empty string")
+    _require(isinstance(note, str), where, "note must be a string")
     _require(isinstance(fields_, list), where, "descriptor_fields must be a list")
     _require(isinstance(checks, list), where, "checks must be a list")
     _require(all(isinstance(f, str) for f in fields_), where, "descriptor_fields must be strings")
     _require(all(isinstance(c, str) for c in checks), where, "checks must be strings")
+    # A graded row names BOTH field(s) and check(s); a documented gap names NEITHER and says
+    # why in the note. A field-only or check-only row is neither.
     _require(
-        bool(fields_) or bool(checks) or bool(note),
+        bool(fields_) == bool(checks),
+        where,
+        f"row {feature!r} must name both a descriptor field and a check, or neither "
+        "(a documented gap)",
+    )
+    _require(
+        bool(fields_) or bool(note),
         where,
         f"row {feature!r} names no descriptor field, no check and no note (a documented gap "
         "at least says where the knob lives)",
-    )
-    _require(
-        bool(checks) or not fields_,
-        where,
-        f"row {feature!r} names descriptor field(s) but no offline check grades them",
     )
     paths = field_paths()
     for path in fields_:
@@ -186,6 +191,11 @@ def load(path: str | Path | None = None) -> Catalog:
         f"unknown top-level key(s): {', '.join(sorted(unknown_top))} "
         "(expected version, [in_agent], [orchestrator], [history])",
     )
+    _require(
+        "version" not in raw or isinstance(raw.get("version"), int),
+        p.name,
+        "version must be an int when present",
+    )
     for axis in AXES:
         section = raw.get(axis, [])
         _require(isinstance(section, list), p.name, f"[{axis}] must be an array of tables")
@@ -210,6 +220,7 @@ def load(path: str | Path | None = None) -> Catalog:
             action in HISTORY_ACTIONS, p.name, f"unknown history action {action!r} for {feature!r}"
         )
         _require(isinstance(date, str) and date, p.name, f"history for {feature!r} needs a date")
+        _require(isinstance(note, str), p.name, "a history note must be a string")
         history.append(HistoryEntry(feature=feature, action=action, date=date, note=note))
 
     # A managed record's ledger is tied to its rows BOTH ways: a live row's latest action is
