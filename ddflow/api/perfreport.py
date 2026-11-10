@@ -13,6 +13,7 @@ window is refused, never passed (r-unavailable).
 from __future__ import annotations
 
 import json
+import shlex
 import time
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def _next_calls(fmt: str, out: str, win: str) -> list[str]:
     cli = f"ddflow perf report --format {fmt} --window {win}"
     mcp = f"ddflow_view action=perf format={fmt} window={win}"
     if out:
-        cli += f" --out {out}"
+        cli += f" --out {shlex.quote(out)}"
         mcp += f" out={out}"
     return [cli, mcp]
 
@@ -172,9 +173,11 @@ def run_perf_report(
         path = _target(repo, fmt, out, at)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(doc, "utf-8")
-        # The answer names the file it wrote and the next calls, not the whole document:
-        # the SVG/HTML body is bounded by the path, and the file is opened, not pasted.
-        body = f"path: {path}\n{_footer(fmt, str(path), win)}"
+        # The whole document is inlined so a shell-less operator still SEES the report
+        # (they cannot open a path); it is bounded by construction -- at most two
+        # fixed-precision bar charts over the finite gate and model row sets -- and the
+        # path names where the same bytes are written, with the exact next calls.
+        body = f"{doc}\npath: {path}\n{_footer(fmt, str(path), win)}"
     return O.ok("perf_report", text=body, format=fmt, window=win, out=out, report=RT.to_json(report))
 
 
