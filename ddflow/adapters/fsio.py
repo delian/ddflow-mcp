@@ -23,6 +23,9 @@ from typing import Any, Protocol, runtime_checkable
 
 from .ports import port
 
+#: Re-exported so the fake (`fakes.fsio`) needs only import this module, not `tempfile`.
+TemporaryDirectory = tempfile.TemporaryDirectory
+
 
 @port
 @runtime_checkable

@@ -11,9 +11,13 @@ unavailable, never zero. No test argument, output or path beyond the test/file i
 
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from xml.etree import ElementTree
+
+from ddflow.adapters import digest
+from ddflow.services.perf import store
 
 
 def _file_of(classname: str) -> str:
@@ -89,10 +93,6 @@ def fold(cases: list[TestCase], repo, gate: str, env: str = "") -> None:
     fingerprint class (empty when unknown); the file/test id is folded into a content HASH in
     the digest (never a raw path in the ``env`` or ``digest`` slots). Only the rollup reaches
     evidence. A case with no duration is not a sample."""
-    import time
-
-    from ddflow.adapters import digest
-    from ddflow.services.perf import store
 
     for c in cases:
         if c.duration_s is None:

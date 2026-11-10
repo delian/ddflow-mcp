@@ -19,4 +19,5 @@ VIEWS: tuple[str, ...] = (
     "tiny",
     "paths",
     "swarm",
+    "slo",
 )

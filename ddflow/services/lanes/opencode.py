@@ -27,8 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
+from ...adapters import templates as _tpl
 from ...config import Config
 from ...infra import fsio, paths
 from ...infra import proc as P
@@ -144,13 +143,12 @@ def select(
 
 
 def instructions(agent: str, item: str, worktree: Path) -> str:
-    env = Environment(  # nosec B701 - markdown for an agent, not HTML
-        loader=FileSystemLoader(str(paths.package_dir() / "templates")),
-        undefined=StrictUndefined,
-        keep_trailing_newline=True,
-    )
-    return env.get_template("harness/opencode/instructions.md.j2").render(
-        agent=agent, item=item, worktree=str(worktree)
+    return _tpl.DEFAULT.render_from(
+        paths.package_dir() / "templates",
+        "harness/opencode/instructions.md.j2",
+        agent=agent,
+        item=item,
+        worktree=str(worktree),
     )
 
 

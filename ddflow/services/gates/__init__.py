@@ -38,8 +38,8 @@ from __future__ import annotations
 from .baseline import (  # noqa: F401
     auto_decision,
     cache_load,
-    cache_snapshot,
     cache_signatures,
+    cache_snapshot,
     cache_store,
     only_tests_failed,
     read_full,

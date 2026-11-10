@@ -20,7 +20,7 @@ from ..context import NOTHING, OK, REFUSED, Ctx
 from ..registry import Command, Param, add_commands
 from ..render import emit_json
 from .identify import COMMAND as IDENTIFY
-from .reporting import cmd_bug_show
+from .reporting import cmd_bug_show, cmd_research_show
 from .viewers_search import COMMAND as SEARCH
 from .viewers_search import cmd_search
 from .viewers_sessions import cmd_session_list
@@ -329,8 +329,19 @@ def register(s) -> None:
     add_commands(s, [SEARCH, IDENTIFY, LIST_COMMAND, *COMMANDS])
     rs = s.choices["research"]
     verb = next(x for x in rs._actions if x.dest == "verb")
-    verb.choices = ["add", "list"]
-    verb.help = "optional: `research add` = `research`; `research list` lists the notes"
+    verb.choices = ["add", "list", "show"]
+    verb.help = (
+        "optional: `research add` = `research`; `research list` lists the notes; "
+        "`research show <id>` reads one"
+    )
+    # `research show <id>` reads ONE note, so its id is a positional, like `bug show`.
+    rs.add_argument(
+        "research_id",
+        nargs="?",
+        default=None,
+        metavar="ID",
+        help="with `research show`: the note's id",
+    )
     for param in _filter_params("research"):
         param.add_to(rs)
     # `list` needs neither field, so argparse cannot require them for the verb-less form.
@@ -342,8 +353,20 @@ def register(s) -> None:
 
     def research(a, c: Ctx) -> int:
         if a.verb == "list":
+            if a.research_id is not None:
+                rs.error("a positional id goes to `research show <id>`")
             a.list_kind = "research"
             return cmd_list(a, c)
+        if a.verb == "show":
+            if a.research_id is not None:
+                if a.id:
+                    rs.error("give the id either positionally or via --id, not both")
+                a.id = a.research_id
+            if not a.id:
+                rs.error("`research show <id>` needs the note's id")
+            return cmd_research_show(a, c)
+        if a.research_id is not None:
+            rs.error("a positional id goes to `research show <id>`; `research add` takes --id")
         stray = [
             f"--{f}" for f in (*_SHARED_FLAGS, "limit", "offset") if getattr(a, f, None) is not None
         ]
