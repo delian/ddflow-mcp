@@ -68,14 +68,15 @@ def _loop_runaways(events, st, cfg) -> list[H.Finding]:
         it = st.items.get(f.item)
         lease_holder = it.lease.holder if it is not None and it.lease is not None else ""
         # The RUNAWAY "holder" is what is running away (a job's is its job id); a loop's
-        # is the gate, or the loop pattern when no single gate is the loop. Two loops on
-        # one item are distinct problems and must not collapse in `inspect`'s
-        # (kind, item, holder) dedupe, which they would under the lease holder alone.
+        # is the loop kind and its gate -- "kind:gate", or just the kind when no one gate
+        # is the loop. `LPS.detect` may return more than one loop for one item, and each
+        # is a distinct problem that must not collapse in `inspect`'s (kind, item, holder)
+        # dedupe (which it would under the lease holder, or under the gate name alone).
         out.append(
             H.Finding(
                 H.RUNAWAY,
                 f.item,
-                f.gate or f.kind,
+                f"{f.kind}:{f.gate}" if f.gate else f.kind,
                 0.0,
                 f.detail,
                 "the loop will not converge on its own; `ddflow loops` names the threshold",
