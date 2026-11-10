@@ -13,9 +13,10 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
-import ddflow.api.review as api
 from conftest import run_cli
 from helpers import git as _git
+
+import ddflow.api.review as api
 
 
 def _setup(repo: Path, tmp_path: Path) -> None:
