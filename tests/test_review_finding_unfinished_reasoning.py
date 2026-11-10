@@ -106,6 +106,37 @@ def test_a_malformed_finding_does_not_hold_a_later_delta_open():
     assert _untriaged(kept, gone=set(), carried={}, verdicts={}) == 0
 
 
+def test_merge_rerun_carries_the_malformed_flag_across_a_chunk_rerun():
+    prior = {
+        "reviewer": "b",
+        "diff_sha": "deadbeef",
+        "max_chunk_chars": 4000,
+        "reviewed": [1, 2],
+        "chunks_total": 2,
+        "coverage": "2/2 chunk(s) reviewed",
+        "chunk_findings": [
+            {
+                "chunk": 2,
+                "digest": "abc123",
+                "severity": "MEDIUM",
+                "title": "x.py:1",
+                "location": "x.py:1",
+                "detail": "the spot",
+                "reviewer": "a",
+                "family": "xai",
+                "malformed": "location is prose, not a path:line or path:symbol",
+            }
+        ],
+        "unreviewed": [],
+    }
+    res = RV.ReviewResult("b", "grok-4.7", "google", status=RV.REVIEWED, requested=[2], reviewed=[2])
+    res.diff_sha = "deadbeef"
+    res.max_chunk_chars = 4000
+    assert RV.merge_rerun(prior, res) == ""
+    kept_f = next(f for f in res.findings if f.digest == "abc123")
+    assert kept_f.malformed, "a malformed finding stays malformed across a --chunk re-review"
+
+
 def test_a_valid_finding_still_blocks():
     (f,) = RV.parse(VALID)[0]
     assert RV.blocking_findings([f], converged=False, floor="HIGH") == [f]
