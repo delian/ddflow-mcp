@@ -59,7 +59,9 @@ COMMANDS: tuple[Command, ...] = (
             ),
             Param(
                 "cmd",
-                help="with action=run: the command to measure (the shell form is `ddflow perf run -- CMD`).",
+                help=(
+                    "with action=run: the command to measure. CLI: `ddflow perf run --cmd 'pytest -q'`."
+                ),
                 cli_help="with run: the command to measure",
             ),
             Param(
