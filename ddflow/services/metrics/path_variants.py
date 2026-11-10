@@ -155,6 +155,7 @@ def build(ctx: Context) -> dict:
         },
     }
 
+
 def has_figures(data: dict) -> bool:
     """True when the graph has any gate-to-gate transition to show. Unlike the ``paths`` burst
     view, this lens HAS a figure below ``min_samples`` -- the descriptive graph is presentable
