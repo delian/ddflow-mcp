@@ -160,9 +160,14 @@ def propose_batch_gates(
 ) -> Proposal | None:
     """Batch gates when the suite lock wait dominates the gate run by at least
     ``prop_batch_dominance`` (batching would amortise the lock). None otherwise. A zero gate
-    run is the STRONGEST dominance case, never "not enough data"."""
+    run with a positive lock wait is the STRONGEST dominance case; a zero gate run with no lock
+    wait is not enough data (a probe that did not run), never a proposal."""
     cfg = cfg or _section_knobs(Config())
-    if suite_lock_wait_s < cfg.prop_batch_dominance * gate_run_s:
+    if gate_run_s > 0:
+        dominated = suite_lock_wait_s >= cfg.prop_batch_dominance * gate_run_s
+    else:
+        dominated = suite_lock_wait_s > 0
+    if not dominated:
         return None
     ratio = suite_lock_wait_s / gate_run_s if gate_run_s > 0 else None
     return Proposal(
