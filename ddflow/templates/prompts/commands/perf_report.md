@@ -54,11 +54,12 @@ html, narrow the window, export the json). Quote that; do not invent a different
 
 ## 4. Close out
 
-Quote the footer's next call for the question asked — it already carries the format, the
-window and (for `svg`/`html`) the out path, with the MCP form beside the CLI one:
+Say the exact next call for the question you answered, in both forms, as the report's
+own footer gave it — the format you chose, the window you asked for, and (for `svg` /
+`html`) the `--out` path, CLI first:
 
-    ddflow perf report --format text --window 28d
-    ddflow_view action=perf format=text window=28d
+    ddflow perf report --format <fmt> --window <win>
+    ddflow_view action=perf format=<fmt> window=<win>
 
-Do not substitute a fixed call: the window is the one asked for, and a `--filters
-phase=<id>` stays in the call that scoped it.
+`<fmt>` and `<win>` are the format and window you actually used; a `--filters
+phase=<id>` you passed stays in the call.
