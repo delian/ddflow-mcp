@@ -106,8 +106,8 @@ def _gates(report: Report, width: int, max_rows: int) -> list[str]:
         out = [header, "|---" * 6 + "|"] + ["| " + " | ".join(c) + " |" for c in cells]
     else:
         out = [
-            f"{_gate_name(r['gate'])}: p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
-            f" failed {bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}"
+            f"{_gate_name(r['gate'])}: failed {bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}"
+            f" p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
             for r in rows
         ]
     return [_clip(line, width) for line in out]
