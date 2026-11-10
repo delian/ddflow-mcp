@@ -74,8 +74,8 @@ class CommandSample:
 
 def wrap_command(cmd: str, *, program: str = "ddflow") -> str:
     """The exact wrapped command a shell-less server returns in its next-actions envelope:
-    ``ddflow perf run -- CMD`` (the agent runs it; ddflow never guesses the shell)."""
-    return f"{program} perf run -- {cmd}"
+    ``ddflow perf run --cmd CMD`` (the agent runs it; ddflow never guesses the shell)."""
+    return f"{program} perf run --cmd {cmd}"
 
 
 def measure(

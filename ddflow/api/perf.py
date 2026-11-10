@@ -104,5 +104,14 @@ def run_perf_ingest(repo: Path, *, line: str = "", agent: str = "") -> O.Outcome
     # the sample keeps the machine class it ran on (the line's own env when the wrapper
     # produced it), never re-stamped with the receiving server's fingerprint
     env_key = sample.env or _fingerprint_key(repo)
-    store.append(repo, series, store.Sample(t=time.time(), env=env_key, value=sample.wall_s))
+    for metric, value in (
+        ("wall", sample.wall_s),
+        ("cpu", sample.cpu_s),
+        ("rss", sample.rss_mb),
+        ("io", sample.io_rw),
+    ):
+        if value is not None:
+            store.append(
+                repo, f"{series}.{metric}", store.Sample(t=time.time(), env=env_key, value=value)
+            )
     return O.ok("perf_ingest", text=sample.one_line())

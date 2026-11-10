@@ -64,7 +64,7 @@ def test_an_agent_line_cannot_be_promoted_to_measured():
 
 
 def test_wrap_command_names_the_exact_command():
-    assert wrap_command("pytest -q", program="ddflow") == "ddflow perf run -- pytest -q"
+    assert wrap_command("pytest -q", program="ddflow") == "ddflow perf run --cmd pytest -q"
 
 
 def test_fingerprint_container_never_mixes_container_with_bare_metal():
