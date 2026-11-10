@@ -26,7 +26,7 @@ HOMES = frozenset(
 #: `which` on the first element of an argv ddflow built itself (never an operator's line).
 EXEMPT = {
     ("api/operations.py", "which(<command>[i])"): "pre-commit execs shlex.split(entry), no shell",
-    ("infra/forge.py", "which(<command>[i])"): "argv[0] of a gh/glab call ddflow assembled",
+    ("adapters/forge.py", "which(<command>[i])"): "argv[0] of a gh/glab call ddflow assembled",
     ("services/companions/model.py", "which(<command>[i])"): "a companion's own detect argv",
 }
 

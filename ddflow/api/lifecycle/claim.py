@@ -170,9 +170,19 @@ def claim(  # noqa: PLR0913 -- the door's own flags
     }  # fmt: skip
     force = force and not _agent_marker_of(agent)  # B49fa10bbb1: an agent's route is --approval
     out = _claim_once(repo, item, note=note, force=force, **kw)
-    if force or out.exit != O.REFUSED or "--force" not in (out.reason or ""):
+    if force or out.exit != O.REFUSED or not _names_claim_override(out.reason or ""):
         return out
     return _claim_by_approval(repo, item, out, approval, note, kw)
+
+
+def _names_claim_override(reason: str) -> bool:
+    """Whether a claim refusal names a route the approval gate can stand in for a person's
+    `--force`: that flag itself, or an agent's `--approval request` (`_take_over` names the
+    agent's route, never `--force`, which `claim()` drops for an agent). Before the second
+    marker, a claim refused only for a foreign expired lease -- whose refusal names
+    `--approval request` -- was swallowed: the request returned exit 3 with nothing filed
+    (Be62e44611e)."""
+    return "--force" in reason or "--approval request" in reason
 
 
 def _correct_stale_package_globs(
