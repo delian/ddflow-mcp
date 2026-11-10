@@ -261,8 +261,14 @@ def test_every_port_has_a_registered_fake_or_is_in_the_shrinking_baseline():
 
 @pytest.mark.parametrize("name", sorted(F.FAKES))
 def test_a_registered_fake_satisfies_its_runtime_checkable_port(name: str):
-    assert isinstance(F.FAKES[name](), _ports()[name]), f"Fake{name} does not satisfy {name}"
-    assert issubclass(F.FAKES[name], _ports()[name]), "the `@port` marker must not break issubclass"
+    port = _ports()[name]
+    if not getattr(port, "_is_runtime_protocol", False):
+        # A multi-adapter port (it declares `name`) is not @runtime_checkable, so isinstance
+        # and issubclass of it raise TypeError; its fake is a nominal subclass instead.
+        assert port in F.FAKES[name].__mro__, f"Fake{name} is not a nominal {name} subclass"
+        return
+    assert isinstance(F.FAKES[name](), port), f"Fake{name} does not satisfy {name}"
+    assert issubclass(F.FAKES[name], port), "the `@port` marker must not break issubclass"
 
 
 def test_the_fakes_are_shipped_in_the_adapters_package():

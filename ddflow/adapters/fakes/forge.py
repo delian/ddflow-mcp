@@ -10,12 +10,12 @@ without a "call" for the test to read.
 
 from __future__ import annotations
 
-from ..forge import PRInfo, Thread
+from ..forge import Forge, PRInfo, Thread
 from . import fake
 
 
 @fake
-class FakeForge:
+class FakeForge(Forge):
     def __init__(self, name: str = "github") -> None:
         self.name = name
         #: number -> PRInfo; `view` returns (and `find` matches on) this table.
