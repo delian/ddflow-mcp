@@ -70,10 +70,9 @@ def test_dark_and_light_differ_only_in_theme():
 def test_heat_strip_encodes_share_by_opacity_not_hue():
     svg = heat_strip([None, 2.0, 1.0], title="share", desc="per-file share")
     ET.fromstring(svg)  # well formed even with a missing value
-    # every cell shares one hue; the share is encoded by the opacity STEP, not hue
+    # every cell shares one hue; the opacity STEP carries the share ratio
     assert svg.count(f'fill="{PALETTE[0]}"') == 3
-    opacities = set(re.findall(r'fill-opacity="([^"]+)"', svg))
-    assert len(opacities) >= 2  # 0, 1.0, 0.5 for [None, 2.0, 1.0] -- the step carries the data
+    assert re.findall(r'fill-opacity="([^"]+)"', svg) == ["0.000", "1.000", "0.500"]
 
 
 def test_bars_and_scatter_and_stacked_are_well_formed():
@@ -86,10 +85,11 @@ def test_bars_and_scatter_and_stacked_are_well_formed():
 
 
 def test_stacked_bar_scales_to_the_column_total_not_the_largest_segment():
-    # setup 2.0 stacked on run 4.0: the total is 6.0, so no rect rolls off the top
+    # one column (index 0) stacked from setup=2.0 and run=4.0: the total is 6.0, so the
+    # two rects fill the plot exactly and no rect rolls off the top (a negative y)
     svg = stacked_bar([("setup", [2.0]), ("run", [4.0])], title="t", desc="d")
     ET.fromstring(svg)
-    assert 'y="-' not in svg  # a negative y would mean a segment drew outside the viewBox
+    assert 'y="-' not in svg
 
 
 def test_an_empty_stacked_bar_draws_nothing_not_a_crash():
