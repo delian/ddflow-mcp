@@ -279,16 +279,9 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             clash = _break_idle(
                 log, cfg, state, it, holder, mine, now, clash, break_lease, activity, broke, pre
             )
-        # Optimistic concurrency (DX-lease-hunk-optimistic): a PLAIN claim whose remaining
-        # clashes all merge cleanly is granted with those globs recorded `optimistic`, so the
-        # two branches stand together and the later merge rebases; a real conflict, a
-        # generated/pinned file or an unanswerable probe keeps the exclusive refusal.
-        optimistic: list[str] = []
-        if clash and not force:
-            clashes, optimistic = optimistic_clashes(
-                log, cfg, state, it, holder, glob_clashes(state, cfg, it, holder, mine, now)
-            )
-            clash = clashes[0] if clashes else None
+        clash, optimistic = _optimistic_or_none(
+            log, cfg, state, it, holder, mine, now, clash, force
+        )
         # Taking over an EXPIRED lease -- the holder's own or a crashed agent's -- needs
         # --force for the expiry alone. It must not also waive the overlap check: expiry
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
@@ -476,6 +469,30 @@ def _break_idle(  # noqa: PLR0913, PLR0917 -- the claim's own view of the clash
         if broke is not None:
             broke.append({"item": other_id, "holder": lease.holder, "idle_s": round(v.idle_s, 1)})
     return None
+
+
+def _optimistic_or_none(
+    log: EventLog,
+    cfg: Config,
+    state: State,
+    it: Item,
+    holder: str,
+    mine: list[str],
+    now: float,
+    clash: tuple[str, Lease, tuple[str, str]] | None,
+    force: bool,
+) -> tuple[tuple[str, Lease, tuple[str, str]] | None, list[str]]:
+    """A PLAIN claim whose remaining clashes all merge cleanly is granted with those globs
+    recorded `optimistic` (DX-lease-hunk-optimistic); the first clash that stays exclusive --
+    a real conflict, a generated/pinned file, an unanswerable probe -- is returned, and
+    --force never goes optimistic (it is an explicit override, not a clean-merge finding).
+    """
+    if clash is None or force:
+        return clash, []
+    clashes, optimistic = optimistic_clashes(
+        log, cfg, state, it, holder, glob_clashes(state, cfg, it, holder, mine, now)
+    )
+    return (clashes[0] if clashes else None), optimistic
 
 
 def _alts(
