@@ -32,8 +32,9 @@ def _finding_listing(it, gate: str) -> str:
         mine = it.triage.get(g, {})
         lines += [
             f"  {g} #{n} [{f.get('severity', '')}] {f.get('location', '')} "
-            f"{f.get('title', '')} -- {mine.get(f['digest'], {}).get('verdict') or 'untriaged'}"
-            f"{' [malformed: ' + f['malformed'] + ']' if f.get('malformed') else ''}"
+            f"{f.get('title', '')} -- "
+            f"{mine.get(f['digest'], {}).get('verdict') or ('malformed' if f.get('malformed') else 'untriaged')}"
+            f"{(' (' + f['malformed'] + ')') if f.get('malformed') else ''}"
             for n, f in enumerate(found, 1)
         ]
     return "\nfindings:\n" + "\n".join(lines) if lines else ""
