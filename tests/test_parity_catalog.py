@@ -52,9 +52,19 @@ def test_every_descriptor_field_resolves(catalog):
 
 def test_every_check_resolves(catalog):
     for row in catalog.rows:
-        assert row.checks, (row.feature, "names at least one offline check")
+        # a documented gap row (ddflow-side, no per-agent field) names no check on purpose
+        if not row.descriptor_fields:
+            assert not row.checks and row.note, (row.feature, "a gap row documents why")
+            continue
+        assert row.checks, (row.feature, "a graded row names at least one offline check")
         for cid in row.checks:
             assert C.known_check(cid), (row.feature, cid)
+
+
+def test_documented_gap_rows_name_a_ddflow_side_knob(catalog):
+    gap = {r.feature for r in catalog.rows if not r.descriptor_fields}
+    assert gap, "the ddflow-side features are recorded (never guessed)"
+    assert "session-start-brief" in gap and "key-by-env-name" in gap
 
 
 def test_the_catalog_cites_the_existing_checks_it_must_reuse():

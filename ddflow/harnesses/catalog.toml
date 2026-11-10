@@ -26,16 +26,16 @@ note = "Where and how ddflow's MCP server is registered, and which file approves
 [[in_agent]]
 feature = "lean-tool-profile"
 title = "Lean tool profile"
-descriptor_fields = ["mcp.path", "mcp.shape"]
-checks = ["facts"]
-note = "The lean MCP tool profile is a ddflow-side [mcp].tools knob; the descriptor's mcp names the registration it governs."
+descriptor_fields = []
+checks = []
+note = "The lean [mcp].tools profile is ddflow-side config; the descriptor has no field for it, so it is ungraded here (never guessed)."
 
 [[in_agent]]
 feature = "session-start-brief"
 title = "Session-start brief path"
-descriptor_fields = ["orchestration"]
-checks = ["facts"]
-note = "The brief path is ddflow-side session config; the descriptor's [orchestration] carries the launch/loop primitives the session-start brief renders (the path itself is not a per-agent field)."
+descriptor_fields = []
+checks = []
+note = "The brief path is ddflow-side session config; the descriptor carries no field for it, so it is ungraded here (never guessed)."
 
 [[in_agent]]
 feature = "pre-tool-enforcement"
@@ -75,9 +75,9 @@ note = "How ddflow recognises the agent and reads the session id."
 [[in_agent]]
 feature = "approvals-relay"
 title = "Approvals relay"
-descriptor_fields = ["orchestration.stop"]
-checks = ["facts"]
-note = "Approvals surface only over the operator's chat; orchestration.stop names that operator gate."
+descriptor_fields = []
+checks = []
+note = "Approvals surface only over the operator's chat (ddflow-side relay); the descriptor has no field for it, so it is ungraded here (never guessed)."
 
 [[in_agent]]
 feature = "session-ingest"
@@ -117,9 +117,9 @@ note = "A per-lane worktree directory isolates each claim's edits."
 [[orchestrator]]
 feature = "key-by-env-name"
 title = "Key by env name"
-descriptor_fields = ["env"]
-checks = ["facts"]
-note = "The endpoint addresses and API-key env NAME live in ddflow/modelreg and .ddflow/local/models.toml; the descriptor's [env] section is its env-var surface (the key names themselves are not per-agent fields)."
+descriptor_fields = []
+checks = []
+note = "Endpoint addresses and API-key env NAME live in ddflow/modelreg and .ddflow/local/models.toml; the descriptor has no field for them, so they are ungraded here (never guessed)."
 
 [[orchestrator]]
 feature = "permission-mode"

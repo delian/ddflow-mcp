@@ -141,8 +141,17 @@ def _parse_row(raw: dict[str, Any], axis: str, where: str) -> Row:
     _require(isinstance(checks, list), where, "checks must be a list")
     _require(all(isinstance(f, str) for f in fields_), where, "descriptor_fields must be strings")
     _require(all(isinstance(c, str) for c in checks), where, "checks must be strings")
-    _require(bool(fields_), where, f"row {feature!r} names no descriptor field")
-    _require(bool(checks), where, f"row {feature!r} names no offline check")
+    _require(
+        bool(fields_) or bool(checks) or bool(note),
+        where,
+        f"row {feature!r} names no descriptor field, no check and no note (a documented gap "
+        "at least says where the knob lives)",
+    )
+    _require(
+        bool(checks) or not fields_,
+        where,
+        f"row {feature!r} names descriptor field(s) but no offline check grades them",
+    )
     paths = field_paths()
     for path in fields_:
         _require(path in paths, where, f"unknown descriptor field {path!r} (feature {feature!r})")
@@ -196,17 +205,18 @@ def load(path: str | Path | None = None) -> Catalog:
         _require(isinstance(date, str) and date, p.name, f"history for {feature!r} needs a date")
         history.append(HistoryEntry(feature=feature, action=action, date=date, note=note))
 
-    # A managed record's ledger is tied to its rows: a live row was added, and a retired
-    # feature is not live (a later "add" after a "retire" re-lives it, so the latest action
-    # for a live slug is "add" and for a gone slug is "retire").
+    # A managed record's ledger is tied to its rows: a live row's latest lifecycle action
+    # is "add" or "edit" (an edit keeps it live); a retired feature is not live. A "retire"
+    # entry may name a slug with no live row (it documents the removal).
     latest_action: dict[str, str] = {}
     for entry in history:
         latest_action[entry.feature] = entry.action
     for row in rows:
         _require(
-            latest_action.get(row.feature) == "add",
+            latest_action.get(row.feature) in ("add", "edit"),
             row.feature,
-            f"live row needs an `add` history entry (latest action: {latest_action.get(row.feature)!r})",
+            f"live row needs an `add`/`edit` history entry (latest action: "
+            f"{latest_action.get(row.feature)!r})",
         )
 
     return Catalog(rows=tuple(rows), history=tuple(history))
