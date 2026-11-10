@@ -36,6 +36,7 @@ CONTRACTS = frozenset(
         "digest-home",
         "http-home",
         "toml-home",
+        "sqlite-home",
         "extras-one-adapter",
     }
 )
