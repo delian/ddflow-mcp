@@ -1,0 +1,2 @@
+{"agent":"rec4","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e82722f8cf2131d1794aaee3b","kind":"ddflow.seen","lamport":164874,"schema":1,"subject":"ddflow","ts":"2026-11-10T02:06:20.277105Z"}
+{"agent":"rec4","data":{"by":"rec4","event":"eac42c9ed6ba5aa024a433793","holder":"bhp","note":"salvaged expired bhp lease; 4 unmerged commits preserved on ddflow/fix-Bec642db4a9"},"id":"ebec44a09a36d9700400df69c","kind":"lease.released","lamport":164875,"schema":1,"subject":"fix-Bec642db4a9","ts":"2026-11-10T02:06:20.329919Z"}
