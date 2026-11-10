@@ -299,7 +299,9 @@ def test_an_agents_claim_approval_over_a_foreign_expired_lease_files(proj):
     from ddflow.infra.log import EventLog
 
     EventLog(proj, "seed").append(
-        "lease.acquired", "T1", {"holder": "gone", "at": 0.0, "ttl_s": 1, "globs": ["t.py"]},
+        "lease.acquired",
+        "T1",
+        {"holder": "gone", "at": 0.0, "ttl_s": 1, "globs": ["t.py"]},
     )
     out = CL(proj, "T1", no_worktree=True, agent="bot", approval="request")
     assert out.exit == 3, out.reason
