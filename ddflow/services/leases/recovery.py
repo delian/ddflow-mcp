@@ -392,6 +392,46 @@ def _gone_tree(
     )
 
 
+def _measure_past_cap(
+    rec: Recovery,
+    cfg: Config,
+    facts: RepoFacts,
+    wt: Path,
+) -> None:
+    """Record a tree the view left past ``lease.scan_view_trees_max`` (its `git status`
+    was never run) using ONLY the free batched signals. The unmerged count is not budgeted,
+    so a tree the scan KNOWS holds unmerged commits is still reported as holding work; a
+    HEAD the scan could not resolve is still "could not measure"; only a base-equal HEAD
+    -- which could hide nothing but uncommitted files -- is the quiet "past the cap"
+    unknown (still never swept: `salvageable` stays None)."""
+    base = facts.base(cfg.worktree.base_ref)
+    ahead = facts.ahead(wt, base)
+    if ahead > 0:
+        rec.unmerged_commits = ahead
+        rec.salvageable = True
+        rec.advice = (
+            f"known to hold {ahead} unmerged commit(s) (counted past the cap; "
+            f"`ddflow recover` weighs it fully): `git -C {wt} log {base}..HEAD`."
+        )
+        return
+    if ahead == -1:
+        # Same "could not measure" danger the uncapped path reports (a broken gitdir, a
+        # missing HEAD), not the quiet cap note (Bfb4b6306d1).
+        rec.salvageable = None
+        rec.advice = (
+            f"COULD NOT MEASURE this worktree (HEAD not resolved by the scan). Treat it "
+            f"as containing work until you have looked: `git -C {wt} status` and "
+            f"`git -C {wt} rev-parse HEAD`. It will NOT be swept automatically."
+        )
+        return
+    rec.salvageable = None
+    rec.budget_capped = True
+    rec.advice = (
+        f"past the measurement cap ({cfg.lease.scan_view_trees_max} trees): "
+        f"`ddflow recover` measures every tree, or `git -C {wt} status` this one."
+    )
+
+
 def _measure(
     rec: Recovery,
     repo: Path,
@@ -421,42 +461,7 @@ def _measure(
         _gone_tree(rec, repo, cfg, facts, held)
         return
     if budget is not None and not budget.take_tree():
-        # This tree was past the view's measurement cap, AFTER every higher-signal tree was
-        # measured (the scan ranks unmerged first). The status budget is spent, but the
-        # unmerged count is not budgeted -- ``RepoFacts.ahead`` was already answered for
-        # free -- so a tree the scan KNOWS holds unmerged commits is still reported as
-        # holding work, not as the "past the cap" unknown (Bfb4b6306d1).
-        base = facts.base(cfg.worktree.base_ref)
-        ahead = facts.ahead(wt, base)
-        if ahead > 0:
-            rec.unmerged_commits = ahead
-            rec.salvageable = True
-            rec.advice = (
-                f"known to hold {ahead} unmerged commit(s) (counted past the cap; "
-                f"`ddflow recover` weighs it fully): `git -C {wt} log {base}..HEAD`."
-            )
-            return
-        if ahead == -1:
-            # HEAD could not be resolved: the same "could not measure" danger the uncapped
-            # path reports (a broken gitdir, a missing HEAD), not the quiet cap note. A tree
-            # whose HEAD is unreadable must never look past-the-cap-clean (Bfb4b6306d1).
-            rec.salvageable = None
-            rec.advice = (
-                f"COULD NOT MEASURE this worktree (HEAD not resolved by the scan). Treat it "
-                f"as containing work until you have looked: `git -C {wt} status` and "
-                f"`git -C {wt} rev-parse HEAD`. It will NOT be swept automatically."
-            )
-            return
-        # Only "could also be mere uncommitted files" remains, and that needs `git status`,
-        # the capped process. It is NOT "clean" -- `salvageable` stays None, so `sweep` can
-        # never delete it -- but it is also not the "could not measure" alarm: the brief
-        # counts these quietly and points at the uncapped `ddflow recover`.
-        rec.salvageable = None
-        rec.budget_capped = True
-        rec.advice = (
-            f"past the measurement cap ({cfg.lease.scan_view_trees_max} trees): "
-            f"`ddflow recover` measures every tree, or `git -C {wt} status` this one."
-        )
+        _measure_past_cap(rec, cfg, facts, wt)
         return
     base = facts.base(cfg.worktree.base_ref)
     tw = W.tree_work(wt, base, ahead=False)
