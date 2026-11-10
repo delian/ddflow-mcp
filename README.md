@@ -553,7 +553,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=46703abd015f -->
+<!-- ddflow:begin README/commands sha=2256599cd648 -->
 <details><summary>All 101 commands</summary>
 
 | Command | What it does |
@@ -651,7 +651,7 @@ needs a line written by hand here.
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
 | `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
 | `ddflow paths` | workflow-path variants: directly-follows, top variants, burst overlap, superseded passes, out-of-order |
-| `ddflow perf` | perf of the host: the machine-class fingerprint and the measuring wrapper |
+| `ddflow perf` | perf of the host (fingerprint, measuring wrapper) and the perf report (window, filters, format) |
 | `ddflow probe` | would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell) |
 | `ddflow digest` | the operator queue: what waits on a person, as askable entries |
 | `ddflow pair` | a PERSON mints a one-time code for a named client with a role (`tokens redeem` spends it) |
@@ -1125,7 +1125,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 642 knobs.
+cadences, and the rest of the 645 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5429,7 +5429,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 642): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 645): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6019,7 +6019,7 @@ declared once and persists — see
 
 ## Configuration
 
-642 knobs across 59 sections, every one documented in place and listed, with its default
+645 knobs across 59 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6086,8 +6086,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=6f20ee362801 -->
-<details><summary>All 642 knobs across 59 sections</summary>
+<!-- ddflow:begin README/knobs sha=5276dc8f3624 -->
+<details><summary>All 645 knobs across 59 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6532,6 +6532,9 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.prop_marginal_gain` | `0.25` |  |
 | `perf_metrics.prop_batch_dominance` | `2.0` |  |
 | `perf_metrics.prop_retire_payback` | `2.0` |  |
+| `perf_metrics.report_default_window` | `"28d"` |  |
+| `perf_metrics.report_max_rows` | `20` |  |
+| `perf_metrics.report_width` | `76` |  |
 | `pins.recipes_file` | `".ddflow/pins.toml"` |  |
 | `pins.timeout_s` | `900` |  |
 | `pins.after_merge_timeout_s` | `120` |  |

@@ -2017,15 +2017,21 @@
 # ---
 # name: test_help[ddflow perf]
   '''
-  usage: ddflow perf [-h] [--cmd CMD] [--line LINE] [{env,run,ingest}]
+  usage: ddflow perf [-h] [--cmd CMD] [--line LINE] [--window WINDOW] [--filters FILTERS] [--format {text,md,json,svg,html}] [--out OUT] [{env,run,ingest,report}]
   
   positional arguments:
-    {env,run,ingest}  env (default), run or ingest
+    {env,run,ingest,report}
+                          env (default), run, ingest or report
   
   options:
-    -h, --help        show this help message and exit
-    --cmd CMD         with run: the command to measure
-    --line LINE       with ingest: the sample line
+    -h, --help            show this help message and exit
+    --cmd CMD             with run: the command to measure
+    --line LINE           with ingest: the sample line
+    --window WINDOW       with report: a duration back (7d, 12h) or a date YYYY-MM-DD
+    --filters FILTERS     with report: only phase=<id>
+    --format {text,md,json,svg,html}
+                          with report: text (default), md, json, svg or html
+    --out OUT             with report svg/html: the file path
   
   '''
 # ---
@@ -3817,7 +3823,8 @@
       suggest             send a bounded change to the lease holder of an item, as a suggestion
       paths               workflow-path variants: directly-follows, top variants, burst overlap,
                           superseded passes, out-of-order
-      perf                perf of the host: the machine-class fingerprint and the measuring wrapper
+      perf                perf of the host (fingerprint, measuring wrapper) and the perf report
+                          (window, filters, format)
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
       digest              the operator queue: what waits on a person, as askable entries

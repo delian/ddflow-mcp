@@ -517,6 +517,9 @@ prop_min_observations = 3
 prop_marginal_gain = 0.25
 prop_batch_dominance = 2.0
 prop_retire_payback = 2.0
+report_default_window = "28d"
+report_max_rows = 20
+report_width = 76
 
 [pins]
 recipes_file = ".ddflow/pins.toml"
