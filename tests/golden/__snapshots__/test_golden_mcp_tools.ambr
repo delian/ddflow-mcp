@@ -1169,7 +1169,7 @@
         "properties": {
          "op": {
           "type": "string",
-          "description": "queue: add|run|status (default)|remove. perf: env (the fingerprint), run (measure a command) or ingest (accept a sample line)."
+          "description": "queue: add|run|status (default)|remove. perf: env (the fingerprint), run (measure a command), ingest (accept a sample line) or report (the performance report)."
          },
          "id": {
           "type": "string",
@@ -1213,7 +1213,7 @@
          },
          "out": {
           "type": "string",
-          "description": "Directory for the generated views (default: docs/ddflow)."
+          "description": "with action=report and format svg/html: the file to write (default .ddflow/local/perf/reports/)."
          },
          "show": {
           "type": "string",
@@ -1362,6 +1362,18 @@
          "line": {
           "type": "string",
           "description": "with action=ingest: the wrapper's one JSON line to accept."
+         },
+         "window": {
+          "type": "string",
+          "description": "with action=report: the time window, a duration back (7d, 12h) or a date YYYY-MM-DD."
+         },
+         "filters": {
+          "type": "string",
+          "description": "with action=report: comma-separated report filters; only phase=<id>."
+         },
+         "format": {
+          "type": "string",
+          "description": "with action=report: text (default), md, json, svg or html."
          },
          "ask": {
           "type": "string",
