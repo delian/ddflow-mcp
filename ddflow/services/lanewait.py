@@ -26,11 +26,6 @@ from .metrics import summary as SUM
 from .metrics.providers import Context
 from .metrics.stats import stat
 
-#: The shared (host-lock) gates a lane waits on when it queues for a slot: every gate whose
-#: run records a ``waited_s`` contributes to ``gate_wait_hours``; these are merely named apart
-#: in ``gate_wait_hours.shared``.
-SHARED_GATES = ("ci", "unit_tests", "standards", "merge")
-
 
 def context(
     events: Sequence[Event],
@@ -54,8 +49,9 @@ def lane_wait(
 ) -> dict:
     """The lane-wait figures as plain data:
 
-    - ``gate_wait_hours``: lane-hours queued for each shared-behind-a-lock gate, and the total
-      (``shared`` names the ``SHARED_GATES`` apart).
+    - ``gate_wait_hours``: lane-hours queued for a shared host lock, per gate, and the total.
+      Every value here is a shared-lock wait by construction: ``waited_s`` records seconds
+      queued for the host lock, so a gate with no such wait has no entry (never a zero).
     - ``ready_to_claimed``: queue wait (ready to first claimed), p50/p90/max.
     - ``ci_lock_queue``: the ``ci`` gate's queued run, p50/p90/max.
     - ``idle``: lane utilisation from the grid (``SW-baseline``): lane-samples working vs
@@ -69,9 +65,6 @@ def lane_wait(
     per_gate = SUM.gate_waits(ctx)
     gate_wait_hours = {
         gate: sum(seconds) / 3600.0 for gate, seconds in per_gate.items() if seconds
-    }
-    shared_hours = {
-        gate: gate_wait_hours[gate] for gate in SHARED_GATES if gate in gate_wait_hours
     }
 
     ready = stat(SUM.queue_waits(ctx), minimum)
@@ -102,7 +95,6 @@ def lane_wait(
         "gate_wait_hours": {
             "total": sum(gate_wait_hours.values()),
             **gate_wait_hours,
-            "shared": shared_hours,
         },
         "ready_to_claimed": ready,
         "ci_lock_queue": ci,

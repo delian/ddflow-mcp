@@ -51,7 +51,22 @@ def test_gate_waits_are_lane_hours_by_gate():
     gw = run()["gate_wait_hours"]
     assert gw["ci"] == pytest.approx((360 + 720) / H)
     assert gw["total"] == pytest.approx(1080 / H)
-    assert gw["shared"] == {"ci": (360 + 720) / H}
+
+
+def test_every_gate_that_queued_for_the_lock_is_counted():
+    # a non-ci gate that queues for the host lock counts toward the total too: waited_s is
+    # the shared-lock queue, whatever the gate is named, never filtered out.
+    log = seeded()
+    log.add(
+        "gate.passed", "A", "a1", T0 + 300, gate="standards", by="a1",
+        evidence={"waited_s": 180},
+    )
+    st, cfg, _ = frozen(log, T0 + 5 * H)
+    cfg.metrics.min_samples = 1
+    gw = LW.lane_wait(log.events, st, cfg, T0 + 5 * H)["gate_wait_hours"]
+    assert gw["standards"] == pytest.approx(180 / H)
+    assert gw["ci"] == pytest.approx(1080 / H)
+    assert gw["total"] == pytest.approx((1080 + 180) / H)
 
 
 def test_ci_lock_queue_is_the_ci_wait_stat():

@@ -40,10 +40,6 @@ def text(data: dict) -> str:
             else ""
         ),
     ]
-    if gw["shared"]:
-        out.append(
-            "    shared-gate hours: " + ", ".join(f"{g} {dur(h * 3600.0)}" for g, h in sorted(gw["shared"].items()))
-        )
     if data["unavailable"]:
         out.append("  unavailable (not zero):")
         out.extend(f"    {k}: {why}" for k, why in sorted(data["unavailable"].items()))
