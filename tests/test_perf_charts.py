@@ -70,24 +70,24 @@ def test_dark_and_light_differ_only_in_theme():
 def test_heat_strip_encodes_share_by_opacity_not_hue():
     svg = heat_strip([None, 2.0, 1.0], title="share", desc="per-file share")
     ET.fromstring(svg)  # well formed even with a missing value
-    # every cell shares one hue; the opacity STEP carries the share ratio
-    assert svg.count(f'fill="{PALETTE[0]}"') == 3
-    assert re.findall(r'fill-opacity="([^"]+)"', svg) == ["0.000", "1.000", "0.500"]
+    # every cell shares one hue; the opacity STEP carries the share ratio, and a missing
+    # share is a gap (no cell), never the same mark as a real zero share
+    assert svg.count(f'fill="{PALETTE[0]}"') == 2
+    assert re.findall(r'fill-opacity="([^"]+)"', svg) == ["1.000", "0.500"]
 
 
 def test_bars_and_scatter_and_stacked_are_well_formed():
     for svg in (
         bars([("a", 1.0), ("b", 2.0)], title="t", desc="d"),
         scatter([(1.0, 5.0), (2.0, 9.0)], title="t", desc="d"),
-        stacked_bar([("q", [1.0, 2.0]), ("m", [0.5, 1.0])], title="t", desc="d"),
+        stacked_bar([[1.0, 0.5], [2.0, 1.0]], legend=["q", "m"], title="t", desc="d"),
     ):
         ET.fromstring(svg)
 
 
 def test_stacked_bar_scales_to_the_column_total_not_the_largest_segment():
-    # one column (index 0) stacked from setup=2.0 and run=4.0: the total is 6.0, so the
-    # two rects fill the plot exactly and no rect rolls off the top (a negative y)
-    svg = stacked_bar([("setup", [2.0]), ("run", [4.0])], title="t", desc="d")
+    # one column whose two segments sum past the largest piece: total 6.0 beats max 4.0
+    svg = stacked_bar([[2.0, 4.0]], legend=["setup", "run"], title="t", desc="d")
     ET.fromstring(svg)
     assert 'y="-' not in svg
 

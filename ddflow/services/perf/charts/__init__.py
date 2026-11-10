@@ -164,14 +164,16 @@ def heat_strip(
     dark: bool = False,
 ) -> str:
     """One heat strip of per-file shares: each cell's opacity encodes its share of the
-    total, so a large share is told apart without colour."""
+    total; a missing share (``None``) draws a gap (no cell), never the same mark as a real
+    zero share, so an unavailable probe is not recorded as zero."""
     vals = [v for v in shares if v is not None]
     hi = max(vals) if vals else 1.0
     cell = width / max(len(shares), 1)
     body = "".join(
         f'<rect x="{_fmt(i * cell)}" y="0" width="{_fmt(cell)}" height="{height}" '
-        f'fill="{PALETTE[0]}" fill-opacity="{_fmt((v / hi) if v is not None and hi else 0)}"/>'
+        f'fill="{PALETTE[0]}" fill-opacity="{_fmt((v / hi) if hi else 0.0)}"/>'
         for i, v in enumerate(shares)
+        if v is not None
     )
     return viewbox(width, height, dark=dark) + _head(title, desc) + body + "</svg>"
 
@@ -198,37 +200,38 @@ def scatter(
 
 
 def stacked_bar(
-    segments: list[tuple[str, list[float]]],
+    columns: list[list[float]],
     *,
+    legend: list[str] | None = None,
     width: int = 600,
     height: int = 200,
     title: str = "",
     desc: str = "",
     dark: bool = False,
 ) -> str:
-    """A stacked bar of ``(label, values)`` segments (the cycle-time split): column ``i``
-    stacks every segment's ``values[i]`` bottom-up against the column TOTAL (the sum, never
-    the largest segment), each segment in a distinct palette step plus its label in the
-    ``<desc>``. An empty column list draws an empty chart, never a crash."""
+    """A stacked bar of ``columns``: column ``c`` stacks ``columns[c]`` (its segment values,
+    bottom-up) against the column TOTAL (the sum, never the largest segment), each segment
+    in a distinct palette step whose label is ``legend[s]`` (named in the ``<desc>``). An
+    empty column list draws an empty chart, never a crash."""
     pad = 40.0
-    cols = max((len(vals) for _k, vals in segments), default=0)
-    if cols == 0:
+    legend = legend or []
+    if not columns:
         return viewbox(width, height, dark=dark) + _head(title, desc) + "</svg>"
-    totals = [sum(vals[c] if c < len(vals) else 0.0 for _k, vals in segments) for c in range(cols)]
+    totals = [sum(col) for col in columns]
     lo, hi = scale([0.0, max(totals)])
     span = width - 2 * pad
-    step = span / cols
-    labels = ", ".join(k for k, _ in segments)
+    step = span / len(columns)
+    labels = ", ".join(legend)
     full_desc = f"{desc} segments: {labels}"
     body: list[str] = []
-    for c in range(cols):
+    for c, col in enumerate(columns):
         base = height - pad
-        for s, (_label, vals) in enumerate(segments):
-            v = vals[c] if c < len(vals) else 0.0
+        for s, v in enumerate(col):
             h = (height - 2 * pad) * ((v - lo) / (hi - lo))
             body.append(
                 f'<rect x="{_fmt(pad + step * c)}" y="{_fmt(base - h)}" width="{_fmt(step * 0.8)}" '
-                f'height="{_fmt(h)}" fill="{PALETTE[s % len(PALETTE)]}" fill-opacity="{_fmt(0.5 + 0.12 * s)}"/>'
+                f'height="{_fmt(h)}" fill="{PALETTE[s % len(PALETTE)]}" '
+                f'fill-opacity="{_fmt(min(1.0, 0.5 + 0.12 * s))}"/>'
             )
             base -= h
     return viewbox(width, height, dark=dark) + _head(title, full_desc) + "".join(body) + "</svg>"
@@ -239,7 +242,7 @@ def html_report(charts: dict[str, str], *, title: str, dark: bool = False) -> st
     ``title`` and each chart's own ``<title>``/``<desc>`` are escaped like the SVG text."""
     bg = "#1e1e1e" if dark else "#ffffff"
     fg = "#e0e0e0" if dark else "#1a1a1a"
-    body = "".join(f"<div>{chart}</div>" for chart in charts.values())
+    body = "".join(f"<div>{charts[k]}</div>" for k in sorted(charts))
     return (
         '<!doctype html><html><head><meta charset="utf-8">'
         f"<title>{_esc(title)}</title></head>"
