@@ -1,0 +1,2 @@
+{"agent":"padap2h","data":{"format_level":1,"install":"source-tree","version":"0.2.10"},"id":"e07160ade650b4b26299e4473","kind":"ddflow.seen","lamport":166401,"schema":1,"subject":"ddflow","ts":"2026-11-10T09:06:41.588459Z"}
+{"agent":"padap2h","data":{"by":"padap2h","event":"e84f3b29e99cd80b574f3ce62","holder":"padap2","note":"resuming padap2's interrupted work; 6 commits intact on branch ddflow/ADP-forge"},"id":"e30c3d1511d93adcbfe64db01","kind":"lease.released","lamport":166402,"schema":1,"subject":"ADP-forge","ts":"2026-11-10T09:06:41.636351Z"}
