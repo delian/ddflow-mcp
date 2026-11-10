@@ -13,9 +13,10 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
-import ddflow.api.review as api
 from conftest import run_cli
 from helpers import git as _git
+
+import ddflow.api.review as api
 
 
 def _setup(repo: Path, tmp_path: Path) -> None:
@@ -23,7 +24,7 @@ def _setup(repo: Path, tmp_path: Path) -> None:
     cli = tmp_path / "fake-reviewer"
     cli.write_text(
         "#!/bin/sh\nin=$(cat | grep '^+')\n"
-        'case "$in" in *FINDME*) printf \'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n\';; '
+        "case \"$in\" in *FINDME*) printf 'FINDING HIGH x.py:1\\nbad\\n\\nSTATUS: FINDINGS 1\\n';; "
         "*) echo 'STATUS: NO FINDINGS';; esac\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
