@@ -164,6 +164,21 @@ def test_a_one_hour_knob_on_old_claude_code_names_the_upgrade():
     assert "upgrade" in CTL._five_minute_remedy(v)
 
 
+def test_forced_on_old_claude_code_does_not_advise_a_useless_1h_knob():
+    # On an old Claude Code the 1h knob is ignored, so "unset the force, set 1h" would not
+    # raise the TTL; the remedy must say so instead of advising a change that does nothing.
+    v = CTL.effective_subagent_ttl(
+        {"FORCE_PROMPT_CACHING_5M": "1", "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"},
+        {},
+        "2.1.241",
+    )
+    assert v.forced
+    assert v.one_hour_available is False
+    remedy = CTL._five_minute_remedy(v)
+    assert "upgrade" in remedy
+    assert "2.1.242" in remedy
+
+
 def test_doctor_note_names_upgrade_when_too_old(monkeypatch, tmp_path):
     monkeypatch.delenv(CTL.SUBAGENT_TTL_ENV, raising=False)
     monkeypatch.setattr(CTL, "claude_version", lambda: "2.0.0")

@@ -210,6 +210,17 @@ def _five_minute_remedy(v: SubagentTTL) -> str:
     hour, the remedy is "upgrade", reported as unavailable rather than as a setting ddflow can
     emit (UNAVAILABLE not pass)."""
     if v.forced:
+        if v.one_hour_available is False:
+            return (
+                f"forced by {FORCE_5M_ENV}, and Claude Code {'.'.join(map(str, v.version))} is "
+                f"older than 2.1.242: unsetting the force then setting {SUBAGENT_TTL_ENV}=1h "
+                "would still leave subagents on 5m until it is upgraded"
+            )
+        if v.one_hour_available is None:
+            return (
+                f"forced by {FORCE_5M_ENV}: unset it, then set {SUBAGENT_TTL_ENV}=1h "
+                "(verify Claude Code 2.1.242 or later)"
+            )
         return (
             f"forced by {FORCE_5M_ENV}: unset it, then set {SUBAGENT_TTL_ENV}=1h"
         )
