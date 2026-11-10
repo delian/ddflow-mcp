@@ -47,16 +47,20 @@ def file_of(test: str) -> str:
     return "/".join(parts) + ".py"
 
 
-def _epoch(row: dict[str, Any]) -> float:
-    """The row's ``at`` as epoch seconds; ``0.0`` (outside any real window) when absent or
-    not a time. A flake with no placeable timestamp is never counted as inside a window."""
-    return clock.epoch(str(row.get("at") or ""), default=0.0)
+def _epoch(row: dict[str, Any]) -> float | None:
+    """The row's ``at`` as epoch seconds, or ``None`` when it is absent or not a time. A
+    flake with no placeable timestamp is never counted as inside a window."""
+    raw = row.get("at")
+    if not isinstance(raw, str) or not raw:
+        return None
+    epoch = clock.epoch(raw, default=float("inf"))
+    return None if epoch == float("inf") else epoch
 
 
 def window_rows(rows: list[dict[str, Any]], now: float, window_s: int) -> list[dict[str, Any]]:
     """The rows whose ``at`` falls in ``[now - window_s, now]``, in their log order. A row
     with a missing or unparseable timestamp cannot be placed and is left out."""
-    return [r for r in rows if now - window_s <= _epoch(r) <= now]
+    return [r for r in rows if (e := _epoch(r)) is not None and now - window_s <= e <= now]
 
 
 def rates(

@@ -120,6 +120,13 @@ def test_report_reads_the_flake_log_and_returns_rates_and_proposals(tmp_path: Pa
     assert flakyrate.report(tmp_path / "missing", now=NOW, perf_metrics=CFG)["flakes"] == 0
 
 
+def test_a_row_with_no_timestamp_is_never_inside_the_window():
+    rows = [{"test": "tests/a.py::t1", "at": ""}, _row("tests/a.py::t1", NOW)]
+    # now close to epoch 0: a 0.0 sentinel would fall INSIDE a 7-day window here
+    view = flakyrate.rates(rows, now=100.0, perf_metrics=CFG)
+    assert view["flakes"] == 0  # the timestamp-less row is excluded, never counted at epoch 0
+
+
 def test_a_zero_window_clamps_not_crashes():
     zero = PerfMetricsConfig(flaky_window_s=0)
     view = flakyrate.rates([_row("tests/a.py::t1", NOW)], now=NOW, perf_metrics=zero)
