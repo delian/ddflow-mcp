@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from ddflow.adapters import proc
+
 #: The default stdlib ladder is proc then ps; a host prepends its OPTIONAL cgroup/psutil
 #: adapters in the cgroup -> psutil -> proc -> ps degrade order and passes the list to ``sample``.
 UNAVAILABLE = "unavailable"
@@ -82,8 +84,6 @@ class PsProbe(ResourceProbe):
         return "ps"
 
     def sample(self, pid: int) -> ResourceSample | None:
-        from ddflow.adapters import proc
-
         try:
             out = proc.run(
                 ["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5
