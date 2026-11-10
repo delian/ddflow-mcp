@@ -360,6 +360,18 @@ def _stale_base_ref(wt: Path) -> str:
     return value if isinstance(value, str) and value.startswith("-") else ""
 
 
+def _note_stale_base_ref(rec: Recovery) -> None:
+    """Append the stale base_ref remedy once every other sentence is set, so a clean,
+    dirty or adopted tree each names the repair (kept out of `_measure` itself: the one
+    branch is cheap, but it must not tip a measured function into a guard grade)."""
+    if rec.stale_base_ref:
+        rec.advice += (
+            f" Its .ddflow/config.toml holds stale worktree.base_ref = "
+            f"{rec.stale_base_ref!r} (a CLI flag, refused) — `ddflow recover --apply` "
+            "repairs it to the default."
+        )
+
+
 def _measure(
     rec: Recovery,
     repo: Path,
@@ -441,12 +453,7 @@ def _measure(
         rec.advice = f"clean and fully merged — safe to remove: `git worktree remove {wt}`" + (
             f" then `ddflow release {rec.item}`." if held else " (no lease is held on it)."
         )
-    if rec.stale_base_ref:
-        rec.advice += (
-            f" Its .ddflow/config.toml holds stale worktree.base_ref = "
-            f"{rec.stale_base_ref!r} (a CLI flag, refused) — `ddflow recover --apply` "
-            "repairs it to the default."
-        )
+    _note_stale_base_ref(rec)
 
 
 def sweep(log: EventLog, cfg: Config, repo: Path, *, apply: bool = False) -> list[Recovery]:
