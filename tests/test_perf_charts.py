@@ -70,10 +70,10 @@ def test_dark_and_light_differ_only_in_theme():
 def test_heat_strip_encodes_share_by_opacity_not_hue():
     svg = heat_strip([None, 2.0, 1.0], title="share", desc="per-file share")
     ET.fromstring(svg)  # well formed even with a missing value
-    # every cell shares one hue; the opacity STEP carries the share ratio, and a missing
-    # share is a gap (no cell), never the same mark as a real zero share
+    # every cell shares one hue; the opacity STEP carries the share of the total, and a
+    # missing share is a gap (no cell), never the same mark as a real zero share
     assert svg.count(f'fill="{PALETTE[0]}"') == 2
-    assert re.findall(r'fill-opacity="([^"]+)"', svg) == ["1.000", "0.500"]
+    assert re.findall(r'fill-opacity="([^"]+)"', svg) == ["0.667", "0.333"]
 
 
 def test_bars_and_scatter_and_stacked_are_well_formed():

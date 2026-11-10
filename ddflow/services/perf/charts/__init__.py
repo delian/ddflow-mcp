@@ -18,6 +18,10 @@ from collections.abc import Iterable
 PALETTE = ("#0072B2", "#E69F00", "#009E73", "#CC79A7")
 
 
+#: A segment whose height is at least this many units gets its legend name drawn in it.
+_MIN_LABEL_H = 9.0
+
+
 def _fmt(value: float) -> str:
     """A number at fixed precision: the same input always becomes the same bytes."""
     return f"{value:.3f}"
@@ -167,11 +171,11 @@ def heat_strip(
     total; a missing share (``None``) draws a gap (no cell), never the same mark as a real
     zero share, so an unavailable probe is not recorded as zero."""
     vals = [v for v in shares if v is not None]
-    hi = max(vals) if vals else 1.0
+    total = sum(vals)
     cell = width / max(len(shares), 1)
     body = "".join(
         f'<rect x="{_fmt(i * cell)}" y="0" width="{_fmt(cell)}" height="{height}" '
-        f'fill="{PALETTE[0]}" fill-opacity="{_fmt((v / hi) if hi else 0.0)}"/>'
+        f'fill="{PALETTE[0]}" fill-opacity="{_fmt((v / total) if total else 0.0)}"/>'
         for i, v in enumerate(shares)
         if v is not None
     )
@@ -223,26 +227,37 @@ def stacked_bar(
     step = span / len(columns)
     labels = ", ".join(legend)
     full_desc = f"{desc} segments: {labels}"
+    fg = "#d6d6d6" if dark else "#1a1a1a"
     body: list[str] = []
     for c, col in enumerate(columns):
         base = height - pad
         for s, v in enumerate(col):
             h = (height - 2 * pad) * ((v - lo) / (hi - lo))
+            cx = pad + step * c
+            cx0 = cx + step * 0.4
             body.append(
-                f'<rect x="{_fmt(pad + step * c)}" y="{_fmt(base - h)}" width="{_fmt(step * 0.8)}" '
+                f'<rect x="{_fmt(cx)}" y="{_fmt(base - h)}" width="{_fmt(step * 0.8)}" '
                 f'height="{_fmt(h)}" fill="{PALETTE[s % len(PALETTE)]}" '
                 f'fill-opacity="{_fmt(min(1.0, 0.5 + 0.12 * s))}"/>'
             )
+            if s < len(legend) and h > _MIN_LABEL_H:
+                body.append(
+                    f'<text x="{_fmt(cx0)}" y="{_fmt(base - h / 2)}" fill="{fg}" font-size="9">{_esc(legend[s])}</text>'
+                )
             base -= h
     return viewbox(width, height, dark=dark) + _head(title, full_desc) + "".join(body) + "</svg>"
 
 
-def html_report(charts: dict[str, str], *, title: str, dark: bool = False) -> str:
-    """A self-contained HTML page that inlines the SVGs (one file, no external request).
-    ``title`` and each chart's own ``<title>``/``<desc>`` are escaped like the SVG text."""
+def html_report(
+    charts: dict[str, str], *, tables: dict[str, str] | None = None, title: str, dark: bool = False
+) -> str:
+    """A self-contained HTML page that inlines the SVGs and any ``tables`` (name -> html
+    ``<table>`` snippet), sorted by key, one file with no external request. ``title`` and
+    every chart's ``<title>``/``<desc>`` are escaped like the SVG text."""
     bg = "#1e1e1e" if dark else "#ffffff"
     fg = "#e0e0e0" if dark else "#1a1a1a"
     body = "".join(f"<div>{charts[k]}</div>" for k in sorted(charts))
+    body += "".join(f"<div>{tables[k]}</div>" for k in sorted(tables or {}))
     return (
         '<!doctype html><html><head><meta charset="utf-8">'
         f"<title>{_esc(title)}</title></head>"
