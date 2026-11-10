@@ -6,6 +6,8 @@ decide which overlapping globs another lease really covers.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ...config import Config
 from ...core import clock
 from ...core import globs as GL
@@ -99,6 +101,20 @@ def unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]
     }
 
 
+def _holder_ref(repo: Path, lz: Lease, other: Item | None, cfg: Config, take: float) -> str:
+    """The holder's side of the probe: its branch when git can resolve it to a commit, the
+    default branch when the branch is unborn (a fresh holder forks from there, like a fresh
+    claimant), or "" for a name git could not answer (a timeout, a missing git) -- a no-answer
+    must stay exclusive, never fall back to the default branch in its place."""
+    name = lz.branch if lz.branch else (branch_name(other, cfg) if other else "")
+    if not name:
+        return ""
+    _sha, why = PR.tip(repo, name, take)
+    if not _sha:
+        return W.default_branch(repo) if "not a commit of this repository" in why else ""
+    return name
+
+
 def optimistic_clashes(
     log: EventLog,
     cfg: Config,
@@ -131,24 +147,19 @@ def optimistic_clashes(
         mine_ref = W.default_branch(log.root)
     else:
         _sha, _why = PR.tip(log.root, mine_ref, take)
-        if not _sha:
-            if "not a commit of this repository" in _why:
-                # Unborn: the branch names nothing yet -- a fresh claim forking from the
-                # default branch -- so the holder need only merge clean into it there.
-                mine_ref = W.default_branch(log.root)
-            else:
-                # The branch names a ref git could not resolve to a commit -- a timeout, a
-                # missing git, a bad name. That is a NO-ANSWER against the claimant's real
-                # tip, and a no-answer stays exclusive: probing the default branch in its
-                # place could report clean while the claimant's true branch conflicts.
-                return clashes, []
+        if not _sha and "not a commit of this repository" in _why:
+            # Unborn: the branch names nothing yet -- a fresh claim forking from the
+            # default branch -- so the holder need only merge clean into it there.
+            mine_ref = W.default_branch(log.root)
     kept: list[tuple[str, Lease, tuple[str, str]]] = []
     optimistic: list[str] = []
     seen: dict[tuple[str, str], PR.Probe] = {}
     for other_id, lz, (mine, theirs) in clashes:
         other = state.items.get(other_id)
-        holder_ref = lz.branch if lz.branch else (branch_name(other, cfg) if other else "")
+        holder_ref = _holder_ref(log.root, lz, other, cfg, take)
         if not holder_ref:
+            # A holder branch git could not resolve to a commit (a timeout, a missing git) is
+            # a no-answer against the holder's real tip: stay exclusive (see `mine_ref`).
             kept.append((other_id, lz, (mine, theirs)))
             continue
         probe = seen.get((mine_ref, holder_ref))
@@ -165,7 +176,12 @@ def optimistic_clashes(
             optimistic.append(mine)
         else:
             kept.append((other_id, lz, (mine, theirs)))
-    return kept, list(dict.fromkeys(optimistic))
+    # A glob granted optimistic for one holder is NOT optimistic if another holder's pair
+    # on the same glob stays exclusive (a clean merge with one agent and a real conflict with
+    # another): the file is exclusive then, never half-shared.
+    conflicted = {m for _o, _lz, (m, _t) in kept}
+    optimistic = [g for g in dict.fromkeys(optimistic) if g not in conflicted]
+    return kept, optimistic
 
 
 def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:
