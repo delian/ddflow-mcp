@@ -66,6 +66,36 @@ def conflicts(
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
 
 
+def real_overlap(
+    mine: list[str],
+    theirs: list[str],
+    changed: list[str] | None,
+    shared: list[str] | None = None,
+) -> list[tuple[str, str]]:
+    """Overlapping pairs once the holder's ACTUAL changes are compared (DX-lease-real-overlap).
+
+    ``theirs`` are the holder's declared claim globs; ``changed`` are the paths its worktree
+    actually changed (git diff against base) plus its literal declared paths. ``changed is
+    None`` means git could not say (no worktree, unreadable): unknown is never "disjoint",
+    so the answer falls back to the prefix rule (`conflicts`).
+
+    Only a WILDCARD glob in ``theirs`` can cover files its holder never touches; that pair
+    survives only when ``mine`` covers one of the actually-changed paths. An exact
+    (wildcard-free) ``theirs`` path is declared work -- changed yet or not -- so it always
+    overlaps. ``shared`` globs overlap nothing, exactly as in `conflicts`.
+    """
+    pairs = conflicts(mine, theirs, shared)
+    if changed is None:
+        return pairs
+    shared = shared or []
+    real = [p for p in changed if not is_shared(p, shared)]
+    return [
+        (a, b)
+        for a, b in pairs
+        if not any(c in b for c in "*?[") or any(glob_match(p, a) for p in real)
+    ]
+
+
 def queued_globs(mine: list[str], theirs: list[str], cfg: Any) -> list[str]:
     """The ``mine`` globs that ``theirs`` overlaps (shared globs excluded): one name per
     queued-behind clause, so the refusal names it instead of the whole ``theirs`` list."""
