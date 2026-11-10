@@ -110,21 +110,53 @@ def unit_tests_scope(cfg, st, it, command: str, tree: Path) -> Scope:
     red = _ci_baseline_red(
         it, tree
     )  # measured baseline-red: the gate runs, it does not wait for ci
-    if not failed_sel and not red and (why := _ci_not_passed_here(cfg, it, tree)):
+    why, excused = _ci_excused(cfg, it, tree, failed_sel, red)
+    if why:
         return Scope("full", why, needs_ci="ci" in _pipeline(cfg, it, tree))
     try:
         base = it.base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
     except W.GitError:
         return Scope("full", "no base to compare the change with")
     lines = changed_lines(tree, base)
-    if not failed_sel and not red and (ran := (it.gates["ci"].evidence or {}).get("ci_scope")):
+    ci = it.gates.get("ci")
+    if not failed_sel and not red and (ran := ((ci.evidence or {}) if ci else {}).get("ci_scope")):
         return _after_ci(cfg, st, it, command, tree, base, lines, ran)
-    kind = _selectable(cfg, it, lines, trivial=_is_trivial(cfg, it, tree))
+    trivial = excused or _is_trivial(cfg, it, tree)
+    kind = _selectable(cfg, it, lines, trivial=trivial)
     if kind.startswith("not "):
         return Scope("full", kind, changed_lines=lines)
     return _selected(
-        cfg, st, it, command, tree, base, kind, lines, ci_failed=failed_sel, ci_red=red
+        cfg,
+        st,
+        it,
+        command,
+        tree,
+        base,
+        kind,
+        lines,
+        ci_note=_ci_note(failed_sel, red, excused),
     )
+
+
+def _ci_excused(cfg, it, tree: Path, failed_sel: bool, red: bool) -> tuple[str, bool]:
+    """("", excused) when no whole-suite obligation blocks the checks below — ``excused``
+    True when a therefore-skipped ci is why (a trivial change excuses ci), else the
+    whole-suite reason ``why`` ("" = the item's ci gate passed on this tree). A
+    baseline-red or selected-failed ci keeps this gate's own selection, never a
+    whole-suite obligation, so it returns ("", False).
+
+    A trivial change excuses the whole-suite ci gate (TRIVIAL_EXCUSED_GATES): it has no
+    ci outcome to require, and its pipeline holds no ci gate, which `_ci_not_passed_here`
+    reads as "the whole suite has not passed on this tree" and runs the whole suite. That
+    short-circuit must NOT fire for a trivial change (Bfcb327570c): it owes the SCOPED
+    tests, and the ci note says excused, not "passed" or "failed"."""
+    if failed_sel or red:
+        return "", False
+    why = _ci_not_passed_here(cfg, it, tree)
+    if not why:
+        return "", False
+    trivial = _is_trivial(cfg, it, tree)
+    return ("", trivial) if trivial else (why, False)
 
 
 def _pipeline(cfg, it, tree: Path) -> list[str]:
@@ -221,9 +253,25 @@ def _selectable(cfg, it, lines: int | None, *, trivial: bool = False) -> str:
     return f"not a bug fix, and {size} (small is under {small})"
 
 
+def _ci_note(ci_failed: bool = False, ci_red: bool = False, ci_excused: bool = False) -> str:
+    """The ci gate's suffix on the selection's ``scope_why``, from its measured state: a
+    trivial change's ci is excused, a selected-failed ci does not widen this gate to the
+    whole suite, a baseline-red one runs its own selection, else the whole suite passed."""
+    if ci_excused:
+        return "; the ci gate is excused for a trivial change (no whole-suite run)"
+    if ci_failed:
+        return (
+            "; the ci gate failed on its selected scope (it must pass before the item "
+            "completes), so this gate does not widen it to the whole suite"
+        )
+    if ci_red:
+        return "; the ci gate is partial, baseline-red only, so this gate runs its own selection"
+    return "; the ci gate passed the whole suite on this tree"
+
+
 def _selected(
     cfg, st, it, command: str, tree: Path, base: str, kind: str, lines: int | None,
-    ci_failed: bool = False, ci_red: bool = False,
+    ci_note: str = "",
 ) -> Scope:  # fmt: skip
     """The selection for a selectable item, or the whole suite when none can be made."""
     sel = select(tree, base, **limits(cfg))
@@ -260,14 +308,7 @@ def _selected(
             if sel.cut
             else ""
         )
-        + (
-            "; the ci gate failed on its selected scope (it must pass before the item completes), "
-            "so this gate does not widen it to the whole suite"
-            if ci_failed
-            else "; the ci gate is partial, baseline-red only, so this gate runs its own selection"
-            if ci_red
-            else "; the ci gate passed the whole suite on this tree"
-        ),
+        + ci_note,
         command=cmd,
         tests=tests,
         changed_lines=lines,

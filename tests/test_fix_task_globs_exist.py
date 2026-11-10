@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
+import sys
+from pathlib import Path
 
 from conftest import run_cli
 from helpers import state_as_reader as state
@@ -75,3 +78,59 @@ def test_an_explicit_glob_naming_no_file_is_loudly_flagged(repo):
     warned = " ".join(out.data.get("glob_warnings", []))
     assert "src/guessed/standards.py" in warned
     assert "src/real.py" not in warned
+
+
+def _cli_ok(repo, *argv):
+    code, out, err = run_cli(repo, *argv)
+    assert code == 0, (argv, out, err)
+    return out
+
+
+def _commit(tree, msg):
+    subprocess.run(["git", "-C", str(tree), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-qm", msg], check=True)
+
+
+def test_a_trivial_change_runs_the_scoped_tests_not_the_whole_suite(repo):
+    """Bfcb327570c: a trivial (format/docs/comment) change must owe a SCOPED `unit_tests`
+    run, never the whole suite. `_ci_not_passed_here` returned 'no ci gate in this item's
+    pipeline runs the whole suite' first, because a trivial change excuses `ci`
+    (TRIVIAL_EXCUSED_GATES), so the pipeline holds no ci gate and the whole-suite branch
+    fired before `_selectable`'s 'a trivial change' branch was reached."""
+    from ddflow.api._base import _load
+    from ddflow.services import testscope as TS
+
+    _cli_ok(repo, "init")
+    (repo / "mymod.py").write_text("def f():\n    return 1\n")
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_f.py").write_text(
+        "import pathlib, sys\n"
+        "sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))\n"
+        "from mymod import f\n\n\n"
+        "def test_f():\n"
+        "    assert f() == 1\n"
+    )
+    _cli_ok(
+        repo, "config", "--set", "gate.unit_tests.command", f"{sys.executable} -m pytest -q tests"
+    )
+    _cli_ok(
+        repo,
+        "config",
+        "--set",
+        "gates.task_pipeline",
+        json.dumps(["research", "implement", "standards", "ci", "unit_tests", "merge"]),
+    )
+    _commit(repo, "a project with a source module and its test")
+
+    _cli_ok(repo, "bug", "found", "--id", "B1", "--summary", "f returns 1")
+    _cli_ok(repo, "claim", "fix-B1")
+    wt = Path(json.loads(_cli_ok(repo, "--json", "show", "fix-B1"))["worktree"])
+    # A comment-only edit: the parsed AST is unchanged, so the change is trivial.
+    (wt / "mymod.py").write_text("def f():\n    return 1  # a comment\n")
+    _commit(wt, "a comment-only change")
+
+    _, cfg, st = _load(repo, "")
+    scope = TS.unit_tests_scope(cfg, st, st.items["fix-B1"], "pytest -q tests", wt)
+    assert scope.scope == "selected", scope
+    assert "a trivial change" in scope.why, scope
+    assert "no ci gate in this item's pipeline" not in scope.why, scope
