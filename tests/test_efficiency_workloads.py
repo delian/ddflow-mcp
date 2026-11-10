@@ -107,19 +107,12 @@ def test_a_live_run_refuses_without_budget_and_consent():
         raise AssertionError("live run without budget and consent must be refused")
 
 
-def test_a_live_run_without_a_runner_scores_unrun_not_pass_over_a_stale_log():
-    # A project whose log already holds the pass events must NOT read as this run's
-    # success; a live run that ran no steps is UNRUN, never PASS and never FAIL.
+def test_a_live_run_without_a_runner_scores_unrun_not_pass_or_fail():
+    # A live run that ran no steps must not be scored: UNRUN, never PASS (a stale log
+    # read as this run's success) and never FAIL (a run that was never attempted).
     wl = _workloads()["claim-and-finish-a-task"]
-    stale = [
-        W.Record("item.started", "demo.task", {"kind": "task"}),
-        W.Record("gate.passed", "demo.task", {"gate": "implement"}),
-        W.Record("gate.passed", "demo.task", {"gate": "unit_tests"}),
-        W.Record("item.completed", "demo.task", {"kind": "task"}),
-    ]
     report = W.run_live(wl, "/tmp/throwaway", budget={"max_spend": 1}, consent="recorded")
     assert report.outcome == W.UNRUN
-    assert report.outcome != W.PASS
 
 
 def test_a_live_run_scores_only_the_records_the_runner_produced():
