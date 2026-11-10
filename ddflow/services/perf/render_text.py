@@ -5,7 +5,9 @@ sparklines and bar rows, width-bounded for a terminal and a chat reply; a short 
 first (what got slower or faster, the top proposals), then the sections; a plain-dict form
 for tools. This is the default answer to a perf report prompt over MCP, so no shell or
 browser is needed (r-no-shell). A section the log cannot support is rendered ``n/a`` or
-named ``not collected``, never as an empty table (r-unavailable).
+named ``not collected``, never as an empty table (r-unavailable). The exact CLI and MCP
+call that returns the uncut report is named by the ``perf`` surface declaration
+(PM-remote's ``ddflow/surfaces/declared/perfremote.py``); this module renders the answer.
 """
 
 from __future__ import annotations
@@ -91,7 +93,8 @@ def _gates(report: Report, width: int, max_rows: int) -> list[str]:
         out = [header, "|---" * 6 + "|"] + ["| " + " | ".join(c) + " |" for c in cells]
     else:
         out = [
-            f"{r['gate']}: n={r['n']} p50 {dur(r.get('p50_s'))} p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
+            f"{r['gate']}: n={r['n']} p50 {dur(r.get('p50_s'))} p90 {dur(r.get('p90_s'))}"
+            f" pass {pct(r.get('first_run_pass_rate'))} failed {pct(r.get('ever_failed_share'))}"
             for r in rows
         ]
     return [_clip(line, width) for line in out]
@@ -121,7 +124,7 @@ def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
     lines.append("")
     lines.append(
         _clip(
-            f"cycle  n={report.cycle.get('n', 0)}  p50 {dur(report.cycle.get('p50_s'))}  p90 {dur(report.cycle.get('p90_s'))}",
+            f"cycle  n={report.cycle.get('n', 'n/a')}  p50 {dur(report.cycle.get('p50_s'))}  p90 {dur(report.cycle.get('p90_s'))}",
             width,
         )
     )
@@ -152,7 +155,11 @@ def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
         lines += section
     if total_cut > 0:
         lines.append("")
-        lines.append(_clip(f"{total_cut} rows omitted; the report's json holds every row", width))
+        lines.append(
+            _clip(
+                f"{total_cut} rows omitted; the report answer's json field holds every row", width
+            )
+        )
     return "\n".join(lines)
 
 
