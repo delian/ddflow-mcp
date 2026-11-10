@@ -175,7 +175,7 @@ def text(data: dict) -> str:
     ov = data["overlap"]
     if not ov.get("unavailable"):
         out.append(
-            f"  burst overlap: union {_d(ov['union_s'])} of sum {_d(ov['sum_s'])} ({ov['burst_share']:.0%}, {ov['n_items']} item(s))"
+            f"  burst overlap: union {_d(ov['union_s'])} of sum {_d(ov['sum_s'])} ({ov['burst_share']:.0%}, {ov['n_items']} completed item(s))"
         )
     else:
         out.append("  burst overlap: not enough data (unavailable, not zero)")

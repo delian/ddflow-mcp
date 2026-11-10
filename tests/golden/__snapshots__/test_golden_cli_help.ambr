@@ -1924,7 +1924,7 @@
   positional arguments:
     {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
-                          tiny, paths or swarm
+                          tiny, paths, variants, swarm or slo
     item                  with retro: the item id
   
   options:

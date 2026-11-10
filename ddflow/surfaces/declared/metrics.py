@@ -54,8 +54,8 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths or swarm.",
-                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths or swarm",
+                help="summary (default), forecast, retro, skips, lanes, stages, locks, tiny, paths, variants, swarm or slo.",
+                cli_help="summary (default), forecast, retro <id>, skips, lanes, stages, locks, tiny, paths, variants, swarm or slo",
                 positional=True,
                 nargs="?",
                 choices=VIEWS,

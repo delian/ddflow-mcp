@@ -126,3 +126,13 @@ def test_variants_collapse_consecutive_reruns_into_one_step():
     a = next(v for v in seen if v["sequence"] == ["research", "rubber_duck", "critic"])
     b = next(v for v in seen if v["sequence"] == ["critic", "rubber_duck"])
     assert a["n"] == 1 and b["n"] == 1
+
+
+def test_text_renders_the_unavailable_overlap_without_a_burst_share():
+    from ddflow.services.metrics.path_variants import text
+
+    out = text(build(ctx_of(seeded())))
+    assert "workflow-path variants" in out
+    assert "burst overlap: not enough data (unavailable, not zero)" in out
+    assert "superseded passes:" in out and "out-of-order runs:" in out
+    assert "next: ddflow paths  |  ddflow_paths" in out
