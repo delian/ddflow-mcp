@@ -102,10 +102,12 @@ def test_a_tree_known_to_hold_unmerged_work_is_not_demoted_to_capped(repo):
     cfg.lease.scan_view_trees_max = 1
     recs = L.scan(EventLog(repo, "scanner"), cfg, repo, view=True)
 
-    for r in recs:
+    by = {r.item: r for r in recs}
+    assert len(recs) == 2, "both stale trees must stay reported"
+    for r in (by["A"], by["B"]):
         assert r.unmerged_commits > 0, r.item
-        assert r.salvageable is True, r.item
-        assert not r.budget_capped, r.item
+        assert r.salvageable is True, f"{r.item} known unmerged must hold work"
+        assert not r.budget_capped, f"{r.item} known unmerged must not be 'past the cap'"
 
 
 def test_capped_trees_get_a_distinct_note_not_the_alarm_and_not_salvage_clean():

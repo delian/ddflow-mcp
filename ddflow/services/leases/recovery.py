@@ -436,6 +436,17 @@ def _measure(
                 f"`ddflow recover` weighs it fully): `git -C {wt} log {base}..HEAD`."
             )
             return
+        if ahead == -1:
+            # HEAD could not be resolved: the same "could not measure" danger the uncapped
+            # path reports (a broken gitdir, a missing HEAD), not the quiet cap note. A tree
+            # whose HEAD is unreadable must never look past-the-cap-clean (Bfb4b6306d1).
+            rec.salvageable = None
+            rec.advice = (
+                f"COULD NOT MEASURE this worktree (HEAD not resolved by the scan). Treat it "
+                f"as containing work until you have looked: `git -C {wt} status` and "
+                f"`git -C {wt} rev-parse HEAD`. It will NOT be swept automatically."
+            )
+            return
         # Only "could also be mere uncommitted files" remains, and that needs `git status`,
         # the capped process. It is NOT "clean" -- `salvageable` stays None, so `sweep` can
         # never delete it -- but it is also not the "could not measure" alarm: the brief
