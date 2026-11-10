@@ -31,6 +31,9 @@ HOUR = 3600.0
 #: The process gates whose verdicts can run concurrently and so form a review PAIR.
 REVIEW_GATES = ("rubber_duck", "critic")
 
+#: A verdict that RAN the gate (a skip or unavailable did not): the kinds that form a pair.
+RAN_KINDS = ("passed", "failed", "partial")
+
 #: How long an item may sit with no gate activity before it counts as PARKED
 #: (R-path-merge measured "22 percent parked more than 2 h").
 PARKED_THRESHOLD_S = 2 * HOUR
@@ -111,6 +114,21 @@ def superseded_pass_hours(ctx: Context) -> dict:
     return {"value": seconds, "n": count}
 
 
+def _classify(r, c) -> str:
+    """How ONE rubber_duck/critic pair ran: ``combined`` (one command recorded both),
+    ``concurrent`` (both timed and their process windows overlap), ``sequential`` else."""
+    if "rubber_duck" in c.combined_gates or "critic" in r.combined_gates:
+        return "combined"
+    ri, ci = _interval(r), _interval(c)
+    if ri is not None and ci is not None and ri[0] < ci[1] and ci[0] < ri[1]:
+        return "concurrent"
+    return "sequential"
+
+
+def _latest(rows: list, gate: str):
+    return max((o for o in rows if o.gate == gate), key=lambda o: o.at, default=None)
+
+
 def sequential_review_share(ctx: Context, minimum: int) -> dict:
     """The share of rubber_duck/critic review PAIRS that ran SEQUENTIALLY: neither combined
     into one command nor overlapping. A pair is the latest rubber_duck and the latest
@@ -118,36 +136,23 @@ def sequential_review_share(ctx: Context, minimum: int) -> dict:
     the other (D-path-merge-answers), ``concurrent`` when both timed verdicts' process
     windows overlap, ``sequential`` otherwise (an untimed single-run verdict is presumed
     non-overlapping). Below the pair floor the share is None, the breakdown is not."""
-    seq = conc = combined = 0
-    by_tree: dict[str, list] = defaultdict(list)
+    by_tree: dict[tuple[str, str], list] = defaultdict(list)
     for s in completed_spans(ctx):
-        for o in ctx.facts.outcomes:
-            if o.item == s.item and o.gate in REVIEW_GATES and o.kind in (
-                "passed",
-                "failed",
-                "partial",
-            ):
+        spanned = {o for o in ctx.facts.outcomes if o.item == s.item}
+        for o in spanned:
+            if o.gate in REVIEW_GATES and o.kind in RAN_KINDS:
                 by_tree[(s.item, o.tree_sha)].append(o)
+    counts: dict[str, int] = {"sequential": 0, "concurrent": 0, "combined": 0}
     for rows in by_tree.values():
-        rd = [o for o in rows if o.gate == "rubber_duck"]
-        cr = [o for o in rows if o.gate == "critic"]
-        if not rd or not cr:
-            continue
-        r = max(rd, key=lambda o: o.at)
-        c = max(cr, key=lambda o: o.at)
-        if "rubber_duck" in c.combined_gates or "critic" in r.combined_gates:
-            combined += 1
-            continue
-        ri, ci = _interval(r), _interval(c)
-        if ri is not None and ci is not None and ri[0] < ci[1] and ci[0] < ri[1]:
-            conc += 1
-        else:
-            seq += 1
-    total = seq + conc + combined
-    value = seq / total if total else None
-    out = {"n": total, "sequential": seq, "concurrent": conc, "combined": combined}
+        r = _latest(rows, "rubber_duck")
+        c = _latest(rows, "critic")
+        if r is not None and c is not None:
+            counts[_classify(r, c)] += 1
+    total = sum(counts.values())
+    value = counts["sequential"] / total if total else None
     return {
-        **out,
+        "n": total,
+        **counts,
         "value": value if total >= max(minimum, 1) else None,
         "unavailable": None if total >= max(minimum, 1) else f"{total} pairs, need {minimum}",
     }
