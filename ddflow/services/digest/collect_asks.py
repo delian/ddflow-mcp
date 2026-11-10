@@ -69,7 +69,7 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 since=row["requested_at"],
                 default=_question_default(row) if is_q else SAFE_DEFAULT,
                 command=(
-                    f"ddflow approvals answer {rid} --text <answer>"
+                    f"ddflow approvals answer {rid} --text '<answer>'"
                     if is_q
                     else f"ddflow approvals approve {rid}"
                 ),

@@ -273,7 +273,7 @@ SOURCES: tuple[Source, ...] = (
         "nudge",
         "session note or ask of kind question without an answer",
         "answer the question at a terminal; the lead records it",
-        "ddflow approvals answer <id> --text <answer>",
+        "ddflow approvals answer <id> --text '<answer>'",
         ASK,
         "the asker",
     ),
