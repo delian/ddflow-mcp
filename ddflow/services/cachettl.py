@@ -27,6 +27,7 @@ from typing import Any
 
 from ..adapters import env as AENV
 from ..adapters import proc as APROC
+from . import harnessreg as HR
 
 #: The env/setting names the docs attribute to the SUBAGENT cache TTL and its overrides.
 SUBAGENT_TTL_ENV = "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL"
@@ -42,6 +43,28 @@ _VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 def _env_mapping(env: Mapping[str, str] | None) -> Mapping[str, str]:
     return AENV.DEFAULT.snapshot() if env is None else env
+
+
+def _claude_binary() -> str:
+    """The Claude Code binary name from its descriptor (``r-agent-parity``: one agent's facts
+    live in ``ddflow/harnesses/claude.toml``, never as a hard-coded name). ``""`` when no
+    descriptor has the claude family."""
+    for h in HR.load():
+        if h.family == "claude-code":
+            return h.id
+    return ""
+
+
+def _claude_dir() -> str:
+    """Claude Code's directory name from its descriptor (the shared prefix of its declared
+    dirs: ``.claude/commands``, ``.claude/worktrees``, ...). ``""`` when no claude family."""
+    for h in HR.load():
+        if h.family == "claude-code":
+            for part in (h.commands, h.subagents, h.worktrees, h.skills):
+                d = part.dir if part is not None else ""
+                if d:
+                    return d.rsplit("/", 1)[0] if "/" in d else d
+    return ""
 
 
 def _is_on(value: str | None) -> bool:
@@ -87,14 +110,17 @@ def read_settings(repo: Path) -> Mapping[str, Any]:
     change to it must change this comment too. Unreadable is an absent entry -- a report must
     not fail on its own probing, and a missing setting reads the same as an absent one."""
     merged: dict[str, Any] = {}
+    cdir = _claude_dir()
+    if not cdir:  # no claude-family descriptor ships no settings to read
+        return merged
     paths: list[Path] = []
     try:
         home = Path.home()
     except Exception:  # HOME unset or unresolvable: no user settings to read, never an error
         home = None
     if home is not None:
-        paths.append(home / ".claude" / "settings.json")
-    paths += [repo / ".claude" / "settings.json", repo / ".claude" / "settings.local.json"]
+        paths.append(home / cdir / "settings.json")
+    paths += [repo / cdir / "settings.json", repo / cdir / "settings.local.json"]
     for path in paths:
         try:
             if path.is_file():
@@ -123,7 +149,10 @@ def claude_version(timeout_s: int = 5) -> str | None:
     """``claude --version`` output on this host, or ``None`` when the binary is absent or does
     not answer (unknown, never a guess). Cheap: a local binary that prints one line. Runs
     through the process adapter so a missing binary is a captured error, not a raised one."""
-    cap = APROC.capture(["claude", "--version"], timeout=timeout_s)
+    binary = _claude_binary()
+    if not binary:
+        return None
+    cap = APROC.capture([binary, "--version"], timeout=timeout_s)
     if cap.returncode == 0 and cap.stdout.strip():
         return cap.stdout.strip()
     return None
