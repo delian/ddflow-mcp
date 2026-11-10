@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections import defaultdict
 from math import sqrt
 
-from ddflow.services.metrics.facts import Facts
+from ddflow.core.facts import Facts
 
 
 def _pct(num: int, den: int, minimum: int) -> float | None:

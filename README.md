@@ -1123,7 +1123,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 623 knobs.
+cadences, and the rest of the 637 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -3255,6 +3255,11 @@ send progress (a `_meta.progressToken` and `[mcp].progress_s` on: each beat rese
 idle timer), and at most 1200 when it cannot — below the 1800 s a client gives a silent tool
 call before aborting it (Bfc43dae5b9); a longer `--timeout` is shortened (and says so on
 stderr), and you call again to wait longer.
+
+`ddflow wait --notify <how>` registers how to reach the waiter when its wake fires, and the
+holder's `release`/`complete` surfaces it in the `woke` list so an orchestrator can resume
+the waiter: empty (default) means the waiter polls `ddflow wait`; `send_message:<session-id>`
+names the harness session to resume; `watch:<url>` an inbound URL to POST the wake to.
 
 **Files every item touches** — a changelog, a research log, a regenerated config — would
 make every pair of items collide. Declare them, and many leases may hold them at once:
@@ -5422,7 +5427,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 623): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 637): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6010,7 +6015,7 @@ declared once and persists — see
 
 ## Configuration
 
-623 knobs across 56 sections, every one documented in place and listed, with its default
+637 knobs across 57 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6077,8 +6082,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=f1c33cccdf53 -->
-<details><summary>All 623 knobs across 56 sections</summary>
+<!-- ddflow:begin README/knobs sha=36460ea37895 -->
+<details><summary>All 637 knobs across 57 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6508,6 +6513,10 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.detect_persistence_windows` | `2` |  |
 | `perf_metrics.detect_creep_alpha` | `0.1` |  |
 | `perf_metrics.detect_creep_threshold` | `0.1` |  |
+| `perf_metrics.flaky_window_s` | `604800` |  |
+| `perf_metrics.flaky_quarantine_after` | `3` |  |
+| `perf_metrics.flaky_quarantine_expiry_s` | `2592000` |  |
+| `perf_metrics.flaky_retry_cost_s` | `60.0` |  |
 | `perf_metrics.budget_gate_p90_s` | `180.0` |  |
 | `perf_metrics.budget_test_file_s` | `120.0` |  |
 | `perf_metrics.budget_stage_lease_wait_s` | `120.0` |  |
@@ -6642,6 +6651,16 @@ long default is left to `ddflow config --explain`.
 | `session.report_test_files` | `12` |  |
 | `session.agent_brief_lessons` | `3` |  |
 | `session.agent_brief_extra` | `""` |  |
+| `slo.target_command_p95_s` | `2.0` |  |
+| `slo.target_gate_p90_s` | `300.0` |  |
+| `slo.target_queue_age_s` | `600.0` |  |
+| `slo.target_unavailable_rate` | `0.25` |  |
+| `slo.target_stuck_lanes` | `2` |  |
+| `slo.target_ci_false_red_rate` | `0.1` |  |
+| `slo.target_log_events_per_item` | `30.0` |  |
+| `slo.target_review_finding_rate` | `0.6` |  |
+| `slo.burn_rate_window_s` | `2592000` |  |
+| `slo.burn_rate_exhaust_s` | `3600.0` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |

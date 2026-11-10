@@ -32,6 +32,9 @@ from .render import skips as text_skips
 from .render import summary as text_summary
 from .retro import timeline
 from .skips import audit
+from .slo import assess as slo_assess
+from .slo import ok as slo_ok
+from .slo import text as slo_text
 from .stages import build as stages_build
 from .stages import has_figures as stages_ok
 from .stages import text as stages_text
@@ -167,6 +170,8 @@ def run(
         return _tiny(ctx)
     if view == "paths":
         return _paths(ctx)
+    if view == "slo":
+        return _figure(ctx, slo_assess, slo_ok, slo_text, "service-level indicator")
     if view == "skips":
         a = audit(ctx)
         return Answer(True, metrics=a, text=text_skips(a))

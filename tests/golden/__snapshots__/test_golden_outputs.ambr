@@ -4146,6 +4146,48 @@
           commands and rules that hold only here (how to run the full test suite, a
           forbidden path). The standard text stays in one place; this is the project's
           addition to it.
+      slo.target_command_p95_s = 2.0   [default]
+          The command-latency target: the p95 wall seconds of a brief or claim command
+          on the host. Bound from the perf store's per-command samples; below the
+          sample floor it is not-collected, never zero (PM-sampler supplies the
+          samples).
+      slo.target_gate_p90_s = 300.0   [default]
+          The gate-latency target: the p90 wall seconds one gate run may take. A gate
+          whose p90 exceeds this in the window is over target.
+      slo.target_queue_age_s = 600.0   [default]
+          The queue-age target: the p90 seconds an item waits ready-to-claimed. This
+          is the SLI that gets a burn-rate view (its window is long and its signal
+          monotone).
+      slo.target_unavailable_rate = 0.25   [default]
+          The unavailable target: the highest share of a gate's RAN verdicts that may
+          be `unavailable` (a reviewer that could not run is never `passed`). A skip
+          is not a pass and is excluded from the rate. One quarter is the contract, so
+          `ci` at ~11 percent is comfortably inside it.
+      slo.target_stuck_lanes = 2   [default]
+          The stuck-lane target: the most live lanes that may be idle past `[lanes]`
+          hold without activity before the SLI is over target. A lane that never
+          released and never renewed is waste, not progress.
+      slo.target_ci_false_red_rate = 0.1   [default]
+          The CI false-red target: the highest share of merges that produce a red-main
+          finding (a bug filed against the item within `[metrics]
+          lock_red_main_window_s` of the merge) that is not a real regression. It gets
+          a burn-rate view with queue age: a red CI is a capacity burn.
+      slo.target_log_events_per_item = 30.0   [default]
+          The log-growth target: the most committed log events one completed item may
+          add. Growth that tracks item count is healthy; growth that tracks retries is
+          rework.
+      slo.target_review_finding_rate = 0.6   [default]
+          The review-finding signal: the share of critic and rubber_duck rounds that
+          raise a finding. It is a review-quality SIGNAL, not an outage target -- the
+          SLO report shows it but never turns it into a breach (a gate that fails
+          55-57 percent is doing its job, not down).
+      slo.burn_rate_window_s = 2592000   [default]
+          The burn-rate window in seconds over which queue age and CI false-red are
+          extrapolated to a time-to-exhaustion (a 30-day budget viewed per hour).
+      slo.burn_rate_exhaust_s = 3600.0   [default]
+          The time-to-exhaustion (seconds) a burn-rate SLI must beat before it is
+          flagged `burning`: the budget is on track to be spent within this horizon.
+          The report only flags; it never refuses (r-safe-by-default).
       swarm.w_critical = 3.0   [default]
           Weight of the critical-path term in the dispatch score: an item on the
           longest dependency chain is offered before one with slack. Zero ignores the

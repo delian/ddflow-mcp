@@ -24,6 +24,7 @@ from .. import workers as WK
 from ..ci_marker import parse_marker, parse_wait
 from ..flakes import failed_tests, failure_evidence
 from ..gateenv import child_env
+from ..perf import testtimes
 from .defs import DEFAULT_GATES, GateDef, command_provenance
 from .drift import _account_for_drift
 from .evidence import diff_stat, digest, tree_identity
@@ -539,8 +540,6 @@ def capture_test_durations(repo, item_id: str, gate: str, xml_report: str, worke
     own pytest/junit output feeds this; other stacks plug the same parse_junit port. A report
     that cannot be parsed is ``{"unavailable": True}``, never zero."""
     try:
-        from ..perf import testtimes
-
         cases = testtimes.parse_junit(xml_report)
         testtimes.fold(cases, repo, gate)
         return testtimes.rollup(cases, workers)

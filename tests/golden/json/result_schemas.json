@@ -1494,7 +1494,8 @@
    "id",
    "offer",
    "fix_task",
-   "fix_task_filed"
+   "fix_task_filed",
+   "glob_warnings"
   ],
   "output_schema": {
    "type": "object",
@@ -1506,11 +1507,11 @@
     "offer": {},
     "fix_task": {},
     "fix_task_filed": {},
+    "glob_warnings": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
     "guidance": {},
-    "glob_warnings": {},
     "refusal": {}
    },
    "additionalProperties": true
@@ -1558,7 +1559,8 @@
   "shape": "object",
   "payload": [
    "session",
-   "how"
+   "how",
+   "item"
   ],
   "output_schema": {
    "type": "object",
@@ -1568,6 +1570,7 @@
     },
     "session": {},
     "how": {},
+    "item": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},
@@ -2877,6 +2880,37 @@
     "repointed": {},
     "dry_run": {},
     "released_parent_lease": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_suggest": {
+  "command": "suggest",
+  "schema": "suggest@1",
+  "shape": "object",
+  "payload": [
+   "id",
+   "ref",
+   "probe",
+   "blob"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "suggest@1"
+    },
+    "id": {},
+    "ref": {},
+    "probe": {},
+    "blob": {},
     "export_refresh": {},
     "ci": {},
     "progress": {},

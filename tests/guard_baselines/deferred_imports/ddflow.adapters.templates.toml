@@ -1,0 +1,5 @@
+# Ratchet `deferred_imports` for ddflow.adapters.templates (tests/test_architecture_guards.py).
+# `import jinja2` is deferred inside JinjaRenderer.render/render_from so the strict stdlib
+# fallback still renders in a stripped deployment with no package index (jinja2 may be absent
+# even though it is a declared dependency). Lower it in the same change that removes sites.
+baseline = 2

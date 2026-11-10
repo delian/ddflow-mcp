@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..templates import _render_stdlib
 from . import fake
 
 
@@ -15,12 +16,7 @@ class FakeTemplates:
     raises `TemplateError`."""
 
     def render(self, text: str, **vars: Any) -> str:
-        # Imported here so the fake module is importable when Jinja2 is absent.
-        from ..templates import _render_stdlib
-
         return _render_stdlib(text, vars)
 
     def render_from(self, directory: Path | str, name: str, **vars: Any) -> str:
-        from ..templates import _render_stdlib
-
         return _render_stdlib((Path(directory) / name).read_text(encoding="utf-8"), vars)

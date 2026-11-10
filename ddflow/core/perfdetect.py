@@ -14,8 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from statistics import median
 
-from ddflow.config_sections.perf_metrics import PerfMetricsConfig
-
 
 def mad(values: list[float]) -> float:
     """Median absolute deviation from the median (robust scale)."""
@@ -76,6 +74,20 @@ class Finding:
     suspected: str
 
 
+@dataclass(frozen=True)
+class DetectKnobs:
+    """The detect thresholds this pure module needs (r-core-pure: core is handed its knobs,
+    it does not read ``config_sections``). The defaults mirror ``PerfMetricsConfig``'s; a
+    caller with a loaded config passes it in and this module reads its ``detect_*`` fields."""
+
+    detect_min_samples: int = 8
+    detect_relative_threshold: float = 0.20
+    detect_absolute_floor_s: float = 5.0
+    detect_persistence_windows: int = 2
+    detect_creep_alpha: float = 0.10
+    detect_creep_threshold: float = 0.10
+
+
 def detect_series(
     series: str,
     env: str,
@@ -84,12 +96,12 @@ def detect_series(
     start: float = 0.0,
     end: float = 0.0,
     *,
-    cfg: PerfMetricsConfig | None = None,
+    cfg: DetectKnobs | None = None,
     suspected: str = "",
 ) -> Finding | None:
     """One step or creep over ``window`` against ``baseline``. Returns None below the sample
     floor or under both thresholds -- the two are distinct, and a "none" is not a pass."""
-    cfg = cfg or PerfMetricsConfig()
+    cfg = cfg or DetectKnobs()
     if len(baseline) < max(cfg.detect_min_samples, 2) or len(window) < max(
         cfg.detect_min_samples, 2
     ):
@@ -119,13 +131,13 @@ def detect(
     baseline: list[float],
     windows: list[tuple[float, float, list[float]]],
     *,
-    cfg: PerfMetricsConfig | None = None,
+    cfg: DetectKnobs | None = None,
     suspected: str = "",
 ) -> Finding | None:
     """The step that PERSISTS: ``detect_persistence_windows`` consecutive windows must each
     exceed both thresholds before the change becomes a Finding (a one-window spike is not a
     regression)."""
-    cfg = cfg or PerfMetricsConfig()
+    cfg = cfg or DetectKnobs()
     streak = 0
     for start, end, vals in windows:
         # A window under the sample floor is NOT a miss (an unrun probe is not a regression,
@@ -174,4 +186,4 @@ def burn_rate(
     return shape
 
 
-__all__ = ["Finding", "burn_rate", "detect", "detect_series", "mad", "median_shift"]
+__all__ = ["DetectKnobs", "Finding", "burn_rate", "detect", "detect_series", "mad", "median_shift"]
