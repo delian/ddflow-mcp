@@ -7,7 +7,7 @@ import pytest
 from ddflow.core.events import Event
 from ddflow.services.lanes.ledger import Lane
 from ddflow.services.lanes.reuse import idle_time_s, merged_per_hour, next_for, released
-from ddflow.services.lanes.states import FREE, WORKING
+from ddflow.services.lanes.states import WORKING
 
 
 def _lane(state: str, *, item: str = "", since: float = 0.0) -> Lane:
