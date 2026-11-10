@@ -31,6 +31,7 @@ class Git(Protocol):
 
     Home: `ddflow.adapters.git` (compat re-export `ddflow.infra.git`). Single adapter.
     """
+
     def run(self, repo: Path | str, *args: str, **kwargs: Any) -> Any:
         """`git -C repo *args`; a `GitResult` (`ok`, `unavailable`, `timed_out`)."""
 

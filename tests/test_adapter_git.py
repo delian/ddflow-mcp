@@ -102,5 +102,3 @@ def test_the_fake_records_the_shas_of_commits_missing_from():
         assert args == (io.repo, (sha, "main"), "main")
     finally:
         io.temp.remove()
-
-
