@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.budget_stage_lease_wait_s"
+new = "120.0"
+why = "Time budgets (PM-budgets): seconds an item may wait for a refused claim's lease before the wait is a finding."
+impact = "additive"

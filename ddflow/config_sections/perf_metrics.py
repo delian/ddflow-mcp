@@ -103,3 +103,50 @@ class PerfMetricsConfig:
             else "must be a number >= 0"
         ),
     )
+    budget_gate_p90_s: float = knob(
+        180.0,
+        doc="A gate wall-time budget: the p90 seconds one gate may take in a window before it is over budget (PM-budgets). The floor only tightens; raising it is a recorded decision.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    budget_test_file_s: float = knob(
+        120.0,
+        doc="A per-test-file budget: the seconds one test file's serial run may take before the file is a split candidate (PM-budgets). The floor only tightens; raising it is a recorded decision.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    budget_stage_lease_wait_s: float = knob(
+        120.0,
+        doc="A lease-wait budget: the seconds an item may wait for a refused claim's lease before the wait is a finding (PM-budgets). Only goes down; raising it is a recorded decision.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    budget_stage_merge_wait_s: float = knob(
+        120.0,
+        doc="A merge-wait budget: the seconds a landed branch may wait to be picked up before the wait is a finding (PM-budgets). Only goes down; raising it is a recorded decision.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    budget_breach_min_samples: int = knob(
+        3,
+        doc="Fewest samples a series needs before its p90 is compared to a budget; below it the check is not-enough-data, never a false clear (PM-budgets).",
+        check=int_at_least(1),
+    )
+    budget_severity: str = knob(
+        "warn",
+        doc="What a budget breach does: 'warn' files a finding only; 'block' also refuses and names the next call (split the file, see the slowest tests, raise with a recorded reason). Ships warn (r-safe-by-default).",
+        choices=("warn", "block"),
+        strictest=("warn", "a budget stays a finding, never a surprise refusal"),
+    )

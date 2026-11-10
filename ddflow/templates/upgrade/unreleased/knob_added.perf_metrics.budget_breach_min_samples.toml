@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.budget_breach_min_samples"
+new = "3"
+why = "Time budgets (PM-budgets): fewest samples a series needs before its p90 is compared to a budget."
+impact = "additive"

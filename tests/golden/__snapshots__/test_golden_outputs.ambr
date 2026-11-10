@@ -3271,6 +3271,34 @@
       perf_metrics.detect_creep_threshold = 0.1   [default]
           The LOWER relative bar a slow-creep EWMA must cross (a fixed +20% step bar
           never catches 1% a week; the creep bar does, accumulated over the window).
+      perf_metrics.budget_gate_p90_s = 180.0   [default]
+          A gate wall-time budget: the p90 seconds one gate may take in a window
+          before it is over budget (PM-budgets). The floor only tightens; raising it
+          is a recorded decision.
+      perf_metrics.budget_test_file_s = 120.0   [default]
+          A per-test-file budget: the seconds one test file's serial run may take
+          before the file is a split candidate (PM-budgets). The floor only tightens;
+          raising it is a recorded decision.
+      perf_metrics.budget_stage_lease_wait_s = 120.0   [default]
+          A lease-wait budget: the seconds an item may wait for a refused claim's
+          lease before the wait is a finding (PM-budgets). Only goes down; raising it
+          is a recorded decision.
+      perf_metrics.budget_stage_merge_wait_s = 120.0   [default]
+          A merge-wait budget: the seconds a landed branch may wait to be picked up
+          before the wait is a finding (PM-budgets). Only goes down; raising it is a
+          recorded decision.
+      perf_metrics.budget_breach_min_samples = 3   [default]
+          Fewest samples a series needs before its p90 is compared to a budget; below
+          it the check is not-enough-data, never a false clear (PM-budgets).
+      perf_metrics.budget_severity = 'warn'   [default]
+          What a budget breach does: 'warn' files a finding only; 'block' also refuses
+          and names the next call (split the file, see the slowest tests, raise with a
+          recorded reason). Ships warn (r-safe-by-default). An unrecognised value in a
+          config file is warned about, reported by `doctor` and falls back to 'warn',
+          the strictest (a budget stays a finding, never a surprise refusal); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       pins.recipes_file = '.ddflow/pins.toml'   [default]
           The project's pin recipes, as data: one `[[pin]]` table per kind of pin file
           with `name`, `files` (the pin files it owns), `check` (an argv; exit 0 = the

@@ -47,6 +47,21 @@ def file_of(test: str) -> str:
     return "/".join(parts) + ".py"
 
 
+def _section(perf_metrics: PerfMetricsConfig | None) -> PerfMetricsConfig:
+    """``perf_metrics`` or ``Config().perf_metrics`` -- naming each flaky knob once so the
+    dead-knob linter counts the name-based read (the ``store._section_knobs`` precedent)."""
+    if perf_metrics is not None:
+        return perf_metrics
+    config = Config()
+    _ = (
+        config.perf_metrics.flaky_window_s,
+        config.perf_metrics.flaky_quarantine_after,
+        config.perf_metrics.flaky_quarantine_expiry_s,
+        config.perf_metrics.flaky_retry_cost_s,
+    )
+    return config.perf_metrics
+
+
 def _epoch(row: dict[str, Any]) -> float | None:
     """The row's ``at`` as epoch seconds, or ``None`` when it is absent or not a time. A
     flake with no placeable timestamp is never counted as inside a window."""
@@ -74,7 +89,7 @@ def rates(
     Rate per day = flakes / (window in days), reported BESIDE the raw count so a rate is
     never mistaken for a count. Only ids and counts leave here: no failure text, argument
     or secret. ``now`` defaults to wall time."""
-    cfg = perf_metrics or Config().perf_metrics
+    cfg = _section(perf_metrics)
     now = time.time() if now is None else now
     # Clamp to 1s: the [perf_metrics] knob check already refuses a non-positive window, but a
     # hand-built PerfMetricsConfig bypasses it, and a zero window must not divide by zero.
@@ -126,7 +141,7 @@ def proposals(
     was running when it tripped; ``""`` when the log names none -- B-sched-flaky resolves a
     person), an expiry (``now + flaky_quarantine_expiry_s``, ISO), and ``proposed`` as a MARKER
     that this is a measure, not an action."""
-    cfg = perf_metrics or Config().perf_metrics
+    cfg = _section(perf_metrics)
     now = time.time() if now is None else now
     window = max(1, cfg.flaky_window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -160,7 +175,7 @@ def report(
     """The rate view read from ``repo``'s flake log: rates + proposals, in one dict.
 
     A log that cannot be read is ``{"unavailable": True}`` -- never an empty (zero) view."""
-    cfg = perf_metrics or Config().perf_metrics
+    cfg = _section(perf_metrics)
     try:
         rows = flakes.read(repo)
     except OSError:
