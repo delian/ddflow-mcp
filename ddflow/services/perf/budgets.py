@@ -101,8 +101,10 @@ _NEXT_CALLS = {
 
 @dataclass(frozen=True)
 class Check:
-    """One budget checked. ``p90_s`` is None below the sample floor (``enough`` false) -- that
-    is "not enough data", NOT a clear; ``breach`` is the p90 over the budget ON enough data."""
+    """One budget checked. ``status`` is the three-way answer ('breach' | 'ok' |
+    'insufficient') so "not a breach" is never the same word as "not enough data":
+    ``p90_s`` is None (``enough`` false) below the sample floor and the series is
+    'insufficient' (unavailable, never a clear), not 'ok'."""
 
     budget: str  # the budget name ("gate", "test_file", "stage:lease", "stage:merge")
     kind: str  # "gate" | "test_file" | "stage"
@@ -117,8 +119,16 @@ class Check:
         return self.p90_s is not None
 
     @property
+    def status(self) -> str:
+        """'breach' (over budget on enough data), 'ok' (ran, under budget), 'insufficient'
+        (below the sample floor: unavailable, never a clear)."""
+        if not self.enough:
+            return "insufficient"
+        return "breach" if self.p90_s > self.budget_s else "ok"
+
+    @property
     def breach(self) -> bool:
-        return self.enough and self.p90_s > self.budget_s
+        return self.status == "breach"
 
     @property
     def blocks(self) -> bool:
@@ -134,8 +144,8 @@ def check(
     values: list[float],
     cfg: PerfMetricsConfig | None = None,
 ) -> Check:
-    """The one answer for a series: enough data, and a breach or not. ``enough`` stays false
-    until the sample floor, so a too-short series is never read as "under budget"."""
+    """The one answer for a series: enough data, and a breach or not. ``status`` is
+    'insufficient' until the sample floor, so a too-short series is never read as 'ok'."""
     cfg = cfg or _section_knobs(Config())
     return Check(
         name,
@@ -151,10 +161,20 @@ def checks(
     measured: dict[str, list[float]],
     cfg: PerfMetricsConfig | None = None,
 ) -> list[Check]:
-    """Only the BREACHES over the declared budgets (the findings). A name not in ``measured``
-    is not checked; a series under its floor is not a breach (and not a clear)."""
+    """One Check per measured budget, each carrying its three-way ``status`` ('breach', 'ok',
+    'insufficient') so an insufficient series is surfaced as unavailable, never dropped or
+    read as a clear. A name not in ``measured`` is simply not checked."""
     cfg = cfg or _section_knobs(Config())
-    return [c for name, values in measured.items() if (c := check(name, list(values), cfg)).breach]
+    return [check(name, list(values), cfg) for name, values in measured.items()]
+
+
+def breaches(
+    measured: dict[str, list[float]],
+    cfg: PerfMetricsConfig | None = None,
+) -> list[Check]:
+    """Only the checks whose ``status`` is 'breach' -- the findings. An 'insufficient' series
+    is neither here (not a finding) nor 'ok' (not a clear); ``checks`` carries it instead."""
+    return [c for c in checks(measured, cfg) if c.breach]
 
 
 def ratchet(current_s: float, proposed_s: float, reason: str = "") -> tuple[float, str]:
@@ -171,6 +191,7 @@ def ratchet(current_s: float, proposed_s: float, reason: str = "") -> tuple[floa
 __all__ = [
     "BUDGETS",
     "Check",
+    "breaches",
     "budget_seconds",
     "check",
     "checks",
