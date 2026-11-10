@@ -12,18 +12,15 @@ holder's branch cannot be found, or when the knob is off (D-lease-overlap-only-b
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
-
-import pytest
-
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.api import lifecycle as LC
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
-from ddflow.api import lifecycle as LC
 
 
 def _git(repo: Path, *args: str) -> None:
