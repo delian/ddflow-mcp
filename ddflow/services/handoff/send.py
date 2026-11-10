@@ -71,7 +71,7 @@ def resolve_patch(
     if not text.lstrip().startswith("diff --git"):
         raise SuggestError(
             f"{src}: a suggestion is a git diff patch (starts with 'diff --git'); "
-            f"regenerate with `git diff` (CLI), or `ddflow_diff`"
+            f"regenerate with `git diff` (CLI)"
         )
     return text
 

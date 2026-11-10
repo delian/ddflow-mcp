@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import ipaddress
 import json
 import os
 from collections.abc import Callable, Iterable, Iterator
@@ -11,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
+from ...adapters.http import local_endpoint as _is_local_endpoint
 from ...config import Config, LogConfig, SessionConfig
 from ...core import redact as R
 from ...core import upcasters as UP
@@ -78,29 +78,6 @@ def _reviewer_redact_names(root: Path) -> list[str]:
         return out
     except Exception:
         return []
-
-
-def _is_local_endpoint(base_url: str) -> bool:
-    """``True`` when ``base_url`` names a private/loopback/link-local address or host."""
-    try:
-        from urllib.parse import urlparse
-
-        host = (urlparse(base_url).hostname or "").lower()
-    except Exception:
-        return False
-    if not host:
-        return False
-    # A literal address first: global means public, anything else (private/loopback/
-    # link-local, or IPv6) reads from `is_global` so a global IPv6 literal is public.
-    try:
-        return not ipaddress.ip_address(host).is_global
-    except ValueError:
-        pass
-    # A hostname: a single label (localhost, ollama, vllm) is never a public internet
-    # host, and a dotted name in a local pseudo-TLD is not routable beyond the machine.
-    if "." not in host or host.endswith((".local", ".internal", ".lan", ".home.arpa")):
-        return True
-    return False
 
 
 #: Called after each event is on disk, under the append lock: `(log, event, size_before,
