@@ -117,6 +117,17 @@ forbidden_modules =
     tomlkit
 allow_indirect_imports = True
 
+# SQLite is the projection's engine and its own one home; every other importer is debt
+# that moves behind IndexStore (ddflow.adapters.indexdb), so the baseline can only shrink.
+[importlinter:contract:sqlite-home]
+name = sqlite3 is imported only by ddflow.adapters.indexdb
+type = forbidden
+source_modules =
+    ddflow
+forbidden_modules =
+    sqlite3
+allow_indirect_imports = True
+
 # Optional extras (D-unify 2): each is imported by exactly ONE adapter module, which owns
 # the stdlib fallback and the doctor line. The task that writes an adapter adds its one
 # "home" entry to tests/guard_baselines/importlinter-extras-one-adapter.toml, e.g.

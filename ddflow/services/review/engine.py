@@ -47,6 +47,36 @@ _FINDING_RE = re.compile(
     re.M | re.I | re.S,
 )
 
+#: A citation is ONE token -- a ``path``, ``path:line``, ``path:line:col``,
+#: ``path:line-line`` or ``path::symbol`` (nested ``::`` included) -- so it has no
+#: whitespace. A reviewer writing a SENTENCE in the location field writes whitespace too,
+#: and a ``?`` or ellipsis together with that whitespace is what shows it thinking aloud,
+#: not citing one spot (B-review-finding-is-unfinished-reasoning). A bare ``path:257?`` is
+#: uncertainty about the line (kept), ``foo.py:10 bar.py:20`` is two cited spots (kept),
+#: and ``a.py:12; b.py:34`` is two cited spots separated by a semicolon (kept): only a
+#: whitespace-separated run that also carries ``?``/ellipsis is the reviewer thinking. A
+#: semicolon is a separator, so it is NOT a prose mark.
+_PROSE_MARK = re.compile(r"[?\u2026]|\.\.\.")
+
+
+def _malformed_reason(location: str) -> str:
+    """Why a finding is reasoning rather than a defect, or "" when it is a real finding.
+
+    One deterministic signal (B-review-finding-is-unfinished-reasoning): a location that is
+    not a ``path:line``/``path:symbol`` citation -- one carrying whitespace together with a
+    ``?`` or ellipsis -- records but does not count.
+
+    The bug also names "the text is reasoning with no failure stated". That half is
+    deliberately left alone: whether a paragraph states a defect is semantic, and a word
+    list or punctuation test drops genuine findings alongside meta-talk -- the review of
+    this very code showed the same classifier drop a real defect with no listed word and no
+    full stop and keep meta-talk that ended in a full stop -- so no paragraph test acts, and
+    a finding that names a real spot is never silently dropped (fail-closed).
+    """
+    if location and re.search(r"\s", location) and _PROSE_MARK.search(location):
+        return "location is prose, not a path:line or path:symbol"
+    return ""
+
 
 def diff_fence(diff: str) -> str:
     """The backtick fence that holds ``diff`` in the reviewer's prompt: one longer than
@@ -519,6 +549,7 @@ def parse(text: str) -> tuple[list[Finding], bool]:
                 location=location,
                 title=title,
                 detail=detail,
+                malformed=_malformed_reason(location),
             )
         )
     return findings, status is not None
