@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from ...core import clock
+from ..metrics.render import dur, pct
 from ..metrics import paths as _paths
 from ..metrics.providers import Context
 from ..metrics.stats import percentile
@@ -254,19 +254,6 @@ def has_figures(data: dict) -> bool:
     return any(r["current"] is not None for r in data["metrics"])
 
 
-def _dur(seconds: float | None) -> str:
-    if seconds is None:
-        return "n/a"
-    minute = clock.DURATION_UNITS["m"]
-    return f"{seconds / 3600:.1f}h" if seconds >= 3600 else (
-        f"{seconds / minute:.0f}m" if seconds >= minute else f"{seconds:.0f}s"
-    )
-
-
-def _pct(share: float | None) -> str:
-    return f"{share:.0%}" if share is not None else "n/a"
-
-
 def text(data: dict) -> str:
     """The human block, shared by CLI and MCP: one row per metric, ``baseline -> current
     (delta)``, direction only when both sides are known (lower-is-better for all six)."""
@@ -291,14 +278,12 @@ def text(data: dict) -> str:
     return "\n".join(out)
 
 
+_SHARE_METRICS = ("process_share", "sequential_review_pair_share", "parked_share")
+
+
 def _render_value(metric: str, value: float | None) -> str:
-    if value is None:
-        return "n/a"
-    if metric == "process_share" or metric == "parked_share":
-        return _pct(value)
-    if metric == "sequential_review_pair_share":
-        return _pct(value)
-    return _dur(value)
+    """One figure in its unit: shares as a percent, the rest as a duration; None is ``n/a``."""
+    return pct(value) if metric in _SHARE_METRICS else dur(value)
 
 
 __all__ = [
