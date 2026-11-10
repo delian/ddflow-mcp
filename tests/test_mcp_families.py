@@ -165,7 +165,10 @@ def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
     # bounded tail, not the flat surface.
     # 56_000 (raised, B470534f9fd): the `bug` family's pinned `reopen`/`tag` actions list two
     # action clauses in the description and two enum values; the list measures 56,139 with them.
-    assert fams + singles < 56_300
+    # 56_800 (raised, GM-surface-counts): the `suggest` (ddflow_lease), `lanes` (ddflow_view)
+    # and `research_add`/`research show` (ddflow_task) action clauses each add a per-action
+    # description clause and enum value; the list measures 56,774 with them.
+    assert fams + singles < 56_800
 
 
 def _flat(tool):
