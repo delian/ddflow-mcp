@@ -69,28 +69,26 @@ class SqliteIndexStore:
         con.execute("insert or replace into meta values('schema', ?)", (str(schema),))
 
 
-def connect_memory(name: str = ":memory:", timeout: float = 30.0) -> Connection:
-    """An in-memory connection with `Row` rows: `FakeIndexStore`'s seam.
+def connect_memory(timeout: float = 30.0) -> Connection:
+    """A private `:memory:` connection with `Row` rows: `FakeIndexStore`'s seam.
 
     It lives here (not in the fake) so the `sqlite-home` contract keeps `sqlite3` in
     this one module while the fake still opens an in-memory database without its own
-    import. `name` keys a *shared-cache* in-memory database, so two connections with the
-    same name see the same rows (the bare `":memory:"` opens a private database that a
-    reconnect starts empty). The name is reduced to URI-safe characters first, so a `?`
-    or `#` in a path cannot cut the ``mode`` off the connection URI.
+    import. A private `:memory:` database dies when its connection closes, exactly like
+    sqlite3's own `:memory:`.
     """
-    if name == ":memory:":
-        con = sqlite3.connect(":memory:", timeout=timeout, isolation_level=None)
-    else:
-        key = "".join(c if c.isalnum() else "_" for c in name)
-        con = sqlite3.connect(
-            f"file:db_{key}?mode=memory&cache=shared",
-            uri=True,
-            timeout=timeout,
-            isolation_level=None,
-        )
+    con = sqlite3.connect(":memory:", timeout=timeout, isolation_level=None)
     con.row_factory = Row
     return con
+
+
+def running(con: Connection) -> bool:
+    """Whether `con` is still open: a closed connection raises on any statement."""
+    try:
+        con.execute("select 1")
+        return True
+    except sqlite3.ProgrammingError:
+        return False
 
 
 #: The shared default instance.
