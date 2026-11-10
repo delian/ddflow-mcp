@@ -75,6 +75,11 @@ class GateStatus:
     #: gate -> why a recorded pass no longer covers the current branch (B1aec051374): the
     #: evidence names a tree that has since changed (a `sync` merged main into its globs).
     stale: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
+    #: gate -> "all findings triaged: not blocking" for a review gate recorded FAILED whose
+    #: findings are all settled (0 untriaged and every confirmed finding later cleared by a
+    #: delta round): the failure is answered, so it blocks `complete` no more and another
+    #: review round would change nothing (bug Bf9554e4156).
+    answered: dict[str, str] = field(default_factory=dict, metadata={"omit_empty": True})
 
     def render(self) -> str:
         return "\n".join(
@@ -89,6 +94,7 @@ class GateStatus:
             + (f"  -- {self.after_failure[g]}" if g in self.after_failure else "")
             + (f"  -- STALE: {self.stale[g]}" if g in self.stale else "")
             + (f"  -- {self.why[g]}" if g in self.why else "")
+            + (f"  -- {self.answered[g]}" if g in self.answered else "")
             for g, o in self.rows
         )
 
@@ -272,6 +278,32 @@ def _triage_notes(it, rows: list[tuple[str, str]]) -> dict[str, str]:
     return {g: triage_line(c) + _pass_mark(it, g) for g, _o in rows if (c := triage_counts(it, g))}
 
 
+#: The note a FAILED review gate carries once its failure is answered (bug Bf9554e4156).
+ANSWERED_REVIEW_NOTE = "all findings triaged: not blocking"
+
+
+def _answered_failed_reviews(
+    it, gates: list[str], defs: Mapping[str, GateDef] | None
+) -> dict[str, str]:
+    """gate -> ``ANSWERED_REVIEW_NOTE`` for a review gate recorded FAILED whose findings a
+    re-review could no longer change (its failure is answered, `unresolved_review_failure`
+    has nothing left), else absent. A failed suite gate (`ci`, `unit_tests`) has no numbered
+    findings and is never "answered", so it stays a plain failure."""
+    from .failed_review import unresolved_review_failure  # deferred: failed_review imports us
+
+    out: dict[str, str] = {}
+    for g in gates:
+        if it.gate_outcome(g) != "failed":
+            continue
+        gd = (defs or {}).get(g)
+        if gd is not None and not gd.reviewer:
+            continue  # a command gate: a failure is a failure, never an answered one
+        if unresolved_review_failure(it, g):
+            continue
+        out[g] = ANSWERED_REVIEW_NOTE
+    return out
+
+
 LOCAL_COMMAND_LABEL = "passed with a local-only command (not the committed one)"
 
 
@@ -330,12 +362,16 @@ def status(
     required = required_gates(cfg)
     na = not_applicable(it, gates, defs, required=required, diff=diff)
     rows = [(g, it.gate_outcome(g)) for g in gates]
+    answered = _answered_failed_reviews(it, gates, defs)
     settled = {
-        g: g in na or it.gate_satisfied(g, g in required) or GA.accepted(state, it, g, cfg).ok
+        g: g in na
+        or g in answered
+        or it.gate_satisfied(g, g in required)
+        or GA.accepted(state, it, g, cfg).ok
         for g in gates
     }
     done = [g for g in gates if settled[g] and g not in na]
-    blocked = _with_outcome(rows, "failed")
+    blocked = [g for g, o in rows if o == "failed" and g not in answered]
     unavail = _with_outcome(rows, "unavailable", "partial")
     partial = _with_outcome(rows, "partial")
     skipped = _with_outcome(rows, "skipped")
@@ -362,6 +398,7 @@ def status(
             g: "skipped after a failed run" for g, o in rows if skipped_after_failure(it, g)
         },
         stale=_stale_mark(stale_notes),
+        answered=answered,
     )
 
 
