@@ -165,6 +165,15 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
         "absent, not passing.",
         [],
     ),
+    "perf_report": (
+        "Answer performance questions from the perf report",
+        "When the operator asks how slow, how expensive or how a gate, reviewer, model or "
+        "agent is trending: run the perf report, read its figures against the sample-size "
+        "and not-collected rules, and answer in chat with the exact next call in CLI and "
+        "MCP form (the report already names both). A probe that could not run is "
+        "unavailable, never zero or passed.",
+        [],
+    ),
 }
 
 
