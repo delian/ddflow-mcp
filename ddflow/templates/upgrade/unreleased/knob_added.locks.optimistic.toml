@@ -4,5 +4,5 @@
 kind = "knob_added"
 key = "locks.optimistic"
 new = "false"
-why = "When on, a plain claim whose globs overlap a live holder's on a non-generated file is granted when a git merge-tree probe shows the two branches merge cleanly (DX-lease-hunk-optimistic); off keeps the plain refusal."
+why = "Optimistic concurrency (DX-lease-hunk-optimistic): when a plain claim's globs overlap a live holder's on a non-generated file, a clean `git merge-tree` probe between the holder's branch and the claim's base grants the claim (the overlapping files are recorded `optimistic`, and the merge rebases, re-running pin regeneration, instead of waiting); a real conflict, an unknown holder branch or an unanswerable probe keeps the exclusive-lease refusal. Generated/pinned files stay exclusive. Off keeps D-lease-overlap-only-by-break."
 impact = "additive"
