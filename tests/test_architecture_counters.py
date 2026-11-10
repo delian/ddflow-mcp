@@ -131,10 +131,13 @@ def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> No
         f"importlinter-{c}.toml" for c in contracts if c not in SPLIT_CONTRACTS
     }
     split = {f"importlinter-{c}" for c in contracts if c in SPLIT_CONTRACTS}
+    # `ports_without_fake` is a per-port directory checked by tests/test_ports_contract.py
+    # (a sibling guard), not one of these counters; it lives in the same `guard_baselines`.
+    other_guards = {"ports_without_fake"}
     present = {p.name for p in BASELINES.iterdir() if not p.name.startswith(".")}
-    assert present - set(PER_MODULE) - split == expected, (
+    assert present - set(PER_MODULE) - split - other_guards == expected, (
         f"missing: {sorted(expected - present)}; "
-        f"read by no guard: {sorted(present - expected - set(PER_MODULE) - split)}"
+        f"read by no guard: {sorted(present - expected - set(PER_MODULE) - split - other_guards)}"
     )
     modules = {_dotted(p) for p in _modules()}
     for kind in COUNTERS:

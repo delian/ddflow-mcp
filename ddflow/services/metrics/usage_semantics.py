@@ -18,10 +18,11 @@ shared here rather than written a second time.
 
 from __future__ import annotations
 
-import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+
+from ddflow.adapters.toml import TomlLibIo
 
 #: Reading modes. NONE is a real mode: it is how "this harness exposes nothing" is stated,
 #: not an omission (r-tell-dont-discover).
@@ -60,7 +61,7 @@ class UsageSemantics:
 def load(source: str | Path | None = None) -> dict[str, dict]:
     """Read the declared usage semantics: harness family -> its declared facts."""
     path = Path(source) if source else _TEMPLATE
-    return tomllib.loads(path.read_text(encoding="utf-8"))
+    return TomlLibIo().read(path)
 
 
 def semantics_for(harness: str, source: str | Path | None = None) -> UsageSemantics:
