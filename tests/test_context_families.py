@@ -6,9 +6,13 @@ from datetime import date
 
 from ddflow.infra import paths
 from ddflow.services import context_families as CF
+from ddflow.services import harnessreg as HR
 
-HARNESSES = paths.package_dir() / "harnesses"
-IDS = sorted(p.stem for p in HARNESSES.glob("*.toml"))
+# "Every harness id" is every DESCRIPTOR id, not every ``ddflow/harnesses/*.toml``: that
+# directory also holds subsystem data (``catalog.toml``, ``usage.toml``) which have no
+# harness row and none belongs here. ``harnessreg.ids()`` is the one enumeration that
+# excludes them.
+IDS = HR.ids()
 FAMILIES = ("claude", "openai", "gemini", "deepseek", "kimi", "qwen", "glm", "unknown")
 
 
