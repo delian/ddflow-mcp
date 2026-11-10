@@ -70,7 +70,7 @@ def test_render_is_width_bounded():
 
 def test_the_headline_names_the_slowest_gate_first():
     text = render(_sample())
-    assert "slower:" in text
+    assert "slowest:" in text
     assert "critic" in text  # p90 150s is the slowest of the two
 
 

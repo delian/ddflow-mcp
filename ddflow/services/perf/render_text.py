@@ -51,8 +51,8 @@ def _clip(text: str, width: int) -> str:
 
 def _headline(report: Report, width: int) -> list[str]:
     """The short headline: which gate is slowest (three at most), and what is not collected
-    yet. One window has no time trend, so the trend sparkline is drawn from a real time
-    series (the charts renderer's job when its source lands), not from gate names."""
+    yet. One window has no before/after, so the line reads `slowest` (absolute), never
+    `slower` (a comparison the window cannot make); the trend goes to the charts renderer."""
     slow = sorted(
         (r for r in report.gates if r.get("p90_s") is not None),
         key=lambda r: r["p90_s"],
@@ -60,7 +60,7 @@ def _headline(report: Report, width: int) -> list[str]:
     )[:3]
     out = ["perf report"]
     if slow:
-        out.append("  slower: " + ", ".join(f"{r['gate']} p90 {dur(r['p90_s'])}" for r in slow))
+        out.append("  slowest: " + ", ".join(f"{r['gate']} p90 {dur(r['p90_s'])}" for r in slow))
     proposals = report.not_collected.get("findings", "")
     if proposals:
         out.append(f"  proposals: not collected yet ({proposals})")
@@ -69,50 +69,44 @@ def _headline(report: Report, width: int) -> list[str]:
 
 def _gates(report: Report, width: int, max_rows: int) -> list[str]:
     """The per-gate table: time, first-run pass rate and a bar of the ever-failed share.
-    An empty gate set is no table at all (never a header-only one), and a gate set narrower
-    than the header is plain ``gate: ...`` rows, never a table with its pipes clipped off."""
+    A markdown table is emitted only when its widest row fits in ``width``; otherwise the
+    same cells are plain ``gate: ...`` rows, and no row is ever clipped mid-table."""
     if not report.gates:
         return []
     rows = sorted(report.gates, key=lambda r: r["gate"])[:max_rows]
-    header = "| gate | n | p50 | p90 | pass | failed |"
-    if width > len(header):
-        out = [header, "|---|---|---|---|---|---|"]
-        for r in rows:
-            out.append(
-                "| "
-                + " | ".join(
-                    [
-                        r["gate"],
-                        str(r["n"]),
-                        dur(r.get("p50_s")),
-                        dur(r.get("p90_s")),
-                        pct(r.get("first_run_pass_rate")),
-                        f"{bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}",
-                    ]
-                )
-                + " |"
-            )
+    cells = [
+        [
+            r["gate"],
+            str(r["n"]),
+            dur(r.get("p50_s")),
+            dur(r.get("p90_s")),
+            pct(r.get("first_run_pass_rate")),
+            f"{bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}",
+        ]
+        for r in rows
+    ]
+    header = "| " + " | ".join(["gate", "n", "p50", "p90", "pass", "failed"]) + " |"
+    widest = max([len(header), *[len("| " + " | ".join(c) + " |") for c in cells]], default=0)
+    if widest <= width:
+        out = [header, "|---" * 6 + "|"] + ["| " + " | ".join(c) + " |" for c in cells]
     else:
         out = [
-            f"{r['gate']}: n={r['n']} p50 {dur(r.get('p50_s'))} p90 {dur(r.get('p90_s'))}"
-            f" pass {pct(r.get('first_run_pass_rate'))}"
+            f"{r['gate']}: n={r['n']} p50 {dur(r.get('p50_s'))} p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
             for r in rows
         ]
     if len(report.gates) > max_rows:
-        out.append(f"… and {len(report.gates) - max_rows} more gates omitted (full rows in json)")
+        out.append(f"{len(report.gates) - max_rows} more gates (full rows in json, to_json)")
     return [_clip(line, width) for line in out]
 
 
-def _comparison(report: Report, width: int) -> list[str]:
+def _comparison(report: Report, width: int, max_rows: int) -> list[str]:
     tables: list[str] = []
     for name, rows in (
         ("model", report.comparisons.get("models", [])),
         ("reviewer", report.comparisons.get("reviewers", [])),
         ("agent", report.comparisons.get("agents", [])),
     ):
-        if not rows:
-            continue
-        for r in rows:
+        for r in rows[:max_rows]:
             tables.append(
                 f"{name}  {r['name']}  {bar(r.get('first_run_pass_rate'), 2)} {pct(r.get('first_run_pass_rate'))}"
             )
@@ -121,8 +115,8 @@ def _comparison(report: Report, width: int) -> list[str]:
 
 def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
     """The markdown rendering: headline, cycle, waits, rework, gates, comparisons, then the
-    not-collected sections named with the task that will provide them. Truncation names how
-    much was cut and the json form for the rest."""
+    not-collected sections named with the task that will provide them, bounded to
+    ``max_rows`` rows per section with the cut stated on the last line."""
     width = max(width, 1)
     lines: list[str] = _headline(report, width)
     lines.append("")
@@ -144,7 +138,7 @@ def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
     if gates:
         lines.append("")
         lines += gates
-    comparison = _comparison(report, width)
+    comparison = _comparison(report, width, max_rows)
     if comparison:
         lines.append("")
         lines += comparison
@@ -157,7 +151,7 @@ def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
         ]
     lines.append("")
     lines.append(
-        _clip("cut: this text is bounded by max_rows; the json form carries every section", width)
+        _clip("bounded: text cut to max_rows rows; to_json(report) carries every section", width)
     )
     return "\n".join(lines)
 
