@@ -55,6 +55,33 @@ def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) ->
     }
 
 
+def _offered_overlap(
+    st, cfg, me: str, it, phase: str, kind: str, now: float, repo: Path
+) -> Blocked | None:
+    """The `Blocked` `next` reports for ``it`` as overlapping an item offered in the same
+    plan; None when `next` would offer ``it``. `claim` of a named item ignores the
+    offered-overlap, so `_claim_blocker` alone calls it claimable; the plan scoped to the
+    item's own phase (what ``next --phase <its phase>`` offers) is the part of `next`'s
+    answer a named clam does not reflect."""
+    p = plan_for(
+        repo,
+        EventLog(repo, me, log_cfg=cfg.log),
+        cfg,
+        st,
+        purpose="offer",
+        kind=kind,
+        phase=phase or it.parent or "",
+        agent=me,
+        now=now,
+    )
+    if it.id not in p.overlapped:
+        return None
+    for b in p.blocked:
+        if b.item == it.id and b.reason == "conflict" and "offered in this plan" in b.detail:
+            return b
+    return None
+
+
 def _judge_wait(
     st,
     cfg,
@@ -95,6 +122,14 @@ def _judge_wait(
         return _judge_held(st, cfg, it, me, now, globs, out)
     b = _claim_blocker(st, cfg, it, me, live, now, globs=globs, repo=repo)
     if b is None:
+        # A NAMED claim of the item ignores the plan's offered-overlap, so the claim will
+        # succeed and READY stays truthful; `next` withholds it when it overlaps an item
+        # offered in the same plan. Name both (B-wait-ready-contradicts-next-blocked):
+        # READY, plus the plan-level conflict `next` would report.
+        if repo is not None:
+            ov = _offered_overlap(st, cfg, me, it, phase, kind, now, repo)
+            if ov is not None:
+                out["note"] = ov.detail
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
     out["blocked"] = [plain(b)]
     if b.reason == "expired":
@@ -196,7 +231,8 @@ def _ready_advice(v: dict[str, Any], lease: str) -> str:
     """What to do on waking: claim the item, or (waiting on a lease) go on."""
     if lease:
         return f"{lease} is free of other agents' leases: claim what you need now."
-    return f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same release woke too."
+    note = f" Note: `next` withholds it as {v['note']}." if v.get("note") else ""
+    return f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same release woke too.{note}"
 
 
 def _judge_any(
