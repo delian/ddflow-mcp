@@ -96,3 +96,21 @@ def test_a_tool_bug_naming_a_test_file_gets_that_test_file(repo):
     )
     assert "tests/test_claim.py" in kept
     assert "ddflow/api/lifecycle/claim.py" not in kept
+
+
+def test_a_named_test_file_is_kept_in_the_found_scope_too(repo):
+    """The found-scope path (a non-tool bug naming few files) already holds the named
+    test file, so the regression-test edit is covered there too (from `_named_files`,
+    not only from `named_test_globs`)."""
+    _tracked(repo, "ddflow/api/lifecycle/claim.py")
+    _tracked(repo, "tests/test_claim.py")
+    kept, _dropped = fix_task_globs(
+        repo,
+        "",
+        ["ddflow/api/lifecycle/claim.py"],
+        "the brief lists claim.py; the regression test goes in tests/test_claim.py",
+        tool_bug=False,
+        named_scope_at=20,
+    )
+    assert "tests/test_claim.py" in kept
+    assert "ddflow/api/lifecycle/claim.py" in kept
