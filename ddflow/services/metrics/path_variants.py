@@ -15,6 +15,7 @@ from collections import defaultdict
 from statistics import median
 
 from ...core import clock
+from . import paths
 from .providers import Context
 
 #: The canonical gate order (a task pipeline); a gate out of order is one that ran before a
@@ -37,8 +38,6 @@ CANON = (
 
 def _items(ctx: Context) -> dict[str, list]:
     """item -> its gate verdicts in time order."""
-    from collections import defaultdict
-
     outs: dict[str, list] = defaultdict(list)
     for o in ctx.facts.outcomes:
         outs[o.item].append(o)
@@ -119,8 +118,6 @@ def out_of_order(ctx: Context) -> list[dict]:
 def overlap(ctx: Context) -> dict:
     """the burst overlap: the summed process time vs its union (what the concurrent view saves),
     and the overlap share (the union's fraction of the sum)."""
-    from . import paths
-
     u = paths.build(ctx)["process_union"]
     union_s = u.get("union", {}).get("p50_s")
     saved_s = u.get("saved_by_union", {}).get("p50_s")
