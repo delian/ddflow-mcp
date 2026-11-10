@@ -17,6 +17,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 MTOK = 1_000_000.0
+#: Distinct families racing one item is a hedge; one family is just an attempt.
+HEDGE_MIN_FAMILIES = 2
 
 
 @dataclass(frozen=True)
@@ -83,7 +85,7 @@ def hedges_from(attempts: Mapping[str, Sequence[str]]) -> tuple[Hedge, ...]:
     rows = []
     for item in sorted(attempts):
         families = tuple(dict.fromkeys(a for a in attempts[item] if a))  # distinct, ordered
-        if len(families) >= 2:
+        if len(families) >= HEDGE_MIN_FAMILIES:
             rows.append(Hedge(item, families))
     return tuple(rows)
 
