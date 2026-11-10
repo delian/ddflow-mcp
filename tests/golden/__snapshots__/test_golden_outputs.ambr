@@ -2713,8 +2713,8 @@
       locks.optimistic = False   [default]
           Optimistic concurrency (DX-lease-hunk-optimistic): when a plain claim's
           globs overlap a live holder's on a non-generated file, run the `git merge-
-          tree` conflict probe between the holder's branch and this claim's base. A
-          clean merge conflates the two branches' disjoint hunks, so the claim is
+          tree` conflict probe between the holder's branch and the claimant's branch.
+          A clean merge conflates the two branches' disjoint hunks, so the claim is
           GRANTED and the overlapping files are recorded `optimistic` on the lease
           (the merge then rebases, re-running pin regeneration, instead of waiting); a
           real conflict or a probe that could not run keeps the exclusive-lease
