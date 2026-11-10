@@ -95,13 +95,13 @@ def test_build_names_the_cli_and_mcp_next_call():
     assert out["variants"] and out["directly_follows"]
 
 
-def test_overlap_is_union_versus_sum_and_never_exceeds_the_sum():
+def test_overlap_is_union_versus_sum_and_marks_too_few_samples_unavailable():
     ov = build(ctx_of(seeded()))["overlap"]
     assert ov["n_items"] == 2
     assert ov["saved_s"] >= 0
     assert ov["union_s"] + ov["saved_s"] == ov["sum_s"]
-    assert ov["union_s"] <= ov["sum_s"] + 1e-9
-    assert ov["burst_share"] is None or ov["burst_share"] <= 1
+    assert ov["unavailable"] is True  # two items, no process time: below min_samples
+    assert ov["burst_share"] is None
 
 
 def test_variants_collapse_consecutive_reruns_into_one_step():

@@ -135,7 +135,7 @@ def overlap(ctx: Context) -> dict:
         "union_s": union_s,
         "sum_s": sum_s,
         "saved_s": sum_s - union_s,
-        "burst_share": union_s / sum_s if sum_s else None,
+        "burst_share": union_s / sum_s if sum_s and not unavailable else None,
         "n_items": len(rows),
         "unavailable": unavailable,
     }
