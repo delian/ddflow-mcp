@@ -31,7 +31,9 @@ def person(cfg, agent: str) -> Actor:
     return resolve_actor(cfg, os_user(), requested_agent=agent)
 
 
-def answer(log, cfg, ask_id: str, outcome: str, *, actor: Actor, digest: str, text: str = "") -> None:
+def answer(
+    log, cfg, ask_id: str, outcome: str, *, actor: Actor, digest: str, text: str = ""
+) -> None:
     E.answer(log, cfg, ask_id, outcome, actor=actor, digest=digest, text=text, via="cli", level=1)
 
 

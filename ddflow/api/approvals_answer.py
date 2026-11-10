@@ -92,7 +92,9 @@ def approvals_answer(repo: Path, ask_id: str, *, text: str = "", agent: str = ""
         AN.answer(log, cfg, ask_id, outcome, actor=actor, digest=row["digest"], text=answer_text)
     except AN.AskRefused as exc:
         return O.refused("approvals.answer", str(exc))
-    return O.ok("approvals.answer", id=ask_id, outcome=outcome, text=f"{ask_id} {outcome} by {actor.id}")
+    return O.ok(
+        "approvals.answer", id=ask_id, outcome=outcome, text=f"{ask_id} {outcome} by {actor.id}"
+    )
 
 
 def _record(log, cfg, st, ask_id: str, actor, prefix: str) -> str:
