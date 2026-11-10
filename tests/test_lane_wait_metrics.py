@@ -49,7 +49,7 @@ def run(log=None, now=None, **knobs):
 
 def test_gate_waits_are_lane_hours_by_gate():
     gw = run()["gate_wait_hours"]
-    assert gw["ci"] == pytest.approx((360 + 720) / H)
+    assert gw["by_gate"]["ci"] == pytest.approx((360 + 720) / H)
     assert gw["total"] == pytest.approx(1080 / H)
 
 
@@ -64,8 +64,8 @@ def test_every_gate_that_queued_for_the_lock_is_counted():
     st, cfg, _ = frozen(log, T0 + 5 * H)
     cfg.metrics.min_samples = 1
     gw = LW.lane_wait(log.events, st, cfg, T0 + 5 * H)["gate_wait_hours"]
-    assert gw["standards"] == pytest.approx(180 / H)
-    assert gw["ci"] == pytest.approx(1080 / H)
+    assert gw["by_gate"]["standards"] == pytest.approx(180 / H)
+    assert gw["by_gate"]["ci"] == pytest.approx(1080 / H)
     assert gw["total"] == pytest.approx((1080 + 180) / H)
 
 
@@ -112,7 +112,7 @@ def test_no_gate_wait_is_zeroed():
     st, cfg, now = frozen(log, T0 + 5 * H)
     cfg.metrics.min_samples = 1
     d = LW.lane_wait(log.events, st, cfg, now)
-    assert d["gate_wait_hours"]["total"] == 0.0 and d["gate_wait_hours"]["shared"] == {}
+    assert d["gate_wait_hours"]["total"] == 0.0 and d["gate_wait_hours"]["by_gate"] == {}
 
 
 def test_reporting_surface_renders_the_text():

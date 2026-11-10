@@ -33,10 +33,9 @@ def context(
     cfg: Config,
     now: float,
     since: float | None = None,
-    phase: str = "",
 ) -> Context:
     """The one folded context the queue and gate figures read, mirroring the other views."""
-    return Context(FX.collect(events, st, now, cfg), cfg, now, since, phase)
+    return Context(FX.collect(events, st, now, cfg), cfg, now, since)
 
 
 def lane_wait(
@@ -45,20 +44,20 @@ def lane_wait(
     cfg: Config,
     now: float,
     since: float | None = None,
-    phase: str = "",
 ) -> dict:
-    """The lane-wait figures as plain data:
+    """The lane-wait figures as plain data, repo-wide (like ``ddflow metrics lanes``):
 
-    - ``gate_wait_hours``: lane-hours queued for a shared host lock, per gate, and the total.
-      Every value here is a shared-lock wait by construction: ``waited_s`` records seconds
-      queued for the host lock, so a gate with no such wait has no entry (never a zero).
+    - ``gate_wait_hours``: ``{"total": ...}`` plus ``"by_gate"`` -> lane-hours queued for a
+      shared host lock, per gate. Every value is a shared-lock wait by construction:
+      ``waited_s`` records seconds queued for the host lock, so a gate with no such wait has
+      no entry (never a zero), and the total sits under ``total``, apart from gate names.
     - ``ready_to_claimed``: queue wait (ready to first claimed), p50/p90/max.
     - ``ci_lock_queue``: the ``ci`` gate's queued run, p50/p90/max.
     - ``idle``: lane utilisation from the grid (``SW-baseline``): lane-samples working vs
       idle beside ready work, and the utilisation share.
     - ``merged``: merged items in the window and per hour, from ``swarm_metrics.baseline``.
     """
-    ctx = context(events, st, cfg, now, since, phase)
+    ctx = context(events, st, cfg, now, since)
     minimum = int(cfg.metrics.min_samples)
     unavailable: dict[str, str] = {}
 
@@ -84,7 +83,7 @@ def lane_wait(
     if util["utilisation"] is None:
         unavailable["idle"] = "no lane worked in the sampled window"
 
-    base = SW.baseline(events, st, cfg, now, phase=phase, since=since)
+    base = SW.baseline(events, st, cfg, now, since=since)
     if base["throughput"]["per_hour"] is None:
         unavailable["merged_per_hour"] = base["unavailable"].get(
             "throughput", "no elapsed time in the window"
@@ -94,7 +93,7 @@ def lane_wait(
         "min_samples": minimum,
         "gate_wait_hours": {
             "total": sum(gate_wait_hours.values()),
-            **gate_wait_hours,
+            "by_gate": gate_wait_hours,
         },
         "ready_to_claimed": ready,
         "ci_lock_queue": ci,
