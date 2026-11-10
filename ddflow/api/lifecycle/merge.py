@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...adapters import git as GIT
 from ...core import flow as F
 from ...core import outcome as O
 from ...core.admission import new_file_globs
@@ -118,31 +117,24 @@ def _record_reconciled(
         return
     if not mine:
         return
-    files: list[str] = []
-    for other_id, other in st.items.items():
-        if other_id == item or other.removed or not other.merged_sha:
-            continue
-        merged_before_fork = GIT.is_ancestor(repo, other.merged_sha, fork)
-        if merged_before_fork is True:
-            continue  # merged at or before this item forked: nothing to reconcile
-        # `None` (git could not tell) fails CLOSED: the overlap is kept for reconciliation,
-        # never dropped on an unanswerable ancestry probe.
-        theirs = CH.changed_paths(
-            repo,
-            other.landed_before,
-            tip=other.landed_after,
-            include=("committed",),
-            fork=False,
+    # The overlap trigger is "this landing touched a file `main` changed since this item
+    # forked" -- another item merged since the fork, OR a main-into-branch conflict resoved at
+    # sync (a direct `main` commit touching a file this branch also touched). Both are the one
+    # set `mine ∩ moved`, where `moved` is what `landed_before` did since `fork`; a direct
+    # `main` commit is a `moved` file with no `merged_sha`, so it no longer slips past a
+    # per-item loop.
+    moved = CH.changed_paths(repo, fork, tip=landed_before, include=("committed",), fork=True)
+    if moved is None:
+        # git could not tell what `main` changed since the fork: fail CLOSED by reconciling
+        # over MY files, so an unanswerable probe still holds complete for a reconciled test.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": sorted(mine), "base": landed_before, "main": landed_after, "unknown": True},
         )
-        if theirs is None:
-            # git could not tell what the other changed: fail CLOSED by treating MY files as
-            # the overlap, so an unreadable rival still holds complete for a reconciled test.
-            files.extend(mine)
-            continue
-        if theirs:
-            files.extend(set(mine) & set(theirs))
+        return
+    files = sorted(set(mine) & set(moved))
     if files:
-        files = sorted(set(files))
         log.append(
             "merge.reconciled",
             item,
