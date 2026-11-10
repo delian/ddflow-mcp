@@ -234,12 +234,11 @@ class TableTool:
         output the parser cannot read. With a pin set, an unmet pin is unavailable too."""
         s = self.spec
         if self.pin:
-            # Re-probe anything but a KNOWN-usable probe: a cached probe from an earlier run may
-            # be a timeout (installed None) or an out-of-date pin (installed False), or the binary
-            # may have changed since -- a plain `or` caches the first answer forever (a dataclass is
-            # always truthy), freezing a transient failure into every later run.
-            if self._probed is None or not self._probed.usable:
-                self._probed = self.probe()
+            # The pin is enforced against the binary as it is NOW, so it is probed fresh on every
+            # pinned run: a cached probe is either a stale success (the binary was replaced, so a
+            # pin that is no longer met reads as met) or a transient failure (a timeout) that would
+            # otherwise freeze into every later run. One bounded probe per pinned run is the cost.
+            self._probed = self.probe()
             if not self._probed.usable:
                 return self._unavailable(
                     "pin",

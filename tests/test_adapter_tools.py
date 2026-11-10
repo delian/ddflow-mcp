@@ -421,6 +421,17 @@ def test_a_pinned_tool_retries_a_probe_that_did_not_succeed():
     assert len(sc.calls) == 3  # probe + scan of the second run
 
 
+def test_a_pinned_tool_reprobes_so_a_downgraded_binary_is_caught():
+    # A probe that once succeeded is not cached against a pin a later binary no longer meets:
+    # the next pinned run probes again and reads the now-out-of-date version (B-ADP-tools-checks).
+    sc = Script(ok("8.30.1"), ok("[]"), ok("8.1.0"))
+    t = T.tool("gitleaks", sc, pin="8.30.1")
+    assert t.run().status == CLEAN  # probes 8.30.1, scans clean
+    assert len(sc.calls) == 2
+    assert t.run().status == UNAVAILABLE  # probes 8.1.0, refuses the scan
+    assert len(sc.calls) == 3  # probe only, no scan
+
+
 def test_a_bad_version_regex_is_refused_when_the_row_is_read():
     row = {"id": "x", "argv": ["x"], "version_argv": ["x", "-v"], "version_re": "("}
     with pytest.raises(ValueError, match="version_re"):
