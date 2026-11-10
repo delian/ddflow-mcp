@@ -177,6 +177,29 @@ def test_a_pass_naming_the_file_but_a_different_tree_stays_fail_closed(repo):
     assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
 
 
+def test_a_tree_sha_merely_containing_the_reconciled_prefix_stays_fail_closed(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    EventLog(repo).append(
+        "merge.reconciled",
+        "T1",
+        {"files": ["src/x.py"], "base": "a" * 40, "main": "b" * 40},
+    )
+    # `tree_sha` names a DIFFERENT commit whose hash merely CONTAINS the reconciled prefix; it
+    # does not START with it, so the run was not on the reconciled tree: the guard must hold.
+    EventLog(repo).append(
+        "gate.passed",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "evidence": {"tree_sha": "deadbeef" + "b" * 12 + "+clean", "note": "touched src/x.py"},
+        },
+    )
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
+
+
 def test_a_missing_base_sha_records_an_unknown_reconcile_fail_closed(repo):
     import subprocess
 

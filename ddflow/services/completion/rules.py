@@ -311,7 +311,10 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
         ev = rec.evidence or {}
         sha = str(ev.get("tree_sha", ""))
         if sha:
-            return bool(reconciled_main) and reconciled_main in sha
+            # `tree_sha` is "<commit-sha-prefix>+<status>", so the reconciled commit is the
+            # run's HEAD: a PREFIX match, not a substring -- a different commit whose hash
+            # merely contains the reconciled prefix is not the reconciled tree.
+            return bool(reconciled_main) and sha.startswith(reconciled_main)
         note = str(ev.get("note", ""))
         return bool(note) and any(f in note for f in reconciled_files)
 
