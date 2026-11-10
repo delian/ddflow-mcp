@@ -166,6 +166,21 @@ def test_superseded_pass_hours_is_a_true_zero_not_a_missing_measurement():
     assert got["seconds"] == 0.0 and got["count"] == 0 and got["n_items"] == 1
 
 
+def test_superseded_pass_hours_counts_only_completed_items():
+    # an INCOMPLETE item's superseded pass is not attributed to the merged-item rate (grok/4.7)
+    log = Log()
+    log.task("DONE")
+    claimdone(log, "DONE", T0 + 500)
+    log.add("gate.passed", "DONE", "a1", T0 + 100, gate="ci", by="a1", evidence={"tree_sha": "t1", "elapsed_s": 120})
+    log.task("HALF")
+    log.claim("a1", "HALF", T0, "f.py")  # claimed but never completed
+    log.add("gate.passed", "HALF", "a1", T0 + 100, gate="ci", by="a1", evidence={"tree_sha": "t1", "elapsed_s": 3600})
+    log.add("gate.passed", "HALF", "a1", T0 + 200, gate="unit_tests", by="a1", evidence={"tree_sha": "t2", "elapsed_s": 60})
+    got = superseded_pass_hours(ctx_of(log))
+    assert got["n_items"] == 1  # only DONE completed
+    assert got["count"] == 0  # HALF's superseded pass is not a merged-item cost
+    assert got["seconds"] == 0.0
+
 def test_parked_share_detects_an_idle_stretch_beyond_the_threshold():
     log = Log()
     log.task("PARK")

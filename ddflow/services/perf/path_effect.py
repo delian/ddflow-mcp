@@ -97,11 +97,15 @@ def superseded_pass_hours(ctx: Context) -> dict:
     is no longer current, PER completed item (a rate: a raw total grows with the window and
     would misread as a regression against the fixed corpus baseline). Mirrors
     ``path_variants.superseded_passes`` but weights by ``elapsed_s``. A superseded pass with
-    no recorded time adds a count but no seconds. Returns the raw facts; the per-item value
-    and the sample floor are applied in :func:`current`."""
+    no recorded time adds a count but no seconds. Only COMPLETED (in-scope) items count: the
+    metric is per merged item, and a superseded pass on an unfinished item is not a cost of
+    merged work. Returns the raw facts; the per-item value and floor are applied in
+    :func:`current`."""
     by_item: dict[str, list] = defaultdict(list)
+    done = {s.item for s in completed_spans(ctx)}
     for o in ctx.facts.outcomes:
-        by_item[o.item].append(o)
+        if o.item in done:
+            by_item[o.item].append(o)
     seconds = 0.0
     count = 0
     for rows in by_item.values():
