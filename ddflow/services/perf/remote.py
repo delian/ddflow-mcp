@@ -81,14 +81,16 @@ def wrap_command(cmd: str, *, program: str = "ddflow") -> str:
 def measure(
     run: Callable[[], None],
     *,
-    probe: Callable[[str], dict[str, float | None] | None],
+    probe: Callable[[str], "dict[str, float | None] | None"],
     clock: Callable[[], float] = time.monotonic,
     container: Callable[[], bool | None] | None = None,
+    env_key: str = "",
 ) -> CommandSample:
     """Run the command via ``run`` (blocking), timing it with ``clock`` (monotonic, this
     host only). ``probe`` takes a ladder rung and returns that rung's resource numbers
     (or ``None``/empty when the rung could not read them); the surviving rung is recorded
-    as the source, so a probe that could not run is named, never passed off as a lower one."""
+    as the source, so a probe that could not run is named, never passed off as a lower one.
+    ``env_key`` is the machine-class digest the sample keeps (never a hostname or path)."""
     start = clock()
     run()
     wall = clock() - start
@@ -109,6 +111,7 @@ def measure(
         io_rw=resource.get("io_rw"),
         source=source,
         container=ctr,
+        env=env_key,
     )
 
 
