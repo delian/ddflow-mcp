@@ -77,3 +77,16 @@ def test_the_reason_names_straggler_vs_hard():
         budget_usd=100.0,
     )
     assert [(h.item, h.reason) for h in plan] == [("a", "straggler"), ("b", "hard")]
+
+
+def test_a_repeated_item_is_raced_on_a_new_family_not_billed_twice_on_one():
+    # a caller that lists an item twice lands the second race on the next family, not the
+    # same one: two duplicates on qwen would double-bill without adding a competing voice.
+    plan = HG.plan(
+        candidates=("a", "a"),
+        on={"a": ["deepseek"]},
+        families=["qwen", "gemini"],
+        attempt_usd=4.0,
+        budget_usd=10.0,
+    )
+    assert [(h.item, h.family) for h in plan] == [("a", "qwen"), ("a", "gemini")]

@@ -62,19 +62,22 @@ def plan(
     """The capped hedge plan.
 
     Each candidate is duplicated onto the first ``families`` not already racing it (a hedge
-    never lands on the item's own family); a candidate with no other family is skipped. The
-    plan stops once the next attempt would exceed ``budget_usd``; when either the budget or
-    ``attempt_usd`` is unverified the cap is left unchecked instead of guessed.
+    never lands on the item's own family, and an item repeated in ``candidates`` is raced on
+    a new family each time, never billed twice on one); a candidate with no other family is
+    skipped. The plan stops once the next attempt would exceed ``budget_usd``; when either
+    the budget or ``attempt_usd`` is unverified the cap is left unchecked instead of guessed.
     """
     out: list[Hedge] = []
+    racing = {item: set(on.get(item, ())) for item in candidates}
     spent = 0.0
     for item in candidates:
-        already = set(on.get(item, ()))
+        already = racing.setdefault(item, set())
         family = next((f for f in families if f not in already), "")
         if not family:
             continue
         if budget_usd is not None and attempt_usd is not None and spent + attempt_usd > budget_usd:
             break
         out.append(Hedge(item, family, REASON_HARD if item in hard else REASON_STRAGGLER))
+        already.add(family)
         spent += attempt_usd or 0.0
     return tuple(out)
