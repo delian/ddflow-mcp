@@ -22,11 +22,6 @@ from ddflow.services.swarm import conformance as CF
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _field_paths():
-    """The descriptor schema's real ``section.key`` paths, computed from the live
-    dataclasses, so the test asserts against the schema itself rather than a copy."""
-
-
 @pytest.fixture(scope="module")
 def catalog():
     return C.load()
@@ -86,9 +81,13 @@ def test_lane_and_declared_check_modules_exist_and_are_the_single_owner():
     # catalog citing `argv`/`stream`/`hook:` is provably cited from THIS module, not forged.
     from harness_conformance import declared as D
 
+    from ddflow.services import driver_conformance as DC
+
     assert HR.CANONICAL_EVENTS
     assert CF.CHECKS
-    assert C.FIXED_CHECKS == ("facts", "hooks")
+    assert set(C.FIXED_CHECKS) <= set(DC.run(HR.get("claude"))["checks"]), (
+        "every FIXED_CHECK is a key driver_conformance.run really emits",
+    )
     assert D.HOOK == "hook" and D.ARGV == "argv" and D.STREAM == "stream"
     assert set(C.DECLARED_CHECKS) == {D.ARGV, D.STREAM}
 
@@ -117,7 +116,7 @@ def test_the_catalog_files_stay_under_the_size_ratchet():
 
 
 def test_a_row_with_no_check_is_refused(tmp_path):
-    _write(tmp_path, "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = []\n")
+    _write(tmp_path, "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = []\n")
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
 
@@ -125,7 +124,7 @@ def test_a_row_with_no_check_is_refused(tmp_path):
 def test_a_live_row_without_an_add_history_entry_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -134,7 +133,7 @@ def test_a_live_row_without_an_add_history_entry_is_refused(tmp_path):
 def test_a_non_string_check_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [1]\n"
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [1]\n"
         "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
     )
     with pytest.raises(C.CatalogError):
@@ -144,7 +143,7 @@ def test_a_non_string_check_is_refused(tmp_path):
 def test_an_orphan_add_history_entry_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
         "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
         "[[history]]\nfeature = \"ghost\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
     )
@@ -155,7 +154,7 @@ def test_an_orphan_add_history_entry_is_refused(tmp_path):
 def test_a_retired_slug_must_not_stay_live(tmp_path):
     _write(
         tmp_path,
-        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
         "[[history]]\nfeature = \"x\"\naction = \"retire\"\ndate = \"2026-11-10\"\n",
     )
     with pytest.raises(C.CatalogError):
@@ -165,12 +164,33 @@ def test_a_retired_slug_must_not_stay_live(tmp_path):
 def test_an_unknown_top_level_table_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
         "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
         "[[features]]\nfeature = \"y\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
+
+
+def test_a_live_row_whose_latest_action_is_edit_loads(tmp_path):
+    _write(
+        tmp_path,
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
+        "[[history]]\nfeature = \"x\"\naction = \"edit\"\ndate = \"2026-11-11\"\n",
+    )
+    catalog = C.load(tmp_path / "catalog.toml")
+    assert catalog.by_feature("x").feature == "x"
+
+
+def test_a_retired_slug_with_no_live_row_is_a_recorded_removal(tmp_path):
+    _write(
+        tmp_path,
+        "[[history]]\nfeature = \"gone\"\naction = \"retire\"\ndate = \"2026-11-10\"\n",
+    )
+    catalog = C.load(tmp_path / "catalog.toml")
+    assert all(r.feature != "gone" for r in catalog.rows)
+    assert any(h.feature == "gone" and h.action == "retire" for h in catalog.history)
 
 
 def _write(tmp_path, body: str) -> None:
