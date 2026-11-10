@@ -93,11 +93,17 @@ def _gates(report: Report, width: int, max_rows: int) -> list[str]:
         out = [header, "|---" * 6 + "|"] + ["| " + " | ".join(c) + " |" for c in cells]
     else:
         out = [
-            f"{r['gate']}: n={r['n']} p50 {dur(r.get('p50_s'))} p90 {dur(r.get('p90_s'))}"
-            f" pass {pct(r.get('first_run_pass_rate'))} failed {pct(r.get('ever_failed_share'))}"
+            f"{_gate_name(r['gate'])}: p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
+            f" failed {bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}"
             for r in rows
         ]
     return [_clip(line, width) for line in out]
+
+
+def _gate_name(name: str, keep: int = 12) -> str:
+    """A gate name capped with an ellipsis, so a narrow row shortens the NAME, never a
+    data field (the failed share stays)."""
+    return name if len(name) <= keep else f"{name[: keep - 1]}…"
 
 
 def _comparison(report: Report, width: int, max_rows: int) -> list[str]:
@@ -177,7 +183,7 @@ def _comparison_cut(report: Report, max_rows: int) -> int:
 def _not_collected_lines(report: Report, width: int, max_rows: int) -> list[str]:
     if not report.not_collected:
         return []
-    out = ["not collected:"]
+    out = [_clip("not collected:", width)]
     out += [
         _clip(f"  {section}: {task}", width)
         for section, task in sorted(report.not_collected.items())[:max_rows]
