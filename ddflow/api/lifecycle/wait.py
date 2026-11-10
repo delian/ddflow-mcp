@@ -56,12 +56,12 @@ def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) ->
 
 
 def _overlap_note(
-    st, cfg, me: str, it, phase: str, kind: str, now: float, repo: Path | None
+    st, cfg, me: str, it, kind: str, now: float, repo: Path | None
 ) -> str:
-    """The `globs overlap X offered in this plan` detail `next` reports for ``it``, or "".
-    `claim` of a named item ignores the offered-overlap, so `_claim_blocker` alone calls it
-    claimable; the plan scoped to the item's own phase (what ``next --phase <its phase>``
-    offers) is the part of `next`'s answer a named claim does not reflect."""
+    """The `globs overlap X offered in this plan` detail `next --phase <its phase>` reports
+    for ``it``, or "". `claim` of a named item ignores the offered-overlap, so
+    `_claim_blocker` alone calls it claimable; the plan scoped to the item's own phase is
+    the part of `next`'s answer a named claim does not reflect."""
     if repo is None:
         return ""
     p = plan_for(
@@ -71,7 +71,7 @@ def _overlap_note(
         st,
         purpose="offer",
         kind=kind,
-        phase=phase or it.parent or "",
+        phase=it.parent or "",
         agent=me,
         now=now,
     )
@@ -128,7 +128,7 @@ def _judge_wait(
         # succeed and READY stays truthful; `next` withholds it when it overlaps an item
         # offered in the same plan. Name both (B-wait-ready-contradicts-next-blocked):
         # READY, plus the plan-level conflict `next` would report.
-        out["note"] = _overlap_note(st, cfg, me, it, phase, kind, now, repo)
+        out["note"] = _overlap_note(st, cfg, me, it, kind, now, repo)
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
     out["blocked"] = [plain(b)]
     if b.reason == "expired":
