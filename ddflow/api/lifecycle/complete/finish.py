@@ -11,6 +11,7 @@ from ....core import outcome as O
 from ....core.events import parse_changelog
 from ....core.model import fold
 from ....services import completion as CM
+from ....services import gate_accept as GA
 from ....services import leases as L
 from ....services import ledger as LG
 from ....services import progress_line as PL
@@ -163,6 +164,11 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     force, stamp = _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp)
     if not v.may_complete and not force:
         _remember_declared_model(st, log, cfg, model, model_source)
+        # `gate_accept.next_step` already names the route for a measured baseline-red partial
+        # ("Do NOT request an approval: fix what it names"). The generic `_ask_hint` tail that
+        # says to spend `--approval request` then contradicts it, so drop the tail when one of the
+        # unmet gates says so (B-complete-refusal-contradicts-approval-advice).
+        next_step_applies = any(GA.next_step(it, item, g) for g in v.unmet_gates)
         return O.refused(
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
@@ -171,7 +177,8 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             + (
                 "--force does not lift the review-gate blocker above."
                 if hard
-                else "--force overrides, and the override is recorded." + _ask_hint(agent)
+                else "--force overrides, and the override is recorded."
+                + ("" if next_step_applies else _ask_hint(agent))
             ),
             forced=False,
             **base,
