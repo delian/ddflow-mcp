@@ -39,8 +39,8 @@ def _phase_filter(filters: str) -> str:
     """The one filter the report's Context reads: ``phase=<id>``. Anything else is
     refused, never silently ignored (r-tell-dont-discover)."""
     phase = ""
-    for part in (filters or "").split(","):
-        part = part.strip()
+    for raw in (filters or "").split(","):
+        part = raw.strip()
         if not part:
             continue
         if part.startswith("phase="):
