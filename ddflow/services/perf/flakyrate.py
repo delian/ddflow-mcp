@@ -26,9 +26,7 @@ from ddflow.core import clock
 from ddflow.services import flakes
 
 
-def _section(
-    perf_metrics: PerfMetricsConfig | None, repo: Path | None = None
-) -> PerfMetricsConfig:
+def _section(perf_metrics: PerfMetricsConfig | None, repo: Path | None = None) -> PerfMetricsConfig:
     """``perf_metrics`` or the config of ``repo`` (default: the CWD repo) -- naming each flaky
     knob once so the dead-knob linter counts the name-based read (``store._section_knobs``
     precedent). A caller that read a repo's flake log must score it with THAT repo's knobs."""
