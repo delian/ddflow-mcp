@@ -2,5 +2,5 @@
 kind = "knob_added"
 key = "upstream_gh.error_max"
 new = "400"
-why = "Characters of a `gh` error message kept when an `Unavailable`/`GhError` is raised (`str(exc)[:error_max]`), so a failure report never outgrows a log line bef..."
+why = "Characters of a `gh` error message kept when an `Unavailable`/`GhError` is raised (`str(exc)[:error_max]`), so a failure report never outgrows a log line before the caller redacts it."
 impact = "additive"

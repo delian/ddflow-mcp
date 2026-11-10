@@ -2,5 +2,5 @@
 kind = "knob_added"
 key = "worktree.stash_retry_pause_s"
 new = "0.25"
-why = "The first pause (seconds) before retrying a transient pre-merge failure that merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read); the nth retr..."
+why = "The first pause (seconds) before retrying a transient pre-merge failure that merged nothing (`fatal: stash failed`, or a lost `MERGE_MSG` read); the nth retry pauses `stash_retry_pause_s * 2**n` (B-merge-stash-failed-transient)."
 impact = "additive"
