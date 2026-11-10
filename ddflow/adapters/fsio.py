@@ -75,6 +75,28 @@ def _temp_beside(path: Path, perm: int) -> tuple[int, Path]:
             continue
 
 
+def fsync_dir(directory: Path | str) -> None:
+    """fsync `directory` so a rename or new entry inside it survives a crash.
+
+    A file's own fsync covers its bytes but not its name: on ext4 and most journaled
+    filesystems a rename (or a freshly created file) is durable only once the directory
+    holding the name is fsynced, so a crash right after the rename can restore the old
+    name (or none) even though the file's bytes were flushed. Call after ``os.replace``,
+    a hard link, or the first create of a file whose parent already existed.
+
+    Best effort: a directory that cannot be opened or synced (Windows, some network and
+    FUSE mounts) is skipped -- the write already happened, and the durability guard must
+    not report a write that succeeded.
+    """
+    directory = Path(directory)
+    with contextlib.suppress(OSError):
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
 def atomic_write(
     path: Path | str,
     data: str | bytes,
@@ -126,6 +148,8 @@ def atomic_write(
             _link_exclusive(tmp, path, raw, want, fsync=fsync)
         else:
             os.replace(tmp, path)
+            if fsync:
+                fsync_dir(path.parent)
     except BaseException:
         # Only this call's own temp file: unlinking any other is what let one writer
         # delete another's file in flight. Best effort, so the error raised is the
@@ -168,6 +192,8 @@ def atomic_file(path: Path | str, *, mode: int | None = None, fsync: bool = True
         if want is not None:
             os.chmod(tmp, want)
         os.replace(tmp, path)
+        if fsync:
+            fsync_dir(path.parent)
     except BaseException:
         with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
@@ -242,6 +268,8 @@ def _link_exclusive(
     (a full disk, no permission) fails that create too, and is raised from it."""
     try:
         os.link(tmp, path)
+        if fsync:
+            fsync_dir(path.parent)
         return
     except FileExistsError:
         raise
@@ -256,6 +284,8 @@ def _link_exclusive(
                 os.fsync(fh.fileno())
         if want is not None:
             os.chmod(path, want)
+        if fsync:
+            fsync_dir(path.parent)
     except BaseException:
         path.unlink(missing_ok=True)
         raise
