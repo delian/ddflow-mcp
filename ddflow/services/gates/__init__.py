@@ -182,6 +182,7 @@ from .runner import (  # noqa: F401
     OUTPUT_TAIL_CHARS,
     RUNS_DIR,
     Classified,
+    capture_test_durations,
     classify_exit,
     command_layer_evidence,
     output_evidence,
