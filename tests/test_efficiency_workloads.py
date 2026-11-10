@@ -78,6 +78,32 @@ def test_a_bug_fixed_without_a_named_regression_test_scores_failed():
     assert any("regression-test" in m for m in report.missing)
 
 
+def test_a_truthy_but_nameless_regression_test_does_not_count():
+    wl = _workloads()["record-a-bug-with-regression-test"]
+    for fix in ({"regression_test": True}, {"regression_tests": [""]}, {"regression_tests": []}):
+        report = W.evaluate(
+            wl,
+            [
+                W.Record("bug.found", "demo.bug", {"summary": "demo"}),
+                W.Record("bug.fixed", "demo.bug", fix),
+            ],
+        )
+        assert report.outcome == W.FAIL, fix
+
+
+def test_a_non_object_jsonl_line_is_skipped_not_crashing():
+    import ddflow.services.efficiency.workloads as Wmod
+
+    tmp = tempfile.mkdtemp(prefix="eff-log-")
+    events_dir = os.path.join(tmp, ".ddflow", "events")
+    os.makedirs(events_dir)
+    with open(os.path.join(events_dir, "shard.jsonl"), "w", encoding="utf-8") as log:
+        log.write("[]\nnull\n")
+        log.write(json.dumps({"kind": "item.started", "subject": "demo.task", "data": {}}) + "\n")
+    records = Wmod.records_from_log(tmp)
+    assert any(r.kind == "item.started" for r in records)
+
+
 def test_a_refusal_that_still_stands_scores_failed():
     wl = _workloads()["resolve-a-refusal"]
     report = W.evaluate(

@@ -154,6 +154,8 @@ def records_from_log(root: str | Path) -> tuple[Record, ...]:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(event, dict):
+                continue
             data = event.get("data")
             out.append(
                 Record(
@@ -199,10 +201,21 @@ def _rule_gate_outcome(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str
     return not missing, hits, missing
 
 
+def _has_regression_test(data: dict[str, Any]) -> bool:
+    """A bug fix carries a NAMED regression test, not just a truthy field."""
+    test = data.get("regression_test")
+    if isinstance(test, str) and test.strip():
+        return True
+    tests = data.get("regression_tests")
+    return isinstance(tests, (list, tuple)) and any(
+        isinstance(t, str) and t.strip() for t in tests
+    )
+
+
 def _rule_bug_with_test(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
     found = [r for r in _event(rs, "bug.found") if r.subject == rule.bug]
     fixed = [r for r in _event(rs, "bug.fixed") if r.subject == rule.bug]
-    with_test = [r for r in fixed if r.data.get("regression_test") or r.data.get("regression_tests")]
+    with_test = [r for r in fixed if _has_regression_test(r.data)]
     missing: list[str] = []
     if not found:
         missing.append(f"bug.found:{rule.bug}")
