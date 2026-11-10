@@ -114,6 +114,33 @@ def test_an_unknown_reconcile_fails_closed_and_still_blocks(repo):
     assert any("could not read" in b for b in v.blockers), v.blockers
 
 
+def test_a_post_reconcile_pass_on_another_tree_needs_reconciled_tree_evidence(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    EventLog(repo).append(
+        "merge.reconciled",
+        "T1",
+        {"files": ["src/x.py"], "base": "a" * 40, "main": "b" * 40},
+    )
+    # A unit_tests pass recorded at/after the reconcile that names NEITHER the reconciled
+    # commit nor the reconciled file is a stale pre-merge run, not proof the suite ran on
+    # the reconciled tree: the guard must still hold.
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "unit_tests",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "pre-merge run",
+    )
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
+
+
 def test_a_missing_base_sha_records_an_unknown_reconcile_fail_closed(repo):
     import subprocess
 

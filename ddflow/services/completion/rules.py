@@ -299,6 +299,19 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
     if not files and not unknown:
         return ""
     reconciled_at = it.reconciled.get("at") or ""
+    reconciled_main = (it.reconciled.get("main") or "")[:12]
+    reconciled_files = list(it.reconciled.get("files") or [])
+
+    def names_reconciled_tree(rec) -> bool:
+        # A stamp at or after `at` is not proof the run was ON the reconciled tree: a pass
+        # recorded after the reconcile can still be a stale pre-merge checkout. The run must
+        # name the reconciled commit (`tree_sha` prefixes `reconciled["main"]`) or one of the
+        # reconciled files -- else the guard fails open.
+        ev = rec.evidence or {}
+        if reconciled_main and reconciled_main in str(ev.get("tree_sha", "")):
+            return True
+        note = str(ev.get("note", ""))
+        return bool(note) and any(f in note for f in reconciled_files)
 
     def passed_on_reconciled_tree(gate: str) -> bool:
         # A pass recorded BEFORE the reconcile is a stale pre-merge run; the guard asks for
@@ -307,7 +320,12 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
         if not reconciled_at:
             return False
         rec = it.gates.get(gate)
-        return bool(rec) and rec.outcome == GateOutcome.PASSED and rec.at >= reconciled_at
+        return (
+            bool(rec)
+            and rec.outcome == GateOutcome.PASSED
+            and rec.at >= reconciled_at
+            and names_reconciled_tree(rec)
+        )
 
     passed = passed_on_reconciled_tree("unit_tests")
     if cfg.lease.reconcile_tests != "full":
