@@ -58,11 +58,12 @@ def test_default_adapter_writes_on_disk(tmp_path):
     p = store.filename(tmp_path, "abc123")
     con = store.connect(p)
     try:
+        mode = con.execute("pragma journal_mode").fetchone()[0]
+        assert mode.lower() == "wal", "the default adapter sets WAL, not the default journal"
         store.migrate(con, 7)
     finally:
         con.close()
     assert p.is_file(), "the default adapter persists the index on disk"
-    assert p.with_suffix(p.suffix + "-wal").is_file() or True  # WAL may checkpoint at close
 
 
 def test_fake_connect_is_in_memory(tmp_path):
