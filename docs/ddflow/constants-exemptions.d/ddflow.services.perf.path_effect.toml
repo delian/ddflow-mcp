@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/services/perf/path_effect.py:PARKED_THRESHOLD_S" = "the parked classification threshold R-path-merge measured (22 percent parked more than 2 h): a research baseline that decides what counts as parked, not a configurable timeout."
