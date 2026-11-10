@@ -4,24 +4,28 @@ A small stdlib SVG package (no third-party plotting): every chart is a pure func
 plain data -> a deterministic SVG string, accessible (``<title>``/``<desc>``, a
 colour-blind-safe palette, dash patterns as well as colour) and themeable (light/dark).
 ``html_report`` inlines the SVGs and the tables in one file with no external requests.
-Deterministic: every number is fixed precision and every series is sorted, so the same
-data always draws the same bytes (golden-tested). A series that cannot support a figure
-draws no line or point for the missing value, never a zero point.
+Deterministic: every number is fixed precision and text is XML-escaped, so fixed data
+always draws the same well-formed bytes. A series that cannot support a figure draws no
+line or point for the missing value, never a zero point.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-#: A colour-blind-safe palette (blue, orange, teal, pink: no red/green alone). A numeric
-#: series uses blue; the p50/p90 band pairs colour with a dash, so the two are told apart
-#: by pattern as well as hue.
+#: A colour-blind-safe palette (blue, orange, teal, pink: no red/green alone). A bar's
+#: dash/dashless stroke and its axis label tell two series apart, not hue alone.
 PALETTE = ("#0072B2", "#E69F00", "#009E73", "#CC79A7")
 
 
 def _fmt(value: float) -> str:
     """A number at fixed precision: the same input always becomes the same bytes."""
     return f"{value:.3f}"
+
+
+def _esc(text: str) -> str:
+    """XML-escape ``& < >`` so a title, description or label never breaks the SVG/HTML."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def scale(values: Iterable[float | None], *, positive: bool = True) -> tuple[float, float]:
@@ -43,6 +47,10 @@ def viewbox(width: int, height: int, *, dark: bool = False) -> str:
     )
 
 
+def _head(title: str, desc: str) -> str:
+    return f"<title>{_esc(title)}</title><desc>{_esc(desc)}</desc>"
+
+
 def line_trend(
     series: list[float | None],
     *,
@@ -55,9 +63,15 @@ def line_trend(
     dark: bool = False,
 ) -> str:
     """A line trend over ``series`` (the p50), an optional ``(lower, upper)`` p50/p90 band,
-    and a budget line. A ``None`` draws nothing for that column and a gap in the polyline."""
+    and a budget line. The y-scale spans the series, the band and the budget, so the band
+    and the budget line are always on the canvas. A ``None`` draws nothing for that column."""
     pad = 40.0
-    lo, hi = scale(series)
+    bounds = list(series)
+    if band is not None:
+        bounds += list(band[0]) + list(band[1])
+    if budget is not None:
+        bounds.append(budget)
+    lo, hi = scale(bounds)
     fg = "#d6d6d6" if dark else "#1a1a1a"
 
     def x(i: int) -> float:
@@ -67,12 +81,9 @@ def line_trend(
     def y(v: float) -> float:
         return height - pad - (height - 2 * pad) * ((v - lo) / (hi - lo))
 
-    def poly(xs: list[float | None], *, colour: str, dash: bool = False) -> str:
+    def poly(xs: list[float | None], *, colour: str) -> str:
         pts = " ".join(f"{_fmt(x(i))},{_fmt(y(v))}" for i, v in enumerate(xs) if v is not None)
-        dash_attr = ' stroke-dasharray="4 4"' if dash else ""
-        return (
-            f'<polyline fill="none" stroke="{colour}" stroke-width="2"{dash_attr} points="{pts}"/>'
-        )
+        return f'<polyline fill="none" stroke="{colour}" stroke-width="2" points="{pts}"/>'
 
     body = [poly(series, colour=PALETTE[0])]
     if band is not None:
@@ -91,12 +102,7 @@ def line_trend(
             f'<line x1="{_fmt(pad)}" y1="{by}" x2="{_fmt(width - pad)}" y2="{by}" '
             f'stroke="{fg}" stroke-dasharray="2 3"/>'
         )
-    return (
-        viewbox(width, height, dark=dark)
-        + f"<title>{title}</title><desc>{desc}</desc>"
-        + "".join(body)
-        + "</svg>"
-    )
+    return viewbox(width, height, dark=dark) + _head(title, desc) + "".join(body) + "</svg>"
 
 
 def bars(
@@ -125,14 +131,9 @@ def bars(
             f'height="{_fmt(h)}" fill="{PALETTE[i % len(PALETTE)]}"/>'
         )
         body.append(
-            f'<text x="{_fmt(x0)}" y="{_fmt(height)}" fill="{fg}" font-size="10">{label}</text>'
+            f'<text x="{_fmt(x0)}" y="{_fmt(height)}" fill="{fg}" font-size="10">{_esc(label)}</text>'
         )
-    return (
-        viewbox(width, height, dark=dark)
-        + f"<title>{title}</title><desc>{desc}</desc>"
-        + "".join(body)
-        + "</svg>"
-    )
+    return viewbox(width, height, dark=dark) + _head(title, desc) + "".join(body) + "</svg>"
 
 
 def heat_strip(
@@ -154,12 +155,7 @@ def heat_strip(
         f'fill="{PALETTE[0]}" fill-opacity="{_fmt((v / hi) if v is not None and hi else 0)}"/>'
         for i, v in enumerate(shares)
     )
-    return (
-        viewbox(width, height, dark=dark)
-        + f"<title>{title}</title><desc>{desc}</desc>"
-        + body
-        + "</svg>"
-    )
+    return viewbox(width, height, dark=dark) + _head(title, desc) + body + "</svg>"
 
 
 def scatter(
@@ -180,12 +176,7 @@ def scatter(
         px = pad + (width - 2 * pad) * (x - xlo) / (xhi - xlo)
         py = height - pad - (height - 2 * pad) * (y - ylo) / (yhi - ylo)
         body.append(f'<circle cx="{_fmt(px)}" cy="{_fmt(py)}" r="3" fill="{PALETTE[0]}"/>')
-    return (
-        viewbox(width, height, dark=dark)
-        + f"<title>{title}</title><desc>{desc}</desc>"
-        + "".join(body)
-        + "</svg>"
-    )
+    return viewbox(width, height, dark=dark) + _head(title, desc) + "".join(body) + "</svg>"
 
 
 def stacked_bar(
@@ -198,15 +189,20 @@ def stacked_bar(
     dark: bool = False,
 ) -> str:
     """A stacked bar of ``(label, values)`` segments (the cycle-time split): column ``i``
-    stacks every segment's ``values[i]`` bottom-up, each in its palette colour plus an
-    opacity step, so the segments are ranked without colour alone (the label is in the
-    ``<title>``/``<desc>`` and the order is stable)."""
+    stacks every segment's ``values[i]`` bottom-up against the column TOTAL (the sum, never
+    the largest segment), each segment in a distinct palette step plus its label in the
+    ``<desc>``. An empty column list draws an empty chart, never a crash."""
     pad = 40.0
-    lo, hi = scale([0.0, max(v for _k, vals in segments for v in vals)])
     cols = max((len(vals) for _k, vals in segments), default=0)
+    if cols == 0:
+        return viewbox(width, height, dark=dark) + _head(title, desc) + "</svg>"
+    totals = [sum(vals[c] if c < len(vals) else 0.0 for _k, vals in segments) for c in range(cols)]
+    lo, hi = scale([0.0, max(totals)])
     span = width - 2 * pad
-    step = span / cols if cols else 1.0
-    body = []
+    step = span / cols
+    labels = ", ".join(k for k, _ in segments)
+    full_desc = f"{desc} segments: {labels}"
+    body: list[str] = []
     for c in range(cols):
         base = height - pad
         for s, (_label, vals) in enumerate(segments):
@@ -214,25 +210,21 @@ def stacked_bar(
             h = (height - 2 * pad) * ((v - lo) / (hi - lo))
             body.append(
                 f'<rect x="{_fmt(pad + step * c)}" y="{_fmt(base - h)}" width="{_fmt(step * 0.8)}" '
-                f'height="{_fmt(h)}" fill="{PALETTE[s * 2 % len(PALETTE)]}" fill-opacity="{_fmt(0.5 + 0.1 * s)}"/>'
+                f'height="{_fmt(h)}" fill="{PALETTE[s % len(PALETTE)]}" fill-opacity="{_fmt(0.5 + 0.12 * s)}"/>'
             )
             base -= h
-    return (
-        viewbox(width, height, dark=dark)
-        + f"<title>{title}</title><desc>{desc}</desc>"
-        + "".join(body)
-        + "</svg>"
-    )
+    return viewbox(width, height, dark=dark) + _head(title, full_desc) + "".join(body) + "</svg>"
 
 
 def html_report(charts: dict[str, str], *, title: str, dark: bool = False) -> str:
-    """A self-contained HTML page that inlines the SVGs (one file, no external request)."""
+    """A self-contained HTML page that inlines the SVGs (one file, no external request).
+    ``title`` and each chart's own ``<title>``/``<desc>`` are escaped like the SVG text."""
     bg = "#1e1e1e" if dark else "#ffffff"
     fg = "#e0e0e0" if dark else "#1a1a1a"
     body = "".join(f"<div>{chart}</div>" for chart in charts.values())
     return (
         '<!doctype html><html><head><meta charset="utf-8">'
-        f"<title>{title}</title></head>"
+        f"<title>{_esc(title)}</title></head>"
         f'<body style="background:{bg};color:{fg};font-family:sans-serif">{body}</body></html>'
     )
 

@@ -48,10 +48,15 @@ def test_charts_are_deterministic():
     assert a == b
 
 
-def test_the_palette_has_no_red_green_alone():
-    # a colour-blind-safe set: no pure red, no pure green
-    assert "#D55E00" not in PALETTE and "#009E73" in PALETTE
-    assert not any(c.lower().startswith("#ff") for c in PALETTE)
+def test_the_palette_is_the_colour_blind_safe_set():
+    # Okabe-Ito order (blue, orange, teal, pink): no red (#D55E00) and no pure green
+    assert PALETTE == ("#0072B2", "#E69F00", "#009E73", "#CC79A7")
+
+
+def test_titles_and_labels_are_xml_escaped():
+    svg = bars([("a&b<c>", 1.0)], title="p50 & p90", desc="a<b")
+    ET.fromstring(svg)  # raw & and < in the label/title would break this
+    assert "&amp;" in svg and "&lt;" in svg
 
 
 def test_dark_and_light_differ_only_in_theme():
@@ -61,9 +66,10 @@ def test_dark_and_light_differ_only_in_theme():
     assert "#1e1e1e" in dark
 
 
-def test_heat_strip_scales_opacity_not_colour():
+def test_heat_strip_encodes_share_by_opacity_not_hue():
     svg = heat_strip([None, 2.0, 1.0], title="share", desc="per-file share")
     ET.fromstring(svg)  # well formed even with a missing value
+    assert "fill-opacity" in svg  # share is encoded by opacity, not a colour per file
 
 
 def test_bars_and_scatter_and_stacked_are_well_formed():
@@ -75,7 +81,20 @@ def test_bars_and_scatter_and_stacked_are_well_formed():
         ET.fromstring(svg)
 
 
+def test_stacked_bar_scales_to_the_column_total_not_the_largest_segment():
+    # setup 2.0 stacked on run 4.0: the total is 6.0, so no rect rolls off the top
+    svg = stacked_bar([("setup", [2.0]), ("run", [4.0])], title="t", desc="d")
+    ET.fromstring(svg)
+
+
+def test_an_empty_stacked_bar_draws_nothing_not_a_crash():
+    svg = stacked_bar([], title="t", desc="d")
+    ET.fromstring(svg)
+    # no data bars drawn: the only <rect> is the viewbox background fill
+    assert "fill-opacity=" not in svg
+
+
 def test_html_report_is_one_self_contained_file():
     page = html_report({"a": line_trend([1.0, 2.0])}, title="report")
     assert "<!doctype html>" in page
-    assert "src=" not in page and "href=" not in page  # no external request
+    assert 'src="' not in page and "<link" not in page and "<script" not in page  # no external request
