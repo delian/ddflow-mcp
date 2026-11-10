@@ -74,8 +74,9 @@ def _brief_recovery(
         band = recovery_band(r)
         if band is _CAPPED:
             # Past the measurement cap, after every higher-signal tree was measured: it is
-            # still unknown (may hold work), but it is not the "could not be measured"
-            # alarm -- counted with the leftovers, and `recover` measures every tree.
+            # still unknown (may hold uncommitted work, never clean), so it must NOT read
+            # "nothing to salvage" -- but it is also not the "could not be measured" alarm.
+            # Counted as its own note, and `recover` measures every tree.
             capped += 1
         elif band is not None:
             bands[band].append(r)
@@ -87,7 +88,8 @@ def _brief_recovery(
         else ""
     )
     capped_note = (
-        f"{capped} tree(s) past the measurement cap: `ddflow recover` measures them."
+        f"{capped} tree(s) past the measurement cap (unmeasured — may hold uncommitted "
+        f"work): `ddflow recover` measures them."
         if capped
         else ""
     )

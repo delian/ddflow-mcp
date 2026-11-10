@@ -12,8 +12,9 @@ to likely-work first, and the clean leftovers past the cap are a quiet count lin
 The free, batched signal is the unmerged count; uncommitted-only dirt is `git status`
 (one process per tree), the exact process the cap exists to bound, so it cannot be ranked
 without erasing the cap. A tree that holds only uncommitted files is therefore still
-`budget_capped` in the view -- but `salvageable` stays None (never clean, never swept), so
-the UNCAPPED `ddflow recover` still measures and flags it.
+`budget_capped` in the view -- but it is never measured "clean": `salvageable` stays None,
+the brief names it "unmeasured -- may hold uncommitted work" (not "nothing to salvage"),
+and the UNCAPPED `ddflow recover` still measures and flags it.
 """
 
 from __future__ import annotations
@@ -88,11 +89,12 @@ def test_a_tree_holding_unmerged_work_is_measured_before_clean_leftovers(repo):
     assert capped, "the clean leftovers past the cap are budget-capped, not unmeasurable"
 
 
-def test_an_uncommitted_tree_past_the_view_cap_is_still_flagged_by_recover(repo):
-    """A tree holding only UNCOMMITTED files is `git status`, the capped process, so the
-    view cannot rank it ahead of clean leftovers -- but it must still never read "clean".
-    The capped view leaves it budget_capped (salvageable None), and UNCAPPED recover
-    measures it."""
+def test_an_uncommitted_tree_past_the_view_cap_is_never_called_clean(repo):
+    """A tree holding only UNCOMMITTED files is found by `git status`, the exact process
+    the view cap exists to bound, so the view cannot rank it ahead of clean leftovers for
+    free -- but it must never read "clean/nothing to salvage". It is budget_capped (still
+    `salvageable is None`), the brief names it "unmeasured -- may hold uncommitted work",
+    and UNCAPPED recover still measures it salvageable."""
     _seed(repo, ["A", "B", "C"])
     _orphan(repo, "A")
     _orphan(repo, "B")
@@ -102,14 +104,14 @@ def test_an_uncommitted_tree_past_the_view_cap_is_still_flagged_by_recover(repo)
     cfg = Config.load(repo)
     cfg.lease.scan_view_trees_max = 1
     view = {r.item: r for r in L.scan(EventLog(repo, "scanner"), cfg, repo, view=True)}
-    assert view["C"].salvageable is None  # never clean
-    assert view["C"].budget_capped
+    assert view["C"].salvageable is None, "an unmeasured tree is never measured-clean"
     full = {r.item: r for r in L.scan(EventLog(repo, "scanner"), cfg, repo, view=False)}
     assert full["C"].salvageable is True, "uncapped recover must still flag the work"
 
 
-def test_capped_clean_trees_render_as_one_quiet_line_not_the_alarm():
-    """The view on its own: budget-capped trees are a count line, not the RESUME alarm."""
+def test_capped_trees_get_a_distinct_note_not_the_alarm_and_not_salvage_clean():
+    """The view on its own: budget-capped trees are a DISTINCT note -- neither the RESUME
+    alarm nor "nothing to salvage" -- and the alarm wording is absent."""
     from ddflow.services.leases.model import Recovery
     from ddflow.views.markdown import _brief_recovery
 
@@ -136,4 +138,8 @@ def test_capped_clean_trees_render_as_one_quiet_line_not_the_alarm():
     _brief_recovery(out, recs)
     text = "\n".join(out)
     assert "Recoverable work found" not in text, text
-    assert "past the measurement cap" in text, text
+    assert "could not be measured" not in text, text
+    assert "past the measurement cap" in text and "unmeasured" in text, text
+    assert "may hold uncommitted work" in text, text
+    assert "**C2**" not in text and "**C3**" not in text, text
+    assert "1 leftover(s) with nothing to salvage" in text, text
