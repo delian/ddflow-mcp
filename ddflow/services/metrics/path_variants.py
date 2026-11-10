@@ -56,11 +56,11 @@ def _lane_rank() -> dict[str, int]:
     return {gate: i for i, lane in enumerate(LANES) for gate in lane}
 
 
-def directly_follows(ctx: Context) -> list[dict]:
+def directly_follows(ctx: Context, items: dict | None = None) -> list[dict]:
     """gate -> gate transition counts over the items, and the median gap of each ADJACENT
     occurrence (a re-run or an out-of-order pass keeps its own gap, never a min-of-all)."""
     pairs: dict[tuple[str, str], list[float]] = defaultdict(list)
-    for _item, rows in _items(ctx).items():
+    for _item, rows in (items if items is not None else _items(ctx)).items():
         for a, b in itertools.pairwise(rows):
             if a.gate != b.gate:
                 pairs[(a.gate, b.gate)].append(b.at - a.at)
@@ -70,10 +70,10 @@ def directly_follows(ctx: Context) -> list[dict]:
     ]
 
 
-def variants(ctx: Context) -> list[dict]:
+def variants(ctx: Context, items: dict | None = None) -> list[dict]:
     """The ordered gate sequences and how often each occurs (top variants first)."""
     counts: dict[str, int] = defaultdict(int)
-    items = _items(ctx)
+    items = items if items is not None else _items(ctx)
     for seq in (_sequence(items[item]) for item in items):
         counts[tuple(seq)] += 1
     return [
@@ -81,11 +81,11 @@ def variants(ctx: Context) -> list[dict]:
     ]
 
 
-def superseded_passes(ctx: Context) -> list[dict]:
+def superseded_passes(ctx: Context, items: dict | None = None) -> list[dict]:
     """a PASS on a tree that a LATER outcome on the same item left behind (a different
     tree_sha recorded after it), so the pass counted for a tree that is no longer current."""
     out = []
-    for item, rows in _items(ctx).items():
+    for item, rows in (items if items is not None else _items(ctx)).items():
         for i, o in enumerate(rows):
             if o.kind != "passed" or not o.tree_sha:
                 continue
@@ -94,14 +94,14 @@ def superseded_passes(ctx: Context) -> list[dict]:
     return out
 
 
-def out_of_order(ctx: Context) -> list[dict]:
+def out_of_order(ctx: Context, items: dict | None = None) -> list[dict]:
     """a gate whose FIRST run came before an EARLIER canonical LANE's first run (it ran ahead
     of a prerequisite lane that had not STARTED yet -- e.g. critic first-ran before
     rubber_duck). A lane has started when its EARLIEST member gate first ran, so two gates of
     one merged lane never count against each other."""
     rank = _lane_rank()
     out = []
-    for item, rows in _items(ctx).items():
+    for item, rows in (items if items is not None else _items(ctx)).items():
         first_at: dict[str, float] = {}
         for o in rows:
             if o.gate in rank and o.gate not in first_at:
@@ -142,12 +142,13 @@ def overlap(ctx: Context) -> dict:
 
 
 def build(ctx: Context) -> dict:
+    items = _items(ctx)
     return {
-        "directly_follows": directly_follows(ctx),
-        "variants": variants(ctx),
+        "directly_follows": directly_follows(ctx, items),
+        "variants": variants(ctx, items),
         "overlap": overlap(ctx),
-        "superseded_passes": superseded_passes(ctx),
-        "out_of_order": out_of_order(ctx),
+        "superseded_passes": superseded_passes(ctx, items),
+        "out_of_order": out_of_order(ctx, items),
         "next": {
             "cli": "ddflow paths",
             "mcp": "ddflow_paths",

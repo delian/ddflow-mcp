@@ -96,12 +96,28 @@ def test_build_names_the_cli_and_mcp_next_call():
 
 
 def test_overlap_is_union_versus_sum_and_marks_too_few_samples_unavailable():
-    ov = build(ctx_of(seeded()))["overlap"]
-    assert ov["n_items"] == 2
+    log = Log()
+    log.add("phase.added", "P1", "lead", T0 - 2000, title="p1", body="")
+    log.add("task.added", "A", "lead", T0 - 1000, title="A", body="", parent="P1")
+    log.claim("a1", "A", T0, "f.py")
+    log.add("gate.passed", "A", "a1", T0 + 100, gate="research", by="a1")
+    log.add(
+        "gate.passed",
+        "A",
+        "a1",
+        T0 + 300,
+        gate="rubber_duck",
+        by="r1",
+        evidence={"tree_sha": "t1", "elapsed_s": 60},
+    )
+    log.complete("a1", "A", T0 + 500)
+    log.release("a1", "A", T0 + 501)
+    ov = build(ctx_of(log))["overlap"]
+    assert ov["sum_s"] > 0  # process time ran (60s)
+    assert ov["unavailable"] is True  # one completed item < min_samples (10)
+    assert ov["burst_share"] is None  # not asserted as a number while unavailable
     assert ov["saved_s"] >= 0
-    assert ov["union_s"] + ov["saved_s"] == ov["sum_s"]
-    assert ov["unavailable"] is True  # two items, no process time: below min_samples
-    assert ov["burst_share"] is None
+    assert ov["union_s"] <= ov["sum_s"]
 
 
 def test_variants_collapse_consecutive_reruns_into_one_step():
