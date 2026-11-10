@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import resource
+import shlex
 import subprocess
 import sys
 import time
@@ -52,13 +53,41 @@ def run_perf_env(repo: Path, *, agent: str = "") -> O.Outcome:
 
 
 def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
-    """Run ``cmd`` through the measuring wrapper and return its one JSON line (monotonic
-    wall, cpu, rss, io, the surviving probe rung). The wrapper is what ``perf wrap`` names."""
+    """Run ``cmd`` (an argv string, split with the shell rules) through the measuring
+    wrapper and return its one JSON line, or a refused/failed outcome when it could not run
+    or exited non-zero. Resources are measured per run (a ``RUSAGE_CHILDREN`` delta), never
+    the process's lifetime total; the env key is the receiver's own machine class."""
     _, _cfg, _st = _load(repo, agent)
-    sample = R.measure(
-        lambda: subprocess.run(cmd, shell=True, capture_output=True), probe=_stdlib_probe
+    if not cmd.strip():
+        return O.refused("perf_run", "a command to measure")
+    try:
+        argv = shlex.split(cmd)
+    except ValueError:
+        return O.refused("perf_run", "a well-quoted command")
+    before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    start = time.monotonic()
+    try:
+        proc = subprocess.run(argv, capture_output=True)
+    except FileNotFoundError:
+        return O.refused("perf_run", f"no such command: {argv[0]}")
+    wall = time.monotonic() - start
+    after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    sample = R.CommandSample(
+        wall_s=round(wall, 3),
+        cpu_s=(after.ru_utime + after.ru_stime) - (before.ru_utime + before.ru_stime),
+        rss_mb=_rss_mb(after),
+        io_rw=(after.ru_inblock + after.ru_oublock) - (before.ru_inblock + before.ru_oublock),
+        source="wait4",
+        trust=R.TRUST_MEASURED,
+        env=_fingerprint_key(repo),
     )
+    if proc.returncode != 0:
+        return O.failed("perf_run", f"command exited {proc.returncode}", text=sample.one_line())
     return O.ok("perf_run", text=sample.one_line())
+
+
+def _fingerprint_key(repo: Path) -> str:
+    return E.collect(repo, parallel_cap=None, xdist_workers=None).key
 
 
 def run_perf_ingest(repo: Path, *, line: str = "", agent: str = "") -> O.Outcome:
@@ -72,6 +101,8 @@ def run_perf_ingest(repo: Path, *, line: str = "", agent: str = "") -> O.Outcome
     series = (
         "agent" if sample.trust == R.TRUST_AGENT else "cmd"
     ) + f".{(agent or 'role').replace('.', '_')}.wall"
-    fp = E.collect(repo, parallel_cap=None, xdist_workers=None)
-    store.append(repo, series, store.Sample(t=time.time(), env=fp.key, value=sample.wall_s))
+    # the sample keeps the machine class it ran on (the line's own env when the wrapper
+    # produced it), never re-stamped with the receiving server's fingerprint
+    env_key = sample.env or _fingerprint_key(repo)
+    store.append(repo, series, store.Sample(t=time.time(), env=env_key, value=sample.wall_s))
     return O.ok("perf_ingest", text=sample.one_line())

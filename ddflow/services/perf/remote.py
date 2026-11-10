@@ -42,7 +42,9 @@ ResourceProbe = Callable[[], "dict[str, float | None]"]
 @dataclass(frozen=True)
 class CommandSample:
     """One result of the measuring wrapper. ``wall_s`` is a monotonic wall clock on THIS
-    host only; the resource numbers and their ``source`` record how they were read."""
+    host only; the resource numbers and their ``source`` record how they were read.
+    ``env`` carries the wrapper's own fingerprint key, so an ingested sample keeps the
+    machine class it ran on (never re-stamped with the receiving server's)."""
 
     wall_s: float
     cpu_s: float | None
@@ -51,6 +53,7 @@ class CommandSample:
     source: str
     trust: str = TRUST_MEASURED
     container: bool | None = None
+    env: str = ""
 
     def one_line(self) -> str:
         """The single JSON line the wrapper prints (sorted keys: one shape everywhere)."""
@@ -63,6 +66,7 @@ class CommandSample:
                 "source": self.source,
                 "trust": self.trust,
                 "container": self.container,
+                "env": self.env,
             },
             sort_keys=True,
         )
@@ -123,6 +127,7 @@ def parse_line(line: str) -> CommandSample:
         source=str(data.get("source") or UNAVAILABLE),
         trust=TRUST_AGENT,
         container=data.get("container"),
+        env=str(data.get("env") or ""),
     )
 
 
