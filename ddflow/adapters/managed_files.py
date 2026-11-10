@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from .digest import content_digest
+from .fsio import atomic_write
 from .ports import port
 
 #: The reserved top-level key that records which keys ddflow owns (never a user's key).
@@ -80,12 +81,27 @@ def _digest(value: Any) -> str:
     return content_digest(json.dumps(value, sort_keys=True))
 
 
+def _drift(data: dict[str, Any]) -> dict[str, str]:
+    """The ddflow-owned keys in ``data``, each ``"current"`` or ``"edited"`` (drifted vs its
+    recorded digest). A legacy marker lists names only (no digests): a name is "current",
+    drift is not known."""
+    marker = data.get(OWNER_KEY)
+    keys = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
+    hashes = keys if isinstance(keys, dict) else {}
+    if not hashes:
+        return dict.fromkeys(_owned_keys(data), "current")
+    return {
+        k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
+        for k in _owned_keys(data)
+    }
+
+
 def _backup(path: str) -> None:
     """A one-time `.ddflow-bak` beside the file, before the first write (D-adapters-answers-2)."""
     p = Path(path)
     bak = p.with_name(p.name + ".ddflow-bak")
     if p.is_file() and not bak.is_file():
-        bak.write_text(p.read_text("utf-8"))
+        atomic_write(bak, p.read_text("utf-8"))
 
 
 class JsonManagedFile:
@@ -95,8 +111,6 @@ class JsonManagedFile:
     re-serialises; a `.ddflow-bak` sits beside the file before the first write."""
 
     def merge(self, path: str, *, owned: dict[str, Any], version: str) -> Any:
-        from .fsio import atomic_write
-
         data = _read(path)
         for key, value_ in owned.items():
             data[key] = value_
@@ -106,8 +120,6 @@ class JsonManagedFile:
         atomic_write(path, _dump(data))
 
     def remove(self, path: str, *, keys: frozenset[str]) -> Any:
-        from .fsio import atomic_write
-
         data = _read(path)
         own = _owned_keys(data)
         for key in keys & own:  # only the owned keys: an unmanaged key is never touched
@@ -121,14 +133,4 @@ class JsonManagedFile:
         atomic_write(path, _dump(data))
 
     def owned(self, path: str) -> dict[str, str]:
-        data = _read(path)
-        marker = data.get(OWNER_KEY)
-        keys = (marker or {}).get("keys", {}) if isinstance(marker, dict) else {}
-        # a legacy marker lists names only (no digests): a name is "current", drift is not known
-        hashes = keys if isinstance(keys, dict) else {}
-        if not hashes:  # a legacy name-only marker: drift is unknown, so every name is current
-            return dict.fromkeys(_owned_keys(data), "current")
-        return {
-            k: ("current" if hashes.get(k) == _digest(data.get(k)) else "edited")
-            for k in _owned_keys(data)
-        }
+        return _drift(_read(path))

@@ -64,3 +64,6 @@ baseline = 0
 "ddflow/services/driverpacks.py:model_overlay_paths" = "DRV-migrate"
 "ddflow/services/driverpacks.py:load_descriptors" = "DRV-migrate"
 "ddflow/services/driverpacks.py:load_pack" = "DRV-migrate"
+# The junit-duration rollup for a gate run (PM-test-durations): the runner's pytest/junit
+# report feeds it, which the gate pipeline wires when it folds per-test durations into evidence.
+"ddflow/services/gates/runner.py:capture_test_durations" = "PM-test-durations"

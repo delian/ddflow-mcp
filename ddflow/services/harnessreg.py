@@ -51,6 +51,13 @@ from .mcpconfig import (
 #: The directory of descriptors, shipped inside the package.
 HARNESS_DIR = Path(__file__).resolve().parent.parent / "harnesses"
 
+#: Stems under ``HARNESS_DIR`` that are DATA for a subsystem, not harness descriptors:
+#: ``usage.toml`` is the per-harness usage-semantics table (ORC-usage-semantics), read by
+#: ``ddflow/services/metrics/usage_semantics.py``, and ``catalog.toml`` is the feature
+#: catalog (PAR-catalog), read by ``ddflow/services/parity/catalog.py``; neither is a harness.
+_NOT_HARNESS_STEMS = frozenset({"usage", "catalog"})
+
+
 #: The lifecycle every agent's native events are mapped onto, handled once by the hook core.
 CANONICAL_EVENTS = (
     "session_start",
@@ -399,7 +406,11 @@ def parse(text: str, name: str) -> Harness:
 
 def _parse_dir(directory: Path) -> tuple[Harness, ...]:
     """Every descriptor under ``directory``, ranked, each file's id checked against its name."""
-    found = [parse(p.read_text(encoding="utf-8"), p.stem) for p in sorted(directory.glob("*.toml"))]
+    found = [
+        parse(p.read_text(encoding="utf-8"), p.stem)
+        for p in sorted(directory.glob("*.toml"))
+        if p.stem not in _NOT_HARNESS_STEMS
+    ]
     ranks: dict[int, str] = {}
     for h in found:
         if h.rank in ranks:
