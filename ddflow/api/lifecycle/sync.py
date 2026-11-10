@@ -78,7 +78,7 @@ def sync(
             "branch.synced",
             it.id,
             {
-                "base": r.base_sha,
+                "base_sha": r.base_sha,
                 "commits": r.commits,
                 "relevant": r.relevant,
                 "gates_valid": data["gates_valid"],

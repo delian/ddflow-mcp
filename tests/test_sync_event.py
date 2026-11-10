@@ -68,7 +68,7 @@ def test_sync_records_a_branch_synced_event_with_the_merge_and_gate_outcomes(rep
     assert out.ok, out.reason
     (last,) = [e for e in _events(repo) if e.kind == "branch.synced"][-1:]
     assert last.subject == "T1"
-    assert last.data["base"] == c1
+    assert last.data["base_sha"] == c1
     assert last.data["commits"] == [c1]
     assert "standards" in last.data["gates_valid"]
     assert last.data["gates_stale"] == []

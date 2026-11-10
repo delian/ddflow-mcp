@@ -97,7 +97,7 @@
   },
   "branch.synced": {
    "fields": {
-    "base": ["str"],
+    "base_sha": ["str"],
     "commits": ["list"],
     "gates_stale": ["list"],
     "gates_valid": ["list"],
