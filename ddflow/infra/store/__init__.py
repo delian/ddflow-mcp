@@ -43,7 +43,6 @@ from ._fingerprint import MIN_TERM_CHARS as MIN_TERM_CHARS
 from ._fingerprint import REBUILD_LOCK_TIMEOUT_S as REBUILD_LOCK_TIMEOUT_S
 from ._fingerprint import REBUILD_TEMP_MAX_AGE_S as REBUILD_TEMP_MAX_AGE_S
 from ._fingerprint import SCHEMA as SCHEMA
-from ._fingerprint import STALE_INDEX_DAYS as STALE_INDEX_DAYS
 from ._fingerprint import _capability_tables as _capability_tables
 from ._fingerprint import _environmental as _environmental
 from ._fingerprint import _has_fts5 as _has_fts5
@@ -104,7 +103,6 @@ __all__ = [
     "REBUILD_TEMP_MAX_AGE_S",
     "RECALL_SOURCES",
     "SCHEMA",
-    "STALE_INDEX_DAYS",
     "EventLog",
     "Store",
     "code_fingerprint",
