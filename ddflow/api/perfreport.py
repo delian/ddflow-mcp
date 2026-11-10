@@ -85,7 +85,7 @@ def _next_calls(fmt: str, out: str, win: str) -> list[str]:
     mcp = f"ddflow_view action=perf format={fmt} window={win}"
     if out:
         cli += f" --out {shlex.quote(out)}"
-        mcp += f" out={out}"
+        mcp += f' out="{out}"'
     return [cli, mcp]
 
 
