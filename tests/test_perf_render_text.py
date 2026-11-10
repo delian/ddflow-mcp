@@ -51,8 +51,9 @@ def _sample() -> Report:
 def test_an_empty_report_renders_named_not_collected_not_blank():
     text = render(Report())
     assert text.strip()  # never a blank answer
-    # an empty report has no gates, so the deliveries carry no fabricated table
-    assert "cycle" in text
+    assert "cycle  n=n/a" in text  # an unset cycle count is n/a, never 0 runs
+    assert "n=0" not in text
+    assert "not collected" not in text  # no section to name, no fabricated table
 
 
 def test_render_names_not_collected_with_their_task():
@@ -82,6 +83,11 @@ def test_sparkline_empty_and_constant_are_not_a_blank_run():
 def test_sparkline_buckets_a_long_series_into_width_cells():
     # five values into two cells: the max of each slice, never five glyphs
     assert len(sparkline([0.0, 1.0, 2.0, 3.0, 4.0], 2)) == 2
+
+
+def test_sparkline_keeps_a_missing_sample_as_a_gap_not_a_low():
+    # None is a gap (one space), so the series keeps its shape and its index alignment
+    assert sparkline([1.0, None, 3.0], 20) == "▁ █"
 
 
 def test_sparkline_tracks_the_series_shape():

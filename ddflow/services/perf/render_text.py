@@ -21,20 +21,33 @@ _SPARK = "▁▂▃▄▅▆▇█"
 
 def sparkline(values: list[float], width: int = 20) -> str:
     """A unicode sparkline of ``values`` over at most ``width`` cells: a series longer than
-    ``width`` is bucketed (each cell is its slice's max), a value that is ``None``
-    (unavailable) is left out rather than plotted as a low, and nothing is the empty string
-    (not a blank run, never a fabricated zero)."""
-    xs = [v for v in values if v is not None]
-    if not xs or width <= 0:
+    ``width`` is bucketed (each cell is its slice's max), a value that is ``None`` is a gap
+    (one space, not dropped and not plotted as a low), and nothing but gaps is the empty
+    string (not a blank run, never a fabricated zero)."""
+    if width <= 0:
         return ""
-    if len(xs) > width:
-        step = len(xs) / width
-        xs = [max(xs[int(i * step) : int((i + 1) * step)]) for i in range(width)]
-    lo, hi = min(xs), max(xs)
-    if hi <= lo:
-        return _SPARK[0] * len(xs)
+    cells = list(values)
+    if len(cells) > width:
+        step = len(cells) / width
+        cells = [_max(cells[int(i * step) : int((i + 1) * step)]) for i in range(width)]
+    present = [v for v in cells if v is not None]
+    if not present:
+        return ""
+    lo, hi = min(present), max(present)
     span = hi - lo
-    return "".join(_SPARK[round((v - lo) / span * (len(_SPARK) - 1))] for v in xs)
+
+    def glyph(v: float | None) -> str:
+        if v is None or span == 0:
+            return " " if v is None else _SPARK[0]
+        return _SPARK[round((v - lo) / span * (len(_SPARK) - 1))]
+
+    return "".join(glyph(v) for v in cells)
+
+
+def _max(bucket: list[float | None]) -> float | None:
+    """A bucket's max of its non-None values; a bucket of only gaps is a gap."""
+    non = [v for v in bucket if v is not None]
+    return max(non) if non else None
 
 
 def bar(fraction: float | None, width: int = 16) -> str:
