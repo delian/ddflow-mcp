@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from ddflow.core.clock import epoch
 from ddflow.core.events import Event
 from ddflow.services.lanes.ledger import Lane
 from ddflow.services.lanes.reuse import idle_time_s, merged_per_hour, next_for, released
@@ -19,21 +20,30 @@ def _merged(ts: str) -> Event:
 
 
 def test_merged_per_hour_scales_the_window() -> None:
-    # one merged item over a one-hour trailing window -> 1 per hour
-    ev = _merged("2026-11-10T20:00:00Z")
-    assert merged_per_hour([ev], 3600.0) == pytest.approx(1.0)
+    # one merged item over a one-hour trailing window ending at now -> 1 per hour
+    ts = "2026-11-10T20:00:00Z"
+    now = epoch(ts) + 600.0  # ten minutes later
+    assert merged_per_hour([_merged(ts)], 3600.0, now) == pytest.approx(1.0)
 
 
 def test_merged_per_hour_ignores_items_outside_the_window() -> None:
     old = "2026-11-10T18:00:00Z"
     new = "2026-11-10T20:00:00Z"
+    now = epoch(new)
     # only the new event is inside the one-hour window (the old one is 2h back)
-    assert merged_per_hour([_merged(old), _merged(new)], 3600.0) == pytest.approx(1.0)
+    assert merged_per_hour([_merged(old), _merged(new)], 3600.0, now) == pytest.approx(1.0)
+
+
+def test_merged_per_hour_decays_when_the_lane_is_quiet() -> None:
+    # the newest merge is four hours old: anchored to `now`, the rate decays to nothing
+    old = "2026-11-10T20:00:00Z"
+    now = epoch("2026-11-11T00:00:00Z")
+    assert merged_per_hour([_merged(old)], 3600.0, now) == pytest.approx(0.0)
 
 
 def test_a_zero_window_is_refused_not_divided_by() -> None:
     with pytest.raises(ValueError):
-        merged_per_hour([], 0.0)
+        merged_per_hour([], 0.0, now=0.0)
 
 
 def test_idle_time_is_zero_while_working_and_positive_when_free() -> None:

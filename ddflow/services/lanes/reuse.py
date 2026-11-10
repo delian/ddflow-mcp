@@ -25,26 +25,21 @@ MERGED_KIND = "worktree.merged"
 _SECONDS_PER_HOUR = 3600.0
 
 
-def merged_per_hour(events: Iterable[Event], window_s: float) -> float:
-    """Merged items per hour over the trailing ``window_s``: the ``worktree.merged`` events
-    inside the window, scaled to an hour. Pure over the log; a window <= 0 is refused so a
-    caller never divides by it and never sees infinity."""
+def merged_per_hour(events: Iterable[Event], window_s: float, now: float) -> float:
+    """Merged items per hour over the trailing ``window_s`` ending at ``now``: the
+    ``worktree.merged`` events inside the window, scaled to an hour. ``now`` is the clock
+    the window is measured from (the caller's), NOT the newest event, so a quiet lane decay
+    to a smaller rate; ``idle_time_s`` takes the same argument. Pure over the log; a window
+    <= 0 is refused so a caller never divides by it and never sees infinity."""
     if window_s <= 0:
         raise ValueError("window_s must be positive")
     evs = list(events)
-    now = _now(evs)
-    if now is None:
-        return 0.0
-    count = sum(1 for e in evs if e.kind == MERGED_KIND and now - epoch(e.ts) <= window_s)
+    count = sum(
+        1
+        for e in evs
+        if e.kind == MERGED_KIND and 0.0 <= now - epoch(e.ts) <= window_s
+    )
     return count * (_SECONDS_PER_HOUR / window_s)
-
-
-def _now(events: Sequence[Event]) -> float | None:
-    """The newest event time, or None: the clock "now" the window is measured from (a caller
-    fast-forwards it by folding a live log, so a helper never reads `time.time()` here)."""
-    if not events:
-        return None
-    return max(epoch(e.ts) for e in events)
 
 
 def idle_time_s(lane: Lane, now: float) -> float:
