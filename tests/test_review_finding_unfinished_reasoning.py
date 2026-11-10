@@ -71,6 +71,15 @@ def test_parse_keeps_a_citation_ending_in_a_question_mark():
     assert not f.malformed, "a citation with a trailing `?` is a spot, not prose"
 
 
+def test_parse_keeps_a_semicolon_separated_citation():
+    text = (
+        "FINDING HIGH src/foo.py:12; src/bar.py:34\n"
+        "the result is dropped before the write.\n\nSTATUS: FINDINGS 1"
+    )
+    (f,) = RV.parse(text)[0]
+    assert not f.malformed, "a semicolon splits two spots, it is not prose"
+
+
 def test_a_valid_finding_is_not_marked_malformed():
     (f,) = RV.parse(VALID)[0]
     assert not f.malformed

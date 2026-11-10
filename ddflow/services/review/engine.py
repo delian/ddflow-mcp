@@ -50,12 +50,13 @@ _FINDING_RE = re.compile(
 #: A citation is ONE token -- a ``path``, ``path:line``, ``path:line:col``,
 #: ``path:line-line`` or ``path::symbol`` (nested ``::`` included) -- so it has no
 #: whitespace. A reviewer writing a SENTENCE in the location field writes whitespace too,
-#: and a ``?``, ``;`` or ellipsis together with that whitespace is what shows it thinking
-#: aloud, not citing one spot (B-review-finding-is-unfinished-reasoning). Neither signal
-#: alone is prose: a bare ``path:257?`` is uncertainty about the line (kept), and
-#: ``foo.py:10 bar.py:20`` is two cited spots (kept) -- only a whitespace-separated run
-#: that also carries a prose mark is the reviewer thinking.
-_PROSE_MARK = re.compile(r"[?;\u2026]|\.\.\.")
+#: and a ``?`` or ellipsis together with that whitespace is what shows it thinking aloud,
+#: not citing one spot (B-review-finding-is-unfinished-reasoning). A bare ``path:257?`` is
+#: uncertainty about the line (kept), ``foo.py:10 bar.py:20`` is two cited spots (kept),
+#: and ``a.py:12; b.py:34`` is two cited spots separated by a semicolon (kept): only a
+#: whitespace-separated run that also carries ``?``/ellipsis is the reviewer thinking. A
+#: semicolon is a separator, so it is NOT a prose mark.
+_PROSE_MARK = re.compile(r"[?\u2026]|\.\.\.")
 
 
 def _malformed_reason(location: str) -> str:
@@ -63,7 +64,7 @@ def _malformed_reason(location: str) -> str:
 
     One deterministic signal (B-review-finding-is-unfinished-reasoning): a location that is
     not a ``path:line``/``path:symbol`` citation -- one carrying whitespace together with a
-    ``?``, ``;`` or ellipsis -- records but does not count.
+    ``?`` or ellipsis -- records but does not count.
 
     The bug also names "the text is reasoning with no failure stated". That half is
     deliberately left alone: whether a paragraph states a defect is semantic, and a word
