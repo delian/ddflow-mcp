@@ -59,6 +59,42 @@ def approvals_deny(repo: Path, ask_id: str, *, digest: str = "", agent: str = ""
     return _answer(repo, ask_id, AN.DENIED, "approvals.deny", digest=digest, agent=agent)
 
 
+def approvals_answer(repo: Path, ask_id: str, *, text: str = "", agent: str = "") -> O.Outcome:
+    """A PERSON answers a question ask (type ``question``): the selected option, or the free text.
+
+    ``text`` is the answer: for a question with options it must be one of them (it becomes the
+    outcome); for a free-text question it is the answer itself (outcome ``answered``). Refused
+    for an approval (use ``approve``/``deny``) or under an agent identity, before anything is read."""
+    if why := AN.why_not_a_person(agent):  # before anything is read
+        return _not_a_person("approvals.answer", why, "answering a question")
+    log, cfg, st = _load(repo, agent)
+    actor = AN.person(cfg, agent)
+    if actor.source not in AN.ANSWER_SOURCES:
+        return _not_a_person("approvals.answer", actor.source, "answering a question")
+    row = asks_of(st).get(ask_id)
+    if row is None or row["type"] != AN.QUESTION:
+        return O.failed("approvals.answer", f"no question ask {ask_id}")
+    if not text:
+        if row["options"]:
+            return O.refused(
+                "approvals.answer",
+                f"{ask_id} is answered with one of: {', '.join(row['options'])}",
+            )
+        return O.refused(
+            "approvals.answer",
+            f"{ask_id} takes free text: give --text with the answer",
+        )
+    if row["options"]:
+        outcome, answer_text = text, ""
+    else:
+        outcome, answer_text = AN.ANSWERED, text
+    try:
+        AN.answer(log, cfg, ask_id, outcome, actor=actor, digest=row["digest"], text=answer_text)
+    except AN.AskRefused as exc:
+        return O.refused("approvals.answer", str(exc))
+    return O.ok("approvals.answer", id=ask_id, outcome=outcome, text=f"{ask_id} {outcome} by {actor.id}")
+
+
 def _record(log, cfg, st, ask_id: str, actor, prefix: str) -> str:
     """Answer ONE request; return "" on success, else the reason.
 

@@ -322,7 +322,7 @@ def test_a_question_shows_its_quoted_text_and_how_to_answer():
     assert (
         e.kind == "question" and "ship it now?" in e.what and e.detail["question"] == "ship it now?"
     )
-    assert e.command == "ddflow approvals show Q9" and e.chat.startswith(
+    assert e.command == "ddflow approvals answer Q9 --text <answer>" and e.chat.startswith(
         "ddflow digest --ask question:Q9"
     )
     assert e.default == "answer in your own words" and "answer the question" in e.answer
@@ -380,7 +380,7 @@ def test_a_question_with_a_verb_is_still_a_question_and_its_id_is_quoted():
     asks_of(st)["weird id"]["type"] = "question"
     (e,) = build(st).entries
     assert e.kind == "question" and e.default == "answer in your own words"
-    assert e.command == "ddflow approvals show 'weird id'"
+    assert e.command == "ddflow approvals answer 'weird id' --text <answer>"
 
 
 def test_a_lease_finding_detail_is_masked():

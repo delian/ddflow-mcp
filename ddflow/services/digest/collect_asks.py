@@ -68,7 +68,11 @@ def _entries(st, cfg, now, kind: str) -> list[N.Entry]:
                 why=why,
                 since=row["requested_at"],
                 default=_question_default(row) if is_q else SAFE_DEFAULT,
-                command=f"ddflow approvals {'show' if is_q else 'approve'} {rid}",
+                command=(
+                    f"ddflow approvals answer {rid} --text <answer>"
+                    if is_q
+                    else f"ddflow approvals approve {rid}"
+                ),
                 answer="" if is_q else f"approve or deny request {rid}",
                 blocks=[item] if item in st.items else [],
                 agents=[who],
