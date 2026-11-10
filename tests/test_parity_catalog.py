@@ -134,7 +134,29 @@ def test_a_live_row_without_an_add_history_entry_is_refused(tmp_path):
 def test_a_non_string_check_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [1]\n",
+        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [1]\n"
+        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def test_an_orphan_add_history_entry_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
+        "[[history]]\nfeature = \"ghost\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def test_a_retired_slug_must_not_stay_live(tmp_path):
+    _write(
+        tmp_path,
+        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[history]]\nfeature = \"x\"\naction = \"retire\"\ndate = \"2026-11-10\"\n",
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")

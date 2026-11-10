@@ -205,18 +205,25 @@ def load(path: str | Path | None = None) -> Catalog:
         _require(isinstance(date, str) and date, p.name, f"history for {feature!r} needs a date")
         history.append(HistoryEntry(feature=feature, action=action, date=date, note=note))
 
-    # A managed record's ledger is tied to its rows: a live row's latest lifecycle action
-    # is "add" or "edit" (an edit keeps it live); a retired feature is not live. A "retire"
-    # entry may name a slug with no live row (it documents the removal).
+    # A managed record's ledger is tied to its rows BOTH ways: a live row's latest action is
+    # "add" or "edit" (an edit keeps it live), and a history slug whose latest action is not
+    # "retire" must be a live row (an add/edit on a slug with no row is an orphan).
     latest_action: dict[str, str] = {}
     for entry in history:
         latest_action[entry.feature] = entry.action
+    live = {row.feature for row in rows}
     for row in rows:
         _require(
             latest_action.get(row.feature) in ("add", "edit"),
             row.feature,
             f"live row needs an `add`/`edit` history entry (latest action: "
             f"{latest_action.get(row.feature)!r})",
+        )
+    for slug, action in latest_action.items():
+        _require(
+            action == "retire" or slug in live,
+            slug,
+            f"a history entry's latest action {action!r} needs a live row (or `retire`)",
         )
 
     return Catalog(rows=tuple(rows), history=tuple(history))
