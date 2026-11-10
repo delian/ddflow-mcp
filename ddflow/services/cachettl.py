@@ -19,14 +19,14 @@ intentionally not consulted.
 
 from __future__ import annotations
 
-import os
 import re
-import shutil
-import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from ..adapters import env as AENV
+from ..adapters import proc as APROC
 
 #: The env/setting names the docs attribute to the SUBAGENT cache TTL and its overrides.
 SUBAGENT_TTL_ENV = "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL"
@@ -41,7 +41,7 @@ _VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
 def _env_mapping(env: Mapping[str, str] | None) -> Mapping[str, str]:
-    return os.environ if env is None else env
+    return AENV.DEFAULT.snapshot() if env is None else env
 
 
 def _is_on(value: str | None) -> bool:
@@ -121,16 +121,12 @@ def json_load(path: Path) -> dict[str, Any]:
 
 def claude_version(timeout_s: int = 5) -> str | None:
     """``claude --version`` output on this host, or ``None`` when the binary is absent or does
-    not answer (unknown, never a guess). Cheap: a local binary that prints one line."""
-    if shutil.which("claude") is None:
-        return None
-    try:
-        proc = subprocess.run(
-            ["claude", "--version"], capture_output=True, text=True, timeout=timeout_s
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else None
+    not answer (unknown, never a guess). Cheap: a local binary that prints one line. Runs
+    through the process adapter so a missing binary is a captured error, not a raised one."""
+    cap = APROC.capture(["claude", "--version"], timeout=timeout_s)
+    if cap.returncode == 0 and cap.stdout.strip():
+        return cap.stdout.strip()
+    return None
 
 
 @dataclass(frozen=True)
@@ -227,7 +223,7 @@ def doctor_notes(repo: Path, cfg=None) -> list[str]:
     while subagents run on 5 minutes, the one-line remedy. ``cfg`` is unused today (the knobs
     are the harness's env/settings, not a ddflow config section) and is accepted so the caller
     can pass its own ``Config`` uniformly."""
-    verdict = effective_subagent_ttl(os.environ, read_settings(repo), claude_version())
+    verdict = effective_subagent_ttl(None, read_settings(repo), claude_version())
     if verdict.ttl == "1h":
         if verdict.version is None:
             return [
