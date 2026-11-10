@@ -3256,6 +3256,11 @@ idle timer), and at most 1200 when it cannot — below the 1800 s a client gives
 call before aborting it (Bfc43dae5b9); a longer `--timeout` is shortened (and says so on
 stderr), and you call again to wait longer.
 
+`ddflow wait --notify <how>` registers how to reach the waiter when its wake fires, and the
+holder's `release`/`complete` surfaces it in the `woke` list so an orchestrator can resume
+the waiter: empty (default) means the waiter polls `ddflow wait`; `send_message:<session-id>`
+names the harness session to resume; `watch:<url>` an inbound URL to POST the wake to.
+
 **Files every item touches** — a changelog, a research log, a regenerated config — would
 make every pair of items collide. Declare them, and many leases may hold them at once:
 
