@@ -1,6 +1,5 @@
 [knob]
 "ddflow/infra/store/_fingerprint.py:INDEX_TOUCH_S" = 'store.index_touch_s'
-"ddflow/infra/store/_fingerprint.py:STALE_INDEX_DAYS" = 'store.stale_index_days'
 
 [exempt]
 "ddflow/infra/store/_fingerprint.py:MIN_FINGERPRINT_SOURCES" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
