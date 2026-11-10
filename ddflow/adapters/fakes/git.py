@@ -41,7 +41,9 @@ class TempRepo:
     def write(self, name: str, text: str = "") -> Path:
         """Add (or replace) the file ``name`` in the working tree; returns its path."""
         p = self.path / name
-        fsio.atomic_write(p, text, fsync=False)
+        # `replace_text` is the write-in-place drop-in for `Path.write_text` (a symlink at
+        # `name` is written through, not replaced) and the fsio home's one text writer.
+        fsio.replace_text(p, text, fsync=False)
         return p
 
     def commit(self, message: str = "commit") -> str:
