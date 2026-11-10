@@ -234,7 +234,12 @@ class TableTool:
         output the parser cannot read. With a pin set, an unmet pin is unavailable too."""
         s = self.spec
         if self.pin:
-            self._probed = self._probed or self.probe()
+            # Re-probe anything but a KNOWN-usable probe: a cached probe from an earlier run may
+            # be a timeout (installed None) or an out-of-date pin (installed False), or the binary
+            # may have changed since -- a plain `or` caches the first answer forever (a dataclass is
+            # always truthy), freezing a transient failure into every later run.
+            if self._probed is None or not self._probed.usable:
+                self._probed = self.probe()
             if not self._probed.usable:
                 return self._unavailable(
                     "pin",
