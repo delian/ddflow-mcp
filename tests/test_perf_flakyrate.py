@@ -120,6 +120,15 @@ def test_report_reads_the_flake_log_and_returns_rates_and_proposals(tmp_path: Pa
     assert flakyrate.report(tmp_path / "missing", now=NOW, perf_metrics=CFG)["flakes"] == 0
 
 
+def test_the_config_default_is_applied_when_perf_metrics_is_omitted(tmp_path: Path):
+    from ddflow.config import Config
+
+    # exercises the `perf_metrics or Config().perf_metrics` default branch of report/rates
+    view = flakyrate.report(tmp_path)
+    assert view["window_s"] == Config().perf_metrics.flaky_window_s == 7 * DAY
+    assert view["flakes"] == 0  # an empty log, from the Config() default path
+
+
 def test_a_row_with_no_timestamp_is_never_inside_the_window():
     rows = [{"test": "tests/a.py::t1", "at": ""}, _row("tests/a.py::t1", NOW)]
     # now close to epoch 0: a 0.0 sentinel would fall INSIDE a 7-day window here
