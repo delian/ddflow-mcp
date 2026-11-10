@@ -53,8 +53,9 @@ HARNESS_DIR = Path(__file__).resolve().parent.parent / "harnesses"
 
 #: Stems under ``HARNESS_DIR`` that are DATA for a subsystem, not harness descriptors:
 #: ``usage.toml`` is the per-harness usage-semantics table (ORC-usage-semantics), read by
-#: ``ddflow/services/metrics/usage_semantics.py``, and must not be parsed as a harness.
-_NOT_HARNESS_STEMS = frozenset({"usage"})
+#: ``ddflow/services/metrics/usage_semantics.py``, and ``catalog.toml`` is the feature
+#: catalog (PAR-catalog), read by ``ddflow/services/parity/catalog.py``; neither is a harness.
+_NOT_HARNESS_STEMS = frozenset({"usage", "catalog"})
 
 
 #: The lifecycle every agent's native events are mapped onto, handled once by the hook core.

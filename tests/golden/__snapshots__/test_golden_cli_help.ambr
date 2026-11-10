@@ -1919,12 +1919,12 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm,slo}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm,slo}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
-                          tiny, paths or swarm
+                          tiny, paths, variants, swarm or slo
     item                  with retro: the item id
   
   options:
@@ -2003,6 +2003,15 @@
     -h, --help     show this help message and exit
     --role ROLE    its role, a name in [agent].roles
     --ttl-h TTL_H  hours the token lives ([agent].token_ttl_h unless given, up to token_max_ttl_h)
+  
+  '''
+# ---
+# name: test_help[ddflow paths]
+  '''
+  usage: ddflow paths [-h]
+  
+  options:
+    -h, --help  show this help message and exit
   
   '''
 # ---
@@ -3529,7 +3538,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--job JOB] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--job JOB] [--token TOKEN] [--notify NOTIFY] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3547,6 +3556,9 @@
     --job JOB            wait for a job (a detached review's run handle) instead of an item, lease
                          or approval: until its process is over and its round is recorded
     --token TOKEN        resume token from an earlier wait
+    --notify NOTIFY      how to reach this waiter when its wake fires: empty (poll ddflow wait),
+                         `send_message:<session-id>` (harness session to resume) or `watch:<url>`
+                         (inbound URL to post to)
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
     --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
@@ -3665,13 +3677,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3789,6 +3801,8 @@
       archdeps            the external-dependency census: families, importing modules, home,
                           violations
       suggest             send a bounded change to the lease holder of an item, as a suggestion
+      paths               workflow-path variants: directly-follows, top variants, burst overlap,
+                          superseded passes, out-of-order
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
       digest              the operator queue: what waits on a person, as askable entries
@@ -3944,6 +3958,7 @@
     'ddflow next',
     'ddflow onboard',
     'ddflow pair',
+    'ddflow paths',
     'ddflow phase',
     'ddflow phase add',
     'ddflow phase close',

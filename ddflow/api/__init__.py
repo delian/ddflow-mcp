@@ -151,6 +151,7 @@ from .mergequeue_run import queue_run
 from .metrics import run_metrics
 from .model_cmds import model_show
 from .onboard import onboard as onboard_run
+from .perf import run_perf_env, run_perf_ingest, run_perf_run
 from .operations import (
     cadence,
     cleanup,
@@ -380,6 +381,9 @@ __all__ = [
     "rule_update",
     "run_docs",
     "run_metrics",
+    "run_perf_env",
+    "run_perf_ingest",
+    "run_perf_run",
     "run_review",
     "session_adopt_orphans",
     "session_end",

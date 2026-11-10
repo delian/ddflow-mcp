@@ -6,17 +6,20 @@ decide which overlapping globs another lease really covers.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ...config import Config
 from ...core import clock
 from ...core import globs as GL
 from ...core.admission import conflicts, glob_conflict, is_shared
 from ...core.admission import glob_clashes as _glob_clashes
-from ...core.flow import line_key
+from ...core.flow import branch_name, line_key
 from ...core.model import Item, Lease, State, fold
 from ...infra import worktree as W
 from ...infra.log import EventLog, bare_agent_id
 from .. import changes as CH
 from .. import leases as _leases
+from .. import probe as PR
 from ..leaseclock import localize
 
 
@@ -96,6 +99,90 @@ def unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]
         for i, lz in state.active_leases(now, cfg.lease.grace_s).items()
         if not (i in state.items and state.items[i].terminal)
     }
+
+
+def _holder_ref(repo: Path, lz: Lease, other: Item | None, cfg: Config, take: float) -> str:
+    """The holder's side of the probe: its branch when git can resolve it to a commit, the
+    default branch when the branch is unborn (a fresh holder forks from there, like a fresh
+    claimant), or "" for a name git could not answer (a timeout, a missing git) -- a no-answer
+    must stay exclusive, never fall back to the default branch in its place."""
+    name = lz.branch if lz.branch else (branch_name(other, cfg) if other else "")
+    if not name:
+        return ""
+    _sha, why = PR.tip(repo, name, take)
+    if not _sha:
+        return W.default_branch(repo) if "not a commit of this repository" in why else ""
+    return name
+
+
+def optimistic_clashes(
+    log: EventLog,
+    cfg: Config,
+    state: State,
+    it: Item,
+    holder: str,
+    clashes: list[tuple[str, Lease, tuple[str, str]]],
+) -> tuple[list[tuple[str, Lease, tuple[str, str]]], list[str]]:
+    """Split clashing pairs into what stays exclusive and what a clean merge-tree probe
+    shares optimistically (DX-lease-hunk-optimistic).
+
+    Off (default) every clash stays exclusive (`D-lease-overlap-only-by-break`). On, a
+    pair whose holder's branch merges cleanly into the claimant's branch is dropped as
+    optimistic -- git auto-merges the two branches' disjoint hunks, and the merge rebases
+    the second instead of waiting -- and its glob is returned for the claim to record. A
+    conflict, an unknown holder branch, or a probe that could not run stays exclusive: a
+    silent no-answer fails closed to the refusal, never to an optimistic grant.
+    """
+    if not cfg.locks.optimistic:
+        return clashes, []
+    # The claimant's side of the probe is its ACTUAL branch -- the changes it would merge
+    # with the holder's (the task's "the two branches' changes") -- and the default branch
+    # only while it has none yet: a fresh claim forks from there, so the holder need only
+    # merge clean into it. An unborn branch name resolves to the default branch.
+    take = cfg.locks.probe_timeout_s
+    mine_ref = it.lease.branch if it.lease and it.lease.branch else branch_name(it, cfg)
+    if not mine_ref:
+        # No branch name at all: a fresh claim forks from the default branch, so the
+        # holder need only merge clean into it.
+        mine_ref = W.default_branch(log.root)
+    else:
+        _sha, _why = PR.tip(log.root, mine_ref, take)
+        if not _sha and "not a commit of this repository" in _why:
+            # Unborn: the branch names nothing yet -- a fresh claim forking from the
+            # default branch -- so the holder need only merge clean into it there.
+            mine_ref = W.default_branch(log.root)
+    kept: list[tuple[str, Lease, tuple[str, str]]] = []
+    optimistic: list[str] = []
+    seen: dict[tuple[str, str], PR.Probe] = {}
+    for other_id, lz, (mine, theirs) in clashes:
+        other = state.items.get(other_id)
+        holder_ref = _holder_ref(log.root, lz, other, cfg, take)
+        if not holder_ref:
+            # A holder branch git could not resolve to a commit (a timeout, a missing git) is
+            # a no-answer against the holder's real tip: stay exclusive (see `mine_ref`).
+            kept.append((other_id, lz, (mine, theirs)))
+            continue
+        probe = seen.get((mine_ref, holder_ref))
+        if probe is None:
+            probe = PR.run(
+                log.root,
+                mine_ref,
+                holder_ref,
+                timeout_s=cfg.locks.probe_timeout_s,
+                min_git=cfg.locks.probe_merge_tree_min_git,
+            )
+            seen[(mine_ref, holder_ref)] = probe
+        if probe.clean:
+            optimistic.append(mine)
+        else:
+            kept.append((other_id, lz, (mine, theirs)))
+    # A glob granted optimistic for one holder is NOT optimistic if another holder's pair
+    # still clashes on it -- overlapped, not merely the same string, so a broad `src/**`
+    # clean against one holder and a real conflict on `src/a.py` against another never half-
+    # shares the file.
+    kept_mine = [m for _o, _lz, (m, _t) in kept]
+    optimistic = [g for g in dict.fromkeys(optimistic) if not any(GL.overlap(g, m) for m in kept_mine)]
+    return kept, optimistic
 
 
 def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:

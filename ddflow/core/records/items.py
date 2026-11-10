@@ -49,6 +49,12 @@ class Lease:
     #: claiming under ONE name are rivals only when both say which clone they are
     #: (B36aa4c8ee5).
     clone: str = ""
+    #: Globs granted OPTIMISTICALLY (DX-lease-hunk-optimistic): a live holder already
+    #: overlaps them but a clean `git merge-tree` probe said the two branches merge
+    #: cleanly, so this lease and that holder's stand together and the merge rebases the
+    #: second instead of waiting. Generated/pinned (shared) files and real conflicts are
+    #: never here.
+    optimistic: list[str] = field(default_factory=list)
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         """Past its TTL plus grace, by the clock alone. Ask `live` to decide anything: a
