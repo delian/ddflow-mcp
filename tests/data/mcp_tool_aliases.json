@@ -289,6 +289,16 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_paths": [
+  "ddflow_view action=paths",
+  "0.2.8",
+  "1.0"
+ ],
+ "ddflow_perf": [
+  "ddflow_view action=perf",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_phase_add": [
   "ddflow_task action=phase_add",
   "0.2.8",
