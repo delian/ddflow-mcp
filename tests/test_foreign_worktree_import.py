@@ -111,3 +111,56 @@ def test_a_primary_pointing_editable_install_is_left_alone(tmp_path, monkeypatch
     monkeypatch.syspath_prepend(str(site))
     assert I.repoint_shared_editable(tree, primary) is False
     assert (site / "_editable_impl_ddflow_mcp.pth").read_text().strip() == str(primary)
+
+
+def test_the_pth_is_repointed_through_a_symlinked_path(tmp_path, monkeypatch):
+    """The `.pth` names the import root as the installer wrote it, possibly through a
+    symlink (`/tmp` -> `/private/tmp`): repoint matches it RESOLVED or the refusal that
+    heals the URL strands the foreign tree and locks the CLI out."""
+    real = tmp_path / "real"
+    real.mkdir()
+    tree = tmp_path / "ln"
+    tree.symlink_to(real)
+    primary = tmp_path / "prj"
+    site = _editable_site(tmp_path, tree)
+    monkeypatch.syspath_prepend(str(site))
+    assert I.repoint_shared_editable(tree.resolve(), primary) is True
+    assert (site / "_editable_impl_ddflow_mcp.pth").read_text().strip() == str(primary)
+
+
+def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
+    """The bug says the caller's OWN tree is legitimate; the guard must not touch it."""
+    from ddflow.infra import worktree as W
+    from ddflow.surfaces import cli as CLI
+
+    _primary, tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setattr(W, "current", lambda start: W.Worktree(item="", path=tree, branch="b"))
+    assert CLI._guard_foreign_launch() == CLI.OK
+
+
+def test_the_cli_guard_refuses_a_foreign_tree_and_heals_it(checkout, monkeypatch):
+    """Standing in the PRIMARY while importing from a DIFFERENT linked worktree is the
+    foreign case this bug records: the guard repoints and refuses instead of running it."""
+    from ddflow.infra import worktree as W
+    from ddflow.surfaces import cli as CLI
+
+    _primary, tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setattr(W, "current", lambda start: None)  # caller at the primary
+    monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: False)
+    assert CLI._guard_foreign_launch() == CLI.FAIL
+
+
+def test_identifying_the_caller_failing_is_not_a_refusal(checkout, monkeypatch):
+    from ddflow.infra import worktree as W
+    from ddflow.surfaces import cli as CLI
+
+    _primary, tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+
+    def broken(_start):
+        raise OSError("cwd removed")
+
+    monkeypatch.setattr(W, "current", broken)
+    assert CLI._guard_foreign_launch() == CLI.OK

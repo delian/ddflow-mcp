@@ -399,9 +399,21 @@ def repoint_shared_editable(foreign: Path, primary: Path) -> bool:
             continue
         pth = path.parent.parent / _EDITABLE_PTH
         try:
-            if pth.is_file() and pth.read_text(encoding="utf-8").strip() == str(foreign_resolved):
+            line = pth.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        try:
+            # The `.pth` line names the import root as the installer wrote it, possibly
+            # through a symlink (`/tmp` -> `/private/tmp`), so it is matched RESOLVED,
+            # exactly like the URL above: a repoint that skips this file strands the
+            # foreign tree on sys.path and turns the refusal into a lockout.
+            same = pth.is_file() and Path(line).resolve() == foreign_resolved
+        except (OSError, ValueError):
+            same = False
+        if same:
+            try:
                 pth.write_text(primary_text + "\n")
                 changed = True
-        except OSError:
-            pass
+            except OSError:
+                pass
     return changed

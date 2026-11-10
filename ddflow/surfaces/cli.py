@@ -360,7 +360,7 @@ def _guard_foreign_launch() -> int:
     try:
         own = W.current(Path(os.getcwd()))
     except Exception:
-        own = None
+        return OK  # cannot identify the caller: NOT evidence of a foreign tree, never a refusal
     if own is not None and own.path.resolve() == foreign.worktree.resolve():
         return OK  # the very tree this code came from: legitimate, not foreign
     try:
