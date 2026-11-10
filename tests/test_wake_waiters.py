@@ -70,3 +70,11 @@ def test_a_wait_token_carries_the_notify_channel(proj):
     out = A.wait(proj, item="T2", agent=LANE, notify="watch:http://inbound", timeout_s=0)
     token = out.data["wake"]["token"]
     assert W.decode_wait(token)["notify"] == "watch:http://inbound"
+
+
+def test_an_unknown_notify_form_is_refused_up_front(proj):
+    out = A.wait(proj, item="T2", agent=LANE, notify="bogus", timeout_s=0)
+    assert out.exit == 1
+    out = A.wait(proj, item="T2", agent=LANE, notify="send_message:", timeout_s=0)
+    assert out.exit == 1
+
