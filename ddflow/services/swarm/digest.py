@@ -122,8 +122,10 @@ def section(
     """The swarm digest section from figures a caller already read. ``chain`` and
     ``durations`` give the ETA; a ``durations`` of None means the caller could not measure
     one, so the ETA is unavailable."""
-    dur = durations if durations is not None else {}
-    eta_s, method = eta_from_path(list(chain), dur)
+    if durations is None:
+        eta_s, method = None, "critical-path"
+    else:
+        eta_s, method = eta_from_path(list(chain), durations)
     return Section(
         lanes=tuple(lanes),
         holders=tuple(holders),

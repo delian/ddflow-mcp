@@ -38,6 +38,18 @@ def test_a_local_route_is_free():
     assert DG.spend_usd(1_000_000, 1_000_000, None, None, local=True) == 0.0
 
 
+def test_section_without_durations_is_unavailable_not_zero():
+    # a caller that could not measure durations must not read as "done in 0s"
+    s = DG.section(chain=["a", "b"], durations=None)
+    assert s.eta_s is None
+
+
+def test_section_with_an_empty_path_is_done():
+    # no remaining work on the critical path: zero seconds left is a fact, not a guess
+    s = DG.section(chain=[], durations={})
+    assert s.eta_s == 0.0
+
+
 def test_spend_is_unavailable_when_a_used_price_is_unverified():
     # in tokens are estimated but the in price is unknown: the figure cannot be told
     assert DG.spend_usd(1_000_000, 0, None, 2.0) is None
