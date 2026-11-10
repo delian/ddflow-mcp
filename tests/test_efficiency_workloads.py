@@ -107,6 +107,54 @@ def test_a_live_run_refuses_without_budget_and_consent():
         raise AssertionError("live run without budget and consent must be refused")
 
 
+def test_a_live_run_without_a_runner_scores_unrun_not_pass_over_a_stale_log():
+    # A project whose log already holds the pass events must NOT read as this run's
+    # success; a live run that ran no steps is UNRUN, never PASS and never FAIL.
+    wl = _workloads()["claim-and-finish-a-task"]
+    stale = [
+        W.Record("item.started", "demo.task", {"kind": "task"}),
+        W.Record("gate.passed", "demo.task", {"gate": "implement"}),
+        W.Record("gate.passed", "demo.task", {"gate": "unit_tests"}),
+        W.Record("item.completed", "demo.task", {"kind": "task"}),
+    ]
+    report = W.run_live(wl, "/tmp/throwaway", budget={"max_spend": 1}, consent="recorded")
+    assert report.outcome == W.UNRUN
+    assert report.outcome != W.PASS
+
+
+def test_a_live_run_scores_only_the_records_the_runner_produced():
+    wl = _workloads()["claim-and-finish-a-task"]
+    produced = [
+        W.Record("item.started", "demo.task", {"kind": "task"}),
+        W.Record("gate.passed", "demo.task", {"gate": "implement"}),
+        W.Record("gate.passed", "demo.task", {"gate": "unit_tests"}),
+        W.Record("item.completed", "demo.task", {"kind": "task"}),
+    ]
+    report = W.run_live(
+        wl,
+        "/tmp/throwaway",
+        budget={"max_spend": 1},
+        consent="recorded",
+        runner=lambda w, p: produced,
+    )
+    assert report.outcome == W.PASS
+
+
+def test_a_gate_outcome_recorded_on_a_different_item_does_not_count():
+    # PASS needs the gate to have run on THIS item; a same-named gate on another item
+    # gives the 'other task' its own record, not this one's.
+    wl = _workloads()["claim-and-finish-a-task"]
+    records = [
+        W.Record("item.started", "demo.task", {"kind": "task"}),
+        W.Record("gate.passed", "other.task", {"gate": "implement"}),
+        W.Record("gate.passed", "other.task", {"gate": "unit_tests"}),
+        W.Record("item.completed", "demo.task", {"kind": "task"}),
+    ]
+    report = W.evaluate(wl, records)
+    assert report.outcome == W.FAIL
+    assert any("gate outcome" in m for m in report.missing)
+
+
 def test_fake_lane_never_refuses_and_scores_pass_for_the_whole_set():
     reports = W.run_all()
     assert set(reports) == set(_workloads())

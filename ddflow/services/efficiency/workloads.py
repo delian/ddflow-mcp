@@ -20,7 +20,7 @@ import json
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -154,11 +154,12 @@ def records_from_log(root: str | Path) -> tuple[Record, ...]:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            data = event.get("data")
             out.append(
                 Record(
                     kind=str(event.get("kind", "")),
                     subject=str(event.get("subject", "")),
-                    data=event.get("data") or {},
+                    data=data if isinstance(data, dict) else {},
                 )
             )
     return tuple(out)
@@ -166,12 +167,6 @@ def records_from_log(root: str | Path) -> tuple[Record, ...]:
 
 def _event(records: Iterable[Record], kind: str) -> list[Record]:
     return [r for r in records if r.kind == kind]
-
-
-def _gate_outcome(records: Iterable[Record], gate: str) -> list[Record]:
-    """Outcome records for one gate. ``gate.<outcome>`` events key the gate name in
-    ``data["gate"]``; the ``subject`` is the item the gate ran on."""
-    return [r for r in records if r.kind in GATE_OUTCOME_KINDS and r.data.get("gate") == gate]
 
 
 def _rule_item_completed(rule: PassRule, rs: list[Record]) -> tuple[bool, list[str]]:
@@ -184,10 +179,16 @@ def _rule_item_completed(rule: PassRule, rs: list[Record]) -> tuple[bool, list[s
     if not any(r.subject == rule.item for r in completed):
         missing.append(f"item.completed:{rule.item}")
     for gate in rule.gates:
-        outcomes = _gate_outcome(rs, gate)
+        outcomes = [
+            r
+            for r in rs
+            if r.kind in GATE_OUTCOME_KINDS
+            and r.data.get("gate") == gate
+            and r.subject == rule.item
+        ]
         if not outcomes:
             missing.append(f"gate outcome:{gate}")
-        matched.extend(r for r in outcomes if r.subject == rule.item)
+        matched.extend(outcomes)
     return not missing, matched, missing
 
 
@@ -296,15 +297,33 @@ def run_all(workloads: dict[str, Workload] | None = None) -> dict[str, Report]:
     return {wid: run_fake_lane(wl) for wid, wl in workloads.items()}
 
 
-def run_live(workload: Workload, project: str | Path, *, budget: Any, consent: str = "") -> Report:
+def run_live(
+    workload: Workload,
+    project: str | Path,
+    *,
+    budget: Any,
+    consent: str = "",
+    runner: Callable[[Workload, Path], Iterable[Record]] | None = None,
+) -> Report:
     """Run one workload against a real agent in a throwaway project.
 
     Refused unless a budget is set AND consent is recorded: a live run spends, so it must
     never happen silently (r-consent-outward, r-no-silent-cost).
+
+    With ``runner``, the return scores ONLY the records that runner just produced, so a
+    project whose log already held the pass events is never scored as *this* run's
+    success. Without ``runner`` no step ran, and the run is UNRUN -- never a FAIL that
+    pretends the workload was attempted, and never a PASS over a stale log.
     """
     if not budget or not consent:
         raise LiveRunRefused(
             f"live run of {workload.id!r} needs a budget and recorded consent; "
             "give both, or run the fake lane"
         )
-    return evaluate(workload, records_from_log(project))
+    if runner is None:
+        return Report(
+            workflow_id=workload.id,
+            outcome=UNRUN,
+            reason=f"{workload.name}: live run produced no records (no runner); nothing scored",
+        )
+    return evaluate(workload, runner(workload, Path(project)))
