@@ -20,4 +20,8 @@ ignore_imports = [
     # services -> views
     "ddflow.services.enforce.views -> ddflow.views.markdown",
     "ddflow.services.sessions._reconstruct -> ddflow.views.markdown",
+    # adapters -> core: the forge adapter clips feedback with the pure clipper while it
+    # still lives in core; the textcut move (ADP-textcut) moves it to ddflow.adapters.textcut
+    # and removes this entry.
+    "ddflow.adapters.forge -> ddflow.core.textcut",
 ]
