@@ -45,12 +45,14 @@ def test_bug_found_scope_ddflow_files_a_fix_task_without_the_items_globs(repo):
     assert state(repo).items["fix-Bd"].globs == []
     K.bug_found(repo, summary="the parser drops a line", item="T1", id="Bp", agent="a")
     assert state(repo).items["fix-Bp"].globs == SRC
-    # a report that quotes the item's own files (as Bc0b26248e3 does) inherits nothing either
+    # a report that quotes the item's own files (as Bc0b26248e3 does) still inherits none
+    # of its SOURCE files, but the test file it names is the regression test's home and is
+    # kept (DX-fixtask-edit-existing-test-glob).
     K.bug_found(
         repo, summary="the brief of fix-X lists claim.py and tests/test_claim.py", item="T1",
         id="Bq", scope="ddflow", agent="a",
     )  # fmt: skip
-    assert state(repo).items["fix-Bq"].globs == []
+    assert state(repo).items["fix-Bq"].globs == ["tests/test_claim.py"]
 
 
 def test_file_tasks_keeps_the_scope_when_it_files_the_task_later(repo):

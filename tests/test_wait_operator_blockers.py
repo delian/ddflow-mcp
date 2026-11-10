@@ -38,7 +38,7 @@ def test_an_any_wait_on_a_cycle_alone_does_not_sleep(repo):
     started = time.monotonic()
     out = A.wait(repo, timeout_s=5, poll_s=0.05, agent=WAITER)
     assert time.monotonic() - started < 2, "slept to its timeout on a cycle"
-    assert out.exit == O.NOTHING
+    assert out.exit == O.REFUSED
     assert out.data["waitable"] is False
     assert "cycle" in out.reason
 
@@ -102,7 +102,7 @@ def test_an_any_wait_on_an_expired_lease_alone_does_not_sleep(repo, monkeypatch,
     # Counted, not timed: a wait that sleeps once has already gone wrong, however fast the
     # machine, and a descheduled one that does not sleep has not.
     assert clock.sleeps == 0, "slept on an expired lease"
-    assert out.exit == O.NOTHING and out.data["waitable"] is False
+    assert out.exit == O.REFUSED and out.data["waitable"] is False
     assert "expired" in out.reason
 
 

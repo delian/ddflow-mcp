@@ -575,6 +575,34 @@ def _covered_by_ci(log, cfg, repo, it, gate, cwd, scope, gates, forced) -> O.Out
     return O.ok("gate.run", gate=gate, outcome="passed", evidence=ev, id=it.id)
 
 
+def _ignored_approval_refusal(
+    approval: str, approval_stamp: dict, gate: str, item: str, outcome: str, refused
+):
+    """What `record` refuses when `--approval` turns out not to be spent, else ``refused``.
+
+    `--approval` (an id, or 'request') was dropped silently when nothing needed it (bug
+    Be2de070703): for a non-skip outcome an agent may record directly, a passed
+    `--approval` has nothing to approve, so refuse it and name the real route. The real
+    refusal `_agent_skip_refusal` already returned is kept first: a skip over a failed
+    review still needs the operator, so a passed-but-unspent `--approval` on THAT call is
+    not "no approval needed" and the real refusal must not be clobbered. Broken out of
+    ``record`` so its loop count stays under the complexity ratchet."""
+    if refused is not None:
+        return refused
+    if approval and not approval_stamp:
+        return O.refused(
+            "gate.record",
+            f"recording {gate} as {outcome} needs no operator's approval, so --approval "
+            "was ignored -- nothing was filed or spent. Record it directly (no approval is "
+            f"needed for it), or have the operator accept the recorded gate with "
+            f"`ddflow approve {item} {gate}`.",
+            id=item,
+            gate=gate,
+            outcome=outcome,
+        )
+    return None
+
+
 def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyword-only
     repo: Path,
     item: str,
@@ -615,6 +643,7 @@ def record(  # noqa: PLR0913 -- one keyword per facet of a gate record; all keyw
         G.required_gates(cfg, gates),
         gated=_override_gate(log, cfg, it, gate, item, (skip, outcome), approval, reason),
     )
+    refused = _ignored_approval_refusal(approval, approval_stamp, gate, item, outcome, refused)
     if refused is not None:
         return refused
     # B97106be46a: a refused skip already says which case it is (the refusal names the

@@ -16,15 +16,50 @@ from ..services import fleet as FR
 from ..services import flowstate as FL
 from ..services import lanes as LN
 from ..services.lanes import launch_template as T
+from ..services.lanes import lead as LD
 from ..services.lanes.redraw import watch as _watch
 from ._base import _load
 from .fleet import fleet_view
 from .lifecycle.planning import plan_for
 from .reporting.waitcycles import wait_moves, wait_report
 
-VIEWS = ("state", "brief", "advise", "fleet", "resume", "approve")
+VIEWS = ("state", "brief", "advise", "fleet", "resume", "lead", "approve")
 #: The agent the plan is computed for: nobody, so every live lease is another lane's.
 NOBODY = "\0lanes"
+
+
+def _lead_text(ledger, st, at: float, agent: str, max_asks: int, repo: Path) -> str:
+    """The lead rollup: the ledger with every lane's honest ETA, then its inbox."""
+    text = LD.summary(ledger, st, at)
+    if not agent:
+        return text
+    msgs = LD.pending(repo, agent)
+    if not msgs:
+        return text
+    shown = msgs[:max_asks] if max_asks > 0 else []
+    rows = [
+        f"  {'ask' if m.reason == 'message' else m.reason} {i}. from "
+        f"{LD.safe(m.sender) or 'a lane'}"
+        + (f" about {LD.safe(m.item)}" if m.item else "")
+        + ": "
+        + m.text.replace("\n", " ")[:200]
+        for i, m in enumerate(shown, 1)
+    ]
+    head = f"your inbox ({len(msgs)}):"
+    if not rows:
+        head += f" all {len(msgs)} held (lanes.advise_max is 0)"
+    elif len(shown) < len(msgs):
+        head += f" ({len(msgs) - len(shown)} more not shown)"
+    body = "\n".join(rows)
+    return text + "\n\n" + head + ("\n" + body if body else "")
+
+
+def _lead_outcome(ledger, st, at: float, agent: str, cfg, repo: Path, data: dict) -> O.Outcome:
+    """`view=lead`: the summary text, exit 2 with no lanes, else ok."""
+    data["text"] = _lead_text(ledger, st, at, agent, cfg.lanes.advise_max, repo)
+    if not ledger:
+        return O.nothing("lanes", "no lanes active in the window", **data)
+    return O.ok("lanes", **data)
 
 
 def lane_template_approve(
@@ -116,6 +151,8 @@ def lanes(
         if not moves:
             return O.nothing("lanes", "no lane needs a move", **data)
         return O.ok("lanes", **data)
+    if view == "lead":
+        return _lead_outcome(ledger, st, at, agent, cfg, Path(repo), data)
     data["text"] = LN.render_ledger(ledger, at)
     if not ledger:
         return O.nothing("lanes", "no lanes active in the window", **data)

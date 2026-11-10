@@ -56,6 +56,9 @@ class Evidence:
     #: Set by a ddflow tool that RAN the gate's command itself (`ci run`), never by a flag or
     #: an MCP argument: it is what tells that record from an agent's typed `--command`.
     ran_by: str = ""
+    #: The blob stub linking the FULL failing-test list a `ci run` kept aside, so a teammate
+    #: reading the record can read all ids the evidence only sampled (B86370c6924).
+    failing_ids: dict[str, Any] | None = None
 
 
 @dataclass
@@ -365,6 +368,8 @@ def _evidence_fields(
         ev["elapsed_s"] = evidence.elapsed_s
     if evidence.ran_by:
         ev["ran_by"] = evidence.ran_by
+    if evidence.failing_ids:
+        ev["failing_ids"] = evidence.failing_ids
     if evidence.output_file:
         try:
             txt = Path(evidence.output_file).read_text("utf-8", errors="replace")

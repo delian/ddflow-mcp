@@ -18,16 +18,32 @@ from .providers import (
     unregister_dimension,
 )
 from .service import VIEWS, Answer, run
+from .usage_semantics import (
+    CUMULATIVE,
+    DELTA,
+    FINAL,
+    NONE,
+    merge_figures,
+    resolve_figure,
+    semantics_for,
+)
 
 __all__ = [
+    "CUMULATIVE",
+    "DELTA",
+    "FINAL",
+    "NONE",
     "VIEWS",
     "Answer",
     "Context",
     "dimension_names",
+    "merge_figures",
     "register",
     "register_dimension",
+    "resolve_figure",
     "run",
     "sample_grid",
+    "semantics_for",
     "unregister",
     "unregister_dimension",
 ]

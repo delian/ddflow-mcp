@@ -53,8 +53,8 @@ TEMPLATE_NAMES: tuple[str, ...] = (
 )
 
 
-class TemplateError(RuntimeError):
-    pass
+from ..adapters import templates as _tpl  # noqa: E402
+from ..adapters.templates import TemplateError, _render_stdlib  # noqa: E402,F401  (re-exported)
 
 
 @dataclass
@@ -334,205 +334,12 @@ def _loader() -> OverlayLoader:
 def render(tmpl: Template | str, **vars: Any) -> str:
     text = tmpl.text if isinstance(tmpl, Template) else tmpl
     try:
-        import jinja2
-    except ImportError:
-        return _render_stdlib(text, vars)
-    # bandit B701: these templates render markdown/plain-text prompts, never HTML; escaping would
-    # corrupt them.
-    env = jinja2.Environment(  # nosec B701
-        undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
-    )
-    try:
-        return env.from_string(text).render(**vars)
-    except jinja2.TemplateError as exc:
+        return _tpl.DEFAULT.render(text, **vars)
+    except TemplateError as exc:
         # Every template failure, not only an undefined variable: a SYNTAX error escaped
         # as jinja2's own exception, through callers that promise never to raise
         # (`services.review.review`), as a traceback (bug Baf7d5082f5).
         raise TemplateError(f"template {getattr(tmpl, 'name', '?')}: {exc}") from exc
-
-
-#: One pass over the source finds every construct. Ordered so a comment wins over the
-#: tags that may appear inside it.
-_TOKEN = re.compile(
-    r"(?P<comment>\{#.*?#\})"
-    r"|\{%\s*(?P<tag>.*?)\s*%\}"
-    r"|\{\{\s*(?P<expr>.*?)\s*\}\}",
-    re.S,
-)
-_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
-
-#: `for`, the loop variable, `in`, the sequence. Grammar, not a tunable: a
-#: `{% for %}` with a different number of words is a template this engine cannot
-#: read, and the remedy is Jinja2 rather than a knob.
-_FOR_WORDS = 4
-
-
-def _lookup(vars: dict[str, Any], dotted: str) -> Any:
-    cur: Any = vars
-    for part in dotted.split("."):
-        if isinstance(cur, dict) and part in cur:
-            cur = cur[part]
-        elif hasattr(cur, part):
-            cur = getattr(cur, part)
-        else:
-            raise TemplateError(
-                f"template variable {dotted!r} is not defined. Available: {', '.join(sorted(vars))}"
-            )
-    return cur
-
-
-def _tokenize(text: str) -> list[tuple[str, str]]:
-    """Source -> a flat token list, applying Jinja's `trim_blocks` + `lstrip_blocks`.
-
-    Both are ON in the Jinja environment above, so the fallback has to honour them or
-    the same template renders with different whitespace depending on which engine is
-    installed -- which is the divergence this module exists to prevent, in its quietest
-    form.
-    """
-    out: list[tuple[str, str]] = []
-    pos = 0
-    for m in _TOKEN.finditer(text):
-        chunk = text[pos : m.start()]
-        pos = m.end()
-        # A `{{ }}` is inline and takes no whitespace with it; a block tag or a comment
-        # standing alone on a line takes the whole line.
-        if m.group("expr") is None:
-            cut = chunk.rfind("\n")
-            if not chunk[cut + 1 :].strip():
-                chunk = chunk[: cut + 1]  # lstrip_blocks; cut == -1 leaves ""
-            if text[pos : pos + 1] == "\n":
-                pos += 1  # trim_blocks
-        if chunk:
-            out.append(("text", chunk))
-        if m.group("comment") is not None:
-            continue
-        out.append(
-            ("block", m.group("tag")) if m.group("expr") is None else ("var", m.group("expr"))
-        )
-    if text[pos:]:
-        out.append(("text", text[pos:]))
-    return out
-
-
-def _parse(tokens: list[tuple[str, str]]) -> list:
-    """Tokens -> a tree, so a block is a SCOPE rather than a pair of markers.
-
-    The previous implementation substituted innermost-first with `re.sub`, which has no
-    notion of an enclosing block: it evaluated a `{% for %}` nested inside an
-    `{% if adopted %}` that was false, over a name only the true branch defines, and
-    took the whole handshake down for every unadopted repository. A tree cannot express
-    that bug -- a branch not taken is never walked.
-    """
-    root: list = []
-    stack: list[tuple[str, list, list]] = [("root", root, root)]
-    for kind, val in tokens:
-        body = stack[-1][2]
-        if kind in ("text", "var"):
-            body.append((kind, val))
-            continue
-        words = val.split()
-        head = words[0] if words else ""
-        if head == "if":
-            node = ["if", val[len("if") :].strip(), [], None]
-            body.append(node)
-            stack.append(("if", node, node[2]))
-        elif head == "else":
-            if stack[-1][0] != "if":
-                raise TemplateError("{% else %} outside an {% if %}")
-            node = stack[-1][1]
-            node[3] = []
-            stack[-1] = ("if", node, node[3])
-        elif head == "endif":
-            if stack[-1][0] != "if":
-                raise TemplateError("{% endif %} with no open {% if %}")
-            stack.pop()
-        elif head == "for":
-            if len(words) != _FOR_WORDS or words[2] != "in":
-                raise TemplateError(f"only `{{% for x in seq %}}` is supported, not {val!r}")
-            node = ["for", words[1], words[3], []]
-            body.append(node)
-            stack.append(("for", node, node[3]))
-        elif head == "endfor":
-            if stack[-1][0] != "for":
-                raise TemplateError("{% endfor %} with no open {% for %}")
-            stack.pop()
-        else:
-            # LOUD, never silent. The regex engine left an unrecognised tag in the
-            # output verbatim, so `{% if a or b %}` -- which its single-name pattern
-            # could not match -- was emitted as literal template source into a model's
-            # context, along with everything up to the orphaned `{% endif %}`.
-            raise TemplateError(
-                f"the fallback template engine does not support {{% {val} %}}. "
-                f"Install Jinja2 (`pip install jinja2`) for the full language."
-            )
-    if len(stack) != 1:
-        raise TemplateError(f"unclosed {{% {stack[-1][0]} %}} block")
-    return root
-
-
-def _truthy(cond: str, vars: dict[str, Any]) -> bool:
-    """`and`, `or`, `not` over names — the subset the shipped templates use.
-
-    Strict about undefined names, because Jinja is configured with `StrictUndefined`
-    and the two engines agreeing matters more than either one's leniency.
-    """
-    cond = cond.strip()
-    if " or " in cond:
-        return any(_truthy(p, vars) for p in cond.split(" or "))
-    if " and " in cond:
-        return all(_truthy(p, vars) for p in cond.split(" and "))
-    if cond.startswith("not "):
-        return not _truthy(cond[4:], vars)
-    if not _NAME.fullmatch(cond):
-        raise TemplateError(
-            f"the fallback template engine cannot evaluate {cond!r}; it understands "
-            f"names joined by `and`/`or`/`not`. Install Jinja2 for the full language."
-        )
-    return bool(_lookup(vars, cond))
-
-
-def _emit(nodes: list, vars: dict[str, Any]) -> str:
-    out: list[str] = []
-    for node in nodes:
-        kind = node[0]
-        if kind == "text":
-            out.append(node[1])
-        elif kind == "var":
-            expr = node[1]
-            if not _NAME.fullmatch(expr):
-                raise TemplateError(
-                    f"the fallback template engine cannot evaluate {{{{ {expr} }}}}; it "
-                    f"understands plain names. Install Jinja2 for the full language."
-                )
-            out.append(str(_lookup(vars, expr)))
-        elif kind == "if":
-            out.append(_emit(node[2] if _truthy(node[1], vars) else (node[3] or []), vars))
-        elif kind == "for":
-            for element in _lookup(vars, node[2]) or []:
-                out.append(_emit(node[3], {**vars, node[1]: element}))
-    return "".join(out)
-
-
-def _render_stdlib(text: str, vars: dict[str, Any]) -> str:
-    """Jinja's common subset, without Jinja.
-
-    Handles `{{ var }}`, `{% if %}`/`{% else %}`/`{% endif %}`, `{% for %}` and
-    `{# comments #}`, with `trim_blocks` and `lstrip_blocks` to match the Jinja
-    environment in `render`. Anything else RAISES rather than passing through, so an
-    unsupported construct is a message naming it instead of template source delivered
-    to a model as if it were prose.
-
-    Parsed into a tree rather than substituted by regex. See `_parse`.
-    """
-    # Jinja's `keep_trailing_newline` defaults to False: it drops exactly one newline
-    # at the end of the source. Matching that is not pedantry -- the templates are
-    # concatenated into prompts, and one engine ending a block with a blank line and
-    # the other not is a diff in every prompt the project sends.
-    if text.endswith("\r\n"):
-        text = text[:-2]
-    elif text.endswith("\n"):
-        text = text[:-1]
-    return _emit(_parse(_tokenize(text)), vars)
 
 
 def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) -> list[Template]:

@@ -97,6 +97,7 @@ def test_the_unapproved_reviewer_hint_reads_the_subject_not_the_redacted_evidenc
         ("http://box.home.arpa/v1", True),
         ("http://api.example.com/v1", False),
         ("http://8.8.8.8/v1", False),
+        ("http://[::1", False),  # unterminated IPv6 literal -> urlparse raises -> not local
     ],
 )
 def test_is_local_endpoint(base_url, local):

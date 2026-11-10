@@ -20,8 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
+from ...adapters import templates as _tpl
 from ...infra import paths
 from .. import facts, modelreg, review_keys
 from ..lane_driver import Result, unavailable
@@ -150,12 +149,10 @@ def render(ep: Endpoint, harness: str) -> str | Result:
     if lay is None:
         return unavailable(f"harness {harness!r} has no private provider layout")
 
-    env = Environment(  # nosec B701 - JSON text for a config file, not HTML: escaping would corrupt it
-        loader=FileSystemLoader(str(paths.package_dir() / "templates")),
-        undefined=StrictUndefined,
-        keep_trailing_newline=True,
-    )
-    text = env.get_template(lay["template"]).render(
+    env = _tpl.DEFAULT
+    text = env.render_from(
+        paths.package_dir() / "templates",
+        lay["template"],
         schema=lay["schema"],
         provider=ep.provider,
         name=f"ddflow lane {ep.route}",

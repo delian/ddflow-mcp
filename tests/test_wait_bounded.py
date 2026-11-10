@@ -9,6 +9,7 @@ import pytest
 from conftest import run_cli
 
 from ddflow.api import lifecycle as A
+from ddflow.core import outcome as O
 
 HOLDER, WAITER = "agent-holder", "agent-waiter"
 
@@ -66,3 +67,21 @@ def test_a_capped_wait_hands_back_the_token_its_advice_names(proj, monkeypatch):
     assert token, "a capped wait must carry a resume token"
     assert any(token in m for m in said), f"the cap note never names its token: {said}"
     assert token in out.reason, f"the exit-2 follow-up never names its token: {out.reason}"
+
+
+def test_an_expired_lease_wait_is_refused_not_nothing_to_retry(repo):
+    """`wait` on an item whose OWN lease expired under `reclaim_policy = report` can
+    never clear on its own, so it answers "Not waiting" at once. That must be exit 3
+    (refused), NOT exit 2 "nothing to do / try again": a caller that retries on 2, as
+    the exit-2 message advises, spins -- 399 instant calls in 40 minutes here
+    (Be68798098a)."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "src/a.py")
+    assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
+    time.sleep(1.5)
+    out = A.wait(repo, item="T1", timeout_s=20, poll_s=0.05, agent=WAITER)
+    assert out.exit == O.REFUSED, out.exit
+    assert not out.data["waitable"]
+    assert "Not waiting" in out.reason and "expired" in out.reason

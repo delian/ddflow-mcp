@@ -1,0 +1,220 @@
+"""The perf report's text and markdown renderer (PM-report-text).
+
+One deterministic renderer over the ``Report`` data layer: markdown tables, unicode
+sparklines and bar rows, width-bounded for a terminal and a chat reply; a short headline
+first (what got slower or faster, the top proposals), then the sections; a plain-dict form
+for tools. This is the default answer to a perf report prompt over MCP, so no shell or
+browser is needed (r-no-shell). A section the log cannot support is rendered ``n/a`` or
+named ``not collected``, never as an empty table (r-unavailable). The exact CLI and MCP
+call that returns the uncut report is named by the ``perf`` surface declaration
+(PM-remote's ``ddflow/surfaces/declared/perfremote.py``); this module renders the answer.
+"""
+
+from __future__ import annotations
+
+from ..metrics.render import dur, pct
+from .report import Report
+
+#: The eight block characters a sparkline uses, low to high. A bar row reuses them.
+_SPARK = "▁▂▃▄▅▆▇█"
+
+
+def sparkline(values: list[float], width: int = 20) -> str:
+    """A unicode sparkline of ``values`` over at most ``width`` cells: a series longer than
+    ``width`` is bucketed (each cell is its slice's max), a value that is ``None`` is a gap
+    (one space, not dropped and not plotted as a low), and nothing but gaps is the empty
+    string (not a blank run, never a fabricated zero)."""
+    if width <= 0:
+        return ""
+    cells = list(values)
+    if len(cells) > width:
+        step = len(cells) / width
+        cells = [_max(cells[int(i * step) : int((i + 1) * step)]) for i in range(width)]
+    present = [v for v in cells if v is not None]
+    if not present:
+        return ""
+    lo, hi = min(present), max(present)
+    span = hi - lo
+
+    def glyph(v: float | None) -> str:
+        if v is None or span == 0:
+            return " " if v is None else _SPARK[0]
+        return _SPARK[round((v - lo) / span * (len(_SPARK) - 1))]
+
+    return "".join(glyph(v) for v in cells)
+
+
+def _max(bucket: list[float | None]) -> float | None:
+    """A bucket's max of its non-None values; a bucket of only gaps is a gap."""
+    non = [v for v in bucket if v is not None]
+    return max(non) if non else None
+
+
+def bar(fraction: float | None, width: int = 16) -> str:
+    """One bar row for a share in ``[0, 1]``; ``None`` (under the sample floor) is ``n/a``."""
+    if fraction is None:
+        return "n/a"
+    filled = round(max(0.0, min(1.0, fraction)) * width)
+    return "█" * filled + "░" * (width - filled)
+
+
+def _clip(text: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    return text if len(text) <= width else f"{text[: width - 1]}…"
+
+
+def _headline(report: Report, width: int) -> list[str]:
+    """The short headline: which gate is slowest (three at most), and what is not collected
+    yet. One window has no before/after, so the line reads `slowest` (absolute), never
+    `slower` (a comparison the window cannot make); the trend goes to the charts renderer."""
+    slow = sorted(
+        (r for r in report.gates if r.get("p90_s") is not None),
+        key=lambda r: r["p90_s"],
+        reverse=True,
+    )[:3]
+    out = ["perf report"]
+    if slow:
+        out.append("  slowest: " + ", ".join(f"{r['gate']} p90 {dur(r['p90_s'])}" for r in slow))
+    proposals = report.not_collected.get("findings", "")
+    if proposals:
+        out.append(f"  proposals: not collected yet ({proposals})")
+    return [_clip(line, width) for line in out]
+
+
+def _gates(report: Report, width: int, max_rows: int) -> list[str]:
+    """The per-gate table: time, first-run pass rate and a bar of the ever-failed share.
+    A markdown table is emitted only when its widest row fits in ``width``; otherwise the
+    same cells are plain ``gate: ...`` rows, and no row is ever clipped mid-table."""
+    if not report.gates:
+        return []
+    rows = sorted(report.gates, key=lambda r: r["gate"])[:max_rows]
+    cells = [
+        [
+            r["gate"],
+            str(r["n"]),
+            dur(r.get("p50_s")),
+            dur(r.get("p90_s")),
+            pct(r.get("first_run_pass_rate")),
+            f"{bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}",
+        ]
+        for r in rows
+    ]
+    header = "| " + " | ".join(["gate", "n", "p50", "p90", "pass", "failed"]) + " |"
+    widest = max([len(header), *[len("| " + " | ".join(c) + " |") for c in cells]], default=0)
+    if widest <= width:
+        out = [header, "|---" * 6 + "|"] + ["| " + " | ".join(c) + " |" for c in cells]
+    else:
+        out = [
+            f"{_gate_name(r['gate'])}: failed {bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}"
+            f" p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
+            for r in rows
+        ]
+    return [_clip(line, width) for line in out]
+
+
+def _gate_name(name: str, keep: int = 12) -> str:
+    """A gate name capped with an ellipsis, so a narrow row shortens the NAME, never a
+    data field (the failed share stays)."""
+    return name if len(name) <= keep else f"{name[: keep - 1]}…"
+
+
+def _comparison(report: Report, width: int, max_rows: int) -> list[str]:
+    tables: list[str] = []
+    for name, rows in (
+        ("model", report.comparisons.get("models", [])),
+        ("reviewer", report.comparisons.get("reviewers", [])),
+        ("agent", report.comparisons.get("agents", [])),
+    ):
+        for r in rows[:max_rows]:
+            tables.append(
+                f"{name}  {r['name']}  {bar(r.get('first_run_pass_rate'), 2)} {pct(r.get('first_run_pass_rate'))}"
+            )
+    return [_clip(line, width) for line in tables]
+
+
+def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
+    """The markdown rendering: headline, cycle, waits, rework, gates, comparisons, then the
+    not-collected sections named with the task that will provide them, bounded to
+    ``max_rows`` rows per section. The cut line names how many rows were omitted and says
+    the json (``to_json``) holds every row; it is absent when nothing was cut."""
+    width = max(width, 1)
+    lines: list[str] = _headline(report, width)
+    lines.append("")
+    lines.append(
+        _clip(
+            f"cycle  n={report.cycle.get('n', 'n/a')}  p50 {dur(report.cycle.get('p50_s'))}  p90 {dur(report.cycle.get('p90_s'))}",
+            width,
+        )
+    )
+    lines.append(
+        _clip(
+            f"waits  lease p50 {dur(report.waits.get('lease', {}).get('p50_s'))} "
+            f" merge p50 {dur(report.waits.get('merge', {}).get('p50_s'))}",
+            width,
+        )
+    )
+    lines.append(_clip(f"rework  {len(report.rework)} items hit by a later bug", width))
+    sections: list[list[str]] = []
+    total_cut = _gates_cut(report.gates, max_rows) + _comparison_cut(report, max_rows)
+    gates = _gates(report, width, max_rows)
+    if gates:
+        sections.append(gates)
+    comparison = _comparison(report, width, max_rows)
+    if comparison:
+        sections.append(comparison)
+    not_collected = _not_collected_lines(report, width, max_rows)
+    if not_collected:
+        sections.append(not_collected)
+        nc = list(report.not_collected)
+        if len(nc) > max_rows:
+            total_cut += len(nc) - max_rows
+    for section in sections:
+        lines.append("")
+        lines += section
+    if total_cut > 0:
+        lines.append("")
+        lines.append(
+            _clip(
+                f"{total_cut} rows omitted; the report answer's json field holds every row", width
+            )
+        )
+    return "\n".join(lines)
+
+
+def _gates_cut(gates: list[dict], max_rows: int) -> int:
+    return max(0, len(gates) - max_rows)
+
+
+def _comparison_cut(report: Report, max_rows: int) -> int:
+    return sum(
+        max(0, len(report.comparisons.get(k, [])) - max_rows)
+        for k in ("models", "reviewers", "agents")
+    )
+
+
+def _not_collected_lines(report: Report, width: int, max_rows: int) -> list[str]:
+    if not report.not_collected:
+        return []
+    out = [_clip("not collected:", width)]
+    out += [
+        _clip(f"  {section}: {task}", width)
+        for section, task in sorted(report.not_collected.items())[:max_rows]
+    ]
+    return out
+
+
+def to_json(report: Report) -> dict:
+    """The report as plain data for tools: every section, with ``not_collected`` named (an
+    uncomputed section is never an empty table)."""
+    return {
+        "gates": report.gates,
+        "cycle": report.cycle,
+        "waits": report.waits,
+        "rework": report.rework,
+        "comparisons": report.comparisons,
+        "not_collected": report.not_collected,
+    }
+
+
+__all__ = ["bar", "render", "sparkline", "to_json"]

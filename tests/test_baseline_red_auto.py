@@ -349,11 +349,25 @@ def test_ci_red_only_from_a_large_baseline_failing_list_is_partial(repo) -> None
     base = ci.evidence["baseline"]
     assert base["red"] is True and len(base["ids"]) == 120
     assert base["auto"]["accepted"] is True
-    sha = ci.evidence["ci_scope"]["sha"]
-    assert len(BL.read_full(repo, sha)) == 120
+    stub = ci.evidence["failing_ids"]
+    assert len(BL.read_full(repo, stub)) == 120
     # unit_tests is not held back by a partial baseline-red ci
     out = json.loads(run_cli(repo, "--json", "gate", "run", "T1", "unit_tests", agent="worker")[1])
     assert "refusal" not in out, out
+
+
+def test_the_whole_failing_list_is_linked_from_the_ci_record_as_a_blob(repo) -> None:
+    from ddflow.core import blobref as B
+    from ddflow.services.gates import baseline as BL
+
+    _ci_project(repo, 120)  # far more than the evidence sample keeps
+    run_cli(repo, "--json", "gate", "run", "T1", "ci", agent="worker")
+    ci = _state(repo).items["T1"].gates["ci"]
+    # The record links the full list as a blob stub -- readable with the record, not only on
+    # the machine whose run wrote the list to a local file (B86370c6924).
+    stub = ci.evidence.get("failing_ids")
+    assert isinstance(stub, dict) and isinstance(stub.get(B.KEY), str), ci.evidence
+    assert len(BL.read_full(repo, stub)) == 120
 
 
 def test_ci_with_a_failure_not_on_the_base_stays_failed_and_says_so(repo, monkeypatch) -> None:

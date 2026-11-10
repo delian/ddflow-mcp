@@ -1653,12 +1653,12 @@
 # ---
 # name: test_help[ddflow lanes]
   '''
-  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume,approve}] [lane]
+  usage: ddflow lanes [-h] [--watch] [{state,brief,advise,fleet,resume,lead,approve}] [lane]
   
   positional arguments:
-    {state,brief,advise,fleet,resume,approve}
-                          state (default), brief <lane>, advise, fleet, resume <lane> or approve
-                          <template>
+    {state,brief,advise,fleet,resume,lead,approve}
+                          state (default), brief <lane>, advise, lead, fleet, resume <lane> or
+                          approve <template>
     lane                  with brief, resume or approve: the lane name (for approve, the template
                           name), or a unique part of it
   
@@ -1919,10 +1919,10 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm,slo}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm,slo}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
                           tiny, paths or swarm
     item                  with retro: the item id
@@ -2578,10 +2578,12 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list}]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
   
   positional arguments:
-    {add,list}            optional: `research add` = `research`; `research list` lists the notes
+    {add,list,show}       optional: `research add` = `research`; `research list` lists the notes;
+                          `research show <id>` reads one
+    ID                    with `research show`: the note's id
   
   options:
     -h, --help            show this help message and exit
@@ -3112,6 +3114,24 @@
   
   '''
 # ---
+# name: test_help[ddflow suggest]
+  '''
+  usage: ddflow suggest [-h] --reason REASON [--commit COMMIT] [--diff DIFF] [--blob BLOB] [--kind KIND] [--evidence EVIDENCE] item
+  
+  positional arguments:
+    item                 the item whose lease holder receives the suggestion
+  
+  options:
+    -h, --help           show this help message and exit
+    --reason REASON      why the owner should take it
+    --commit COMMIT      a revision: its diff is the suggestion
+    --diff DIFF          a file holding the git diff to suggest
+    --blob BLOB          a file holding the patch text to suggest
+    --kind KIND          optional suggestion kind
+    --evidence EVIDENCE  gate_fix: CMD,EXIT the re-run must reproduce
+  
+  '''
+# ---
 # name: test_help[ddflow sync]
   '''
   usage: ddflow sync [-h] [--check] [--keep-local] [item]
@@ -3509,7 +3529,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--job JOB] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3524,6 +3544,8 @@
                          returns the first ready item at once
     --approval APPROVAL  wait for an operator-approval request id until it is answered; ready then
                          means re-run the gated command with --approval ID
+    --job JOB            wait for a job (a detached review's run handle) instead of an item, lease
+                         or approval: until its process is over and its round is recorded
     --token TOKEN        resume token from an earlier wait
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
@@ -3643,13 +3665,13 @@
 # ---
 # name: test_help[ddflow]
   '''
-  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves} ...
+  usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version] [--reason SKEW_REASON] [--version] {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,probe,digest,pair,tokens,sync,watch,waves} ...
   
   A portable work-queue kernel for AI coding agents. The event log is the source of truth;
   everything else is derived.
   
   positional arguments:
-    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,probe,digest,pair,tokens,sync,watch,waves}
+    {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,probe,digest,pair,tokens,sync,watch,waves}
       init                create .ddflow/ in this repository
       phase               add, list, complete or close a phase
       task                add a task
@@ -3729,7 +3751,8 @@
                           = none)
       precommit           propose a .pre-commit-config.yaml for this repository's stacks (writes
                           nothing without --write)
-      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`
+      lanes               the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`,
+                          `lanes lead`
       vigil               one compact health snapshot: bug severity counts, stale pins, active
                           lanes, interrupted, pending approvals, reviewer up/429/slow
       health              idle, stalled, unresponsive, locked, crashed and runaway lanes; `--run` is
@@ -3765,6 +3788,7 @@
                           `<kind> list` shows); `search --query TEXT` is `ddflow search`
       archdeps            the external-dependency census: families, importing modules, home,
                           violations
+      suggest             send a bounded change to the lease holder of an item, as a suggestion
       probe               would an item's branch merge clean with main or a peer? (exit 1 =
                           conflict, 2 = could not tell)
       digest              the operator queue: what waits on a person, as askable entries
@@ -3991,6 +4015,7 @@
     'ddflow similar',
     'ddflow split',
     'ddflow status',
+    'ddflow suggest',
     'ddflow sync',
     'ddflow task',
     'ddflow task add',

@@ -4,11 +4,10 @@ subprocess."""
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass
 from typing import Any
 
-from ..proc import Captured, Proc
+from ..proc import Captured, CompletedProcess, Proc
 from . import fake
 
 
@@ -38,10 +37,10 @@ class FakeProc(Proc):
     def _next(self) -> dict[str, Any]:
         return self.script.pop(0) if self.script else {}
 
-    def run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+    def run(self, *args: Any, **kwargs: Any) -> CompletedProcess:
         self.calls.append(("run", args, kwargs))
         r = self._next()
-        return subprocess.CompletedProcess(
+        return CompletedProcess(
             r.get("args", args[0] if args else ()),
             r.get("returncode", 0),
             r.get("stdout", ""),

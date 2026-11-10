@@ -11,7 +11,8 @@ per-model comparison is always present, and below the minimum it says not enough
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import defaultdict
+from dataclasses import dataclass, field, replace
 
 from ddflow.config import Config
 from ddflow.services.metrics.providers import Context
@@ -38,8 +39,6 @@ NOT_COLLECTED = {
 def _scoped_facts(ctx: Context):
     """The facts inside the window (outcomes/findings/bugs of in-scope items); the yield and
     rework sections read this so they describe the SAME window as the comparisons and waits."""
-    from dataclasses import replace
-
     f = ctx.facts
     return replace(
         f,
@@ -90,8 +89,6 @@ def _pass_rate(kinds: list[str], minimum: int) -> tuple[float | None, int]:
 def _agent_outcomes(ctx: Context, first: dict) -> dict[str, list[str]]:
     """per-agent: an item's claim agent, first-run "passed every RAN gate" (in-scope, re-claims
     count once, a skip-only item is omitted)."""
-    from collections import defaultdict
-
     out: dict[str, list[str]] = defaultdict(list)
     seen: set[tuple[str, str]] = set()
     for span in ctx.facts.spans.values():
@@ -129,8 +126,6 @@ def _comparisons(ctx: Context, minimum: int) -> dict[str, list[dict]]:
     """The per-MODEL, per-REVIEWER and per-AGENT comparison D-perf-metrics-answers always
     shows: the first-verdict pass rate over the RAN verdicts (a skip is excluded, so a retry
     and a skip do not inflate ``n`` or move the rate), and ``None`` below the sample floor."""
-    from collections import defaultdict
-
     first = gateyield._first_verdicts(ctx.facts)
     first_out: dict[tuple[str, str], object] = {}
     for o in sorted(

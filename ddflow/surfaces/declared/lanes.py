@@ -21,13 +21,14 @@ def _text(out, a) -> str:
 COMMANDS: tuple[Command, ...] = (
     Command(
         path=("lanes",),
-        summary="the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`",
+        summary="the lane ledger: each agent's state; `lanes brief <lane>`, `lanes advise`, `lanes lead`",
         tool="ddflow_lanes",
         description=(
             "Agent lanes from the log, read-only: harness, model, item, heartbeat and state "
             "(working, stale, waiting-on-glob naming the holder, idle-with-ready-work, "
             "stopped). view=brief + lane: that lane's whole first prompt. view=advise: "
-            "concrete moves. Never starts or stops an agent. Exit 2: nothing to show."
+            "concrete moves. view=lead: states with each lane's honest ETA and your pending "
+            "asks. Never starts or stops an agent. Exit 2: nothing to show."
         ),
         call=lambda repo, a, agent: _api().lanes(
             repo, view=a.get("view") or "state", lane=a.get("lane") or "", agent=agent
@@ -49,11 +50,11 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "view",
-                help="state (default), brief, advise, fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template).",
-                cli_help="state (default), brief <lane>, advise, fleet, resume <lane> or approve <template>",
+                help="state (default), brief, advise (concrete moves), lead (states with ETA and your pending asks), fleet (every agent seen), resume (how to resume lane) or approve <template> (a person approves a lane template).",
+                cli_help="state (default), brief <lane>, advise, lead, fleet, resume <lane> or approve <template>",
                 positional=True,
                 nargs="?",
-                choices=("state", "brief", "advise", "fleet", "resume", "approve"),
+                choices=("state", "brief", "advise", "fleet", "resume", "lead", "approve"),
                 default=None,
             ),
             Param(

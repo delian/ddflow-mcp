@@ -331,6 +331,7 @@ COMMANDS: tuple[Command, ...] = (
             token=a.get("token", "") or "",
             approval=a.get("approval", "") or "",
             job=a.get("job", "") or "",
+            notify=a.get("notify", "") or "",
             timeout_s=_wait_timeout(a, repo),
             poll_s=a.get("poll"),
             max_s=a.get("max_s"),
@@ -390,6 +391,13 @@ COMMANDS: tuple[Command, ...] = (
                 "token",
                 help="The resume token a bounded wait returned (`wake.token`): asks the same question again; item, phase, lease and globs given with it win.",
                 cli_help="resume token from an earlier wait",
+                default="",
+            ),
+            Param(
+                "notify",
+                help="Register how to reach this waiter when its wake fires, surfaced to the holder's release/complete (`woke`): '' = it polls `ddflow wait`; `send_message:<session-id>` = the harness session to resume (SendMessage); `watch:<url>` = an inbound URL to POST the wake to.",
+                cli_help="how to reach this waiter when its wake fires: empty (poll ddflow wait), "
+                "`send_message:<session-id>` (harness session to resume) or `watch:<url>` (inbound URL to post to)",
                 default="",
             ),
             Param(
