@@ -24,17 +24,6 @@ from typing import Any
 from ddflow.core import clock
 from ddflow.services import flakes
 
-_DAY_S = 86400.0
-
-#: Default rolling window (seconds) over which flake rates and proposals are measured.
-DEFAULT_WINDOW_S = 7 * 86400
-#: Default flake count within the window that proposes a quarantine.
-DEFAULT_QUARANTINE_AFTER = 3
-#: Default seconds a proposal stays open (its expiry).
-DEFAULT_QUARANTINE_EXPIRY_S = 30 * 86400
-#: Default estimated wall seconds one failed->rerun cycle costs.
-DEFAULT_RETRY_COST_S = 60.0
-
 
 def file_of(test: str) -> str:
     """The file a flake's test id belongs to. A pytest node id (``tests/test_a.py::test_x``)
@@ -75,8 +64,8 @@ def rates(
     rows: list[dict[str, Any]],
     *,
     now: float | None = None,
-    window_s: float = DEFAULT_WINDOW_S,
-    retry_cost_s: float = DEFAULT_RETRY_COST_S,
+    window_s: float = 7 * 86400,
+    retry_cost_s: float = 60.0,
 ) -> dict[str, Any]:
     """Per-test and per-file flake rates over the window, plus the estimated retry cost.
 
@@ -94,7 +83,7 @@ def rates(
             "test": test,
             "file": file_of(test),
             "flakes": len(rs),
-            "rate_per_day": len(rs) / (window / _DAY_S),
+            "rate_per_day": len(rs) / (window / 86400.0),
             "last_at": max(_epoch(r) for r in rs),
         }
         for test, rs in by_test.items()
@@ -106,7 +95,7 @@ def rates(
         {
             "file": fl,
             "flakes": sum(p["flakes"] for p in ps),
-            "rate_per_day": sum(p["flakes"] for p in ps) / (window / _DAY_S),
+            "rate_per_day": sum(p["flakes"] for p in ps) / (window / 86400.0),
             "tests": len(ps),
         }
         for fl, ps in sorted(by_file.items(), key=lambda kv: -sum(p["flakes"] for p in kv[1]))
@@ -125,9 +114,9 @@ def proposals(
     rows: list[dict[str, Any]],
     *,
     now: float | None = None,
-    window_s: float = DEFAULT_WINDOW_S,
-    quarantine_after: int = DEFAULT_QUARANTINE_AFTER,
-    quarantine_expiry_s: float = DEFAULT_QUARANTINE_EXPIRY_S,
+    window_s: float = 7 * 86400,
+    quarantine_after: int = 3,
+    quarantine_expiry_s: float = 30 * 86400,
 ) -> list[dict[str, Any]]:
     """One proposal per test that flaked ``quarantine_after`` times within the window.
 
@@ -163,10 +152,10 @@ def report(
     repo: Path,
     *,
     now: float | None = None,
-    window_s: float = DEFAULT_WINDOW_S,
-    quarantine_after: int = DEFAULT_QUARANTINE_AFTER,
-    quarantine_expiry_s: float = DEFAULT_QUARANTINE_EXPIRY_S,
-    retry_cost_s: float = DEFAULT_RETRY_COST_S,
+    window_s: float = 7 * 86400,
+    quarantine_after: int = 3,
+    quarantine_expiry_s: float = 30 * 86400,
+    retry_cost_s: float = 60.0,
 ) -> dict[str, Any]:
     """The rate view read from ``repo``'s flake log: rates + proposals, in one dict.
 
