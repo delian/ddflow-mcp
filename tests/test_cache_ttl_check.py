@@ -135,10 +135,33 @@ def test_doctor_note_warns_on_five_minutes(monkeypatch, tmp_path):
 
 def test_doctor_note_quiet_on_one_hour(monkeypatch, tmp_path):
     monkeypatch.setenv(CTL.SUBAGENT_TTL_ENV, "1h")
+    monkeypatch.delenv(CTL.FORCE_5M_ENV, raising=False)
+    monkeypatch.delenv(CTL.ENABLE_1H_ENV, raising=False)
     monkeypatch.setattr(CTL, "claude_version", lambda: "2.1.300")
+    monkeypatch.setattr(CTL, "read_settings", lambda repo: {})
     (note,) = CTL.doctor_notes(Path(tmp_path))
     assert note.startswith("subagent cache TTL: 1h")
     assert note.endswith("(via " + CTL.SUBAGENT_TTL_ENV + ")")
+
+
+def test_a_one_hour_knob_on_old_claude_code_is_reported_as_five_minutes():
+    # A knob older Claude Code ignores is not a 1h pass: the effective TTL is still 5m.
+    v = CTL.effective_subagent_ttl(
+        {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"}, {}, "2.1.241"
+    )
+    assert v.ttl == "5m"
+    assert v.ignored_1h
+    assert CTL.SUBAGENT_TTL_ENV in CTL._five_minute_remedy(v)
+
+
+def test_a_one_hour_knob_on_old_claude_code_names_the_upgrade():
+    v = CTL.effective_subagent_ttl(
+        {"ENABLE_PROMPT_CACHING_1H": "1"}, {}, "2.1.100"
+    )
+    assert v.ttl == "5m"
+    assert v.ignored_1h
+    assert "unavailable" in CTL._five_minute_remedy(v)
+    assert "upgrade" in CTL._five_minute_remedy(v)
 
 
 def test_doctor_note_names_upgrade_when_too_old(monkeypatch, tmp_path):

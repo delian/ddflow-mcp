@@ -114,6 +114,7 @@ class SubagentTTL:
     source: str  # which knob decided it (see `effective_subagent_ttl`)
     forced: bool = False  # FORCE_PROMPT_CACHING_5M in effect
     version: tuple[int, int, int] | None = None  # None = unknown
+    ignored_1h: bool = False  # a 1h knob was set, but this Claude Code is too old to honor it
 
     @property
     def seconds(self) -> int:
@@ -150,6 +151,7 @@ def effective_subagent_ttl(
     env = _env_mapping(env)
     settings = settings if settings is not None else {}
     version_tuple = parse_version(version)
+    too_old = version_tuple is not None and version_tuple < MIN_1H_VERSION
 
     if _is_on(env.get(FORCE_5M_ENV)):
         return SubagentTTL("5m", "forced_5m", forced=True, version=version_tuple)
@@ -157,14 +159,20 @@ def effective_subagent_ttl(
     subagent_env = (env.get(SUBAGENT_TTL_ENV) or "").strip().lower()
     if subagent_env:
         ttl = "1h" if subagent_env.startswith("1h") else "5m"
+        if ttl == "1h" and too_old:  # the knob exists but this Claude Code ignores it
+            return SubagentTTL("5m", "subagent_env", version=version_tuple, ignored_1h=True)
         return SubagentTTL(ttl, "subagent_env", version=version_tuple)
 
     subagent_setting = settings.get(SUBAGENT_TTL_SETTING)
     if subagent_setting is not None:
         ttl = "1h" if str(subagent_setting).strip().lower().startswith("1h") else "5m"
+        if ttl == "1h" and too_old:
+            return SubagentTTL("5m", "subagent_setting", version=version_tuple, ignored_1h=True)
         return SubagentTTL(ttl, "subagent_setting", version=version_tuple)
 
     if _is_on(env.get(ENABLE_1H_ENV)):
+        if too_old:
+            return SubagentTTL("5m", "enable_1h", version=version_tuple, ignored_1h=True)
         return SubagentTTL("1h", "enable_1h", version=version_tuple)
 
     return SubagentTTL("5m", "default", version=version_tuple)
@@ -188,6 +196,11 @@ def doctor_notes(repo: Path, cfg=None) -> list[str]:
     can pass its own ``Config`` uniformly."""
     verdict = effective_subagent_ttl(os.environ, read_settings(repo), claude_version())
     if verdict.ttl == "1h":
+        if verdict.version is None:
+            return [
+                f"subagent cache TTL: 1h (via {knob_name(verdict.source)}) -- Claude Code "
+                "version unknown: verify it is 2.1.242 or later, which first honors the knob"
+            ]
         return [f"subagent cache TTL: 1h (via {knob_name(verdict.source)})"]
     return [f"subagent cache TTL: 5m -- {_five_minute_remedy(verdict)}"]
 
@@ -201,9 +214,11 @@ def _five_minute_remedy(v: SubagentTTL) -> str:
             f"forced by {FORCE_5M_ENV}: unset it, then set {SUBAGENT_TTL_ENV}=1h"
         )
     if v.one_hour_available is False:
+        ignored = f": {knob_name(v.source)} is set to 1h but ignored" if v.ignored_1h else ""
         return (
             f"Claude Code {'.'.join(map(str, v.version))} is older than 2.1.242: the 1-hour "
             f"subagent cache TTL knob ({SUBAGENT_TTL_ENV}) is unavailable until it is upgraded"
+            f"{ignored}"
         )
     if v.one_hour_available is None:
         return (
