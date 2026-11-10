@@ -14,7 +14,6 @@ from pathlib import Path
 
 import ddflow.services.cachettl as CTL
 
-
 # -- version parsing ---------------------------------------------------------
 
 
@@ -68,9 +67,7 @@ def test_subagent_env_wins_over_settings_and_enable():
 
 
 def test_subagent_env_five_minutes_is_still_five_minutes():
-    v = CTL.effective_subagent_ttl(
-        {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "5m"}, {}, "2.1.300"
-    )
+    v = CTL.effective_subagent_ttl({"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "5m"}, {}, "2.1.300")
     assert v.ttl == "5m"
     assert v.source == "subagent_env"
 
@@ -97,7 +94,9 @@ def test_enable_1h_does_not_override_a_forced_five_minutes():
 
 def test_enable_1h_only_truthy_values_enable():
     for off in ("", "0", "false", "no", "yes", "on"):
-        assert CTL.effective_subagent_ttl({"ENABLE_PROMPT_CACHING_1H": off}, {}, "2.1.300").ttl == "5m"
+        assert (
+            CTL.effective_subagent_ttl({"ENABLE_PROMPT_CACHING_1H": off}, {}, "2.1.300").ttl == "5m"
+        )
 
 
 def test_only_the_exact_1h_token_raises_the_ttl():
@@ -156,9 +155,7 @@ def test_doctor_note_quiet_on_one_hour(monkeypatch, tmp_path):
 
 def test_a_one_hour_knob_on_old_claude_code_is_reported_as_five_minutes():
     # A knob older Claude Code ignores is not a 1h pass: the effective TTL is still 5m.
-    v = CTL.effective_subagent_ttl(
-        {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"}, {}, "2.1.241"
-    )
+    v = CTL.effective_subagent_ttl({"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"}, {}, "2.1.241")
     assert v.ttl == "5m"
     assert v.ignored_1h
     assert CTL.SUBAGENT_TTL_ENV in CTL._five_minute_remedy(v)
@@ -184,9 +181,7 @@ def test_subagent_setting_wins_over_enable_when_it_names_a_ttl():
 
 
 def test_a_one_hour_knob_on_old_claude_code_names_the_upgrade():
-    v = CTL.effective_subagent_ttl(
-        {"ENABLE_PROMPT_CACHING_1H": "1"}, {}, "2.1.100"
-    )
+    v = CTL.effective_subagent_ttl({"ENABLE_PROMPT_CACHING_1H": "1"}, {}, "2.1.100")
     assert v.ttl == "5m"
     assert v.ignored_1h
     assert "unavailable" in CTL._five_minute_remedy(v)

@@ -317,7 +317,7 @@ def _over_budget_notes(
     ]
 
 
-def doctor(
+def doctor(  # noqa: PLR0915 -- the doctor registry grows one statement per findings source
     repo: Path,
     *,
     agent: str = "",

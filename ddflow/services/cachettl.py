@@ -23,9 +23,10 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 #: The env/setting names the docs attribute to the SUBAGENT cache TTL and its overrides.
 SUBAGENT_TTL_ENV = "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL"
@@ -182,9 +183,7 @@ def effective_subagent_ttl(
     # A settings `env` block names env vars Claude Code sets for the process it launches; a
     # var already in the process env wins over it (D-agent-token-features, settings vs shell).
     settings_env = settings.get("env")
-    effective_env = (
-        {**settings_env, **dict(env)} if isinstance(settings_env, dict) else dict(env)
-    )
+    effective_env = {**settings_env, **dict(env)} if isinstance(settings_env, dict) else dict(env)
 
     if _is_on(effective_env.get(FORCE_5M_ENV)):
         return SubagentTTL("5m", "forced_5m", forced=True, version=version_tuple)
@@ -197,9 +196,7 @@ def effective_subagent_ttl(
         return SubagentTTL(ttl, "subagent_env", version=version_tuple)
 
     subagent_setting = settings.get(SUBAGENT_TTL_SETTING)
-    subagent_value = (
-        str(subagent_setting).strip().lower() if subagent_setting is not None else ""
-    )
+    subagent_value = str(subagent_setting).strip().lower() if subagent_setting is not None else ""
     if subagent_value:
         ttl = _as_ttl(subagent_value)
         if ttl == "1h" and too_old:
@@ -257,9 +254,7 @@ def _five_minute_remedy(v: SubagentTTL) -> str:
                 f"forced by {FORCE_5M_ENV}: unset it, then set {SUBAGENT_TTL_ENV}=1h "
                 "(verify Claude Code 2.1.242 or later)"
             )
-        return (
-            f"forced by {FORCE_5M_ENV}: unset it, then set {SUBAGENT_TTL_ENV}=1h"
-        )
+        return f"forced by {FORCE_5M_ENV}: unset it, then set {SUBAGENT_TTL_ENV}=1h"
     if v.one_hour_available is False:
         ignored = f": {knob_name(v.source)} is set to 1h but ignored" if v.ignored_1h else ""
         return (
