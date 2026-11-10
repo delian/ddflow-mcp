@@ -93,6 +93,18 @@ def test_retire_stage_proposes_when_the_wait_is_not_paid_back():
     assert p.advice == "review_wait" and p.because
 
 
+def test_parallel_cap_collapses_two_rows_of_the_same_cap():
+    # two observations of cap 2 are that cap twice, never "cap 2 then one more agent"
+    cfg = PerfMetricsConfig(prop_min_observations=3, prop_marginal_gain=0.1)
+    rows = [
+        prop_flow.CapObserved(2, 100.0),
+        prop_flow.CapObserved(2, 10.0),
+        prop_flow.CapObserved(3, 9.0),
+    ]
+    p = prop_flow.propose_parallel_cap(rows, cfg=cfg)
+    assert p.advice == 3  # cap 2 -> cap 3 still pays (10 -> 9 within the distinct caps)
+
+
 def test_retire_stage_stays_quiet_when_the_wait_is_paid_back():
     cfg = PerfMetricsConfig(prop_retire_payback=2.0)
     assert prop_flow.propose_retire_stage("merge_wait", 20.0, 100.0, cfg=cfg) is None

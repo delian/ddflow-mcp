@@ -107,11 +107,18 @@ def propose_parallel_cap(
     by_cap = sorted(observed, key=lambda o: o.cap)
     if len(by_cap) < cfg.prop_min_observations:
         return None
-    advice = by_cap[-1].cap  # every step paid for itself: keep going (the observed ceiling)
-    for i in range(len(by_cap) - 1):
-        saved = by_cap[i].wall_s - by_cap[i + 1].wall_s
-        if saved < cfg.prop_marginal_gain * by_cap[i].wall_s:
-            advice = by_cap[i].cap
+    # ONE point per cap (the best wall observed there): two rows at the same cap are two
+    # observations of THAT cap, never "one more agent", so the step gain compares distinct caps.
+    best: dict[int, float] = {}
+    for o in by_cap:
+        if o.cap not in best or o.wall_s < best[o.cap]:
+            best[o.cap] = o.wall_s
+    caps = sorted(best)
+    advice = caps[-1]
+    for i in range(len(caps) - 1):
+        saved = best[caps[i]] - best[caps[i + 1]]
+        if saved < cfg.prop_marginal_gain * best[caps[i]]:
+            advice = caps[i]
             break
     return Proposal(
         "parallel_cap",
