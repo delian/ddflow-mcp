@@ -13,6 +13,7 @@ import time
 
 from ...api import reporting as A
 from ...api import surf_reporting as R
+from ...infra import worktree as W
 from ...views import output_caps as OC
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ...views.progress import status_tasks_note
@@ -303,7 +304,13 @@ def _show(a, c: Ctx, only: str = "") -> int:
             + taken_over_note(it)
         )
     if it.worktree:
-        print(f"  worktree {R.worktree_path(c.repo, it.worktree)} [{it.branch}]")
+        wt = R.worktree_path(c.repo, it.worktree)
+        gone = (
+            ""
+            if wt.is_dir() or (it.branch and W.branch_exists(c.repo, it.branch))
+            else "  (recorded, but gone: no such worktree or branch)"
+        )
+        print(f"  worktree {wt} [{it.branch}]{gone}")
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())
