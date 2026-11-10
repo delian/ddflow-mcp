@@ -17,11 +17,12 @@ Research: R-path-merge. Next call names the perf report that renders this block.
 
 from __future__ import annotations
 
+import itertools
 from collections import defaultdict
 
-from ..metrics.render import dur, pct
 from ..metrics import paths as _paths
 from ..metrics.providers import Context
+from ..metrics.render import dur, pct
 from ..metrics.stats import percentile
 from ..metrics.summary import completed_spans
 
@@ -110,11 +111,11 @@ def superseded_pass_hours(ctx: Context) -> dict:
     seconds = 0.0
     count = 0
     for rows in by_item.values():
-        rows = sorted(rows, key=lambda o: o.at)
-        for i, o in enumerate(rows):
+        ordered = sorted(rows, key=lambda o: o.at)
+        for i, o in enumerate(ordered):
             if o.kind != "passed" or not o.tree_sha:
                 continue
-            if any(r.tree_sha and r.tree_sha != o.tree_sha for r in rows[i + 1 :]):
+            if any(r.tree_sha and r.tree_sha != o.tree_sha for r in ordered[i + 1 :]):
                 count += 1
                 if o.elapsed_s is not None:
                     seconds += o.elapsed_s
@@ -182,7 +183,7 @@ def parked_share(ctx: Context, minimum: int) -> dict:
         marks.update(t for t, _a in s.claims if s.first_claim <= t <= s.completed_at)
         marks.update(t for t in outs_by_item[s.item] if s.first_claim <= t <= s.completed_at)
         ordered = sorted(marks)
-        if any(b - a > PARKED_THRESHOLD_S for a, b in zip(ordered, ordered[1:])):
+        if any(b - a > PARKED_THRESHOLD_S for a, b in itertools.pairwise(ordered)):
             parked += 1
     value = parked / n if n else None
     return _figure(value, n, minimum, what="completed items") | {"parked": parked}
@@ -208,9 +209,7 @@ def current(ctx: Context) -> dict[str, dict]:
         "claim_to_merge_p90_s": _figure(percentile(cycles, 90), n, minimum, "completed items"),
         "process_share": _figure(process_share, n, minimum, "completed items"),
         "sequential_review_pair_share": sequential_review_share(ctx, minimum),
-        "superseded_pass_s": _figure(
-            sup_value, superseded["n_items"], minimum, "completed items"
-        )
+        "superseded_pass_s": _figure(sup_value, superseded["n_items"], minimum, "completed items")
         | {"superseded_passes": superseded["count"]},
         "parked_share": parked_share(ctx, minimum),
         "n_completed_items": n,
