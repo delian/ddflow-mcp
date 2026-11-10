@@ -16,10 +16,20 @@ def _state(repo):
     return fold(EventLog(repo).read_all())
 
 
+def _head(repo) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 def _reconciled(repo, item: str, files: list[str]) -> None:
-    EventLog(repo).append(
-        "merge.reconciled", item, {"files": files, "base": "0" * 40, "main": "0" * 40}
-    )
+    head = _head(repo)
+    EventLog(repo).append("merge.reconciled", item, {"files": files, "base": head, "main": head})
 
 
 def test_reconcile_tests_defaults_to_affected(repo):
@@ -135,6 +145,32 @@ def test_a_post_reconcile_pass_on_another_tree_needs_reconciled_tree_evidence(re
         "passed",
         "--evidence",
         "pre-merge run",
+    )
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
+
+
+def test_a_pass_naming_the_file_but_a_different_tree_stays_fail_closed(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    EventLog(repo).append(
+        "merge.reconciled",
+        "T1",
+        {"files": ["src/x.py"], "base": "a" * 40, "main": "b" * 40},
+    )
+    # The evidence mentions the reconciled file, but its `tree_sha` names a DIFFERENT commit:
+    # that is a stale checkout, not proof the suite ran on the reconciled tree.
+    EventLog(repo).append(
+        "gate.passed",
+        "T1",
+        {
+            "gate": "unit_tests",
+            "evidence": {
+                "tree_sha": "c" * 12 + "+clean",
+                "note": "pre-merge suite, touched src/x.py",
+            },
+        },
     )
     st = _state(repo)
     v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")

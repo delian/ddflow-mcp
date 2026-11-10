@@ -305,11 +305,13 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
     def names_reconciled_tree(rec) -> bool:
         # A stamp at or after `at` is not proof the run was ON the reconciled tree: a pass
         # recorded after the reconcile can still be a stale pre-merge checkout. The run must
-        # name the reconciled commit (`tree_sha` prefixes `reconciled["main"]`) or one of the
-        # reconciled files -- else the guard fails open.
+        # name the reconciled commit (`tree_sha` prefixes `reconciled["main"]`). A `tree_sha`
+        # naming a DIFFERENT commit is a stale checkout, whatever the note says; only when the
+        # run carries no `tree_sha` does naming a reconciled file count as its whole evidence.
         ev = rec.evidence or {}
-        if reconciled_main and reconciled_main in str(ev.get("tree_sha", "")):
-            return True
+        sha = str(ev.get("tree_sha", ""))
+        if sha:
+            return bool(reconciled_main) and reconciled_main in sha
         note = str(ev.get("note", ""))
         return bool(note) and any(f in note for f in reconciled_files)
 
