@@ -24,3 +24,4 @@
 {"agent":"pswarm5","data":{"path":".ddflow/worktrees/fix-B-merged-uncompleted-claimable"},"id":"e9e406f8a19571f6801278608","kind":"worktree.removed","lamport":166914,"schema":1,"subject":"fix-B-merged-uncompleted-claimable","ts":"2026-11-10T14:50:57.932912Z"}
 {"agent":"pswarm5","data":{"at":1794322906.711574,"holder":"pswarm5"},"id":"ef003bb7aa9632cfe979594c3","kind":"lease.renewed","lamport":166963,"schema":1,"subject":"DX-health-watch-liveness","ts":"2026-11-10T15:01:46.847225Z"}
 {"agent":"pswarm5","data":{"at":1794324343.7826355,"holder":"pswarm5"},"id":"e405ef59d61ae6e9c1dfcd622","kind":"lease.renewed","lamport":167119,"schema":1,"subject":"DX-health-watch-liveness","ts":"2026-11-10T15:25:43.920672Z"}
+{"agent":"pswarm5","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ec7d2610063a61505ee1a5f0b","kind":"cadence.ran","lamport":167121,"schema":1,"subject":"recall_recheck:DX-health-watch-liveness","ts":"2026-11-10T15:25:52.830528Z"}
