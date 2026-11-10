@@ -77,4 +77,3 @@ def test_an_unknown_notify_form_is_refused_up_front(proj):
     assert out.exit == 1
     out = A.wait(proj, item="T2", agent=LANE, notify="send_message:", timeout_s=0)
     assert out.exit == 1
-
