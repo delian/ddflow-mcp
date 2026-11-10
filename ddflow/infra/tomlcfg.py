@@ -35,7 +35,6 @@ import contextlib
 import json
 import re
 import sys
-import tomllib
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -253,24 +252,23 @@ def literal(text: str) -> str:
     return basic_string(text)
 
 
-def _tomlkit() -> Any:
-    """The tomlkit module, imported on first use: 38 ms, and most commands never edit a config."""
-    import tomlkit
+def _toml() -> Any:
+    """The `ddflow.adapters.toml` module (the one home for `tomllib`/`tomlkit` I/O), imported
+    on first use: tomlkit is 38 ms, and most commands never edit a config. Its `TomlLibIo`
+    is the single `TomlIo` adapter; `TomlError` is the parse error every method raises."""
+    from ..adapters import toml as _toml
 
-    return tomlkit
+    return _toml
 
 
 def remove(text: str, dotted: str) -> tuple[str, bool]:
     """``(text without <section>.<key>, whether it was there)``, everything else as it was
-    (comments, blank lines, key order). Raises ``tomllib.TOMLDecodeError`` when ``text`` is
-    not TOML. A section left empty stays: the table header is the operator's."""
-    tomlkit = _tomlkit()
+    (comments, blank lines, key order). Raises ``TomlError`` (a
+    ``tomllib.TOMLDecodeError``) when ``text`` is not TOML. A section left empty stays: the
+    table header is the operator's."""
+    io = _toml().TomlLibIo()
     section, _, key = dotted.rpartition(".")
-    try:
-        doc = tomlkit.parse(text)
-    except tomlkit.exceptions.TOMLKitError:
-        tomllib.loads(text)
-        raise
+    doc = io.document(text)
     table: Any = doc
     for part in [p.strip() for p in section.split(".")] if section else []:
         table = table.get(part) if isinstance(table, dict) else None
@@ -279,13 +277,13 @@ def remove(text: str, dotted: str) -> tuple[str, bool]:
     if not isinstance(table, dict) or key.strip() not in table:
         return text, False
     del table[key.strip()]
-    return tomlkit.dumps(doc), True
+    return io.dumps(doc), True
 
 
 def _drop_if_empty(text: str, dotted: str) -> str:
     """``text`` without the table ``dotted`` (``a`` or ``a.b``) when it is there and empty."""
-    tomlkit = _tomlkit()
-    doc = tomlkit.parse(text)
+    io = _toml().TomlLibIo()
+    doc = io.document(text)
     parts = [p.strip() for p in dotted.split(".")]
     parent: Any = doc
     for part in parts[:-1]:
@@ -294,7 +292,7 @@ def _drop_if_empty(text: str, dotted: str) -> str:
     if not isinstance(table, dict) or table:
         return text
     del parent[parts[-1]]
-    return tomlkit.dumps(doc)
+    return io.dumps(doc)
 
 
 def move_keys(
@@ -309,7 +307,7 @@ def move_keys(
     moved: list[str] = []
     for old, new in moves.items():
         osec, _, okey = old.rpartition(".")
-        table: Any = _tomlkit().parse(text) if osec else None
+        table: Any = _toml().TomlLibIo().document(text) if osec else None
         for part in [p.strip() for p in osec.split(".")] if osec else []:
             table = table.get(part) if isinstance(table, dict) else None
         if not isinstance(table, dict) or okey not in table:
@@ -319,7 +317,7 @@ def move_keys(
         if osec not in keep:
             text = _drop_if_empty(text, osec)
         nsec, _, nkey = new.rpartition(".")
-        have: Any = tomllib.loads(text)
+        have: Any = _toml().TomlLibIo().loads(text)
         for part in nsec.split("."):
             have = have.get(part) if isinstance(have, dict) else None
         if not (isinstance(have, dict) and nkey in have):
@@ -333,33 +331,33 @@ def upsert(text: str, dotted: str, literal_text: str) -> str:
     else as it was: comments, blank lines, key order and the spelling of every other value.
 
     Pure and on TEXT, so several edits compose into one write (a half-applied change after
-    the third of four is rejected is a state nobody can reason about). The only place
-    ddflow uses tomlkit: it parses with comments and layout kept, which a hand-built line
-    editor had to approximate (multi-line strings, brackets inside values, a header with a
-    trailing comment). A key already there takes the new value in place; a new key goes at
+    the third of four is rejected is a state nobody can reason about). Edits go through
+    `TomlIo.document`/`dumps`, which parse with comments and layout kept, which a hand-built
+    line editor had to approximate (multi-line strings, brackets inside values, a header with
+    a trailing comment). A key already there takes the new value in place; a new key goes at
     the end of its section; a missing section is appended after a blank line. Raises
     ``tomllib.TOMLDecodeError`` when ``text`` is not TOML and ``ValueError`` when the
     section names something that is not a table."""
-    tomlkit = _tomlkit()
+    io = _toml().TomlLibIo()
 
     section, _, key = dotted.rpartition(".")
     parts = [p.strip() for p in section.split(".")] if section else []  # no dot: top level
     try:
-        doc = tomlkit.parse(text)
-        value = tomlkit.parse(f"v = {literal_text}")["v"]
+        doc = io.document(text)
+        value = io.document(f"v = {literal_text}")["v"]
         table: Any = doc
         for part in parts:
             if part not in table:
-                if table is doc and len(doc):
-                    doc.add(tomlkit.nl())
-                table[part] = tomlkit.table()
+                # tomlkit wraps a plain dict as a table and renders it after a blank line,
+                # so this round-trips exactly as `doc.add(tomlkit.nl())` + `tomlkit.table()` did.
+                table[part] = {}
             table = table[part]
             if not isinstance(table, dict):
                 raise ValueError(f"{section!r} is not a table")
         table[key.strip()] = value
-        out = tomlkit.dumps(doc)
-    except tomlkit.exceptions.TOMLKitError:
-        tomllib.loads(text)  # not TOML: raise tomllib's error, which callers already handle
+        out = io.dumps(doc)
+    except _toml().TomlError:
+        io.loads(text)  # not TOML: raise the read-side error, which callers already handle
         raise ValueError(f"cannot set {dotted!r} to {literal_text}") from None
     return out.rstrip() + "\n"
 
