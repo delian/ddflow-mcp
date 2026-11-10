@@ -121,6 +121,17 @@ def test_a_flat_wall_is_unavailable_not_a_scale_up():
     assert prop_flow.propose_parallel_cap(rows, cfg=cfg) is None
 
 
+def test_an_unmeasured_higher_cap_is_not_a_scale_up():
+    # cap 2 and 3 have wall 0 (unmeasured): only cap 1 was measured, below the floor
+    cfg = PerfMetricsConfig(prop_min_observations=3)
+    rows = [
+        prop_flow.CapObserved(1, 10.0),
+        prop_flow.CapObserved(2, 0.0),
+        prop_flow.CapObserved(3, 0.0),
+    ]
+    assert prop_flow.propose_parallel_cap(rows, cfg=cfg) is None
+
+
 def test_a_proposal_names_the_next_call_in_cli_and_mcp_form():
     p = prop_flow.propose_narrow_globs(
         {"src/a.py": 5.0, "src/b.py": 40.0}, PerfMetricsConfig(budget_stage_lease_wait_s=30.0)
