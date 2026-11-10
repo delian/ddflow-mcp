@@ -190,6 +190,27 @@ class TestSnapshot:
         assert V.snapshot_statusline(old, json.dumps(early)) == 0
         assert of(V.read_claude_snapshot(new), "5h").value == 80.0
 
+    def test_a_future_dated_row_reads_stale_and_does_not_block_a_real_figure(self, tmp_path):
+        c = ctx(tmp_path)
+        c.snapshot.parent.mkdir(parents=True, exist_ok=True)
+        c.snapshot.write_text(
+            json.dumps(
+                {
+                    "version": V.SNAPSHOT_VERSION,
+                    "windows": {
+                        "5h": {
+                            "percent": 99,
+                            "observed_at": iso(NOW + 86400),
+                            "origin": "stream-json",
+                        }
+                    },
+                }
+            )
+        )
+        assert of(V.read_claude_snapshot(c), "5h").stale is True
+        assert V.snapshot_statusline(c, json.dumps(self.STATUS)) == 2
+        assert of(V.read_claude_snapshot(c), "5h").value == 23.5
+
     def test_stream_event_single_window_is_rescaled(self, tmp_path):
         c = ctx(tmp_path)
         line = {
