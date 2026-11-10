@@ -46,8 +46,9 @@ def _bug_found(a, c: Ctx) -> int:
         task += f"\nrepro bundle stored ({link['mode']})"
     elif link.get("unavailable"):
         task += f"\nrepro bundle NOT stored: {link['unavailable']}"
+    task += "".join(f"\n  warning:  {w}" for w in out.data.get("glob_warnings", []))
     c.out(
         f"bug {out.data['id']} recorded{note}{task}" + (f"\n{offer}" if offer else ""),
-        out.body(("id", "offer", "fix_task", "fix_task_filed")),
+        out.body(("id", "offer", "fix_task", "fix_task_filed", "glob_warnings")),
     )
     return OK

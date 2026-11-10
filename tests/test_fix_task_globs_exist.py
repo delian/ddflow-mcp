@@ -51,3 +51,17 @@ def test_an_explicit_glob_is_kept_even_when_it_names_a_file_the_fix_creates(repo
     out = K.bug_found(repo, summary="s", id="By", agent="a", globs="src/new_module.py")
     assert out.exit == 0, out.reason
     assert state(repo).items["fix-By"].globs == ["src/new_module.py"]
+
+
+def test_an_explicit_glob_naming_no_file_is_loudly_flagged(repo):
+    """Bf839186cee: `--globs` naming a file that exists nowhere held a lease on a path
+    nobody writes while the real file stayed unprotected, and nothing said so at filing."""
+    _seed(repo)
+    out = K.bug_found(
+        repo, summary="s", id="Bz", agent="a",
+        globs="src/real.py,src/guessed/standards.py",
+    )
+    assert out.exit == 0, out.reason
+    warned = " ".join(out.data.get("glob_warnings", []))
+    assert "src/guessed/standards.py" in warned
+    assert "src/real.py" not in warned

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from ...core import outcome as O
 from ...core.defaults import DEFAULT_PRIORITY
 from ...core.flow import FEATURE, branch_kind
 from ...core.model import ABANDONED, DONE, Item, fold
+from ...infra import git as GIT
 from ...services import reprobundle as RB
 from ...services.bug_globs import fix_task_globs
 from ...services.completion import fixes_of
@@ -169,6 +171,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     more: dict[str, Any] = {"offer": offer} if offer else {}
     more["fix_task"] = fix["fix_task"] or (prior.fix_task if prior else "")
     more["fix_task_filed"] = fix["filed"]
+    more["glob_warnings"] = fix.get("glob_warnings", [])
     more["repro"] = repro.get("repro", {})
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
@@ -280,6 +283,27 @@ def _bugs_parent(log, cfg, st) -> tuple[str, str]:
     return parent, phase_made
 
 
+def missing_loud(root: Path, globs: list[str]) -> list[str]:
+    """One warning per literal glob that names no TRACKED file and is not a path that exists
+    on disk (Bf839186cee): a fix task filed with such a glob holds a lease on a path nobody
+    writes, while the file the reporter really means stays unprotected, and `bug found` used
+    to let the wrong scope stand silently. A glob naming an existing file -- tracked, or a
+    new file already on disk -- and a wildcard pattern are not warnings. Loud, never a
+    refusal: an explicit scope may still name a file the fix creates."""
+    tracked: list[str] = GIT.files(root, "tracked") or []
+    out: list[str] = []
+    for raw in dict.fromkeys(globs):
+        rel = raw.lstrip("/")
+        if not rel or any(c in rel for c in "*?["):
+            continue  # a pattern: a new file behind it cannot be told from a typo
+        if (root / rel).exists():
+            continue  # a real file (tracked, or already on disk) is not a warning
+        near = difflib.get_close_matches(rel, tracked, n=3, cutoff=0.6)
+        hint = f"; nearest: {', '.join(near)}" if near else ""
+        out.append(f"{raw!r} names no tracked file{hint}")
+    return out
+
+
 def _file_fix_task(
     log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str, scope: str = ""
 ) -> dict[str, Any]:
@@ -301,7 +325,7 @@ def _file_fix_task(
 
     tid = _fix_task_id(st, cfg, bug_id, item)
     if _has_fix_task(st, cfg, bug_id, item):
-        return {"fix_task": tid, "filed": False, "phase_made": ""}
+        return {"fix_task": tid, "filed": False, "phase_made": "", "glob_warnings": []}
     # A removed source still lends its files, priority and line: the bug is in those files
     # whether or not the item that touched them is still in the queue, and the fix task's
     # globs are what makes a feature on them wait. The parent is the standing bugs phase,
@@ -333,6 +357,7 @@ def _file_fix_task(
         tool_bug=scope == "ddflow",
         named_scope_at=cfg.bugs.named_scope_at,
     )
+    warnings = missing_loud(log.root, kept) if globs else []
     if dropped:
         body += f"\n\nNot attached, they match nothing in the tree: {', '.join(dropped)}."
     draft = TaskDraft(
@@ -356,7 +381,7 @@ def _file_fix_task(
     )
     if not added.ok:  # the globs were checked by the caller; an id has no colon
         raise ValueError(added.problem)
-    return {"fix_task": tid, "filed": True, "phase_made": phase_made}
+    return {"fix_task": tid, "filed": True, "phase_made": phase_made, "glob_warnings": warnings}
 
 
 def _live(st, item: str) -> bool:
