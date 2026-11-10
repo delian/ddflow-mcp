@@ -214,6 +214,28 @@ def test_a_non_string_note_is_refused(tmp_path):
         C.load(tmp_path / "catalog.toml")
 
 
+def test_a_non_one_version_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "version = 2\n[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
+        "checks = [\"facts\"]\n[[history]]\nfeature = \"x\"\naction = \"add\"\n"
+        "date = \"2026-11-10\"\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
+def test_an_edit_without_an_add_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
+        "checks = [\"facts\"]\n[[history]]\nfeature = \"x\"\naction = \"edit\"\n"
+        "date = \"2026-11-10\"\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
 def _write(tmp_path, body: str) -> None:
     (tmp_path / "catalog.toml").write_text(body)
 

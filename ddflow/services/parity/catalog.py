@@ -96,6 +96,7 @@ class HistoryEntry:
 
 @dataclass(frozen=True)
 class Catalog:
+    version: int
     rows: tuple[Row, ...]
     history: tuple[HistoryEntry, ...]
 
@@ -180,6 +181,11 @@ def load(path: str | Path | None = None) -> Catalog:
         p.name,
         "version must be an int when present",
     )
+    _require(
+        raw.get("version", 1) == 1,
+        p.name,
+        "this loader reads version 1; bump it with a migration, never in place",
+    )
     for axis in AXES:
         section = raw.get(axis, [])
         _require(isinstance(section, list), p.name, f"[{axis}] must be an array of tables")
@@ -192,6 +198,7 @@ def load(path: str | Path | None = None) -> Catalog:
 
     history: list[HistoryEntry] = []
     hraw = raw.get("history", [])
+    added: set[str] = set()
     _require(isinstance(hraw, list), p.name, "[history] must be an array of tables")
     for i, entry in enumerate(hraw):
         _require(isinstance(entry, dict), p.name, f"[history][{i}] must be a table")
@@ -205,6 +212,13 @@ def load(path: str | Path | None = None) -> Catalog:
         )
         _require(isinstance(date, str) and date, p.name, f"history for {feature!r} needs a date")
         _require(isinstance(note, str), p.name, "a history note must be a string")
+        _require(
+            action != "edit" or feature in added,
+            p.name,
+            f"an `edit` history entry for {feature!r} needs the feature's `add` entry first",
+        )
+        if action == "add":
+            added.add(feature)
         history.append(HistoryEntry(feature=feature, action=action, date=date, note=note))
 
     # A managed record's ledger is tied to its rows BOTH ways: a live row's latest action is
@@ -228,4 +242,4 @@ def load(path: str | Path | None = None) -> Catalog:
             f"a history entry's latest action {action!r} needs a live row (or `retire`)",
         )
 
-    return Catalog(rows=tuple(rows), history=tuple(history))
+    return Catalog(version=raw.get("version", 1), rows=tuple(rows), history=tuple(history))
