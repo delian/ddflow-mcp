@@ -6,9 +6,8 @@ functions (`ddflow.adapters.fsio`).
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import tempfile
+from pathlib import Path
 
 from ddflow.adapters import fsio as real_fsio
 from ddflow.adapters.fakes.fsio import FakeFsio
