@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.budget_test_file_s"
+new = "120.0"
+why = "Time budgets (PM-budgets): seconds one test file's serial run may take before it is a split candidate."
+impact = "additive"
