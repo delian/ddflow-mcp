@@ -94,8 +94,6 @@ def _gates(report: Report, width: int, max_rows: int) -> list[str]:
             f"{r['gate']}: n={r['n']} p50 {dur(r.get('p50_s'))} p90 {dur(r.get('p90_s'))} pass {pct(r.get('first_run_pass_rate'))}"
             for r in rows
         ]
-    if len(report.gates) > max_rows:
-        out.append(f"{len(report.gates) - max_rows} more gates (full rows in json, to_json)")
     return [_clip(line, width) for line in out]
 
 
@@ -116,7 +114,8 @@ def _comparison(report: Report, width: int, max_rows: int) -> list[str]:
 def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
     """The markdown rendering: headline, cycle, waits, rework, gates, comparisons, then the
     not-collected sections named with the task that will provide them, bounded to
-    ``max_rows`` rows per section with the cut stated on the last line."""
+    ``max_rows`` rows per section. The cut line names how many rows were omitted and says
+    the json (``to_json``) holds every row; it is absent when nothing was cut."""
     width = max(width, 1)
     lines: list[str] = _headline(report, width)
     lines.append("")
@@ -134,26 +133,49 @@ def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
         )
     )
     lines.append(_clip(f"rework  {len(report.rework)} items hit by a later bug", width))
+    sections: list[list[str]] = []
+    total_cut = _gates_cut(report.gates, max_rows) + _comparison_cut(report, max_rows)
     gates = _gates(report, width, max_rows)
     if gates:
-        lines.append("")
-        lines += gates
+        sections.append(gates)
     comparison = _comparison(report, width, max_rows)
     if comparison:
+        sections.append(comparison)
+    not_collected = _not_collected_lines(report, width, max_rows)
+    if not_collected:
+        sections.append(not_collected)
+        nc = list(report.not_collected)
+        if len(nc) > max_rows:
+            total_cut += len(nc) - max_rows
+    for section in sections:
         lines.append("")
-        lines += comparison
-    if report.not_collected:
+        lines += section
+    if total_cut > 0:
         lines.append("")
-        lines.append("not collected:")
-        lines += [
-            _clip(f"  {section}: {task}", width)
-            for section, task in sorted(report.not_collected.items())
-        ]
-    lines.append("")
-    lines.append(
-        _clip("bounded: text cut to max_rows rows; to_json(report) carries every section", width)
-    )
+        lines.append(_clip(f"{total_cut} rows omitted; the report's json holds every row", width))
     return "\n".join(lines)
+
+
+def _gates_cut(gates: list[dict], max_rows: int) -> int:
+    return max(0, len(gates) - max_rows)
+
+
+def _comparison_cut(report: Report, max_rows: int) -> int:
+    return sum(
+        max(0, len(report.comparisons.get(k, [])) - max_rows)
+        for k in ("models", "reviewers", "agents")
+    )
+
+
+def _not_collected_lines(report: Report, width: int, max_rows: int) -> list[str]:
+    if not report.not_collected:
+        return []
+    out = ["not collected:"]
+    out += [
+        _clip(f"  {section}: {task}", width)
+        for section, task in sorted(report.not_collected.items())[:max_rows]
+    ]
+    return out
 
 
 def to_json(report: Report) -> dict:
