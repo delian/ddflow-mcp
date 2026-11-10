@@ -326,9 +326,9 @@ _WOKEN_ADVICE = (
 )
 
 
-def _from_token(token: str, item: str, phase: str, kind: str, lease: str, globs):
-    """(item, phase, kind, lease, globs, resume token) with a wait token's arguments filled in
-    where the caller gave none, or the refusal for a token that is not ours."""
+def _from_token(token: str, item: str, phase: str, kind: str, lease: str, globs, notify: str = ""):
+    """(item, phase, kind, lease, globs, notify, resume token) with a wait token's arguments
+    filled in where the caller gave none, or the refusal for a token that is not ours."""
     carried = WK.decode_wait(token) if token else {}
     if carried is None:
         return O.failed("wait", "that is not a wait token")
@@ -337,13 +337,14 @@ def _from_token(token: str, item: str, phase: str, kind: str, lease: str, globs)
         lease or carried.get("lease", ""),
         (carried.get("globs") if globs is None else globs),
     )
+    notify = notify or carried.get("notify", "")
     if kind == DEFAULT_NEXT_KIND:
         kind = carried.get("kind", kind)
-    named = (("item", item), ("phase", phase), ("kind", kind), ("lease", lease))
+    named = (("item", item), ("phase", phase), ("kind", kind), ("lease", lease), ("notify", notify))
     resume = WK.encode_wait(
         {k: v for k, v in named if v} | ({"globs": GS.parse(globs)} if globs else {})
     )
-    return item, phase, kind, lease, globs, resume
+    return item, phase, kind, lease, globs, notify, resume
 
 
 def _wake_data(repo: Path, me: str, cfg, v: dict[str, Any], resume: str):
@@ -381,14 +382,14 @@ def _finish(st, cfg, v, data: dict[str, Any], woken: bool, lease: str, waited: f
     )
 
 
-def _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s):
+def _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s, notify):
     """The wait's arguments after a resume token filled the gaps, checked: the tuple
-    (item, phase, kind, lease, globs to judge with, resume token, poll, the empty result),
-    or the refusal."""
-    resumed = _from_token(token, item, phase, kind, lease, globs)
+    (item, phase, kind, lease, globs to judge with, notify, resume token, poll, the empty
+    result), or the refusal."""
+    resumed = _from_token(token, item, phase, kind, lease, globs, notify)
     if isinstance(resumed, O.Outcome):
         return resumed
-    item, phase, kind, lease, globs, resume = resumed
+    item, phase, kind, lease, globs, notify, resume = resumed
     poll = WT.POLL_S if poll_s is None else float(poll_s)
     empty: dict[str, Any] = {
         "item": item,
@@ -407,7 +408,7 @@ def _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s):
         bad = "timeout and max-s must be >= 0 and poll > 0 seconds"
     if bad:
         return O.failed("wait", bad, **empty)
-    return item, phase, kind, lease, want, resume, poll, empty
+    return item, phase, kind, lease, want, notify, resume, poll, empty
 
 
 def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
@@ -426,6 +427,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     token: str = "",
     approval: str = "",
     job: str = "",
+    notify: str = "",
 ) -> O.Outcome:
     """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
 
@@ -439,6 +441,11 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     ``lease`` (instead of ``item``) waits for a LEASE: an agent id until it holds nothing, or
     a path/glob until no other agent's live lease covers it. A bare wait returns the first
     ready item at once, whatever it is -- it cannot wait on a lease (Bff1731a132).
+
+    ``notify`` registers how to reach this waiter when its wake fires, and is surfaced to
+    the holder's `release`/`complete` ``woke`` list: "" (default) = the waiter polls
+    `ddflow wait`; ``send_message:<session-id>`` = the harness session to resume
+    (SendMessage); ``watch:<url>`` = an inbound URL to POST the wake to (DX-wake-waiters).
 
     ``globs`` (with ``item``) are the globs the caller will claim with: READY then means
     that claim is not refused for them. Without them, the item's stored globs are used.
@@ -460,10 +467,10 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     if job:
         return _wait_job(repo, job, item, phase, lease, globs, token, timeout_s, poll_s, max_s, agent, on_progress)
     # fmt: on
-    args = _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s)
+    args = _args(token, item, phase, kind, lease, globs, timeout_s, max_s, poll_s, notify)
     if isinstance(args, O.Outcome):
         return args
-    item, phase, kind, lease, want, resume, poll, empty = args
+    item, phase, kind, lease, want, notify, resume, poll, empty = args
     log, cfg, st = _load(repo, agent)
     timeout, capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
     found = (
@@ -512,6 +519,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
             reason=v["why"],
             since=carried,
             until=time.time() + timeout,
+            notify=notify,
         ),
     )
     # Woken for an item, or carrying an older place: the place in line stays on at the end.
