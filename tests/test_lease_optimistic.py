@@ -68,22 +68,6 @@ def test_a_clean_merge_grants_the_overlapping_claim(repo: Path) -> None:
     assert st.items["B"].lease.optimistic == ["shared.txt"], st.items["B"].lease
 
 
-def test_a_real_conflict_stays_exclusive(repo: Path) -> None:
-    (repo / "shared.txt").write_text("one\ntwo\nthree\n")
-    _git(repo, "add", "shared.txt")
-    _git(repo, "commit", "-qm", "shared")
-    _tasks(repo)
-    _optimistic_on(repo)
-    _branch_edit(repo, "ddflow/A", "shared.txt", "three\n", "THREE\n")  # A edits line 3
-    (repo / "shared.txt").write_text("one\ntwo\nXXX\n")  # main edits the same line
-    _git(repo, "add", "shared.txt")
-    _git(repo, "commit", "-qm", "main: line 3")
-    assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
-    out = LC.claim(repo, "B", agent="b", no_worktree=True)
-    assert out.exit == 3, "granted over a real conflict"
-    assert "shared.txt" in out.reason and "A" in out.reason, out.reason
-
-
 def test_the_knob_off_keeps_the_plain_refusal(repo: Path) -> None:
     (repo / "shared.txt").write_text("one\n")
     _git(repo, "add", "shared.txt")
@@ -93,6 +77,22 @@ def test_the_knob_off_keeps_the_plain_refusal(repo: Path) -> None:
     assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
     out = LC.claim(repo, "B", agent="b", no_worktree=True)
     assert out.exit == 3, out.reason
+
+
+def test_a_real_conflict_between_two_branches_stays_exclusive(repo: Path) -> None:
+    """The probe compares the TWO branches: a claimant that already has a branch editing the
+    same line is refused, even though each branch alone merges cleanly into main."""
+    (repo / "shared.txt").write_text("x\n")
+    _git(repo, "add", "shared.txt")
+    _git(repo, "commit", "-qm", "shared")
+    _tasks(repo)
+    _optimistic_on(repo)
+    _branch_edit(repo, "ddflow/A", "shared.txt", "x\n", "A\n")  # A: x -> A (clean vs main)
+    _branch_edit(repo, "ddflow/B", "shared.txt", "x\n", "B\n")  # B: x -> B (clean vs main)
+    assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
+    out = LC.claim(repo, "B", agent="b", no_worktree=True)
+    assert out.exit == 3, "granted although ddflow/A and ddflow/B conflict on the same line"
+    assert "shared.txt" in out.reason and "A" in out.reason, out.reason
 
 
 def test_an_unknown_holder_branch_fails_closed(repo: Path) -> None:

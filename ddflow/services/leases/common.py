@@ -111,7 +111,7 @@ def optimistic_clashes(
     shares optimistically (DX-lease-hunk-optimistic).
 
     Off (default) every clash stays exclusive (`D-lease-overlap-only-by-break`). On, a
-    pair whose holder's branch merges cleanly into this claim's base is dropped as
+    pair whose holder's branch merges cleanly into the claimant's branch is dropped as
     optimistic -- git auto-merges the two branches' disjoint hunks, and the merge rebases
     the second instead of waiting -- and its glob is returned for the claim to record. A
     conflict, an unknown holder branch, or a probe that could not run stays exclusive: a
@@ -119,17 +119,24 @@ def optimistic_clashes(
     """
     if not cfg.locks.optimistic:
         return clashes, []
-    mine_ref = it.lease.branch if it.lease and it.lease.branch else W.default_branch(log.root)
+    # The claimant's side of the probe is its ACTUAL branch -- the changes it would merge
+    # with the holder's (the task's "the two branches' changes") -- and the default branch
+    # only while it has none yet: a fresh claim forks from there, so the holder need only
+    # merge clean into it. An unborn branch name resolves to the default branch.
+    take = cfg.locks.probe_timeout_s
+    mine_ref = it.lease.branch if it.lease and it.lease.branch else branch_name(it, cfg)
+    if not mine_ref or not PR.tip(log.root, mine_ref, take)[0]:
+        mine_ref = W.default_branch(log.root)
     kept: list[tuple[str, Lease, tuple[str, str]]] = []
     optimistic: list[str] = []
-    seen: dict[str, PR.Probe] = {}
+    seen: dict[tuple[str, str], PR.Probe] = {}
     for other_id, lz, (mine, theirs) in clashes:
         other = state.items.get(other_id)
         holder_ref = lz.branch if lz.branch else (branch_name(other, cfg) if other else "")
         if not holder_ref:
             kept.append((other_id, lz, (mine, theirs)))
             continue
-        probe = seen.get(holder_ref)
+        probe = seen.get((mine_ref, holder_ref))
         if probe is None:
             probe = PR.run(
                 log.root,
@@ -138,7 +145,7 @@ def optimistic_clashes(
                 timeout_s=cfg.locks.probe_timeout_s,
                 min_git=cfg.locks.probe_merge_tree_min_git,
             )
-            seen[holder_ref] = probe
+            seen[(mine_ref, holder_ref)] = probe
         if probe.clean:
             optimistic.append(mine)
         else:
