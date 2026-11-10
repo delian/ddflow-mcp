@@ -15,10 +15,10 @@ def lane_wait_metrics(log, st, cfg, now=None, events=None) -> dict:
     """The lane-wait figures as of ``now``, with ``text`` and the plain ``data`` keys beside."""
     now = CLOCK.wall() if now is None else now
     data = LW.lane_wait(log.read_all() if events is None else events, st, cfg, now)
-    return {**data, "text": text(data)}
+    return {**data, "text": _text(data)}
 
 
-def text(data: dict) -> str:
+def _text(data: dict) -> str:
     gw = data["gate_wait_hours"]
     idle = data["idle"]
     rtc = data["ready_to_claimed"]
