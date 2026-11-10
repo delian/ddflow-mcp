@@ -2578,10 +2578,12 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list}]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
   
   positional arguments:
-    {add,list}            optional: `research add` = `research`; `research list` lists the notes
+    {add,list,show}       optional: `research add` = `research`; `research list` lists the notes;
+                          `research show <id>` reads one
+    ID                    with `research show`: the note's id
   
   options:
     -h, --help            show this help message and exit
