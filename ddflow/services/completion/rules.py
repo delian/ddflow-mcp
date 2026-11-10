@@ -300,6 +300,9 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
     def passed_on_reconciled_tree(gate: str) -> bool:
         # A pass recorded BEFORE the reconcile is a stale pre-merge run; the guard asks for
         # the suite on the RECONCILED tree, so only a gate recorded at or after `at` counts.
+        # A reconcile with no stamp cannot prove any pass is post-reconcile: fail closed.
+        if not reconciled_at:
+            return False
         rec = it.gates.get(gate)
         return bool(rec) and rec.outcome == GateOutcome.PASSED and rec.at >= reconciled_at
 

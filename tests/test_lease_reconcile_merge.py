@@ -52,10 +52,18 @@ def test_a_reconciled_merge_with_a_passed_ci_completes(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
     _reconciled(repo, "T1", ["src/x.py"])
-    # A passed ci gate recorded AFTER the reconcile (on the reconciled tree) is the
-    # affected-tests evidence.
+    # A passed ci gate recorded AFTER the reconcile (on the reconciled tree, its selection
+    # reached by the reconciled src/x.py) is the affected-tests evidence.
     run_cli(
-        repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "selected tests"
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "ci",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "affected tests on the reconciled tree: tests/test_x.py (reached by src/x.py)",
     )
     st = _state(repo)
     v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
