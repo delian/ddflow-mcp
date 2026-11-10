@@ -139,8 +139,22 @@ def test_superseded_pass_hours_sums_elapsed_of_superseded_passes():
     # a control pass with no elapsed is not counted as hours, and one on the SAME tree is not superseded
     log.add("gate.passed", "A", "a1", T0 + 400, gate="ci", by="a1", evidence={"tree_sha": "t2"})
     got = superseded_pass_hours(ctx_of(log))
-    assert got["n"] == 1
-    assert got["value"] == approx(120.0)
+    assert got["count"] == 1
+    assert got["seconds"] == approx(120.0)
+    assert got["n_items"] == 1
+
+
+def test_superseded_pass_hours_counts_an_untimed_superseded_pass():
+    # a superseded pass that recorded NO elapsed_s still counts (a count, zero seconds), so a
+    # window with a superseded pass is never reported n=0 as if none had occurred (grok/4.7).
+    log = Log()
+    log.task("A")
+    claimdone(log, "A", T0 + 500)
+    log.add("gate.passed", "A", "a1", T0 + 100, gate="ci", by="a1", evidence={"tree_sha": "t1"})
+    log.add("gate.passed", "A", "a1", T0 + 300, gate="unit_tests", by="a1", evidence={"tree_sha": "t2"})
+    got = superseded_pass_hours(ctx_of(log))
+    assert got["count"] == 1
+    assert got["seconds"] == 0.0
 
 
 def test_superseded_pass_hours_is_a_true_zero_not_a_missing_measurement():
@@ -149,7 +163,7 @@ def test_superseded_pass_hours_is_a_true_zero_not_a_missing_measurement():
     claimdone(log, "A", T0 + 500)
     log.add("gate.passed", "A", "a1", T0 + 100, gate="ci", by="a1", evidence={"tree_sha": "t1", "elapsed_s": 120})
     got = superseded_pass_hours(ctx_of(log))
-    assert got["value"] == 0.0 and got["n"] == 0
+    assert got["seconds"] == 0.0 and got["count"] == 0 and got["n_items"] == 1
 
 
 def test_parked_share_detects_an_idle_stretch_beyond_the_threshold():

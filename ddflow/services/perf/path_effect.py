@@ -46,7 +46,7 @@ METRICS = (
     ("claim_to_merge_p90_s", "claim-to-merge p90", True),
     ("process_share", "process share", True),
     ("sequential_review_pair_share", "sequential review-pair share", True),
-    ("superseded_pass_s", "superseded-pass hours", True),
+    ("superseded_pass_s", "superseded-pass hours per merged item", True),
     ("parked_share", "parked share", True),
 )
 
@@ -64,7 +64,9 @@ BASELINES: dict[str, dict[str, float]] = {
         "claim_to_merge_p90_s": 9.7 * HOUR,  # cycle p90 9.7 h
         "process_share": 992 / 3702,  # 992 h process union of 3,702 h claim-to-merge
         "sequential_review_pair_share": 1378 / 2499,  # 1,378 of 2,499 review pairs
-        "superseded_pass_s": 119 * HOUR,  # superseded passes across the whole window
+        # 119 h of superseded passes over the corpus, PER item (a rate, window-independent:
+        # comparing a raw window total against a fixed total mislabels a longer window).
+        "superseded_pass_s": 119 * HOUR / 1322,
         "parked_share": 0.22,  # 22 percent parked more than 2 h
     },
 }
@@ -90,12 +92,13 @@ def _interval(o) -> tuple[float, float] | None:
 
 
 def superseded_pass_hours(ctx: Context) -> dict:
-    """The summed wall time of PASSED verdicts a later outcome on the same item left behind
-    (a different ``tree_sha`` recorded after it) -- the pass counted for a tree that is no
-    longer current. Mirrors ``path_variants.superseded_passes`` but sums ``elapsed_s`` so
-    the number is HOURS, not a count. A pass with no recorded time adds a count but no
-    seconds; either way the value is the real sum, never floored (a window with no
-    superseded pass is a true zero, not a missing measurement)."""
+    """The summed wall time of timed PASSED verdicts a later outcome on the same item left
+    behind (a different ``tree_sha`` recorded after it) -- the pass counted for a tree that
+    is no longer current, PER completed item (a rate: a raw total grows with the window and
+    would misread as a regression against the fixed corpus baseline). Mirrors
+    ``path_variants.superseded_passes`` but weights by ``elapsed_s``. A superseded pass with
+    no recorded time adds a count but no seconds. Returns the raw facts; the per-item value
+    and the sample floor are applied in :func:`current`."""
     by_item: dict[str, list] = defaultdict(list)
     for o in ctx.facts.outcomes:
         by_item[o.item].append(o)
@@ -104,14 +107,13 @@ def superseded_pass_hours(ctx: Context) -> dict:
     for rows in by_item.values():
         rows = sorted(rows, key=lambda o: o.at)
         for i, o in enumerate(rows):
-            if o.kind != "passed" or not o.tree_sha or o.elapsed_s is None:
+            if o.kind != "passed" or not o.tree_sha:
                 continue
             if any(r.tree_sha and r.tree_sha != o.tree_sha for r in rows[i + 1 :]):
-                seconds += o.elapsed_s
                 count += 1
-    if not completed_spans(ctx):
-        return {"value": None, "n": 0}  # no completed item: no data, never a zero
-    return {"value": seconds, "n": count}
+                if o.elapsed_s is not None:
+                    seconds += o.elapsed_s
+    return {"seconds": seconds, "count": count, "n_items": len(completed_spans(ctx))}
 
 
 def _classify(r, c) -> str:
@@ -183,23 +185,28 @@ def parked_share(ctx: Context, minimum: int) -> dict:
 
 def current(ctx: Context) -> dict[str, dict]:
     """The six current numbers over the window. Rates and percentiles carry the sample
-    floor; the superseded hour-sum and the seq/concurrent/combined breakdown do not."""
+    floor; the superseded hour-sum is a per-item rate, floored on completed items."""
     minimum = int(ctx.cfg.metrics.min_samples)
     spans = completed_spans(ctx)
     n = len(spans)
     paths = _paths.build(ctx)["paths"]
     union = sum(p["process_union_s"] for p in paths)
-    cycles = [s.cycle_s for s in spans if s.cycle_s is not None]
+    cycles = [s.cycle_s for s in spans]  # completed_spans keeps only non-None cycle_s
     cycle = sum(cycles)
     gate_hours = union / n if n else None
     process_share = union / cycle if cycle else None
+    superseded = superseded_pass_hours(ctx)
+    sup_value = superseded["seconds"] / superseded["n_items"] if superseded["n_items"] else None
     return {
         "gate_hours_per_merged_s": _figure(gate_hours, n, minimum, "completed items"),
         "claim_to_merge_p50_s": _figure(percentile(cycles, 50), n, minimum, "completed items"),
         "claim_to_merge_p90_s": _figure(percentile(cycles, 90), n, minimum, "completed items"),
         "process_share": _figure(process_share, n, minimum, "completed items"),
         "sequential_review_pair_share": sequential_review_share(ctx, minimum),
-        "superseded_pass_s": superseded_pass_hours(ctx),
+        "superseded_pass_s": _figure(
+            sup_value, superseded["n_items"], minimum, "completed items"
+        )
+        | {"superseded_passes": superseded["count"]},
         "parked_share": parked_share(ctx, minimum),
         "n_completed_items": n,
     }
