@@ -105,3 +105,23 @@ def test_an_unknown_holder_branch_fails_closed(repo: Path) -> None:
     assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
     out = LC.claim(repo, "B", agent="b", no_worktree=True)
     assert out.exit == 3, out.reason
+
+
+def test_a_claimant_side_the_probe_cannot_resolve_fails_closed(repo: Path, monkeypatch) -> None:
+    """A claimant whose own branch tip cannot be resolved (a probe timeout) is refused,
+    never granted optimistically against the default branch standing in for it."""
+    (repo / "shared.txt").write_text("one\n")
+    _git(repo, "add", "shared.txt")
+    _git(repo, "commit", "-qm", "shared")
+    _tasks(repo)
+    _optimistic_on(repo)
+    _branch_edit(repo, "ddflow/A", "shared.txt", "one\n", "one\nA\n")
+    assert LC.claim(repo, "A", agent="a", no_worktree=True).exit == 0
+    # B's branch edits the SAME line A did: a fallback to main would probe clean (each
+    # branch alone merges into main) and wrongly grant, but B's true tip conflicts.
+    _branch_edit(repo, "ddflow/B", "shared.txt", "one\n", "one\nB\n")
+    from ddflow.services import probe as PR
+
+    monkeypatch.setattr(PR, "tip", lambda repo, ref, timeout_s: ("", "git timed out"))
+    out = LC.claim(repo, "B", agent="b", no_worktree=True)
+    assert out.exit == 3, "granted on a claimant tip the probe could not resolve"

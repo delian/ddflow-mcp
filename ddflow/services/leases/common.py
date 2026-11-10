@@ -125,8 +125,23 @@ def optimistic_clashes(
     # merge clean into it. An unborn branch name resolves to the default branch.
     take = cfg.locks.probe_timeout_s
     mine_ref = it.lease.branch if it.lease and it.lease.branch else branch_name(it, cfg)
-    if not mine_ref or not PR.tip(log.root, mine_ref, take)[0]:
+    if not mine_ref:
+        # No branch name at all: a fresh claim forks from the default branch, so the
+        # holder need only merge clean into it.
         mine_ref = W.default_branch(log.root)
+    else:
+        _sha, _why = PR.tip(log.root, mine_ref, take)
+        if not _sha:
+            if "not a commit of this repository" in _why:
+                # Unborn: the branch names nothing yet -- a fresh claim forking from the
+                # default branch -- so the holder need only merge clean into it there.
+                mine_ref = W.default_branch(log.root)
+            else:
+                # The branch names a ref git could not resolve to a commit -- a timeout, a
+                # missing git, a bad name. That is a NO-ANSWER against the claimant's real
+                # tip, and a no-answer stays exclusive: probing the default branch in its
+                # place could report clean while the claimant's true branch conflicts.
+                return clashes, []
     kept: list[tuple[str, Lease, tuple[str, str]]] = []
     optimistic: list[str] = []
     seen: dict[tuple[str, str], PR.Probe] = {}
