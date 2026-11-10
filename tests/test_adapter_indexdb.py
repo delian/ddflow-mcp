@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from ddflow.adapters.fakes import FAKES
 from ddflow.adapters.fakes.indexdb import FakeIndexStore
 from ddflow.adapters.indexdb import DEFAULT, IndexStore, SqliteIndexStore
 
 
 def _schema(con) -> str:
-    """The schema version `migrate` recorded, or "" before it ran."""
+    """The schema version `migrate` recorded, or "" before it ran (or the table exists not)."""
+    made = con.execute(
+        "select 1 from sqlite_master where type='table' and name='meta'"
+    ).fetchone()
+    if not made:
+        return ""
     row = con.execute("select v from meta where k='schema'").fetchone()
     return row["v"] if row else ""
 
