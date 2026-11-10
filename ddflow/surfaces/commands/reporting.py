@@ -13,6 +13,7 @@ import time
 
 from ...api import reporting as A
 from ...api import surf_reporting as R
+from ...infra import worktree as W
 from ...views import output_caps as OC
 from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ...views.progress import status_tasks_note
@@ -35,6 +36,20 @@ def taken_over_note(it) -> str:
         f" (previously taken over, first by {by}; still in an unresolved contest -- "
         f"`ddflow resolve {it.id} --keep <event-id|agent>`)"
     )
+
+
+def _stale_worktree_note(c, it, wt) -> str:
+    """A note when the recorded worktree and branch are both gone (Bf3c93a0759).
+
+    `show` used to print the item's recorded worktree and branch even after the tree and
+    branch no longer exist, so a reader believed parked work was still there. An open item
+    keeps the fields (a re-claim reuses them), so the truthful thing is to say they are
+    recorded, not present."""
+    if wt.is_dir():
+        return ""
+    if it.branch and W.branch_exists(c.repo, it.branch):
+        return ""
+    return "  (recorded, but gone: no such worktree or branch)"
 
 
 def _taken(r, iid: str) -> str:
@@ -303,7 +318,8 @@ def _show(a, c: Ctx, only: str = "") -> int:
             + taken_over_note(it)
         )
     if it.worktree:
-        print(f"  worktree {R.worktree_path(c.repo, it.worktree)} [{it.branch}]")
+        wt = R.worktree_path(c.repo, it.worktree)
+        print(f"  worktree {wt} [{it.branch}]{_stale_worktree_note(c, it, wt)}")
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())
