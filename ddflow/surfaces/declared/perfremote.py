@@ -1,8 +1,8 @@
 """The `perf` command, declared once: the host fingerprint and the measuring wrapper.
 
 `perf env` prints the machine-class fingerprint (never a hostname or path); `perf run`
-returns the exact wrapped command an agent runs where ddflow cannot (`ddflow perf run --
-CMD`); `perf ingest` accepts one reported sample line at the reported trust level. The
+returns the exact wrapped command an agent runs where ddflow cannot (`ddflow perf run
+--cmd CMD`); `perf ingest` accepts one reported sample line at the reported trust level. The
 parser half is registered by convention and the MCP half is `ddflow_perf` (D-unify 4).
 """
 
@@ -39,7 +39,7 @@ COMMANDS: tuple[Command, ...] = (
             "Perf data about where ddflow runs. action=env: this machine class's fingerprint "
             "(a stable key over the class of machine, never a hostname, user or path, plus its "
             "run-time condition, facts and container flag). action=run: the exact wrapped "
-            "command an agent runs where ddflow cannot run it itself -- `ddflow perf run -- CMD` "
+            "command an agent runs where ddflow cannot run it itself -- `ddflow perf run --cmd CMD` "
             "-- whose wrapper prints one JSON line of wall, cpu, rss and io. action=ingest + line: "
             "accept one such reported sample line (an agent-reported timing is kept at the "
             "agent-reported trust level and never counted as gate evidence of a pass). Malformed "

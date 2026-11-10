@@ -32,17 +32,24 @@ def _rss_mb(ru: resource.struct_rusage) -> float | None:
     return ru.ru_maxrss / 1048576.0 if sys.platform == "darwin" else ru.ru_maxrss / 1024.0
 
 
-def _stdlib_probe(rung: str) -> dict[str, float | None] | None:
-    """The stdlib rung of the probe ladder (``resource.ru`` = wait4); the cgroup/psutil/proc
-    rungs need their sources and report ``None`` here so the ladder records ``wait4``."""
-    if rung != "wait4":
-        return None
-    ru = resource.getrusage(resource.RUSAGE_CHILDREN)
-    return {
-        "cpu_s": ru.ru_utime + ru.ru_stime,
-        "rss_mb": _rss_mb(ru),
-        "io_rw": ru.ru_inblock + ru.ru_oublock,
-    }
+def _wait4_delta(before: resource.struct_rusage):
+    """The stdlib rung of the probe ladder (``resource.ru`` = wait4) as a ``measure`` probe:
+    CPU and block IO are per-run DELTAS against ``before`` (never the process's lifetime
+    total); RSS is the wait4 high-water mark (``ru_maxrss``, the only RSS number wait4 gives).
+    The cgroup/psutil/proc rungs are not wired here, so they report ``None`` and the ladder
+    records ``wait4`` as the surviving source."""
+
+    def probe(rung: str) -> dict[str, float | None] | None:
+        if rung != "wait4":
+            return None
+        after = resource.getrusage(resource.RUSAGE_CHILDREN)
+        return {
+            "cpu_s": (after.ru_utime + after.ru_stime) - (before.ru_utime + before.ru_stime),
+            "rss_mb": _rss_mb(after),
+            "io_rw": (after.ru_inblock + after.ru_oublock) - (before.ru_inblock + before.ru_oublock),
+        }
+
+    return probe
 
 
 def run_perf_env(repo: Path, *, agent: str = "") -> O.Outcome:
@@ -53,10 +60,12 @@ def run_perf_env(repo: Path, *, agent: str = "") -> O.Outcome:
 
 
 def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
-    """Run ``cmd`` (an argv string, split with the shell rules) through the measuring
-    wrapper and return its one JSON line, or a refused/failed outcome when it could not run
-    or exited non-zero. Resources are measured per run (a ``RUSAGE_CHILDREN`` delta), never
-    the process's lifetime total; the env key is the receiver's own machine class."""
+    """Run ``cmd`` (an argv string, split with the shell rules) through the measuring wrapper
+    and return its one JSON line, or a refused/failed outcome when it could not run or exited
+    non-zero. Duration is a monotonic clock on this host; CPU and block IO are per-run
+    ``RUSAGE_CHILDREN`` deltas (never the process's lifetime total); RSS is the wait4
+    high-water mark; ``source`` is the ladder rung the numbers came from. The env key is the
+    receiver's own machine class."""
     _, _cfg, _st = _load(repo, agent)
     if not cmd.strip():
         return O.refused("perf_run", "a command to measure")
@@ -65,24 +74,23 @@ def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
     except ValueError:
         return O.refused("perf_run", "a well-quoted command")
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
-    start = time.monotonic()
+    ran: dict[str, int] = {}
+    missing: dict[str, str] = {}
+
+    def run() -> None:
+        try:
+            proc = subprocess.run(argv, capture_output=True)
+        except FileNotFoundError:
+            missing["argv0"] = argv[0]
+            raise
+        ran["returncode"] = proc.returncode
+
     try:
-        proc = subprocess.run(argv, capture_output=True)
+        sample = R.measure(run, probe=_wait4_delta(before), env=_fingerprint_key(repo))
     except FileNotFoundError:
-        return O.refused("perf_run", f"no such command: {argv[0]}")
-    wall = time.monotonic() - start
-    after = resource.getrusage(resource.RUSAGE_CHILDREN)
-    sample = R.CommandSample(
-        wall_s=round(wall, 3),
-        cpu_s=(after.ru_utime + after.ru_stime) - (before.ru_utime + before.ru_stime),
-        rss_mb=_rss_mb(after),
-        io_rw=(after.ru_inblock + after.ru_oublock) - (before.ru_inblock + before.ru_oublock),
-        source="wait4",
-        trust=R.TRUST_MEASURED,
-        env=_fingerprint_key(repo),
-    )
-    if proc.returncode != 0:
-        return O.failed("perf_run", f"command exited {proc.returncode}", text=sample.one_line())
+        return O.refused("perf_run", f"no such command: {missing['argv0']}")
+    if ran["returncode"] != 0:
+        return O.failed("perf_run", f"command exited {ran['returncode']}", text=sample.one_line())
     return O.ok("perf_run", text=sample.one_line())
 
 
@@ -100,10 +108,11 @@ def run_perf_ingest(repo: Path, *, line: str = "", agent: str = "") -> O.Outcome
         return O.refused("perf_ingest", "ingest needs the wrapper's one JSON line")
     series = (
         "agent" if sample.trust == R.TRUST_AGENT else "cmd"
-    ) + f".{(agent or 'role').replace('.', '_')}.wall"
+    ) + f".{(agent or 'role').replace('.', '_')}"
     # the sample keeps the machine class it ran on (the line's own env when the wrapper
-    # produced it), never re-stamped with the receiving server's fingerprint
-    env_key = sample.env or _fingerprint_key(repo)
+    # produced it); a line with no env is unknown origin, never re-stamped with the
+    # receiving server's fingerprint
+    env_key = sample.env or R.UNAVAILABLE
     for metric, value in (
         ("wall", sample.wall_s),
         ("cpu", sample.cpu_s),

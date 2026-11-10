@@ -4,7 +4,7 @@ One measuring wrapper (:func:`measure`) runs a command through a probe ladder
 (``cgroup`` -> ``psutil`` -> ``proc`` -> ``wait4``), degrading as each source is
 unavailable and recording WHICH source the numbers came from. A shell-less server never
 runs the wrapper itself: the agent asks for the exact wrapped command
-(:func:`wrap_command`, ``ddflow perf run -- CMD``), runs it, and posts the one JSON line
+(:func:`wrap_command`, ``ddflow perf run --cmd CMD``), runs it, and posts the one JSON line
 back through the ingest action (:func:`parse_line`). A sample the harness timed itself is
 ``agent-reported`` -- shown separately, stored at a lower trust level, and never counted as
 gate evidence of a pass (D-perf-metrics-answers). Container status is one flag
@@ -124,14 +124,26 @@ def parse_line(line: str) -> CommandSample:
     data = json.loads(line)
     return CommandSample(
         wall_s=float(data["wall_s"]),
-        cpu_s=data.get("cpu_s"),
-        rss_mb=data.get("rss_mb"),
-        io_rw=data.get("io_rw"),
+        cpu_s=_maybe_float(data.get("cpu_s")),
+        rss_mb=_maybe_float(data.get("rss_mb")),
+        io_rw=_maybe_float(data.get("io_rw")),
         source=str(data.get("source") or UNAVAILABLE),
         trust=TRUST_AGENT,
         container=data.get("container"),
         env=_valid_env_key(str(data.get("env") or "")),
     )
+
+
+def _maybe_float(value: object) -> float | None:
+    """``float``, or ``None`` for a missing or non-numeric field. An ingested line's resource
+    fields are coerced here, never let through as strings (a budgets/rollup that adds them
+    would mix types, or ``one_line`` round-trip the bad type as JSON)."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _valid_env_key(env: str) -> str:
@@ -145,10 +157,11 @@ def _valid_env_key(env: str) -> str:
 
 
 def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None, vm: bool | None = None) -> str:
-    """The container/VM flags added to the env fingerprint key so a cgroup-limited series is
+    """The container/VM flag appended to the env fingerprint KEY so a cgroup-limited series is
     never mixed with a bare-metal one, and a VM (a macOS Docker VM has no ``/.dockerenv``)
     never keys as bare metal. ``None`` for either flag means the probe could not run
-    (``unavailable``, never guessed)."""
+    (``unavailable``, never guessed). The result is still a valid env key: the flag is joined
+    to ``fp.key`` with ``.``, never the ``stamp()`` (whose spaces ``_valid_env_key`` drops)."""
     if in_ctr is None:
         flag = UNAVAILABLE
     elif in_ctr:
@@ -159,7 +172,7 @@ def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None, vm: bool | No
         flag = "vm"
     else:
         flag = "bare"
-    return f"{fp.stamp()} container={flag}"
+    return f"{fp.key}.{flag}"
 
 
 __all__ = [

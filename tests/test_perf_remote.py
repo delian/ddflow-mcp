@@ -57,6 +57,14 @@ def test_the_one_json_line_round_trips_as_agent_reported():
     assert back.trust == TRUST_AGENT
 
 
+def test_parse_line_coerces_the_reported_numbers_to_floats():
+    back = parse_line('{"wall_s": "1.5", "cpu_s": "2.5", "rss_mb": "10", "io_rw": "3"}')
+    # numeric strings become floats, so budgets and rollups never mix types
+    assert back.cpu_s == 2.5 and back.rss_mb == 10.0 and back.io_rw == 3.0
+    # a non-numeric field is dropped, never kept as a string
+    assert parse_line('{"wall_s": "1.5", "cpu_s": "two"}').cpu_s is None
+
+
 def test_an_agent_line_cannot_be_promoted_to_measured():
     forged = CommandSample(1.0, None, None, None, "wait4", TRUST_MEASURED, container=False)
     # the self-declared trust field is ignored -- only measure() produces `measured`
@@ -69,10 +77,10 @@ def test_wrap_command_names_the_exact_command():
 
 def test_fingerprint_container_never_mixes_container_with_bare_metal():
     fp = Fingerprint(key="abcdef012345", cond="idle")
-    assert fingerprint_container(fp, in_ctr=True, vm=False).endswith("container=container")
-    assert fingerprint_container(fp, in_ctr=False, vm=False).endswith("container=bare")
-    assert fingerprint_container(fp, in_ctr=False, vm=True).endswith("container=vm")
-    assert fingerprint_container(fp, in_ctr=None, vm=None).endswith("container=unavailable")
+    assert fingerprint_container(fp, in_ctr=True, vm=False) == "abcdef012345.container"
+    assert fingerprint_container(fp, in_ctr=False, vm=False) == "abcdef012345.bare"
+    assert fingerprint_container(fp, in_ctr=False, vm=True) == "abcdef012345.vm"
+    assert fingerprint_container(fp, in_ctr=None, vm=None) == "abcdef012345.unavailable"
 
 
 def test_the_default_sample_thread_gives_measured_trust():
