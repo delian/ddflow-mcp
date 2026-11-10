@@ -100,15 +100,32 @@ def test_retire_stage_proposes_when_the_wait_is_not_paid_back():
 
 
 def test_parallel_cap_collapses_two_rows_of_the_same_cap():
-    # two observations of cap 2 are that cap twice, never "cap 2 then one more agent"
+    # three samples of ONE cap are one point, so the FLOOR is distinct caps -- not three values
     cfg = PerfMetricsConfig(prop_min_observations=3, prop_marginal_gain=0.1)
     rows = [
-        prop_flow.CapObserved(2, 100.0),
         prop_flow.CapObserved(2, 10.0),
-        prop_flow.CapObserved(3, 9.0),
+        prop_flow.CapObserved(2, 9.0),
+        prop_flow.CapObserved(2, 8.0),
     ]
-    p = prop_flow.propose_parallel_cap(rows, cfg=cfg)
-    assert p.advice == 3  # cap 2 -> cap 3 still pays (10 -> 9 within the distinct caps)
+    assert prop_flow.propose_parallel_cap(rows, cfg=cfg) is None
+
+
+def test_a_flat_wall_is_unavailable_not_a_scale_up():
+    # all caps at wall 0 (a probe that did not run) never pays back and never scales up
+    cfg = PerfMetricsConfig(prop_min_observations=3)
+    rows = [
+        prop_flow.CapObserved(1, 0.0),
+        prop_flow.CapObserved(2, 0.0),
+        prop_flow.CapObserved(3, 0.0),
+    ]
+    assert prop_flow.propose_parallel_cap(rows, cfg=cfg) is None
+
+
+def test_a_proposal_names_the_next_call_in_cli_and_mcp_form():
+    p = prop_flow.propose_narrow_globs(
+        {"src/a.py": 5.0, "src/b.py": 40.0}, PerfMetricsConfig(budget_stage_lease_wait_s=30.0)
+    )
+    assert "ddflow update" in p.next_call() and "MCP:" in p.next_call()
 
 
 def test_retire_stage_stays_quiet_when_the_wait_is_paid_back():

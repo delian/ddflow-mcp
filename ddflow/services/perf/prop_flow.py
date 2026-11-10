@@ -63,6 +63,22 @@ class Proposal:
     evidence: dict
     because: str
 
+    def next_call(self) -> str:
+        """The operator's exact next call to act on this proposal, CLI and MCP form
+        (r-tell-dont-discover)."""
+        return _NEXT_CALLS[self.kind]
+
+
+#: The exact next call each proposal names (what changes, CLI then MCP form).
+_NEXT_CALLS = {
+    "parallel_cap": "apply the cap advice to the flow controller: `ddflow report stages`"
+    " (MCP: ddflow_report action=stages); the advice never overrides the schedule/worktree knob",
+    "narrow_globs": "narrow the item's globs: `ddflow update <item> --globs <globs>`"
+    " (MCP: ddflow_task action=update id=<item> globs=<globs>)",
+    "batch_gates": "batch the suite-lock gates: `ddflow metrics stages` (MCP: ddflow_metrics action=stages)",
+    "retire_stage": "retire the unpaid stage: `ddflow metrics stages` (MCP: ddflow_metrics action=stages)",
+}
+
 
 def _evidence(by_cap: list[CapObserved]) -> dict:
     """The observed values the proposal rests on: wall clock, cpu seconds, peak rss, load and
@@ -104,15 +120,16 @@ def propose_parallel_cap(
     stops paying for itself, and the cap BEFORE it is the advice. When every step keeps paying,
     the highest observed cap is the advice (the ceiling so far, not a new raise)."""
     cfg = cfg or _section_knobs(Config())
-    by_cap = sorted(observed, key=lambda o: o.cap)
-    if len(by_cap) < cfg.prop_min_observations:
-        return None
     # ONE point per cap (the best wall observed there): two rows at the same cap are two
     # observations of THAT cap, never "one more agent", so the step gain compares distinct caps.
     best: dict[int, float] = {}
-    for o in by_cap:
+    for o in sorted(observed, key=lambda o: o.cap):
         if o.cap not in best or o.wall_s < best[o.cap]:
             best[o.cap] = o.wall_s
+    if len(best) < cfg.prop_min_observations:
+        return None  # the floor counts DISTINCT cap values: one cap sampled N times is one point
+    if len(set(best.values())) <= 1:
+        return None  # a flat wall (a probe that did not run) neither pays nor scales up
     caps = sorted(best)
     advice = caps[-1]
     for i in range(len(caps) - 1):
@@ -123,7 +140,7 @@ def propose_parallel_cap(
     return Proposal(
         "parallel_cap",
         advice,
-        _evidence(by_cap),
+        _evidence(sorted(observed, key=lambda o: o.cap)),
         f"cap {advice} is the last agent whose wall saving paid for itself in the observations",
     )
 
