@@ -162,7 +162,11 @@ def propose_shard_or_workers(
     probe that did not run."""
     cfg = cfg or _section_knobs(Config())
     floor = _floor(rollup)
-    per_file = rollup.get("per_file") or {}
+    per_file = {
+        f: s
+        for f, s in (rollup.get("per_file") or {}).items()
+        if isinstance(s, (int, float)) and not isinstance(s, bool) and _is_finite(s)
+    }
     if floor is None or not per_file:
         return None
     slowest = max(per_file, key=lambda f: per_file[f])
