@@ -397,6 +397,29 @@ def test_a_failed_lint_check_keeps_ci_from_being_baseline_red() -> None:
     assert not BL.only_tests_failed([Check("ruff check", False), tests])
 
 
+def test_a_non_test_failure_still_keeps_the_red_tests_for_the_split(repo) -> None:
+    from ddflow.api import cirun
+    from ddflow.services.ci.types import Check, Result
+
+    res = Result(
+        status="failed",
+        sha="a" * 40,
+        checks=[
+            Check("ruff check", False),
+            Check("unit tests + end-to-end scenarios", False),
+        ],
+        failures={"failed_tests": ["tests/test_x.py::test_a"]},
+        output="FAILED tests/test_x.py::test_a - boom",
+        command="ddflow ci run",
+    )
+    out = cirun._keep_failing_ids(repo, res)
+    # The failing test ids are kept aside even when a non-test check failed beside them, so
+    # the baseline_split can measure them on the base and say "tests would be accepted".
+    assert "failing_ids" in out, out
+    assert BL.read_full(repo, out["failing_ids"]) == ["tests/test_x.py::test_a"]
+    assert "ruff check" in out["failing_ids_note"]
+
+
 def test_a_malformed_cache_is_dropped_not_fatal_and_a_name_after_equals_matches(repo) -> None:
     from ddflow.api import gate_baseline as GB
 

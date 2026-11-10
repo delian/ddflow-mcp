@@ -143,12 +143,24 @@ def _keep_failing_ids(repo: Path, res) -> dict:
     out: dict = {}
     if len(everyone) > len(res.failures.get("failed_tests") or ()):
         out["failed_tests_total"] = len(everyone)
-    if not BL.only_tests_failed(res.checks):
-        names = ", ".join(c.id for c in res.checks if not c.ok)
-        out["failing_ids_note"] = f"not kept: a check other than the tests failed ({names})"
-    elif kept := BL.write_full(repo, res.sha, everyone):
+    # The failing test ids are kept aside even when a NON-TEST check (a lint, build or secrets
+    # check) failed beside red tests: the baseline_split must still measure those tests on the
+    # base to say "tests would be accepted" (Ba17fabe249). The non-test check is named in the
+    # note; it never stops the list from being kept.
+    non_test = [
+        c.id for c in res.checks if not c.ok and c.id != "command" and "test" not in c.id.lower()
+    ]
+    kept = BL.write_full(repo, res.sha, everyone)
+    if kept:
         out["failing_ids"] = kept
-    else:
+    if non_test:
+        names = ", ".join(non_test)
+        out["failing_ids_note"] = f"a check other than the tests also failed ({names}); " + (
+            "the failing tests are kept aside for the baseline split"
+            if kept
+            else "the failing tests were not kept aside"
+        )
+    elif not kept:
         out["failing_ids_note"] = f"not kept: no sha ({res.sha!r}) or no ids ({len(everyone)})"
     return out
 
