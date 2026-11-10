@@ -65,9 +65,7 @@ class Section:
     why: tuple[Why, ...] = ()
 
 
-def eta_from_path(
-    chain: Sequence[str], durations: Mapping[str, float]
-) -> tuple[float | None, str]:
+def eta_from_path(chain: Sequence[str], durations: Mapping[str, float]) -> tuple[float | None, str]:
     """Remaining wall-clock from the critical path: the sum of each path item's duration
     estimate. A path item with no estimate makes the figure unavailable -- the path is a
     floor and a gap in it would understate it, so the answer is None, not a low guess."""
