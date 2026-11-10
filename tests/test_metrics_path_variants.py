@@ -66,11 +66,15 @@ def test_a_gate_run_before_an_earlier_canonical_step_is_out_of_order():
 
 
 def test_a_pass_superseded_by_a_later_tree_change_is_listed():
-    # A's critic on t1 is not superseded (no later tree); B has no superseded pass.
-    assert superseded_passes(ctx_of(seeded())) == []
+    # B's critic passed on tree t2; rubber_duck then ran on t3, so the critic pass is
+    # superseded (the tree changed after it). A's rubber_duck/critic share t1, so neither is.
+    superseded = superseded_passes(ctx_of(seeded()))
+    assert any(r["item"] == "B" and r["gate"] == "critic" for r in superseded)
+    assert not any(r["item"] == "A" for r in superseded)
 
 
 def test_build_names_the_cli_and_mcp_next_call():
     out = build(ctx_of(seeded()))
-    assert out["next"]["cli"] == "ddflow metrics paths --variants"
+    assert out["next"]["cli"] == "ddflow paths"
+    assert out["next"]["mcp"] == "ddflow_paths"
     assert out["variants"] and out["directly_follows"]

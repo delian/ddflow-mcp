@@ -18,21 +18,19 @@ from ...core import clock
 from . import paths
 from .providers import Context
 
-#: The canonical gate order (a task pipeline); a gate out of order is one that ran before a
-#: prerequisite. D-path-merge-answers merges bookkeeping gates (research+rules+implement,
-#: bug_hunt+dedupe), so the canonical order is per-lane, not per-gate.
-CANON = (
-    "research",
-    "rules",
-    "implement",
-    "rubber_duck",
-    "critic",
-    "standards",
-    "ci",
-    "unit_tests",
-    "bug_hunt",
-    "dedupe",
-    "merge",
+#: The canonical task lanes in order. D-path-merge-answers lets bookkeeping gates be
+#: recorded in one call, so ``research``+``rules``+``implement`` and ``bug_hunt``+``dedupe``
+#: are each ONE lane: order is per-lane, not per-gate -- two gates inside the same merged
+#: lane are never out of order relative to each other.
+LANES: tuple[tuple[str, ...], ...] = (
+    ("research", "rules", "implement"),
+    ("rubber_duck",),
+    ("critic",),
+    ("standards",),
+    ("ci",),
+    ("unit_tests",),
+    ("bug_hunt", "dedupe"),
+    ("merge",),
 )
 
 
@@ -51,6 +49,11 @@ def _sequence(rows: list) -> list[str]:
         if not seq or seq[-1] != o.gate:
             seq.append(o.gate)
     return seq
+
+
+def _lane_rank() -> dict[str, int]:
+    """gate -> its canonical lane position (gates in one merged lane share a rank)."""
+    return {gate: i for i, lane in enumerate(LANES) for gate in lane}
 
 
 def directly_follows(ctx: Context) -> list[dict]:
@@ -79,26 +82,22 @@ def variants(ctx: Context) -> list[dict]:
 
 
 def superseded_passes(ctx: Context) -> list[dict]:
-    """a PASS superseded by a later tree change on the same item (the later run re-reviewed a
-    moved tree, so the earlier pass counted for nothing)."""
+    """a PASS on a tree that a LATER outcome on the same item left behind (a different
+    tree_sha recorded after it), so the pass counted for a tree that is no longer current."""
     out = []
     for item, rows in _items(ctx).items():
-        by_gate: dict[str, list] = defaultdict(list)
-        for o in rows:
-            by_gate[o.gate].append(o)
-        for gate, runs in by_gate.items():
-            for i, o in enumerate(runs):
-                if o.kind == "passed" and any(
-                    r.tree_sha and r.tree_sha != o.tree_sha for r in runs[i + 1 :]
-                ):
-                    out.append({"item": item, "gate": gate, "at": o.at, "tree_sha": o.tree_sha})
+        for i, o in enumerate(rows):
+            if o.kind != "passed" or not o.tree_sha:
+                continue
+            if any(r.tree_sha and r.tree_sha != o.tree_sha for r in rows[i + 1 :]):
+                out.append({"item": item, "gate": o.gate, "at": o.at, "tree_sha": o.tree_sha})
     return out
 
 
 def out_of_order(ctx: Context) -> list[dict]:
-    """a gate whose FIRST run came before an EARLIER canonical step's FIRST run (it ran ahead
-    of a prerequisite that had not run yet -- e.g. critic first-ran before rubber_duck)."""
-    rank = {g: i for i, g in enumerate(CANON)}
+    """a gate whose FIRST run came before an EARLIER canonical LANE's first run (it ran ahead
+    of a prerequisite lane that had not run yet -- e.g. critic first-ran before rubber_duck)."""
+    rank = _lane_rank()
     out = []
     for item, rows in _items(ctx).items():
         first_at: dict[str, float] = {}
@@ -109,24 +108,25 @@ def out_of_order(ctx: Context) -> list[dict]:
             at = first_at.get(gate)
             if at is None:
                 continue
-            # a lower-rank gate that RAN later than this one means this run was ahead of it
+            # a lower-rank LANE that RAN later than this one means this run was ahead of it
             if any(r2 < r and first_at[g2] > at for g2, r2 in rank.items() if g2 in first_at):
                 out.append({"item": item, "gate": gate, "at": at})
     return out
 
 
 def overlap(ctx: Context) -> dict:
-    """the burst overlap: the summed process time vs its union (what the concurrent view saves),
-    and the overlap share (the union's fraction of the sum)."""
-    u = paths.build(ctx)["process_union"]
-    union_s = u.get("union", {}).get("p50_s")
-    saved_s = u.get("saved_by_union", {}).get("p50_s")
-    total = union_s + saved_s if union_s is not None and saved_s is not None else None
+    """the burst overlap: the summed process time vs its union (what the concurrent view
+    saves), as WINDOW TOTALS over the same per-item pairs -- never the sum of two medians of
+    different series. ``burst_share`` is the union's fraction of the sum."""
+    rows = paths.build(ctx)["paths"]
+    sum_s = sum(p["process_sum_s"] for p in rows)
+    union_s = sum(p["process_union_s"] for p in rows)
     return {
-        "union_p50_s": union_s,
-        "saved_p50_s": saved_s,
-        "sum_p50_s": total,
-        "burst_share": union_s / total if total else None,
+        "union_s": union_s,
+        "sum_s": sum_s,
+        "saved_s": sum_s - union_s,
+        "burst_share": union_s / sum_s if sum_s else None,
+        "n_items": len(rows),
     }
 
 
@@ -138,10 +138,14 @@ def build(ctx: Context) -> dict:
         "superseded_passes": superseded_passes(ctx),
         "out_of_order": out_of_order(ctx),
         "next": {
-            "cli": "ddflow metrics paths --variants",
-            "mcp": "ddflow_metrics view=paths variants=true",
+            "cli": "ddflow paths",
+            "mcp": "ddflow_paths",
         },
     }
+
+
+def has_figures(data: dict) -> bool:
+    return bool(data["directly_follows"] or data["variants"])
 
 
 def text(data: dict) -> str:
@@ -159,7 +163,7 @@ def text(data: dict) -> str:
     ov = data["overlap"]
     if ov.get("burst_share") is not None:
         out.append(
-            f"  burst overlap: union {_d(ov['union_p50_s'])} of sum {_d(ov['sum_p50_s'])} ({ov['burst_share']:.0%})"
+            f"  burst overlap: union {_d(ov['union_s'])} of sum {_d(ov['sum_s'])} ({ov['burst_share']:.0%})"
         )
     out.append(f"  superseded passes: {len(data['superseded_passes'])}")
     out.append(f"  out-of-order runs: {len(data['out_of_order'])}")
@@ -177,6 +181,7 @@ def _d(seconds) -> str:
 __all__ = [
     "build",
     "directly_follows",
+    "has_figures",
     "out_of_order",
     "overlap",
     "superseded_passes",

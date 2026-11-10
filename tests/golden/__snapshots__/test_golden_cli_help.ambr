@@ -1919,10 +1919,10 @@
 # ---
 # name: test_help[ddflow metrics]
   '''
-  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm,slo}] [item]
+  usage: ddflow metrics [-h] [--phase PHASE] [--since SINCE] [--group-by GROUP_BY] [{summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}] [item]
   
   positional arguments:
-    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,swarm,slo}
+    {summary,forecast,retro,skips,lanes,stages,locks,tiny,paths,variants,swarm,slo}
                           summary (default), forecast, retro <id>, skips, lanes, stages, locks,
                           tiny, paths or swarm
     item                  with retro: the item id
