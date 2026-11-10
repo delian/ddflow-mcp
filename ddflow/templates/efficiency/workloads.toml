@@ -1,0 +1,60 @@
+# Reference workloads: fixed, deterministic evaluation tasks run over a throwaway
+# project. Each workload names a fixed sequence of steps and ONE pass rule expressed
+# over ddflow's OWN records (item lifecycle, gate outcomes, bug records) -- never over
+# an agent's words. A scripted fake lane runs them at no model spend; a live run
+# against a real agent needs a budget and recorded consent.
+#
+# The record contract: a pass rule reads kinds from ddflow/templates/events/*.toml
+# (item.started, item.completed, gate.passed, gate.failed, bug.found, bug.fixed,
+# worktree.merged, ...). Silence is not a pass: an agent that claims success without
+# the named records is scored FAIL, not PASS.
+
+[[workload]]
+id = "claim-and-finish-a-task"
+name = "Claim and finish a task"
+summary = "Claim a task in the throwaway project, satisfy every gate, merge and complete it."
+lane = "fake"       # scripted fake lane, no spend; "live" needs budget + consent
+spend = "none"
+steps = ["claim", "run-gates", "merge", "complete"]
+
+  [workload.pass_rule]
+  kind = "item-completed"
+  item = "demo.task"
+  gates = ["implement", "unit_tests"]
+
+[[workload]]
+id = "run-a-gate"
+name = "Run a gate and record its outcome"
+summary = "Run one gate on an item and record its actual outcome; a never-run gate is not a pass."
+lane = "fake"
+spend = "none"
+steps = ["run-gate"]
+
+  [workload.pass_rule]
+  kind = "gate-outcome-recorded"
+  gate = "unit_tests"
+  outcome = "passed"
+
+[[workload]]
+id = "record-a-bug-with-regression-test"
+name = "Record a bug with its regression test"
+summary = "File a bug and fix it with a regression test the record names; otherwise failed."
+lane = "fake"
+spend = "none"
+steps = ["file-bug", "fix-with-regression-test"]
+
+  [workload.pass_rule]
+  kind = "bug-with-regression-test"
+  bug = "demo.bug"
+
+[[workload]]
+id = "resolve-a-refusal"
+name = "Resolve a refusal"
+summary = "Hit a refusal (a gate that refuses) and resolve it so the gate passes; otherwise failed."
+lane = "fake"
+spend = "none"
+steps = ["refuse", "resolve", "complete"]
+
+  [workload.pass_rule]
+  kind = "refusal-resolved"
+  gate = "merge"
