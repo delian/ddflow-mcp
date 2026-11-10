@@ -109,30 +109,34 @@ def measure(
 
 
 def parse_line(line: str) -> CommandSample:
-    """Parse the single JSON line the wrapper (or an unwrapped agent run) reported. The
-    trust level comes from the line itself: `measured` only when the wrapper wrote it, else
-    `agent-reported` -- a caller cannot promote a self-reported line to `measured`."""
+    """Parse the single JSON line an agent reported. Every ingested line is
+    ``agent-reported`` -- a posted line cannot prove it came from the wrapper, so the trust
+    field a caller supplies is ignored and a self-reported time is never gate evidence
+    (D-perf-metrics-answers). Only :func:`measure` (ddflow runs the command itself) ever
+    produces ``measured``."""
     data = json.loads(line)
-    trust = TRUST_MEASURED if data.get("trust") == TRUST_MEASURED else TRUST_AGENT
     return CommandSample(
         wall_s=float(data["wall_s"]),
         cpu_s=data.get("cpu_s"),
         rss_mb=data.get("rss_mb"),
         io_rw=data.get("io_rw"),
         source=str(data.get("source") or UNAVAILABLE),
-        trust=trust,
+        trust=TRUST_AGENT,
         container=data.get("container"),
     )
 
 
-def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None, vm: bool | None = False) -> str:
+def fingerprint_container(fp: Fingerprint, *, in_ctr: bool | None, vm: bool | None = None) -> str:
     """The container/VM flags added to the env fingerprint key so a cgroup-limited series is
     never mixed with a bare-metal one, and a VM (a macOS Docker VM has no ``/.dockerenv``)
-    never keys as bare metal. ``None`` means the probe could not run (named, never guessed)."""
+    never keys as bare metal. ``None`` for either flag means the probe could not run
+    (``unavailable``, never guessed)."""
     if in_ctr is None:
         flag = UNAVAILABLE
     elif in_ctr:
         flag = "container"
+    elif vm is None:
+        flag = UNAVAILABLE
     elif vm:
         flag = "vm"
     else:

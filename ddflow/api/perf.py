@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import resource
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -22,6 +23,14 @@ from ..services.perf import store
 from ._base import _load
 
 
+def _rss_mb(ru: resource.struct_rusage) -> float | None:
+    """``ru_maxrss`` is KB on Linux and bytes on macOS; scale to MB per platform so one
+    wrapper reports the same number on the two sides the fingerprint distinguishes."""
+    if not ru.ru_maxrss:
+        return None
+    return ru.ru_maxrss / 1048576.0 if sys.platform == "darwin" else ru.ru_maxrss / 1024.0
+
+
 def _stdlib_probe(rung: str) -> dict[str, float | None] | None:
     """The stdlib rung of the probe ladder (``resource.ru`` = wait4); the cgroup/psutil/proc
     rungs need their sources and report ``None`` here so the ladder records ``wait4``."""
@@ -30,7 +39,7 @@ def _stdlib_probe(rung: str) -> dict[str, float | None] | None:
     ru = resource.getrusage(resource.RUSAGE_CHILDREN)
     return {
         "cpu_s": ru.ru_utime + ru.ru_stime,
-        "rss_mb": (ru.ru_maxrss / 1024.0) if ru.ru_maxrss else None,
+        "rss_mb": _rss_mb(ru),
         "io_rw": ru.ru_inblock + ru.ru_oublock,
     }
 
@@ -60,7 +69,9 @@ def run_perf_ingest(repo: Path, *, line: str = "", agent: str = "") -> O.Outcome
         sample = R.parse_line(line)
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         return O.refused("perf_ingest", "ingest needs the wrapper's one JSON line")
-    series = "agent.wall" if sample.trust == R.TRUST_AGENT else "cmd.wall"
+    series = (
+        "agent" if sample.trust == R.TRUST_AGENT else "cmd"
+    ) + f".{(agent or 'role').replace('.', '_')}.wall"
     fp = E.collect(repo, parallel_cap=None, xdist_workers=None)
     store.append(repo, series, store.Sample(t=time.time(), env=fp.key, value=sample.wall_s))
     return O.ok("perf_ingest", text=sample.one_line())

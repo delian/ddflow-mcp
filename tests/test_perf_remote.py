@@ -48,23 +48,19 @@ def test_measure_names_unavailable_when_no_rung_reports():
     assert sample.cpu_s is None  # never zero
 
 
-def test_the_one_json_line_round_trips():
+def test_the_one_json_line_round_trips_as_agent_reported():
     s = CommandSample(1.5, 0.9, 50.0, None, "psutil", TRUST_MEASURED, container=False)
     back = parse_line(s.one_line())
     assert back.wall_s == 1.5 and back.cpu_s == 0.9
-    # the wrapper's own line is accepted as measured (never demoted)
-    assert back.trust == TRUST_MEASURED
+    # an ingested line is always agent-reported: a posted line cannot prove it ran the
+    # wrapper, so its self-declared `measured` is never taken at face value
+    assert back.trust == TRUST_AGENT
 
 
 def test_an_agent_line_cannot_be_promoted_to_measured():
     forged = CommandSample(1.0, None, None, None, "wait4", TRUST_MEASURED, container=False)
-    # a line without the wrapper's own `trust` field is agent-reported, never measured
-    assert (
-        parse_line(
-            forged.one_line().replace('"trust": "measured"', '"trust": "agent-reported"')
-        ).trust
-        == TRUST_AGENT
-    )
+    # the self-declared trust field is ignored -- only measure() produces `measured`
+    assert parse_line(forged.one_line()).trust == TRUST_AGENT
 
 
 def test_wrap_command_names_the_exact_command():
@@ -73,9 +69,10 @@ def test_wrap_command_names_the_exact_command():
 
 def test_fingerprint_container_never_mixes_container_with_bare_metal():
     fp = Fingerprint(key="abcdef012345", cond="idle")
-    assert fingerprint_container(fp, in_ctr=True).endswith("container=container")
-    assert fingerprint_container(fp, in_ctr=False).endswith("container=bare")
-    assert fingerprint_container(fp, in_ctr=None).endswith("container=unavailable")
+    assert fingerprint_container(fp, in_ctr=True, vm=False).endswith("container=container")
+    assert fingerprint_container(fp, in_ctr=False, vm=False).endswith("container=bare")
+    assert fingerprint_container(fp, in_ctr=False, vm=True).endswith("container=vm")
+    assert fingerprint_container(fp, in_ctr=None, vm=None).endswith("container=unavailable")
 
 
 def test_the_default_sample_thread_gives_measured_trust():

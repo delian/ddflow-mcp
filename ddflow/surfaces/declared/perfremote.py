@@ -17,7 +17,10 @@ def _call(repo, a, agent):
     if action == "env":
         return _api().run_perf_env(repo, agent=agent)
     if action == "run":
-        return _api().run_perf_run(repo, cmd=a.get("cmd") or "", agent=agent)
+        cmd = a.get("cmd") or ""
+        if isinstance(cmd, list):
+            cmd = " ".join(cmd)
+        return _api().run_perf_run(repo, cmd=cmd, agent=agent)
     return _api().run_perf_ingest(repo, line=a.get("line") or "", agent=agent)
 
 
@@ -46,20 +49,21 @@ COMMANDS: tuple[Command, ...] = (
         params=(
             Param(
                 "action",
-                help="env (the fingerprint), run (the wrapped command) or ingest (accept a sample line).",
+                help="env (the fingerprint), run (measure a command) or ingest (accept a sample line).",
                 cli_help="env (default), run or ingest",
                 positional=True,
                 nargs="?",
+                choices=("env", "run", "ingest"),
+            ),
+            Param(
+                "cmd",
+                help="with action=run: the command to measure (the shell form is `ddflow perf run -- CMD`).",
+                cli_help="with run: the command to measure",
             ),
             Param(
                 "line",
                 help="with action=ingest: the wrapper's one JSON line to accept.",
                 cli_help="with ingest: the sample line",
-            ),
-            Param(
-                "cmd",
-                help="with action=run: the command to measure (after `--`).",
-                cli_help="with run: the command to measure",
             ),
         ),
     ),
