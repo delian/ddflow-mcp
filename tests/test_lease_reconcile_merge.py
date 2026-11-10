@@ -112,3 +112,46 @@ def test_an_unknown_reconcile_fails_closed_and_still_blocks(repo):
     assert st.items["T1"].reconciled["unknown"] is True
     v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
     assert any("could not read" in b for b in v.blockers), v.blockers
+
+
+def test_a_missing_base_sha_records_an_unknown_reconcile_fail_closed(repo):
+    import subprocess
+
+    from ddflow.api.lifecycle.merge import _record_reconciled
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+
+    def rev(ref: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", ref],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    landed_before = rev("HEAD")
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "x.py").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "item change"], check=True)
+    branch_head = rev("HEAD")
+
+    class It:
+        base_sha = ""
+
+    _record_reconciled(
+        repo,
+        Config.load(repo),
+        EventLog(repo),
+        It(),
+        "T1",
+        landed_before,
+        landed_before,
+        branch_head,
+    )
+    # No recorded fork means the fork is unanswerable, so the reconcile fails CLOSED with an
+    # `unknown` stamp over MY files instead of silently skipping an overlapping merge.
+    st = _state(repo)
+    assert st.items["T1"].reconciled["unknown"] is True
+    assert "src/x.py" in st.items["T1"].reconciled["files"]

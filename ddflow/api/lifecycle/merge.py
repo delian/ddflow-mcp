@@ -117,6 +117,19 @@ def _record_reconciled(
         return
     if not mine:
         return
+    if not it.base_sha:
+        # No recorded fork (a located/resumed worktree records no base_sha, or an imported
+        # item never had one): what `main` changed since this item REALLY forked is
+        # unanswerable, and `fork` fell back to `landed_before`, so the `moved` probe below
+        # would compare `landed_before` with itself and read empty. Fail CLOSED -- reconcile
+        # over MY files with `unknown`, so an overlapping merge is never silently skipped
+        # when the fork is unknown.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": sorted(mine), "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
     # The overlap trigger is "this landing touched a file `main` changed since this item
     # forked" -- another item merged since the fork, OR a main-into-branch conflict resoved at
     # sync (a direct `main` commit touching a file this branch also touched). Both are the one
