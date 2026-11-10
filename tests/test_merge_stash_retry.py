@@ -64,7 +64,7 @@ def test_a_stash_failure_that_never_clears_is_reported_with_its_cause(repo, monk
     pauses = []
     _patch_sleep(monkeypatch, pauses.append)
     r = W.merge(repo, cfg, wt)
-    assert len(pauses) == W.STASH_RETRIES - 1  # bounded
+    assert len(pauses) == cfg.worktree.stash_retries - 1  # bounded
     assert not r.ok
     msg = r.err or r.out
     assert "stash failed" in msg and "index.lock" in msg and "nothing was merged" in msg, msg
@@ -223,4 +223,4 @@ def test_other_threads_sleeping_do_not_count_as_the_merge_pauses(repo, monkeypat
     finally:
         stop.set()
         t.join()
-    assert not r.ok and len(pauses) == W.STASH_RETRIES - 1
+    assert not r.ok and len(pauses) == cfg.worktree.stash_retries - 1

@@ -1124,7 +1124,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 638 knobs.
+cadences, and the rest of the 642 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5428,7 +5428,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 638): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 642): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6017,7 +6017,7 @@ declared once and persists — see
 
 ## Configuration
 
-638 knobs across 57 sections, every one documented in place and listed, with its default
+642 knobs across 59 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6084,8 +6084,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=219a493f9704 -->
-<details><summary>All 638 knobs across 57 sections</summary>
+<!-- ddflow:begin README/knobs sha=6f20ee362801 -->
+<details><summary>All 642 knobs across 59 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6664,6 +6664,7 @@ long default is left to `ddflow config --explain`.
 | `slo.target_review_finding_rate` | `0.6` |  |
 | `slo.burn_rate_window_s` | `2592000` |  |
 | `slo.burn_rate_exhaust_s` | `3600.0` |  |
+| `store.stale_index_days` | `7.0` |  |
 | `swarm.w_critical` | `3.0` |  |
 | `swarm.w_fit` | `2.0` |  |
 | `swarm.w_cost` | `1.0` |  |
@@ -6713,6 +6714,7 @@ long default is left to `ddflow config --explain`.
 | `upgrade.index_url` | `""` |  |
 | `upgrade.prereleases` | `false` |  |
 | `upgrade.self` | `"ask"` | `ask` \| `operator` \| `auto` |
+| `upstream_gh.error_max` | `400` |  |
 | `waves.auto_stamp` | `true` |  |
 | `worktree.enabled` | `true` |  |
 | `worktree.root` | `".ddflow/worktrees"` |  |
@@ -6723,6 +6725,8 @@ long default is left to `ddflow config --explain`.
 | `worktree.dispose_finished` | `true` |  |
 | `worktree.sweep_min_age_s` | `3600` |  |
 | `worktree.sweep_interval_s` | `900` |  |
+| `worktree.stash_retries` | `4` |  |
+| `worktree.stash_retry_pause_s` | `0.25` |  |
 | `worktree.max_parallel` | `0` |  |
 | `worktree.sync_before_start` | `true` |  |
 | `worktree.adopt_existing` | `true` |  |
