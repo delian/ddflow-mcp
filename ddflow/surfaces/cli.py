@@ -345,8 +345,8 @@ def _guard_foreign_launch() -> int:
     unmerged code and later crashes when the tree merges away (a lazy re-export reaches a
     removed file). Imported from the CALLER's own tree is legitimate; imported from any
     other linked worktree is not. Heal the install back to its primary and refuse, so the
-    retry runs the primary's code. A git or env failure while checking is not a reason to
-    keep every command from running.
+    retry runs the primary's code. A positive foreign hit refuses; a check that cannot
+    even identify the import (no linked worktree) still lets every ordinary command run.
     """
     from ..infra import worktree as W
     from ..services import install_info as I
@@ -360,7 +360,19 @@ def _guard_foreign_launch() -> int:
     try:
         own = W.current(Path(os.getcwd()))
     except Exception:
-        return OK  # cannot identify the caller: NOT evidence of a foreign tree, never a refusal
+        # The import IS from a linked worktree (or the guard would have returned above),
+        # so running it could execute another lane's unmerged code — the failure this
+        # guard exists for — while not identifying the caller is NOT evidence the import
+        # is the caller's own tree. Refuse, and repoint nothing: a heal on an unproven
+        # foreignity would strand the caller's own tree if git merely misread it.
+        print(
+            "ddflow: imported from the linked worktree"
+            f" {I.normalise_path(foreign.worktree)}, but the caller's own tree cannot be"
+            " identified; refusing to run code that may be another lane's — re-run once"
+            " the checkout is reachable",
+            file=sys.stderr,
+        )
+        return FAIL
     if own is not None and own.path.resolve() == foreign.worktree.resolve():
         return OK  # the very tree this code came from: legitimate, not foreign
     try:

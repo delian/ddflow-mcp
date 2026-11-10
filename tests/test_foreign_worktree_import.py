@@ -135,7 +135,7 @@ def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
 
     _primary, tree = checkout
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(W, "current", lambda start: W.Worktree(item="", path=tree, branch="b"))
+    monkeypatch.setattr(W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base=""))
     assert CLI._guard_foreign_launch() == CLI.OK
 
 
@@ -152,7 +152,7 @@ def test_the_cli_guard_refuses_a_foreign_tree_and_heals_it(checkout, monkeypatch
     assert CLI._guard_foreign_launch() == CLI.FAIL
 
 
-def test_identifying_the_caller_failing_is_not_a_refusal(checkout, monkeypatch):
+def test_identifying_the_caller_failing_refuses_without_repointing(checkout, monkeypatch):
     from ddflow.infra import worktree as W
     from ddflow.surfaces import cli as CLI
 
@@ -163,4 +163,5 @@ def test_identifying_the_caller_failing_is_not_a_refusal(checkout, monkeypatch):
         raise OSError("cwd removed")
 
     monkeypatch.setattr(W, "current", broken)
-    assert CLI._guard_foreign_launch() == CLI.OK
+    monkeypatch.setattr(I, "repoint_shared_editable", lambda foreign, primary: True)
+    assert CLI._guard_foreign_launch() == CLI.FAIL
