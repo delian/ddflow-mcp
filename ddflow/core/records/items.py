@@ -234,7 +234,7 @@ class Item:
     #: reconciled tree (D-lease-hold-limit-r2). {} when the merge landed clean over nothing.
     #: Holds {files, base, main, at}: `at` is the reconcile event's timestamp, so a test pass
     #: recorded before the reconcile (a stale pre-merge run) never clears the guard.
-    reconciled: dict[str, Any] = field(default_factory=dict)
+    reconciled: dict[str, Any] = field(default_factory=dict, metadata={"omit_empty": True})
 
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
     #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.
