@@ -175,7 +175,6 @@ class TableTool:
         self.pin = spec.pin if pin is None else pin
         self.probe_timeout_s = probe_timeout_s
         self.run_timeout_s = run_timeout_s
-        self._probed: ToolProbe | None = None
 
     # -- the port ------------------------------------------------------------------------
     def tool_id(self) -> str:
@@ -238,11 +237,11 @@ class TableTool:
             # pinned run: a cached probe is either a stale success (the binary was replaced, so a
             # pin that is no longer met reads as met) or a transient failure (a timeout) that would
             # otherwise freeze into every later run. One bounded probe per pinned run is the cost.
-            self._probed = self.probe()
-            if not self._probed.usable:
+            probed = self.probe()
+            if not probed.usable:
                 return self._unavailable(
                     "pin",
-                    self._probed.reason or f"{s.id} could not be probed against pin {self.pin}",
+                    probed.reason or f"{s.id} could not be probed against pin {self.pin}",
                 )
         argv = [*s.argv, *(args or ())]
         done = self._call(argv, self.run_timeout_s if timeout_s is None else timeout_s, cwd)

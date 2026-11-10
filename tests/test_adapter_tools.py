@@ -428,8 +428,13 @@ def test_a_pinned_tool_reprobes_so_a_downgraded_binary_is_caught():
     t = T.tool("gitleaks", sc, pin="8.30.1")
     assert t.run().status == CLEAN  # probes 8.30.1, scans clean
     assert len(sc.calls) == 2
-    assert t.run().status == UNAVAILABLE  # probes 8.1.0, refuses the scan
+    down = t.run()  # probes 8.1.0, refuses the scan
+    assert down.status == UNAVAILABLE
     assert len(sc.calls) == 3  # probe only, no scan
+    # the third call is a PROBE of the version, not the scan: under the old cache it is the
+    # scan argv and this assertion fails (the run is then refused for a parse error, not the pin)
+    assert sc.calls[2][0] == list(T.SPECS["gitleaks"].version_argv)
+    assert "older than the pinned" in down.reason
 
 
 def test_a_bad_version_regex_is_refused_when_the_row_is_read():
