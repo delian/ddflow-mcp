@@ -16,12 +16,12 @@ data file and its ``[[history]]`` ledger, not new code.
 
 from __future__ import annotations
 
-import tomllib
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
 from pathlib import Path
 from typing import Any
 
+from ddflow.adapters.toml import TomlError, TomlLibIo
 from ddflow.services import harnessreg as HR
 from ddflow.services import harnessv2 as HV
 
@@ -163,10 +163,10 @@ def load(path: str | Path | None = None) -> Catalog:
     """Load and validate the catalog data file (default ``ddflow/harnesses/catalog.toml``)."""
     p = Path(path) if path is not None else _CATALOG
     try:
-        raw = tomllib.loads(p.read_text(encoding="utf-8"))
+        raw = TomlLibIo().read(p)
     except FileNotFoundError:
         raise CatalogError(f"{p}: catalog data file not found") from None
-    except tomllib.TOMLDecodeError as exc:
+    except TomlError as exc:
         raise CatalogError(f"{p}: {exc}") from None
 
     rows: list[Row] = []
