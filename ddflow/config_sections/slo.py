@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from ._docs import declare, int_at_least, knob
 
 
-def _seconds(value: object) -> str:
+def _positive(value: object) -> str:
     return (
         ""
         if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
@@ -39,17 +39,17 @@ class SloConfig:
     target_command_p95_s: float = knob(
         2.0,
         doc="The command-latency target: the p95 wall seconds of a brief or claim command on the host. Bound from the perf store's per-command samples; below the sample floor it is not-collected, never zero (PM-sampler supplies the samples).",
-        check=_seconds,
+        check=_positive,
     )
     target_gate_p90_s: float = knob(
         300.0,
         doc="The gate-latency target: the p90 wall seconds one gate run may take. A gate whose p90 exceeds this in the window is over target.",
-        check=_seconds,
+        check=_positive,
     )
     target_queue_age_s: float = knob(
         600.0,
         doc="The queue-age target: the p90 seconds an item waits ready-to-claimed. This is the SLI that gets a burn-rate view (its window is long and its signal monotone).",
-        check=_seconds,
+        check=_positive,
     )
     target_unavailable_rate: float = knob(
         0.25,
@@ -69,7 +69,7 @@ class SloConfig:
     target_log_events_per_item: float = knob(
         30.0,
         doc="The log-growth target: the most committed log events one completed item may add. Growth that tracks item count is healthy; growth that tracks retries is rework.",
-        check=_seconds,
+        check=_positive,
     )
     target_review_finding_rate: float = knob(
         0.60,
@@ -84,5 +84,5 @@ class SloConfig:
     burn_rate_exhaust_s: float = knob(
         3600.0,
         doc="The time-to-exhaustion (seconds) a burn-rate SLI must beat before it is flagged `burning`: the budget is on track to be spent within this horizon. The report only flags; it never refuses (r-safe-by-default).",
-        check=_seconds,
+        check=_positive,
     )

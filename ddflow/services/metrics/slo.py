@@ -203,12 +203,11 @@ def assess(ctx: Context) -> dict:
         },
     ]
     burn = {
-        "queue_age": _burn(
-            queue, s.target_queue_age_s, s.burn_rate_window_s, s.burn_rate_exhaust_s
-        ),
-        "ci_false_red": _burn(
-            red, s.target_ci_false_red_rate, s.burn_rate_window_s, s.burn_rate_exhaust_s
-        ),
+        r["name"]: _burn(
+            r["value"], r["target"], s.burn_rate_window_s, s.burn_rate_exhaust_s
+        )
+        for r in rows
+        if r["burn"]
     }
     breached = [r["name"] for r in rows if r["breached"] is True]
     return {"sli": rows, "burn_rate": burn, "breached": breached}
