@@ -92,7 +92,10 @@ def real_overlap(
     return [
         (a, b)
         for a, b in pairs
-        if not any(c in b for c in "*?[") or any(glob_match(p, a) for p in real)
+        # A changed path must fall under BOTH globs: under the holder's glob ``b`` (it
+        # really is this glob's work, not another of the holder's globs) and under the
+        # claimant's glob ``a`` (the file this pair could actually collide on).
+        if not any(c in b for c in "*?[") or any(glob_match(p, a) and glob_match(p, b) for p in real)
     ]
 
 

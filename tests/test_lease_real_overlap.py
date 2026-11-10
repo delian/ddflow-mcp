@@ -44,3 +44,17 @@ def test_conflicts_stays_prefix_based():
 def test_a_changed_file_inside_a_shared_glob_does_not_make_an_overlap():
     # A shared (regenerated/pinned) path is exempt: changing it holds nothing.
     assert real_overlap(["a/x.py"], ["a/**"], changed=["a/gen.md"], shared=["a/gen.md"]) == []
+
+
+def test_a_changed_file_outside_the_holders_glob_does_not_block():
+    # mine `src/**` vs theirs `src/pkg/**`: the holder only changed `src/other.py`, which
+    # is NOT under its `src/pkg/**` glob, so the two are disjoint and run in parallel.
+    assert real_overlap(["src/**"], ["src/pkg/**"], changed=["src/other.py"]) == []
+
+
+def test_a_changed_file_under_both_globs_blocks():
+    # The holder changed `src/pkg/a.py`, under both its glob and the claimant's: a real
+    # collision on that file.
+    assert real_overlap(["src/**"], ["src/pkg/**"], changed=["src/pkg/a.py"]) == [
+        ("src/**", "src/pkg/**")
+    ]
