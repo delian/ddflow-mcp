@@ -126,3 +126,35 @@ class PerfMetricsConfig:
         choices=("warn", "block"),
         strictest=("warn", "a budget stays a finding, never a surprise refusal"),
     )
+    prop_min_observations: int = knob(
+        3,
+        doc="Fewest observed cap values a parallel-cap proposal needs before it will advise a cap (PM-prop-flow); below it the proposal is not-enough-data, never a zero.",
+        check=int_at_least(3),
+    )
+    prop_marginal_gain: float = knob(
+        0.25,
+        doc="The fraction of the wall clock one more agent must save before its extra parallelism is paid back (PM-prop-flow); below it the cap before it is the proposed parallel cap.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    prop_batch_dominance: float = knob(
+        2.0,
+        doc="The suite-lock wait as a multiple of the gate run that triggers a batch-gates proposal (PM-prop-flow).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    prop_retire_payback: float = knob(
+        2.0,
+        doc="The multiple of what a stage buys back that its wait must reach before a retire-stage proposal fires (PM-prop-flow).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )

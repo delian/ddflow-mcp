@@ -508,6 +508,10 @@ budget_stage_lease_wait_s = 120.0
 budget_stage_merge_wait_s = 120.0
 budget_breach_min_samples = 3
 budget_severity = "warn"
+prop_min_observations = 3
+prop_marginal_gain = 0.25
+prop_batch_dominance = 2.0
+prop_retire_payback = 2.0
 
 [pins]
 recipes_file = ".ddflow/pins.toml"
