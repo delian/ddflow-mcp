@@ -18,16 +18,21 @@ _SPARK = "▁▂▃▄▅▆▇█"
 
 
 def sparkline(values: list[float], width: int = 20) -> str:
-    """A unicode sparkline of ``values`` scaled to ``width`` cells; the empty series is an
-    empty string (not a blank run, and never a fabricated zero)."""
+    """A unicode sparkline of ``values`` over at most ``width`` cells: a series longer than
+    ``width`` is bucketed (each cell is its slice's max), a value that is ``None``
+    (unavailable) is left out rather than plotted as a low, and nothing is the empty string
+    (not a blank run, never a fabricated zero)."""
     xs = [v for v in values if v is not None]
-    if not xs:
+    if not xs or width <= 0:
         return ""
+    if len(xs) > width:
+        step = len(xs) / width
+        xs = [max(xs[int(i * step) : int((i + 1) * step)]) for i in range(width)]
     lo, hi = min(xs), max(xs)
-    if hi == lo:
-        return _SPARK[0] * width
-    step = hi - lo
-    return "".join(_SPARK[int((v - lo) / step * (len(_SPARK) - 1))] for v in xs)
+    if hi <= lo:
+        return _SPARK[0] * len(xs)
+    span = hi - lo
+    return "".join(_SPARK[round((v - lo) / span * (len(_SPARK) - 1))] for v in xs)
 
 
 def bar(fraction: float | None, width: int = 16) -> str:
@@ -38,15 +43,25 @@ def bar(fraction: float | None, width: int = 16) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _clip(text: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    return text if len(text) <= width else f"{text[: width - 1]}…"
+
+
 def _headline(report: Report, width: int) -> list[str]:
     """The short headline: which gate is slowest (three at most), and what is not collected
-    yet. Kept to ``width`` columns; longer rows are truncated with the count."""
+    yet, with a trend sparkline of the per-gate p90."""
     slow = sorted(
         (r for r in report.gates if r.get("p90_s") is not None),
         key=lambda r: r["p90_s"],
         reverse=True,
     )[:3]
+    p90s = [r.get("p90_s") for r in sorted(report.gates, key=lambda r: r["gate"])]
+    trend = sparkline(p90s, min(width - 11, 24))
     out = ["perf report"]
+    if trend:
+        out.append(f"  gate p90  {trend}")
     if slow:
         out.append("  slower: " + ", ".join(f"{r['gate']} p90 {dur(r['p90_s'])}" for r in slow))
     proposals = report.not_collected.get("findings", "")
@@ -55,31 +70,37 @@ def _headline(report: Report, width: int) -> list[str]:
     return [_clip(line, width) for line in out]
 
 
-def _clip(text: str, width: int) -> str:
-    return text if len(text) <= width else f"{text[: width - 1]}…"
-
-
-def _gates(report: Report, width: int) -> list[str]:
-    """The per-gate table: time, first-run pass rate and a bar of the ever-failed share."""
+def _gates(report: Report, width: int, max_rows: int) -> list[str]:
+    """The per-gate table: time, first-run pass rate and a bar of the ever-failed share.
+    An empty gate set is no table at all (never a header-only one)."""
+    if not report.gates:
+        return []
     header = "| gate | n | p50 | p90 | pass | failed |"
     sep = "|---|---|---|---|---|---|"
-    rows = [header, sep]
-    for r in sorted(report.gates, key=lambda r: r["gate"]):
+    rows = [_clip(header, width), _clip(sep, width)]
+    for r in sorted(report.gates, key=lambda r: r["gate"])[:max_rows]:
         rows.append(
-            "| "
-            + " | ".join(
-                [
-                    r["gate"],
-                    str(r["n"]),
-                    dur(r.get("p50_s")),
-                    dur(r.get("p90_s")),
-                    pct(r.get("first_run_pass_rate")),
-                    f"{bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}",
-                ]
+            _clip(
+                "| "
+                + " | ".join(
+                    [
+                        r["gate"],
+                        str(r["n"]),
+                        dur(r.get("p50_s")),
+                        dur(r.get("p90_s")),
+                        pct(r.get("first_run_pass_rate")),
+                        f"{bar(r.get('ever_failed_share'), 2)} {pct(r.get('ever_failed_share'))}",
+                    ]
+                )
+                + " |",
+                width,
             )
-            + " |"
         )
-    return [_clip(line, width) for line in rows]
+    if len(report.gates) > max_rows:
+        rows.append(
+            _clip(f"… and {len(report.gates) - max_rows} more gates (to_json for all)", width)
+        )
+    return rows
 
 
 def _comparison(report: Report, width: int) -> list[str]:
@@ -89,19 +110,20 @@ def _comparison(report: Report, width: int) -> list[str]:
         ("reviewer", report.comparisons.get("reviewers", [])),
         ("agent", report.comparisons.get("agents", [])),
     ):
-        tables += [
-            f"{name}        pass",
-            *[
-                f"  {r['name']}  {bar(r.get('first_run_pass_rate'), 2)} {pct(r.get('first_run_pass_rate'))}"
-                for r in rows
-            ],
-        ]
+        if not rows:
+            continue
+        for r in rows:
+            tables.append(
+                f"{name}  {r['name']}  {bar(r.get('first_run_pass_rate'), 2)} {pct(r.get('first_run_pass_rate'))}"
+            )
     return [_clip(line, width) for line in tables]
 
 
-def render(report: Report, *, width: int = 76) -> str:
-    """The markdown rendering: headline, gates, cycle, waits, rework, comparisons, then the
-    not-collected sections named with the task that will provide them."""
+def render(report: Report, *, width: int = 76, max_rows: int = 20) -> str:
+    """The markdown rendering: headline, cycle, waits, rework, gates, comparisons, then the
+    not-collected sections named with the task that will provide them. Truncation names how
+    much was cut and the json form for the rest."""
+    width = max(width, 1)
     lines: list[str] = _headline(report, width)
     lines.append("")
     lines.append(
@@ -118,10 +140,14 @@ def render(report: Report, *, width: int = 76) -> str:
         )
     )
     lines.append(_clip(f"rework  {len(report.rework)} items hit by a later bug", width))
-    lines.append("")
-    lines += _gates(report, width)
-    lines.append("")
-    lines += _comparison(report, width)
+    gates = _gates(report, width, max_rows)
+    if gates:
+        lines.append("")
+        lines += gates
+    comparison = _comparison(report, width)
+    if comparison:
+        lines.append("")
+        lines += comparison
     if report.not_collected:
         lines.append("")
         lines.append("not collected:")
@@ -129,6 +155,8 @@ def render(report: Report, *, width: int = 76) -> str:
             _clip(f"  {section}: {task}", width)
             for section, task in sorted(report.not_collected.items())
         ]
+    lines.append("")
+    lines.append(_clip("full data: to_json(report) (the report action's json form)", width))
     return "\n".join(lines)
 
 

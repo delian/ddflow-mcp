@@ -76,7 +76,12 @@ def test_the_headline_names_the_slowest_gate_first():
 
 def test_sparkline_empty_and_constant_are_not_a_blank_run():
     assert sparkline([]) == ""
-    assert sparkline([5.0, 5.0, 5.0], 4) == "▁▁▁▁"
+    assert sparkline([5.0, 5.0, 5.0], 4) == "▁▁▁"
+
+
+def test_sparkline_buckets_a_long_series_into_width_cells():
+    # five values into two cells: the max of each slice, never five glyphs
+    assert len(sparkline([0.0, 1.0, 2.0, 3.0, 4.0], 2)) == 2
 
 
 def test_sparkline_tracks_the_series_shape():
