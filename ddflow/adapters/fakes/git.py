@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .. import fs
 from .. import fsio
 from .. import git as G
 from . import fake
@@ -28,8 +27,10 @@ class TempRepo:
     """
 
     def __init__(self, prefix: str = "ddflow-fakegit-") -> None:
-        self.path = fsio.unused_dir(prefix)
-        self.path.mkdir()
+        # `TemporaryDirectory` cleans up on garbage collection, so a `FakeGit()` built
+        # and dropped by the conformance harness does not leak a repository on disk.
+        self._tmp = fsio.TemporaryDirectory(prefix=prefix)
+        self.path = Path(self._tmp.name)
         if not G.run(self.path, "init", "-q", "-b", "main").ok:
             raise RuntimeError(f"git init failed in {self.path}")
         G.run(self.path, "config", "user.name", "ddflow")
@@ -53,7 +54,7 @@ class TempRepo:
         return G.commit_of(self.path, "HEAD")
 
     def remove(self) -> None:
-        fs.DEFAULT.rmtree(self.path, ignore_errors=True)
+        self._tmp.cleanup()
 
 
 @fake
@@ -111,7 +112,7 @@ class FakeGit(G.Git):
         return G.commits_ahead(self.repo, base, head, **kwargs)
 
     def commits_missing_from(self, repo: Path | str, shas: list[str], base: str) -> set[str] | None:
-        self.calls.append(("commits_missing_from", (repo, base)))
+        self.calls.append(("commits_missing_from", (repo, tuple(shas), base)))
         return G.commits_missing_from(self.repo, shas, base)
 
     def is_ancestor(self, repo: Path | str, sha: str, base: str, **kwargs: Any) -> bool | None:
