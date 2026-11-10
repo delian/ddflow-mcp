@@ -80,7 +80,10 @@ def read_settings(repo: Path) -> Mapping[str, Any]:
     the same key -- Claude Code's own merge). A later file's ``env`` object is merged INTO the
     earlier one key-by-key: Claude Code keeps the earlier file's env entries under a later
     file's env, so a shallow replace would drop the user's ``CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL``
-    when a later file adds a different env var. Unreadable is an absent entry -- a report must
+    when a later file adds a different env var. That Claude Code deep-merges ``env`` (rather
+    than shallow-replaces it) is read from the docs (docs/ddflow/research/agent-token-features.md
+    2.1), not observed -- the direction is the load-bearing assumption of this whole check, so a
+    change to it must change this comment too. Unreadable is an absent entry -- a report must
     not fail on its own probing, and a missing setting reads the same as an absent one."""
     merged: dict[str, Any] = {}
     paths: list[Path] = []

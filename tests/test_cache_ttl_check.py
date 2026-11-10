@@ -9,6 +9,7 @@ main-conversation knobs do not govern subagents and are deliberately left out.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import ddflow.services.cachettl as CTL
@@ -234,3 +235,44 @@ def test_doctor_note_names_upgrade_when_too_old(monkeypatch, tmp_path):
     (note,) = CTL.doctor_notes(Path(tmp_path))
     assert "older than 2.1.242" in note
     assert "unavailable" in note
+
+
+def test_read_settings_deep_merges_the_env_object_across_files(monkeypatch, tmp_path):
+    # A later settings file's `env` must be merged INTO the earlier one key-by-key: a
+    # user-level CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL must survive a project file that adds a
+    # different var, and a local file that sets the same var must win (roborev: std gap).
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    (home / ".claude" / "settings.json").write_text(
+        json.dumps({"env": {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"}})
+    )
+    repo = tmp_path / "repo"
+    (repo / ".claude").mkdir(parents=True)
+    (repo / ".claude" / "settings.json").write_text(
+        json.dumps({"env": {"ANTHROPIC_MODEL": "sonnet"}})
+    )
+    (repo / ".claude" / "settings.local.json").write_text(
+        json.dumps({"env": {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "5m"}})
+    )
+    settings = CTL.read_settings(repo)
+    assert settings["env"] == {
+        "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "5m",  # local wins over user on collision
+        "ANTHROPIC_MODEL": "sonnet",  # user's other var kept, not replaced
+    }
+
+
+def test_read_settings_env_deep_merge_is_really_used(monkeypatch, tmp_path):
+    # The whole point of the merge above: the user env survives and the local env wins when
+    # read back through the effective-TTL computation.
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    (home / ".claude" / "settings.json").write_text(
+        json.dumps({"env": {"CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL": "1h"}})
+    )
+    repo = tmp_path / "repo"
+    (repo / ".claude").mkdir(parents=True)
+    (repo / ".claude" / "settings.json").write_text("{}")
+    v = CTL.effective_subagent_ttl({}, CTL.read_settings(repo), "2.1.300")
+    assert v.ttl == "1h"
