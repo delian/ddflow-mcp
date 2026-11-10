@@ -52,10 +52,39 @@ def test_a_reconciled_merge_with_a_passed_ci_completes(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
     _reconciled(repo, "T1", ["src/x.py"])
-    # A passed ci gate on the reconciled (merged) tree is the affected-tests evidence.
+    # A passed ci gate recorded AFTER the reconcile (on the reconciled tree) is the
+    # affected-tests evidence.
     run_cli(
         repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "selected tests"
     )
     st = _state(repo)
     v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
     assert not any("reconciled" in b for b in v.blockers), v.blockers
+
+
+def test_a_stale_pre_reconcile_pass_does_not_clear_the_guard(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    # A ci pass recorded BEFORE the reconcile ran on the pre-merge tree: it must NOT clear
+    # the reconcile guard, which asks for the tests on the RECONCILED tree.
+    run_cli(
+        repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "pre-merge run"
+    )
+    _reconciled(repo, "T1", ["src/x.py"])
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
+
+
+def test_a_post_reconcile_full_pass_clears_the_guard_under_full(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    run_cli(repo, "config", "--set", "lease.reconcile_tests", "full")
+    _reconciled(repo, "T1", ["src/x.py"])
+    # Under 'full', a ci pass (the selection) is NOT enough: only the whole suite passes.
+    run_cli(
+        repo, "gate", "record", "T1", "ci", "--outcome", "passed", "--evidence", "selected tests"
+    )
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers

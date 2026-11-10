@@ -40,6 +40,7 @@ def _h_merge_reconciled(st: State, ev: Event) -> None:
         "files": sorted(ev.data.get("files", []) or []),
         "base": ev.data.get("base", ""),
         "main": ev.data.get("main", ev.data.get("sha", "")),
+        "at": ev.ts,
     }
 
 

@@ -230,9 +230,10 @@ class Item:
     #: verified inside the item's declared globs and inside the range's changed files.
     landed_paths: list[str] = field(default_factory=list, metadata={"omit_empty": True})
     #: `merge.reconciled`: this item's landing touched files another item changed since
-    #: this one branched (or the main-into-branch merge conflicted), so complete is refused
-    #: until the affected tests pass on the reconciled tree (D-lease-hold-limit-r2). {} when
-    #: the merge landed clean over nothing. Holds {files, base, main}.
+    #: this one branched, so complete is refused until the affected tests pass on the
+    #: reconciled tree (D-lease-hold-limit-r2). {} when the merge landed clean over nothing.
+    #: Holds {files, base, main, at}: `at` is the reconcile event's timestamp, so a test pass
+    #: recorded before the reconcile (a stale pre-merge run) never clears the guard.
     reconciled: dict[str, Any] = field(default_factory=dict)
 
     #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug

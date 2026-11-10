@@ -112,8 +112,11 @@ def _record_reconciled(
     for other_id, other in st.items.items():
         if other_id == item or other.removed or not other.merged_sha:
             continue
-        if GIT.is_ancestor(repo, other.merged_sha, fork) is not False:
+        merged_before_fork = GIT.is_ancestor(repo, other.merged_sha, fork)
+        if merged_before_fork is True:
             continue  # merged at or before this item forked: nothing to reconcile
+        # `None` (git could not tell) fails CLOSED: the overlap is kept for reconciliation,
+        # never dropped on an unanswerable ancestry probe.
         theirs = CH.changed_paths(
             repo,
             other.landed_before,

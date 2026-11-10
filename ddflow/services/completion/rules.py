@@ -295,9 +295,17 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
     files = it.reconciled.get("files", []) if it.reconciled else []
     if not files or cfg.lease.reconcile_tests == "off":
         return ""
-    passed = it.gate_outcome("unit_tests") == GateOutcome.PASSED
+    reconciled_at = it.reconciled.get("at") or ""
+
+    def passed_on_reconciled_tree(gate: str) -> bool:
+        # A pass recorded BEFORE the reconcile is a stale pre-merge run; the guard asks for
+        # the suite on the RECONCILED tree, so only a gate recorded at or after `at` counts.
+        rec = it.gates.get(gate)
+        return bool(rec) and rec.outcome == GateOutcome.PASSED and rec.at >= reconciled_at
+
+    passed = passed_on_reconciled_tree("unit_tests")
     if cfg.lease.reconcile_tests != "full":
-        passed = passed or it.gate_outcome("ci") == GateOutcome.PASSED
+        passed = passed or passed_on_reconciled_tree("ci")
     if passed:
         return ""
     base = (it.reconciled.get("base") or "")[:12]
