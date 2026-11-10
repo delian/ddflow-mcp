@@ -91,9 +91,9 @@ def _p90(values: list[float], minimum: int) -> float | None:
 #: over budget is raised only with a recorded reason).
 _NEXT_CALLS = {
     "gate": "see the slowest tests that keep the gate over budget: `ddflow tests --full`"
-    " (MCP: ddflow_tests full=\"true\")",
+    ' (MCP: ddflow_tests full="true")',
     "test_file": "split the slowest file by cohesion into a package that keeps the old"
-    " imports; list the candidates: `ddflow tests --full` (MCP: ddflow_tests full=\"true\")",
+    ' imports; list the candidates: `ddflow tests --full` (MCP: ddflow_tests full="true")',
     "stage": "raise the budget only with a recorded reason: `ddflow decision add`"
     " (MCP: ddflow_decision action=add)",
 }
