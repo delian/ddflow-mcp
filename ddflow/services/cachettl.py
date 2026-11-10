@@ -72,7 +72,14 @@ def read_settings(repo: Path) -> Mapping[str, Any]:
     its own probing, and a missing setting reads the same as an absent one (the env and the
     doctor note, not the settings read, carry the warning)."""
     merged: dict[str, Any] = {}
-    paths = [Path.home() / ".claude" / "settings.json", repo / ".claude" / "settings.json"]
+    paths: list[Path] = []
+    try:
+        home = Path.home()
+    except RuntimeError:  # HOME unset: no user settings to read, never an error
+        home = None
+    if home is not None:
+        paths.append(home / ".claude" / "settings.json")
+    paths.append(repo / ".claude" / "settings.json")
     for path in paths:
         try:
             if path.is_file():
