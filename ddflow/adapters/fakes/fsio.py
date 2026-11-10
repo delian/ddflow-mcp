@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import contextlib
-import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from ..fsio import Fsio
+from ..fsio import Fsio, TemporaryDirectory, atomic_write
 from . import fake
 
 
@@ -44,7 +43,7 @@ class _ScratchDir:
     """A `scratch_dir` that yields a `Path` (not `TemporaryDirectory`'s str) and removes it on exit."""
 
     def __init__(self) -> None:
-        self._dir = tempfile.TemporaryDirectory()
+        self._dir = TemporaryDirectory()
 
     def __enter__(self) -> Path:
         return Path(self._dir.name)
@@ -57,9 +56,9 @@ class _TempText:
     """A `temp_text` that writes to a real temp dir and removes it on exit (no leak)."""
 
     def __init__(self, text: str, suffix: str) -> None:
-        self._dir = tempfile.TemporaryDirectory()
+        self._dir = TemporaryDirectory()
         self.path = Path(self._dir.name) / f"text{suffix}"
-        self.path.write_text(text)
+        atomic_write(self.path, text)
 
     def __enter__(self) -> Path:
         return self.path

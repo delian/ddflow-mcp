@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from ddflow.adapters.config_store import ConfigStore, LocalConfigStore
+from ddflow.adapters.config_store import ConfigStore
 from ddflow.adapters.fakes.config_store import FakeConfigStore
+from ddflow.services.config_store import LocalConfigStore
 
 
 def _resolved(io, root, *, env=None):

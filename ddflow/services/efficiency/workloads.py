@@ -17,11 +17,12 @@ never spend silently.
 from __future__ import annotations
 
 import json
-import tomllib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from ddflow.adapters.toml import TomlLibIo
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -110,7 +111,7 @@ def load_workloads(source: str | Path | None = None) -> dict[str, Workload]:
     never silently evaluate to ``UNRUN``-by-mistake.
     """
     path = Path(source) if source else _TEMPLATE
-    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    raw = TomlLibIo().read(path)
     workloads: dict[str, Workload] = {}
     for block in raw.get("workload", []):
         rule_raw = block.get("pass_rule", {})

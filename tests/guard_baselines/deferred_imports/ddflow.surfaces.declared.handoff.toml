@@ -1,0 +1,5 @@
+# Ratchet `deferred_imports` for ddflow.surfaces.declared.handoff (tests/test_architecture_guards.py).
+# `ddflow.api.handoff` is imported lazily so importing the declared command table does not
+# pull `ddflow.api` into sys.modules (tests/test_clock_duration.py::test_the_tool_table_does_not_pull_in_the_api).
+# Lower it in the same change that removes sites; delete the file at zero; never raise it.
+baseline = 1

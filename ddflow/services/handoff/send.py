@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ...adapters import git
 from ...config import Config
 from . import events
 from .events import SuggestionRefused
@@ -50,8 +51,6 @@ def resolve_patch(
             f"suggest takes exactly one of --commit/--diff/--blob, got {given or ['none']}"
         )
     if commit:
-        from ...adapters import git
-
         show = git.run(repo, "show", "--no-notes", "--format=", "--binary", commit)
         if show.unavailable or not show.ok:
             raise SuggestError(f"git could not show {commit}: {show.err}")

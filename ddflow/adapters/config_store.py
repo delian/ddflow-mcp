@@ -12,6 +12,9 @@ config stays TOML).
 
 The default stays small on purpose: `resolve`/`validate`/`explain` are the in-process
 `Config`; `set`/`unset` go through `services.configwrite`, the one guarded write path.
+Because that default reaches up into `ddflow.config` and `ddflow.services.configwrite`, it
+lives in `ddflow.services.config_store` (r-core-pure): the bottom `adapters` layer declares
+the port, the `services` layer supplies the default.
 """
 
 from __future__ import annotations
@@ -29,7 +32,9 @@ class ConfigStore(Protocol):
 
     Home: `ddflow.adapters.config_store` (compat: the call sites still import
     `ddflow.config.Config` / `services.configwrite`). Single default adapter; a new source is
-    a new adapter, never a new code path in the loader or writer.
+    a new adapter, never a new code path in the loader or writer. The default
+    (`ddflow.services.config_store.LocalConfigStore`) reads the in-process `Config` and
+    writes `configwrite`.
     """
 
     def resolve(self, root: Path | str | None = None, *, env: dict[str, str] | None = None) -> Any:
@@ -56,45 +61,3 @@ class ConfigStore(Protocol):
         `EditResult` (nothing written when anything is refused). A key REMOVAL (`unset`) is
         not in this port yet: `services.configwrite` has a set and an append edit but no
         remove edit, so deletion waits on one (ADP-config-store)."""
-
-
-class LocalConfigStore:
-    """The default `ConfigStore`: resolves the in-process `Config`, writes `configwrite`."""
-
-    def resolve(self, root: Path | str | None = None, *, env: dict[str, str] | None = None):
-        from ddflow.config import Config
-
-        return Config.load(Path(root) if root is not None else None, env=env)
-
-    def validate(self, data: dict[str, Any], *, written: Any = None) -> None:
-        from ddflow.config import Config
-
-        Config.check(data, written=written)
-
-    def explain(self, resolved: Any) -> list[tuple[str, Any, str, str]]:
-        return resolved.explain()
-
-    def set(
-        self,
-        root: Path | str,
-        key: str,
-        value: object,
-        *,
-        layer: str = "file",
-        person: bool = False,
-        agent: str = "",
-    ):
-        from ddflow.services import configwrite as cw
-
-        return cw.apply_edit(
-            Path(root),
-            cw.SetPairs([(key, value)]),
-            layer=layer,
-            person=person,
-            agent=agent,
-        )
-
-
-def default_store() -> LocalConfigStore:
-    """The one default adapter."""
-    return LocalConfigStore()

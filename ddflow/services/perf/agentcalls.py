@@ -12,8 +12,11 @@ durations and cost only, marked approximate and versioned (those formats change)
 from __future__ import annotations
 
 import json
+import time
 from collections import defaultdict
 from dataclasses import dataclass
+
+from ddflow.services.perf import store
 
 
 def _js(parts: list[str]) -> str:
@@ -64,10 +67,6 @@ def record(repo, source: str, tc: ToolCall) -> None:
     """Append one tool call to the local ring under ``agent_calls`` (the caller is the
     post-tool hook). ``source`` names the harness/feed; ``ok`` is encoded into the digest and
     a missing duration is the -1 sentinel, never a fabricated 0."""
-    import time
-
-    from ddflow.services.perf import store
-
     store.append(
         repo,
         "agent_calls",
@@ -83,8 +82,6 @@ def record(repo, source: str, tc: ToolCall) -> None:
 
 def rollup(repo) -> list[dict]:
     """per agent/lane/item/tool-class: {count, ok, failed, total_s} from the local ring."""
-    from ddflow.services.perf import store
-
     by: dict[tuple[str, str, str, str], dict] = defaultdict(
         lambda: {"count": 0, "ok": 0, "timed": 0, "total_s": 0.0}
     )
@@ -116,8 +113,6 @@ def doctor(repo) -> list[dict]:
     """Which agent-call sources are in use and which are available, so the operator can turn
     one off: the hook and any wired importer each count their own ring rows (read off the
     digest's source prefix); a not-wired importer is unavailable, never a zero count."""
-    from ddflow.services.perf import store
-
     counts: dict[str, int] = defaultdict(int)
     for s in store._read_ring(repo, "agent_calls"):
         source = s.digest.split(":")[0] if s.digest else "unknown"

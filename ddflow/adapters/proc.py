@@ -39,6 +39,7 @@ CalledProcessError = subprocess.CalledProcessError
 SubprocessError = subprocess.SubprocessError
 TimeoutExpired = subprocess.TimeoutExpired
 Popen = subprocess.Popen
+CompletedProcess = subprocess.CompletedProcess
 #: `Popen` whose reap keeps its own rusage (see `resources.metered`).
 MeteredPopen = R.metered(subprocess.Popen)
 

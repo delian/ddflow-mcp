@@ -27,6 +27,7 @@ catches `OSError` keeps working, and each keeps the text urllib gave it:
 from __future__ import annotations
 
 import http.client
+import ipaddress
 import socket
 import ssl
 import urllib.error
@@ -169,7 +170,6 @@ def local_endpoint(base_url: str) -> bool:
 
     Lives here (not a caller) so ``urllib.parse`` stays home in this module: the
     ``http-home`` import contract forbids every other module importing it."""
-    import ipaddress
 
     try:
         host = (urllib.parse.urlparse(base_url).hostname or "").lower()

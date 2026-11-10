@@ -502,6 +502,10 @@ detect_absolute_floor_s = 5.0
 detect_persistence_windows = 2
 detect_creep_alpha = 0.1
 detect_creep_threshold = 0.1
+flaky_window_s = 604800
+flaky_quarantine_after = 3
+flaky_quarantine_expiry_s = 2592000
+flaky_retry_cost_s = 60.0
 budget_gate_p90_s = 180.0
 budget_test_file_s = 120.0
 budget_stage_lease_wait_s = 120.0
@@ -664,6 +668,18 @@ report_brief_chars = 200
 report_test_files = 12
 agent_brief_lessons = 3
 agent_brief_extra = ""
+
+[slo]
+target_command_p95_s = 2.0
+target_gate_p90_s = 300.0
+target_queue_age_s = 600.0
+target_unavailable_rate = 0.25
+target_stuck_lanes = 2
+target_ci_false_red_rate = 0.1
+target_log_events_per_item = 30.0
+target_review_finding_rate = 0.6
+burn_rate_window_s = 2592000
+burn_rate_exhaust_s = 3600.0
 
 [swarm]
 w_critical = 3.0
