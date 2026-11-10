@@ -60,7 +60,7 @@ def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
 
     def run() -> None:
         try:
-            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
             missing["argv0"] = argv[0] if argv else "?"
             raise
@@ -69,7 +69,11 @@ def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
         except OSError:
             missing["argv0"] = argv[0] if argv else "?"
             raise
-        ran["returncode"] = proc.returncode = os.waitstatus_to_exitcode(status)
+        if os.WIFSIGNALED(status):
+            ran["returncode"] = -os.WTERMSIG(status)
+        else:
+            ran["returncode"] = os.WEXITSTATUS(status)
+        proc.returncode = ran["returncode"]
         child.update(
             {
                 "cpu_s": ru.ru_utime + ru.ru_stime,
