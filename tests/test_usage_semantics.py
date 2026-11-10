@@ -8,6 +8,8 @@ never zero.
 
 from __future__ import annotations
 
+import os
+
 import ddflow.services.metrics.usage_semantics as U
 
 
@@ -63,10 +65,11 @@ def test_a_missing_or_corrupt_table_reads_none_not_a_raise():
 
     import tempfile
 
-    bad = tempfile.NamedTemporaryFile(suffix=".toml", delete=False)
-    bad.write(b"\xff\xfe not utf-8")
-    bad.close()
-    assert U.semantics_for("claude-code", bad.name).mode == U.NONE
+    with tempfile.TemporaryDirectory() as tmp:
+        bad = os.path.join(tmp, "bad.toml")
+        with open(bad, "wb") as fh:
+            fh.write(b"\xff\xfe not utf-8")
+        assert U.semantics_for("claude-code", bad).mode == U.NONE
 
 
 def test_resolve_figure_for_a_cumulative_harness():
