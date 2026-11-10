@@ -397,9 +397,19 @@ def parse(text: str, name: str) -> Harness:
     return h
 
 
+#: Data files under the descriptors directory that are not descriptors themselves. A
+#: descriptor is ``<id>.toml`` with its own ``id = "<id>"``; these are sidecar data files
+#: (the feature catalog, PAR-catalog) that the registry must not parse as a harness.
+NON_DESCRIPTOR_FILES = frozenset({"catalog.toml"})
+
+
 def _parse_dir(directory: Path) -> tuple[Harness, ...]:
     """Every descriptor under ``directory``, ranked, each file's id checked against its name."""
-    found = [parse(p.read_text(encoding="utf-8"), p.stem) for p in sorted(directory.glob("*.toml"))]
+    found = [
+        parse(p.read_text(encoding="utf-8"), p.stem)
+        for p in sorted(directory.glob("*.toml"))
+        if p.name not in NON_DESCRIPTOR_FILES
+    ]
     ranks: dict[int, str] = {}
     for h in found:
         if h.rank in ranks:
