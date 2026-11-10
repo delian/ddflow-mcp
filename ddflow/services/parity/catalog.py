@@ -17,13 +17,13 @@ data file and its ``[[history]]`` ledger, not new code.
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass, fields as dc_fields
+from dataclasses import dataclass
+from dataclasses import fields as dc_fields
 from pathlib import Path
 from typing import Any
 
 from ddflow.services import harnessreg as HR
 from ddflow.services import harnessv2 as HV
-from ddflow.services.swarm import conformance as CF
 
 IN_AGENT = "in_agent"
 ORCHESTRATOR = "orchestrator"
@@ -194,7 +194,9 @@ def load(path: str | Path | None = None) -> Catalog:
         for i, entry in enumerate(section):
             _require(isinstance(entry, dict), p.name, f"[{axis}][{i}] must be a table")
             row = _parse_row(entry, axis, f"{p.name}[{axis}][{i}]")
-            _require(row.feature not in seen, row.feature, f"duplicate feature slug {row.feature!r}")
+            _require(
+                row.feature not in seen, row.feature, f"duplicate feature slug {row.feature!r}"
+            )
             seen.add(row.feature)
             rows.append(row)
 

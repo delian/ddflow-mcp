@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 
 from ddflow.services import harnessreg as HR
-from ddflow.services import harnessv2 as HV
 from ddflow.services.parity import catalog as C
 from ddflow.services.swarm import conformance as CF
 
@@ -72,7 +71,9 @@ def test_the_catalog_cites_the_existing_checks_it_must_reuse():
     # are the real swarm-conformance ladder (1-7), not the bare token
     levels_row = C.load().by_feature("conformance-levels-1-7")
     assert "lane" in levels_row.checks
-    assert CF.CHECKS and len(CF.CHECKS) == 7  # launch claim heartbeat gate_record hook lease_stop tool_accuracy
+    assert (
+        CF.CHECKS and len(CF.CHECKS) == 7
+    )  # launch claim heartbeat gate_record hook lease_stop tool_accuracy
 
 
 def test_lane_and_declared_check_modules_exist_and_are_the_single_owner():
@@ -116,7 +117,7 @@ def test_the_catalog_files_stay_under_the_size_ratchet():
 
 
 def test_a_row_with_no_check_is_refused(tmp_path):
-    _write(tmp_path, "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = []\n")
+    _write(tmp_path, '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = []\n')
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
 
@@ -124,7 +125,7 @@ def test_a_row_with_no_check_is_refused(tmp_path):
 def test_a_live_row_without_an_add_history_entry_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = ["facts"]\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -133,8 +134,8 @@ def test_a_live_row_without_an_add_history_entry_is_refused(tmp_path):
 def test_a_non_string_check_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [1]\n"
-        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = [1]\n'
+        '[[history]]\nfeature = "x"\naction = "add"\ndate = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -143,9 +144,9 @@ def test_a_non_string_check_is_refused(tmp_path):
 def test_an_orphan_add_history_entry_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
-        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
-        "[[history]]\nfeature = \"ghost\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = ["facts"]\n'
+        '[[history]]\nfeature = "x"\naction = "add"\ndate = "2026-11-10"\n'
+        '[[history]]\nfeature = "ghost"\naction = "add"\ndate = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -154,8 +155,8 @@ def test_an_orphan_add_history_entry_is_refused(tmp_path):
 def test_a_retired_slug_must_not_stay_live(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
-        "[[history]]\nfeature = \"x\"\naction = \"retire\"\ndate = \"2026-11-10\"\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = ["facts"]\n'
+        '[[history]]\nfeature = "x"\naction = "retire"\ndate = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -164,9 +165,9 @@ def test_a_retired_slug_must_not_stay_live(tmp_path):
 def test_an_unknown_top_level_table_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
-        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
-        "[[features]]\nfeature = \"y\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = ["facts"]\n'
+        '[[history]]\nfeature = "x"\naction = "add"\ndate = "2026-11-10"\n'
+        '[[features]]\nfeature = "y"\ndescriptor_fields = ["env"]\nchecks = ["facts"]\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -175,9 +176,9 @@ def test_an_unknown_top_level_table_is_refused(tmp_path):
 def test_a_live_row_whose_latest_action_is_edit_loads(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
-        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
-        "[[history]]\nfeature = \"x\"\naction = \"edit\"\ndate = \"2026-11-11\"\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\nchecks = ["facts"]\n'
+        '[[history]]\nfeature = "x"\naction = "add"\ndate = "2026-11-10"\n'
+        '[[history]]\nfeature = "x"\naction = "edit"\ndate = "2026-11-11"\n',
     )
     catalog = C.load(tmp_path / "catalog.toml")
     assert catalog.by_feature("x").feature == "x"
@@ -186,7 +187,7 @@ def test_a_live_row_whose_latest_action_is_edit_loads(tmp_path):
 def test_a_retired_slug_with_no_live_row_is_a_recorded_removal(tmp_path):
     _write(
         tmp_path,
-        "[[history]]\nfeature = \"gone\"\naction = \"retire\"\ndate = \"2026-11-10\"\n",
+        '[[history]]\nfeature = "gone"\naction = "retire"\ndate = "2026-11-10"\n',
     )
     catalog = C.load(tmp_path / "catalog.toml")
     assert all(r.feature != "gone" for r in catalog.rows)
@@ -196,9 +197,9 @@ def test_a_retired_slug_with_no_live_row_is_a_recorded_removal(tmp_path):
 def test_a_non_int_version_is_refused(tmp_path):
     _write(
         tmp_path,
-        "version = \"banana\"\n[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
-        "checks = [\"facts\"]\n[[history]]\nfeature = \"x\"\naction = \"add\"\n"
-        "date = \"2026-11-10\"\n",
+        'version = "banana"\n[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\n'
+        'checks = ["facts"]\n[[history]]\nfeature = "x"\naction = "add"\n'
+        'date = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -207,9 +208,9 @@ def test_a_non_int_version_is_refused(tmp_path):
 def test_a_non_string_note_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
-        "checks = [\"facts\"]\nnote = 1\n"
-        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\n'
+        'checks = ["facts"]\nnote = 1\n'
+        '[[history]]\nfeature = "x"\naction = "add"\ndate = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -218,9 +219,9 @@ def test_a_non_string_note_is_refused(tmp_path):
 def test_a_non_one_version_is_refused(tmp_path):
     _write(
         tmp_path,
-        "version = 2\n[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
-        "checks = [\"facts\"]\n[[history]]\nfeature = \"x\"\naction = \"add\"\n"
-        "date = \"2026-11-10\"\n",
+        'version = 2\n[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\n'
+        'checks = ["facts"]\n[[history]]\nfeature = "x"\naction = "add"\n'
+        'date = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -229,9 +230,9 @@ def test_a_non_one_version_is_refused(tmp_path):
 def test_an_edit_without_an_add_is_refused(tmp_path):
     _write(
         tmp_path,
-        "[[in_agent]]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\n"
-        "checks = [\"facts\"]\n[[history]]\nfeature = \"x\"\naction = \"edit\"\n"
-        "date = \"2026-11-10\"\n",
+        '[[in_agent]]\nfeature = "x"\ndescriptor_fields = ["env"]\n'
+        'checks = ["facts"]\n[[history]]\nfeature = "x"\naction = "edit"\n'
+        'date = "2026-11-10"\n',
     )
     with pytest.raises(C.CatalogError):
         C.load(tmp_path / "catalog.toml")
@@ -239,5 +240,3 @@ def test_an_edit_without_an_add_is_refused(tmp_path):
 
 def _write(tmp_path, body: str) -> None:
     (tmp_path / "catalog.toml").write_text(body)
-
-
