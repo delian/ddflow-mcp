@@ -81,7 +81,7 @@ def wrap_command(cmd: str, *, program: str = "ddflow") -> str:
 def measure(
     run: Callable[[], None],
     *,
-    probe: Callable[[str], "dict[str, float | None] | None"],
+    probe: Callable[[str], dict[str, float | None] | None],
     clock: Callable[[], float] = time.monotonic,
     container: Callable[[], bool | None] | None = None,
     env_key: str = "",
