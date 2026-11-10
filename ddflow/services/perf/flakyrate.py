@@ -27,13 +27,13 @@ from ddflow.services import flakes
 
 def file_of(test: str) -> str:
     """The file a flake's test id belongs to. A pytest node id (``tests/test_a.py::test_x``)
-    is cut at the first ``::``; a pytest FILE id (already ``tests/test_a.py``) is returned
-    as-is; a unittest id (``pkg.mod.Class.test``) drops the trailing CamelCase class and its
-    method and re-joins dots to a path (``pkg/mod.py``) -- so flake and duration rows agree on
-    a file id."""
+    is cut at the first ``::``; a pytest FILE id ending in ``.py`` (``tests/test_a.py`` or a
+    bare ``test_a.py``) is returned as-is; a unittest id (``pkg.mod.Class.test``) drops the
+    trailing CamelCase class and its method and re-joins dots to a path (``pkg/mod.py``) -- so
+    flake and duration rows agree on a file id."""
     if "::" in test:
         return test.split("::", 1)[0]
-    if "/" in test:
+    if test.endswith(".py"):
         return test
     parts = test.split(".")
     # The trailing class (+ any method) is the last segment that names a class: uppercase first.

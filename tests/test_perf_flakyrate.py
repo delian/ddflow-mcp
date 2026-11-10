@@ -33,6 +33,7 @@ def _row(test: str, t: float, item: str = "", gate: str = "unit_tests") -> dict:
 def test_file_of_cuts_a_pytest_node_and_maps_a_unittest_class():
     assert flakyrate.file_of("tests/test_a.py::test_thing[1]") == "tests/test_a.py"
     assert flakyrate.file_of("tests/test_a.py") == "tests/test_a.py"
+    assert flakyrate.file_of("test_a.py") == "test_a.py"
     assert flakyrate.file_of("tests.test_a.TestSuite.test_thing") == "tests/test_a.py"
 
 
