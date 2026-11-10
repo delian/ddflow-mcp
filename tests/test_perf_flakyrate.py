@@ -10,10 +10,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
+from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.core import clock
 from ddflow.services.perf import flakyrate
 
 DAY = 86400
+CFG = PerfMetricsConfig(
+    flaky_window_s=7 * DAY,
+    flaky_quarantine_after=3,
+    flaky_quarantine_expiry_s=30 * DAY,
+    flaky_retry_cost_s=60.0,
+)
 NOW = clock.epoch("2026-11-01T00:00:00Z")
 
 
@@ -48,7 +55,7 @@ def test_rates_report_count_rate_per_day_and_retry_cost():
         _row("tests/a.py::t1", NOW - 2 * DAY),
         _row("tests/a.py::t2", NOW - DAY),
     ]
-    view = flakyrate.rates(rows, now=NOW, window_s=7 * DAY, retry_cost_s=60.0)
+    view = flakyrate.rates(rows, now=NOW, perf_metrics=CFG)
     assert view["flakes"] == 3
     top = view["per_test"][0]
     assert top["test"] == "tests/a.py::t1"
@@ -56,7 +63,6 @@ def test_rates_report_count_rate_per_day_and_retry_cost():
     assert top["flakes"] == 2
     assert top["rate_per_day"] == pytest.approx(2 / 7)
     assert top["last_at"] == pytest.approx(NOW - DAY)
-    # 3 flakes at 60s each in this window
     assert view["retry_cost_s"] == pytest.approx(3 * 60.0)
 
 
@@ -66,19 +72,18 @@ def test_rates_group_per_file_and_keep_ids_only():
         _row("tests/a.py::t2", NOW - DAY),
         _row("tests/b.py::t3", NOW - DAY),
     ]
-    view = flakyrate.rates(rows, now=NOW, window_s=7 * DAY)
+    view = flakyrate.rates(rows, now=NOW, perf_metrics=CFG)
     by_file = {p["file"]: p for p in view["per_file"]}
     assert by_file["tests/a.py"]["flakes"] == 2 and by_file["tests/a.py"]["tests"] == 2
     assert by_file["tests/b.py"]["flakes"] == 1
-    # ids and counts only: no failure text rides out
     assert "failure" not in view["per_test"][0]
 
 
 def test_proposal_fires_only_at_the_quarantine_threshold():
     two = [_row("tests/a.py::t1", NOW - i * DAY) for i in range(2)]
-    assert flakyrate.proposals(two, now=NOW, quarantine_after=3) == []
+    assert flakyrate.proposals(two, now=NOW, perf_metrics=CFG) == []
     three = [_row("tests/a.py::t1", NOW - i * DAY) for i in range(3)]
-    props = flakyrate.proposals(three, now=NOW, quarantine_after=3)
+    props = flakyrate.proposals(three, now=NOW, perf_metrics=CFG)
     assert len(props) == 1
     assert props[0]["test"] == "tests/a.py::t1"
     assert props[0]["flakes"] == 3
@@ -87,7 +92,7 @@ def test_proposal_fires_only_at_the_quarantine_threshold():
 
 def test_proposal_names_owner_and_expiry():
     rows = [_row("tests/a.py::t1", NOW - i * DAY, item="ITEM-9") for i in range(3)]
-    prop = flakyrate.proposals(rows, now=NOW, quarantine_expiry_s=30 * DAY)[0]
+    prop = flakyrate.proposals(rows, now=NOW, perf_metrics=CFG)[0]
     assert prop["owner"] == "ITEM-9"
     assert prop["expires_at"] == clock.iso_at(NOW + 30 * DAY)
     assert prop["file"] == "tests/a.py"
@@ -99,19 +104,24 @@ def test_a_flake_outside_the_window_never_proposes():
         _row("tests/a.py::t1", NOW - 101 * DAY),
         _row("tests/a.py::t1", NOW - 102 * DAY),
     ]
-    assert flakyrate.proposals(rows, now=NOW, quarantine_after=3) == []
+    assert flakyrate.proposals(rows, now=NOW, perf_metrics=CFG) == []
 
 
 def test_a_row_with_no_timestamp_is_never_inside_the_window():
     rows = [{"test": "tests/a.py::t1", "at": ""}, _row("tests/a.py::t1", NOW)]
-    # now close to epoch 0: a 0.0 sentinel would fall INSIDE a 7-day window here
-    view = flakyrate.rates(rows, now=100.0, window_s=7 * DAY)
-    assert view["flakes"] == 0  # the timestamp-less row is excluded, never counted at epoch 0
+    view = flakyrate.rates(rows, now=100.0, perf_metrics=CFG)
+    assert view["flakes"] == 0
+
+
+def test_a_row_without_a_test_id_is_skipped_not_a_key_error():
+    rows = [{"at": clock.iso_at(NOW), "item": "B-1"}]
+    assert flakyrate.rates(rows, now=NOW, perf_metrics=CFG)["flakes"] == 0
 
 
 def test_a_zero_window_clamps_not_crashes():
-    view = flakyrate.rates([_row("tests/a.py::t1", NOW)], now=NOW, window_s=0)
-    assert view["window_s"] == 1  # never a ZeroDivisionError on window 0
+    zero = PerfMetricsConfig(flaky_window_s=0)
+    view = flakyrate.rates([_row("tests/a.py::t1", NOW)], now=NOW, perf_metrics=zero)
+    assert view["window_s"] == 1
 
 
 def test_report_reads_the_flake_log_and_returns_rates_and_proposals(tmp_path: Path):
@@ -119,23 +129,25 @@ def test_report_reads_the_flake_log_and_returns_rates_and_proposals(tmp_path: Pa
     log.parent.mkdir(parents=True)
     rows = [_row("tests/a.py::t1", NOW - i * DAY, item="ITEM-1") for i in range(3)]
     log.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))
-    view = flakyrate.report(tmp_path, now=NOW, quarantine_after=3)
+    view = flakyrate.report(tmp_path, now=NOW, perf_metrics=CFG)
     assert view["flakes"] == 3
     assert [p["test"] for p in view["proposals"]] == ["tests/a.py::t1"]
-    # a missing log (no file) is an empty view, not an error
-    assert flakyrate.report(tmp_path / "missing", now=NOW)["flakes"] == 0
+    assert flakyrate.report(tmp_path / "missing", now=NOW, perf_metrics=CFG)["flakes"] == 0
 
 
 def test_report_counts_and_proposes_a_flake_on_the_window_edge(tmp_path: Path):
+    cfg = PerfMetricsConfig(flaky_window_s=100, flaky_quarantine_after=1)
     log = tmp_path / ".ddflow" / "local" / "flakes.jsonl"
     log.parent.mkdir(parents=True)
     log.write_text(json.dumps(_row("tests/a.py::t1", NOW - 100, item="I"), sort_keys=True) + "\n")
-    view = flakyrate.report(tmp_path, now=NOW, window_s=100, quarantine_after=1)
-    assert view["flakes"] == 1  # the on-edge flake is inside the window in BOTH views
+    view = flakyrate.report(tmp_path, now=NOW, perf_metrics=cfg)
+    assert view["flakes"] == 1
     assert len(view["proposals"]) == 1
 
 
-def test_the_default_thresholds_are_applied_when_omitted(tmp_path: Path):
-    view = flakyrate.report(tmp_path)  # all thresholds default
-    assert view["window_s"] == 7 * DAY
+def test_the_config_default_is_applied_when_perf_metrics_is_omitted(tmp_path: Path):
+    from ddflow.config import Config
+
+    view = flakyrate.report(tmp_path)
+    assert view["window_s"] == Config().perf_metrics.flaky_window_s == 7 * DAY
     assert view["flakes"] == 0
