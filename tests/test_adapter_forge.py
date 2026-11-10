@@ -130,7 +130,8 @@ def test_the_fake_scripts_and_records():
     got = io.find("feat/x")
     assert got is info and io.view(7) is info
     io.merge(7, strategy="squash", head_sha="abc", auto=True)
-    assert io.calls[0] == ("find", "feat/x") and io.calls[2] == ("merge", 7, "squash")
+    assert io.calls[0] == ("find", "feat/x")
+    assert io.calls[2] == ("merge", 7, "squash", "abc", True)
 
 
 def test_the_fake_scripts_an_unavailable_answer():
