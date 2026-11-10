@@ -32,3 +32,4 @@
 {"agent":"lane6-kilo","data":{"gate":"ci"},"id":"ee776ccd825908fac4b50f009","kind":"gate.started","lamport":168352,"schema":1,"subject":"fix-Ba17fabe249","ts":"2026-11-10T22:59:37.582004Z"}
 {"agent":"lane6-kilo","data":{"by":"lane6-kilo","evidence":{"started_tree_sha":"6018031021b5+clean","terminated_by":"SIGTERM"},"gate":"ci","reason":"the run was terminated by SIGTERM before its command finished"},"id":"e534142ac7b9088bd1cfc63db","kind":"gate.unavailable","lamport":168431,"schema":1,"subject":"fix-Ba17fabe249","ts":"2026-11-10T23:09:30.438950Z"}
 {"agent":"lane6-kilo","data":{"gate":"ci"},"id":"e98d37e1527aaadedc81224dd","kind":"gate.started","lamport":168440,"schema":1,"subject":"fix-Ba17fabe249","ts":"2026-11-10T23:09:46.778479Z"}
+{"agent":"lane6-kilo","data":{"at":1794353088.9216435,"holder":"lane6-kilo"},"id":"e0eddde805cd557b5b040fe18","kind":"lease.renewed","lamport":168611,"schema":1,"subject":"fix-Ba17fabe249","ts":"2026-11-10T23:24:49.440159Z"}
