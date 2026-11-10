@@ -11,12 +11,13 @@ from ...core import clock
 from ...core import globs as GL
 from ...core.admission import conflicts, glob_conflict, is_shared
 from ...core.admission import glob_clashes as _glob_clashes
-from ...core.flow import line_key
+from ...core.flow import branch_name, line_key
 from ...core.model import Item, Lease, State, fold
 from ...infra import worktree as W
 from ...infra.log import EventLog, bare_agent_id
 from .. import changes as CH
 from .. import leases as _leases
+from .. import probe as PR
 from ..leaseclock import localize
 
 
@@ -96,6 +97,53 @@ def unfinished_leases(state: State, cfg: Config, now: float) -> dict[str, Lease]
         for i, lz in state.active_leases(now, cfg.lease.grace_s).items()
         if not (i in state.items and state.items[i].terminal)
     }
+
+
+def optimistic_clashes(
+    log: EventLog,
+    cfg: Config,
+    state: State,
+    it: Item,
+    holder: str,
+    clashes: list[tuple[str, Lease, tuple[str, str]]],
+) -> tuple[list[tuple[str, Lease, tuple[str, str]]], list[str]]:
+    """Split clashing pairs into what stays exclusive and what a clean merge-tree probe
+    shares optimistically (DX-lease-hunk-optimistic).
+
+    Off (default) every clash stays exclusive (`D-lease-overlap-only-by-break`). On, a
+    pair whose holder's branch merges cleanly into this claim's base is dropped as
+    optimistic -- git auto-merges the two branches' disjoint hunks, and the merge rebases
+    the second instead of waiting -- and its glob is returned for the claim to record. A
+    conflict, an unknown holder branch, or a probe that could not run stays exclusive: a
+    silent no-answer fails closed to the refusal, never to an optimistic grant.
+    """
+    if not cfg.locks.optimistic:
+        return clashes, []
+    mine_ref = it.lease.branch if it.lease and it.lease.branch else W.default_branch(log.root)
+    kept: list[tuple[str, Lease, tuple[str, str]]] = []
+    optimistic: list[str] = []
+    seen: dict[str, PR.Probe] = {}
+    for other_id, lz, (mine, theirs) in clashes:
+        other = state.items.get(other_id)
+        holder_ref = lz.branch if lz.branch else (branch_name(other, cfg) if other else "")
+        if not holder_ref:
+            kept.append((other_id, lz, (mine, theirs)))
+            continue
+        probe = seen.get(holder_ref)
+        if probe is None:
+            probe = PR.run(
+                log.root,
+                mine_ref,
+                holder_ref,
+                timeout_s=cfg.locks.probe_timeout_s,
+                min_git=cfg.locks.probe_merge_tree_min_git,
+            )
+            seen[holder_ref] = probe
+        if probe.clean:
+            optimistic.append(mine)
+        else:
+            kept.append((other_id, lz, (mine, theirs)))
+    return kept, list(dict.fromkeys(optimistic))
 
 
 def holder_changed_paths(log: EventLog, it: Item) -> list[str] | None:

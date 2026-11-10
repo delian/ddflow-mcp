@@ -100,6 +100,7 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         note=d.get("note", ""),
         resources=list(d.get("resources", [])),
         clone=str(d.get("clone", "")),
+        optimistic=list(d.get("optimistic", [])),
         event=ev.id or ev.compute_id(),
         prior_state=it.state,
         prior_holder=it.lease.holder if it.lease else "",

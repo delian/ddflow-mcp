@@ -18,7 +18,7 @@ from ...infra.log import EventLog
 from .. import identity as _ID
 from .. import leasebreak as LB
 from .. import leases as _leases
-from .common import _clone_field, _fold, clash_report, glob_clash, glob_clashes
+from .common import _clone_field, _fold, clash_report, glob_clash, glob_clashes, optimistic_clashes
 from .model import LeaseError, Offer
 from .remote import _remote_drop, _remote_renew, _remote_take
 
@@ -279,6 +279,16 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             clash = _break_idle(
                 log, cfg, state, it, holder, mine, now, clash, break_lease, activity, broke, pre
             )
+        # Optimistic concurrency (DX-lease-hunk-optimistic): a PLAIN claim whose remaining
+        # clashes all merge cleanly is granted with those globs recorded `optimistic`, so the
+        # two branches stand together and the later merge rebases; a real conflict, a
+        # generated/pinned file or an unanswerable probe keeps the exclusive refusal.
+        optimistic: list[str] = []
+        if clash and not force:
+            clashes, optimistic = optimistic_clashes(
+                log, cfg, state, it, holder, glob_clashes(state, cfg, it, holder, mine, now)
+            )
+            clash = clashes[0] if clashes else None
         # Taking over an EXPIRED lease -- the holder's own or a crashed agent's -- needs
         # --force for the expiry alone. It must not also waive the overlap check: expiry
         # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
@@ -350,6 +360,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
                 "note": note,
                 "kind": it.kind,
                 "resources": wants,
+                "optimistic": optimistic,
                 **_clone_field(log, holder),
             },
         )
@@ -363,6 +374,7 @@ def _acquire_locked(  # noqa: PLR0913 -- the claim's own fields plus the caller'
             globs=mine,
             note=note,
             resources=wants,
+            optimistic=optimistic,
         )
 
 
