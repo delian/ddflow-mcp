@@ -90,3 +90,16 @@ def test_a_repeated_item_is_raced_on_a_new_family_not_billed_twice_on_one():
         budget_usd=10.0,
     )
     assert [(h.item, h.family) for h in plan] == [("a", "qwen"), ("a", "gemini")]
+
+
+def test_a_hedge_never_lands_on_the_items_own_family():
+    # the item's own family is excluded even when the caller omitted it from ``on``
+    plan = HG.plan(
+        candidates=("a",),
+        on={},
+        own={"a": "deepseek"},
+        families=["deepseek", "qwen"],
+        budget_usd=100.0,
+        attempt_usd=2.0,
+    )
+    assert [(h.item, h.family) for h in plan] == [("a", "qwen")]

@@ -55,20 +55,26 @@ def plan(
     on: Mapping[str, Collection[str]],
     families: Sequence[str],
     hard: Collection[str] = (),
+    own: Mapping[str, str] | None = None,
     *,
     budget_usd: float | None = None,
     attempt_usd: float | None = None,
 ) -> tuple[Hedge, ...]:
     """The capped hedge plan.
 
-    Each candidate is duplicated onto the first ``families`` not already racing it (a hedge
-    never lands on the item's own family, and an item repeated in ``candidates`` is raced on
-    a new family each time, never billed twice on one); a candidate with no other family is
-    skipped. The plan stops once the next attempt would exceed ``budget_usd``; when either
-    the budget or ``attempt_usd`` is unverified the cap is left unchecked instead of guessed.
+    Each candidate is duplicated onto the first ``families`` not already racing it, and
+    never onto its own family (``own`` maps an item to the family currently working it).
+    An item repeated in ``candidates`` is raced on a new family each time, never billed
+    twice on one; a candidate with no other family is skipped. The plan stops once the
+    next attempt would exceed ``budget_usd``; when either the budget or ``attempt_usd`` is
+    unverified the cap is left unchecked instead of guessed.
     """
+    own = own or {}
     out: list[Hedge] = []
-    racing = {item: set(on.get(item, ())) for item in candidates}
+    racing = {
+        item: (set(on.get(item, ())) | ({own[item]} if own.get(item) else set()))
+        for item in candidates
+    }
     spent = 0.0
     for item in candidates:
         already = racing.setdefault(item, set())
