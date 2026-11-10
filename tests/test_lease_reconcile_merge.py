@@ -109,5 +109,6 @@ def test_an_unknown_reconcile_fails_closed_and_still_blocks(repo):
         {"files": [], "base": "0" * 40, "main": "0" * 40, "unknown": True},
     )
     st = _state(repo)
+    assert st.items["T1"].reconciled["unknown"] is True
     v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
-    assert any("reconciled" in b or "could not read" in b for b in v.blockers), v.blockers
+    assert any("could not read" in b for b in v.blockers), v.blockers

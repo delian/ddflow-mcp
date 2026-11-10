@@ -95,7 +95,7 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
 
 
 def _record_reconciled(
-    repo, cfg, log, st, it, item: str, landed_before: str, landed_after: str, branch_head: str
+    repo, cfg, log, it, item: str, landed_before: str, landed_after: str, branch_head: str
 ) -> None:
     """Record `merge.reconciled` when this landing touched a file another item changed since
     this item forked: the reconcile-at-merge safety net of D-lease-hold-limit-r2. Complete is
@@ -322,7 +322,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         landed_before=landed_before,
         landed_after=landed_after,
     )
-    _record_reconciled(repo, cfg, log, st, it, item, landed_before, landed_after, branch_head)
+    _record_reconciled(repo, cfg, log, it, item, landed_before, landed_after, branch_head)
     return _finish_merge(
         repo,
         cfg,

@@ -41,6 +41,7 @@ def _h_merge_reconciled(st: State, ev: Event) -> None:
         "base": ev.data.get("base", ""),
         "main": ev.data.get("main", ev.data.get("sha", "")),
         "at": ev.ts,
+        "unknown": bool(ev.data.get("unknown")),
     }
 
 
