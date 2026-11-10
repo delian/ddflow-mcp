@@ -200,6 +200,27 @@ def test_a_tree_sha_merely_containing_the_reconciled_prefix_stays_fail_closed(re
     assert any("reconciled src/x.py" in b for b in v.blockers), v.blockers
 
 
+def test_a_pass_with_only_a_note_containing_the_path_is_not_tree_evidence(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "src/x.py")
+    EventLog(repo).append(
+        "merge.reconciled",
+        "T1",
+        {"files": ["flow.py"], "base": "a" * 40, "main": "b" * 40},
+    )
+    # A note that merely CONTAINS the reconciled path as a substring ("flow.py" inside
+    # "overflow.py") is free text, not WHERE the run ran: with no `tree_sha` the guard stays
+    # closed (it cannot prove the run sat on the reconciled tree).
+    EventLog(repo).append(
+        "gate.passed",
+        "T1",
+        {"gate": "unit_tests", "evidence": {"note": "overflow.py still green"}},
+    )
+    st = _state(repo)
+    v = CM.verdict(st, Config.load(repo), "T1", repo=repo, model="claude-sonnet-5-5")
+    assert any("reconciled flow.py" in b for b in v.blockers), v.blockers
+
+
 def test_a_missing_base_sha_records_an_unknown_reconcile_fail_closed(repo):
     import subprocess
 

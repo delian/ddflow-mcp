@@ -300,23 +300,18 @@ def _reconciled_blocker(cfg: Config, it: Item) -> str:
         return ""
     reconciled_at = it.reconciled.get("at") or ""
     reconciled_main = (it.reconciled.get("main") or "")[:12]
-    reconciled_files = list(it.reconciled.get("files") or [])
 
     def names_reconciled_tree(rec) -> bool:
         # A stamp at or after `at` is not proof the run was ON the reconciled tree: a pass
-        # recorded after the reconcile can still be a stale pre-merge checkout. The run must
-        # name the reconciled commit (`tree_sha` prefixes `reconciled["main"]`). A `tree_sha`
-        # naming a DIFFERENT commit is a stale checkout, whatever the note says; only when the
-        # run carries no `tree_sha` does naming a reconciled file count as its whole evidence.
+        # recorded after the reconcile can still be a stale pre-merge checkout. `tree_sha` is
+        # the run's OWN word for where it ran ("<commit-sha-prefix>+<status>"), so only a run
+        # whose HEAD starts with the reconciled commit sat on the reconciled tree; anything
+        # else (a different commit, or no `tree_sha`) is not proof and the guard stays closed.
+        # The note is free text and never evidence of WHERE the run ran (a path name is a
+        # substring of other names), so it is not consulted.
         ev = rec.evidence or {}
-        sha = str(ev.get("tree_sha", ""))
-        if sha:
-            # `tree_sha` is "<commit-sha-prefix>+<status>", so the reconciled commit is the
-            # run's HEAD: a PREFIX match, not a substring -- a different commit whose hash
-            # merely contains the reconciled prefix is not the reconciled tree.
-            return bool(reconciled_main) and sha.startswith(reconciled_main)
-        note = str(ev.get("note", ""))
-        return bool(note) and any(f in note for f in reconciled_files)
+        sha = str(ev.get("tree_sha", "") or "")
+        return bool(sha) and bool(reconciled_main) and sha.startswith(reconciled_main)
 
     def passed_on_reconciled_tree(gate: str) -> bool:
         # A pass recorded BEFORE the reconcile is a stale pre-merge run; the guard asks for
