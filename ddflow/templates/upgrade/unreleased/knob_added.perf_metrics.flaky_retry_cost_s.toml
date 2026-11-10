@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.flaky_retry_cost_s"
+new = "60.0"
+why = "Estimated wall seconds one failed->rerun cycle costs; the rate view multiplies flakes in the window by this for retry cost (the flake log stores no per-retry..."
+impact = "additive"

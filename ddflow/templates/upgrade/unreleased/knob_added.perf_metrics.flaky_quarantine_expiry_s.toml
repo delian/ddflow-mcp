@@ -1,0 +1,6 @@
+[[change]]
+kind = "knob_added"
+key = "perf_metrics.flaky_quarantine_expiry_s"
+new = "2592000"
+why = "Seconds a quarantine proposal stays open (its expiry); after this the test is re-evaluated rather than quarantined forever."
+impact = "additive"
