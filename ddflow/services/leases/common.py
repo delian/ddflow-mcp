@@ -181,7 +181,9 @@ def optimistic_clashes(
     # clean against one holder and a real conflict on `src/a.py` against another never half-
     # shares the file.
     kept_mine = [m for _o, _lz, (m, _t) in kept]
-    optimistic = [g for g in dict.fromkeys(optimistic) if not any(GL.overlap(g, m) for m in kept_mine)]
+    optimistic = [
+        g for g in dict.fromkeys(optimistic) if not any(GL.overlap(g, m) for m in kept_mine)
+    ]
     return kept, optimistic
 
 
