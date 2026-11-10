@@ -176,10 +176,10 @@ class Finding:
     #: peer-findings).
     reviewer: str = ""
     family: str = ""
-    #: Non-empty when this is not a finding at all -- a location field holding the
-    #: reviewer thinking aloud, or a paragraph of reasoning that states no defect -- so the
-    #: gate records it for the operator but does not count it against the outcome
-    #: (B-review-finding-is-unfinished-reasoning).
+    #: Non-empty when this is not a finding at all -- a location field holding the reviewer
+    #: thinking aloud instead of a citation -- so the gate records it for the operator but
+    #: does not count it against the outcome (B-review-finding-is-unfinished-reasoning). The
+    #: paragraph is not classified (that half of the bug is deliberately out of scope).
     malformed: str = ""
 
 
