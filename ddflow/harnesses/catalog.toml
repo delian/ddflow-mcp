@@ -1,0 +1,348 @@
+# Feature catalogue: every in-agent and orchestrator feature as a managed data row.
+#
+# Each row names the descriptor field(s) that answer the feature and the offline
+# conformance check(s) that grade it. The check ids cite the checks that already exist:
+#   facts, hooks            -> ddflow.services.driver_conformance.run
+#   hook:<event>, argv, stream -> tests/harness_conformance.declared
+#   lane                    -> ddflow.services.swarm.conformance (levels 1-7)
+# A field the catalog cannot name stays empty (a ddflow-side knob, named in the note), and
+# a fact nobody verified remains unknown, never guessed.
+version = 1
+
+[[in_agent]]
+feature = "instruction-file"
+title = "Instruction file"
+descriptor_fields = ["instructions.reads", "instructions.agents_md", "instructions.claude_md"]
+checks = ["facts"]
+note = "Which instruction files the agent reads, and whether AGENTS.md / CLAUDE.md reach it."
+
+[[in_agent]]
+feature = "mcp-config"
+title = "MCP config"
+descriptor_fields = ["mcp.path", "mcp.shape", "mcp.approve_file", "mcp.approve_key", "mcp.deny_key"]
+checks = ["facts"]
+note = "Where and how ddflow's MCP server is registered, and which file approves/denies it."
+
+[[in_agent]]
+feature = "lean-tool-profile"
+title = "Lean tool profile"
+descriptor_fields = []
+checks = []
+note = "The lean [mcp].tools profile is ddflow-side config; the descriptor has no field for it, so it is ungraded here (never guessed)."
+
+[[in_agent]]
+feature = "session-start-brief"
+title = "Session-start brief path"
+descriptor_fields = []
+checks = []
+note = "The brief path is ddflow-side session config; the descriptor carries no field for it, so it is ungraded here (never guessed)."
+
+[[in_agent]]
+feature = "pre-tool-enforcement"
+title = "Pre-tool enforcement hook"
+descriptor_fields = ["hooks.file", "hooks.style", "hooks.events"]
+checks = ["hook:pre_tool", "hooks"]
+note = "The PreToolUse hook that enforces rules before a tool call."
+
+[[in_agent]]
+feature = "post-tool-recording"
+title = "Post-tool recording"
+descriptor_fields = ["hooks.events", "hooks.session_id"]
+checks = ["hook:post_tool", "hooks"]
+note = "The PostToolUse hook that records a tool call; session_id lifts identity out of the payload."
+
+[[in_agent]]
+feature = "stop-gate-reminder"
+title = "Stop / gate reminder"
+descriptor_fields = ["hooks.events", "continuation.mechanism", "continuation.cap"]
+checks = ["hook:stop", "facts"]
+note = "The Stop hook reminding the model of the gate, and the continuation cap that bounds it."
+
+[[in_agent]]
+feature = "skills-and-commands"
+title = "Skills and commands"
+descriptor_fields = ["skills.dir", "commands.dir", "commands.format", "subagents.dir"]
+checks = ["facts"]
+note = "Where skills, slash commands and subagent definitions live and render."
+
+[[in_agent]]
+feature = "agent-session-identity"
+title = "Agent and session identity"
+descriptor_fields = ["detect.client_names", "detect.env", "env.session_id", "hooks.session_id"]
+checks = ["facts"]
+note = "How ddflow recognises the agent and reads the session id."
+
+[[in_agent]]
+feature = "approvals-relay"
+title = "Approvals relay"
+descriptor_fields = []
+checks = []
+note = "Approvals surface only over the operator's chat (ddflow-side relay); the descriptor has no field for it, so it is ungraded here (never guessed)."
+
+[[in_agent]]
+feature = "session-ingest"
+title = "Session ingest"
+descriptor_fields = ["continuation.mechanism", "headless.resume_flag"]
+checks = ["facts"]
+note = "Whether a prior session can be resumed; the descriptor's continuation/resume facts answer it."
+
+[[in_agent]]
+feature = "trust-handling"
+title = "Trust handling"
+descriptor_fields = ["mcp.approve_file", "mcp.approve_key", "mcp.deny_key", "hooks.block"]
+checks = ["facts"]
+note = "The hook/server trust step; approve/deny keys and the block mode are the boundary the descriptor names."
+
+[[in_agent]]
+feature = "version-detection"
+title = "Version detection"
+descriptor_fields = ["detect.process_names", "verified.date", "verified.probe"]
+checks = ["facts"]
+note = "Which process names identify the agent, and the probe that verified its version and date."
+
+[[orchestrator]]
+feature = "headless-launch"
+title = "Headless launch"
+descriptor_fields = ["headless.argv", "headless.model_flag", "headless.effort_flag", "headless.mcp_flag"]
+checks = ["argv", "facts"]
+note = "The launch template and how the model, effort and MCP are set per spawn."
+
+[[orchestrator]]
+feature = "state-dir-isolation"
+title = "State-dir isolation"
+descriptor_fields = ["worktrees.dir"]
+checks = ["facts"]
+note = "A per-lane worktree directory isolates each claim's edits."
+
+[[orchestrator]]
+feature = "key-by-env-name"
+title = "Key by env name"
+descriptor_fields = []
+checks = []
+note = "Endpoint addresses and API-key env NAME live in ddflow/modelreg and .ddflow/local/models.toml; the descriptor has no field for them, so they are ungraded here (never guessed)."
+
+[[orchestrator]]
+feature = "permission-mode"
+title = "Permission mode"
+descriptor_fields = ["headless.autonomy", "autonomy.profiles", "autonomy.files"]
+checks = ["facts"]
+note = "The autonomy profile headless launch uses, and the files that hold the permission flags."
+
+[[orchestrator]]
+feature = "budget-limits"
+title = "Budget limits"
+descriptor_fields = ["caps.mcp_tools", "caps.instructions_bytes", "caps.subagent_depth"]
+checks = ["facts"]
+note = "The tool-count, instruction-size and subagent-depth caps the agent enforces."
+
+[[orchestrator]]
+feature = "stream-mapping"
+title = "Stream mapping"
+descriptor_fields = ["headless.output_format", "telemetry.transcript_format"]
+checks = ["stream", "facts"]
+note = "The output format a headless run emits, and the transcript format the lane taps."
+
+[[orchestrator]]
+feature = "usage-and-cost"
+title = "Usage and cost"
+descriptor_fields = ["meters.context", "meters.quota"]
+checks = ["facts"]
+note = "Where context use and remaining quota are read from."
+
+[[orchestrator]]
+feature = "limit-detection"
+title = "Limit detection"
+descriptor_fields = ["meters.quota", "caps.mcp_tools", "caps.instructions_bytes"]
+checks = ["facts"]
+note = "Which meter/cap fields drive the lane's limit detection."
+
+[[orchestrator]]
+feature = "stop-on-lease-revocation"
+title = "Stop on lease revocation"
+descriptor_fields = ["orchestration.stop", "autonomy.files"]
+checks = ["lane", "facts"]
+note = "The lane conformance level grades stop-on-revocation against a live stub; autonomy.files name the revocation flag's file."
+
+[[orchestrator]]
+feature = "steer"
+title = "Steer"
+descriptor_fields = ["orchestration.dispatch"]
+checks = ["facts"]
+note = "How the wave loop fans each claimed item to a subagent (orchestration.dispatch)."
+
+[[orchestrator]]
+feature = "resume"
+title = "Resume"
+descriptor_fields = ["continuation.mechanism", "continuation.cap", "headless.resume_flag"]
+checks = ["facts"]
+note = "The continuation mechanism, its cap, and the headless resume flag."
+
+[[orchestrator]]
+feature = "hook-injection-in-lanes"
+title = "Hook injection in lanes"
+descriptor_fields = ["hooks.inject", "hooks.events"]
+checks = ["hook:session_start", "hooks"]
+note = "Which canonical events inject ddflow's context into the model (the lane's hook bridge)."
+
+[[orchestrator]]
+feature = "conformance-levels-1-7"
+title = "Conformance levels 1-7"
+descriptor_fields = ["orchestration.loop", "orchestration.keepalive"]
+checks = ["lane"]
+note = "The swarm conformance ladder grades the lane's launch/claim/heartbeat/gate_record/hook/lease_stop/tool_accuracy."
+
+[[history]]
+feature = "instruction-file"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "mcp-config"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "lean-tool-profile"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "session-start-brief"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "pre-tool-enforcement"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "post-tool-recording"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "stop-gate-reminder"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "skills-and-commands"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "agent-session-identity"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "approvals-relay"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "session-ingest"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "trust-handling"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "version-detection"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "headless-launch"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "state-dir-isolation"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "key-by-env-name"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "permission-mode"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "budget-limits"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "stream-mapping"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "usage-and-cost"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "limit-detection"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "stop-on-lease-revocation"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "steer"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "resume"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "hook-injection-in-lanes"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
+
+[[history]]
+feature = "conformance-levels-1-7"
+action = "add"
+date = "2026-11-10"
+note = "Initial catalog row."
