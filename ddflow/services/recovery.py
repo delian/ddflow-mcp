@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 
 from ..infra import fsio
+from ..infra import worktree as W
 from ..services import leases as L
 from ..services import mergequeue as MQ
 
@@ -176,10 +177,10 @@ def _one_safe(repo, log, agent, a, L, MQ) -> dict:
 
 def _repair_base_ref(repo: Path, a) -> dict:
     """Reset a worktree's own `.ddflow/config.toml` `base_ref = "--flag"` to the default
-    (auto-detect). Targets the single base_ref line and nothing else, so it is idempotent
-    and never touches a comment or another section."""
+    (``base_ref = ""`` = auto-detect). Targets the single base_ref line and nothing else,
+    so it is idempotent and never touches a comment or another section."""
     worktree = a.evidence.get("worktree", "")
-    path = Path(repo) / worktree / ".ddflow" / "config.toml" if worktree else None
+    path = (W.load_path(repo, worktree) / ".ddflow" / "config.toml") if worktree else None
     if not path or not path.exists():
         return {"item": a.item, "applied": False, "note": "its worktree has no local config to repair"}
     try:
