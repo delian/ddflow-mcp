@@ -90,3 +90,9 @@ def test_retire_stage_proposes_when_the_wait_is_not_paid_back():
 def test_retire_stage_stays_quiet_when_the_wait_is_paid_back():
     cfg = PerfMetricsConfig(prop_retire_payback=2.0)
     assert prop_flow.propose_retire_stage("merge_wait", 20.0, 100.0, cfg=cfg) is None
+
+
+def test_retire_stage_fires_when_the_stage_buys_nothing_back():
+    cfg = PerfMetricsConfig(prop_retire_payback=2.0)
+    p = prop_flow.propose_retire_stage("lint", 30.0, 0.0, cfg=cfg)
+    assert p is not None and p.kind == "retire_stage"  # paid back 0: never a clear

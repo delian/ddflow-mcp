@@ -170,10 +170,8 @@ def propose_retire_stage(
     cfg: PerfMetricsConfig | None = None,
 ) -> Proposal | None:
     """Retire a stage whose wait exceeds ``prop_retire_payback`` times what it buys back. None
-    when the wait is paid back."""
+    when the wait is paid back. (A stage that buys nothing back is exactly the retire case.)"""
     cfg = cfg or _section_knobs(Config())
-    if paid_back_s <= 0:
-        return None
     if wait_s < cfg.prop_retire_payback * paid_back_s:
         return None
     return Proposal(
