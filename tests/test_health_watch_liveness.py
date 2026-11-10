@@ -54,3 +54,22 @@ def test_one_failure_is_not_reported_as_a_loop(repo):
     _setup(repo)
     assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == FAIL  # one run is not a loop
     assert _loop_runaways(_findings(repo)) == []
+
+
+def test_two_loops_on_one_item_are_distinct_runaways(repo):
+    """Two different loop patterns on one held item are two problems, not one: the
+    (kind, item, holder) dedupe must not collapse them under the lease holder alone."""
+    run_cli(repo, "init")
+    cmd = f'{sys.executable} -c "import sys; print(chr(98)*3); sys.exit(1)"'
+    (repo / ".ddflow" / "gates.toml").write_text(
+        f'[gate.unit_tests]\ncommand = {json.dumps(cmd)}\ncwd = "repo"\n\n'
+        f'[gate.implement]\ncommand = {json.dumps(cmd)}\ncwd = "repo"\n'
+    )
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--globs", "a.py")
+    assert run_cli(repo, "claim", "T1")[0] == 0
+    for _ in range(3):
+        assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == FAIL
+        assert run_cli(repo, "gate", "run", "T1", "implement")[0] == FAIL
+    runaways = _loop_runaways(_findings(repo))
+    repeats = [f for f in runaways if f["evidence"].get("loop") == "repeated_failure"]
+    assert {f["evidence"]["gate"] for f in repeats} == {"unit_tests", "implement"}, repeats
