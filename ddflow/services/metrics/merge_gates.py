@@ -63,8 +63,10 @@ def _pipeline(cfg, item) -> list[str]:
 
 def _groups(kind: str, groups: tuple, pipeline: set[str], evidence: set[str]) -> list[dict]:
     """The groups fully present in the item's pipeline; a partial group is not proposed (a
-    gate the item does not run is not a candidate), and a bookkeeping group whose member is
-    in ``evidence_required`` is dropped (its input is an own run, not 'none')."""
+    gate the item does not run is not a candidate), and a BOOKKEEPING group whose member is
+    in ``evidence_required`` is dropped (its input is an own run, not 'none'). The review
+    pair keeps a member that is ``evidence_required``: a review records its own evidence AND
+    reads the one review diff, so its input is unchanged."""
     out = []
     for gates in groups:
         if kind == BOOKKEEPING_INPUT and any(g in evidence for g in gates):
@@ -81,6 +83,13 @@ def gate_merge_candidates(state: State, cfg, item) -> dict:
     pipe = _pipeline(cfg, item)
     present = set(pipe)
     evidence = set(getattr(cfg.gates, "evidence_required", ()) or ())
+    refused = []  # a bookkeeping group fully present but dropped: a member needs its own evidence
+    for kind, groups in ((BOOKKEEPING_INPUT, RECORD_TOGETHER),):
+        for gates in groups:
+            if all(g in present for g in gates) and any(g in evidence for g in gates):
+                refused.append(
+                    {"gates": list(gates), "input": kind, "why": "a member needs its own run evidence"}
+                )
     covered = [
         {"gate": covered, "by": covering, "input": COVERED_INPUT}
         for covered, covering in COVERED_BY.items()
@@ -92,6 +101,7 @@ def gate_merge_candidates(state: State, cfg, item) -> dict:
         "run_together": _groups(REVIEW_PAIR_INPUT, RUN_TOGETHER, present, evidence),
         "record_together": _groups(BOOKKEEPING_INPUT, RECORD_TOGETHER, present, evidence),
         "covered_by": covered,
+        "refused": refused,
         "pipeline": pipe,
         "next": {
             "cli": "ddflow gates merge",
@@ -115,8 +125,14 @@ def text(data: dict) -> str:
         out.append(f"  record together: {', '.join(r['gates'])}")
     for r in data["covered_by"]:
         out.append(f"  covered: {r['gate']} by {r['by']}")
+    for r in data.get("refused", []):
+        names = ", ".join(r.get("gates") or [f"{r['gate']} by {r['by']}"])
+        out.append(f"  refused: {names} - {r['why']}")
     if not has_figures(data):
-        out.append("  (none: no merge candidates in the pipeline)")
+        if data.get("refused"):
+            out.append("  (no merge candidates: the present groups were refused)")
+        else:
+            out.append("  (none: no merge candidates in the pipeline)")
     out.append(f"next: {data['next']['cli']}  |  {data['next']['mcp']}")
     return "\n".join(out)
 

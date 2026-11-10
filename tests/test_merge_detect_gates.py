@@ -92,6 +92,27 @@ def test_a_bookkeeping_member_that_needs_its_own_evidence_is_dropped():
     assert ("bug_hunt", "dedupe") in {tuple(r["gates"]) for r in record}
 
 
+def test_evidence_required_drops_bookkeeping_but_not_the_review_pair_or_covered_by():
+    cfg = cfg_with(FULL)
+    cfg.gates.evidence_required = ["unit_tests", "critic", "implement"]
+    data = gate_merge_candidates(None, cfg, task())
+    # covered_by: unit_tests is evidence_required but a covered gate is recorded from ci's
+    # run (the tree), so the tree input is unchanged and the proposal stays.
+    assert data["covered_by"] == [{"gate": "unit_tests", "by": "ci", "input": "tree"}]
+    # run_together: a review records its own evidence AND reads the one review diff.
+    assert data["run_together"] == [{"gates": ["rubber_duck", "critic"], "input": "review-diff"}]
+    # record_together: a bookkeeping member that needs its own evidence is dropped.
+    assert all(tuple(r["gates"]) != ("research", "rules", "implement") for r in data["record_together"])
+
+
+def test_a_refused_group_is_reported_not_silent():
+    cfg = cfg_with(["research", "rules", "implement"])
+    cfg.gates.evidence_required = ["research"]
+    data = gate_merge_candidates(None, cfg, task())
+    assert has_figures(data) is False
+    assert "refused: research, rules, implement" in text(data)
+
+
 def test_text_renders_proposals_and_names_the_next_call():
     out = text(gate_merge_candidates(None, cfg_with(FULL), task()))
     assert "run together: rubber_duck, critic" in out
