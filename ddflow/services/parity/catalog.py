@@ -57,7 +57,9 @@ def _sections() -> tuple[tuple[str, type], ...]:
 def field_paths() -> frozenset[str]:
     """Every ``section.key`` the descriptor can name, plus the reserved section names.
 
-    Computed from the live dataclasses, so the loader asserts against the schema itself.
+    ``_sections()`` and the section dataclasses are derived live (``dc_fields``); the five
+    scalar top-level fields (``id``, ``rank``, ``family``, ``title``, ``delta``) are a small
+    fixed set, not dataclass sections, so they are named explicitly here.
     """
     out: set[str] = {"id", "rank", "family", "title", "delta"}
     for name, cls in _sections():

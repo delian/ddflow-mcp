@@ -95,7 +95,7 @@ def test_lane_and_declared_check_modules_exist_and_are_the_single_owner():
 def test_rows_are_data_not_code():
     # The catalog is a TOML data file and a thin loader; the loader adds no per-agent code.
     assert (ROOT / "ddflow" / "harnesses" / "catalog.toml").is_file()
-    assert "python" not in (ROOT / "ddflow" / "harnesses" / "catalog.toml").suffix
+    assert (ROOT / "ddflow" / "harnesses" / "catalog.toml").suffix == ".toml"
 
 
 def test_every_active_row_has_an_add_history_entry(catalog):
