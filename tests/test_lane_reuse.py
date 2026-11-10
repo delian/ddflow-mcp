@@ -41,6 +41,13 @@ def test_merged_per_hour_decays_when_the_lane_is_quiet() -> None:
     assert merged_per_hour([_merged(old)], 3600.0, now) == pytest.approx(0.0)
 
 
+def test_merged_per_hour_ignores_a_future_dated_event() -> None:
+    # a stale `now` behind the newest event does not count that future-dated merge
+    fut = "2026-11-10T21:00:00Z"
+    now = epoch("2026-11-10T20:00:00Z")
+    assert merged_per_hour([_merged(fut)], 3600.0, now) == pytest.approx(0.0)
+
+
 def test_a_zero_window_is_refused_not_divided_by() -> None:
     with pytest.raises(ValueError):
         merged_per_hour([], 0.0, now=0.0)
