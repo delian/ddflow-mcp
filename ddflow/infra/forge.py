@@ -29,11 +29,11 @@ from ddflow.adapters.forge import (  # noqa: F401  # re-exported for the flow se
     _run,
 )
 from ddflow.adapters.forge_github import (  # noqa: F401  # re-exported (was public here)
-    GitHub,
     _GH_QUEUE_QUERY,
     _GH_REPLY_MUTATION,
     _GH_RESOLVE_MUTATION,
     _GH_THREADS_QUERY,
+    GitHub,
     _gh_checks,
 )
 from ddflow.adapters.forge_gitlab import GitLab  # noqa: F401  # re-exported (was public here)

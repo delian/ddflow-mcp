@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ..core.textcut import clip
-from . import fsio
 from . import proc as P
 from .fs import which
 from .ports import port

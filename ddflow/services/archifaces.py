@@ -48,7 +48,12 @@ PROGRAM_HOMES: dict[str, tuple[str, tuple[str, ...]]] = {
     "git": ("ADP-git", ("ddflow.infra.git",)),
     "gh": (
         "ADP-forge",
-        ("ddflow.infra.forge", "ddflow.infra.upstream_gh", "ddflow.adapters.forge", "ddflow.adapters.forge_github"),
+        (
+            "ddflow.infra.forge",
+            "ddflow.infra.upstream_gh",
+            "ddflow.adapters.forge",
+            "ddflow.adapters.forge_github",
+        ),
     ),
     "glab": (
         "ADP-forge",
