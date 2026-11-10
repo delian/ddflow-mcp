@@ -164,9 +164,10 @@ def _measure_signal(
     measured by a cheap branch probe, not a ``git status``, so it never spends the budget).
 
     The ahead count comes from ``RepoFacts``, asked once per scan across every worktree, so
-    this rank costs nothing the scan was not already paying. Unknown is never ranked above
-    resolved-clean: ranking an unknown LAST would push an unreadable tree past the cap, and
-    ranking it FIRST would let every queryable tree hide a genuinely unmerged one."""
+    this rank costs nothing the scan was not already paying. Unknown ranks below unmerged but
+    above resolved-clean: ranking an unknown LAST would push a possibly-unreadable tree past
+    the cap, and ranking it FIRST would let every queryable tree hide a genuinely unmerged
+    one."""
     wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
         return (3, 0)  # gone: the cheap branch probe, in any order
