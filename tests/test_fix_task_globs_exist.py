@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+
 from conftest import run_cli
 from helpers import state_as_reader as state
 
@@ -51,3 +53,22 @@ def test_an_explicit_glob_is_kept_even_when_it_names_a_file_the_fix_creates(repo
     out = K.bug_found(repo, summary="s", id="By", agent="a", globs="src/new_module.py")
     assert out.exit == 0, out.reason
     assert state(repo).items["fix-By"].globs == ["src/new_module.py"]
+
+
+def test_an_explicit_glob_naming_no_file_is_loudly_flagged(repo):
+    """Bf839186cee: `--globs` naming a file that names no tracked file held a lease on a
+    path nobody writes while the real file stayed unprotected, and nothing said so at
+    filing. A TRACKED file deleted from the worktree is still its path (in scope, no
+    warning); a path that names no tracked file is a wrong scope (warned)."""
+    _seed(repo)
+    subprocess.run(["git", "-C", str(repo), "add", "src/real.py"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "track real"], check=True)
+    (repo / "src" / "real.py").unlink()  # tracked but gone from the worktree: still the scope
+    out = K.bug_found(
+        repo, summary="s", id="Bz", agent="a",
+        globs="src/real.py,src/guessed/standards.py",
+    )
+    assert out.exit == 0, out.reason
+    warned = " ".join(out.data.get("glob_warnings", []))
+    assert "src/guessed/standards.py" in warned
+    assert "src/real.py" not in warned
