@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from ...api import handoff as H
 from ..registry import Command, Param, by_tool
 
 
 def _suggest(repo, a, agent):
     """`ddflow_suggest`. The sender's own item/agent is the operator's, at a terminal."""
+    from ...api import handoff as H
+
     return H.suggest(
         repo,
         item=a.get("item", "") or "",
