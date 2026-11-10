@@ -55,9 +55,7 @@ def test_a_slow_file_with_no_size_is_not_split():
     hand confirms that."""
     cfg = PerfMetricsConfig(prop_split_share=0.5)
     rollup = _rollup({"tests/test_a.py": 8.0, "tests/test_b.py": 2.0}, workers=1)
-    assert prop_tests.propose_split_files(
-        rollup, sizes={}, max_file_bytes=100, cfg=cfg
-    ) == []
+    assert prop_tests.propose_split_files(rollup, sizes={}, max_file_bytes=100, cfg=cfg) == []
 
 
 # -- shard vs workers ------------------------------------------------------------------
@@ -73,24 +71,32 @@ def test_a_skewed_suite_is_a_shard_of_the_slowest_file():
 
 def test_an_unskewed_suite_proposes_a_worker_raise_not_a_shard():
     cfg = PerfMetricsConfig(prop_shard_skew=0.5)
-    rollup = _rollup({"tests/test_a.py": 4.0, "tests/test_b.py": 3.0, "tests/test_c.py": 3.0}, workers=1)
+    rollup = _rollup(
+        {"tests/test_a.py": 4.0, "tests/test_b.py": 3.0, "tests/test_c.py": 3.0}, workers=1
+    )
     p = prop_tests.propose_shard_or_workers(rollup, cfg=cfg)
     assert p is not None and p.kind == "workers"
     assert p.advice["kind"] == "raise"
 
 
 def test_a_rollup_with_no_floor_proposes_nothing():
-    assert prop_tests.propose_shard_or_workers(
-        {"per_file": {"a.py": 1.0}, "critical_path_floor_s": None, "workers": 4},
-        cfg=PerfMetricsConfig(prop_shard_skew=0.5),
-    ) is None
+    assert (
+        prop_tests.propose_shard_or_workers(
+            {"per_file": {"a.py": 1.0}, "critical_path_floor_s": None, "workers": 4},
+            cfg=PerfMetricsConfig(prop_shard_skew=0.5),
+        )
+        is None
+    )
 
 
 def test_an_empty_rollup_proposes_nothing():
-    assert prop_tests.propose_shard_or_workers(
-        {"per_file": {}, "critical_path_floor_s": 10.0, "workers": 4},
-        cfg=PerfMetricsConfig(prop_shard_skew=0.5),
-    ) is None
+    assert (
+        prop_tests.propose_shard_or_workers(
+            {"per_file": {}, "critical_path_floor_s": 10.0, "workers": 4},
+            cfg=PerfMetricsConfig(prop_shard_skew=0.5),
+        )
+        is None
+    )
 
 
 # -- selection -------------------------------------------------------------------------
