@@ -10,9 +10,11 @@ import json
 from pathlib import Path
 
 from ddflow.adapters import forge as FG
+from ddflow.adapters import forge_github
 from ddflow.adapters.fakes import FAKES
 from ddflow.adapters.fakes.forge import FakeForge
-from ddflow.adapters.forge import ForgeError, ForgeUnavailable, GitHub, PRInfo, Thread
+from ddflow.adapters.forge import ForgeError, ForgeUnavailable, PRInfo, Thread
+from ddflow.adapters.forge_github import GitHub
 
 _PR = {
     "number": 1,
@@ -96,7 +98,7 @@ def forge_cases(io) -> None:
 
 
 def _scripted_github(monkeypatch) -> GitHub:
-    monkeypatch.setattr(FG, "_run", _gh_run)
+    monkeypatch.setattr(forge_github, "_run", _gh_run)
     return GitHub(Path("."))
 
 

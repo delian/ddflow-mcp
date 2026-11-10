@@ -1,4 +1,4 @@
-"""Compatibility re-export: the forge family moved to `ddflow.adapters.forge` (+ `forge_gitlab`).
+"""Compatibility re-export: the forge family moved to `ddflow.adapters.forge` (+ `forge_github`, `forge_gitlab`).
 
 The `Forge` port, its `GitHub`/`GitLab` adapters, `PRInfo`/`Thread` values and the
 `ForgeUnavailable`/`ForgeError` outcomes now live at the bottom `ddflow.adapters` layer; this
@@ -12,17 +12,29 @@ import shutil
 from pathlib import Path
 
 from ddflow.adapters.forge import (  # noqa: F401  # re-exported for the flow services
+    FEEDBACK_MAX,
     FORGES,  # the registry, for callers that name a forge
     GITHUB,
     GITLAB,
+    THREAD_BODY_MAX,
     Forge,
     ForgeError,
     ForgeUnavailable,
-    GitHub,
     PRInfo,
     Thread,
     _check,
+    _clip,
+    _count,
+    _json,
     _run,
+)
+from ddflow.adapters.forge_github import (  # noqa: F401  # re-exported (was public here)
+    GitHub,
+    _GH_QUEUE_QUERY,
+    _GH_REPLY_MUTATION,
+    _GH_RESOLVE_MUTATION,
+    _GH_THREADS_QUERY,
+    _gh_checks,
 )
 from ddflow.adapters.forge_gitlab import GitLab  # noqa: F401  # re-exported (was public here)
 from ddflow.adapters.registry import UnknownName
