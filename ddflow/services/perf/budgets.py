@@ -5,11 +5,12 @@ the file-size baseline: it is never raised without a recorded reason, and a prop
 without one is refused, never silently accepted). Three classes are budgeted: gate wall time
 (p90 seconds), one test file's serial time, and one stage wait (lease wait, merge wait).
 
-A series whose p90 exceeds its budget is a ``Breach`` -- a finding; when the severity knob is
-``block`` it is a refusal that names the exact next call (see the slowest tests, split the
-file, raise with a recorded reason), in CLI and MCP form (r-tell-dont-discover). Below the
-sample floor the check returns ``None`` (never a zero, never a false clear); a measurement
-that could not run is unavailable, never passed.
+``check`` always returns a ``Check`` -- never a bare ``None`` -- so a series below the SAMPLE
+FLOOR (``enough`` false, ``p90_s`` None) is told apart from a series that ran and stayed
+under budget (``enough`` true, ``breach`` false). A measurement that could not run is
+unavailable, never a zero and never a false clear. A breach whose severity knob is ``block``
+is also a refusal naming the exact next call (see the slowest tests, split the file, raise
+with a recorded reason) in CLI and MCP form (r-tell-dont-discover).
 
 Pure functions only: no I/O, no scheduler. The store owns the samples; this module answers
 "is this over budget" and "is this floor move allowed" from the values the caller already
@@ -99,19 +100,29 @@ _NEXT_CALLS = {
 
 
 @dataclass(frozen=True)
-class Breach:
-    """One budget exceeded: the measured p90, the budget, how many samples, the severity."""
+class Check:
+    """One budget checked. ``p90_s`` is None below the sample floor (``enough`` false) -- that
+    is "not enough data", NOT a clear; ``breach`` is the p90 over the budget ON enough data."""
 
     budget: str  # the budget name ("gate", "test_file", "stage:lease", "stage:merge")
     kind: str  # "gate" | "test_file" | "stage"
-    p90_s: float
+    p90_s: float | None  # None = below the sample floor, never a measured 0
     budget_s: float
     n: int
     severity: str  # "warn" (a finding) or "block" (a finding AND a refusal)
 
     @property
+    def enough(self) -> bool:
+        """Whether enough samples were seen: false is "cannot say", never "within budget"."""
+        return self.p90_s is not None
+
+    @property
+    def breach(self) -> bool:
+        return self.enough and self.p90_s > self.budget_s
+
+    @property
     def blocks(self) -> bool:
-        return self.severity == "block"
+        return self.breach and self.severity == "block"
 
     def next_call(self) -> str:
         """The next call this breach names, CLI and MCP form (r-tell-dont-discover)."""
@@ -122,43 +133,47 @@ def check(
     name: str,
     values: list[float],
     cfg: PerfMetricsConfig | None = None,
-) -> Breach | None:
-    """A breach when the series' p90 exceeds its budget on at least the sample floor; None
-    below the floor (not enough data) and None under budget (not a finding)."""
+) -> Check:
+    """The one answer for a series: enough data, and a breach or not. ``enough`` stays false
+    until the sample floor, so a too-short series is never read as "under budget"."""
     cfg = cfg or _section_knobs(Config())
-    p90 = _p90(values, cfg.budget_breach_min_samples)
-    if p90 is None:
-        return None
-    budget_s = budget_seconds(name, cfg)
-    if p90 <= budget_s:
-        return None
-    return Breach(name, kind_of(name), p90, budget_s, len(values), cfg.budget_severity)
+    return Check(
+        name,
+        kind_of(name),
+        _p90(values, cfg.budget_breach_min_samples),
+        budget_seconds(name, cfg),
+        len(values),
+        cfg.budget_severity,
+    )
 
 
 def checks(
     measured: dict[str, list[float]],
     cfg: PerfMetricsConfig | None = None,
-) -> list[Breach]:
-    """Every declared budget whose (measured) p90 exceeds it, one Breach each. ``measured``
-    maps a budget NAME to its duration samples; a name not in it is simply not checked."""
+) -> list[Check]:
+    """Only the BREACHES over the declared budgets (the findings). A name not in ``measured``
+    is not checked; a series under its floor is not a breach (and not a clear)."""
     cfg = cfg or _section_knobs(Config())
-    out: list[Breach] = []
-    for name, values in measured.items():
-        b = check(name, list(values), cfg)
-        if b is not None:
-            out.append(b)
-    return out
+    return [c for name, values in measured.items() if (c := check(name, list(values), cfg)).breach]
 
 
 def ratchet(current_s: float, proposed_s: float, reason: str = "") -> tuple[float, str]:
     """The shrink-only floor move. A proposal at or below the current floor tightens (accepts
-    and returns it); a proposal above the floor is refused without a recorded reason and
-    accepted only when one is given. Returns (accepted floor seconds, note)."""
+    and returns it); a proposal above the floor is refused without a NON-BLANK recorded reason
+    and accepted only when one is given. Returns (accepted floor seconds, note)."""
     if proposed_s <= current_s:
         return proposed_s, "tightened" if proposed_s < current_s else "unchanged"
-    if reason:
+    if reason and reason.strip():
         return proposed_s, f"raised with recorded reason: {reason}"
     return current_s, "refused: raising a budget floor needs a recorded reason"
 
 
-__all__ = ["BUDGETS", "Breach", "budget_seconds", "check", "checks", "kind_of", "ratchet"]
+__all__ = [
+    "BUDGETS",
+    "Check",
+    "budget_seconds",
+    "check",
+    "checks",
+    "kind_of",
+    "ratchet",
+]
