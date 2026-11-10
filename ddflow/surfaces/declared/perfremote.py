@@ -38,6 +38,7 @@ COMMANDS: tuple[Command, ...] = (
         family="ddflow_view",
         action="perf",
         tier="all",
+        help_group="Doing the work",
         description=(
             "Perf data about where ddflow runs. action=env: this machine class's fingerprint "
             "(a stable key over the class of machine, never a hostname, user or path, plus its "
