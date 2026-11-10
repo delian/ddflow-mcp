@@ -95,6 +95,10 @@ class LocksConfig:
         "2.38",
         doc="The oldest git whose `merge-tree --write-tree` the probe uses; an older git (or one that answers 129 to it, as 2.43 does to --quiet) makes the probe fall back to a scratch merge in a throwaway worktree, slower and the same answer.",
     )
+    optimistic: bool = knob(
+        False,
+        doc="Optimistic concurrency (DX-lease-hunk-optimistic): when a plain claim's globs overlap a live holder's on a non-generated file, run the `git merge-tree` conflict probe between the holder's branch and the claimant's branch. A clean merge conflates the two branches' disjoint hunks, so the claim is GRANTED and the overlapping files are recorded `optimistic` on the lease (the merge then rebases, re-running pin regeneration, instead of waiting); a real conflict or a probe that could not run keeps the exclusive-lease refusal (D-lease-overlap-only-by-break). Generated/pinned files ([lease].shared_globs, append-only and export targets) stay exclusive. Off (default) keeps the plain refusal. Change it for the project (`ddflow config locks.optimistic ...`), for this machine (add --local), per run (DDFLOW_LOCKS_OPTIMISTIC), or over MCP with `ddflow_configure`.",
+    )
     review_reuse: str = knob(
         "off",
         doc="Whether a recorded review may be REUSED after the tree it covered moved (main merged in or a rebase) instead of running it whole (LK-review-reuse). 'off' (default, until measured) never reuses: a review whose recorded tree no longer matches is re-reviewed. 'disjoint' classifies each review gate with `git patch-id --stable` of the item's own change plus disjoint changed files -- when the item's own change is unchanged and the files main changed are disjoint from the files the reviewer saw, the review is kept and the reason recorded; when they overlap, only the overlapping files are re-reviewed as a delta; anything git cannot tell invalidates (fail closed, never a guess). Measured by the wrong-keep rate (a kept review followed by a finding on the same files).",

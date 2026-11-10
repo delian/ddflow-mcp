@@ -3529,7 +3529,7 @@
 # ---
 # name: test_help[ddflow wait]
   '''
-  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--job JOB] [--token TOKEN] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
+  usage: ddflow wait [-h] [--item ITEM] [--phase PHASE] [--kind {task,phase}] [--globs GLOBS] [--lease LEASE] [--approval APPROVAL] [--job JOB] [--token TOKEN] [--notify NOTIFY] [--timeout TIMEOUT] [--poll POLL] [--max-s MAX_S]
   
   options:
     -h, --help           show this help message and exit
@@ -3547,6 +3547,9 @@
     --job JOB            wait for a job (a detached review's run handle) instead of an item, lease
                          or approval: until its process is over and its round is recorded
     --token TOKEN        resume token from an earlier wait
+    --notify NOTIFY      how to reach this waiter when its wake fires: empty (poll ddflow wait),
+                         `send_message:<session-id>` (harness session to resume) or `watch:<url>`
+                         (inbound URL to post to)
     --timeout TIMEOUT    seconds to wait (default 600; 0 asks without waiting)
     --poll POLL          seconds between log checks
     --max-s MAX_S        never wait longer than this many seconds: exit 2 naming the live holder and
