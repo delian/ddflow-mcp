@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "locks.optimistic"
+new = "false"
+why = "When on, a plain claim whose globs overlap a live holder's on a non-generated file is granted when a git merge-tree probe shows the two branches merge cleanly (DX-lease-hunk-optimistic); off keeps the plain refusal."
+impact = "additive"
