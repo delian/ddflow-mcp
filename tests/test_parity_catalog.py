@@ -162,6 +162,17 @@ def test_a_retired_slug_must_not_stay_live(tmp_path):
         C.load(tmp_path / "catalog.toml")
 
 
+def test_an_unknown_top_level_table_is_refused(tmp_path):
+    _write(
+        tmp_path,
+        "[in_agent]\nfeature = \"x\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n"
+        "[[history]]\nfeature = \"x\"\naction = \"add\"\ndate = \"2026-11-10\"\n"
+        "[[features]]\nfeature = \"y\"\ndescriptor_fields = [\"env\"]\nchecks = [\"facts\"]\n",
+    )
+    with pytest.raises(C.CatalogError):
+        C.load(tmp_path / "catalog.toml")
+
+
 def _write(tmp_path, body: str) -> None:
     (tmp_path / "catalog.toml").write_text(body)
 

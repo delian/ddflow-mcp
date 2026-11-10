@@ -179,6 +179,13 @@ def load(path: str | Path | None = None) -> Catalog:
 
     rows: list[Row] = []
     seen: set[str] = set()
+    unknown_top = set(raw) - {"version", IN_AGENT, ORCHESTRATOR, "history"}
+    _require(
+        not unknown_top,
+        p.name,
+        f"unknown top-level key(s): {', '.join(sorted(unknown_top))} "
+        "(expected version, [in_agent], [orchestrator], [history])",
+    )
     for axis in AXES:
         section = raw.get(axis, [])
         _require(isinstance(section, list), p.name, f"[{axis}] must be an array of tables")
