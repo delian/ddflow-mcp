@@ -3,14 +3,15 @@
 Reads the machine-local flake log (:mod:`ddflow.services.flakes`) and derives the numbers the
 report and the quarantine lane need: flake rate per test and per file over a rolling window,
 an estimated retry cost in seconds, and a quarantine proposal (owner + expiry) for any test
-that flaked ``flaky_quarantine_after`` times within the window.
+that flaked ``quarantine_after`` times within the window.
 
 This module MEASURES and PROPOSES only; the quarantine lane itself is B-sched-flaky's (no
 duplicate). There is no second store: the flake log is the one home of flake rows, and every
-threshold and interval is a ``[perf_metrics]`` knob (org-locked, like the rest of the section).
-A flake row carries a test id, a timestamp, a gate/item and a load -- never prompt text, a
-command argument, a user path or a secret -- and the view reads it back the same way: ids and
-counts only.
+threshold and interval is a call-site parameter with a default (the store knobs live in
+``[perf_metrics]``; this view's knobs are parameters so it stays a non-pin leaf, like
+:mod:`ddflow.services.perf.testtimes`). A flake row carries a test id, a timestamp, a gate/item
+and a load -- never prompt text, a command argument, a user path or a secret -- and the view
+reads it back the same way: ids and counts only.
 """
 
 from __future__ import annotations
@@ -20,12 +21,19 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from ddflow.config import Config
-from ddflow.config_sections.perf_metrics import PerfMetricsConfig
 from ddflow.core import clock
 from ddflow.services import flakes
 
 _DAY_S = 86400.0
+
+#: Default rolling window (seconds) over which flake rates and proposals are measured.
+DEFAULT_WINDOW_S = 7 * 86400
+#: Default flake count within the window that proposes a quarantine.
+DEFAULT_QUARANTINE_AFTER = 3
+#: Default seconds a proposal stays open (its expiry).
+DEFAULT_QUARANTINE_EXPIRY_S = 30 * 86400
+#: Default estimated wall seconds one failed->rerun cycle costs.
+DEFAULT_RETRY_COST_S = 60.0
 
 
 def file_of(test: str) -> str:
@@ -47,21 +55,6 @@ def file_of(test: str) -> str:
     return "/".join(parts) + ".py"
 
 
-def _section(perf_metrics: PerfMetricsConfig | None) -> PerfMetricsConfig:
-    """``perf_metrics`` or ``Config().perf_metrics`` -- naming each flaky knob once so the
-    dead-knob linter counts the name-based read (the ``store._section_knobs`` precedent)."""
-    if perf_metrics is not None:
-        return perf_metrics
-    config = Config()
-    _ = (
-        config.perf_metrics.flaky_window_s,
-        config.perf_metrics.flaky_quarantine_after,
-        config.perf_metrics.flaky_quarantine_expiry_s,
-        config.perf_metrics.flaky_retry_cost_s,
-    )
-    return config.perf_metrics
-
-
 def _epoch(row: dict[str, Any]) -> float | None:
     """The row's ``at`` as epoch seconds, or ``None`` when it is absent or not a time. A
     flake with no placeable timestamp is never counted as inside a window."""
@@ -72,7 +65,7 @@ def _epoch(row: dict[str, Any]) -> float | None:
     return None if epoch == float("inf") else epoch
 
 
-def window_rows(rows: list[dict[str, Any]], now: float, window_s: int) -> list[dict[str, Any]]:
+def window_rows(rows: list[dict[str, Any]], now: float, window_s: float) -> list[dict[str, Any]]:
     """The rows whose ``at`` falls in ``[now - window_s, now]``, in their log order. A row
     with a missing or unparseable timestamp cannot be placed and is left out."""
     return [r for r in rows if (e := _epoch(r)) is not None and now - window_s <= e <= now]
@@ -82,18 +75,17 @@ def rates(
     rows: list[dict[str, Any]],
     *,
     now: float | None = None,
-    perf_metrics: PerfMetricsConfig | None = None,
+    window_s: float = DEFAULT_WINDOW_S,
+    retry_cost_s: float = DEFAULT_RETRY_COST_S,
 ) -> dict[str, Any]:
     """Per-test and per-file flake rates over the window, plus the estimated retry cost.
 
     Rate per day = flakes / (window in days), reported BESIDE the raw count so a rate is
     never mistaken for a count. Only ids and counts leave here: no failure text, argument
     or secret. ``now`` defaults to wall time."""
-    cfg = _section(perf_metrics)
     now = time.time() if now is None else now
-    # Clamp to 1s: the [perf_metrics] knob check already refuses a non-positive window, but a
-    # hand-built PerfMetricsConfig bypasses it, and a zero window must not divide by zero.
-    window = max(1, cfg.flaky_window_s)
+    # Clamp to 1s: a non-positive window must not divide by zero.
+    window = max(1.0, window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in window_rows(rows, now, window):
         by_test[str(r["test"])].append(r)
@@ -125,7 +117,7 @@ def rates(
         "flakes": in_window,
         "per_test": sorted(per_test, key=lambda p: (-p["flakes"], p["test"])),
         "per_file": per_file,
-        "retry_cost_s": in_window * cfg.flaky_retry_cost_s,
+        "retry_cost_s": in_window * retry_cost_s,
     }
 
 
@@ -133,26 +125,27 @@ def proposals(
     rows: list[dict[str, Any]],
     *,
     now: float | None = None,
-    perf_metrics: PerfMetricsConfig | None = None,
+    window_s: float = DEFAULT_WINDOW_S,
+    quarantine_after: int = DEFAULT_QUARANTINE_AFTER,
+    quarantine_expiry_s: float = DEFAULT_QUARANTINE_EXPIRY_S,
 ) -> list[dict[str, Any]]:
-    """One proposal per test that flaked ``flaky_quarantine_after`` times within the window.
+    """One proposal per test that flaked ``quarantine_after`` times within the window.
 
     Each proposal carries an owner (the item whose gate last flaked this test -- the work that
     was running when it tripped; ``""`` when the log names none -- B-sched-flaky resolves a
-    person), an expiry (``now + flaky_quarantine_expiry_s``, ISO), and ``proposed`` as a MARKER
+    person), an expiry (``now + quarantine_expiry_s``, ISO), and ``proposed`` as a MARKER
     that this is a measure, not an action."""
-    cfg = _section(perf_metrics)
     now = time.time() if now is None else now
-    window = max(1, cfg.flaky_window_s)
+    window = max(1.0, window_s)
     by_test: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in window_rows(rows, now, window):
         by_test[str(r["test"])].append(r)
-    expiry = clock.iso_at(now + cfg.flaky_quarantine_expiry_s)
+    expiry = clock.iso_at(now + quarantine_expiry_s)
     out: list[dict[str, Any]] = []
     for test, rs in sorted(by_test.items()):
-        if len(rs) < cfg.flaky_quarantine_after:
+        if len(rs) < quarantine_after:
             continue
-        newest = max(rs, key=_epoch)
+        newest = max(rs, key=lambda r: _epoch(r) or 0.0)
         out.append(
             {
                 "test": test,
@@ -170,12 +163,14 @@ def report(
     repo: Path,
     *,
     now: float | None = None,
-    perf_metrics: PerfMetricsConfig | None = None,
+    window_s: float = DEFAULT_WINDOW_S,
+    quarantine_after: int = DEFAULT_QUARANTINE_AFTER,
+    quarantine_expiry_s: float = DEFAULT_QUARANTINE_EXPIRY_S,
+    retry_cost_s: float = DEFAULT_RETRY_COST_S,
 ) -> dict[str, Any]:
     """The rate view read from ``repo``'s flake log: rates + proposals, in one dict.
 
     A log that cannot be read is ``{"unavailable": True}`` -- never an empty (zero) view."""
-    cfg = _section(perf_metrics)
     try:
         rows = flakes.read(repo)
     except OSError:
@@ -184,8 +179,14 @@ def report(
     # edge, so a flake counted by one is never dropped by the other (each resolves ``now``
     # only when it is None -- a collected view resolves it here, once).
     now = time.time() if now is None else now
-    view = rates(rows, now=now, perf_metrics=cfg)
-    view["proposals"] = proposals(rows, now=now, perf_metrics=cfg)
+    view = rates(rows, now=now, window_s=window_s, retry_cost_s=retry_cost_s)
+    view["proposals"] = proposals(
+        rows,
+        now=now,
+        window_s=window_s,
+        quarantine_after=quarantine_after,
+        quarantine_expiry_s=quarantine_expiry_s,
+    )
     return view
 
 
