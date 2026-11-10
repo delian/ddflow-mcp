@@ -168,18 +168,22 @@ def heat_strip(
     dark: bool = False,
 ) -> str:
     """One heat strip of per-file shares: each cell's opacity encodes its share of the
-    total; a missing share (``None``) draws a gap (no cell), never the same mark as a real
-    zero share, so an unavailable probe is not recorded as zero."""
+    total; a missing share (``None``) draws a gap (no cell), and a real zero share draws an
+    empty cell with a dashed outline, so an unavailable probe is never read as a zero."""
     vals = [v for v in shares if v is not None]
     total = sum(vals)
     cell = width / max(len(shares), 1)
-    body = "".join(
-        f'<rect x="{_fmt(i * cell)}" y="0" width="{_fmt(cell)}" height="{height}" '
-        f'fill="{PALETTE[0]}" fill-opacity="{_fmt((v / total) if total else 0.0)}"/>'
-        for i, v in enumerate(shares)
-        if v is not None
-    )
-    return viewbox(width, height, dark=dark) + _head(title, desc) + body + "</svg>"
+    body: list[str] = []
+    for i, v in enumerate(shares):
+        if v is None:
+            continue
+        opacity = (v / total) if total else 0.0
+        outline = ' stroke="#888888" stroke-dasharray="2 2"' if v == 0.0 else ""
+        body.append(
+            f'<rect x="{_fmt(i * cell)}" y="0" width="{_fmt(cell)}" height="{height}" '
+            f'fill="{PALETTE[0]}" fill-opacity="{_fmt(opacity)}"{outline}/>'
+        )
+    return viewbox(width, height, dark=dark) + _head(title, desc) + "".join(body) + "</svg>"
 
 
 def scatter(
