@@ -147,9 +147,7 @@ def _keep_failing_ids(repo: Path, res) -> dict:
     # check) failed beside red tests: the baseline_split must still measure those tests on the
     # base to say "tests would be accepted" (Ba17fabe249). The non-test check is named in the
     # note; it never stops the list from being kept.
-    non_test = [
-        c.id for c in res.checks if not c.ok and c.id != "command" and "test" not in c.id.lower()
-    ]
+    non_test = [c.id for c in res.checks if not c.ok and not BL.test_check(c)]
     kept = BL.write_full(repo, res.sha, everyone)
     if kept:
         out["failing_ids"] = kept
