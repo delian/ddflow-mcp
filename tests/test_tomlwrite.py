@@ -135,15 +135,16 @@ def test_literal_keeps_what_is_already_a_value_and_quotes_the_rest(typed, writte
 
 
 def test_tomlkit_is_imported_in_one_module() -> None:
-    """The adapter rule (D-unify 2): only `infra/tomlcfg.py` imports it. (The architecture
-    guard counts uses of the module; this names the importers.)"""
+    """The adapter rule (ADP-toml, ADP-toml-unify): tomlkit is imported in
+    `ddflow/adapters/toml.py` alone -- `infra/tomlcfg.py` reads and writes through `TomlIo`.
+    (The architecture guard counts uses of the module; this names the importers.)"""
     root = Path(TC.__file__).resolve().parents[1]
     importers = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*.py")
         if re.search(r"^\s*(import|from) tomlkit\b", path.read_text("utf-8"), re.M)
     }
-    assert importers == {"infra/tomlcfg.py"}
+    assert importers == {"adapters/toml.py"}
 
 
 def test_a_zero_padded_number_is_written_as_text_not_refused() -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...config import Config
 from .. import git as G
 from .. import worktree as _W
 
@@ -23,9 +24,8 @@ GIT_REFUSED = 2
 #: git run `git stash create` first; while another process holds `.git/index.lock` (another
 #: agent's `git status`/`add` in the primary) that dies with `fatal: stash failed` BEFORE
 #: anything is merged. The next attempt, moments later, succeeds. So the merge is attempted a
-#: bounded number of times, pausing ``STASH_RETRY_PAUSE_S * 2**n`` between them.
-STASH_RETRIES = 4
-STASH_RETRY_PAUSE_S = 0.25
+#: bounded number of times (`[worktree].stash_retries`), pausing `[worktree].stash_retry_pause_s
+#: * 2**n` between them.
 
 
 def _stash_failed(r: G.GitResult, tree: Path) -> bool:
@@ -80,14 +80,14 @@ def _overwritten(r: G.GitResult) -> bool:
     return False
 
 
-def _merge_retrying_stash(tree: Path, args: list[str]) -> G.GitResult:
+def _merge_retrying_stash(tree: Path, args: list[str], cfg: Config) -> G.GitResult:
     """`git <args>`, retried only while git reports a transient pre-merge failure that
     merged nothing (`stash failed` or a lost `MERGE_MSG` read). When it never clears, the
     error names the cause and says nothing was merged."""
     r = _W.git(tree, *args)
     tries = 1
-    while not r.ok and _transient(r, tree) and tries < STASH_RETRIES:
-        _W.time.sleep(STASH_RETRY_PAUSE_S * 2 ** (tries - 1))
+    while not r.ok and _transient(r, tree) and tries < cfg.worktree.stash_retries:
+        _W.time.sleep(cfg.worktree.stash_retry_pause_s * 2 ** (tries - 1))
         r = _W.git(tree, *args)
         tries += 1
     if not r.ok and _stash_failed(r, tree):

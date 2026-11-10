@@ -85,8 +85,6 @@ _SUBMODULE_OF = {
     "unreadable": "_state",
     # _mergecore
     "GIT_REFUSED": "_mergecore",
-    "STASH_RETRIES": "_mergecore",
-    "STASH_RETRY_PAUSE_S": "_mergecore",
     "_merge_retrying_stash": "_mergecore",
     "_overwritten": "_mergecore",
     "_stash_failed": "_mergecore",
