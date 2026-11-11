@@ -116,19 +116,21 @@ OPENAPI_LITERALS = frozenset({"openapi"})
 UTCP_LITERALS = frozenset({"utcp"})
 
 # A set literal that names exactly one protocol family (the `jsonrpc` literal is handled
-# apart: it disambiguates to mcp/acp when those methods are present). Built once so
-# `_literal_site` stays a single ``elif v in`` lookup instead of one branch per family.
-_LITERAL_FAMILY: dict[str, str] = {
-    lit: fam
-    for fam, lits in (
-        ("mcp", MCP_METHODS),
-        ("acp", ACP_METHODS),
-        ("a2a", A2A_METHODS),
-        ("openapi", OPENAPI_LITERALS),
-        ("utcp", UTCP_LITERALS),
-    )
-    for lit in lits
-}
+# apart: it disambiguates to mcp/acp when those methods are present). The family sets are
+# required to be pairwise disjoint: a method name in two families is a defect, not a tie
+# to resolve silently, so an overlap is asserted against at import.
+_LITERAL_FAMILY: dict[str, str] = {}
+for _fam, _lits in (
+    ("mcp", MCP_METHODS),
+    ("acp", ACP_METHODS),
+    ("a2a", A2A_METHODS),
+    ("openapi", OPENAPI_LITERALS),
+    ("utcp", UTCP_LITERALS),
+):
+    _overlap = set(_lits) & _LITERAL_FAMILY.keys()
+    assert not _overlap, f"protocol literals overlap {_fam} with an earlier family: {sorted(_overlap)}"
+    for _lit in _lits:
+        _LITERAL_FAMILY[_lit] = _fam
 
 # A file another tool owns: the literal's last path component (or the whole literal).
 MANAGED_NAMES: dict[str, str] = {
