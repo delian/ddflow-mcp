@@ -182,10 +182,8 @@ def _landed_paths_fields(
     return {"landed_paths": paths}
 
 
-def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
-    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
-    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
-    plans many edits before recording any (DX-task-fold)."""
+def _early_refusal(cfg, st, it, edit: ItemEdit) -> O.Outcome | None:
+    """The refusal for a bad or frozen line, or a ``--set`` a work item does not take."""
     if edit.line:
         bad = _bad_line(cfg, edit.line)
         if bad:
@@ -194,9 +192,17 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
         moved = _line_frozen(st, it)
         if moved:
             return O.refused("item.updated", moved, id=it.id)
-
     if edit.set and (why := item_set(it.family, it.id, edit)):
         return O.refused("item.updated", why, id=it.id)
+    return None
+
+
+def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
+    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
+    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
+    plans many edits before recording any (DX-task-fold)."""
+    if (early := _early_refusal(cfg, st, it, edit)) is not None:
+        return early
     fields = _edit_fields(edit)
     if edit.append_body:
         base = it.body if edit.body is None else edit.body
