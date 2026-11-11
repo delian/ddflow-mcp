@@ -52,3 +52,13 @@ def test_found_text_names_the_verdict_and_summary():
     )
     assert _run._found_text("passed", {"summary": ["10 passed"]}) == "PASSED 10 passed"
     assert _run._found_text("passed", {}) == "PASSED"
+
+
+def test_found_text_names_the_failing_test_ids():
+    # B4ba4673c0a: the failing test ids survive a supersede alongside the verdict.
+    assert _run._found_text(
+        "failed", {"summary": ["206 failed"], "failed_tests": ["tests/a.py::test_1"]}
+    ) == "FAILED 206 failed; tests/a.py::test_1"
+    assert _run._found_text("failed", {"failed_tests": ["tests/a.py::test_1"]}) == (
+        "FAILED tests/a.py::test_1"
+    )

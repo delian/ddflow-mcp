@@ -190,11 +190,20 @@ def _failure_reason(gdef, result: str, ev: dict[str, Any]) -> str:
 
 
 def _found_text(result: str, ev: dict[str, Any]) -> str:
-    """What a finished-but-superseded run found, so its outcome is not lost (B267a6b0b5e)."""
+    """What a finished-but-superseded run found, so its outcome is not lost
+    (B267a6b0b5e). The failing test ids are named too: the test ids are not a side
+    note, they are what an operator needs to fix, so they survive a supersede the way
+    the verdict does (B4ba4673c0a)."""
     found = [result.upper()]
+    body: list[str] = []
     summary = ev.get("summary") or []
     if summary and not isinstance(summary, str):
-        found.append("; ".join(str(s) for s in summary))
+        body.extend(str(s) for s in summary)
+    ids = ev.get("failed_tests") or []
+    if ids:
+        body.append(", ".join(str(t) for t in ids[:80]))
+    if body:
+        found.append("; ".join(body))
     return " ".join(found).strip()
 
 
