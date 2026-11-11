@@ -70,17 +70,20 @@ def record(
 
 
 def _trim(path: Path) -> None:
-    """Drop the oldest lines once the log has grown past ``CAP_ENTRIES``. The read-then-rewrite
-    is not atomic across two processes (the CLI and the post_tool hook may write at once): a
-    record appended by the other writer during the rewrite can be dropped, and `recent` skips a
-    line torn by it. That is accepted -- this is a best-effort "last N" ring, not a durable log."""
+    """Drop the oldest lines once the log has grown past ``CAP_ENTRIES``. The tail is rewritten
+    through a temp file and renamed into place (`os.replace` is atomic), so a kill or a full
+    disk mid-rewrite leaves the old ring, never a half-written or emptied one. Two processes
+    may still drop one another's concurrent append -- a best-effort "last N" ring, so `recent`
+    skips a line torn by that."""
     try:
         if path.stat().st_size == 0:
             return
         text = path.read_text(encoding="utf-8")
         if text.count("\n") <= CAP_ENTRIES:
             return
-        path.write_text("".join(text.splitlines(keepends=True)[-CAP_ENTRIES:]), encoding="utf-8")
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text("".join(text.splitlines(keepends=True)[-CAP_ENTRIES:]), encoding="utf-8")
+        os.replace(tmp, path)
     except OSError:
         return
 
