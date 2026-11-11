@@ -177,4 +177,4 @@ def test_the_queued_count_ignores_an_injected_now(tmp_path):
     ticket = tmp_path / SL.QUEUE / "00000000000000000001-lane-x.ticket"
     ticket.parent.mkdir(parents=True)
     ticket.write_text("")
-    assert SL.running(Cfg, tmp_path, now=1_000.0)[1] == 1  # a fresh ticket, whatever `now` says
+    assert SL.running(Cfg, tmp_path, now=4_000_000_000.0)[1] == 1  # a fresh ticket, whatever `now` says
