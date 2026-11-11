@@ -77,7 +77,8 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
     title = " ".join((title or "").split())
-    bad = _bug_fields_problem(scope, severity, globs) or RB.mode_problem(repro_capture)
+    summary = " ".join(summary.split())
+    bad = _bug_fields_problem(summary, scope, severity, globs) or RB.mode_problem(repro_capture)
     if bad:
         return O.failed("bug.found", bad)
     tag_list, bad_tags = found_tags(tags)
@@ -535,8 +536,10 @@ def _link(st, task: str) -> dict[str, str]:
     return {"task": task, "state": it.state if it is not None and not it.removed else "missing"}
 
 
-def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
-    """Why `bug found`'s optional fields cannot be recorded, or ""."""
+def _bug_fields_problem(summary: str, scope: str, severity: str, globs: str) -> str:
+    """Why `bug found`'s fields cannot be recorded, or ""."""
+    if not summary:
+        return "a bug needs a summary: pass one line saying what is wrong"
     if scope and scope not in BUG_SCOPES:
         return f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}"
     if severity and severity not in BUG_SEVERITIES:
