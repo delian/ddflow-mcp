@@ -187,6 +187,33 @@ def test_protocols_by_method_and_jsonrpc_literal(tmp_path: Path):
     assert home == {"mcp": "ADP-mcp", "acp": "ADP-acp", "jsonrpc": "ADP-lane-transport"}
 
 
+def test_new_protocol_families_detected_by_literal_and_named_home(tmp_path: Path):
+    src = (
+        "def f():\n"
+        '    key = "openapi"\n'
+        '    method = "message/send"\n'
+        '    proto = "utcp"\n'
+        "    return key, method, proto\n"
+    )
+    c = I.scan(_tree(tmp_path, {"services/client.py": src}))
+    got = _sites(c, "protocol")
+    p = "ddflow/services/client.py"
+    assert ("openapi", p, _line(src, '"openapi"')) in got
+    assert ("a2a", p, _line(src, '"message/send"')) in got
+    assert ("utcp", p, _line(src, '"utcp"')) in got
+    home = {f.family: f.home for f in c.families if f.kind == "protocol"}
+    assert home["utcp"] == "ADP-utcp"
+    assert home["a2a"] == "AG-a2a"
+    assert home["openapi"] == "CN-adapter-openapi"
+
+
+def test_a_hand_rolled_utcp_call_in_services_is_counted(tmp_path: Path):
+    src = 'def call():\n    return "utcp"\n'
+    c = I.scan(_tree(tmp_path, {"services/client.py": src}))
+    utcp = next(f for f in c.families if f.kind == "protocol" and f.family == "utcp")
+    assert {s.module for s in utcp.violations} == {"ddflow.services.client"}
+
+
 def test_managed_files_exclude_prose_and_comments(tmp_path: Path):
     c = I.scan(_tree(tmp_path, ALL))
     got = {(f, line) for f, _p, line in _sites(c, "managed-file")}

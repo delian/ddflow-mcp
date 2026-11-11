@@ -70,6 +70,12 @@ class LeaseConfig:
         False,
         doc="A claim that meets a breakable lease breaks it by itself. Off (default): the waiter must say so (`ddflow claim --break`), so breaking another agent's lease is always a deliberate, attributed act. On: any plain claim of a contended, idle lease breaks it.",
     )
+    reconcile_tests: str = knob(
+        "affected",
+        doc="When this item's merge reconciled files another item changed since this one branched (recorded as merge.reconciled), complete is refused until the tests have passed on the reconciled tree: 'affected' runs the tests the reconciled files select, 'full' the whole suite, 'off' turns the reconcile guard off. D-lease-hold-limit-r2, D-gate-economy-r3.",
+        choices=("full", "affected", "off"),
+        strictest=("full", "run the whole suite, never the narrower affected set"),
+    )
     inbox_max_chars: int = knob(
         2000,
         doc="Longest message a lane's inbox (`ddflow session message`) keeps, in characters; the rest is cut and marked. Messages are untrusted text shown to an agent, so the cap is a bound on what a sender can put in front of it.",

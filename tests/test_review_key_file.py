@@ -231,9 +231,8 @@ def test_lane_endpoint_uses_the_same_helper(tmp_path, monkeypatch):
     ep = EP.Endpoint("r", "http://h", "m", ENV, api_key_file=str(_keyfile(tmp_path)))
     assert EP.resolve_key(ep).value == FAKE
     assert FAKE not in repr(ep) and str(tmp_path) not in repr(ep)
-    assert EP.launch_env(ep) == {
-        ENV: FAKE
-    }  # the resolved VALUE for the child env; never in a config
+    assert EP.launch_env(ep) == {}  # a file key has no live source env name
+    assert EP.secret_env(ep) == {ENV: FAKE}  # the file value for the child env; never in a config
 
 
 def test_key_result_is_not_serialisable_to_a_dict(tmp_path):

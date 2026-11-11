@@ -82,6 +82,46 @@ def rmtree(path: Path | str, *, ignore_errors: bool = True) -> None:
     _fs.DEFAULT.rmtree(path, ignore_errors=ignore_errors)
 
 
+def rmtree_owned(path: Path | str, *, ignore_errors: bool = True) -> None:
+    """Remove the directory tree at ``path``, refusing the targets ``shutil.rmtree`` makes
+    dangerous (AU-safe-rmtree): ``shutil.rmtree('', ignore_errors=True)`` empties the current
+    directory. A dangerous target is never removed; with ``ignore_errors=True`` (the default,
+    matching the best-effort call sites) it — and a target whose path could not be resolved —
+    is refused silently, and with ``ignore_errors=False`` it raises `ValueError` naming the target."""
+    p = Path(path)
+
+    def refuse(message: str) -> None:
+        if not ignore_errors:
+            raise ValueError(message)
+
+    reason: str | None
+    if not p.parts:
+        reason = "rmtree_owned: an empty path is the current directory; refused"
+    elif not p.is_absolute():
+        reason = f"rmtree_owned: {str(p)!r} is relative; refused"
+    else:
+        try:
+            resolved = p.resolve()
+        except (OSError, RuntimeError):  # RuntimeError = a symlink loop (pathlib < 3.13)
+            reason = f"rmtree_owned: {str(p)!r} cannot be resolved; refused"
+        else:
+            try:
+                cwd = Path.cwd().resolve()
+            except (OSError, RuntimeError):  # cwd unlinked: compare to the root only
+                cwd = None
+            reason = (
+                "rmtree_owned: refusing to remove the current directory"
+                if cwd is not None and resolved == cwd
+                else "rmtree_owned: refusing to remove a filesystem root"
+                if resolved == Path(resolved.anchor)
+                else None
+            )
+    if reason is not None:
+        refuse(reason)
+        return
+    rmtree(p, ignore_errors=ignore_errors)
+
+
 @dataclass(frozen=True, slots=True)
 class Unreadable:
     """Why `read_json` could not give a JSON object; each caller words its own refusal.
