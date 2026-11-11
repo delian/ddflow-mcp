@@ -253,6 +253,19 @@ def _adopted_ids(repo: Path) -> list[str]:
     return adopted_agents(repo)
 
 
+def _split_fleet(seen: dict[str, list[str]]) -> tuple[list[str], list[str]]:
+    """(agents cut off from another's rule files, agents whose files they miss): two agents
+    are cut off from each other when neither shares a file with the other and one has some."""
+    blind: set[str] = set()
+    sighted: set[str] = set()
+    for a, mine in seen.items():
+        for b, theirs in seen.items():
+            if a != b and theirs and not set(mine) & set(theirs):
+                blind.add(a)
+                sighted.add(b)
+    return sorted(blind), sorted(sighted)
+
+
 def doctor_note(repo: Path) -> str | None:
     """A note only when one adopted agent sees none of the project rule files another
     adopted agent sees (it may see others, or none): the rules then bind only part of the fleet."""
@@ -260,17 +273,7 @@ def doctor_note(repo: Path) -> str | None:
     adopted = _adopted_ids(repo)
     rows = [r for r in scan_rule_files(repo) if r["kind"] != KIND_COMMAND and not r["ddflow_owned"]]
     seen = {a: [r["path"] for r in rows if a in r["loaded_by"]] for a in adopted}
-    # an agent is cut off from another's rules when the two share none of them
-    blind = sorted(
-        a
-        for a, files in seen.items()
-        if any(b != a and seen[b] and not set(files) & set(seen[b]) for b in seen)
-    )
-    sighted = sorted(
-        b
-        for b, files in seen.items()
-        if files and any(a != b and not set(seen[a]) & set(files) for a in seen)
-    )
+    blind, sighted = _split_fleet(seen)
     if not blind or not sighted:
         return None
     return (
