@@ -1,0 +1,8 @@
+# Event kinds owned by the install manifest (core/handlers/installmanifest.py). One [[kind]] per kind.
+
+[[kind]]
+name = "agent.onboarded"
+doc = "An onboarding run put artifacts into the project for an agent: paths, kinds, regions or keys, digests, descriptor and ddflow version."
+fields = { "agent" = ["str"], "artifacts" = ["list"] }
+lookup = { "agent" = "the agent whose onboarding wrote the artifacts", "artifacts" = "paths, artifact kinds, regions or keys and digests an onboarding wrote" }
+exempt = "a machine record of what an onboarding wrote: paths, keys and digests, no authored text"
