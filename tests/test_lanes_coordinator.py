@@ -185,3 +185,18 @@ def test_the_queued_count_ignores_an_injected_now(tmp_path):
 def test_item_does_not_replace_the_lane_of_the_other_views(busy):
     code, out, _ = run_cli(busy, "lanes", "brief", "holder", "--item", "Y", agent="reader")
     assert code == 0 and out.startswith("# Lane brief: holder")
+
+
+def test_a_note_with_a_string_time_is_read_as_a_number(tmp_path, monkeypatch):
+    Cfg = Config()
+    Cfg.ci.max_concurrent_suites = 2
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    with SL.hold(Cfg, "lane-a"):
+        d = SL.state_dir()
+        with SL.SLOTS.Slots(d, SL.NAME).hold(2, 0):
+            for i in range(2):
+                note = d / f"{SL.NAME}.{i}.holder"
+                if "lane-a" not in note.read_text() if note.exists() else True:
+                    note.write_text('{"holder": "b", "at": "5"}')
+            rows, _ = SL.running(Cfg)
+    assert sorted(r["holder"] for r in rows) == ["b", "lane-a"]
