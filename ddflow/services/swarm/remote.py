@@ -33,7 +33,6 @@ from typing import Protocol
 from ...config import Config, SessionConfig
 from ...core.digest import content_digest
 from ...core.globs import inside
-from ...core.outcome import FAIL
 from ...core.redact import mask_secrets
 from ...core.secret_shapes import session_secret_patterns, shape_hit
 from ...infra import fsio
@@ -41,12 +40,12 @@ from ...infra import git as G
 from ..lane_driver import LaneStatus, Result, ok
 from ..redact_report import redactor
 from . import seedpack as S
+from .remote_config import DEFAULT, Knobs, RemoteError, _safe
 
 _DATE = "1970-01-01T00:00:00Z"
 _BLOB = ("100644", "100755", "120000")
 _LINKS = ("120000", "160000")  # a returned symlink or gitlink reaches outside the tree
 _REF = re.compile(r"refs/[A-Za-z0-9._/-]+")
-_FILE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
 _PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----\s+[A-Za-z0-9+/]")
 _LOOSE = frozenset(session_secret_patterns(SessionConfig(), builtin=False))
 BUNDLE, MANIFEST, RETURN, PROPOSALS = (
@@ -55,49 +54,6 @@ BUNDLE, MANIFEST, RETURN, PROPOSALS = (
     "return.bundle",
     "proposals.json",
 )
-
-
-class RemoteError(RuntimeError):
-    exit_code = FAIL
-
-
-@dataclass(frozen=True)
-class Knobs:
-    """SW-remote-config feeds these from ``[swarm].remote_*``; ``from_config`` is the one reader."""
-
-    exclude: tuple[str, ...] = (".ddflow", ".env", "**/.env")
-    bundle_max_bytes: int = 104857600
-    return_max_bytes: int = 52428800
-    return_max_commits: int = 200
-    git_timeout_s: int = 120
-    scan_max_blob_bytes: int = 1048576
-    scan_batch_files: int = 64  # at most this many blobs of scan_max_blob_bytes in memory
-    branch_prefix: str = "swarm/remote/"
-    seed_name: str = "SEED.md"
-    proposals_max: int = 5
-    proposal_chars: int = 400
-    proposals_max_bytes: int = 65536
-    ssh_argv: tuple[str, ...] = ("ssh",)
-    ssh_timeout_s: int = 60
-    ssh_connect_timeout_s: int = 15
-    copy_timeout_s: int = 600
-    lanes_root: str = "ddflow-lanes"  # under the remote home
-    detail_chars: int = 200
-
-    @classmethod
-    def from_config(cls, cfg: Config) -> Knobs:
-        """Read the ``[swarm] remote_*`` knobs; one per field, so a new field needs a knob."""
-        sw = cfg.swarm
-        kw = {
-            f.name: getattr(sw, "remote_" + f.name) for f in dataclasses.fields(cls)
-        }
-        # a config list one is the tuple field (a frozen knob), never a list object in Knobs
-        for name in ("exclude", "ssh_argv"):
-            kw[name] = tuple(kw[name])
-        return cls(**kw)
-
-
-DEFAULT = Knobs()
 
 
 @dataclass(frozen=True)
@@ -141,14 +97,6 @@ def _refuses(fn: Callable) -> Callable:
             raise RemoteError(str(exc)) from exc
 
     return guarded
-
-
-def _safe(s: str) -> str:
-    """``s``, if one harmless path and ref component. Never rewritten: that could give two
-    lanes one ref."""
-    if not _FILE.fullmatch(s) or ".." in s or s.endswith((".lock", ".")):
-        raise RemoteError(f"{s!r} is not one plain name")
-    return s
 
 
 def _excluded(path: str, k: Knobs) -> bool:
