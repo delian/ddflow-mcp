@@ -137,7 +137,9 @@ def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
 
     _primary, tree = checkout
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base=""))
+    monkeypatch.setattr(
+        W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base="")
+    )
     assert CLI._guard_foreign_launch() == CLI.OK
 
 
