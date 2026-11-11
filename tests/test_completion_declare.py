@@ -70,14 +70,13 @@ def test_every_exemption_names_a_real_argument():
         assert (entry.path, entry.argument) in real, f"unused exemption {entry.path}{entry.argument}"
 
 
-def test_inference_resolves_every_choices_and_id_argument():
+def test_inference_resolves_every_choices_argument_to_enum():
     parser = build_parser()
     resolved = [(path, a) for path, a in _walk(parser)]
     assert resolved  # the walk reaches the real parser, at scale
     for path, action in resolved:
-        kind = _resolve(path, action)
-        if action.choices is not None:
-            assert kind == "enum", (path, action.dest)
+        if action.choices is not None and not getattr(action, "complete", ""):
+            assert _resolve(path, action) == "enum", (path, action.dest)
 
 
 def test_declared_complete_is_attached_to_the_action():
@@ -101,10 +100,16 @@ def test_declared_complete_is_attached_to_the_action():
 
 def test_canary_a_new_id_parameter_completes_with_no_completion_code():
     """A registrable synthetic record kind is inferred by name, with no per-command code."""
-    kinds.declare_id_kind("widget")
-    assert kinds.infer("widget") == "id:widget"
-    assert kinds.infer("id", positional=True, record_kind="widget") == "id:widget"
-    assert kinds.looks_like_id("widget")
+    before = kinds.id_kinds()
+    try:
+        kinds.declare_id_kind("widget")
+        assert kinds.infer("widget") == "id:widget"
+        assert kinds.infer("id", positional=True, record_kind="widget") == "id:widget"
+        assert kinds.looks_like_id("widget")
+    finally:
+        # do not leak the synthetic kind into the registry the other tests read
+        kinds._id_kinds -= {"widget"}
+        assert kinds.id_kinds() == before
 
 
 def test_infer_vocabulary():

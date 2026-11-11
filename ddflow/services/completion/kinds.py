@@ -72,9 +72,9 @@ NAME_KINDS = {
     "kind": "kind",
 }
 
-#: Metavars that name a directory or a path outright.
-DIR_METAVARS = {"DIR", "PATH"}
-FILE_METAVARS = {"FILE"}
+#: Metavars that name a directory or a file path outright.
+DIR_METAVARS = {"DIR"}
+PATH_METAVARS = {"PATH", "FILE"}
 
 
 def declare_id_kind(name: str) -> None:
@@ -130,9 +130,13 @@ def infer(
     * a name that spells a record kind -> ``id:<name>``;
     * a name that spells a fixed vocabulary kind -> that kind;
     * a positional named ``id`` under a record verb -> ``id:<record kind>``;
-      a bare ``id`` positionial elsewhere -> ``id``;
-    * a directory / path name or ``DIR``/``PATH``/``FILE`` metavar -> ``dir`` / ``path``;
+       a bare ``id`` positional elsewhere -> ``id``;
+    * a directory / file-path name, or a ``DIR`` metavar -> ``dir``, a ``PATH``/``FILE``
+       metavar -> ``path`` (the argument's declared value shape);
     * anything else -> ``none``.
+
+    There is no ``path`` JSON type on `Param`, so a path argument says so through its
+    name or its metavar, not through ``cli_type``.
     """
     if choices is not None:
         return "enum"
@@ -153,7 +157,7 @@ def infer(
         return f"id:{name}"
     if name in DIR_NAMES or metavar in DIR_METAVARS:
         return "dir"
-    if name in PATH_NAMES or metavar in FILE_METAVARS:
+    if name in PATH_NAMES or metavar in PATH_METAVARS:
         return "path"
     return "none"
 
