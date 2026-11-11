@@ -137,6 +137,14 @@ def test_a_full_selection_with_no_miss_is_a_narrow():
     assert p is not None and p.advice == "narrow"
 
 
+def test_a_full_selection_with_misses_is_not_a_widen():
+    """A run that selected the whole suite (fraction 1.0) can record no miss; a miss it
+    records regardless is contradictory evidence, so it neither widens nor narrows."""
+    cfg = PerfMetricsConfig(prop_select_miss_min=1, prop_select_min_runs=2)
+    runs = [{"selected_fraction": 1.0, "misses": 2}, {"selected_fraction": 1.0, "misses": 3}]
+    assert prop_tests.propose_selection(runs, cfg=cfg) is None
+
+
 def test_too_few_runs_is_not_a_selection_claim():
     cfg = PerfMetricsConfig(prop_select_miss_min=2, prop_select_min_runs=3)
     assert prop_tests.propose_selection([{"misses": 3}], cfg=cfg) is None

@@ -295,9 +295,10 @@ def _fraction(run: dict) -> float | None:
 def _count_misses(runs: list[dict[str, Any]]) -> tuple[int, bool]:
     """(counted misses, every run MEASURED its misses). Misses are integer by nature: a
     whole, non-negative count -- an ``int``, or an integral float like ``2.0`` -- is a
-    measured miss. A missing, non-numeric, non-finite, negative or fractional count is
-    UNAVAILABLE, never a truncation toward zero, so it neither adds to a WIDEN nor counts
-    toward a NARROW."""
+    measured miss, and a run that selected the whole suite (fraction 1.0) can record no
+    miss (nothing was left out), so a miss it nevertheless records is contradictory and
+    unmeasured. A missing, non-numeric, non-finite, negative or fractional count is
+    UNAVAILABLE, never a truncation toward zero."""
     total = 0
     measured = True
     for r in runs:
@@ -306,6 +307,8 @@ def _count_misses(runs: list[dict[str, Any]]) -> tuple[int, bool]:
             measured = False
         elif isinstance(m, float) and not m.is_integer():
             measured = False  # a fractional miss count is malformed, never a truncation
+        elif _fraction(r) == 1.0 and m > 0:
+            measured = False  # a full-selection run records no miss: contrary evidence
         else:
             total += int(m)
     return total, measured
