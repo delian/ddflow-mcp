@@ -142,17 +142,28 @@ def exercised_scope(root: Path, ids: list[str]) -> list[str]:
     named, _drop = existing_globs(root, _named_files(_PATHISH.findall("\n".join(ids)), listed))
     out.update(p for p in named if not is_test_file(p))
     for t in sorted({i.partition("::")[0] for i in ids}):
-        if t.endswith(".py") and (root / t).is_file():
-            try:
-                source = (root / t).read_text("utf-8", errors="replace")
-            except OSError:
-                continue
-            for mod in TR.imports(t, source):
-                p = by_module.get(TR.resolve(mod, known))
-                if p and not is_test_file(p):
-                    out.add(p)
-            out.update(p for p in lib if any(fnmatch(p, g) for g in _governs(source)))
+        out.update(_imported_and_governed(root, t, by_module, known, lib))
     return sorted(out)
+
+
+def _imported_and_governed(
+    root: Path, test: str, by_module: dict[str, str], known: set[str], lib: list[str]
+) -> set[str]:
+    """The source files one failing test file exercises: the library modules it imports
+    directly, and its ``GOVERNS`` files."""
+    if not test.endswith(".py") or not (root / test).is_file():
+        return set()
+    try:
+        source = (root / test).read_text("utf-8", errors="replace")
+    except OSError:
+        return set()
+    out = {
+        by_module[resolved]
+        for name in TR.imports(test, source)
+        if (resolved := TR.resolve(name, known)) in by_module and not is_test_file(by_module[resolved])
+    }
+    out.update(p for p in lib if any(fnmatch(p, g) for g in _governs(source)))
+    return out
 
 
 def existing_globs(root: Path, globs: list[str]) -> tuple[list[str], list[str]]:
