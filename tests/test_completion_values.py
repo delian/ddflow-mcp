@@ -35,6 +35,7 @@ def test_id_kind_completes_by_kind(tmp_path):
 def test_state_kind(tmp_path):
     index = _index(tmp_path)
     assert V.complete("state", "", index=index) == ["open"]
+    assert V.complete("state", "cl", index=index) == []  # prefix-filtered, like kind/agent/gate
 
 
 def test_kind_kind(tmp_path):
@@ -47,7 +48,17 @@ def test_enum_reads_choices():
     assert V.enum(("a", "b")) == ["a", "b"]
 
 
-def test_none_path_dir_offer_nothing():
+def test_none_offers_nothing():
     assert V.complete("none", "x") == []
-    assert V.complete("path", "x") == []
-    assert V.complete("dir", "x") == []
+
+
+def test_path_and_dir_complete_paths(tmp_path):
+    (tmp_path / "a.txt").write_text("")
+    (tmp_path / "b.txt").write_text("")
+    (tmp_path / "proj").mkdir()
+    import os
+
+    os.chdir(tmp_path)
+    assert V.complete("path", "a") == ["a.txt"]
+    assert V.complete("dir", "proj") == ["proj"]
+    assert V.complete("dir", "zzz") == []

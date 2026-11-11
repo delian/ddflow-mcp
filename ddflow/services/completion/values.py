@@ -44,18 +44,41 @@ def complete(
     if kind.startswith("id:"):
         return CI.complete_ids(prefix, kind[3:], state, index=index)
     if kind == "state":
-        return CI.states(index=index)
+        return _prefixed(CI.states(index=index), prefix)
     if kind == "kind":
         return _prefixed(CI.kinds(index=index), prefix)
     if kind == "agent":
         return _prefixed(_agent_names(), prefix)
     if kind == "gate":
         return _prefixed(_gate_names(root), prefix)
+    if kind == "path":
+        return _paths(prefix, dirs=False)
+    if kind == "dir":
+        return _paths(prefix, dirs=True)
     return []
+
+
+#: How many file/directory matches one TAB offers (a listing must stay bounded).
+_PATH_MAX = 200
 
 
 def _prefixed(names: list[str], prefix: str) -> list[str]:
     return [n for n in names if n.startswith(prefix)]
+
+
+def _paths(prefix: str, *, dirs: bool) -> list[str]:
+    """File (or directory) paths under ``prefix``, from the filesystem (``glob``): the tree
+    names them as ``path``/``dir`` kinds."""
+    import glob as _g
+    import os as _os
+
+    if any(c in prefix for c in ("\x00", "\n", "\r")):
+        return []
+    pat = prefix + "*"
+    try:
+        return sorted(f for f in _g.glob(pat) if _os.path.isdir(f) == dirs)[:_PATH_MAX]
+    except (OSError, ValueError):
+        return []
 
 
 def _agent_names() -> list[str]:
