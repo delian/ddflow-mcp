@@ -4967,7 +4967,9 @@ They read the folded log and write nothing; `ddflow show <id>` is the whole reco
 
 ```sh
 ddflow task list --phase P2 --state open        # what is left in a phase
-ddflow phase list                               # id, state, done/total tasks, title
+ddflow phase list                               # id, state, done/total tasks, title (every phase, unpaged)
+ddflow task list --match schedule               # id or title contains the text: use it, not `| grep`
+ddflow task list --all                          # every row (up to 1000), not one page
 ddflow bug list                                 # OPEN bugs only
 ddflow bug list --all                           # also fixed and invalid ones
 ddflow bug list --state invalid --since 2026-10-01
@@ -4982,9 +4984,13 @@ queue can be audited from `--json` without opening the sqlite index.
 
 Filters are `--state`, `--phase`, `--tag`, `--owner` (the leaseholder; not `--agent`, which is
 always who *you* are), `--since` (an ISO
-date or timestamp, compared with the last change) and `--limit` (default 50; 0 or a value above
+date or timestamp, compared with the last change), `--match TEXT` (only rows whose id or title contains the
+text, case-insensitive, applied before paging: a server-side filter, so `| grep` on one page is never
+needed; MCP `match`), `--all` (every row, up to 1000, for every kind; bugs and lessons also include
+closed ones) and `--limit` (default 50, but `phase list` shows every phase; 0 or a value above
 1000 gives the 1000 a list gives at most, and says it was cut) and `--offset` (paging: a cut list
-says how many matched and the `--offset` of the next page; `--json` has `total`, `truncated`, `offset`,
+says how many matched and the `--offset` of the next page, on stdout and, when stdout is not a terminal,
+on stderr too, so a pipe never swallows it; `--json` has `total`, `truncated`, `offset`,
 `next`, `clamped_from`). A kind offers only the filters it has data for:
 bugs have no tag or owner, so `bug list --tag x` is an unknown option rather than a
 silent "everything" (and the list flags are refused on `research` when recording a finding). Titles and tags are redacted as the export documents are. Exit

@@ -32,6 +32,7 @@ _HELP = {
     "tag": "only rows carrying this tag",
     "owner": "only rows leased by this agent (not --agent, which is who YOU are)",
     "since": "only rows last changed at or after this ISO date or timestamp",
+    "match": "only rows whose id or title contains this text (case-insensitive); use it instead of `| grep`, which sees one page only",
 }
 _LISTS = {
     "task": "tasks (and sub-tasks), newest change first",
@@ -43,11 +44,20 @@ _LISTS = {
 #: `research` has no subcommands (`research add` is the verb form), so its list lives
 #: behind `research list` as the optional verb.
 _ALL_HELP = {
-    "bug": "include fixed and invalid bugs",
-    "lesson": "include superseded lessons",
-    "": "accepted for every list kind; this kind lists all its rows already",
+    "bug": "include fixed and invalid bugs, and list every row (up to the most a list gives)",
+    "lesson": "include superseded lessons, and list every row (up to the most a list gives)",
+    "": "list every row, not one page (up to the most a list gives)",
 }
-_SHARED_FLAGS = ("state", "phase", "tag", "owner", "since")
+_SHARED_FLAGS = ("state", "phase", "tag", "owner", "since", "match")
+
+
+#: Phases are few and a page of them hides most (199 phases, 50 shown, the oldest-touched
+#: ones off the page), so `phase list` shows every row unless `--limit` says otherwise.
+_UNPAGED = frozenset({"phase"})
+
+
+def _default_limit(kind: str) -> str:
+    return f"all rows, up to {R.LIST_MAX_LIMIT}" if kind in _UNPAGED else str(R.LIST_DEFAULT_LIMIT)
 
 
 def _filter_params(kind: str) -> tuple[Param, ...]:
@@ -67,7 +77,7 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
             "limit",
             type="integer",
             default=None,
-            help=f"most rows to show (default {R.LIST_DEFAULT_LIMIT}; 0 or above {R.LIST_MAX_LIMIT} = the {R.LIST_MAX_LIMIT} a list gives at most)",
+            help=f"most rows to show (default {_default_limit(kind)}; 0 or above {R.LIST_MAX_LIMIT} = the {R.LIST_MAX_LIMIT} a list gives at most)",
         )
     )
     out.append(Param("offset", type="integer", default=None, help="skip this many rows (paging)"))
@@ -144,6 +154,16 @@ def _line(kind: str, r: dict[str, Any]) -> str:
 _NARROW_TO = {"bug": "open", "lesson": "live"}
 
 
+def _limit(a, kind: str) -> int:
+    """`--limit`, else the most a list gives for `--all` or a kind that is not paged, else
+    the page size."""
+    if a.limit is not None:
+        return a.limit
+    if getattr(a, "all", False) or kind in _UNPAGED:
+        return R.LIST_MAX_LIMIT
+    return R.LIST_DEFAULT_LIMIT
+
+
 def _query(a, kind: str) -> tuple[dict[str, Any], bool]:
     """The engine's arguments for a parsed `<kind> list`, and whether the default narrowing
     (open bugs, live lessons) was applied because the line gave no state and no --all."""
@@ -158,7 +178,8 @@ def _query(a, kind: str) -> tuple[dict[str, Any], bool]:
         "agent": getattr(a, "owner", "") or "",
         "since": getattr(a, "since", "") or "",
         "item": getattr(a, "item", "") or "",
-        "limit": R.LIST_DEFAULT_LIMIT if a.limit is None else a.limit,
+        "match": getattr(a, "match", "") or "",
+        "limit": _limit(a, kind),
         "offset": getattr(a, "offset", None) or 0,
     }, defaulted
 
@@ -171,6 +192,27 @@ def _json_body(out) -> dict[str, Any]:
     return body
 
 
+def cut_notice(d: dict[str, Any]) -> str:
+    """The one-line notice of a cut list: how many of how many, and how to see the rest."""
+    more = (
+        f"the next page: --limit {d['limit']} --offset {d['next']}"
+        if d["next"] is not None
+        else "no further page"
+    )
+    # `--all` only raises the page to the most a list gives: past that, only narrowing helps.
+    ways = "narrow with --match TEXT or a filter"
+    if d["limit"] < R.LIST_MAX_LIMIT:
+        ways += ", or see the rest with --all"
+    return f"(PARTIAL LIST: showing {d['shown']} of {d['total']} from {d['offset']}; {ways}, or {more})"
+
+
+def _warn_cut(out, c: Ctx) -> None:
+    """A cut list says so on stderr too when stdout is a pipe: `| grep` swallows the stdout
+    notice and a miss would read as 'no such row' (Bd515797884)."""
+    if out.data.get("truncated") and not sys.stdout.isatty():
+        print(cut_notice(out.data), file=sys.stderr)
+
+
 def _print_rows(kind: str, out, defaulted: bool) -> None:
     for r in out.data["rows"]:
         print(_line(kind, r))
@@ -178,10 +220,7 @@ def _print_rows(kind: str, out, defaulted: bool) -> None:
     if d["clamped_from"]:
         print(f"\n(--limit {d['clamped_from']} cut to {d['limit']}, the most a list gives)")
     if d["truncated"]:
-        print(
-            f"\n(showing {d['shown']} of {d['total']} from {d['offset']}; "
-            f"next page: the same command with --limit {d['limit']} --offset {d['next']})"
-        )
+        print("\n" + cut_notice(d))
     if defaulted:
         what = "fixed and invalid" if kind == "bug" else "superseded"
         print(f"\n({_NARROW_TO[kind]} {kind}s only; --all includes {what})")
@@ -204,11 +243,13 @@ def cmd_list(a, c: Ctx) -> int:
         emit_json(_json_body(out))
         if out.exit not in (OK, NOTHING):
             print(out.reason, file=sys.stderr)
+        _warn_cut(out, c)
         return out.exit
     if out.exit != OK:
         print(out.reason, file=sys.stdout if out.exit == NOTHING else sys.stderr)
         return out.exit
     _print_rows(kind, out, defaulted)
+    _warn_cut(out, c)
     return OK
 
 

@@ -457,7 +457,7 @@
 # ---
 # name: test_help[ddflow bug list]
   '''
-  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
+  usage: ddflow bug list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}]
   
   options:
     -h, --help         show this help message and exit
@@ -465,10 +465,13 @@
     --phase PHASE      only rows under this phase id
     --tag TAG          only rows carrying this tag
     --since SINCE      only rows last changed at or after this ISO date or timestamp
+    --match MATCH      only rows whose id or title contains this text (case-insensitive); use it
+                       instead of `| grep`, which sees one page only
     --limit LIMIT      most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                        most)
     --offset OFFSET    skip this many rows (paging)
-    --all              include fixed and invalid bugs
+    --all              include fixed and invalid bugs, and list every row (up to the most a list
+                       gives)
     --item ITEM        only bugs filed in or against this queue item id
     --sort {severity}  order the rows by severity (critical first, id as the tiebreak); default:
                        newest change first
@@ -1720,7 +1723,7 @@
 # ---
 # name: test_help[ddflow lesson list]
   '''
-  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow lesson list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -1728,9 +1731,11 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
     --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            include superseded lessons
+    --all            include superseded lessons, and list every row (up to the most a list gives)
   
   '''
 # ---
@@ -1801,7 +1806,7 @@
 # ---
 # name: test_help[ddflow list]
   '''
-  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
+  usage: ddflow list [-h] [--query QUERY] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [--item ITEM] [--sort {severity}] [{task,phase,bug,research,lesson,session,search}]
   
   positional arguments:
     {task,phase,bug,research,lesson,session,search}
@@ -1815,10 +1820,12 @@
     --tag TAG             only rows carrying this tag
     --owner OWNER         only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
     --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                           most)
     --offset OFFSET       skip this many rows (paging)
-    --all                 accepted for every list kind; this kind lists all its rows already
+    --all                 list every row, not one page (up to the most a list gives)
     --item ITEM           only bugs filed in or against this queue item id
     --sort {severity}     order the rows by severity (critical first, id as the tiebreak); default:
                           newest change first
@@ -2118,7 +2125,7 @@
 # ---
 # name: test_help[ddflow phase list]
   '''
-  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow phase list [-h] [--state STATE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -2126,9 +2133,12 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
-    --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
+    --limit LIMIT    most rows to show (default all rows, up to 1000; 0 or above 1000 = the 1000 a
+                     list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            accepted for every list kind; this kind lists all its rows already
+    --all            list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -2626,7 +2636,7 @@
 # ---
 # name: test_help[ddflow research]
   '''
-  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
+  usage: ddflow research [-h] [--id ID] [--question QUESTION] [--claim CLAIM] [--mechanism MECHANISM] [--falsifier FALSIFIER] [--probe PROBE] [--probe-output PROBE_OUTPUT] [--verdict VERDICT] [--sources SOURCES] [--budget BUDGET] [--item ITEM] [--new | --extends ID | --merge-into ID | --duplicate-of ID | --related ID | --check] [--state STATE] [--phase PHASE] [--tag TAG] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all] [{add,list,show}] [ID]
   
   positional arguments:
     {add,list,show}       optional: `research add` = `research`; `research list` lists the notes;
@@ -2660,10 +2670,12 @@
     --phase PHASE         only rows under this phase id
     --tag TAG             only rows carrying this tag
     --since SINCE         only rows last changed at or after this ISO date or timestamp
+    --match MATCH         only rows whose id or title contains this text (case-insensitive); use it
+                          instead of `| grep`, which sees one page only
     --limit LIMIT         most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at
                           most)
     --offset OFFSET       skip this many rows (paging)
-    --all                 accepted for every list kind; this kind lists all its rows already
+    --all                 list every row, not one page (up to the most a list gives)
   
   '''
 # ---
@@ -3265,7 +3277,7 @@
 # ---
 # name: test_help[ddflow task list]
   '''
-  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--limit LIMIT] [--offset OFFSET] [--all]
+  usage: ddflow task list [-h] [--state STATE] [--phase PHASE] [--tag TAG] [--owner OWNER] [--since SINCE] [--match MATCH] [--limit LIMIT] [--offset OFFSET] [--all]
   
   options:
     -h, --help       show this help message and exit
@@ -3274,9 +3286,11 @@
     --tag TAG        only rows carrying this tag
     --owner OWNER    only rows leased by this agent (not --agent, which is who YOU are)
     --since SINCE    only rows last changed at or after this ISO date or timestamp
+    --match MATCH    only rows whose id or title contains this text (case-insensitive); use it
+                     instead of `| grep`, which sees one page only
     --limit LIMIT    most rows to show (default 50; 0 or above 1000 = the 1000 a list gives at most)
     --offset OFFSET  skip this many rows (paging)
-    --all            accepted for every list kind; this kind lists all its rows already
+    --all            list every row, not one page (up to the most a list gives)
   
   '''
 # ---

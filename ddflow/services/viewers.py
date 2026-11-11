@@ -14,6 +14,7 @@ goes through the same redaction the export documents use. `owner` is an agent id
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -62,14 +63,14 @@ class View:
 #: ignored: `bug list --agent x` returning every bug would read as "x filed all of
 #: these", which is a claim the log does not make.
 _FILTERS: dict[str, frozenset[str]] = {
-    "task": frozenset({"state", "phase", "tag", "agent", "since"}),
-    "phase": frozenset({"state", "tag", "agent", "since"}),
+    "task": frozenset({"state", "phase", "tag", "agent", "since", "match"}),
+    "phase": frozenset({"state", "tag", "agent", "since", "match"}),
     # `item`: the queue item a bug was filed in or affects -- the bug's own `item` field,
     # not its phase (a bug filed against no item has none).
-    "bug": frozenset({"state", "phase", "tag", "since", "item"}),
-    "research": frozenset({"state", "phase", "tag", "since"}),
+    "bug": frozenset({"state", "phase", "tag", "since", "item", "match"}),
+    "research": frozenset({"state", "phase", "tag", "since", "match"}),
     # `owner` is the lesson's `by`: the agent that first recorded it.
-    "lesson": frozenset({"state", "tag", "agent", "since"}),
+    "lesson": frozenset({"state", "tag", "agent", "since", "match"}),
     "session": frozenset({"state", "agent", "since"}),
 }
 
@@ -203,6 +204,44 @@ def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
     return [_session_row(s, cfg) for s in st.sessions.values()]
 
 
+def _since_pred(since: str) -> Callable[[dict[str, Any]], bool]:
+    try:
+        at_or_after = _cutoff(since)
+    except ExportError as exc:
+        raise ViewError(str(exc).replace("--since", "since")) from None
+    return lambda r: bool(r["updated"]) and bool(at_or_after(r["updated"]))
+
+
+def _match_pred(match: str) -> Callable[[dict[str, Any]], bool]:
+    # Server-side text filter (id or title, case-insensitive substring): the reason no
+    # caller needs `| grep`, which a paged list defeats (Bd515797884).
+    needle = match.lower()
+    return lambda r: needle in r["id"].lower() or needle in r["title"].lower()
+
+
+def _filter_rows(rows: list[dict[str, Any]], cfg: Config, **given: str) -> list[dict[str, Any]]:
+    """`rows` narrowed by every filter that is set (each one a plain AND): `state`, `phase`,
+    `tag`, `agent`, `item`, `match`, `since`."""
+    want_tag = redact_text(given["tag"], cfg).text  # compared as the row shows it
+    preds: dict[str, Callable[[dict[str, Any]], bool]] = {
+        "state": lambda r: r["state"].lower() == given["state"].lower(),
+        "phase": lambda r: r["phase"] == given["phase"],
+        "tag": lambda r: want_tag in r["tags"],
+        "agent": lambda r: r["owner"] == given["agent"],
+        # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
+        # this honest if a future kind with the filter lacks the field.
+        "item": lambda r: r.get("item") == given["item"],
+    }
+    for name, pred in preds.items():
+        if given[name]:
+            rows = [r for r in rows if pred(r)]
+    if given["match"]:
+        rows = list(filter(_match_pred(given["match"]), rows))
+    if given["since"]:
+        rows = list(filter(_since_pred(given["since"]), rows))
+    return rows
+
+
 def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     st: State,
     cfg: Config,
@@ -214,6 +253,7 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     agent: str = "",
     since: str = "",
     item: str = "",
+    match: str = "",
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> View:
@@ -227,6 +267,7 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
         "agent": agent,
         "since": since,
         "item": item,
+        "match": match,
     }
     given = {k: v for k, v in asked.items() if v}
     unsupported = sorted(k for k in given if k not in _FILTERS[kind])
@@ -245,26 +286,17 @@ def list_view(  # noqa: PLR0913 -- one reader carries every viewer filter
     if phase and not (phase in st.items and st.items[phase].kind == "phase"):
         raise ViewError(f"no phase {phase!r}")
 
-    rows = _candidates(st, kind, cfg)
-    if state:
-        rows = [r for r in rows if r["state"].lower() == state.lower()]
-    if phase:
-        rows = [r for r in rows if r["phase"] == phase]
-    if tag:
-        want_tag = redact_text(tag, cfg).text  # compared as the row shows it
-        rows = [r for r in rows if want_tag in r["tags"]]
-    if agent:
-        rows = [r for r in rows if r["owner"] == agent]
-    if item:
-        # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
-        # this honest if a future kind with the filter lacks the field.
-        rows = [r for r in rows if r.get("item") == item]
-    if since:
-        try:
-            at_or_after = _cutoff(since)
-        except ExportError as exc:
-            raise ViewError(str(exc).replace("--since", "since")) from None
-        rows = [r for r in rows if r["updated"] and at_or_after(r["updated"])]
+    rows = _filter_rows(
+        _candidates(st, kind, cfg),
+        cfg,
+        state=state,
+        phase=phase,
+        tag=tag,
+        agent=agent,
+        item=item,
+        match=match,
+        since=since,
+    )
     # Two stable sorts: id ascending, then newest first, so equal timestamps keep id order.
     rows.sort(key=lambda r: r["id"])
     rows.sort(key=lambda r: r["updated"], reverse=True)
