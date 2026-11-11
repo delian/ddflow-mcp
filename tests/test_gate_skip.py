@@ -14,6 +14,7 @@ from conftest import run_cli, write_config
 
 from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
+from ddflow.services.phase_guard import settled_tasks
 
 
 def _fold(repo):
@@ -109,6 +110,34 @@ def test_warn_reports_but_files_nothing(repo):
         f"the skip output must report the un-filed follow-up: {out}{err}"
     )
     assert _followups(repo, "T1") == []
+
+
+def test_a_gate_skip_followup_does_not_block_the_phase_close(repo):
+    """A skipped gate's follow-up must never hold its item's phase open: it is the
+    re-run reminder settled with the item, not the phase's remaining work. A phase whose
+    real tasks are done closes even when a follow-up still shows open (it resolves on
+    its own when the gate is re-recorded or the item settles)."""
+    run_cli(repo, "phase", "add", "P1", "--title", "Phase one")
+    run_cli(repo, "task", "add", "T1", "--title", "T1 fixture", "--parent", "P1", "--globs", "a.py")
+    code, out, err = run_cli(
+        repo, "gate", "skip", "T1", "dedupe", "--reason", "no shared code touched"
+    )
+    assert code == 0, f"{out}{err}"
+    fups = _followups(repo, "T1")
+    assert len(fups) == 1, f"fixture: the skip filed one follow-up, got {fups}"
+    assert fups[0].parent == "P1", "fixture: the follow-up landed in the item's phase"
+
+    # The real task under P1 is done; only the follow-up remains open. The close
+    # condition must not count that follow-up as open work holding the phase open.
+    EventLog(repo, "operator").append(
+        "item.completed", "T1", {"kind": "task", "evidence": "shipped it"}
+    )
+    st = _fold(repo)
+    assert st.items["T1"].terminal, "fixture: the real task is done"
+    err, tasks, done = settled_tasks(st.items["P1"], st, "phase.close", "P1", hint="")
+    assert err is None, f"the follow-up held the phase open: {err}"
+    assert done == 1, (done, [t.id for t in tasks])
+    assert any(getattr(t, "followup_of", "") for t in tasks), tasks
 
 
 def test_a_finished_followup_is_not_an_open_rerun(repo):
