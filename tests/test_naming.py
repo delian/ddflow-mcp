@@ -233,3 +233,19 @@ def test_config_set_accepts_a_valid_template_and_host_label_goes_local(repo: Pat
     local = (repo / ".ddflow" / "local" / "config.toml").read_text("utf-8")
     assert "ci-7" in local
     assert "ci-7" not in (repo / ".ddflow" / "config.toml").read_text("utf-8")
+
+
+def test_a_resumed_name_survives_a_template_that_is_invalid_now() -> None:
+    held = "worker-bcdf"
+    got = naming.generate(_cfg(template="{role}"), role="x", current=held)
+    assert got == naming.Resolved(held, naming.RESUMED)
+
+
+def test_a_resumed_name_that_is_a_case_twin_of_a_taken_one_carries_a_note() -> None:
+    got = naming.generate(Config(), role="x", current="abc-12", taken=["ABC-12"])
+    assert got.source == naming.RESUMED and "case" in got.note and "ABC-12" in got.note
+
+
+def test_zero_tries_is_a_refusal_not_a_crash() -> None:
+    with pytest.raises(naming.NameRefused, match="0 tries"):
+        naming.generate(_cfg(max_tries=0), role="x")

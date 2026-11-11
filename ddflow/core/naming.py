@@ -149,12 +149,15 @@ def generate(
     change nothing). Otherwise the template is rendered; a taken result is re-drawn
     (`on_collision = suffix`) up to `[naming].max_tries` times, or refused (`refuse`)."""
     n = cfg.naming
+    if current and not name_problem(current, max_length=63):
+        # Before the template is read: a restart changes nothing, whatever the template says
+        # now. A case twin among the taken names is noted, as for a declared name.
+        return Resolved(current, RESUMED, _twin_note(current, taken))
     if problem := template_problem(n.template, n.scope):
         raise NameRefused(f"[naming].template {n.template!r} {problem}")
-    if current and not name_problem(current, max_length=63):
-        return Resolved(current, RESUMED)
     used = {fold(t) for t in taken}
     uses_rand = "{rand}" in n.template
+    name = ""
     for attempt in range(1, n.max_tries + 1):
         name = render(
             cfg,
@@ -173,7 +176,7 @@ def generate(
                 "on_collision = suffix"
             )
     raise NameRefused(
-        f"no free name after {n.max_tries} tries for {name!r}: widen the template with "
+        f"no free name after {n.max_tries} tries for {name or n.template!r}: widen the template with "
         "{rand} or a longer [naming].rand_length"
     )
 
@@ -185,11 +188,15 @@ def declared(name: str, taken: Iterable[str] = ()) -> Resolved:
     noted, because the two are one shard file on a case-insensitive file system."""
     if not agentname.is_valid(name):
         raise NameRefused(agentname.refusal(name))
+    return Resolved(name, EXPLICIT, _twin_note(name, taken))
+
+
+def _twin_note(name: str, taken: Iterable[str]) -> str:
+    """A warning when ``name`` differs only by case from a taken name, else ""."""
     twins = sorted(t for t in set(taken) if t != name and fold(t) == fold(name))
-    note = (
+    if not twins:
+        return ""
+    return (
         f"{name!r} differs only by case from the taken name {twins[0]!r}: one shard file on "
         "a case-insensitive file system"
-        if twins
-        else ""
     )
-    return Resolved(name, EXPLICIT, note)
