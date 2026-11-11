@@ -15,8 +15,9 @@ A remote or git-shared log is a later adapter behind this same port and needs co
 
 ## The contract
 
-- `append(kind, subject, data, *, agent="")` — one event, ordered by the store's monotonic
-  sequence, written under its lock; returns the record.
+- `append(kind, subject, data)` — one event to this store's shard, ordered by the store's
+  monotonic sequence, written under its lock; returns the record. A store is one writer;
+  `shards()` / `read_from()` read every shard present.
 - `append_many(items)` — several events as one atomic unit (all or none).
 - `read_from(offset=0)` — events with a sequence above `offset`, sorted, de-duplicated.
 - `shards()` — the shard names present.

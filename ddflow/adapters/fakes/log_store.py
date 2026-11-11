@@ -11,7 +11,8 @@ from __future__ import annotations
 import copy
 import threading
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 from ddflow.adapters import digest as D
@@ -26,11 +27,13 @@ _ID_SIZE = 12
 @dataclass(frozen=True)
 class _Event:
     """What the fake records for one event: the fields a caller reads, and the `sort_key`
-    the fold sorts by -- the storage surface, none of the fold's domain semantics."""
+    the fold sorts by -- the storage surface, none of the fold's domain semantics. `data`
+    is the immutable snapshot taken at append, so a caller cannot rewrite what was written
+    (the jsonl store re-parses bytes on read; the fake holds a frozen copy)."""
 
     kind: str
     subject: str
-    data: dict[str, Any]
+    data: Any
     agent: str
     lamport: int
     id: str
@@ -91,8 +94,14 @@ class FakeLogStore:
         deadlock a non-reentrant `threading.Lock`)."""
         self._lamport += 1
         data = copy.deepcopy(data or {})
+        snapshot = MappingProxyType(data)
         ev = _Event(
-            kind, subject, data, agent, self._lamport, _eid(kind, subject, data, agent, self._lamport)
+            kind,
+            subject,
+            snapshot,
+            agent,
+            self._lamport,
+            _eid(kind, subject, data, agent, self._lamport),
         )
         self._shards.setdefault(f"{agent}.jsonl", []).append(ev)
         return ev
@@ -147,4 +156,5 @@ class FakeLogStore:
 
     def blob_refs(self) -> Iterator[str]:
         with self._lock:
-            yield from sorted(self._blobs)
+            refs = sorted(self._blobs)
+        yield from refs
