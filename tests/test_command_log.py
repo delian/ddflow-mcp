@@ -76,6 +76,18 @@ def test_the_command_log_is_not_written_when_there_is_no_repo(tmp_path: Path, mo
     assert not (plain / ".ddflow").exists(), "a non-git directory must not gain a .ddflow dir"
 
 
+def test_the_command_log_still_falls_back_to_a_repository_cwd(repo: Path, monkeypatch):
+    """A target that is not a repository does not mean `skip`: when the process runs from
+    inside a real repository, the command belongs to that repository's log."""
+    plain = repo.parent / "outside"
+    plain.mkdir()
+    monkeypatch.chdir(repo)
+    monkeypatch.delenv("DDFLOW_REPO", raising=False)
+    args = argparse.Namespace(repo=str(plain), agent="me")  # a non-repository target
+    cli._remember_command(args, ["ddflow", "onboard", "status"], 1, "", set(), set())
+    assert (repo / ".ddflow" / "local" / "cmdlog.jsonl").exists()
+
+
 def test_the_tail_keeps_the_command_but_not_the_machine_home(tmp_path: Path):
     home = str(Path.home())
     _record(tmp_path, ["ddflow"], 0, f"boom {home}/secret")
