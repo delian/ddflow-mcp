@@ -277,7 +277,7 @@ def doctor_note(repo: Path) -> str | None:
     if not pairs:
         return None
     detail = "; ".join(f"{a} sees none of the rule files {b} sees" for a, b in pairs)
-    return f"adopted agents are cut off from each other's rules: {detail} (`ddflow rule inventory`)"
+    return f"some adopted agents miss rules others load: {detail} (`ddflow rule inventory`)"
 
 
 def inventory(repo: Path) -> dict[str, Any]:
