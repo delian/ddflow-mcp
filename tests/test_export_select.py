@@ -214,9 +214,7 @@ def test_a_locked_document_refuses_an_agent_enable_and_the_operator_can_unlock(p
     assert run_cli(proj, "export", "enable", "roadmap", agent="bot")[0] == 0  # no lock now
 
 
-def test_an_agent_cannot_lock_and_a_lock_survives_a_plain_disable(proj):
-    code, _o, err = run_cli(proj, "export", "disable", "roadmap", "--lock", agent="bot")
-    assert code == 3 and "operator" in err
+def test_a_lock_survives_a_plain_disable(proj):
     assert run_human(proj, "export", "disable", "roadmap", "--lock")[0] == 0
     assert run_cli(proj, "export", "disable", "roadmap", agent="bot")[0] == 0
     assert run_cli(proj, "export", "enable", "roadmap", agent="bot")[0] == 3
@@ -241,7 +239,10 @@ def test_the_harness_marker_alone_is_an_agent(proj):
         text=True,
         env=env,
     )
-    assert p.returncode == 3 and "operator" in p.stderr
+    # an agent may lock (B-export-agent-lock): recorded as the agent's, not the operator's
+    assert p.returncode == 0, p.stderr
+    (ev,) = _events(proj, "export.disabled")
+    assert ev["data"]["human"] is False and ev["data"]["locked"] is True
 
 
 # -- events and the fold --------------------------------------------------------------

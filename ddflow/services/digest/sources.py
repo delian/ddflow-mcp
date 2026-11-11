@@ -297,7 +297,6 @@ EXEMPT_SITES: dict[str, str] = {
     "config.reviewer_command": "T3 signed act; nothing pends in State",
     "upgrade.self": "an immediate act by a person; nothing pends in State",
     "skew.override": "an immediate flag on one command; nothing pends in State",
-    "export.lock": "an immediate act by a person; nothing pends in State",
     "export.unlock": "an immediate act by a person; nothing pends in State",
     "export.force": "an immediate act by a person; nothing pends in State",
     "export.machine": "an immediate act by a person; nothing pends in State",

@@ -5274,7 +5274,7 @@ $ ddflow export enable roadmap                       # select it (shared config)
 $ ddflow export enable status --path docs/S.md --mode region
 $ ddflow export enable bugs --local                  # this machine only (.ddflow/local/)
 $ ddflow export disable roadmap                      # deselect; the file stays, printing still works
-$ ddflow export disable roadmap --lock               # the operator's veto: agents cannot enable it again
+$ ddflow export disable roadmap --lock               # a veto: other agents cannot enable it again
 $ ddflow export ack                                  # the operator has seen what agents enabled
 ```
 
@@ -5285,10 +5285,14 @@ path, mode and time (`export.disabled` and `export.acknowledged` are the other t
 kinds; an older ddflow reports them as skipped), `ddflow export` lists who enabled each
 document and when, `brief` carries one `Export:` line and `doctor` a note until the
 operator acknowledges (`ddflow export ack`, or `ddflow export` at a terminal), and
-`disable --lock` makes an agent's later `enable` exit 3 (`locked by the operator`). Locking,
-acknowledging and unlocking (`ddflow export enable <doc>` at a terminal) are the operator's
-acts, refused under `--agent`, `DDFLOW_AGENT` or a harness's shell (as `reviewers approve`
-is). Enable edits the selection through the same guarded write as `config --set`, and an
+`disable --lock` makes an agent's later `enable` exit 3 (`locked by the operator`). An agent
+may lock a document too (B-export-agent-lock): the `export.disabled` event records the agent's
+id, another agent's `enable` exits 3 (`locked by agent <id>`), the locking agent may lift its
+own lock, and the operator can always unlock (`ddflow export enable <doc>` at a terminal). An
+agent's lock never overrides or replaces the operator's lock, which only a person (or an
+agent spending the operator's approval, `export.unlock`) lifts. Acknowledging and unlocking
+the operator's lock are the operator's acts, refused under `--agent`, `DDFLOW_AGENT` or a
+harness's shell (as `reviewers approve` is). Enable edits the selection through the same guarded write as `config --set`, and an
 `append` target is registered as an append-only path.
 
 **Templates are yours to change.** The format of every kind is a Jinja2 template; resolution

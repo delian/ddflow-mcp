@@ -30,7 +30,11 @@ def _state_text(r: dict) -> str:
     """The STATE column of one document row."""
     state = r["state"] + (f" ({r['detail']})" if r["detail"] else "")
     if r.get("locked"):
-        state += " (locked by the operator)"
+        state += (
+            f" (locked by agent {r.get('locked_by') or '?'})"
+            if r.get("locked_by_agent")
+            else " (locked by the operator)"
+        )
     if r.get("enabled_by"):
         when = clock.fmt_minute(str(r.get("enabled_at", "")))
         state += f" -- enabled by {r['enabled_by']} {when}"
