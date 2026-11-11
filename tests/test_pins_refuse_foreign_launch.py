@@ -1,0 +1,58 @@
+"""A pin never records the foreign-launch guard's refusal as its expected output (Bc28808f9c3).
+
+Run from a linked worktree whose code is not the caller's own, the golden transcripts recorded
+`ddflow: imported from the linked worktree <path> ...` for every command, with the path of
+whichever worktree regenerated last, and `pins regenerate` reported success (the test passed
+while it rewrote its own pin). The regeneration is refused and its files are put back.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from ddflow.config import Config
+from ddflow.services import install_info as I
+from ddflow.services import pins as PN
+
+PY = sys.executable
+
+
+@pytest.fixture
+def tree(tmp_path: Path, monkeypatch) -> Path:
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)  # a regeneration refuses xdist
+    r = tmp_path / "proj"
+    r.mkdir()
+    subprocess.run(["git", "-C", str(r), "init", "-q", "-b", "main"], check=True)
+    (r / "pin.json").write_text('{"ok": 1}\n')
+    return r
+
+
+def _recipe(regen: str) -> PN.Recipe:
+    # the check always reports stale, so the regeneration runs
+    return PN.Recipe("pin", ("pin.json",), (PY, "-c", "raise SystemExit(1)"), (PY, "-c", regen))
+
+
+def test_a_regeneration_that_records_the_guard_refusal_is_refused_and_put_back(tree):
+    refusal = f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL} /somewhere/lane, not the primary"
+    rep = PN.regenerate(
+        tree,
+        Config.load(tree),
+        recipes=[_recipe(f"open('pin.json','w').write({refusal!r})")],
+    )
+    assert [p.name for p in rep.failed] == ["pin"], rep
+    assert "foreign-launch refusal" in rep.failed[0].error
+    assert (tree / "pin.json").read_text() == '{"ok": 1}\n'  # put back as it was
+
+
+def test_a_regeneration_that_records_ordinary_output_is_kept(tree):
+    rep = PN.regenerate(
+        tree,
+        Config.load(tree),
+        recipes=[_recipe("open('pin.json','w').write('{\"ok\": 2}\\n')")],
+    )
+    assert not rep.failed or "foreign-launch" not in rep.failed[0].error
+    assert (tree / "pin.json").read_text() == '{"ok": 2}\n'

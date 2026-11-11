@@ -23,6 +23,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+from ..adapters.env import DEFAULT as ENV
+from ..adapters.env import Env
 from ..config_sections import _compat as CV
 from ..core import version as V
 from ..infra import fsio
@@ -229,15 +231,19 @@ def upgrade_advice(highest: str = "", install: InstallInfo | None = None) -> str
 
 __all__ = [
     "DIST_NAME",
+    "FOREIGN_LAUNCH_REFUSAL",
     "KINDS",
     "METHODS",
+    "SYSTEM_TEMP_DIRS",
     "ForeignLaunch",
     "InstallInfo",
     "foreign_launch_root",
+    "in_checkout_family",
     "install_info",
     "install_method",
     "installed_from_index",
     "is_own_dev_tree",
+    "named_on_pythonpath",
     "normalise_path",
     "own_distribution",
     "repoint_shared_editable",
@@ -328,6 +334,51 @@ class ForeignLaunch:
     primary: Path
 
 
+#: What the foreign-launch refusal says first, and what `pins` looks for so that a refusal is never
+#: recorded as a pin's expected output (Bc28808f9c3): one string, so the two cannot drift apart.
+FOREIGN_LAUNCH_REFUSAL = "imported from the linked worktree"
+
+#: The temp directories ddflow's scratch trees are made in when TMPDIR is not redirected.
+SYSTEM_TEMP_DIRS: tuple[Path, ...] = (Path("/tmp"), Path("/var/tmp"))
+
+
+def _scratch_parents() -> set[Path]:
+    """Where a ``ddflow-*`` scratch tree can sit: this process's temp root or a system one."""
+    return {fsio.temp_root().resolve(), *(d.resolve() for d in SYSTEM_TEMP_DIRS)}
+
+
+def named_on_pythonpath(root: Path, env: Env = ENV) -> bool:
+    """Whether ``root`` is an entry of ``PYTHONPATH``: the launcher put this tree's code on the
+    import path ON PURPOSE, which a shared editable install redirected behind its back is not."""
+    want = root.resolve()
+    for entry in filter(None, (env.get("PYTHONPATH") or "").split(os.pathsep)):
+        try:
+            if Path(entry).resolve() == want:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def in_checkout_family(start: Path, primary: Path) -> bool:
+    """Whether ``start`` lies in the ``primary`` checkout or one of its linked worktrees.
+
+    The nearest enclosing git tree decides (a ``.git`` file or directory), read from the files
+    git keeps. A caller standing in a repository that is neither (a test's sandbox, another
+    project) has no lane of this checkout whose code could be foreign to it. A start with no
+    enclosing tree answers False; a path that cannot be read answers True (refuse, never
+    excuse, on a doubt).
+    """
+    try:
+        here = Path(start).resolve()
+        top = next((d for d in (here, *here.parents) if (d / ".git").exists()), None)
+        if top is None:
+            return False
+        return top == primary.resolve() or _paths.primary_checkout(top) == primary.resolve()
+    except (OSError, ValueError):
+        return True
+
+
 def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     """The linked worktree the running `ddflow` package was imported from, or None.
 
@@ -345,9 +396,11 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     # hold ddflow's own code under test, not another lane's unmerged branch — a ci/pre-push run
     # lives in one, so importing from it is legitimate and must not read as foreign (B267ff88849).
     # A lane's worktree is under `.ddflow/worktrees/`, never a sibling of the temp root.
-    if root.resolve().parent == fsio.temp_root().resolve() and root.name.startswith(
-        "ddflow-"
-    ):
+    # The parent is compared to the process's temp root AND to the system defaults: a process
+    # that runs under its own TMPDIR (the swarm pilot's sandbox) is not looking at the temp dir
+    # the scratch tree was made in, and that must not turn ci's own tree into a foreign one
+    # (Bbaaaba1364).
+    if root.name.startswith("ddflow-") and root.resolve().parent in _scratch_parents():
         return None
     primary = _paths.primary_checkout(root)
     if primary is None:

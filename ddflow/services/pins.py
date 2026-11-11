@@ -41,6 +41,7 @@ from ..infra import proc as P
 from ..infra.fsio import LockTimeout, atomic_write, file_lock, replace_text
 from .cmdrunner import TIMEOUT, CommandRunner, Declared
 from .gateenv import REPO_VARS
+from .install_info import FOREIGN_LAUNCH_REFUSAL
 from .pins_conflict import apply as apply_settled
 from .pins_conflict import settle_files, take_side
 
@@ -362,7 +363,10 @@ def _run_all(
         began = time.monotonic()
         kept = _snapshot(repo, r)
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
-        broke = done.error is not None or done.returncode != 0
+        poisoned = (
+            done.error is None and done.returncode == 0 and _records_refusal(repo, r)
+        )  # the command "succeeded" by recording a guard refusal as the expected output
+        broke = done.error is not None or done.returncode != 0 or poisoned
         # A killed or failed regeneration leaves its files as it dropped them (README.md with
         # thousands of duplicated lines, snapshots deleted: Bf965d87b66): put them back.
         back = (
@@ -379,6 +383,16 @@ def _run_all(
                 r.name
             ].unavailable = f"the regeneration did not finish in {limit}s (timed out).{back}"
             say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
+        elif poisoned:
+            states[r.name].error = (
+                f"regeneration recorded a foreign-launch refusal ({FOREIGN_LAUNCH_REFUSAL!r}) as"
+                " the pin: the command ran from a tree whose code is not the caller's own, so what"
+                " it printed is that refusal, not the output the pin is for. Nothing was kept;"
+                " regenerate from the primary checkout, or from a lane whose own code runs."
+                f"{back}"
+            )
+            states[r.name].unavailable = ""
+            say(f"pins: {r.name}: REFUSED ({time.monotonic() - began:.0f}s)")
         elif broke:
             states[r.name].error = f"regeneration failed: {_tail(done)}{back}"
             states[r.name].unavailable = ""
@@ -388,6 +402,17 @@ def _run_all(
             redone.append(r)
     _pmap(again, redone, workers, say, every, "re-checks")
     return [states[r.name] for r in chosen]
+
+
+def _records_refusal(repo: Path, r: Recipe) -> bool:
+    """Whether a file the recipe owns now holds the foreign-launch refusal message."""
+    for p in _owned(repo, r):
+        try:
+            if FOREIGN_LAUNCH_REFUSAL in p.read_text("utf-8", errors="replace"):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _owned(repo: Path, r: Recipe) -> list[Path]:
