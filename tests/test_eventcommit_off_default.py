@@ -56,3 +56,17 @@ def test_commit_shards_commits_when_head_is_on_the_default_branch(repo):
     sha, note = EC.commit_shards(repo, "release T1")
     assert sha and not note, (sha, note)
     assert EC.uncommitted_shards(repo) == []
+
+
+def test_commit_shards_refuses_on_a_detached_head(repo):
+    from ddflow.infra.log import EventLog
+    from ddflow.services import eventcommit as EC
+
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "adopt", "--no-verify")
+    EventLog(repo, "agent-test").append("task.added", "T1", {"title": "t", "globs": []})
+    _git(repo, "checkout", "-q", "--detach")
+    sha, note = EC.commit_shards(repo, "release T1")
+    assert not sha and "detached" in note, (sha, note)
+

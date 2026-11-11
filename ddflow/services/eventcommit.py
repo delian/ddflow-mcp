@@ -130,14 +130,12 @@ def _off_default(repo: Path) -> str:
     on the default branch and nothing is stranded."""
     head = W.git(repo, "symbolic-ref", "--quiet", "HEAD")
     if not head.ok:
-        return ""  # detached: no branch to strand an item on (a detached commit stays a sha)
+        return "HEAD is detached, not on a branch"
     branch = head.out.strip()
     dflt = W.default_branch(repo)
-    if dflt == "HEAD":
-        return ""  # no default branch resolved: nothing to compare "off" against
-    if branch == f"refs/heads/{dflt}":
-        return ""
-    return f"HEAD is on {branch!r}, not the default branch {dflt!r}"
+    if branch != f"refs/heads/{dflt}":
+        return f"HEAD is on {branch!r}, not the default branch {dflt!r}"
+    return ""
 
 
 def whole(repo: Path, rel: str) -> bool:
