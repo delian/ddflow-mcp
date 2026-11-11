@@ -15,17 +15,19 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Iterable
 
 from ..globs import overlap as globs_overlap
-from ..model import Item
 
 #: The ``wave:N`` tag shape, the same `services.waves.WAVE_TAG` reads for a whole `State`;
 #: this reads ONE item's tags: the number among the item's ``wave:N`` stamps, or ``None``.
 _WAVE_TAG = re.compile(r"wave:\d+")
 
+#: A co-location cluster is a HINT only at this many items or more; a singleton is not
+#: advice, so an item alone in its component drops out below.
+_MIN_CLUSTER = 2
 
-def wave_of(tags: Iterable[str]) -> int | None:
+
+def wave_of(tags: list) -> int | None:
     """The ``wave:N`` number an item's tags carry, or ``None`` when none is stamped.
 
     ``wave:0`` = no open prerequisite; ``wave:N`` = 1 + the highest wave among open
@@ -39,32 +41,32 @@ def wave_of(tags: Iterable[str]) -> int | None:
     return None
 
 
-def co_location_hints(items: list[Item]) -> list[dict]:
+def co_location_hints(items: list) -> list:
     """Cluster ``items`` into the sets that should run in one lane.
 
     Two items are joined (union-find) when they share a declared dependency, or their
-    globs overlap; the clusters are the connected components that follow, transitively.
-    Returns one ``{"items", "shared_deps", "overlap"}`` entry per cluster of TWO OR MORE
-    items (a singleton is not a hint).
+    globs overlap (and then transitively); the clusters are the connected components
+    that follow. Returns one ``{"items", "shared_deps", "overlap"}`` entry per cluster
+    of TWO OR MORE items (a singleton is not a hint).
     """
-    if len(items) < 2:
+    if len(items) < _MIN_CLUSTER:
         return []
     ids = [it.id for it in items]
     needs = [set(it.needs) for it in items]
     globs = [list(it.globs) for it in items]
     parent = _union_roots(len(items), needs, globs)
-    groups: dict[int, list[int]] = {}
+    groups = {}
     for i in range(len(items)):
         groups.setdefault(_find(parent, i), []).append(i)
     hints = [
         _cluster(ids, needs, globs, members)
         for members in groups.values()
-        if len(members) >= 2
+        if len(members) >= _MIN_CLUSTER
     ]
     return sorted(hints, key=lambda c: c["items"])
 
 
-def _union_roots(n: int, needs: list[set[str]], globs: list[list[str]]) -> list[int]:
+def _union_roots(n, needs: list, globs: list) -> list:
     """A union-find parent array over ``n`` items, joining shared-dep and glob-overlap pairs."""
     parent = list(range(n))
     for i in range(n):
@@ -78,24 +80,25 @@ def _union_roots(n: int, needs: list[set[str]], globs: list[list[str]]) -> list[
     return parent
 
 
-def _union(parent: list[int], a: int, b: int) -> None:
-    ra, rb = _find(parent, a), _find(parent, b)
+def _union(parent: list, a: int, b: int) -> None:
+    ra = _find(parent, a)
+    rb = _find(parent, b)
     if ra != rb:
         parent[rb] = ra
 
 
-def _find(parent: list[int], i: int) -> int:
+def _find(parent: list, i: int) -> int:
     while parent[i] != i:
         parent[i] = parent[parent[i]]
         i = parent[i]
     return i
 
 
-def _overlap_globs(a: list[str], b: list[str]) -> bool:
+def _overlap_globs(a: list, b: list) -> bool:
     return any(globs_overlap(g, h) for g in a for h in b)
 
 
-def _cluster(ids, needs: list[set[str]], globs: list[list[str]], members: list[int]) -> dict:
+def _cluster(ids: list, needs: list, globs: list, members: list) -> dict:
     return {
         "items": sorted(ids[i] for i in members),
         "shared_deps": _shared_deps(needs, members),
@@ -103,13 +106,13 @@ def _cluster(ids, needs: list[set[str]], globs: list[list[str]], members: list[i
     }
 
 
-def _shared_deps(needs: list[set[str]], members: list[int]) -> list[str]:
+def _shared_deps(needs: list, members: list) -> list:
     counts = Counter(d for i in members for d in needs[i])
-    return sorted(d for d, n in counts.items() if n >= 2)
+    return sorted(d for d, n in counts.items() if n >= _MIN_CLUSTER)
 
 
-def _overlap_pairs(globs: list[list[str]], members: list[int]) -> list[list[str]]:
-    pairs: set[tuple[str, str]] = set()
+def _overlap_pairs(globs: list, members: list) -> list:
+    pairs = set()
     for a, b in _pairs(members):
         for g in globs[a]:
             for h in globs[b]:
@@ -118,5 +121,5 @@ def _overlap_pairs(globs: list[list[str]], members: list[int]) -> list[list[str]
     return sorted(list(p) for p in pairs)
 
 
-def _pairs(members: list[int]) -> list[tuple[int, int]]:
+def _pairs(members: list) -> list:
     return [(a, b) for a in members for b in members if a < b]

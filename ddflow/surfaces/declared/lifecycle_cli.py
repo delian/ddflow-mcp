@@ -313,10 +313,7 @@ def _blocked_text(out, p, excluded) -> str:
     return "\n".join(
         [
             out.reason,
-            *(
-                f"  {b.item}: {b.reason} — {b.detail}"
-                for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]
-            ),
+            *(f"  {b.item}: {b.reason} — {b.detail}" for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]),
             *more,
             *_excluded_lines(excluded),
             *([note] if (note := out.data.get("_footer")) else []),
@@ -362,7 +359,11 @@ def _next_ready_lines(p, flat, clusters) -> list[str]:
 def _co_locate_lines(clusters) -> list[str]:
     lines = ["\nCo-locate (place in ONE lane to minimize locking):"]
     for c in clusters:
-        why = f"share dep(s): {', '.join(c['shared_deps'])}" if c["shared_deps"] else "overlapping globs"
+        why = (
+            f"share dep(s): {', '.join(c['shared_deps'])}"
+            if c["shared_deps"]
+            else "overlapping globs"
+        )
         lines.append(f"  {', '.join(c['items'])}  ({why})")
     return lines
 

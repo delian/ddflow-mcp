@@ -13,7 +13,14 @@ from ...core import progress as PR
 from ...core.defaults import DEFAULT_NEXT_KIND
 from ...core.model import REVIEW
 from ...core.plain import plain
-from ...core.schedule import Blocked, bug_items, co_location_hints, critical_path, glob_conflict, wave_of
+from ...core.schedule import (
+    Blocked,
+    bug_items,
+    co_location_hints,
+    critical_path,
+    glob_conflict,
+    wave_of,
+)
 from ...core.tier import tier_of
 from ...services import flow as FS
 from ...services import leases as LS
@@ -160,9 +167,7 @@ def _drop_leased_overlap(items, st, cfg, agent):
     kept: list = []
     dropped: list[Blocked] = []
     for it in items:
-        clash = glob_conflict(
-            st, cfg, it, list(it.globs), agent, against="live", live=live
-        )
+        clash = glob_conflict(st, cfg, it, list(it.globs), agent, against="live", live=live)
         if clash is None:
             kept.append(it)
             continue

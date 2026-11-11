@@ -126,4 +126,3 @@ def test_two_unstamped_items_are_one_unstamped_bucket_not_two(repo):
     code, out, _err = run_cli(repo, "next")
     assert code == 0, out
     assert out.count("unstamped") == 1, out
-
