@@ -88,9 +88,7 @@ def cut_text(text: Any, *, chars: int = 0, lines: int = MAX_LINES) -> tuple[Any,
     return kept, cut_chars, cut_lines
 
 
-def footer(
-    cut_chars: int, cut_lines: int, *, cli: str, mcp: str, chars: int, lines: int
-) -> str:
+def footer(cut_chars: int, cut_lines: int, *, cli: str, mcp: str, chars: int, lines: int) -> str:
     """The one-line footer naming the count cut and the exact FULL call.
 
     ``cli`` and ``mcp`` are the un-bounded call each surface would run. The footer is
@@ -106,11 +104,11 @@ def footer(
     how = ", ".join(cut)
     first = f"[{how} (budget {lines} line(s)/{chars} character(s))."
     if cli and mcp:
-        first += " everything: `%s` (MCP: `%s`)" % (cli, mcp)
+        first += f" everything: `{cli}` (MCP: `{mcp}`)"
     elif mcp:
-        first += " everything: `%s`" % mcp
+        first += f" everything: `{mcp}`"
     elif cli:
-        first += " everything: `%s`" % cli
+        first += f" everything: `{cli}`"
     return first + "]"
 
 

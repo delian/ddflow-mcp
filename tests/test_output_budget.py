@@ -15,9 +15,7 @@ def _cfg(chars: int) -> SimpleNamespace:
 
 def test_under_both_caps_is_unchanged_with_no_footer():
     text = "one\ntwo\nthree\n"
-    out = B.apply(
-        text, cfg=_cfg(1000), cli="ddflow show X", mcp="ddflow_show id=X", bounded=True
-    )
+    out = B.apply(text, cfg=_cfg(1000), cli="ddflow show X", mcp="ddflow_show id=X", bounded=True)
     assert out.text == text
     assert out.footer == ""
     assert (out.cut_chars, out.cut_lines) == (0, 0)
