@@ -134,16 +134,25 @@ def monitor(
     now = _CLOCK.wall() if now is None else now
     agent = agent or cfg.agent.id
     live = state.active_leases(now, cfg.lease.grace_s) if live is None else live
-    acts: list[Act] = []
-    for iid, it in state.items.items():
-        why = interrupted(state, it, live)
-        if why:
-            acts.append(Act("recover", iid, why))
+    recover: list[Item] = []
+    complete: list[Item] = []
     for iid, it in state.items.items():
         if it.merged_sha and not it.terminal:
-            acts.append(
-                Act("complete", iid, f"merged ({it.merged_sha[:12]}) but not completed")
-            )
+            # A merged item is landed-but-unrecorded, never INTERRUPTED: recover is for
+            # salvaging a crash's uncommitted work, and a merged item has none left (its
+            # work is already in the base). It is `complete`, exactly once.
+            complete.append(it)
+        elif interrupted(state, it, live):
+            recover.append(it)
+    acts: list[Act] = []
+    for it in fill_order(
+        cfg, state, recover, agent=agent, now=now, live=live, bugs=bugs, in_cycle=in_cycle, cycles=cycles
+    ):
+        acts.append(Act("recover", it.id, interrupted(state, it, live)))
+    for it in fill_order(
+        cfg, state, complete, agent=agent, now=now, live=live, bugs=bugs, in_cycle=in_cycle, cycles=cycles
+    ):
+        acts.append(Act("complete", it.id, f"merged ({it.merged_sha[:12]}) but not completed"))
     ready = plan(state, cfg, agent=agent, now=now).ready
     for it in fill_order(
         cfg,

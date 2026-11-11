@@ -78,3 +78,30 @@ def test_monitor_fill_offers_the_bug_before_the_generic_item(log, cfg):
     st = _state(log)
     fills = [a.item for a in monitor(cfg, st) if a.verb == "fill"]
     assert fills == ["FIXBUG", "FEAT"]
+
+
+def test_merged_interrupted_item_is_completed_not_recovered(log, cfg):
+    """A merged item is landed work: it is `complete`, never `recover`, even when it was
+    started and never finished (roborev: recover is salvage, and a merged item has none).
+    """
+    log.append("phase.added", "P1", {"title": "phase"})
+    _task(log, "MIXED", parent="P1", priority=10)
+    log.append("item.started", "MIXED", {})
+    log.append("worktree.merged", "MIXED", {"sha": "a1b2c3d4e5f67890abcdef12"})
+    st = fold(log.read_all())
+    verbs = [(a.verb, a.item) for a in monitor(cfg, st)]
+    assert ("recover", "MIXED") not in verbs
+    assert ("complete", "MIXED") in verbs
+
+
+def test_recover_orders_same_tier_items_by_priority(log, cfg):
+    """Within a tier the actions are in value order (lower priority runs sooner), not
+    insertion order."""
+    log.append("phase.added", "P1", {"title": "phase"})
+    _task(log, "P90", parent="P1", priority=90)  # inserted first: would lead insertion order
+    _task(log, "P10", parent="P1", priority=10)  # lower number runs sooner
+    log.append("item.started", "P90", {})
+    log.append("item.started", "P10", {})
+    st = fold(log.read_all())
+    recovers = [a.item for a in monitor(cfg, st) if a.verb == "recover"]
+    assert recovers == ["P10", "P90"]
