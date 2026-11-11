@@ -1125,7 +1125,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 665 knobs.
+cadences, and the rest of the 683 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5439,7 +5439,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 665): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 683): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6029,7 +6029,7 @@ declared once and persists — see
 
 ## Configuration
 
-665 knobs across 61 sections, every one documented in place and listed, with its default
+683 knobs across 61 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6096,8 +6096,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=9af0309ae907 -->
-<details><summary>All 665 knobs across 61 sections</summary>
+<!-- ddflow:begin README/knobs sha=b15fff93a11c -->
+<details><summary>All 683 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6734,6 +6734,24 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `swarm.remote_exclude` | `[".ddflow", ".env", "**/.env"]` |  |
+| `swarm.remote_bundle_max_bytes` | `104857600` |  |
+| `swarm.remote_return_max_bytes` | `52428800` |  |
+| `swarm.remote_return_max_commits` | `200` |  |
+| `swarm.remote_git_timeout_s` | `120` |  |
+| `swarm.remote_scan_max_blob_bytes` | `1048576` |  |
+| `swarm.remote_scan_batch_files` | `64` |  |
+| `swarm.remote_branch_prefix` | `"swarm/remote/"` |  |
+| `swarm.remote_seed_name` | `"SEED.md"` |  |
+| `swarm.remote_proposals_max` | `5` |  |
+| `swarm.remote_proposal_chars` | `400` |  |
+| `swarm.remote_proposals_max_bytes` | `65536` |  |
+| `swarm.remote_ssh_argv` | `["ssh"]` |  |
+| `swarm.remote_ssh_timeout_s` | `60` |  |
+| `swarm.remote_ssh_connect_timeout_s` | `15` |  |
+| `swarm.remote_copy_timeout_s` | `600` |  |
+| `swarm.remote_lanes_root` | `"ddflow-lanes"` |  |
+| `swarm.remote_detail_chars` | `200` |  |
 | `triggers.max_fires_per_hour` | `10` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.skew_notice` | `"once"` | `once` \| `always` \| `off` |

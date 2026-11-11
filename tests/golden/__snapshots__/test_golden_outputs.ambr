@@ -4479,6 +4479,55 @@
       swarm.launch_max_budget_usd = 5.0   [default]
           Ceiling on any template's `budget_usd`: a launch from a template that asks
           for more is refused, whatever its approval. Zero removes the ceiling.
+      swarm.remote_exclude = ['.ddflow', '.env', '**/.env']   [default]
+          Relative path globs a remote lane's working tree never carries in its
+          bundle: ddflow's own event log, secrets and env files stay on the host. What
+          the outbound commit leaves out is
+          `ddflow.services.swarm.remote.Knobs.exclude`.
+      swarm.remote_bundle_max_bytes = 104857600   [default]
+          Biggest outbound bundle the host sends, in bytes (default 100 MiB). The
+          returned bundle cap is its own knob (`remote_return_max_bytes`).
+      swarm.remote_return_max_bytes = 52428800   [default]
+          Biggest returned bundle back to the host, in bytes (default 50 MiB).
+      swarm.remote_return_max_commits = 200   [default]
+          Most commits a returned branch, bundle or import carries; one past the cap
+          is refused.
+      swarm.remote_git_timeout_s = 120   [default]
+          How long one remote git command may run, in seconds.
+      swarm.remote_scan_max_blob_bytes = 1048576   [default]
+          Biggest file blob the outbound scan inspects, in bytes: the tree with a file
+          OVER this many bytes is refused. The return refuses anything its scan
+          inspects over this ceiling.
+      swarm.remote_scan_batch_files = 64   [default]
+          At most this many blobs of `remote_scan_max_blob_bytes` the scan holds in
+          memory at once.
+      swarm.remote_branch_prefix = 'swarm/remote/'   [default]
+          Branch refs the remote work is stored under on the host.
+      swarm.remote_seed_name = 'SEED.md'   [default]
+          Name of the seed pack file inside the outbound bundle.
+      swarm.remote_proposals_max = 5   [default]
+          Most proposal the return reports at once.
+      swarm.remote_proposal_chars = 400   [default]
+          Longest one proposal in characters before it is cut.
+      swarm.remote_proposals_max_bytes = 65536   [default]
+          Longest whole return reply in bytes at once, proposals included.
+      swarm.remote_ssh_argv = ['ssh']   [default]
+          The ssh binary and flags, `ssh` by default; a different ssh binary's path
+          goes here.
+      swarm.remote_ssh_timeout_s = 60   [default]
+          How long one ssh command may run, in seconds, before the remote reads it as
+          not finishing.
+      swarm.remote_ssh_connect_timeout_s = 15   [default]
+          How long ssh may keep trying to connect before it gives up, on its own
+          budget.
+      swarm.remote_copy_timeout_s = 600   [default]
+          How long one copy in or out may run before the remote reads it as does not
+          finish.
+      swarm.remote_lanes_root = 'ddflow-lanes'   [default]
+          Directory under the remote home lanes live; a first segment names the lane.
+      swarm.remote_detail_chars = 200   [default]
+          Longest one line of remote stderr a report keeps before the cut: enough to
+          ask nicely.
       triggers.max_fires_per_hour = 10   [default]
           How many times triggers may fire, counted across EVERY trigger, in any
           rolling hour (default 10). A met condition past it is recorded as
