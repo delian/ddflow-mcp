@@ -185,7 +185,7 @@ def _plan_block(path: Path, section: str, name: str) -> str:
     so a plan distinguishes a no-op from a rewrite."""
     label = name or path.name
     if not path.exists():
-        return f"would append the managed block to {label}"
+        return f"would create {label}"
     try:
         existing = path.read_text("utf-8")
     except UnicodeDecodeError:
