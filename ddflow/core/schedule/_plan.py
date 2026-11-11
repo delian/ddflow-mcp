@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
+from typing import Any
 
 from ...adapters.optimizer import Candidate, Slots, get_optimizer
 from ...config import Config
 from .. import flowcontrol as FC
 from ..admission import glob_conflict
+from ..clock import epoch
 from ..graph import find_cycles
 from ..model import REVIEW, RUNNING, Item, State
-from ._chain import _chain_scope
+from ._chain import _chain_scope, critical_path
 from ._filters import PlanCtx, item_blocker, order_terms
 from ._parallel import _cap_words, parallel_line
 from ._readiness import Blocked, Plan, unpickable
@@ -22,7 +24,7 @@ from ._resources import bug_items, interrupted, needs_tree
 RESERVED = "schedule.reserved_slots"
 
 
-def _cut_ready(
+def _cut_ready(  # noqa: PLR0913, PLR0917 -- each argument is one facet of the cut
     state: State,
     cfg: Config,
     p: Plan,
@@ -33,6 +35,7 @@ def _cut_ready(
     live_note: str,
     reached: str,
     hold: Callable[[Item], Blocked | None] | None,
+    now: float,
 ) -> None:
     """Trim ``p.ready`` to the free slots, in place, never offering two overlapping items."""
     # Cut the ready list conflict-aware, by the configured optimizer: it walks the offer order
@@ -64,7 +67,7 @@ def _cut_ready(
         return clash.item
 
     result = get_optimizer(cfg.schedule.optimizer).cut(
-        {}, cands, free, hold=held_fn, clash=clash_fn
+        _facts(state, cfg, now, list(p.ready)), cands, free, hold=held_fn, clash=clash_fn
     )
     taken: list[Item] = []
     cut: list[Item] = []
@@ -131,7 +134,31 @@ def _ordered(ctx: PlanCtx, candidates: list[Item]) -> list[Item]:
     terms = order_terms(ctx)
     by_id = {i.id: i for i in candidates}
     cands = [Candidate(i.id, terms(i)) for i in candidates]
-    return [by_id[x.id] for x in get_optimizer(ctx.cfg.schedule.optimizer).order({}, cands)]
+    optimizer = get_optimizer(ctx.cfg.schedule.optimizer)
+    return [
+        by_id[x.id] for x in optimizer.order(_facts(ctx.state, ctx.cfg, ctx.now, candidates), cands)
+    ]
+
+
+def _facts(state: State, cfg: Config, now: float, candidates: list[Item]) -> dict[str, Any]:
+    """The optimizer ``ctx``: its ``facts`` entry carries the per-candidate facts a ``swarm``
+    adapter orders by, computed only for the keys that adapter reads (the default reads
+    none, so a plain plan pays for none). ``critical`` is "on the critical path", ``waited_s``
+    the seconds since the item was filed. Open: an adapter reads what it knows and misses
+    what is absent; a future key rides the same map."""
+    wanted = getattr(get_optimizer(cfg.schedule.optimizer), "facts", frozenset())
+    if "critical" not in wanted and "waited_s" not in wanted:
+        return {}
+    chain = frozenset(critical_path(state, "", cfg))
+    return {
+        "facts": {
+            it.id: {
+                "critical": it.id in chain,
+                "waited_s": max(0.0, now - epoch(it.created_at)) if it.created_at else 0.0,
+            }
+            for it in candidates
+        }
+    }
 
 
 def _classify(state: State, cfg: Config, ctx: PlanCtx, candidates: list[Item], p: Plan) -> None:
@@ -301,7 +328,7 @@ def plan(
         tree_binds = True
     p.reserved_note = reserved_note(cfg, limit, tree_binds=tree_binds)
     free, reserved = open_slots(state, cfg, live, live_items, limit, flight_slots, tree_slots)
-    _cut_ready(state, cfg, p, slots, free, reserved, live_items, live_note, reached, hold)
+    _cut_ready(state, cfg, p, slots, free, reserved, live_items, live_note, reached, hold, now)
     if parallel is not None:
         line = parallel_line(cfg, parallel, limit, in_flight, len(p.ready), p.capped)
         p.parallel_line = "; ".join(filter(None, [line, p.reserved_note]))
