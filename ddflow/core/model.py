@@ -141,6 +141,7 @@ from .handlers.links import (  # noqa: F401
     _links,
     link_targets,
 )
+from .handlers.installmanifest import INSTALLMANIFEST_HANDLERS
 from .handlers.probe import PROBE_HANDLERS
 from .handlers.record_update import UPDATE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
@@ -314,6 +315,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: services/installmanifest.py (an onboarding writer's run)
+    **INSTALLMANIFEST_HANDLERS,
     # first writer: api/probe.py (`ddflow probe`)
     **PROBE_HANDLERS,
     # first writer: services/auth.py (a redeemed pairing, a revocation)
