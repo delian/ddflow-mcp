@@ -135,6 +135,8 @@ def test_the_reviewer_refusal_carries_the_route():
         'ddflow approvals ask {{ ask_id }}; then --approval "Qother00000"',
         "ddflow approvals ask {{ ask_id }}; then --approval",
         "ddflow approvals ask {{ ask_id }}; --approval {{ ask_id }}; approve it now",
+        "ddflow approvals ask --approval request",
+        "ddflow approvals ask Qother00000 --approval {{ ask_id }}",
     ],
 )
 def test_an_override_that_retargets_or_self_approves_is_ignored(tmp_path, body):
@@ -156,4 +158,7 @@ def test_the_reviewer_refusal_keeps_a_command_reviewer_off_the_chat_route():
 
     msg = reviewers._no_reviewer_refusal([], [], [("critic", "rev x")], "author")
     assert "ddflow reviewers approve" in msg and "--approval" in msg
-    assert "cannot be approved over chat" in msg
+    assert "can only be approved that way" in msg
+    assert (
+        msg.index("ddflow reviewers approve") < msg.index("at the host") < msg.index("--approval")
+    )

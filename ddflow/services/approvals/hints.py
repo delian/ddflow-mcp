@@ -56,7 +56,7 @@ _FLAG = re.compile(r"--approval[ =]+[`'\"]*([^\s`'\".,;:)]+)")
 _MAX_CHARS = 1200
 
 
-def _sound(out: str, ident: str) -> bool:
+def _sound(out: str, ident: str, need: str) -> bool:
     """Whether a rendered route keeps the way back to the answer and names only ``ident``.
 
     Every ``--approval X`` in it must be the bound id, so a template cannot send the agent
@@ -69,6 +69,8 @@ def _sound(out: str, ident: str) -> bool:
         and all(f not in low for f in _FORBIDDEN)
         and bool(flags := _FLAG.findall(out))
         and all(m in (ident, "request") for m in flags)
+        and need in flags
+        and (ident == PLACEHOLDER or f"ddflow approvals ask {ident}" in out)
         and out.count("--approval") == len(flags)
     )
 
@@ -79,6 +81,7 @@ def _render(
     overrides: dict[str, str] | None,
     *,
     ident: str,
+    need: str = "",
     **vars: str,
 ) -> str:
     for ov in (overrides, None):  # the project's text first, the shipped text if it is unusable
@@ -86,7 +89,7 @@ def _render(
             out = P.render(_section(name, repo, ov), **vars).strip()
         except (P.TemplateError, OSError):
             continue
-        if _sound(out, ident):
+        if _sound(out, ident, need or ident):
             return out
     return ""
 
@@ -98,7 +101,14 @@ def route(
     ask = clean_id(ask_id)
     # No ask yet: the way to file one is `--approval request`, so the text says that.
     section = "route" if ask != PLACEHOLDER else "route_new"
-    return _render(section, repo, overrides, ident=ask, ask_id=ask) or _FALLBACK.format(id=ask)
+    return _render(
+        section,
+        repo,
+        overrides,
+        ident=ask,
+        need="request" if section == "route_new" else ask,
+        ask_id=ask,
+    ) or _FALLBACK.format(id=ask)
 
 
 def driver_line(repo: Path | None = None, overrides: dict[str, str] | None = None) -> str:
