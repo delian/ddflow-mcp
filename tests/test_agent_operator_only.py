@@ -27,7 +27,7 @@ def _committed_cfg(repo, text: str) -> None:
 
 
 def test_a_committed_config_cannot_widen_a_role(repo):
-    """The committed layer setting `[agent].roles` is refused, so `bot` stays default.
+    """A committed layer WIDENING `[agent].roles` is refused, so `bot` stays default.
 
     Against the unfixed code the committed table IS read, so the bot role (packaged default
     `read, claim, note, start_lane, approve_marked`) becomes `*` -- this test fails there.
@@ -37,8 +37,15 @@ def test_a_committed_config_cannot_widen_a_role(repo):
         Config.load(repo)
 
 
+def test_a_committed_config_may_tighten_a_role(repo):
+    """A committed layer TIGHTENING a role is not a widening (r-tighten-only): it is read."""
+    _committed_cfg(repo, '[agent]\nroles = { bot = ["read"] }\n')
+    cfg = Config.load(repo)
+    assert cfg.agent.roles["bot"] == ["read"]
+
+
 def test_a_committed_config_cannot_widen_a_capability_verb_table(repo):
-    """`[agent].capability_verbs` is the same operator table; committed is refused too."""
+    """`[agent].capability_verbs` is the same operator table; widening it is refused too."""
     _committed_cfg(repo, '[agent]\ncapability_verbs = { read = ["*"] }\n')
     with pytest.raises(InvalidValue, match="agent.capability_verbs"):
         Config.load(repo)

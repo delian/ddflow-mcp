@@ -80,6 +80,29 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     return value
 
 
+#: Every capability or verb (`agent.roles`, `agent.capability_verbs`); a role or capability
+#: that holds ``"*"`` holds everything, so nothing widens past it.
+_STAR = "*"
+
+
+def _widens_verb_table(committed: Any, below: Any) -> bool:
+    """Whether ``committed`` widens an authority ``below`` holds (B-token-role-widened).
+
+    `*` is every capability or verb; a name missing from ``below`` holds none (the table
+    fails closed). True only when some name gains a capability or verb it did not hold below
+    -- a tightening restatement of the layer below is not a widening (r-tighten-only)."""
+    if not isinstance(committed, dict) or not isinstance(below, dict):
+        return True  # a shape we cannot compare is refused: it fails closed, it never widens
+    for name, grants in committed.items():
+        had = below.get(name, ())
+        if _STAR in had:  # below already holds everything; nothing widens past that
+            continue
+        got = set(grants)
+        if _STAR in got or not got <= set(had):
+            return True
+    return False
+
+
 class _SectionFields:
     """Mixes every `[section]` dataclass into `Config` as a field, alphabetically by
     section name (sorted discovery, r-extension-contract). `declare()` is the ONE place a
@@ -323,18 +346,21 @@ class Config(_SectionFields):
         this code does not know is tolerated (a file layer, or a key being kept as found)."""
         target = getattr(self, sec)
         key = f"{sec}.{knob}"
+        typ = next(f.type for f in fields(target) if f.name == knob)
+        value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
         if key in _OPERATOR_ONLY and source == "file":
             # The committed layer is visible to every clone, so a token holder who can land
             # a commit could widen its own role there and escalate everything it may do
-            # (B-token-role-widened). Refused, never read as the layer below said.
-            raise InvalidValue(
-                f"{key} is operator-only: the committed config cannot set it "
-                "(a cloned project must not widen a token's role). Set it in the local "
-                f"layer (`ddflow config --set {sec}.{knob} ... --local`), the environment, "
-                "or `ddflow_configure`."
-            )
-        typ = next(f.type for f in fields(target) if f.name == knob)
-        value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
+            # (B-token-role-widened). Refused only when it WIDENS an authority the layer
+            # below holds: a committed table that merely restates or tightens it is fine
+            # (r-tighten-only). A wider table is the operator's, in local/env/`ddflow_configure`.
+            if _widens_verb_table(value, getattr(target, knob)):
+                raise InvalidValue(
+                    f"{key} is operator-only: the committed config may not widen an "
+                    "authority the layer below holds. Widen it in the local layer "
+                    f"(`ddflow config --set {sec}.{knob} ... --local`), the environment, "
+                    "or `ddflow_configure`."
+                )
         written = value  # what THIS layer says, before any merge: what a note names
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
