@@ -253,17 +253,15 @@ def _adopted_ids(repo: Path) -> list[str]:
     return adopted_agents(repo)
 
 
-def _split_fleet(seen: dict[str, list[str]]) -> tuple[list[str], list[str]]:
-    """(agents cut off from another's rule files, agents whose files they miss): two agents
-    are cut off from each other when neither shares a file with the other and one has some."""
-    blind: set[str] = set()
-    sighted: set[str] = set()
-    for a, mine in seen.items():
-        for b, theirs in seen.items():
-            if a != b and theirs and not set(mine) & set(theirs):
-                blind.add(a)
-                sighted.add(b)
-    return sorted(blind), sorted(sighted)
+def _cut_off(seen: dict[str, list[str]]) -> list[tuple[str, str]]:
+    """(a, b) for every pair of adopted agents where b sees some rule files and a shares none
+    of them: the rules in b's files do not bind a."""
+    return [
+        (a, b)
+        for a, mine in sorted(seen.items())
+        for b, theirs in sorted(seen.items())
+        if a != b and theirs and not set(mine) & set(theirs)
+    ]
 
 
 def doctor_note(repo: Path) -> str | None:
@@ -273,13 +271,11 @@ def doctor_note(repo: Path) -> str | None:
     adopted = _adopted_ids(repo)
     rows = [r for r in scan_rule_files(repo) if r["kind"] != KIND_COMMAND and not r["ddflow_owned"]]
     seen = {a: [r["path"] for r in rows if a in r["loaded_by"]] for a in adopted}
-    blind, sighted = _split_fleet(seen)
-    if not blind or not sighted:
+    pairs = _cut_off(seen)
+    if not pairs:
         return None
-    return (
-        f"adopted agent(s) {', '.join(blind)} see none of the project rule files that "
-        f"{', '.join(sighted)} see: those rules do not bind them (`ddflow rule inventory`)"
-    )
+    detail = "; ".join(f"{a} sees none of the rule files {b} sees" for a, b in pairs)
+    return f"adopted agents are cut off from each other's rules: {detail} (`ddflow rule inventory`)"
 
 
 def inventory(repo: Path) -> dict[str, Any]:

@@ -184,7 +184,9 @@ def test_doctor_note_fires_when_each_agent_sees_only_its_own_rule_files(tmp_path
     for name in ("claude-code.md", "cursor.md"):
         (deltas / name).write_text("x", encoding="utf-8")
     note = RI.doctor_note(tmp_path)
-    assert note and "cursor" in note and "claude" in note
+    assert note and "cursor sees none of the rule files claude" in note
+    assert "claude sees none of the rule files cursor" in note
+    assert "claude sees none of the rule files claude" not in note
 
 
 def test_a_command_dir_agent_does_not_always_load_a_file_a_rule_agent_does(tmp_path, monkeypatch):

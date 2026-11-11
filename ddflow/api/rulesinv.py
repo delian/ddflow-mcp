@@ -9,8 +9,9 @@ from ..services import rulesinv as RI
 
 
 def rule_inventory(repo: Path, *, agent: str = "") -> O.Outcome:
-    """Who loads which rule file, when, and at what always-loaded cost. Writes nothing; ``agent``
-    is the caller (recorded identity), not a filter: every agent is in the report."""
+    """Who loads which rule file, when, and at what always-loaded cost. Writes nothing. ``agent`` is
+    the caller identity every surface passes to its api function; it is neither recorded nor a
+    filter here: every agent is in the report."""
     try:
         return O.ok("rule.inventory", **RI.inventory(repo))
     except OSError as exc:
