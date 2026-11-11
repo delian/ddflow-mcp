@@ -34,11 +34,7 @@ def merged_per_hour(events: Iterable[Event], window_s: float, now: float) -> flo
     if window_s <= 0:
         raise ValueError("window_s must be positive")
     evs = list(events)
-    count = sum(
-        1
-        for e in evs
-        if e.kind == MERGED_KIND and 0.0 <= now - epoch(e.ts) <= window_s
-    )
+    count = sum(1 for e in evs if e.kind == MERGED_KIND and 0.0 <= now - epoch(e.ts) <= window_s)
     return count * (_SECONDS_PER_HOUR / window_s)
 
 
