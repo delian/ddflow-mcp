@@ -56,3 +56,4 @@
 {"agent":"lane-hard","data":{"at":1794438725.412571,"holder":"lane-hard"},"id":"e426610230300290a56d659db","kind":"lease.renewed","lamport":178626,"schema":1,"subject":"AU-redact-shapes","ts":"2026-11-11T23:12:05.566095Z"}
 {"agent":"lane-hard","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e28efb5ff9895dc3753584099","kind":"cadence.ran","lamport":178628,"schema":1,"subject":"recall_recheck:AU-redact-shapes","ts":"2026-11-11T23:12:15.072854Z"}
 {"agent":"lane-hard","data":{"at":1794439348.749682,"holder":"lane-hard"},"id":"e99f24751ac5a9651f35863d5","kind":"lease.renewed","lamport":178693,"schema":1,"subject":"AU-redact-shapes","ts":"2026-11-11T23:22:28.886271Z"}
+{"agent":"lane-hard","data":{"at":1794439969.514602,"holder":"lane-hard"},"id":"e16c8e3828f4a68744045ee94","kind":"lease.renewed","lamport":178775,"schema":1,"subject":"AU-redact-shapes","ts":"2026-11-11T23:32:49.652372Z"}
