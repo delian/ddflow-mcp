@@ -94,32 +94,6 @@ _PROCESS_CALLS = frozenset(
     }
 )
 
-#: pathlib CALLS whose result is a `Path` -- the constructor and the methods that return
-#: one, deterministically. `_resolve` types such a call `pathlib.Path`, so the `os_replace`
-#: counter sees `.replace` on it (and on a chain like ``p.replace(a).replace(b)``, where
-#: every atomic rename is counted, not just the first). `.rename` and the rest return a
-#: Path but are not atomic renames, so they surface for chaining only, not as a counted
-#: site. A pathlib ATTRIBUTE that returns a Path (`Path.parent`) is in `_PATH_ATTRS`.
-_PATH_RESULT = frozenset(
-    {
-        "pathlib.Path",
-        "pathlib.Path.replace",
-        "pathlib.Path.rename",
-        "pathlib.Path.with_name",
-        "pathlib.Path.with_suffix",
-        "pathlib.Path.with_stem",
-        "pathlib.Path.resolve",
-        "pathlib.Path.absolute",
-        "pathlib.Path.expanduser",
-        "pathlib.Path.joinpath",
-        "pathlib.Path.cwd",
-        "pathlib.Path.home",
-    }
-)
-
-#: pathlib ATTRIBUTES whose value is a `Path` (so `.replace` on ``p.parent`` is counted).
-_PATH_ATTRS = frozenset({"parent"})
-
 
 #: Methods that parse a timestamp; counted outside `core.clock` as `time_parse`.
 _TIME_PARSERS = frozenset({"fromisoformat", "strptime"})
@@ -171,11 +145,7 @@ class _Sites(ast.NodeVisitor):
             return None
         if isinstance(node, ast.Attribute):
             base = self._resolve(node.value)
-            if base == "pathlib.Path" and node.attr in _PATH_ATTRS:
-                return "pathlib.Path"
             return f"{base}.{node.attr}" if base else None
-        if isinstance(node, ast.Call):
-            return "pathlib.Path" if self._resolve(node.func) in _PATH_RESULT else None
         return None
 
     # -- imports --------------------------------------------------------------------
@@ -201,29 +171,10 @@ class _Sites(ast.NodeVisitor):
     # -- scopes ---------------------------------------------------------------------
     def _function(self, node: ast.AST) -> None:
         self.scopes.append({})
-        for arg in (
-            *getattr(node.args, "posonlyargs", ()),
-            *getattr(node.args, "args", ()),
-            *getattr(node.args, "kwonlyargs", ()),
-        ):
-            if isinstance(arg, ast.arg) and self._resolve(arg.annotation) == "pathlib.Path":
-                self._bind(arg.arg, "pathlib.Path")
         self.depth += 1
         self.generic_visit(node)
         self.depth -= 1
         self.scopes.pop()
-
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        if isinstance(node.target, ast.Name) and self._resolve(node.annotation) == "pathlib.Path":
-            self._bind(node.target.id, "pathlib.Path")
-        self.generic_visit(node)
-
-    def visit_Assign(self, node: ast.Assign) -> None:
-        if self._resolve(node.value) == "pathlib.Path":
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    self._bind(target.id, "pathlib.Path")
-        self.generic_visit(node)
 
     visit_FunctionDef = _function
     visit_AsyncFunctionDef = _function
@@ -246,7 +197,7 @@ class _Sites(ast.NodeVisitor):
         name = self._resolve(node.func)
         if name in _PROCESS_CALLS:
             self.sites["subprocess_calls"].append(node.lineno)
-        if name in ("os.replace", "pathlib.Path.replace"):
+        if name == "os.replace":
             self.sites["os_replace"].append(node.lineno)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             self.sites["write_text"].append(node.lineno)
