@@ -13,16 +13,23 @@ and `get_optimizer` resolves it.
 
 The default adapter, ``greedy-v1``, is the algorithm ddflow always had: the registered order
 keys left to right (bugs first, priority, id) and a greedy cut that takes an item only when it
-overlaps nothing already taken. Affinity and aversion are PREFERENCES that reorder, never filters:
-hard constraints stay `needs` and `globs`, decided by the caller's readiness filters.
+overlaps nothing already taken. ``swarm-v1`` is the second: the swarm scheduler's item order
+(critical-path items first, then the longest-waiting) over the same cut. Affinity and aversion
+are PREFERENCES that reorder, never filters: hard constraints stay `needs` and `globs`, decided
+by the caller's readiness filters.
 
-Deterministic: terms are integers (or the id), the id is the final tie-break, no clock, no hash
-order, no randomness. ``ctx`` is an OPEN mapping: later phases (lock-wait signals, load) add keys
-and an adapter reads only the ones it knows. Pure of ddflow: imports no other layer.
+Deterministic given the ctx: the algorithm reads no clock, no hash order and no randomness,
+and the id is the final tie-break; a fact such as ``waited_s`` is time-derived by the CALLER's
+``now``, so the same ``ctx`` always ranks the same, but the fact itself ages as time moves. The
+``ctx`` is an OPEN mapping: the caller fills ``ctx["facts"]`` with the per-candidate facts an
+adapter may read (``critical``, ``waited_s``) and it reads only the keys it knows. An adapter
+says which facts it reads with ``facts``; the default reads none, so the default plan pays for
+none. Pure of ddflow: imports no other layer.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -119,6 +126,37 @@ def _term_text(value: Any) -> str:
     return str(int(value)) if isinstance(value, bool) else str(value)
 
 
+def _fact(ctx: Mapping[str, Any], candidate_id: str) -> dict[str, Any]:
+    """The per-candidate facts ``ctx["facts"][candidate_id]``, or ``{}`` when the ctx
+    carries none. The ctx is OPEN: a caller fills the keys it knows and an adapter reads the
+    ones it recognises, so an absent fact is a miss, never an error."""
+    facts = ctx.get("facts", ())
+    cell = facts.get(candidate_id, ()) if isinstance(facts, Mapping) else ()
+    return cell if isinstance(cell, Mapping) else {}
+
+
+def _fact_flag(cell: Mapping[str, Any], key: str) -> bool:
+    """A flag fact, True only when truthy; an absent or ``None`` fact is neutral (False)."""
+    value = cell.get(key)
+    return bool(value)
+
+
+def _fact_num(cell: Mapping[str, Any], key: str) -> float:
+    """A numeric fact as a float, neutral ``0.0`` when absent, ``None``, not a number,
+    ``nan``/``inf``, or too large to be one: the open ctx says "miss", never an error, and
+    a quiet NaN that would break the deterministic total order reads as unmeasured."""
+    value = cell.get(key)
+    if value is None:
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    if math.isnan(number) or math.isinf(number):
+        return 0.0
+    return number
+
+
 @port
 @runtime_checkable
 class Optimizer(Protocol):
@@ -156,9 +194,11 @@ OPTIMIZERS: Registry[Optimizer] = Registry("optimizer", key=lambda a: a.name, sa
 
 
 class GreedyV1:
-    """The default adapter: ddflow's own ordering, unchanged."""
+    """The default adapter: ddflow's own ordering, unchanged. ``facts`` names the
+    ``ctx["facts"]`` keys this adapter reads (none: its terms live on the candidate)."""
 
     name = DEFAULT_NAME
+    facts: frozenset[str] = frozenset()
 
     def order(self, ctx: Mapping[str, Any], candidates: Sequence[Candidate]) -> list[Placement]:
         ranked = sorted(candidates, key=lambda c: (tuple(v for _, v in c.terms), c.id))
@@ -194,7 +234,48 @@ class GreedyV1:
         return f"{placement.id}: rank {placement.rank} by {items or 'id'}"
 
 
+class SwarmV1(GreedyV1):
+    """The swarm scheduler's own item RANK (critical-path items first, then the
+    longest-waiting), sharing ``GreedyV1.cut`` unchanged. ``order`` only ranks -- every
+    candidate once, per the port contract, nothing is dropped there -- and the ONE overlap
+    check stays ``GreedyV1.cut`` (inherited, not reimplemented), so a swarm order still
+    refuses overlapping work when it reaches the cut.
+
+    Reads the per-candidate facts the caller fills into ``ctx["facts"]`` (``critical``: on the
+    critical path, ``waited_s``: seconds since filed). A fact it does not find is neutral --
+    the ctx is open and absent means unmeasured. Deterministic: the id breaks the last tie.
+    """
+
+    name = "swarm-v1"
+    facts: frozenset[str] = frozenset({"critical", "waited_s"})
+
+    def order(self, ctx: Mapping[str, Any], candidates: Sequence[Candidate]) -> list[Placement]:
+        def key(c: Candidate) -> tuple:
+            cell = _fact(ctx, c.id)
+            return (
+                not _fact_flag(cell, "critical"),
+                -_fact_num(cell, "waited_s"),
+                tuple(v for _, v in c.terms),
+                c.id,
+            )
+
+        placed: list[Placement] = []
+        for n, c in enumerate(sorted(candidates, key=key)):
+            cell = _fact(ctx, c.id)
+            terms = (
+                ("critical", _fact_flag(cell, "critical")),
+                ("waited_s", _fact_num(cell, "waited_s")),
+            )
+            placed.append(Placement(c.id, n, terms + tuple(c.terms)))
+        return placed
+
+    def explain(self, placement: Placement) -> str:
+        items = ", ".join(f"{k}={_term_text(v)}" for k, v in placement.terms)
+        return f"{placement.id}: rank {placement.rank} by {items}"
+
+
 OPTIMIZERS.register(GreedyV1())
+OPTIMIZERS.register(SwarmV1())
 
 
 def get_optimizer(name: str = "") -> Optimizer:
