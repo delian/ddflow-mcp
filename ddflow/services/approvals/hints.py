@@ -49,13 +49,42 @@ def _section(name: str, repo: Path | None, overrides: dict[str, str] | None) -> 
     return dict(AB.split(text)).get(name, "").strip()
 
 
-def _render(name: str, repo: Path | None, overrides: dict[str, str] | None, **vars: str) -> str:
+#: Wording that tells a reader to answer the request themselves: never in a route, whoever
+#: wrote the template. (The words grant nothing; this keeps them from pointing the wrong way.)
+_FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "approve it yourself")
+_FLAG = re.compile(r"--approval[ =]+([^\s`'\".,;:)]+)")
+_MAX_CHARS = 1200
+
+
+def _sound(out: str, ident: str) -> bool:
+    """Whether a rendered route keeps the way back to the answer and names only ``ident``.
+
+    Every ``--approval X`` in it must be the bound id, so a template cannot send the agent
+    to spend another request's answer, and it must not tell the agent to answer for the
+    operator. A text that fails is never half-used."""
+    low = out.lower()
+    return (
+        0 < len(out) <= _MAX_CHARS
+        and all(m in out for m in _MUST_NAME)
+        and all(f not in low for f in _FORBIDDEN)
+        and all(m == ident for m in _FLAG.findall(out))
+    )
+
+
+def _render(
+    name: str,
+    repo: Path | None,
+    overrides: dict[str, str] | None,
+    *,
+    ident: str,
+    **vars: str,
+) -> str:
     for ov in (overrides, None):  # the project's text first, the shipped text if it is unusable
         try:
             out = P.render(_section(name, repo, ov), **vars).strip()
         except (P.TemplateError, OSError):
             continue
-        if out and all(m in out for m in _MUST_NAME):
+        if _sound(out, ident):
             return out
     return ""
 
@@ -65,9 +94,9 @@ def route(
 ) -> str:
     """The sentence a refusal ends with: how the operator's answer reaches this command."""
     ask = clean_id(ask_id)
-    return _render("route", repo, overrides, ask_id=ask) or _FALLBACK.format(id=ask)
+    return _render("route", repo, overrides, ident=ask, ask_id=ask) or _FALLBACK.format(id=ask)
 
 
 def driver_line(repo: Path | None = None, overrides: dict[str, str] | None = None) -> str:
     """The one line a driver or brief carries about operator-only acts."""
-    return _render("driver", repo, overrides)
+    return _render("driver", repo, overrides, ident=PLACEHOLDER)

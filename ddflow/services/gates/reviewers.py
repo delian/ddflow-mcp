@@ -317,9 +317,10 @@ def _no_reviewer_refusal(fams, anonymous, unapproved, author_desc: str) -> str:
             f"write a reviewer, so it cannot vouch for one. The operator reviews the "
             f"entry and runs "
             + " and ".join(f"`ddflow reviewers approve {shlex.quote(n)}`" for n in names)
-            + ". "
+            + ". For an HTTP entry: "
             + hints.route()
-            + " (An HTTP entry; a command reviewer is terminal only.)"
+            + " A command reviewer cannot be approved over chat: the operator runs the command "
+            "above at the host."
         )
     if not fams:
         if anonymous:
