@@ -3,12 +3,21 @@ no tool of its own (tools/list is at its byte budget): over MCP it is `ddflow_sh
 
 from __future__ import annotations
 
+from ...services import output_budget as _budget
 from ..registry import Command, Param
 from ..tools._common import _api
 
 
 def _text(out, a) -> str:
-    return out.data["text"].rstrip("\n")
+    text = out.data["text"].rstrip("\n")
+    item = a.get("item") or ""
+    capped = _budget.apply(
+        text,
+        a=a,
+        cli=f"ddflow report {item}",
+        mcp=f"ddflow_show id={item} report=true",
+    )
+    return f"{capped.text}\n\n{capped.footer}" if capped.footer else capped.text
 
 
 COMMANDS: tuple[Command, ...] = (
