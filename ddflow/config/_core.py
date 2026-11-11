@@ -16,7 +16,7 @@ from ..config_sections.export import _export_table_problem, export_table_keys
 from ..config_sections.schedule import SIGNALS, merge_signals
 from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
-from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
+from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _OPERATOR_ONLY, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
 from ._errors import InvalidValue
 from ._packaged import apply_packaged
 from ._tree import _is_code_tree
@@ -323,6 +323,16 @@ class Config(_SectionFields):
         this code does not know is tolerated (a file layer, or a key being kept as found)."""
         target = getattr(self, sec)
         key = f"{sec}.{knob}"
+        if key in _OPERATOR_ONLY and source == "file":
+            # The committed layer is visible to every clone, so a token holder who can land
+            # a commit could widen its own role there and escalate everything it may do
+            # (B-token-role-widened). Refused, never read as the layer below said.
+            raise InvalidValue(
+                f"{key} is operator-only: the committed config cannot set it "
+                "(a cloned project must not widen a token's role). Set it in the local "
+                f"layer (`ddflow config --set {sec}.{knob} ... --local`), the environment, "
+                "or `ddflow_configure`."
+            )
         typ = next(f.type for f in fields(target) if f.name == knob)
         value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
         written = value  # what THIS layer says, before any merge: what a note names
