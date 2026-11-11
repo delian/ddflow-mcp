@@ -1,4 +1,4 @@
-<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=8900e9ab8b5d -->
+<!-- ddflow:begin drivers/implement-phase ddflow=0.2.4 fmt=1 sha=ee3ae6e8945f -->
 # Driver: `implement phase <NAME>`
 
 **This file is the canonical, agent-agnostic driver.** Every agent — Claude Code, Gemini
@@ -367,7 +367,8 @@ disposable on purpose.
 - **Prefer `ddflow brief` over reading the rule and lesson files.** That is what it is
   for, and what keeps a session's opening cost roughly constant as the project grows.
 - **Read the project with the viewers, never by scraping `.ddflow/events`.**
-  `ddflow task list`, `phase list`, `bug list`, `research list` [`ddflow_list` `kind=...`] filter by `--state`,
+  `ddflow task list`, `ddflow phase list`, `ddflow bug list`,
+  `ddflow research list` [`ddflow_list` `kind=...`] filter by `--state`,
   `--since` and, where the kind has them, `--phase`, `--tag`, `--owner`, and page with
   `--limit`/`--offset`; `ddflow session list|show`
   [`ddflow_list` `kind=session`] read sessions; `ddflow show <id>` [`ddflow_show`] is one
