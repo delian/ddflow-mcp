@@ -161,9 +161,11 @@ def test_swarm_treats_an_unmeasured_fact_as_neutral_not_an_error():
     assert [p.id for p in got] == ["t1", "t2"]  # both neutral 0.0, tie falls to id
     # a non-numeric waited_s is neutral too, and the reported fact is what was read (0.0)
     ctx2 = {"facts": {"t1": {"waited_s": "n/a"}}}
-    assert O.get_optimizer("swarm-v1").explain(
-        O.get_optimizer("swarm-v1").order(ctx2, items)[0]
-    ).startswith("t1: rank 0 by critical=0, waited_s=0.0")
+    assert (
+        O.get_optimizer("swarm-v1")
+        .explain(O.get_optimizer("swarm-v1").order(ctx2, items)[0])
+        .startswith("t1: rank 0 by critical=0, waited_s=0.0")
+    )
 
 
 def test_swarm_explain_itemises_critical_and_wait():
