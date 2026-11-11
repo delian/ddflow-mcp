@@ -142,15 +142,15 @@ def _fact_flag(cell: Mapping[str, Any], key: str) -> bool:
 
 
 def _fact_num(cell: Mapping[str, Any], key: str) -> float:
-    """A numeric fact as a float, neutral ``0.0`` when absent, ``None``, not a number, or
-    ``nan``/``inf``: the open ctx says "miss", never an error, and a quiet NaN that would
-    break the deterministic total order reads as unmeasured."""
+    """A numeric fact as a float, neutral ``0.0`` when absent, ``None``, not a number,
+    ``nan``/``inf``, or too large to be one: the open ctx says "miss", never an error, and
+    a quiet NaN that would break the deterministic total order reads as unmeasured."""
     value = cell.get(key)
     if value is None:
         return 0.0
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0.0
     if math.isnan(number) or math.isinf(number):
         return 0.0

@@ -165,6 +165,10 @@ def test_swarm_treats_an_unmeasured_fact_as_neutral_not_an_error():
         ctx2 = {"facts": {"t1": {"waited_s": bad}}}
         placed = O.get_optimizer("swarm-v1").order(ctx2, items)
         assert placed[0].terms[1] == ("waited_s", 0.0), bad
+    # an oversized number too big for a float is a miss too (OverflowError), not a crash
+    ctx3 = {"facts": {"t1": {"waited_s": 10**400}}}
+    placed3 = O.get_optimizer("swarm-v1").order(ctx3, items)
+    assert placed3[0].terms[1] == ("waited_s", 0.0)
 
 
 def test_swarm_explain_itemises_critical_and_wait():
