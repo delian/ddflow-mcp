@@ -7,6 +7,8 @@ own: `ddflow_bug_invalid` with `reopen` serves it.
 
 from __future__ import annotations
 
+import importlib
+
 from ...core import outcome as O
 from ...core.outcome import OK
 from ..registry import CliPolicy, Command, Param, by_tool
@@ -21,6 +23,17 @@ from ..tools._common import (
 )
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
+
+#: The body of `bug fixed`, on both surfaces (the tag form adds its own fields below).
+BUG_FIXED_FIELDS = (
+    "id",
+    "landed",
+    "regression_verified",
+    "regression_verify",
+    "lesson_captured",
+    "lesson_capture",
+    "open_duplicates",
+)
 
 #: The body of `bug invalid`, on both surfaces (`ddflow bug invalid --json` and the tool).
 BUG_INVALID_FIELDS = (
@@ -336,6 +349,36 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("bug", "duplicate"),
+        summary="close a bug as a duplicate of a bug that is already FIXED (cites its test)",
+        tool="ddflow_bug_duplicate",
+        family="ddflow_bug",
+        action="duplicate",
+        tier="standard",
+        description="Close the open bug `id` as a duplicate of `of`, which must already be "
+        "FIXED with a regression test: the link is recorded and the closure cites that "
+        "test. Refused (exit 3) while `of` is open, fixed without a test, unknown, or `id` "
+        "is closed. `bug fixed` lists the open duplicates of the bug it closes; nothing "
+        "closes automatically.",
+        call=lambda repo, a, agent: importlib.import_module("ddflow.api.knowledge").bug_duplicate(
+            repo, a["id"], of=a.get("of", "") or "", agent=agent
+        ),
+        payload=("id", "of", "regression_test", "fix_task", "fix_task_removed"),
+        render=lambda out, a: (
+            f"bug {a['id']} closed as a duplicate of {out.data['of']} "
+            f"(guarded by {out.data['regression_test']})"
+        ),
+        params=(
+            Param("id", help="The open duplicate bug to close.", cli_help="", positional=True),
+            Param(
+                "of",
+                help="The FIXED bug it duplicates.",
+                cli_help="the already-fixed bug this one duplicates",
+                required=True,
+            ),
+        ),
+    ),
+    Command(
         path=("bug", "fixed"),
         tool="ddflow_bug_fixed",
         flag_exempt=MUTATION_FLAG_EXEMPT,
@@ -362,12 +405,7 @@ COMMANDS: tuple[Command, ...] = (
             )
         ),
         payload=(
-            "id",
-            "landed",
-            "regression_verified",
-            "regression_verify",
-            "lesson_captured",
-            "lesson_capture",
+            *BUG_FIXED_FIELDS,
             "tags",
             "was",
             "changed",

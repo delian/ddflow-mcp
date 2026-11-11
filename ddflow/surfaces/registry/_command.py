@@ -97,6 +97,10 @@ class Command:
     handler: Callable[..., Any] | None = None
     kind: str = ""
     identify: bool = False
+    #: A server-lifecycle tool (`restart` | `kill`): the engine applies it to the running
+    #: connection after the call answers (`mcp_lifecycle.arm`), which an ordinary `call`
+    #: cannot do (its signature has no server to re-exec or end).
+    lifecycle: str = ""
     deprecated: Mapping[str, Any] = field(default_factory=dict)
     #: Why this command has no MCP tool of its own (the parity exemption), or "".
     reason: str = ""
@@ -235,6 +239,8 @@ class Command:
             entry["kind"] = self.kind
         if self.identify:
             entry["identify"] = True
+        if self.lifecycle:
+            entry["lifecycle"] = self.lifecycle
         if self.help_group:
             entry["help_group"] = self.help_group
         if self.wants_called_from:

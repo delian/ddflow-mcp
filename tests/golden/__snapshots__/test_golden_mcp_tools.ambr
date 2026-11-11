@@ -36,7 +36,7 @@
     'ddflow_bug': '''
       {
        "name": "ddflow_bug",
-       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, reopen(id,reason), tag(id).",
+       "description": "Bug records. Set `action`; required arguments in brackets: fixed(id), invalid(id,reason), found(summary), file_tasks, dedupe, duplicate(id,of), reopen(id,reason), tag(id).",
        "inputSchema": {
         "type": "object",
         "properties": {
@@ -175,6 +175,10 @@
           "type": "number",
           "description": "Minimum score at which two bugs cluster (default: [dedupe].show_floor)."
          },
+         "of": {
+          "type": "string",
+          "description": "The FIXED bug it duplicates."
+         },
          "action": {
           "type": "string",
           "enum": [
@@ -183,6 +187,7 @@
            "found",
            "file_tasks",
            "dedupe",
+           "duplicate",
            "reopen",
            "tag"
           ],
