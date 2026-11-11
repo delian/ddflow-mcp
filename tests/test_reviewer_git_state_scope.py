@@ -110,7 +110,7 @@ def test_api_review_runs_the_command_reviewer_in_the_items_worktree(repo, tmp_pa
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(
         f'[[reviewer]]\nname = "r"\nkind = "command"\n'
-        f'command = "pwd > {seen}; printf \'STATUS: NO FINDINGS\\n\'"\n'
+        f"command = \"pwd > {seen}; printf 'STATUS: NO FINDINGS\\n'\"\n"
         'model = "cmd-model"\ngates = ["critic"]\n',
     )
     _git(repo, "add", "-A")
