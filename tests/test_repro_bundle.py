@@ -74,7 +74,7 @@ def test_bug_carries_a_bundle_with_the_facts(proj, monkeypatch):
     assert got["config_deltas"]["bugs.phase"]["layer"] != "default"
     assert got["item"]["id"] == "T1" and "gates" in got["item"]
     assert "load_avg" in got["machine"] and "disk_free_mb" in got["machine"]
-    assert "unavailable" in got["commands"]  # no command log exists; the bundle says so
+    assert got["commands"]["last"], got["commands"]  # the fixture's `ddflow init` recorded to the log
     run = got["repro_cmd"]
     assert run["command"] == "uv run pytest tests/test_x.py"
     # DX-bug-repro-verify: the command is run AT FILING, in a scratch checkout of the
@@ -234,7 +234,10 @@ def test_a_check_that_raises_degrades_the_evidence_not_the_filing(proj, monkeypa
 def test_a_basic_bundle_does_not_point_at_a_section_it_lacks(proj):
     _, bug = _file(proj, repro_capture="basic")
     got = _bundle(proj, bug)
-    assert "recent_events" not in got and "recent_events" not in got["commands"]["unavailable"]
+    # The fixture's `ddflow init` wrote to the command log, so `commands` is the `last`
+    # list (not the note that would say "see recent_events"); a basic bundle carries no
+    # "recent_events" section to point at either.
+    assert "recent_events" not in got and "last" in got["commands"]
     _, bug = _file(proj, repro_capture="full")
     assert "recent_events" in _bundle(proj, bug)
 
