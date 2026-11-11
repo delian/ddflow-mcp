@@ -6,6 +6,8 @@ freed lane claims its next item while the integrator finishes the released one â
 per-test split cannot observe. Marked `slow` and deselected by default, so run them by name.
 """
 
+# ruff: noqa: F401, F811  (fixtures imported from test_merge_queue)
+
 from __future__ import annotations
 
 import json
@@ -17,8 +19,8 @@ from pathlib import Path
 
 import pytest
 from conftest import append_config, run_cli
-from test_merge_queue import _finish, _git, _landed, _status, proj  # noqa: F401
-from test_release_at_enqueue import _item, _lease_of, _release  # noqa: F401
+from test_merge_queue import _finish, _git, _landed, _status, proj
+from test_release_at_enqueue import _item, _lease_of, _release
 
 from ddflow.services import inbox as IB
 from ddflow.services import mergequeue as MQ
@@ -46,9 +48,7 @@ def test_a_freed_lane_claims_its_next_item_while_the_integrator_merges_the_relea
     hold = rp.parent / "hold"
     hold.write_text("")
     integrator = subprocess.Popen(
-        [
-            sys.executable, "-m", "ddflow", "--repo", str(rp), "--agent", "one", "queue", "run"
-        ],
+        [sys.executable, "-m", "ddflow", "--repo", str(rp), "--agent", "one", "queue", "run"],
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
