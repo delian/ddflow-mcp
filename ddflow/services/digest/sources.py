@@ -307,6 +307,7 @@ EXEMPT_SITES: dict[str, str] = {
     "pins.regenerate": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "history.accept": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "token.manage": "T3 signed act; nothing pends in State",
+    "channel.consent": "a pending request for it is an 'approval' entry; nothing else pends in State",
 }
 
 
