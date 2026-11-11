@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import fnmatch
 import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, fields
@@ -81,46 +80,18 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     return value
 
 
-#: Every capability or verb (`agent.roles`, `agent.capability_verbs`); a role or capability
-#: that holds ``"*"`` holds everything, so nothing widens past it.
-_STAR = "*"
-
-
-def _widens_verb_table(committed: Any, below: Any) -> bool:
-    """Whether ``committed`` widens an authority ``below`` holds (B-token-role-widened).
-
-    A name's grant is a capability name (`agent.roles`, matched exactly) or a verb glob
-    (`agent.capability_verbs`, matched with fnmatch), and ``"*"`` matches everything, so a
-    name missing from ``below`` holds none (the table fails closed). True only when a grant
-    a name gains is not already held by some grant below -- a tightening restatement of the
-    layer below is not a widening (r-tighten-only; critic finding on glob subsumption)."""
-    if not isinstance(committed, dict) or not isinstance(below, dict):
-        return True  # a shape we cannot compare is refused: it fails closed, it never widens
-    for name, grants in committed.items():
-        had = below.get(name, ())
-        if any(not _held(g, had) for g in grants):
-            return True
-    return False
-
-
-def _held(grant: str, had: Any) -> bool:
-    """Does ``grant`` (a committed verb glob or capability name) sit inside ``had``'s grants?
-    ``h`` is the below layer's glob, the PATTERN: ``fnmatch(grant, h)`` is True when the grant
-    is one ``h`` already holds, ``"*"`` holding every grant (a verb subsumed by a glob)."""
-    return any(fnmatch.fnmatchcase(grant, h) for h in had) if isinstance(had, (list, tuple)) else False
-
-
-def _operator_only_refusal(sec: str, knob: str, key: str, value: Any, below: Any) -> str:
-    """Why the committed ``file`` layer may not set ``key``, or ``""`` when it may.
+def _operator_only_refusal(sec: str, knob: str, key: str) -> str:
+    """Why the committed ``file`` layer may not set ``key`` (never ``""`` for these).
 
     The committed layer is visible to every clone, so a token holder who can land a commit
-    could widen its own role there (B-token-role-widened). Refused only when it WIDENS an
-    authority the layer below holds: a tightening restatement is fine (r-tighten-only)."""
-    if not _widens_verb_table(value, below):
-        return ""
+    could widen its own role there (B-token-role-widened). Deciding case-by-case whether a
+    committed table *widens* a role would be glob-language containment over `agent.
+    capability_verbs` verb globs; the safe, simple rule is that these two operator tables may
+    not be set in the committed layer at all -- fail-closed (r-tighten-only). A tightening
+    belongs in the local layer, which still accepts it."""
     return (
-        f"{key} is operator-only: the committed config may not widen an authority the "
-        f"layer below holds. Widen it in the local layer (`ddflow config --set "
+        f"{key} is operator-only: the committed config cannot set it (a cloned project "
+        "must not widen a token's role). Set it in the local layer (`ddflow config --set "
         f"{sec}.{knob} ... --local`), the environment, or `ddflow_configure`."
     )
 
@@ -371,7 +342,7 @@ class Config(_SectionFields):
         typ = next(f.type for f in fields(target) if f.name == knob)
         value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
         if key in _OPERATOR_ONLY and source == "file":
-            if why := _operator_only_refusal(sec, knob, key, value, getattr(target, knob)):
+            if why := _operator_only_refusal(sec, knob, key):
                 raise InvalidValue(why)
         written = value  # what THIS layer says, before any merge: what a note names
         if key == SIGNALS and isinstance(value, dict):

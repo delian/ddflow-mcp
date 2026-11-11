@@ -38,10 +38,11 @@ def test_a_committed_config_cannot_widen_a_role(repo):
 
 
 def test_a_committed_config_may_tighten_a_role(repo):
-    """A committed layer TIGHTENING a role is not a widening (r-tighten-only): it is read."""
+    """The committed layer may set neither table at all (fail-closed), even to tighten: a
+    tightening belongs in the local layer. Refused, never silently applied."""
     _committed_cfg(repo, '[agent]\nroles = { bot = ["read"] }\n')
-    cfg = Config.load(repo)
-    assert cfg.agent.roles["bot"] == ["read"]
+    with pytest.raises(InvalidValue, match="agent.roles"):
+        Config.load(repo)
 
 
 def test_a_committed_config_cannot_widen_a_capability_verb_table(repo):
