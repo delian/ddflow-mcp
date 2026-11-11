@@ -119,6 +119,27 @@ def _busy(repo: Path) -> str:
     return ""
 
 
+def _off_default(repo: Path) -> str:
+    """Why the event log must not be committed right now because it would land off the
+    default branch, or "".
+
+    A door (a release, above all) that runs while the primary checkout sits on an item
+    branch would commit the events THERE and strand them off the default branch, where a
+    clone or a pull reads the shared log (Baa48528523). The commit is left for the next
+    door that runs on the default branch instead, so the release event itself is recorded
+    on the default branch and nothing is stranded."""
+    head = W.git(repo, "symbolic-ref", "--quiet", "HEAD")
+    if not head.ok:
+        return ""  # detached: no branch to strand an item on (a detached commit stays a sha)
+    branch = head.out.strip()
+    dflt = W.default_branch(repo)
+    if dflt == "HEAD":
+        return ""  # no default branch resolved: nothing to compare "off" against
+    if branch == f"refs/heads/{dflt}":
+        return ""
+    return f"HEAD is on {branch!r}, not the default branch {dflt!r}"
+
+
 def whole(repo: Path, rel: str) -> bool:
     """True when every line of the shard parses as JSON: a shard another live process is
     in the middle of appending to ends in half a line, and committing that publishes a
@@ -310,6 +331,9 @@ def _read_plan(repo: Path, reason: str, template: str):
     busy = _busy(repo)
     if busy:
         return stop(f"event log not committed: {busy}")
+    off = _off_default(repo)
+    if off:
+        return stop(f"event log not committed: {off}")
     try:
         message = template.format(reason=reason)
     except (KeyError, IndexError, ValueError):
