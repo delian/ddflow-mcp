@@ -35,9 +35,7 @@ def _tree(tmp_path, monkeypatch, running: str = RUNNING):
     (tree / "ddflow").mkdir(parents=True)
     (tree / "ddflow" / "__init__.py").write_text(f'__version__ = "{DECLARED}"\n')
     (tree / ".ddflow").mkdir()
-    (tree / ".ddflow" / "config.toml").write_text(
-        "[lease]\nttl_s = 77\nfrom_the_future = true\n"
-    )
+    (tree / ".ddflow" / "config.toml").write_text("[lease]\nttl_s = 77\nfrom_the_future = true\n")
     monkeypatch.setattr(ddflow, "__version__", running)
     monkeypatch.setattr(DCFG, "_CODE_TREE", tree.resolve())
     return tree
