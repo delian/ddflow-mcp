@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import fnmatch
 import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, fields
@@ -88,19 +89,25 @@ _STAR = "*"
 def _widens_verb_table(committed: Any, below: Any) -> bool:
     """Whether ``committed`` widens an authority ``below`` holds (B-token-role-widened).
 
-    `*` is every capability or verb; a name missing from ``below`` holds none (the table
-    fails closed). True only when some name gains a capability or verb it did not hold below
-    -- a tightening restatement of the layer below is not a widening (r-tighten-only)."""
+    A name's grant is a capability name (`agent.roles`, matched exactly) or a verb glob
+    (`agent.capability_verbs`, matched with fnmatch), and ``"*"`` matches everything, so a
+    name missing from ``below`` holds none (the table fails closed). True only when a grant
+    a name gains is not already held by some grant below -- a tightening restatement of the
+    layer below is not a widening (r-tighten-only; critic finding on glob subsumption)."""
     if not isinstance(committed, dict) or not isinstance(below, dict):
         return True  # a shape we cannot compare is refused: it fails closed, it never widens
     for name, grants in committed.items():
         had = below.get(name, ())
-        if _STAR in had:  # below already holds everything; nothing widens past that
-            continue
-        got = set(grants)
-        if _STAR in got or not got <= set(had):
+        if any(not _held(g, had) for g in grants):
             return True
     return False
+
+
+def _held(grant: str, had: Any) -> bool:
+    """Does ``grant`` (a committed verb glob or capability name) sit inside ``had``'s grants?
+    ``h`` is the below layer's glob, the PATTERN: ``fnmatch(grant, h)`` is True when the grant
+    is one ``h`` already holds, ``"*"`` holding every grant (a verb subsumed by a glob)."""
+    return any(fnmatch.fnmatchcase(grant, h) for h in had) if isinstance(had, (list, tuple)) else False
 
 
 def _operator_only_refusal(sec: str, knob: str, key: str, value: Any, below: Any) -> str:
