@@ -2,7 +2,8 @@
 
 `next --phase P-tail` walked only P-tail's own tasks, so a phase at the end of a
 dependency chain showed '0 ready / N blocked' with no way to see, from the same command,
-which upstream dependency tasks were themselves ready to claim (B-next-phase-hides-blocking-deps).
+which upstream dependency tasks were themselves ready to
+claim (B-next-phase-hides-blocking-deps).
 By default those ready blocking-dependency items are now included and labelled, and
 ``--phase-only`` restores the in-phase-only slice.
 """
@@ -19,11 +20,40 @@ def _chained(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P-up", "--title", "upstream", "--globs", "up/**")
     run_cli(
-        repo, "phase", "add", "P-down", "--title", "downstream", "--needs", "P-up", "--globs", "down/**"
+        repo,
+        "phase",
+        "add",
+        "P-down",
+        "--title",
+        "downstream",
+        "--needs",
+        "P-up",
+        "--globs",
+        "down/**",
     )
-    run_cli(repo, "task", "add", "P-up.T1", "--title", "up task", "--phase", "P-up", "--globs", "up/a.py")
     run_cli(
-        repo, "task", "add", "P-down.T1", "--title", "down task", "--phase", "P-down", "--globs", "down/a.py"
+        repo,
+        "task",
+        "add",
+        "P-up.T1",
+        "--title",
+        "up task",
+        "--phase",
+        "P-up",
+        "--globs",
+        "up/a.py",
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "P-down.T1",
+        "--title",
+        "down task",
+        "--phase",
+        "P-down",
+        "--globs",
+        "down/a.py",
     )
 
 
@@ -42,7 +72,7 @@ def test_blocking_dependency_is_included_and_labelled_by_default(repo):
     dep_ids = [r["id"] for r in deps]
     assert "P-up.T1" in dep_ids, f"the ready upstream task must be surfaced: {plan!r}"
     assert all(r["blocking_dependency"] is True for r in deps), deps
-    # Distinct from in-phase items: the upstream task is NOT in the in-phase `ready` list.
+    # Distinct from in-phase items: the upstream task is not in the in-phase `ready` list.
     assert "P-up.T1" not in ready
 
 
@@ -69,7 +99,18 @@ def test_human_text_labels_the_blocking_dependency(repo):
 def test_a_phase_with_no_dependencies_has_no_blocking_deps(repo):
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "Solo", "--title", "solo")
-    run_cli(repo, "task", "add", "Solo.T1", "--title", "solo task", "--phase", "Solo", "--globs", "solo.py")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "Solo.T1",
+        "--title",
+        "solo task",
+        "--phase",
+        "Solo",
+        "--globs",
+        "solo.py",
+    )
     plan = _plan(repo, "--phase", "Solo")
     assert [r["id"] for r in plan["ready"]] == ["Solo.T1"], plan
     assert plan["blocking_deps"] == [], plan

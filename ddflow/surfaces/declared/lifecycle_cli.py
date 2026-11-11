@@ -294,9 +294,11 @@ def next_text(out, a, ctx) -> str | None:
             ]
         )
     lines = []
+
     def ready_line(it):
         tier = tier_of(it.tags)
         return f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else "")
+
     if p.ready:
         lines.append(f"Ready ({p.summary()}):")
         for it in p.ready:

@@ -175,7 +175,16 @@ def next_lane(
     now = CLOCK.wall()
     me = cfg.agent.id or log.agent_id
     p = plan_for(
-        repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me, phase_only=phase_only, now=now
+        repo,
+        log,
+        cfg,
+        st,
+        purpose="offer",
+        kind=kind,
+        phase=phase,
+        agent=me,
+        phase_only=phase_only,
+        now=now,
     )
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     live = st.active_leases(now, cfg.lease.grace_s)

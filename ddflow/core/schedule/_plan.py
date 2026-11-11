@@ -134,9 +134,7 @@ def _ordered(ctx: PlanCtx, candidates: list[Item]) -> list[Item]:
     return [by_id[x.id] for x in get_optimizer(ctx.cfg.schedule.optimizer).order({}, cands)]
 
 
-def _classify(
-    state: State, cfg: Config, ctx: PlanCtx, candidates: list[Item], p: Plan
-) -> None:
+def _classify(state: State, cfg: Config, ctx: PlanCtx, candidates: list[Item], p: Plan) -> None:
     """Run ``candidates`` through the readiness filters, in pick order, and place each
     into exactly one of ``p``'s lists — ready, review, running, interrupted or blocked.
 
