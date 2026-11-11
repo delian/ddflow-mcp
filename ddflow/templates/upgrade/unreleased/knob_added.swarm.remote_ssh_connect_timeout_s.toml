@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "swarm.remote_ssh_connect_timeout_s"
-new = 15
+new = "15"
 why = "The [swarm] remote_* knobs (SW-remote-config): every field of remote.Knobs is a knob."
 impact = "additive"

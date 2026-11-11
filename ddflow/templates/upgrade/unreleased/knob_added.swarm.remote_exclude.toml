@@ -3,6 +3,6 @@
 [[change]]
 kind = "knob_added"
 key = "swarm.remote_exclude"
-new = ['.ddflow', '.env', '**/.env']
+new = '[".ddflow", ".env", "**/.env"]'
 why = "The [swarm] remote_* knobs (SW-remote-config): every field of remote.Knobs is a knob."
 impact = "additive"
