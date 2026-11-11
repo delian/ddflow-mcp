@@ -108,3 +108,9 @@ class TomlLibIo:
             return tomlkit.parse(text)
         except tomlkit.exceptions.ParseError as exc:  # one error family, as `loads` has
             raise TomlError(str(exc), exc) from exc  # keeps the position tomlkit found
+
+
+#: The one default adapter callers look up instead of importing `TomlLibIo` at the call
+#: site (r-swap-seam): a caller takes the port as an argument, or reads `DEFAULT` here, never
+#: reaches the adapter directly; in a test pass `FakeTomlIo`.
+DEFAULT: TomlIo = TomlLibIo()

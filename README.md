@@ -7048,6 +7048,7 @@ Each is overridden with `ddflow prompts eject <name>`, which copies the shipped 
 | `onboard`, `import-existing-project` | Install into, and import history from, an existing project |
 | `research-companions`, `install-companions` | Choose and install companion tools |
 | `bug-hunt`, `code-deduplication`, `code-clean`, `all-tests` | Periodic quality passes |
+| `perf_report` | Answer performance questions from the perf report |
 
 ### CLI commands that change the project's setup
 

@@ -279,6 +279,14 @@ class TestSnapshot:
         c.snapshot.write_text(json.dumps({"version": True, "windows": {"5h": row}}))
         assert none_of(V.read_claude_snapshot(c))
 
+    def test_a_version_written_as_a_float_is_not_this_version(self, tmp_path):
+        c = ctx(tmp_path)
+        c.snapshot.parent.mkdir(parents=True)
+        row = {"percent": 50, "observed_at": iso(NOW)}
+        # ddflow only ever writes the integer version; a JSON 1.0 must not read as it.
+        c.snapshot.write_text(json.dumps({"version": 1.0, "windows": {"5h": row}}))
+        assert none_of(V.read_claude_snapshot(c))
+
     def test_corrupt_snapshot_is_unavailable_and_a_new_write_heals_it(self, tmp_path):
         c = ctx(tmp_path)
         c.snapshot.parent.mkdir(parents=True)

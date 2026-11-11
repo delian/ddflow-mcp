@@ -213,6 +213,20 @@ COMMANDS: tuple[Command, ...] = (
         ),
     ),
     Command(
+        path=("approvals", "answer"),
+        summary="a PERSON answers a question ask: free text, or one of its options",
+        tool="",
+        reason="a person's act: refused for every agent identity, so no tool carries it",
+        params=(
+            Param("id", required=True, positional=True, cli_help="the question id"),
+            Param(
+                "text",
+                default="",
+                cli_help="the answer: one of the question's options, or the free text",
+            ),
+        ),
+    ),
+    Command(
         path=("approvals", "revoke"),
         summary="a PERSON takes back an approval that is not spent yet",
         tool="",

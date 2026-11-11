@@ -102,9 +102,10 @@ def new_reports_block(item: str, rep: dict) -> str:
 #: kind, so a run of salvageable trees cannot push a RUNNING item nobody holds, or a tree
 #: that could not be measured, off the list (rubber_duck on B20e103326b).
 _RECOVERY_SHOWN = 5
-_HOLDING, _UNMEASURED, _UNHELD = (
+_HOLDING, _UNMEASURED, _CAPPED, _UNHELD = (
     "holding work",
     "could not be measured",
+    "past the measurement cap",
     "RUNNING with nobody on it",
 )
 
@@ -113,15 +114,20 @@ def recovery_band(r) -> str | None:
     """Which band of the brief a recovery entry is named in, in this order: a tree
     holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
     nobody on it; None for a leftover with nothing to salvage, which is counted rather
-    than listed (B20e103326b). `recover` and `status` count all three bands as "may
+    than listed (B20e103326b). A tree left unmeasured ONLY because the view hit its
+    measurement cap is its own band: still "may hold work" for `recover`/`status`, but the
+    brief counts it quietly with the other leftovers instead of raising the alarm over it
+    (Bfb4b6306d1). `recover` and `status` count every listed band as "may
     contain work" (B3f8c406fea): a truthy `salvageable` dropped the unmeasured and the
-    unheld. `doctor` makes the two TREE bands a problem and leaves a RUNNING item nobody
+    unheld. `doctor` makes the tree bands a problem and leaves a RUNNING item nobody
     holds a note, since `next` offers it to resume."""
     if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
         return _UNHELD
     if r.salvageable:
         return _HOLDING
-    return _UNMEASURED if r.salvageable is None else None
+    if r.salvageable is None:
+        return _CAPPED if r.budget_capped else _UNMEASURED
+    return None
 
 
 #: The name tests/test_brief_recovery_all.py imports; one function, not a copy.

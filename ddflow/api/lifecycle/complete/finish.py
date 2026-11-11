@@ -11,6 +11,7 @@ from ....core import outcome as O
 from ....core.events import parse_changelog
 from ....core.model import fold
 from ....services import completion as CM
+from ....services import gate_accept as GA
 from ....services import leases as L
 from ....services import ledger as LG
 from ....services import progress_line as PL
@@ -32,6 +33,18 @@ from .approval import _ask_hint, _auto_complete_unavailable, _override_by_approv
 from .checks import _failed_review, _na_map, _phase_suite, _refuted_extra, _umbrella_children
 from .closing import _close_arg_refusal, _close_bugs, _phase_end_self_assessment
 from .dispose import _dispose
+
+
+def _closing_tail(hard: bool, agent: str, it, gates: list[str]) -> str:
+    """The close after the blockers: what lifts them. `gate_accept.person_only` names the route
+    for a person-only baseline-red partial ("Do NOT request an approval: ... `ddflow approve`"),
+    so the agent `_ask_hint` tail ("ask the operator to override these in chat") is dropped when
+    one of the unmet gates is that one (B-complete-refusal-contradicts-approval-advice)."""
+    if hard:
+        return "--force does not lift the review-gate blocker above."
+    if any(GA.person_only(it, g) for g in gates):
+        return "--force overrides, and the override is recorded."
+    return "--force overrides, and the override is recorded." + _ask_hint(agent)
 
 
 def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
@@ -168,11 +181,7 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
             + "\n".join(f"  - {b}" for b in v.blockers)
             + f"\n\n`ddflow gate status {item}` shows the pipeline. "
-            + (
-                "--force does not lift the review-gate blocker above."
-                if hard
-                else "--force overrides, and the override is recorded." + _ask_hint(agent)
-            ),
+            + _closing_tail(hard, agent, it, v.unmet_gates),
             forced=False,
             **base,
         )
