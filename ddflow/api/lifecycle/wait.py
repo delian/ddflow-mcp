@@ -32,7 +32,15 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-from .wait_approval import _bounded, _call_cap, _keep_alive, _note_cap, _poll, _wait_approval, _wait_job
+from .wait_approval import (
+    _bounded,
+    _call_cap,
+    _keep_alive,
+    _note_cap,
+    _poll,
+    _wait_approval,
+    _wait_job,
+)
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
