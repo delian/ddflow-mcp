@@ -98,6 +98,25 @@ def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, mon
     assert "LAN_ENDPOINT_KEY" not in os.environ
 
 
+def test_prepare_of_a_file_key_with_the_variable_unset_writes_a_prepared(tmp_path, monkeypatch):
+    # The prepare-level shape the helper-level contract pins: a keyed lane endpoint whose key
+    # lives ONLY in its key file still write a Prepared -- env names nothing live (so the
+    # launcher never refuses a file key whose variable is unset) and the file value travels
+    # in secret_env alone.
+    keyfile = tmp_path / "endpoint.key"
+    keyfile.write_text("sk-key-from-file")
+    keyfile.chmod(0o600)
+    t = EXAMPLE.read_text().replace('s = "unverified"', 's = "verified"')
+    t = t.replace(
+        'api_key_env = "LAN_ENDPOINT_KEY"',
+        f'api_key_env = "LAN_ENDPOINT_KEY", api_key_file = "{keyfile}"',
+    )
+    monkeypatch.delenv("LAN_ENDPOINT_KEY", raising=False)
+    pr = E.prepare(_cat(tmp_path, t), "lan-vllm", "kilo", tmp_path / "home")
+    assert isinstance(pr, E.Prepared)
+    assert pr.env == {} and pr.secret_env == {"LAN_ENDPOINT_KEY": "sk-key-from-file"}
+
+
 @pytest.mark.parametrize(
     "old,new,msg",
     [

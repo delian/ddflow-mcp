@@ -183,7 +183,7 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
     return target
 
 
-def launch_env(ep: Endpoint) -> dict[str, str]:
+def launch_env(ep: Endpoint, got: review_keys.KeyResult | None = None) -> dict[str, str]:
     """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read live
     at launch, so a revoked variable refuses the launch instead of running stale). A key held
     in a FILE has no source env name: its value travels only in `secret_env`, and `env` asks
@@ -191,19 +191,20 @@ def launch_env(ep: Endpoint) -> dict[str, str]:
     a file key whose variable is unset)."""
     if not ep.api_key_env:
         return {}
-    if resolve_key(ep).source == "file":
+    got = got if got is not None else resolve_key(ep)
+    if got.source == "file":
         return {}
     return {ep.api_key_env: ep.api_key_env}
 
 
-def secret_env(ep: Endpoint) -> dict[str, str]:
+def secret_env(ep: Endpoint, got: review_keys.KeyResult | None = None) -> dict[str, str]:
     """`LaunchSpec.secret_env` for the key: child variable -> the FILE-resolved VALUE. Only a
     key read from its key file is snapshotted here, because it has no live source name to
     read at launch; an env-sourced key is read live by `launch_env`, never snapshotted stale
     (a revoked or rotated variable then refuses the launch or reads its live value)."""
     if not ep.api_key_env:
         return {}
-    got = resolve_key(ep)
+    got = got if got is not None else resolve_key(ep)
     if got.source == "file":
         return {ep.api_key_env: got.value}
     return {}
@@ -275,13 +276,10 @@ def prepare(
     ep = resolve(cat, route, model, require_tools=require_tools)
     if isinstance(ep, Result):
         return ep
-    if ep.api_key_env:
-        key = resolve_key(ep)
-        if not key:
-            return unavailable(
-                key.reason or f"no API key: set ${ep.api_key_env} in the environment"
-            )
+    got = resolve_key(ep) if ep.api_key_env else None
+    if ep.api_key_env and not got:
+        return unavailable(got.reason or f"no API key: set ${ep.api_key_env} in the environment")
     cfg = write_private(ep, harness, home)
     if isinstance(cfg, Result):
         return cfg
-    return Prepared(ep, home, cfg, launch_env(ep), secret_env(ep), model_arg(ep), probe_plan(ep, harness))
+    return Prepared(ep, home, cfg, launch_env(ep, got), secret_env(ep, got), model_arg(ep), probe_plan(ep, harness))
