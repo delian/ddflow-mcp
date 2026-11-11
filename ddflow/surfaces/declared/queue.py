@@ -521,7 +521,7 @@ COMMANDS: tuple[Command, ...] = (
                 type="array",
                 repeat=True,
                 help="field=value items for a record that is not a task: its own fields (lesson why, bug severity, ...) and add_tags / remove_tags / add_globs / remove_globs / add_needs / remove_needs. `id` may be kind:id.",
-                cli_help="field=value, repeatable: the record's own fields (lesson why, bug severity ...); `ddflow help update` lists each kind's",
+                cli_help="field=value, repeatable: the record's own fields (lesson why, bug severity ...); the fields each kind has are listed by `ddflow help update`",
             ),
             Param(
                 "worktree",

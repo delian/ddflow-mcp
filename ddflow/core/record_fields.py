@@ -280,7 +280,7 @@ def coerce(own: Own, raw: Any) -> Any:
         if text not in ("true", "false"):
             raise ValueError(f"{own.name} is true or false; got {raw!r}")
         return text == "true"
-    text = str(raw)
+    text = str(raw).strip() if own.type == ENUM else str(raw)
     if own.type == ENUM and text not in own.choices:
         raise ValueError(f"{own.name} is one of {', '.join(own.choices)}; got {raw!r}")
     return text

@@ -3439,7 +3439,7 @@
     --kind KIND           change the work kind: task, doc, research or job (the gate pipeline
                           [gates].kind_pipelines gives it)
     --set SET             field=value, repeatable: the record's own fields (lesson why, bug severity
-                          ...); `ddflow help update` lists each kind's
+                          ...); the fields each kind has are listed by `ddflow help update`
     --worktree WORKTREE   rebind the item (and your live lease on it) to this linked worktree and
                           the branch checked out there -- the way out of a binding to the wrong tree
   

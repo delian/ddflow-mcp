@@ -155,3 +155,22 @@ def test_mcp_twin_appends_to_a_bug_like_the_cli(seeded):
     assert bug.summary.endswith("\n\nvia mcp") and "m" in bug.tags
     refused = call(seeded, {"id": "B1", "needs": "T1"}, "agent-test")
     assert refused.exit == O.REFUSED and "bug B1" in refused.reason
+
+
+def test_a_missing_id_is_not_found_even_when_it_contains_several(seeded):
+    out = _upd(seeded, "several", title="x")
+    assert out.exit == O.FAIL and "no such item" in out.reason
+
+
+def test_enum_value_whitespace_is_ignored(seeded):
+    assert _upd(seeded, "B1", set=["severity=high "]).exit == O.OK
+
+
+def test_set_on_a_task_carries_list_folds_and_refuses_other_names(repo):
+    log = api.items._load(repo, "agent-test")[0]
+    log.append("phase.added", "P1", {"title": "p"})
+    log.append("task.added", "T1", {"title": "t", "parent": "P1", "tags": ["a"]})
+    assert _upd(repo, "T1", set=["add_tags=b"]).exit == O.OK
+    assert _st(repo).items["T1"].tags == ["a", "b"]
+    out = _upd(repo, "T1", set=["why=x"])
+    assert out.exit == O.REFUSED and "task T1" in out.reason

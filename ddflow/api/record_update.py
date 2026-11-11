@@ -25,6 +25,7 @@ from .rules import rule_get, rule_update
 from .schedule import schedule_update
 
 _EV = "record.updated"
+_NONE = "no such record"
 
 
 def _fail(kind: str, rid: str, msg: str) -> O.Outcome:
@@ -91,7 +92,7 @@ def resolve(st, ref: str) -> tuple[str, str, str]:
             return kind, rid, ""
     found = _candidates(st, ref)
     if not found:
-        return "", ref, f"no such record {ref!r}"
+        return "", ref, f"{_NONE} {ref!r}"
     if len(found) > 1:
         forms = ", ".join(f"{k}:{ref}" for k in found)
         return "", ref, f"{ref!r} names several records ({', '.join(found)}): say which, as {forms}"
@@ -231,13 +232,30 @@ def _fold_set_lists(edit, extra: dict[str, str]) -> None:
             setattr(edit, name, [p for p in extra.pop(name).split(",") if p])
 
 
+def item_set(kd_kind: str, rid: str, edit) -> str:
+    """For a work item: fold the list edits carried in ``--set`` onto ``edit`` and return why any
+    other ``--set`` item is refused ("" when none is): a task's own fields are flags."""
+    extra, bad = RF.split_set(edit.set)
+    if bad:
+        return bad
+    _fold_set_lists(edit, extra)
+    if extra:
+        return (
+            f"{kd_kind} {rid} has no own field {sorted(extra)[0]!r} to set: its fields are the "
+            "update flags (--title --body --append-body --tags --needs --globs --parent "
+            "--priority ...), and --set carries only add_/remove_ tags, needs and globs. "
+            "Nearest verb: ddflow update --help."
+        )
+    return ""
+
+
 def update_record(repo: Path, ref: str, edit, *, agent: str = "") -> O.Outcome | None:
     """Apply ``edit`` to the non-item record ``ref`` names; None when ``ref`` names no record
     (so `items.update` reports its own 'no such item')."""
     log, cfg, st = _load(repo, agent)
     kind, rid, problem = resolve(st, ref)
     if problem:
-        return None if not kind and "several" not in problem else O.refused(_EV, problem, id=ref)
+        return None if not kind and problem.startswith(_NONE) else O.refused(_EV, problem, id=ref)
     kd = _entry(kind)
     if kd is None:
         known = ", ".join(RF.ALL_KIND_NAMES)

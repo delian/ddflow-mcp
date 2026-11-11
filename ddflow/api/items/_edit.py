@@ -27,7 +27,7 @@ from ...services import landed as LD
 from ...services import leases as L
 from ...services import waiting as WG
 from ..lifecycle.claim import _worktree_held_by
-from ..record_update import update_record
+from ..record_update import item_set, update_record
 
 
 @dataclass
@@ -107,6 +107,8 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         if it is None or it.removed:
             gone = " (it was removed from the queue)" if it is not None else ""
             return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
+        if edit.set and (why := item_set(it.family, item, edit)):
+            return O.refused("item.updated", why, id=item)
         fields = plan_edit(cfg, st, it, edit)
         if isinstance(fields, O.Outcome):
             if not (
