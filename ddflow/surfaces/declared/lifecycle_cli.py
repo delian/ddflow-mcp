@@ -282,7 +282,7 @@ def next_text(out, a, ctx) -> str | None:
     excluded = out.data.get("excluded_leased") or []
     if not p.ready and not bdeps:
         return _blocked_text(out, p, excluded)
-    lines = _next_ready_lines(p, flat) if p.ready else []
+    lines = _next_ready_lines(p, flat, clusters) if p.ready else []
     if clusters:
         lines += _co_locate_lines(clusters)
     lines += _excluded_lines(excluded)
@@ -334,8 +334,13 @@ def _needs_line(it) -> str | None:
     return f"      needs: {', '.join(needs)}" if needs else None
 
 
-def _next_ready_lines(p, flat) -> list[str]:
-    """The ready-list section: wave headers (unless ``flat``), each item with globs + needs."""
+def _next_ready_lines(p, flat, clusters) -> list[str]:
+    """The ready-list section: wave headers (unless ``flat``), each item with globs + needs.
+
+    ``clusters`` is `co_location_hints`: its presence replaces the generic "run in parallel
+    worktrees" line -- those items are the one-lane case the Co-locate section below
+    prints, so "independent" is not claimed for them.
+    """
     lines = [f"Ready ({p.summary()}):"]
     last_k = None  # the previous row's wave bucket, so a header prints only on a change
     for it in p.ready:
@@ -349,7 +354,7 @@ def _next_ready_lines(p, flat) -> list[str]:
             lines.append(f"      writes: {', '.join(it.globs)}")
         if needs := _needs_line(it):
             lines.append(needs)
-    if len(p.ready) > 1:
+    if len(p.ready) > 1 and not clusters:
         lines.append("\nThese are independent — run them in parallel worktrees.")
     return lines
 
