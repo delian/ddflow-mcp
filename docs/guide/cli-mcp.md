@@ -230,7 +230,7 @@ ddflow init                     create .ddflow/ only
 
 ddflow phase add <id> [...]     add a phase
 ddflow task add <id> --phase .. add a task
-ddflow update <id> [...]        change title/body/needs/globs/tags/priority (--globs REPLACES)
+ddflow update <id> [...]        change title/body/--append-body/needs/globs/tags/priority of any record kind (--globs REPLACES; --set field=value)
 ddflow update <id> --worktree P rebind the item and its lease to the linked worktree at P
 ddflow resolve <id> --keep X    settle a contested item: keep one definition or one claim
 

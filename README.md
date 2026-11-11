@@ -508,7 +508,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=4e4e8a96386b -->
+<!-- ddflow:begin README/commands sha=007a8dcf553b -->
 <details><summary>All 102 commands</summary>
 
 | Command | What it does |
@@ -518,7 +518,7 @@ needs a line written by hand here.
 | `ddflow task` | add a task |
 | `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
 | `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
-| `ddflow update` | change an item's fields |
+| `ddflow update` | change the fields of any record (task, phase, bug, lesson, research, decision, memory, session, rule… |
 | `ddflow batch` | apply many item edits in one all-or-nothing transaction |
 | `ddflow rename` | move an item to a new id (and phase), re-pointing every needs edge |
 | `ddflow chore` | commit or approve chore files (no reviewer) |
@@ -677,7 +677,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=204ca0eb76c3 -->
+<!-- ddflow:begin README/tools sha=67b9cf0ac6de -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -742,7 +742,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
 | Shaping the work | `ddflow_task_add` | core | Add a task to a phase. |
 | Shaping the work | `ddflow_task_fold` | all | Fold the duplicate `dup` into the survivor `keep` in one transaction: dup's body is appended to keep's, its… |
-| Shaping the work | `ddflow_update` | core | Change an item's fields. |
+| Shaping the work | `ddflow_update` | core | Change a record's fields; id may be kind:id. |
 | Shaping the work | `ddflow_batch` | all | Apply many field edits in ONE locked transaction: a JSON array of {id, needs, add_needs, remove_needs, tags… |
 | Shaping the work | `ddflow_rename` | all | Re-file the unclaimed task `old` as `new` (under `parent` when given): title, body, globs, resources, tags… |
 | Doing the work | `ddflow_abandon` | standard | Stop work on an item without completing it, with a reason. |
@@ -1553,6 +1553,7 @@ long default is left to `ddflow config --explain`.
 
 | Document | Contents |
 |---|---|
+| [docs/guide/](docs/guide/) | The reference the README used to hold, one file per audience: [workflow](docs/guide/workflow.md), [adoption](docs/guide/adoption.md), [contributing](docs/guide/contributing.md), [cli-mcp](docs/guide/cli-mcp.md), [configuration](docs/guide/configuration.md), [customisation](docs/guide/customisation.md), [knowledge](docs/guide/knowledge.md), [upgrading](docs/guide/upgrading.md), [parallelism](docs/guide/parallelism.md), [gitflow](docs/guide/gitflow.md) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The event-log inversion, ordering, concurrency, module map, what is deliberately absent |
 | [docs/RESEARCH.md](docs/RESEARCH.md) | Twelve research questions with probes, measured output and verdicts; the self-found bug catalogue, the 2026-09-24 review pass (R10), the importer against a real 400-day corpus (R11), and what the MCP spec is worth for a mutating tool (R12) |
 | [docs/RECOVERY.md](docs/RECOVERY.md) | Operator runbook: crashes, corruption, divergence, full reconstruction |

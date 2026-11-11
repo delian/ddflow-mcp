@@ -142,6 +142,7 @@ from .handlers.links import (  # noqa: F401
     link_targets,
 )
 from .handlers.probe import PROBE_HANDLERS
+from .handlers.record_update import UPDATE_HANDLERS
 from .handlers.sessions import (  # noqa: F401
     CI_RESULTS_KEPT,
     _h_ci_result,
@@ -317,6 +318,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **PROBE_HANDLERS,
     # first writer: services/auth.py (a redeemed pairing, a revocation)
     **TOKEN_HANDLERS,
+    # first writer: api/record_update.py (`ddflow update <bug|lesson|research|...>`)
+    **UPDATE_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

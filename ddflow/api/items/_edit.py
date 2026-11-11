@@ -27,6 +27,7 @@ from ...services import landed as LD
 from ...services import leases as L
 from ...services import waiting as WG
 from ..lifecycle.claim import _worktree_held_by
+from ..record_update import item_set, update_record
 
 
 @dataclass
@@ -78,6 +79,9 @@ class ItemEdit:
     #: inside ``--landed``'s changed files, then recorded; `changed_paths` reports only
     #: those. May be recorded alone later, against the range already on record.
     landed_paths: list[str] | None = None
+    #: ``field=value`` items: a record of another kind's own fields (a lesson's ``why``, a
+    #: bug's ``severity``) and, over MCP, ``add_tags=a,b`` style list edits (DX-update-universal).
+    set: list[str] | None = None
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -96,6 +100,10 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     with log.transaction():
         st = L._fold(log)
         it = st.items.get(item)
+        if it is None:
+            other = update_record(repo, item, edit, agent=agent)
+            if other is not None:
+                return other
         if it is None or it.removed:
             gone = " (it was removed from the queue)" if it is not None else ""
             return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
@@ -174,10 +182,8 @@ def _landed_paths_fields(
     return {"landed_paths": paths}
 
 
-def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
-    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
-    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
-    plans many edits before recording any (DX-task-fold)."""
+def _early_refusal(cfg, st, it, edit: ItemEdit) -> O.Outcome | None:
+    """The refusal for a bad or frozen line, or a ``--set`` a work item does not take."""
     if edit.line:
         bad = _bad_line(cfg, edit.line)
         if bad:
@@ -186,7 +192,17 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
         moved = _line_frozen(st, it)
         if moved:
             return O.refused("item.updated", moved, id=it.id)
+    if edit.set and (why := item_set(it.family, it.id, edit)):
+        return O.refused("item.updated", why, id=it.id)
+    return None
 
+
+def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
+    """The fields ``edit`` would record on ``it`` -- or the refusal, failure or "nothing to
+    change" outcome, with nothing appended. Pure: `update` records the result, and `batch`
+    plans many edits before recording any (DX-task-fold)."""
+    if (early := _early_refusal(cfg, st, it, edit)) is not None:
+        return early
     fields = _edit_fields(edit)
     if edit.append_body:
         base = it.body if edit.body is None else edit.body
