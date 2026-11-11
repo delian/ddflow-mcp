@@ -1,0 +1,15 @@
+[doctype]
+name = "guide"
+title = "README guide"
+pattern = "docs/guide/{slug}.md"
+multi = true
+genre = "reference"
+contract = "evergreen"
+
+[doctype.guidance]
+audience = "a user or agent who followed a pointer from the README"
+tone = "plain and current; it is true today or it is wrong"
+style = "One audience per guide. Keep every heading's anchor stable: the README and other guides link to it. Link back to the README."
+
+[doctype.validate]
+rules = [{ kind = "no_skipped_levels" }]
