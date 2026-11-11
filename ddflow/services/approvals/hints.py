@@ -33,8 +33,8 @@ _MUST_NAME = ("--approval", "ddflow approvals ask")
 #: Used when no template renders: a refusal is never left without its route.
 _FALLBACK = (
     "This is the operator's act, not yours. Ask them in chat with `ddflow approvals ask {id}` "
-    "(MCP: `ddflow_session action=ask`), then re-run this command with `--approval {id}` once "
-    "they have answered."
+    "(MCP: `ddflow_session action=ask`); `--approval request` files the ask if none exists. "
+    "Re-run this command with `--approval {id}` once they have answered."
 )
 
 
@@ -67,7 +67,7 @@ def _sound(out: str, ident: str) -> bool:
         0 < len(out) <= _MAX_CHARS
         and all(m in out for m in _MUST_NAME)
         and all(f not in low for f in _FORBIDDEN)
-        and all(m == ident for m in _FLAG.findall(out))
+        and all(m in (ident, "request") for m in _FLAG.findall(out))
     )
 
 
@@ -94,7 +94,9 @@ def route(
 ) -> str:
     """The sentence a refusal ends with: how the operator's answer reaches this command."""
     ask = clean_id(ask_id)
-    return _render("route", repo, overrides, ident=ask, ask_id=ask) or _FALLBACK.format(id=ask)
+    # No ask yet: the way to file one is `--approval request`, so the text says that.
+    section = "route" if ask != PLACEHOLDER else "route_new"
+    return _render(section, repo, overrides, ident=ask, ask_id=ask) or _FALLBACK.format(id=ask)
 
 
 def driver_line(repo: Path | None = None, overrides: dict[str, str] | None = None) -> str:

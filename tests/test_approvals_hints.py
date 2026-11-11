@@ -17,6 +17,12 @@ from ddflow.services.approvals import hints as H
 GOOD = "Qe3eb76edfd"
 
 
+def test_with_no_ask_yet_the_route_says_how_to_file_one():
+    text = H.route()
+    assert "--approval request" in text and "ddflow approvals ask" in text
+    assert H.route("Qbad\n") == text
+
+
 def test_the_route_names_the_cli_the_mcp_form_and_the_approval_flag():
     text = H.route(GOOD)
     assert f"ddflow approvals ask {GOOD}" in text
