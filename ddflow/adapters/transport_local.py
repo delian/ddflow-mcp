@@ -123,7 +123,9 @@ class LocalTransport:
         # stopped = the process died BY the exact stop signal we sent (a trapped term that then
         # exits nonzero, or a SIGABRT a signal did not cause, is its own failure, not a stop).
         sig = run.stop_sig
-        state = "stopped" if sig is not None and code == -sig else "exited" if code == 0 else "failed"
+        state = (
+            "stopped" if sig is not None and code == -sig else "exited" if code == 0 else "failed"
+        )
         return LaneStatus(state, pid=run.popen.pid, exit_code=code)
 
     def copy_in(self, lane: str, local: Path, name: str) -> Result:
