@@ -46,6 +46,7 @@ TOPICS: dict[str, str] = {
     "verify": "checking that a done task is really done, and what to do when it is not",
     "lanes": "which agents are working, their state, their brief, and what to do next",
     "metrics": "cycle time, review rounds, waits, forecast and retro, derived from the log",
+    "viewers": "list and show: tasks, phases, bugs, research, sessions and the log, on CLI and MCP",
     "upgrade": "newer releases, upgrading it and the project, watching and resuming an upgrade",
 }
 
