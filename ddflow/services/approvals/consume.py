@@ -19,9 +19,9 @@ from ...core.handlers.asks import ANSWERED, asks_of
 from ...core.model import fold
 from ..ask import engine as E
 from . import harness as H  # registers the level verifier of the harness channel
+from . import hints, sites
 from . import policy as PO
 from . import request as R
-from . import sites
 from .canon import Canon
 
 
@@ -53,10 +53,8 @@ def route(ask_id: str, canon: Canon, *, new: bool, chat: bool = False) -> str:
         )
     return (
         f"{head} ({s.tier}, level L{s.min_level}+): the operator "
-        f"approves it with `ddflow approvals approve {ask_id}` from their own terminal (or answers "
-        f"it over a channel they use); then run `ddflow wait --approval {ask_id}` to block until "
-        f"the answer, and re-run this command with --approval {ask_id}. It is "
-        f"single-use, bound to this exact command and its current state, and expires."
+        f"approves it with `ddflow approvals approve {ask_id}` (or answers it over a channel "
+        f"they use). " + hints.route(ask_id)
     )
 
 

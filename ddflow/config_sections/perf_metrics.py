@@ -182,6 +182,34 @@ class PerfMetricsConfig:
             else "must be a number > 0"
         ),
     )
+    prop_split_share: float = knob(
+        0.5,
+        doc="The fraction of the critical-path floor one test file's serial run must exceed before it is a split candidate, WHEN the file is also over the size rule (PM-prop-tests). The floor only tightens; raising it is a recorded decision.",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    prop_shard_skew: float = knob(
+        0.9,
+        doc="The slowest file's share of the critical-path floor at or above which the test suite is skewed enough that the proposal is to SHARD the slowest file, not to raise the worker count (PM-prop-tests).",
+        check=lambda v: (
+            ""
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0
+            else "must be a number > 0"
+        ),
+    )
+    prop_select_miss_min: int = knob(
+        2,
+        doc="Fewest full-run failures a selection would not have run, in a set of selection runs, before the report proposes widening the selection (PM-prop-tests).",
+        check=int_at_least(1),
+    )
+    prop_select_min_runs: int = knob(
+        3,
+        doc="Fewest selection runs over which misses are counted before a selection new claim is honest (PM-prop-tests); below it the claim is not-enough-data, never a zero.",
+        check=int_at_least(2),
+    )
     report_default_window: str = knob(
         "28d",
         doc="The time window a perf report measures when none is given: a duration back (7d, 12h) or a date YYYY-MM-DD (parse_since).",
