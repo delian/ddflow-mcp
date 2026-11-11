@@ -187,11 +187,18 @@ def read_full(repo: Path, link: Any) -> list[str]:
     return [str(i) for i in ids] if isinstance(ids, list) else []
 
 
+def test_check(c) -> bool:
+    """Does check ``c`` count as the tests (not a lint, build or secrets check)? A check counts
+    as the tests when its name says so (the hook "unit tests + end-to-end scenarios") or it is
+    the run's own exit -- asked of a failed check alone in ``only_tests_failed`` too, so the two
+    stay one heuristic in one place (Ba17fabe249)."""
+    return c.id == "command" or "test" in c.id.lower()
+
+
 def only_tests_failed(checks) -> bool:
     """Did the ci run fail ONLY in its tests? A failed lint, build or secrets check is no test
-    failure, so a red that includes one is never baseline-red. A check counts as the tests when
-    its name says so (the hook "unit tests + end-to-end scenarios") or it is the run's own exit."""
-    return all(c.ok or c.id == "command" or "test" in c.id.lower() for c in checks)
+    failure, so a red that includes one is never baseline-red."""
+    return all(c.ok or test_check(c) for c in checks)
 
 
 def test_files_of(ids: list[str]) -> list[str]:

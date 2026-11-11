@@ -122,7 +122,8 @@ def _read_snapshot(ctx: B.MeterContext) -> dict[str, Any]:
     data = json.loads(ctx.snapshot.read_text(encoding="utf-8"))
     windows = data.get("windows") if isinstance(data, dict) else None
     version = data.get("version") if isinstance(data, dict) else None
-    if not isinstance(windows, dict) or version is True or version != SNAPSHOT_VERSION:
+    # ddflow only ever writes the integer, so a float like 1.0 is not this version.
+    if not isinstance(windows, dict) or type(version) is not int or version != SNAPSHOT_VERSION:
         raise ValueError("not a snapshot of this version")
     return windows
 
