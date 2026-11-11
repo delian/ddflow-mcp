@@ -213,7 +213,13 @@ def _plan_native(repo: Path, key: str, docs_dir: str) -> str:
         return _plan_block(repo / rule.path, project_section(docs_dir), rule.path)
     if rule.form == FORM_WHOLE:
         want = native_rule_text(docs_dir)
-        cur = (repo / rule.path).read_text("utf-8") if (repo / rule.path).exists() else None
+        path = repo / rule.path
+        if not path.exists():
+            return f"would write {rule.path} (always-applied project rule)"
+        try:
+            cur = path.read_text("utf-8")
+        except UnicodeDecodeError:
+            return f"would skip {rule.path}: it is not UTF-8 text"
         return (
             f"{rule.path} is current"
             if cur == want
