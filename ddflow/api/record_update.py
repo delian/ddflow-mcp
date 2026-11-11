@@ -294,7 +294,13 @@ def _write(repo, log, cfg, kind, rid, kd, changed, agent) -> O.Outcome:
             out = R.record_edit(repo, dk, rid, changed, agent=agent)
         else:
             out = DEFS.def_update(repo, kind, rid, changed, agent=agent)
-    data = {**out.data, "id": rid, "record_kind": kind, "changed": sorted(changed)}
+    data = {
+        **out.data,
+        "id": rid,
+        "record_kind": kind,
+        "changed": sorted(changed),
+        "fields": changed,
+    }
     if out.exit == O.OK:
         return O.ok(_EV, **data)
     make = {O.NOTHING: O.nothing, O.REFUSED: O.refused}.get(out.exit, O.failed)

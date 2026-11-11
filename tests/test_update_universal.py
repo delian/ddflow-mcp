@@ -119,6 +119,7 @@ def test_session_and_memory_and_schedule_kinds(seeded, log):
     )
     out = _upd(seeded, "J1", append_body="more", set=["jitter=3"])
     assert out.exit == O.OK, out.reason
+    assert "fields" in out.data  # `update_message` reads it for every store
     job = _st(seeded).schedules["J1"]
     assert job.prompt == "p\n\nmore" and job.jitter == 3
 
@@ -194,3 +195,21 @@ def test_set_on_a_task_carries_list_folds_and_refuses_other_names(repo):
     assert _st(repo).items["T1"].tags == ["a", "b"]
     out = _upd(repo, "T1", set=["why=x"])
     assert out.exit == O.REFUSED and "task T1" in out.reason
+
+
+def test_a_data_kind_record_takes_append_body(repo):
+    from ddflow.api import records as R
+
+    kind = R.KINDS["risk"]
+    out = R.record_add(
+        repo,
+        kind,
+        "rk1",
+        {"title": "Db outage", "description": "may go down", "state": "open"},
+        agent="agent-test",
+    )
+    assert out.exit == O.OK, out.reason
+    out = _upd(repo, "rk1", append_body="more", add_tags=["ops"])
+    assert out.exit == O.OK and "fields" in out.data, out.reason
+    fields = _st(repo).defs["risk:rk1"].fields
+    assert fields["description"] == "may go down\n\nmore" and fields["tags"] == ["ops"]
