@@ -17,8 +17,9 @@ _CODE_TREE = Path(__file__).resolve().parents[2]
 #: `ddflow/__init__.py` keeps the version as a plain `__version__ = "X.Y.Z"` literal (the
 #: whole line); this matches that one declaration. Read from the FILE, never the imported
 #: module: a long-lived process (the MCP server) froze `ddflow.__version__` at import time,
-#: and the whole point is to notice the tree on disk outran it.
-_VERSION_LINE = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
+#: and the whole point is to notice the tree on disk outran it. `\r?` before `$` accepts a
+#: CRLF checkout the same as an LF one (a `$` in MULTILINE matches before `\n`, not `\r`).
+_VERSION_LINE = re.compile(r'^__version__ = "([^"]+)"\r?$', re.MULTILINE)
 
 
 def declared_version(tree: Path) -> str:
@@ -34,7 +35,8 @@ def declared_version(tree: Path) -> str:
 
 def _running_version() -> str:
     """The version this process imported, "" when there is none. Frozen: a long-lived
-    process keeps it while the tree on disk is bumped out from under it."""
+    process keeps it while the tree on disk is bumped out from under it. The same answer
+    as `ddflow.core.version.running()` (which `config` may not import); keep them in step."""
     dflow = sys.modules.get("ddflow")
     return str(getattr(dflow, "__version__", "") or "")
 
@@ -48,9 +50,10 @@ def _is_code_tree(root: Path) -> bool:
 
     Same tree AND same version: a long-lived process keeps the code it imported while a
     sibling session bumps the tree on disk (an MCP server running 0.2.10 against the
-    shell's 0.2.11). Then the file and the code are NOT one commit -- an unknown knob is
-    the newer release's, not a typo -- so it must be reported, not raised. Reading the
-    declared (on-disk) version against the frozen running one is what tells the two apart.
+    shell's 0.2.11). The file and the code are then NOT one commit -- an unknown knob is
+    the newer release's, not a typo -- so it must be reported, not raised. Only an EQUAL
+    declared and running version stands for "one commit"; ANY mismatch (in practice: the
+    running code outlived the tree) is not that commit, and greys the knob.
 
     ``_CODE_TREE`` is read from `ddflow.config` at call time, not this module's copy, so
     a monkeypatch of ``ddflow.config._CODE_TREE`` (which re-exports the value from here)

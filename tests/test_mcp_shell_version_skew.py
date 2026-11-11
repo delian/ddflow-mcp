@@ -84,6 +84,12 @@ def test_declared_version_is_empty_when_the_file_is_missing(tmp_path):
     assert declared_version(tmp_path / "missing") == ""
 
 
+def test_declared_version_accepts_a_crlf_literal(tmp_path):
+    (tmp_path / "ddflow").mkdir()
+    (tmp_path / "ddflow" / "__init__.py").write_bytes(b'__version__ = "0.2.11"\r\n')
+    assert declared_version(tmp_path) == "0.2.11"
+
+
 def test_installed_version_reads_a_source_tree_from_disk(tmp_path, monkeypatch):
     """A source tree IS its own install: its "installed" version is the one on disk, so a
     stale server stops concluding a restart would change nothing."""
