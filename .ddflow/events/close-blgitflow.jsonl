@@ -103,3 +103,4 @@
 {"agent":"close-blgitflow","data":{"at":1794405027.1844893,"holder":"close-blgitflow"},"id":"e46a600124ceb53ad22ad501a","kind":"lease.renewed","lamport":174689,"schema":1,"subject":"B175","ts":"2026-11-11T13:50:27.886814Z"}
 {"agent":"close-blgitflow","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e12d2a45281775c36ec6d0e3e","kind":"cadence.ran","lamport":174691,"schema":1,"subject":"recall_recheck:B175","ts":"2026-11-11T13:50:36.431879Z"}
 {"agent":"close-blgitflow","data":{"at":1794405050.8917818,"holder":"close-blgitflow"},"id":"eeff54ad2883ce0c9feb20abe","kind":"lease.renewed","lamport":174694,"schema":1,"subject":"B181","ts":"2026-11-11T13:50:51.020688Z"}
+{"agent":"close-blgitflow","data":{"at":1794405389.0052555,"holder":"close-blgitflow"},"id":"ec9b480b6ee1dd941aee54329","kind":"lease.renewed","lamport":174770,"schema":1,"subject":"B181","ts":"2026-11-11T13:56:29.218649Z"}
