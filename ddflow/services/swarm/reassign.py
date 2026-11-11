@@ -94,9 +94,7 @@ def detect(
         claims = list(span.claims)
         for idx, (at, author) in enumerate(claims):
             nxt = claims[idx + 1][0] if idx + 1 < len(claims) else done
-            if not any(
-                o.kind == "failed" and at <= o.at < nxt for o in gates.get(item, ())
-            ):
+            if not any(o.kind == "failed" and at <= o.at < nxt for o in gates.get(item, ())):
                 continue
             model = L._author_model(item, author, at, sessions, leases)
             fam = family_for(model, fam_map or None)

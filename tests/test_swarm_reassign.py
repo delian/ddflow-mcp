@@ -3,7 +3,7 @@ item send that item to another family; a family below the mark, or poison on a d
 item, is untouched.
 """
 
-from lanes_fixture import Log, T0
+from lanes_fixture import T0, Log
 
 from ddflow.config import Config
 from ddflow.core.model import fold
