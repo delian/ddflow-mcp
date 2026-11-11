@@ -389,7 +389,13 @@ def _settle_mark(counts: dict[str, int], used: int, cap: int) -> dict[str, Any]:
     rounds = {"rounds": used, "max_rounds": cap}
     refuted = counts.get("refuted", 0)
     return (
-        {"passed_on_refutation": {"refuted": refuted, "confirmed": counts.get("confirmed", 0), **rounds}}
+        {
+            "passed_on_refutation": {
+                "refuted": refuted,
+                "confirmed": counts.get("confirmed", 0),
+                **rounds,
+            }
+        }
         if refuted
         else {"findings_fixed": {"confirmed": counts.get("confirmed", 0), **rounds}}
     )
@@ -593,7 +599,9 @@ def _why_outcome(log, cfg, it, gate: str, how: str, why: str, sargs: dict[str, A
     )
 
 
-def _release_settled(log, cfg, it, gate: str, how: str, why: str, counts: dict[str, int]) -> O.Outcome:
+def _release_settled(
+    log, cfg, it, gate: str, how: str, why: str, counts: dict[str, int]
+) -> O.Outcome:
     """Record ``gate`` passed from settled triage (the ''held pass'' or ''confirmed-finding'' shape
     `_unchanged_delta` re-evaluates): no round was counted for the unchanged delta, and every
     recorded finding has a verdict with its probe."""

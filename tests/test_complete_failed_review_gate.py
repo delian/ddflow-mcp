@@ -176,9 +176,7 @@ def test_a_confirmed_finding_a_later_full_round_dropped_still_needs_a_delta(repo
     assert BLOCKER in _complete(repo)[1]
 
 
-def test_a_delta_that_is_empty_because_the_fix_is_at_the_reviewed_head_settles_it(
-    repo, tmp_path
-):
+def test_a_delta_that_is_empty_because_the_fix_is_at_the_reviewed_head_settles_it(repo, tmp_path):
     """Bug B-tk-delta-round-empty: the fix for a confirmed finding IS the reviewed head
     (R2, a full re-review, reviewed the tip that already carries the fix), so a `--delta`
     re-checks nothing (`_unchanged_delta`). It used to answer "stays failed" and merge
@@ -188,7 +186,9 @@ def test_a_delta_that_is_empty_because_the_fix_is_at_the_reviewed_head_settles_i
     _failed_and_confirmed(repo)  # R1 raises #1, confirmed
     _commit(repo, "x.py", "x = 1\n")  # the fix
     _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # a MEDIUM nit: below the HIGH floor
-    out = api.review(repo, gate="critic", item="T1", branch="feat", full=True)  # R2: reviewed head = fix
+    out = api.review(
+        repo, gate="critic", item="T1", branch="feat", full=True
+    )  # R2: reviewed head = fix
     assert out.data["outcome"] == "failed", out.data  # confirmed #1 still has no delta round
     t = api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="the nit is fine")
     assert t.exit == 0, t.reason
