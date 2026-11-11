@@ -1,0 +1,2 @@
+{"agent":"o2-kilo","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"eb49247bf575a961e4b7c347f","kind":"ddflow.seen","lamport":177143,"schema":1,"subject":"ddflow","ts":"2026-11-11T20:01:32.664832Z"}
+{"agent":"o2-kilo","data":{"path":".ddflow/worktrees/B-mcp-server-lifecycle"},"id":"ee50905a859b1d2b1e419276b","kind":"worktree.removed","lamport":177144,"schema":1,"subject":"B-mcp-server-lifecycle","ts":"2026-11-11T20:01:32.736461Z"}
