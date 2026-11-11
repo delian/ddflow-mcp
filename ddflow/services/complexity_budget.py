@@ -8,6 +8,9 @@ functions of the staged ``.py`` files against HEAD and names those whose complex
 never refuses a commit. radon is a dev dependency; without it nothing is said (and nothing
 is claimed clean).
 
+radon is imported only in `ddflow.adapters.complexity` (the `extras-one-adapter` contract);
+`complexities` there is re-exported here so `risen` reads through one function.
+
 Accepted limitation (operator-reviewed): a function name defined more than once in one file
 (under `if`/`else`) is paired with HEAD by order (`f`, `f#2`). When a definition is added or
 removed the pairing can be wrong, so the note may miss a rise or add a warning. Advisory only.
@@ -15,41 +18,16 @@ removed the pairing can be wrong, so the note may miss a rise or add a warning. 
 
 from __future__ import annotations
 
-import io
-import tokenize
 from collections.abc import Callable
 
-try:  # a dev dependency: absent, the check says nothing
-    from radon.complexity import cc_visit
-except ImportError:  # pragma: no cover - exercised by monkeypatching `cc_visit` to None
-    cc_visit = None
+from ..adapters.complexity import complexities
+
+__all__ = ["GRADE_D_FROM", "GUARD", "SHOWN", "advice", "complexities", "risen"]
 
 #: radon's grade D starts at 21: what the architecture guard counts.
 GRADE_D_FROM = 21
 SHOWN = 5
 GUARD = "tests/test_architecture_guards.py"
-
-
-def complexities(source: bytes | None) -> dict[str, tuple[int, int]]:
-    """``{qualified function name: (line, complexity)}``; empty when radon is missing or the
-    source does not parse (a half-written file is the compiler's to report)."""
-    if source is None or cc_visit is None:
-        return {}
-    try:
-        encoding = tokenize.detect_encoding(io.BytesIO(source).readline)[0]  # PEP 263
-        blocks = cc_visit(source.decode(encoding, errors="replace"))
-    except (SyntaxError, ValueError, LookupError):
-        return {}
-    found: dict[str, tuple[int, int]] = {}
-    # cc_visit lists a class block whose methods are also listed on their own: functions only.
-    for b in sorted((b for b in blocks if not hasattr(b, "methods")), key=lambda b: b.lineno):
-        # a name defined twice (under `if`/`else`) is two functions: `f` and `f#2`, by order
-        key, n = b.fullname, 1
-        while key in found:
-            n += 1
-            key = f"{b.fullname}#{n}"
-        found[key] = (b.lineno, b.complexity)
-    return found
 
 
 def risen(
