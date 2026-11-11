@@ -108,8 +108,10 @@ def running(
     for i in range(max(1, int(cfg.ci.max_concurrent_suites))):
         if not _held(directory, i):
             continue
-        with contextlib.suppress(OSError, ValueError):
+        with contextlib.suppress(OSError, ValueError, TypeError):
             note = json.loads(_note(directory, i).read_text())
+            if not isinstance(note, dict):
+                continue
             rows.append({**note, "slot": i, "age_s": max(0, int(at - float(note.get("at", at))))})
     queued = 0
     stale = float(cfg.ci.suite_queue_stale_s)

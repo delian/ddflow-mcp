@@ -142,3 +142,31 @@ def test_ddflow_lease_lists_the_same_holders_as_lanes_coordinator(busy):
     _, cj, _ = run_cli(busy, "lanes", "--coordinator", "--json")
     names = lambda rows: [(r["lane"], r["item"]) for r in rows]  # noqa: E731
     assert names(json.loads(js)["holders"]) == names(json.loads(cj)["coordinator"]["holders"])
+
+
+def test_a_cut_chain_owners_and_free_lanes_say_how_many_are_left():
+    g = _seeded()
+    g.task("T1", "t1.py", needs="W,Q,U")
+    data = _view(g, item="T1", coordinator_max_rows=1)
+    for section in ("chain", "owners"):
+        assert data["partial"][section] >= 1, section
+    assert "more chain not shown" in CV.render(data)
+
+
+def test_a_suite_note_that_is_not_an_object_does_not_hide_the_other_suites(tmp_path, monkeypatch):
+    Cfg = Config()
+    Cfg.ci.max_concurrent_suites = 2
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    with SL.hold(Cfg, "lane-a"):
+        d = SL.state_dir()
+        with SL.SLOTS.Slots(d, SL.NAME).hold(2, 0):  # the second slot, whose note is junk
+            for i in range(2):
+                if not (d / f"{SL.NAME}.{i}.holder").exists():
+                    (d / f"{SL.NAME}.{i}.holder").write_text("null")
+            rows, _ = SL.running(Cfg)
+    assert [r["holder"] for r in rows] == ["lane-a"]
+
+
+def test_the_positional_coordinator_view_takes_item_too(busy):
+    code, out, _ = run_cli(busy, "lanes", "coordinator", "--item", "Y", agent="reader")
+    assert code == 0 and "CHAIN Y" in out

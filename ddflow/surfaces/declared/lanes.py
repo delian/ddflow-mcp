@@ -33,7 +33,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().lanes(
             repo,
             view="coordinator" if a.get("coordinator") else (a.get("view") or "state"),
-            lane=(a.get("item") if a.get("coordinator") else "") or a.get("lane") or "",
+            lane=(a.get("item") or "") or a.get("lane") or "",
             agent=agent,
         ),
         payload=(

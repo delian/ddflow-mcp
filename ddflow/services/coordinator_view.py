@@ -23,14 +23,14 @@ def _cut(rows: list, cap: int, partial: dict[str, int], name: str) -> list:
     return rows
 
 
-def _chain(item: str, st, plan, now: float, grace_s: int, rows: int) -> list[dict[str, Any]]:
+def _chain(item: str, st, plan, now: float, grace_s: int) -> list[dict[str, Any]]:
     blocked = {b.item: b for b in plan.blocked}
     ready = {i.id for i in plan.ready}
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     def walk(node: str, depth: int) -> None:
-        if node in seen or (rows > 0 and len(out) >= rows):  # each item once: a cycle ends
+        if node in seen:  # each item once: the walk is finite and a cycle ends
             return
         seen.add(node)
         b = blocked.get(node)
@@ -89,7 +89,9 @@ def build(
                 "idle": idle_s > 0 and quiet >= idle_s,
             }
         )
-    owners = {h["lane"]: h["item"] for h in holders}
+    owners = dict(
+        _cut(list({h["lane"]: h["item"] for h in holders}.items()), cap, partial, "owners")
+    )
     asks = [
         {
             "id": r["id"],
@@ -107,10 +109,12 @@ def build(
     data = {
         "suites": _cut([dict(s) for s in suites], cap, partial, "suites"),
         "holders": _cut(holders, cap, partial, "holders"),
-        "free": [ln.name for ln in ledger if ln.state in S.FREE],
+        "free": _cut([ln.name for ln in ledger if ln.state in S.FREE], cap, partial, "free"),
         "approvals": _cut(asks, cap, partial, "approvals"),
         "ready": per_phase,
-        "chain": _chain(item, st, plan, now, cfg.lease.grace_s, cap) if item else [],
+        "chain": _cut(_chain(item, st, plan, now, cfg.lease.grace_s), cap, partial, "chain")
+        if item
+        else [],
         "item": item,
         "owners": owners,
         "partial": partial,
@@ -142,7 +146,8 @@ def render(d: dict[str, Any]) -> str:
     ] or ["  none"]
     out += more("holders")
     if d["free"]:
-        out.append("  free: " + ", ".join(safe(n) for n in d["free"][:10]))
+        out.append("  free: " + ", ".join(safe(n) for n in d["free"]))
+    out += more("free")
     out.append("APPROVALS")
     out += [
         f"  {a['id']}  {fmt_age(a['age_s'], 'm')}  {safe(a['by'])}: {a['command']}  -> {a['form']}"
@@ -159,8 +164,10 @@ def render(d: dict[str, Any]) -> str:
             + (f" — {c['detail']}" if c["detail"] else "")
             for c in d["chain"]
         ]
+        out += more("chain")
     out.append("OWNERS")
     out += [f"  {safe(a)} -> {safe(i)}" for a, i in d["owners"].items()] or ["  none"]
+    out += more("owners")
     return "\n".join(out)
 
 
