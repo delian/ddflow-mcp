@@ -51,9 +51,7 @@ class LocalLogStore:
         self._log.stamp = stamp
         self._blobs = BlobStore(self._log.root)
 
-    def append(self, kind: str, subject: str, data: dict[str, Any] | None = None, *, agent: str = ""):
-        # `agent` names the shard; the local adapter writes to its own agent's shard, so the
-        # one `EventLog` instance is the store.
+    def append(self, kind: str, subject: str, data: dict[str, Any] | None = None):
         return self._log.append(kind, subject, data)
 
     def append_many(self, items):

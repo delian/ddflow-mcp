@@ -62,9 +62,11 @@ def _is_hex_ref(ref: str) -> bool:
 @fake
 class FakeLogStore:
     """A `LogStore` over memory: ``_shards`` maps a shard name (`<agent>.jsonl`) to its
-    events; ``_blobs`` maps a digest to its bytes. `append` serialises writes under a
-    `threading.Lock` and fills in the next sequence number. `compact` merges every shard
-    into the default agent's and returns how many were merged away."""
+    events; ``_blobs`` maps a digest to its bytes. Writes and structure reads all hold one
+    `threading.Lock`; `append` fills in the next sequence number. `agent=` on `append` is a
+    fake-only extra (the port's one append writes THIS store's shard) so swarm tests can
+    record several agents in one fake; `compact` merges every shard into the default agent's
+    and returns how many were merged away."""
 
     def __init__(self, root: Any = None) -> None:
         self._shards: dict[str, list[_Event]] = {}
@@ -96,6 +98,8 @@ class FakeLogStore:
         return ev
 
     def _events(self) -> list[_Event]:
+        """The sorted, de-duplicated stream. The caller holds the lock, so the shard list
+        it iterates is the one `append`/`compact` mutated, never one deleted mid-iteration."""
         seen: set[str] = set()
         out: list[_Event] = []
         for shard in sorted(self._shards):
@@ -108,13 +112,16 @@ class FakeLogStore:
         return out
 
     def read_from(self, offset: int = 0):
-        return [e for e in self._events() if e.lamport > offset]
+        with self._lock:
+            return [e for e in self._events() if e.lamport > offset]
 
     def shards(self) -> list[str]:
-        return sorted(self._shards)
+        with self._lock:
+            return sorted(self._shards)
 
     def snapshot(self) -> list[_Event]:
-        return list(self._events())
+        with self._lock:
+            return list(self._events())
 
     def compact(self) -> int:
         with self._lock:
@@ -131,10 +138,13 @@ class FakeLogStore:
     def blob_put(self, ref: str, raw: bytes) -> None:
         if not _is_hex_ref(ref) or _address(raw) != ref:
             raise ValueError(f"{ref!r} is not the address of these bytes")
-        self._blobs[ref] = raw
+        with self._lock:
+            self._blobs[ref] = raw
 
     def blob_get(self, ref: str) -> bytes | None:
+        # A dict read under the GIL; the write is one dict assignment under the lock.
         return self._blobs.get(ref)
 
     def blob_refs(self) -> Iterator[str]:
-        yield from sorted(self._blobs)
+        with self._lock:
+            yield from sorted(self._blobs)

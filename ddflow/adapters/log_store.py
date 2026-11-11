@@ -34,13 +34,11 @@ class LogStore(Protocol):
         kind: str,
         subject: str,
         data: dict[str, Any] | None = None,
-        *,
-        agent: str = "",
     ) -> Any:
-        """Write one event and return it, with its ordering filled in. Ordering is the
-        store's monotonic sequence (the lamport clock of the local shards), and the write
-        is serialised under the store's lock. ``agent`` names the shard (the local adapter
-        uses its own agent's shard; the fake creates one)."""
+        """Write one event to THIS store's shard and return it, with its ordering filled
+        in. Ordering is the store's monotonic sequence (the lamport clock of the local
+        shards), and the write is serialised under the store's lock. A store is one
+        writer; `shards()` and `read_from()` read every shard present."""
 
     def append_many(self, items: Any) -> list[Any]:
         """Append several ``(kind, subject, data)`` events as one unit: all of them, or none.
