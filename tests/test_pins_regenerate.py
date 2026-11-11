@@ -327,17 +327,13 @@ def test_regenerate_warns_when_the_branch_is_behind_its_base(repo: Path):
     # Bf4ee89e08e: on a branch forked before main moved ahead, `pins regenerate` re-recorded
     # drift from the out-of-date base together with the item's own change with no warning that
     # the branch lags main. It must re-record the item's change AND name the base it is behind.
-    # Called through the API (the person route, no approval), not the CLI: the CLI subprocess
-    # guard refuses to run code imported from a linked worktree that is not the caller's tree.
-    from ddflow.api import pin_files as PF
-
     git(repo, "commit", "--allow-empty", "-qm", "ahead")
     git(repo, "checkout", "-q", "-b", "topic", "HEAD~1")
     (repo / "knobs.txt").write_text("a\nb\n")  # the item's own change
-    out = PF.pins_regenerate(repo, verb="regenerate")
-    assert out.exit == 0, out.data
+    done = ddflow_cli(repo, "pins", "regenerate", "--approval", approve(repo))
+    assert done.returncode == 0, done.stdout + done.stderr
     assert (repo / "pin.txt").read_text() == "2 knobs\n- a\n- b\n"
-    assert "behind `main`" in (out.data.get("note") or "")
+    assert "behind `main`" in done.stdout + done.stderr
 
 
 def test_text_that_is_not_utf8_still_merges_and_conflicts_are_kept():
