@@ -188,7 +188,7 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
-| **onboard an existing project** | `ddflow onboard status` (standing drift report; also `preflight`, `legacy`, `memory`, `test-gate`, `verify`; propose by default, `--apply` acts, `--accept NAME` approves one item) | `ddflow_onboard` (stage, apply, accept) |
+| **onboard an existing project** | `ddflow onboard status` (standing drift report; also `preflight`, `legacy`, `memory`, `test-gate`, `verify`, `harness`; `ddflow help onboard` walks the stages; propose by default, `--apply` acts, `--accept NAME` approves one item) | `ddflow_onboard` (stage, apply, accept) |
 | **the pre-push checks, on the merge result** | `ddflow ci run` (the `ci` gate; `ddflow ci status` shows what would run): a scratch worktree of your branch merged with the base, then the project's own `pre-commit run --hook-stage pre-push` (or `[ci].command`, run as written; with the default, a `language: fail` tripwire hook runs on the diff being checked, not over every file); exit 0 passed, 1 failed, 2 could not run (never a pass). After a merge lands, `[ci].on_merge` (`fast` default: the pre-commit set without the test hooks; `full`; `off`) checks the base, records a `ci.result` and files a bug and fix task per failing check; the pre-push hook reports with `ddflow ci record` | `ddflow_ci` (run, status) |
 | **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails; `--reopen` sends a completion that fails back to the queue with its gates cleared (`--reason` says why; `--force` reopens one that holds); `--pack` prints the evidence pack (requirement fenced as data, what landed, mechanical findings) for an independent verifier and `--judge` hands it to the cross-family reviewer (gate `verify`, optional, never part of the default pipeline); on a task that is not done it names work that landed anyway): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
 | **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
@@ -508,8 +508,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=007a8dcf553b -->
-<details><summary>All 102 commands</summary>
+<!-- ddflow:begin README/commands sha=450a61e29fd9 -->
+<details><summary>All 104 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -606,6 +606,8 @@ needs a line written by hand here.
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
 | `ddflow dispatch` | the dispatcher's plan: what to start now, in order, on which lane (advise only) |
 | `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
+| `ddflow restart` | soft upgrade: reload this MCP server's code and re-bind its tools, keeping the connection |
+| `ddflow kill` | hard upgrade: end this MCP server's process so your client respawns it fresh |
 | `ddflow paths` | workflow-path variants: directly-follows, top variants, burst overlap, superseded passes, out-of-order |
 | `ddflow perf` | perf of the host (fingerprint, measuring wrapper) and the perf report (window, filters, format) |
 | `ddflow probe` | would an item's branch merge clean with main or a peer? (exit 1 = conflict, 2 = could not tell) |
@@ -862,8 +864,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=02c33f8c846b -->
-<details><summary>All 675 knobs across 60 sections</summary>
+<!-- ddflow:begin README/knobs sha=33f90fc572a5 -->
+<details><summary>All 677 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1331,6 +1333,8 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `prices.limit` | `{}` |  |
+| `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
 | `prompts.gate_instruction` | `""` |  |

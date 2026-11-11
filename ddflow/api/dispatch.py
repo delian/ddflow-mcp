@@ -20,6 +20,8 @@ from ..core import outcome as O
 from ..core.schedule import caps
 from ..services import dispatch as PLAN
 from ..services import flowstate as FL
+from ..services import lanes as LN
+from ..services.lanes import advise as AD
 from ..services.lanes import launch_template as T
 from ..services.swarm import dispatch as D
 from ..services.swarm import score
@@ -79,8 +81,6 @@ def dispatch(
 
     offer = plan_for(repo, log, cfg, st, purpose="view", agent=me, now=now)
     events = log.read_all()
-    from ..services import lanes as LN
-    from ..services.lanes import advise as AD
 
     ledger = LN.build(events, st, cfg, now, offer)
     moves = PLAN.steer(AD(ledger, parallel, max_moves=cfg.lanes.advise_max))

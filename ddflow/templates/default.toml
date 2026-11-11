@@ -545,6 +545,10 @@ mergiraf_keep_pct = 10
 [plan]
 warn_missing_globs = true
 
+[prices]
+limit = {}
+reset = {}
+
 [prompts]
 review_system = ""
 review_user = ""

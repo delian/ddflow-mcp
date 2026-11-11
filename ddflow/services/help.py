@@ -35,6 +35,7 @@ TOPICS: dict[str, str] = {
     "manual": "the full workflow the MCP charter summarises: reporting, review rules, companion tools",
     "workflow": "the loop: pick work, claim it, satisfy its gates, land it",
     "import": "adopting a project that already has history",
+    "onboard": "onboarding an existing project: each stage, what it proposes, what --apply does",
     "gates": "what a gate is, which are agent gates, and proving one can fail",
     "parallel": "several agents at once: worktrees, leases, conflict refusal",
     "memory": "what the project remembers, and how to ask it",

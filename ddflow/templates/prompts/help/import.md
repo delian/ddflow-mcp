@@ -19,6 +19,10 @@ lessons corpus, `docs/adr/`, a research log, an engineering journal (`docs/log/*
 Ids are read, not invented: `### 142.A — …` and `- [ ] **WFOPT.4.6** — …` both import
 under the id the project has been writing in its commit trailers for months.
 
+A checklist item is a line starting `- [ ]`, `* [ ]`, `+ [ ]`, `1. [ ]` or `1) [ ]` (ticked
+with `x`): all five forms import as tasks with the same meaning. A bullet with no box is
+not a task.
+
 ## What it will not decide for you
 
 Which open items are actually live, what each task writes, and what depends on what.

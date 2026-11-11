@@ -300,6 +300,13 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_rule_add",
     "ddflow_rule_edit",
     "ddflow_rule_remove",
+    # Restarts / ends THIS server (re-exec in place, or end the process): invoking it twice
+    # is not the same as invoking it once — the second call finds the server already
+    # re-exec'd/ended — and its CLI twin runs in a separate process whose hosting detects
+    # differently, so the two surfaces cannot be invoked identically. Pinned by
+    # tests/test_mcp_lifecycle.py instead. (B-mcp-server-lifecycle)
+    "ddflow_restart",
+    "ddflow_kill",
 }
 
 
