@@ -29,6 +29,7 @@ none. Pure of ddflow: imports no other layer.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -141,15 +142,19 @@ def _fact_flag(cell: Mapping[str, Any], key: str) -> bool:
 
 
 def _fact_num(cell: Mapping[str, Any], key: str) -> float:
-    """A numeric fact as a float, neutral ``0.0`` when absent, ``None`` or not a number:
-    the open ctx says "miss", never an error, so an unmeasured fact cannot abort ordering."""
+    """A numeric fact as a float, neutral ``0.0`` when absent, ``None``, not a number, or
+    ``nan``/``inf``: the open ctx says "miss", never an error, and a quiet NaN that would
+    break the deterministic total order reads as unmeasured."""
     value = cell.get(key)
     if value is None:
         return 0.0
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return 0.0
+    if math.isnan(number) or math.isinf(number):
+        return 0.0
+    return number
 
 
 @port
