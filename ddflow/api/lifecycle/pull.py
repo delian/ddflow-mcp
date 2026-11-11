@@ -70,7 +70,9 @@ def _source(repo: Path, cfg: Config, st: State, lane: str, now: float) -> D.Lane
     t = templates.get(lane)
     live = sum(lz.holder == lane for lz in st.active_leases(now, cfg.lease.grace_s).values())
     if t is None:
-        return D.LaneSource(None, D.LaneFacts(), False, False, live=live, defect=_defect(path, lane, notes))
+        return D.LaneSource(
+            None, D.LaneFacts(), False, False, live=live, defect=_defect(path, lane, notes)
+        )
     cat = modelreg.load(local_dir=Path(repo) / LOCAL)
     return D.LaneSource(
         t,
@@ -250,7 +252,9 @@ def _launch_due(ctx: TickCtx) -> str | None:
         return None
     live = st.active_leases(now, cfg.lease.grace_s)
     me = cfg.agent.id or log.agent_id
-    p = plan_for(repo, log, cfg, st, purpose="offer", kind=DEFAULT_NEXT_KIND, phase="", agent=me, now=now)
+    p = plan_for(
+        repo, log, cfg, st, purpose="offer", kind=DEFAULT_NEXT_KIND, phase="", agent=me, now=now
+    )
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     c = caps(st, cfg, live, parallel)
     ids = _candidates(p, st, cfg, c, live)
