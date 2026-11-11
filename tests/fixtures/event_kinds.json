@@ -164,6 +164,12 @@
    },
    "v": 1
   },
+  "bug.updated": {
+   "fields": {
+    "fields": ["dict"]
+   },
+   "v": 1
+  },
   "cadence.ran": {
    "fields": {
     "evidence": ["dict"],
@@ -221,6 +227,12 @@
    "fields": {
     "by": ["str"],
     "reason": ["str"]
+   },
+   "v": 1
+  },
+  "decision.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },
@@ -575,6 +587,12 @@
    },
    "v": 1
   },
+  "lesson.updated": {
+   "fields": {
+    "fields": ["dict"]
+   },
+   "v": 1
+  },
   "link.recorded": {
    "fields": {
     "by": ["str"],
@@ -604,6 +622,12 @@
    "fields": {
     "event": ["str"],
     "reason": ["str"]
+   },
+   "v": 1
+  },
+  "memory.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },
@@ -752,6 +776,12 @@
    },
    "v": 1
   },
+  "research.updated": {
+   "fields": {
+    "fields": ["dict"]
+   },
+   "v": 1
+  },
   "review.triaged": {
    "fields": {
     "digest": ["str"],
@@ -829,6 +859,12 @@
     "implicit": ["bool"],
     "model": ["str"],
     "tool": ["str"]
+   },
+   "v": 1
+  },
+  "session.updated": {
+   "fields": {
+    "fields": ["dict"]
    },
    "v": 1
   },
