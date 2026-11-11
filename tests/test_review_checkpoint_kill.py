@@ -169,4 +169,3 @@ def test_a_concurrent_registration_does_not_trip_the_snapshot(tmp_path):
     chunked = [c for f in got for c, _r in f.chunks()]
     assert 1 in chunked, "the checkpoint read back the chunk that already answered"
     assert all(f in got for f in registered), "a sibling registration is never lost"
-
