@@ -365,6 +365,12 @@ def _conf(repo: Any, cfg: Any) -> Any:
     return cfg if cfg is not None else Config.load(repo)
 
 
+def _wire_budget(chars: int, wire: bool, data: dict[str, Any]) -> int:
+    """Halved for a `--json` body that carries prose beside its rows (`board`); one without
+    a `text` (`status`) is held to the whole budget, as the MCP call is."""
+    return max(1, chars // 2) if wire and chars and data.get("text") else chars
+
+
 def apply(
     repo: Any,
     out: Outcome,
@@ -389,9 +395,7 @@ def apply(
     rows, chars = _limits(cfg)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
-    # Halved only for a body that carries prose beside its rows (`board`): one without a
-    # `text` (`status`) is held to the whole budget, as the MCP call is.
-    budget = max(1, chars // 2) if wire and chars and out.data.get("text") else chars
+    budget = _wire_budget(chars, wire, out.data)
     start = max(0, int(cursor or 0)) if _entry(command)[3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
     text, cut_chars = _cut_text(
