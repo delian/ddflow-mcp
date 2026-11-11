@@ -31,8 +31,8 @@ from ddflow.services.approvals.canon import Canon
 from ddflow.services.ask import engine as E
 
 T0 = time.time()
-T2 = "gate.skip.failed_review"
-T3 = "config.reviewer_command"
+VERB_T2 = "gate.skip.failed_review"
+VERB_T3 = "config.reviewer_command"
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +50,7 @@ def _state(log):
     return fold(log.read_all(), strict=False)
 
 
-def _canon(verb=T2, **over):
+def _canon(verb=VERB_T2, **over):
     base = {"verb": verb, "agent": "bot", "item": "T1", "target": "critic", "state": "s1"}
     base.update(over)
     return Canon(**base)
@@ -120,10 +120,10 @@ def test_an_agent_cannot_revoke_withdraw_someone_elses_or_answer_the_cli(repo):
 @pytest.mark.parametrize("source", ["terminal", "credential", "named", "signed", "chat", "harness"])
 @pytest.mark.parametrize("claimed", [(0, ""), (2, "harness"), (3, "chat"), (4, "signed")])
 def test_a_hand_appended_answer_never_reaches_a_level_it_cannot_prove(log, claimed, source):
-    """An agent appends `ask.answered` with a high level it cannot back. For a T3 act (needs
+    """An agent appends `ask.answered` with a high level it cannot back. For a VERB_T3 act (needs
     L4) it is refused whatever it claims; with no recorded source it is refused outright."""
     cfg = Config()
-    t3 = _canon(T3, item="", target="")
+    t3 = _canon(VERB_T3, item="", target="")
     filed = _file(log, cfg, t3)
     level, via = claimed
     _forge(log, filed, source=source, level=level, via=via)
@@ -134,8 +134,10 @@ def test_a_hand_appended_answer_never_reaches_a_level_it_cannot_prove(log, claim
 
 def test_a_hand_appended_answer_without_a_source_approves_nothing_at_any_tier(log):
     cfg = Config()
-    for verb in (T2, T3):
-        canon = _canon(verb, item="" if verb == T3 else "T1", target="" if verb == T3 else "critic")
+    for verb in (VERB_T2, VERB_T3):
+        canon = _canon(
+            verb, item="" if verb == VERB_T3 else "T1", target="" if verb == VERB_T3 else "critic"
+        )
         filed = _file(log, cfg, canon)
         _forge(log, filed)  # no source, no level
         got = C.operator_gate(log, cfg, canon, approval_id=filed.id, now=T0 + 1)
@@ -160,7 +162,7 @@ def test_replaying_a_spent_approval_cannot_be_undone_by_appending_events(log):
     assert C.operator_gate(log, cfg, _canon(), approval_id=filed.id, now=T0 + 1).ok
     assert asks_of(_state(log))[filed.id]["used"] == 1
     # the hostile appends: the same id requested again, answered again, a fake fresh use
-    log.append("ask.requested", filed.id, {"id": filed.id, "verb": T2, "digest": filed.digest,
+    log.append("ask.requested", filed.id, {"id": filed.id, "verb": VERB_T2, "digest": filed.digest,
                                            "uses": 9, "min_level": 1})  # fmt: skip
     _forge(log, filed, source="terminal")
     log.append("ask.consumed", filed.id, {"id": filed.id, "by": "x", "used": 0})
@@ -177,11 +179,11 @@ def test_replaying_a_spent_approval_cannot_be_undone_by_appending_events(log):
 @pytest.mark.parametrize(
     "change",
     [
-        {"item": "T2"},
+        {"item": "VERB_T2"},
         {"target": "rubber_duck"},
         {"state": "s2"},
         {"verb": "complete.force"},
-        {"verb": T3},
+        {"verb": VERB_T3},
     ],
 )
 def test_an_approval_does_not_stretch_to_a_changed_command(log, change):
@@ -227,7 +229,7 @@ def test_a_denied_withdrawn_or_missing_id_is_never_an_approval(log):
 def test_a_t3_act_refuses_a_level_one_answer_and_a_chat_answer_without_the_opt_in(log, tmp_path):
     cfg = Config()
     cfg.approvals.transcript_dirs = [str(tmp_path / "projects")]
-    t3 = _canon(T3, item="", target="")
+    t3 = _canon(VERB_T3, item="", target="")
     filed = _file(log, cfg, t3)
     E.answer(log, cfg, filed.id, "approved", actor=A.resolve_actor(cfg, "me"),
              digest=filed.digest, now=T0)  # fmt: skip  # a person at the terminal: L1
@@ -235,7 +237,7 @@ def test_a_t3_act_refuses_a_level_one_answer_and_a_chat_answer_without_the_opt_i
     assert not got.ok and "L4" in got.message
     assert asks_of(_state(log))[filed.id]["used"] == 0
     # the person typing it in chat does not lift it unless the machine-local opt-in is on
-    other = _file(log, cfg, _canon(T3, item="x", target=""))
+    other = _file(log, cfg, _canon(VERB_T3, item="x", target=""))
     d = Path(cfg.approvals.transcript_dirs[0]) / "slug"
     d.mkdir(parents=True)
     typed = {"type": "user", "uuid": "U1", "timestamp": "2026-10-24T10:00:00Z",
@@ -244,26 +246,28 @@ def test_a_t3_act_refuses_a_level_one_answer_and_a_chat_answer_without_the_opt_i
     (d / "s.jsonl").write_text(json.dumps(typed) + "\n")
     ok, message = H.attest(log, cfg, other.id)
     assert not ok and "accept_chat_for_t3" in message
-    assert not C.operator_gate(log, cfg, _canon(T3, item="x", target=""), approval_id=other.id).ok
+    assert not C.operator_gate(
+        log, cfg, _canon(VERB_T3, item="x", target=""), approval_id=other.id
+    ).ok
 
 
 def test_auto_approval_never_reaches_a_higher_tier(repo, log, monkeypatch):
-    """A standing rule that matches its verb answers a T2 act and is refused for a T3 one:
+    """A standing rule that matches its verb answers a VERB_T2 act and is refused for a VERB_T3 one:
     the contrast proves the rule is live and the tier is what stops it."""
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "t.py")
     cfg = Config()
     cfg.approvals.standing_verbs = [
         *cfg.approvals.standing_verbs,
-        T3,
+        VERB_T3,
     ]  # in scope: only the tier stops it
     always = lambda it, target, c: True  # noqa: E731
-    monkeypatch.setitem(PO.RULES, "t2rule", PO.Rule("t2rule", T2, "x", always))
-    monkeypatch.setitem(PO.RULES, "t3rule", PO.Rule("t3rule", T3, "x", always))
+    monkeypatch.setitem(PO.RULES, "t2rule", PO.Rule("t2rule", VERB_T2, "x", always))
+    monkeypatch.setitem(PO.RULES, "t3rule", PO.Rule("t3rule", VERB_T3, "x", always))
     cfg.approvals.policy = ["t2rule", "t3rule"]
     ok = C.operator_gate(log, cfg, _canon(), reason="r", now=T0)
     assert ok.ok and ok.stamp["via"] == "policy"
-    t3 = _canon(T3, target="")  # item T1 exists, the rule matches, the window covers the verb
+    t3 = _canon(VERB_T3, target="")  # item T1 exists, the rule matches, the window covers the verb
     got = C.operator_gate(log, cfg, t3, reason="r", now=T0)
     assert not got.ok and got.ask_id
     row = asks_of(_state(log))[got.ask_id]
