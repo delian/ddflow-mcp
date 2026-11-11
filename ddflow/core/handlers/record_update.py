@@ -9,6 +9,7 @@ silent drop: strict fold reports it, non-strict records it as a fold problem.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 
 from .. import record_fields as RF
@@ -47,7 +48,7 @@ def _handler(kind: str) -> Callable[[State, Event], None]:
             book, cls = _BOOKS[kind]
             rec = getattr(st, book).setdefault(ev.subject, cls(id=ev.subject))
         for name, value in fields.items():
-            setattr(rec, name, list(value) if isinstance(value, list) else value)
+            setattr(rec, name, copy.deepcopy(value))
 
     return handle
 

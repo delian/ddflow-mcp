@@ -123,14 +123,34 @@ def test_session_and_memory_and_schedule_kinds(seeded, log):
     assert job.prompt == "p\n\nmore" and job.jitter == 3
 
 
-def test_every_kind_has_a_catalogue_entry_with_every_op_decided():
-    for name in RF.KINDS:
-        kd = RF.KINDS[name]
+def test_every_kind_decides_every_operation():
+    """Each operation is accepted by a kind or refused naming the kind, the field and a verb."""
+    for name, kd in RF.KINDS.items():
         for op in RF.OPS:
             if op == "append_body":
                 continue
-            assert op in kd.attrs or op in kd.declined or kd.nearest, (name, op)
+            if op in kd.attrs:
+                continue
+            text = RF.refusal(kd, "X1", op)
+            assert name in text and op.replace("_", "-") in text and "Nearest verb" in text, (
+                name,
+                op,
+            )
     assert set(RF.ALL_KIND_NAMES) >= {"goal", "principle", "waiver", "rule", "trigger", "schedule"}
+
+
+def test_a_rule_is_found_by_its_bare_id(repo):
+    from ddflow.services.rules import Rule
+
+    out = api.rule_add(
+        repo,
+        Rule(id="r-demo-rule", title="Demo rule", content="Always do the demo thing properly."),
+        agent="agent-test",
+    )
+    assert out.exit == O.OK, out.reason
+    out = _upd(repo, "r-demo-rule", append_body="Also this.")
+    assert out.exit == O.OK, out.reason
+    assert api.rule_get(repo, "r-demo-rule").data["content"].endswith("\n\nAlso this.")
 
 
 def test_surfaces_expose_the_catalogue_operations():

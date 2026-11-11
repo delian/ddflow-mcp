@@ -107,8 +107,6 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         if it is None or it.removed:
             gone = " (it was removed from the queue)" if it is not None else ""
             return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
-        if edit.set and (why := item_set(it.family, item, edit)):
-            return O.refused("item.updated", why, id=item)
         fields = plan_edit(cfg, st, it, edit)
         if isinstance(fields, O.Outcome):
             if not (
@@ -197,6 +195,8 @@ def plan_edit(cfg, st, it, edit: ItemEdit) -> dict[str, Any] | O.Outcome:
         if moved:
             return O.refused("item.updated", moved, id=it.id)
 
+    if edit.set and (why := item_set(it.family, it.id, edit)):
+        return O.refused("item.updated", why, id=it.id)
     fields = _edit_fields(edit)
     if edit.append_body:
         base = it.body if edit.body is None else edit.body
