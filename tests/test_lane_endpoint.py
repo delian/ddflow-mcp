@@ -155,9 +155,11 @@ def test_prepare_writes_private_block_and_reports_probe(tmp_path, monkeypatch):
     monkeypatch.setenv("LAN_ENDPOINT_KEY", "sk-sentinel-value")
     pr = E.prepare(_verified(tmp_path), "lan-vllm", "kilo", tmp_path / "home")
     assert isinstance(pr, E.Prepared) and pr.config.is_file()
-    assert pr.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"} and pr.model.endswith(
-        "/SERVED-MODEL-ID"
-    ) and pr.secret_env == {}
+    assert (
+        pr.env == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
+        and pr.model.endswith("/SERVED-MODEL-ID")
+        and pr.secret_env == {}
+    )
     assert pr.probe.status == "unavailable"
     assert E.prepare(_cat(tmp_path), "lan-vllm", "kilo", tmp_path / "h2").status == "unavailable"
     assert not (tmp_path / "h2").exists()  # a refused route writes nothing

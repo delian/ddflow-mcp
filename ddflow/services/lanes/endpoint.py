@@ -243,7 +243,9 @@ class Prepared:
     home: Path
     config: Path
     env: dict[str, str]  #: the key env var -> SOURCE NAME (the value is read live at launch)
-    secret_env: dict[str, str] = field(repr=False)  #: the key env var -> resolved key VALUE (a secret)
+    secret_env: dict[str, str] = field(
+        repr=False
+    )  #: the key env var -> resolved key VALUE (a secret)
     model: str
     probe: Result  #: the live tool-call probe: `unavailable` until the operator runs it
 
@@ -282,4 +284,12 @@ def prepare(
     cfg = write_private(ep, harness, home)
     if isinstance(cfg, Result):
         return cfg
-    return Prepared(ep, home, cfg, launch_env(ep, got), secret_env(ep, got), model_arg(ep), probe_plan(ep, harness))
+    return Prepared(
+        ep,
+        home,
+        cfg,
+        launch_env(ep, got),
+        secret_env(ep, got),
+        model_arg(ep),
+        probe_plan(ep, harness),
+    )
