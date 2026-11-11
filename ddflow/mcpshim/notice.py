@@ -51,6 +51,8 @@ def _by_name(tools: Any) -> dict[str, str]:
 
 def delta(served: Any, live: Any) -> Delta:
     """What the worker's `live` tool list has that the client's `served` one lacks."""
+    if not (isinstance(served, list) and isinstance(live, list)):
+        return Delta()  # a list not loaded yet is no baseline, not an empty one
     old, new = _by_name(served), _by_name(live)
     return Delta(
         added=tuple(sorted(new.keys() - old.keys())),
@@ -86,12 +88,11 @@ def removed_tool(name: Any, served: Any, live: Any, *, name_chars: int) -> str |
     """The message for a call to `name` when the upgrade removed it (the client's `served` list
     has it, the worker's `live` one does not), else None (an ordinary unknown tool). The name is
     echoed at most `name_chars` characters long."""
-    if not isinstance(name, str) or name not in _by_name(served) or name in _by_name(live):
+    if not (isinstance(served, list) and isinstance(live, list) and isinstance(name, str)):
         return None
-    return (
-        f"tool '{_safe(name, name_chars)}' was removed by a ddflow upgrade: "
-        "restart your agent to see the current tools"
-    )
+    if name not in _by_name(served) or name in _by_name(live):
+        return None
+    return f"tool '{_safe(name, name_chars)}' was removed. {message(delta(served, live))}"
 
 
 class RestartNotice:

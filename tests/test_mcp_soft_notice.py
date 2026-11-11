@@ -192,3 +192,15 @@ def test_the_removed_tool_text_does_not_echo_hostile_names_raw():
 def test_removed_tool_with_garbage_inputs_is_none():
     assert N.removed_tool(None, None, None, name_chars=64) is None  # type: ignore[arg-type]
     assert N.removed_tool("a", "x", 3, name_chars=64) is None  # type: ignore[arg-type]
+
+
+def test_a_list_not_loaded_yet_is_no_baseline_not_an_empty_list():
+    live = [tool("doctor")]
+    assert not N.delta(None, live) and not N.delta(live, None)
+    assert notice().footer("unknown", None, live) == ""
+    assert N.removed_tool("doctor", live, None, name_chars=64) is None
+
+
+def test_the_removed_tool_text_contains_the_shared_upgrade_message():
+    text = N.removed_tool("c", OLD, OLD[:2], name_chars=64)
+    assert N.message(N.delta(OLD, OLD[:2])) in text
