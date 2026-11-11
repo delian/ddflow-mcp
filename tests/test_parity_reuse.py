@@ -113,6 +113,17 @@ def test_a_missing_delta_note_is_empty():
     assert R.delta_note(_h("x", "plain", delta="note-that-does-not-exist.md")) == ""
 
 
+def test_a_delta_path_that_escapes_the_note_dir_records_nothing(tmp_path, monkeypatch):
+    # A `delta` that is not a file NAME under DELTA_DIR (a `..` escape) is not a driver
+    # delta note: it must not make an unrecorded gap read as recorded.
+    monkeypatch.setattr(R, "DELTA_DIR", tmp_path)
+    (tmp_path / "note.md").write_text("reason\n")
+    assert R.delta_note(_h("x", "plain", delta="note.md")) == "reason"
+    outside = tmp_path.parent / "_no_such_note_outside.md"
+    outside.write_text("not-a-note")
+    assert R.delta_note(_h("x", "plain", delta="../_no_such_note_outside.md")) == ""  # escaped
+
+
 def test_unrecorded_names_a_bespoke_agent_missing_from_the_recorded_set():
     assert R.unrecorded(recorded=BASELINE) == []
     # a new agent bespoke on the emitter axis, with its gap not yet recorded

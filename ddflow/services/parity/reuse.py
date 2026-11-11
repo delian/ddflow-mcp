@@ -138,7 +138,12 @@ def delta_note(h: HR.Harness) -> str:
     name = getattr(h, "delta", "")
     if not name:
         return ""
+    # ``delta`` is a file NAME under DELTA_DIR: a value that escapes it (an absolute path,
+    # or a ``..``) is not a driver delta note, so it records nothing and the ratchet refuses.
+    note = (DELTA_DIR / name).resolve()
+    if DELTA_DIR.resolve() not in note.parents:
+        return ""
     try:
-        return (DELTA_DIR / name).read_text("utf-8").strip()
+        return note.read_text("utf-8").strip()
     except OSError:
         return ""
