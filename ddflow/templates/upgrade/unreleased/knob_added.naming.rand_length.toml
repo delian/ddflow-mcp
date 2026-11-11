@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.rand_length"
+new = "4"
+why = "Characters in the random name suffix, 3 to 12 (default 4)."
+impact = "additive"

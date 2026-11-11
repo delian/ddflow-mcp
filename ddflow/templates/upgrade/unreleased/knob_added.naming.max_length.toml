@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.max_length"
+new = "48"
+why = "Longest generated name, 16 to 63 (default 48)."
+impact = "additive"

@@ -1,0 +1,8 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "knob_added"
+key = "naming.scope"
+new = "\"global\""
+why = "How far a generated name must be unique by construction: global, host or family (default global)."
+impact = "additive"
