@@ -127,6 +127,8 @@ def test_infer_vocabulary():
     assert kinds.infer("freeform") == "none"
     assert kinds.infer("id", positional=True, record_kind="bug") == "id:bug"
     assert kinds.normalize("phase") == "id:phase"
+    assert kinds.normalize("bug") == "id:bug"
+    assert kinds.normalize("enum") == "enum"
 
 
 def test_an_id_flag_without_a_positional_metavar_is_inferred():

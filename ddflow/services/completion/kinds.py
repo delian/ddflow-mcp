@@ -106,10 +106,14 @@ def record_kind(kind: str) -> str | None:
 
 
 def normalize(kind: str) -> str:
-    """A declared ``complete`` value spelled short as its canonical form (``phase`` -> ``id:phase``)."""
+    """A declared ``complete`` value spelled short as its canonical form.
+
+    A record-kind word is spelled ``id:<word>`` (``phase`` -> ``id:phase``, "bug" ->
+    ``id:bug``); a fixed kind or an ``id:`` form passes through whole.
+    """
     kind = kind.strip()
-    if kind in ("phase",):
-        return "id:phase"
+    if kind in _id_kinds:
+        return f"id:{kind}"
     return kind
 
 

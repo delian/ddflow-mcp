@@ -92,9 +92,9 @@ class Param:
     #: ``phase``/``gate``/``agent``/``state``/``kind``, ``path``/``dir``, ``enum`` from
     #: ``choices``, or ``none`` for free text). Unset: inferred from the name, the choices
     #: and the type by `services.completion.kinds.infer` (`ddflow/services/completion/kinds.py`).
-    #: Short spellings are normalized (``complete="phase"`` -> ``id:phase``) and attached
-    #: onto the argparse action, which the completion engine (`services.completion.values`)
-    #: reads when it builds the completers for the argument.
+    #: Short record-kind spellings are normalized (``complete="phase"`` -> ``id:phase``) and
+    #: attached onto the argparse action, which the completion engine reads when it builds
+    #: the argument's completers.
     complete: str = ""
 
     def __post_init__(self) -> None:
