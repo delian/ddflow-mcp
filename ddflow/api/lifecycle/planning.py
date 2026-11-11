@@ -45,6 +45,7 @@ def plan_for(
     agent: str = "",
     now: float | None = None,
     events: Callable[[], Sequence[Event]] | Sequence[Event] | None = None,
+    with_deps: bool = False,
 ) -> Plan:
     """The ready set for ``purpose``, computed with the caller's identity (``agent``, else
     the configured id, else the log's), the reservation hold and the parallelism limit."""
@@ -62,6 +63,7 @@ def plan_for(
         agent=me,
         hold=_reservation_hold(repo, st, cfg, me, now),
         parallel=FL.limit_for(repo, cfg, st, log.read_all if events is None else events),
+        with_deps=with_deps,
     )
 
 

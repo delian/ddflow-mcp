@@ -11,6 +11,7 @@ from .. import flowcontrol as FC
 from ..admission import glob_conflict
 from ..graph import find_cycles
 from ..model import REVIEW, RUNNING, Item, State
+from ._chain import _chain_scope
 from ._filters import PlanCtx, item_blocker, order_terms
 from ._parallel import _cap_words, parallel_line
 from ._readiness import Blocked, Plan, unpickable
@@ -133,56 +134,22 @@ def _ordered(ctx: PlanCtx, candidates: list[Item]) -> list[Item]:
     return [by_id[x.id] for x in get_optimizer(ctx.cfg.schedule.optimizer).order({}, cands)]
 
 
-def plan(
-    state: State,
-    cfg: Config,
-    *,
-    kind: str = "task",
-    phase: str = "",
-    now: float | None = None,
-    agent: str = "",
-    hold: Callable[[Item], Blocked | None] | None = None,
-    parallel: FC.Decision | None = None,
-) -> Plan:
-    """Compute the ready set.
+def _classify(
+    state: State, cfg: Config, ctx: PlanCtx, candidates: list[Item], p: Plan
+) -> None:
+    """Run ``candidates`` through the readiness filters, in pick order, and place each
+    into exactly one of ``p``'s lists — ready, review, running, interrupted or blocked.
 
-    ``hold`` lets a caller withhold an item the pure state cannot see is spoken for (a
-    waiter in line, `claim` would refuse it): a Blocked it returns goes to ``blocked`` and
-    the item neither takes a slot nor counts against the offered items' overlap check.
-
-    ``phase`` restricts to one phase's tasks -- the "implement phase X" entry point.
-    ``agent`` is the caller's identity: an item this agent already holds counts as
-    running-by-me, not as a conflict against me.
-    """
-    now = time.time() if now is None else now
-    p = Plan()
-    grace = cfg.lease.grace_s
-
-    if kind == "task":
-        # `state.tasks(phase)` walks DESCENDANTS, so sub-tasks nested below a task are
-        # candidates too. Filtering on direct parentage excluded them entirely: a task
-        # split into two left both halves unreachable, and the queue looked empty while
-        # holding the only work there was.
-        candidates = state.tasks(phase)
-    else:
-        candidates = [
-            i
-            for i in state.items.values()
-            if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
-        ]
-    p.cycles = find_cycles(state.live_by_id())
-    in_cycle = {n for c in p.cycles for n in c}
-    live = state.active_leases(now, grace)
-
-    bugs = frozenset(bug_items(state, cfg)) if cfg.schedule.bugs_first else frozenset()
-    ctx = PlanCtx(state, cfg, agent, now, live, in_cycle, p.cycles, bugs)
+    Extracted from :func:`plan` (B-next-phase-hides-blocking-deps): the blocking-dependency
+    probe below must ask the SAME question of a second candidate set, and two copies of
+    the loop would drift exactly the way the duplication this module documents did."""
     for it in _ordered(ctx, candidates):
         if it.terminal:
             continue
         if it.state == REVIEW:
             p.review.append(it)
             continue
-        if it.state == RUNNING and it.id in live:
+        if it.state == RUNNING and it.id in ctx.live:
             # Running and leased. Always reported as running; never offered as ready,
             # INCLUDING to the agent that holds it -- offering it would put the same
             # item in two lists, and a caller iterating `ready` would start it twice.
@@ -209,26 +176,94 @@ def plan(
             state,
             cfg,
             it,
-            live,
-            agent=agent,
-            now=now,
-            in_cycle=in_cycle,
-            cycles=p.cycles,
+            ctx.live,
+            agent=ctx.agent,
+            now=ctx.now,
+            in_cycle=ctx.in_cycle,
+            cycles=ctx.cycles,
         )
         if blocker is not None:
             p.blocked.append(blocker)
-        else:
-            note = interrupted(state, it, live)
-            if note:
-                p.interrupted.append(note)
-                # An INTERRUPTED item (RUNNING, no live lease) is nobody's work right now:
-                # `ddflow recover` resumes it, `claim` refuses it. It is still in flight, so
-                # it is reported under `running`, never offered a free ready slot -- a slot it
-                # took hid CLAIMABLE work behind "held by the cap" with no one to run the
-                # slot (Bcec3b3229f).
-                p.running.append(it)
-                continue
-            p.ready.append(it)
+            continue
+        note = interrupted(state, it, ctx.live)
+        if note:
+            p.interrupted.append(note)
+            # An INTERRUPTED item (RUNNING, no live lease) is nobody's work right now:
+            # `ddflow recover` resumes it, `claim` refuses it. It is still in flight, so
+            # it is reported under `running`, never offered a free ready slot -- a slot it
+            # took hid CLAIMABLE work behind "held by the cap" with no one to run the
+            # slot (Bcec3b3229f).
+            p.running.append(it)
+            continue
+        p.ready.append(it)
+
+
+def _blocking_dependency_items(state: State, cfg: Config, phase: str, ctx: PlanCtx) -> list[Item]:
+    """The ready work items OUTSIDE ``phase`` that ``phase`` transitively waits on.
+
+    `next --phase P` restricts its candidates to P's own tasks, so a phase at the end of a
+    dependency chain never sees the upstream tasks that block it — arming a lane with no
+    in-phase work and no way (from that command) to start the blockers first. These are the
+    ready ones among those upstream items, computed with the SAME readiness filters as the
+    in-phase plan; the caller labels them blocking-dependencies, never in-phase items.
+    """
+    in_phase = state.descendants(phase) | {phase}
+    floor, _before = _chain_scope(state, phase, ctx.cfg)
+    upstream = [it for nid, it in floor.items() if nid not in in_phase and it.is_work]
+    dp = Plan()
+    _classify(state, cfg, ctx, upstream, dp)
+    return dp.ready
+
+
+def plan(
+    state: State,
+    cfg: Config,
+    *,
+    kind: str = "task",
+    phase: str = "",
+    now: float | None = None,
+    agent: str = "",
+    hold: Callable[[Item], Blocked | None] | None = None,
+    parallel: FC.Decision | None = None,
+    with_deps: bool = False,
+) -> Plan:
+    """Compute the ready set.
+
+    ``hold`` lets a caller withhold an item the pure state cannot see is spoken for (a
+    waiter in line, `claim` would refuse it): a Blocked it returns goes to ``blocked`` and
+    the item neither takes a slot nor counts against the offered items' overlap check.
+
+    ``phase`` restricts to one phase's tasks -- the "implement phase X" entry point.
+    ``with_deps`` also surfaces the phase's ready upstream blocking-dependencies in
+    ``blocking_deps`` (never in ``ready``).
+    ``agent`` is the caller's identity: an item this agent already holds counts as
+    running-by-me, not as a conflict against me.
+    """
+    now = time.time() if now is None else now
+    p = Plan()
+    grace = cfg.lease.grace_s
+
+    if kind == "task":
+        # `state.tasks(phase)` walks DESCENDANTS, so sub-tasks nested below a task are
+        # candidates too. Filtering on direct parentage excluded them entirely: a task
+        # split into two left both halves unreachable, and the queue looked empty while
+        # holding the only work there was.
+        candidates = state.tasks(phase)
+    else:
+        candidates = [
+            i
+            for i in state.items.values()
+            if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
+        ]
+    p.cycles = find_cycles(state.live_by_id())
+    in_cycle = {n for c in p.cycles for n in c}
+    live = state.active_leases(now, grace)
+
+    bugs = frozenset(bug_items(state, cfg)) if cfg.schedule.bugs_first else frozenset()
+    ctx = PlanCtx(state, cfg, agent, now, live, in_cycle, p.cycles, bugs)
+    _classify(state, cfg, ctx, candidates, p)
+    if with_deps and phase:
+        p.blocking_deps = _blocking_dependency_items(state, cfg, phase, ctx)
 
     # TWO caps, because they are two different statements and `min()` of them was one
     # number pretending to be one statement:

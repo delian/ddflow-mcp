@@ -275,7 +275,8 @@ def next_text(out, a, ctx) -> str | None:
     if out.exit == FAIL:
         return None
     p = out.data["_render"]["plan"]
-    if not p.ready:
+    bdeps = p.blocking_deps
+    if not p.ready and not bdeps:
         more = (
             [f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_NO_READY} more (--json holds them all)"]
             if len(p.blocked) > _BLOCKED_SHOWN_NO_READY
@@ -292,14 +293,26 @@ def next_text(out, a, ctx) -> str | None:
                 *([note] if (note := out.data.get("_footer")) else []),
             ]
         )
-    lines = [f"Ready ({p.summary()}):"]
-    for it in p.ready:
+    lines = []
+    def ready_line(it):
         tier = tier_of(it.tags)
-        lines.append(f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else ""))
-        if it.globs:
-            lines.append(f"      writes: {', '.join(it.globs)}")
-    if len(p.ready) > 1:
-        lines.append("\nThese are independent — run them in parallel worktrees.")
+        return f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else "")
+    if p.ready:
+        lines.append(f"Ready ({p.summary()}):")
+        for it in p.ready:
+            lines.append(ready_line(it))
+            if it.globs:
+                lines.append(f"      writes: {', '.join(it.globs)}")
+        if len(p.ready) > 1:
+            lines.append("\nThese are independent — run them in parallel worktrees.")
+    if bdeps:
+        lines.append(
+            f"Blocking dependencies ({len(bdeps)} ready to start — do these to unblock the phase):"
+        )
+        for it in bdeps:
+            lines.append(ready_line(it) + "  [blocking-dependency]")
+            if it.globs:
+                lines.append(f"      writes: {', '.join(it.globs)}")
     lines += [
         f"  (blocked) {b.item}: {b.reason} — {b.detail}"
         for b in p.blocked[:_BLOCKED_SHOWN_WITH_READY]

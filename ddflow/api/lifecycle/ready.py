@@ -28,7 +28,12 @@ DEFAULT_CHECK_RECOVERY = True
 
 
 def next_(
-    repo: Path, *, kind: str = DEFAULT_NEXT_KIND, phase: str = "", agent: str = ""
+    repo: Path,
+    *,
+    kind: str = DEFAULT_NEXT_KIND,
+    phase: str = "",
+    agent: str = "",
+    phase_only: bool = False,
 ) -> O.Outcome:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     ``phase`` names no item (`_unknown_phase`)."""
@@ -72,13 +77,24 @@ def next_(
         if rep.changes:
             log, cfg, st = _load(repo, agent)
     me = cfg.agent.id or log.agent_id
-    p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me)
+    p = plan_for(
+        repo,
+        log,
+        cfg,
+        st,
+        purpose="offer",
+        kind=kind,
+        phase=phase,
+        agent=me,
+        with_deps=bool(phase) and not phase_only,
+    )
     LS.surface_contests(p, st, cfg)  # B2809f4213b: a contested claim is not 'running'
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
         "promoted": promoted,
         "ready": _ready_rows(p.ready),
+        "blocking_deps": _blocking_dep_rows(p.blocking_deps),
         "blocked": [plain(b) for b in p.blocked],
         "running": [i.id for i in p.running],
         "cycles": p.cycles,
@@ -89,7 +105,7 @@ def next_(
     }
     if contested := [LS.contest_row(st, cfg, i) for i in LS.contested_items(st)]:
         data["contested"] = contested
-    if p.ready:
+    if p.ready or p.blocking_deps:
         return O.ok("next", **data)
     # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
     # phase close, which `close_note` then spells out (B28268eba1a).
@@ -107,6 +123,15 @@ def _ready_rows(items) -> list[dict[str, Any]]:
         if tier := tier_of(i.tags):
             row["tier"] = tier
         rows.append(row)
+    return rows
+
+
+def _blocking_dep_rows(items) -> list[dict[str, Any]]:
+    """A blocking dependency's ready item as a row, in the ready-row shape plus an explicit
+    `blocking_dependency` marker -- the label that keeps it distinct from an in-phase item."""
+    rows = _ready_rows(items)
+    for row in rows:
+        row["blocking_dependency"] = True
     return rows
 
 
