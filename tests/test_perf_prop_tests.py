@@ -121,6 +121,15 @@ def test_a_missing_miss_is_unavailable_not_a_miss():
     assert prop_tests.propose_selection(runs, cfg=cfg) is None
 
 
+def test_a_fractional_miss_is_unavailable_not_a_measured_zero():
+    """A fractional miss count is unmeasured, never int()-truncated toward zero: it neither
+    triggers a widen nor a narrow, so a run that recorded a fractional miss can never be
+    read as a clean full run."""
+    cfg = PerfMetricsConfig(prop_select_miss_min=2, prop_select_min_runs=2)
+    runs = [{"selected_fraction": 1.0, "misses": 0.9}, {"selected_fraction": 1.0, "misses": 0.9}]
+    assert prop_tests.propose_selection(runs, cfg=cfg) is None
+
+
 def test_a_full_selection_with_no_miss_is_a_narrow():
     cfg = PerfMetricsConfig(prop_select_miss_min=2, prop_select_min_runs=2)
     runs = [{"selected_fraction": 1.0, "misses": 0}, {"selected_fraction": 1.0, "misses": 0}]
@@ -138,3 +147,15 @@ def test_every_kind_names_a_real_next_call():
     the parity ratchet reads it without a separate page."""
     call = prop_tests._NEXT_CALLS["shard"]
     assert "ddflow decision add" in call  # resolve the parity ratchet would check
+
+
+def test_a_split_proposal_next_call_names_the_file():
+    """``Proposal.next_call`` substitutes the file the evidence selected -- not the static
+    ``<file>`` placeholder -- so the accept command is the exact call for that proposal."""
+    cfg = PerfMetricsConfig(prop_split_share=0.5)
+    rollup = _rollup({"tests/test_a.py": 8.0, "tests/test_b.py": 2.0}, workers=1)
+    sizes = {"tests/test_a.py": 200, "tests/test_b.py": 10}
+    [p] = prop_tests.propose_split_files(rollup, sizes=sizes, max_file_bytes=100, cfg=cfg)
+    call = p.next_call()
+    assert "ddflow split tests/test_a.py" in call
+    assert "<file>" not in call
