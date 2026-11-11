@@ -36,7 +36,9 @@ def _next(repo, a, agent):
         out = _api().next_lane(
             repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
         )
-        token = _lane_token(lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only)
+        token = _lane_token(
+            lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase, phase_only
+        )
         return _cap(repo, out, token, a)  # its footer names the lane call
     return _cap(
         repo,

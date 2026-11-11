@@ -462,7 +462,11 @@ def test_max_chars_doc_says_four_chars_a_token_is_ascii_only(repo):
     run_cli(repo, "init")
     text = run_cli(repo, "config", "--explain")[1]
     block = text[text.index("output.max_chars") :]
-    block = block[: block.index("output.non_ascii_weight")] if "output.non_ascii_weight" in block else block
+    block = (
+        block[: block.index("output.non_ascii_weight")]
+        if "output.non_ascii_weight" in block
+        else block
+    )
     assert "ASCII" in block and "non_ascii_weight" in block
 
 
