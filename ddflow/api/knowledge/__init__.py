@@ -31,6 +31,7 @@ from .bug_close import (  # noqa: F401
 from .bug_dedupe import dedupe_bugs  # noqa: F401
 from .bug_repro import repro_lead  # noqa: F401
 from .bug_tags import bug_tag, found_tags, get_tags, reserved, set_tags  # noqa: F401
+from .bug_duplicate import bug_duplicate, open_duplicates  # noqa: F401
 from .bug_void import bug_invalid  # noqa: F401
 from .bugs import (  # noqa: F401
     BUG_REPORT_COMMAND,

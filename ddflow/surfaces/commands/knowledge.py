@@ -357,6 +357,12 @@ def _bug_fixed(a, c: Ctx) -> int:
         )
     if out.data.get("landed"):
         tail += f"\n  fix landed in {out.data['landed'][:12]}" + _fix_task_tail(out.data)
+    dups = out.data.get("open_duplicates") or []
+    if dups:
+        tail += (
+            f"\n  open duplicates linked to {a.id}: {', '.join(dups)} -- close each explicitly "
+            f"(`ddflow bug duplicate <id> --of {a.id}`, its own `bug fixed`, or `bug invalid`)"
+        )
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
@@ -368,6 +374,7 @@ def _bug_fixed(a, c: Ctx) -> int:
                 "regression_verify",
                 "lesson_captured",
                 "lesson_capture",
+                "open_duplicates",
             )
         ),
     )

@@ -14,6 +14,7 @@ from ...infra import worktree as W
 from ...services import completion as CM
 from ...services import gates as G
 from .._base import _load
+from .bug_duplicate import open_duplicates
 from .bug_lint import _close_lint_exempt, _is_node_id
 from .bugs import _unknown_bug
 from .fix_task_drop import (  # noqa: F401 -- re-exported by the package
@@ -162,6 +163,8 @@ def bug_fixed(  # noqa: PLR0913 -- one keyword per close facet, all keyword-only
         # The lesson that now holds the text: the new one, or the one it was added to.
         lesson_captured=capture.get("captured") or capture.get("extended", ""),
         lesson_capture=capture,
+        # Reports linked to this bug as its duplicates: each is closed explicitly, never here.
+        open_duplicates=open_duplicates(fold(log.read_all(), strict=False), item),
     )
 
 
