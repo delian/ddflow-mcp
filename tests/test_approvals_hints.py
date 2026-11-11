@@ -136,6 +136,7 @@ def test_the_reviewer_refusal_carries_the_route():
         "ddflow approvals ask {{ ask_id }}; then --approval",
         "ddflow approvals ask {{ ask_id }}; --approval {{ ask_id }}; approve it now",
         "ddflow approvals ask --approval request",
+        "`ddflow approvals ask {{ ask_id }}` (`ddflow approvals\nask --yes`) --approval {{ ask_id }}",
         "`ddflow approvals ask {{ ask_id }}` (`ddflow approvals ask --yes`) --approval {{ ask_id }}",
         'echo "ddflow approvals ask {{ ask_id }}" and ddflow approvals ask nope --approval {{ ask_id }}',
         "`ddflow approvals ask {{ ask_id }}` && `ddflow approvals ask nope` --approval {{ ask_id }}",

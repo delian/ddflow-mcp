@@ -55,7 +55,7 @@ _FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "yourself",
 _FLAG = re.compile(r"--approval[ =]+[`'\"]*([^\s`'\".,;:)]+)")
 _MAX_CHARS = 1200
 #: A route is prose: shell syntax in it is how a second command rides along with the first.
-_SHELLISH = re.compile(r"[;|&$<>\\]|\becho\b|\beval\b")
+_SHELLISH = re.compile(r"[;|&$<>\\\n\r]|\becho\b|\beval\b")
 #: Anything shaped like an ask id: only the bound one may appear in a route.
 _ANY_ID = re.compile(r"\bQ[0-9a-f]{10}\b")
 
