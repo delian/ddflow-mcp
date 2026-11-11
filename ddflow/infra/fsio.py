@@ -102,12 +102,12 @@ def rmtree_owned(path: Path | str, *, ignore_errors: bool = True) -> None:
     else:
         try:
             resolved = p.resolve()
-        except OSError:
+        except (OSError, RuntimeError):  # RuntimeError = a symlink loop (pathlib < 3.13)
             reason = f"rmtree_owned: {str(p)!r} cannot be resolved; refused"
         else:
             try:
                 cwd = Path.cwd().resolve()
-            except OSError:  # cwd unlinked: compare to the root only, still remove a safe tree
+            except (OSError, RuntimeError):  # cwd unlinked: compare to the root only
                 cwd = None
             reason = (
                 "rmtree_owned: refusing to remove the current directory"
