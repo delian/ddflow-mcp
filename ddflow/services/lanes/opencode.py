@@ -264,8 +264,8 @@ def prepare(  # noqa: PLR0913 - one call that writes the whole private lane
         values={"model": ep.model, "dir": str(worktree)},
         prompt=prompt,
         cwd=str(worktree),
-        env={},  # the child's key env vars come from the secret-resolved `ep.env` below
-        secret_env=dict(ep.env),
+        env=dict(ep.env),
+        secret_env=dict(ep.secret_env),
         fixed_env=dict(hooks.env),
         home=home,
         pass_env=pass_env,
