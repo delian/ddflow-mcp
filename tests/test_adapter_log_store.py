@@ -87,22 +87,30 @@ def test_the_adapter_and_the_fake_satisfy_the_port():
     assert FAKES["LogStore"] is FakeLogStore
 
 
+def _stream(events) -> list[tuple]:
+    return [(e.kind, e.subject, dict(e.data), e.agent, e.lamport) for e in events]
+
+
 def test_replay_the_real_log_through_adapter_and_fake(tmp_path):
-    """The default adapter reads the current jsonl shards byte-for-byte unchanged, and the
-    fake reproduces the same stream: replaying one real log through both agrees."""
+    """The default adapter reads the current jsonl shards unchanged, and the fake
+    REPLAYS the very records the real log holds: one real log through both agrees on the
+    full stream (kind, subject, data, agent, lamport), not just the subjects."""
     real = EventLog(tmp_path, "probe")
     real.stamp = False  # the storage write; the SAME write the adapter issues
-    expected = [f"s{i}" for i in range(5)]
-    for i in range(5):
-        real.append(KIND, expected[i], {"marker": i})
+    payloads = [{"marker": i} for i in range(5)]
+    for i, data in enumerate(payloads):
+        real.append(KIND, f"s{i}", data)
 
     store = LocalLogStore(tmp_path, agent_id="probe")
-    assert _subjects(store.read_from(0)) == expected
 
+    # Replay the REAL log's records through the fake, agent and all, not a second loop.
     fake = FakeLogStore()
-    for i in range(5):
-        fake.append(KIND, expected[i], {"marker": i})
-    assert _subjects(fake.read_from(0)) == expected
+    for e in real.read_all():
+        fake.append(e.kind, e.subject, e.data, agent=e.agent)
+
+    stream = _stream(store.read_from(0))
+    assert stream == _stream(fake.read_from(0))
+    assert [e.lamport for e in store.read_from(0)] == [1, 2, 3, 4, 5]
 
 
 def test_fake_supports_multiple_agent_shards_and_compaction():
@@ -134,3 +142,11 @@ def test_default_adapter_writes_real_jsonl_shards(tmp_path):
     shard = tmp_path / ".ddflow" / "events" / "w.jsonl"
     assert shard.is_file(), "the default adapter writes the jsonl shard, not an abstraction"
     assert _subjects(store.read_from(0)) == ["x"]
+
+
+def test_fake_append_many_is_an_atomic_unit_and_does_not_deadlock():
+    f = FakeLogStore()
+    out = f.append_many([(KIND, "a", {"n": 1}), (KIND, "b", {"n": 2})])
+    assert [e.subject for e in out] == ["a", "b"]
+    assert [e.lamport for e in out] == [1, 2]
+    assert _subjects(f.read_from(0)) == ["a", "b"]

@@ -73,18 +73,26 @@ class FakeLogStore:
         self._default_agent = "agent"
 
     def append(self, kind, subject, data=None, *, agent=""):
-        agent = agent or self._default_agent
         with self._lock:
-            self._lamport += 1
-            ev = _Event(kind, subject, dict(data or {}), agent, self._lamport, _eid(
-                kind, subject, dict(data or {}), agent, self._lamport
-            ))
-            self._shards.setdefault(f"{agent}.jsonl", []).append(ev)
-            return ev
+            return self._write(kind, subject, data, agent or self._default_agent)
 
     def append_many(self, items):
         with self._lock:
-            return [self.append(kind, subject, data) for kind, subject, data in items]
+            return [
+                self._write(kind, subject, data, self._default_agent)
+                for kind, subject, data in items
+            ]
+
+    def _write(self, kind: str, subject: str, data: Any, agent: str) -> _Event:
+        """One event, with the lock already held (an `append` nested under the lock would
+        deadlock a non-reentrant `threading.Lock`)."""
+        self._lamport += 1
+        data = dict(data or {})
+        ev = _Event(
+            kind, subject, data, agent, self._lamport, _eid(kind, subject, data, agent, self._lamport)
+        )
+        self._shards.setdefault(f"{agent}.jsonl", []).append(ev)
+        return ev
 
     def _events(self) -> list[_Event]:
         seen: set[str] = set()
