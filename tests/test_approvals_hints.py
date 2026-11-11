@@ -169,3 +169,13 @@ def test_the_reviewer_refusal_keeps_a_command_reviewer_off_the_chat_route():
     assert (
         msg.index("ddflow reviewers approve") < msg.index("at the host") < msg.index("--approval")
     )
+
+
+def test_an_override_much_longer_than_the_shipped_route_is_ignored(tmp_path):
+    p = tmp_path / "approvals.md"
+    p.write_text(
+        "<!-- section: route -->\nRun `ddflow approvals ask {{ ask_id }}` then --approval {{ ask_id }} "
+        + "and read this long note. " * 400
+        + "\n"
+    )
+    assert H.route(GOOD, overrides={H.NAME: str(p)}) == H.route(GOOD)

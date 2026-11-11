@@ -90,12 +90,15 @@ def _render(
     need: str = "",
     **vars: str,
 ) -> str:
-    for ov in (overrides, None):  # the project's text first, the shipped text if it is unusable
+    # The project's text first, the shipped text if it is unusable. A route stays about as
+    # long as the shipped one (twice it at most), so it cannot swamp a lean-charter brief.
+    shipped = P.render(_section(name, None, None), **vars).strip()
+    for where, ov in ((repo, overrides), (None, None)):
         try:
-            out = P.render(_section(name, repo, ov), **vars).strip()
+            out = P.render(_section(name, where, ov), **vars).strip()
         except (P.TemplateError, OSError):
             continue
-        if _sound(out, ident, need or ident):
+        if len(out) <= 2 * len(shipped) and _sound(out, ident, need or ident):
             return out
     return ""
 
