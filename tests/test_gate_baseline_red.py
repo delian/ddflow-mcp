@@ -795,7 +795,9 @@ def test_a_command_that_is_no_pytest_stays_failed_and_claims_nothing_new(repo) -
     assert "new_failures" not in ev["baseline"] and not ev["baseline"].get("unmeasured")
 
 
-def test_a_baseline_red_fix_task_names_the_source_files_the_tests_exercise(repo, monkeypatch) -> None:
+def test_a_baseline_red_fix_task_names_the_source_files_the_tests_exercise(
+    repo, monkeypatch
+) -> None:
     """B83543b98f4: `_file` passed no globs, so the baseline-red bug's fix task inherited the
     finding item's own (test) globs instead of the source files the failing tests exercise --
     the fix edits source files its own task globs never named. The filed globs must name the

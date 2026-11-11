@@ -160,7 +160,8 @@ def _imported_and_governed(
     out = {
         by_module[resolved]
         for name in TR.imports(test, source)
-        if (resolved := TR.resolve(name, known)) in by_module and not is_test_file(by_module[resolved])
+        if (resolved := TR.resolve(name, known)) in by_module
+        and not is_test_file(by_module[resolved])
     }
     out.update(p for p in lib if any(fnmatch(p, g) for g in _governs(source)))
     return out
