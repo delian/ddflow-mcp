@@ -357,7 +357,6 @@ COMMANDS: tuple[Command, ...] = (
             f"bug {a['id']} closed as a duplicate of {out.data['of']} "
             f"(guarded by {out.data['regression_test']})"
         ),
-        wire_shape=(("bug", "duplicate"), {}),
         params=(
             Param("id", help="The open duplicate bug to close.", cli_help="", positional=True),
             Param(
