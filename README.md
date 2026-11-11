@@ -508,8 +508,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=450a61e29fd9 -->
-<details><summary>All 104 commands</summary>
+<!-- ddflow:begin README/commands sha=f9b8c84d6128 -->
+<details><summary>All 105 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -606,6 +606,7 @@ needs a line written by hand here.
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
 | `ddflow dispatch` | the dispatcher's plan: what to start now, in order, on which lane (advise only) |
 | `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
+| `ddflow lease` | the lease holders and how long each has been quiet (idle ones flagged); the holders of `lanes --coordinator` |
 | `ddflow restart` | soft upgrade: reload this MCP server's code and re-bind its tools, keeping the connection |
 | `ddflow kill` | hard upgrade: end this MCP server's process so your client respawns it fresh |
 | `ddflow paths` | workflow-path variants: directly-follows, top variants, burst overlap, superseded passes, out-of-order |
