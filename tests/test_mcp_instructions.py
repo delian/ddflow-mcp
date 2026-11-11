@@ -39,6 +39,13 @@ def _manual(repo: Path) -> str:
     return H.render_topic("manual", repo)
 
 
+def _brief_lines(repo: Path) -> str:
+    from ddflow.services import brief_volatile
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    return brief_volatile.volatile_lines(_instruction_vars(repo))
+
+
 # -- bootstrap ------------------------------------------------------------------------
 
 
@@ -107,16 +114,19 @@ def test_every_companion_is_named_with_the_gates_it_serves(repo):
 def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
     """The charter says there are companions to wire up and to PROPOSE them; the operator decides.
 
-    The state-specific list (install command per companion) is `ddflow_companions`, so the
-    handshake stays a charter; the rules for proposing are in the manual.
+    The state-specific list (install command per companion) is `ddflow_companions`; the
+    volatile per-session lines render in the brief, not the handshake
+    (B-mcp-instructions-volatile-prefix), so the handshake stays byte-stable.
     """
 
     run_cli(repo, "init")
     text = _instructions(repo)
-    assert "not wired up" in text and "ddflow_companions" in text and "Propose" in text
+    assert "not wired up" not in text  # moved to the brief
+    brief = _brief_lines(repo)
+    assert "not wired up" in brief and "ddflow_companions" in brief and "Propose" in brief
     manual = _manual(repo)
     assert "Propose; never install" in manual
-    assert "unavailable" in manual and "install nothing unasked" in text
+    assert "unavailable" in manual and "install nothing unasked" in brief
 
 
 def test_the_companion_line_is_only_said_when_one_needs_action(repo):
@@ -231,22 +241,23 @@ def test_the_handshake_does_not_write_to_the_repository(repo):
 
 
 def test_gates_with_no_tool_behind_them_are_still_said(repo):
-    """End to end: a fresh project has gates with no companion behind them, and the served
-    instructions say so (the signal the charter must not lose)."""
+    """End to end: a fresh project has gates with no companion behind them, and the brief
+    says so (the signal the charter must not lose) -- where it is per-session state, not
+    the byte-stable handshake."""
     run_cli(repo, "init")
     text = _instructions(repo)
-    assert "Gates with no tool behind them:" in text, text[-600:]
-    assert "never imply one ran" in text
+    assert "Gates with no tool behind them:" not in text  # moved to the brief
+    assert "never imply one ran" in _brief_lines(repo)
 
 
 def test_a_registered_companion_is_absent_from_the_served_notice(repo):
-    """End to end on the served text: context7 is registered, so the notice names the others only."""
+    """End to end on the brief: context7 is registered, so the notice names the others only."""
     from ddflow.services import companions as CO
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
     CO.register(repo, comp, "claude")
-    line = next(ln for ln in _instructions(repo).splitlines() if "not wired up" in ln)
+    line = next(ln for ln in _brief_lines(repo).splitlines() if "not wired up" in ln)
     assert "context7" not in line and "roborev" in line, line
 
 
