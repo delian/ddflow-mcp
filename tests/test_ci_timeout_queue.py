@@ -83,6 +83,6 @@ def test_the_queue_wait_is_recorded_apart_and_never_counts_against_the_timeout(m
     """The queue wait is carried as the dedicated ``waited_s`` (B1d51fb9da1), the run's own
     ``elapsed_s`` is the check time alone, and none of the wait came off the run budget."""
     res, budget = _drive(monkeypatch, timeout_s=30, wait_s=12.5, run_s=8.0)
-    assert budget == 30            # the whole timeout survived the 12.5 s queue wait
-    assert res.waited_s == 12.5    # recorded separately (never as run time)
-    assert res.elapsed_s == 8.0    # the run, not wait + run
+    assert budget == 30  # the whole timeout survived the 12.5 s queue wait
+    assert res.waited_s == 12.5  # recorded separately (never as run time)
+    assert res.elapsed_s == 8.0  # the run, not wait + run
