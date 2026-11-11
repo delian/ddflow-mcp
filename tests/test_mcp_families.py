@@ -86,7 +86,9 @@ def test_route_resolves_the_member_and_drops_the_action():
 def test_a_members_own_action_argument_is_op_in_its_family():
     assert not {t for t in TOOLS if "op" in TOOLS[t]["properties"]}
     owners = {t: F.placement(t) for t in TOOLS if "action" in TOOLS[t]["properties"]}
-    assert len(owners) == 6  # `ddflow_perf` (action=perf) joined the `view` family (fix-B92ab2d8f54)
+    assert (
+        len(owners) == 6
+    )  # `ddflow_perf` (action=perf) joined the `view` family (fix-B92ab2d8f54)
     for tool, (family, action) in owners.items():
         props = FS.family_entry(family)["inputSchema"]["properties"]
         assert props["action"]["enum"] and "op" in props
