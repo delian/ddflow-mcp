@@ -188,3 +188,5 @@
 {"agent":"close-bldupes","data":{"at":1794421017.04283,"holder":"close-bldupes"},"id":"e13beff7bbe111dc31317c8c1","kind":"lease.renewed","lamport":176662,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T18:16:57.177116Z"}
 {"agent":"close-bldupes","data":{"at":1794421278.2797203,"holder":"close-bldupes"},"id":"e07c5bb78e105771a138921d2","kind":"lease.renewed","lamport":176668,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T18:21:18.421847Z"}
 {"agent":"close-bldupes","data":{"at":1794421540.5895789,"holder":"close-bldupes"},"id":"e74770d3bb5f9343de896f11a","kind":"lease.renewed","lamport":176682,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T18:25:40.766084Z"}
+{"agent":"close-bldupes","data":{"at":1794421799.6382043,"holder":"close-bldupes"},"id":"ecc040e36c417563fed8b81bf","kind":"lease.renewed","lamport":176714,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T18:29:59.766831Z"}
+{"agent":"close-bldupes","data":{"at":1794422066.5256672,"holder":"close-bldupes"},"id":"e91007963e24c354ec085cf5a","kind":"lease.renewed","lamport":176751,"schema":1,"subject":"B-dup-closure","ts":"2026-11-11T18:34:26.661950Z"}
