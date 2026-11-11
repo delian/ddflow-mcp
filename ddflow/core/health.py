@@ -20,6 +20,10 @@ Six conditions, each with evidence and the command that corrects it:
                gone and which was last renewed ``crash_s`` ago: the work is at risk, never the
                lane's fault.
 * RUNAWAY      a job still running after ``runaway_s``.
+* ORPHAN_WAIT  a lane showing no progress for ``orphan_s`` whose newest registered run (a
+               gate, review, ci or pins run in the live-run registry) is already finished
+               -- its outcome recorded -- or whose process is gone with no outcome: the
+               lane is 'waiting on nothing' and the run must be rerun.
 
 Nothing here decides to act; `services.healthwatch` turns findings into corrections.
 """
@@ -33,7 +37,8 @@ from . import clock
 
 STALLED, LOCKED, CRASHED, RUNAWAY = "stalled", "locked", "crashed", "runaway"
 IDLE, UNRESPONSIVE = "idle", "unresponsive"
-KINDS = (CRASHED, LOCKED, UNRESPONSIVE, STALLED, IDLE, RUNAWAY)
+ORPHAN_WAIT = "orphan_wait"
+KINDS = (CRASHED, LOCKED, UNRESPONSIVE, STALLED, IDLE, ORPHAN_WAIT, RUNAWAY)
 
 
 @dataclass(frozen=True)
@@ -78,6 +83,22 @@ class Wait:
 
 
 @dataclass(frozen=True)
+class Run:
+    """One registered gate/review/ci/pins run of an item (the live-run registry,
+    `services.gates.running`). `alive` says whether the process is still going (None =
+    unknown: another host, or the run left no marker); `outcome` is the recorded outcome
+    of a run that finished ("" while none is recorded)."""
+
+    item: str
+    gate: str
+    pid: int = 0
+    started_at: float = 0.0
+    alive: bool | None = None
+    log_path: str = ""
+    outcome: str = ""
+
+
+@dataclass(frozen=True)
 class Limits:
     """Seconds; 0 turns a check off. The shipped values are `[health]`'s, not these."""
 
@@ -86,6 +107,7 @@ class Limits:
     idle_s: float = 0
     reply_s: float = 0
     crash_s: float = 0
+    orphan_s: float = 0
 
 
 @dataclass(frozen=True)
@@ -286,6 +308,54 @@ def _runaways(procs: list[Proc], now: float, limit: float) -> list[Finding]:
     ]
 
 
+def _orphan(lane: Lane, run: Run, now: float) -> Finding:
+    """One lane whose newest registered run is already over: it is 'waiting on nothing'."""
+    age = now - run.started_at
+    name = f"{run.gate} run {run.pid}" if run.pid else run.gate
+    if run.outcome:
+        detail = (
+            f"waits on {name} that ended {_age(age)} ago "
+            f"(outcome recorded: {run.outcome}, see `ddflow gate status`)"
+        )
+    else:
+        where = f" (log: {run.log_path})" if run.log_path else ""
+        detail = f"waits on {name} that died with no outcome{where}"
+    return Finding(
+        ORPHAN_WAIT,
+        lane.item,
+        lane.holder,
+        age,
+        detail,
+        f"rerun: `ddflow review {lane.item} --gate {run.gate}`",
+        {"gate": run.gate, "pid": run.pid, "outcome": run.outcome, "log_path": run.log_path},
+    )
+
+
+def _orphans(
+    lanes: list[Lane], runs: list[Run], now: float, limits: Limits
+) -> list[Finding]:
+    """A lane that showed no progress for ``orphan_s`` while its newest registered run is
+    finished, or whose pid is gone with no recorded outcome, is waiting on nothing."""
+    if limits.orphan_s <= 0:
+        return []
+    newest: dict[str, Run] = {}
+    for r in runs:
+        if r.item not in newest or r.started_at > newest[r.item].started_at:
+            newest[r.item] = r
+    out: list[Finding] = []
+    for ln in lanes:
+        if not ln.live:
+            continue
+        r = newest.get(ln.item)
+        if r is None:
+            continue
+        if now - ln.progress_at < limits.orphan_s:
+            continue  # progress since the run: not waiting on nothing
+        if r.outcome or r.alive is False:
+            out.append(_orphan(ln, r, now))
+    return out
+
+
 def _judge(
     ln: Lane,
     waiters: list[str],
@@ -317,11 +387,14 @@ def inspect(
     cycles: list[dict[str, Any]],
     now: float,
     limits: Limits,
+    runs: list[Run] = (),
 ) -> list[Finding]:
     """Every finding for these facts, ordered by `KINDS`, then by item.
 
     ``cycles`` are `leasewait.Cycle.as_dict()` rows. A lane is judged on its own facts: a
-    lane in a cycle is LOCKED even when it is also stalled (both are reported)."""
+    lane in a cycle is LOCKED even when it is also stalled (both are reported). ``runs``
+    are the live-run registry rows (`Run`): a lane waiting on one that is already over is
+    ORPHAN_WAIT."""
     out: list[Finding] = []
     by_item = {ln.item: ln for ln in lanes}
     waiting_for: dict[str, list[str]] = {}
@@ -337,4 +410,5 @@ def inspect(
     out += _cycle_locks(cycles, seen)
     out += _stalled_locks(waits, by_item, stalled, seen, now)
     out += _runaways(procs, now, limits.runaway_s)
+    out += _orphans(lanes, runs, now, limits)
     return sorted(out, key=lambda f: (KINDS.index(f.kind), f.item, f.holder))
