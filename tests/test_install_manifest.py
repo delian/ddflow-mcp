@@ -171,3 +171,12 @@ def test_a_file_behind_an_unreadable_directory_is_unknown_not_gone(repo, log):
         assert IM.read(log, repo, "claude").changed == []
     finally:
         (repo / "d").chmod(0o755)
+
+
+def test_a_path_that_is_not_a_regular_file_is_not_read(tmp_path):
+    import os
+
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    assert IM.file_digest(fifo) is None  # would block forever if it were opened
+    assert IM.file_digest(tmp_path) is None
