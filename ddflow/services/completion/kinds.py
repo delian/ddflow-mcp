@@ -149,7 +149,7 @@ def infer(
         return "enum"
     # A name that IS the generic id word (an `id` positional under a command, or a
     # positional that takes many ids at once): a record verb narrows it to its own kind.
-    if name == "id" or name == "ids":
+    if name in {"id", "ids"}:
         return f"id:{record_kind}" if positional and record_kind else "id"
     # A name spelled ``<kind>_id`` (``decision_id``, ``research_id``): the kind's ids.
     if name.endswith("_id"):

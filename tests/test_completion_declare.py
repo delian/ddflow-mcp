@@ -117,7 +117,7 @@ def test_declared_complete_is_attached_to_the_action():
         ],
     )
     probe = subparsers.choices["probe"]
-    positional = [a for a in probe._actions if not a.option_strings][0]
+    positional = next(a for a in probe._actions if not a.option_strings)
     assert positional.complete == "id:bug"
 
 
@@ -186,5 +186,5 @@ def test_declared_shorthand_is_normalized_on_the_action():
             ),
         ],
     )
-    positional = [a for a in subparsers.choices["probe"]._actions if not a.option_strings][0]
+    positional = next(a for a in subparsers.choices["probe"]._actions if not a.option_strings)
     assert positional.complete == "id:phase"
