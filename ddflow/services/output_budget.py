@@ -41,11 +41,18 @@ def wants_bounded(a: Any) -> bool:
 
 
 def budget_chars(cfg: Any) -> int:
-    """The character budget in force, from `[output].max_chars` (0 lifts the cap)."""
+    """The character budget in force: `[output].max_chars` when a config is given and it is
+    set (0 lifts the cap), else the shipped `DEFAULT_CHARS`."""
     try:
-        return int(getattr(getattr(cfg, "output", None), "max_chars", 0) or 0)
-    except (AttributeError, TypeError, ValueError):
-        return 0
+        val = getattr(getattr(cfg, "output", None), "max_chars", None)
+    except AttributeError:
+        val = None
+    if val is None:
+        return DEFAULT_CHARS
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return DEFAULT_CHARS
 
 
 @dataclass(frozen=True)

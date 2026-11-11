@@ -76,3 +76,13 @@ def test_wants_bounded_reads_brief_or_agent():
     assert B.wants_bounded(SimpleNamespace(brief=True)) is True
     assert B.wants_bounded(SimpleNamespace(brief=False)) is B.is_agent()
     assert B.wants_bounded({"brief": True}) is True
+
+
+def test_no_config_uses_the_shipped_default_char_budget():
+    # A surface render without a config must still cap (finding: cfg=None walked the cap
+    # off because the default was never read): one over-long line is cut to DEFAULT_CHARS.
+    assert B.budget_chars(None) == B.DEFAULT_CHARS
+    huge = "x" * (B.DEFAULT_CHARS + 100)
+    out = B.apply(huge, cfg=None, bounded=True)
+    assert out.cut_chars == 100 + (len(huge) - B.DEFAULT_CHARS - 100)
+    assert "character(s) cut" in out.footer
