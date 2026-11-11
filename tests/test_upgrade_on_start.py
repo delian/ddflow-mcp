@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 from ddflow.api._base import _load
 from ddflow.config import Config
@@ -369,4 +370,4 @@ def test_a_failing_marker_write_does_not_lose_the_report(
 def test_the_image_documents_the_switch() -> None:
     text = (ROOT / "Dockerfile").read_text()
     assert "DDFLOW_UPGRADE_ON_START" in text
-    assert "DDFLOW_UPGRADE_ON_START" in (ROOT / "README.md").read_text()
+    assert "DDFLOW_UPGRADE_ON_START" in readme_corpus()

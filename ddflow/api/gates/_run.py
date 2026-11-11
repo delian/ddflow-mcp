@@ -204,9 +204,11 @@ def _found_text(result: str, ev: dict[str, Any]) -> str:
         body.extend(str(s) for s in summary)
     ids = ev.get("failed_tests") or []
     if ids:
-        shown = ", ".join(str(t) for t in ids[: _MAX_FAILED_IDS_SHOWN])
+        shown = ", ".join(str(t) for t in ids[:_MAX_FAILED_IDS_SHOWN])
         body.append(
-            shown if len(ids) <= _MAX_FAILED_IDS_SHOWN else f"{shown} (and {len(ids) - _MAX_FAILED_IDS_SHOWN} more)"
+            shown
+            if len(ids) <= _MAX_FAILED_IDS_SHOWN
+            else f"{shown} (and {len(ids) - _MAX_FAILED_IDS_SHOWN} more)"
         )
     if body:
         found.append("; ".join(body))

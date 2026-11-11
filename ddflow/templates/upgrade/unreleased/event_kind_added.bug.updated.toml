@@ -1,0 +1,7 @@
+# One unreleased change; cutting a version folds it into that release.
+
+[[change]]
+kind = "event_kind_added"
+key = "bug.updated"
+why = "ddflow update edits a bug (title, body, append, tags, its own fields) as an event; the original record is never rewritten."
+impact = "additive"

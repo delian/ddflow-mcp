@@ -4,10 +4,28 @@ source tree a phase gate ran against."""
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 from helpers import git as _git
 
 from ddflow.api.gates import _run
 from ddflow.services import gates as G
+
+
+def test_gate_run_module_stays_ruff_format_clean():
+    """B8d98b6835a: the ci runs `ruff format --check`; a spaced slice and an over-long
+    `_found_text` ternary re-reddened it after B4ba4673c0a. Pin the format here, since it
+    is a check the post-merge hook runs, not a behaviour a pytest asserts."""
+    root = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, "-m", "ruff", "format", "--check", "ddflow/api/gates/_run.py"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr
 
 
 def _repo(tmp_path):

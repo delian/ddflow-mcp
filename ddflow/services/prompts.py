@@ -50,6 +50,9 @@ TEMPLATE_NAMES: tuple[str, ...] = (
     # the companion tools. Text, because it is the file you edit to change how this
     # project works rather than what the code does.
     "mcp_instructions",
+    # The route an operator-only refusal names (RA-prompt): ask, show the operator, re-run
+    # with --approval ID. Sections `driver` and `route`.
+    "approvals",
 )
 
 
