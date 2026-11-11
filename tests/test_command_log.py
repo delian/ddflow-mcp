@@ -43,6 +43,11 @@ def test_an_empty_log_reads_as_nothing(tmp_path: Path):
     assert cmdlog.recent(tmp_path, 10) == []
 
 
+def test_asking_for_zero_records_is_not_the_whole_ring(tmp_path: Path):
+    _record(tmp_path, ["ddflow"], 0)
+    assert cmdlog.recent(tmp_path, 0) == []  # n=0 is none, never every record
+
+
 def test_recent_is_bounded_to_n(tmp_path: Path):
     for i in range(5):
         _record(tmp_path, ["ddflow"], i)

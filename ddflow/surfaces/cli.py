@@ -345,7 +345,11 @@ def _cli_vocabulary(parser: argparse.ArgumentParser) -> tuple[set[str], set[str]
             continue
         seen.add(id(p))
         for action in p._actions:
-            flags.update(action.option_strings)
+            # A no-value switch (`--json`, `-h`, a store_true flag) never consumes the next
+            # token, so it is NOT offered to `redact_argv` as a "kept flag", which would read
+            # the word after it as its `<value>` and hide the verb it swallowed.
+            if action.nargs != 0:
+                flags.update(action.option_strings)
             if isinstance(getattr(action, "choices", None), dict):  # a _SubParsersAction
                 verbs.update(action.choices)
                 stack.extend(action.choices.values())

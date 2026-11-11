@@ -42,7 +42,7 @@ def record(
     repo: Path,
     agent: str,
     argv: Iterable[str],
-    code: int,
+    code: int | None,
     tail: str,
     *,
     verbs: Iterable[str] = (),
@@ -52,19 +52,19 @@ def record(
     redacted in place (the ``log`` profile without the config's secret patterns, so the
     machine's host/home/repo paths a traceback frames are removed)."""
 
-    line = {
-        "t": time.time(),
-        "agent": agent or os.environ.get("DDFLOW_AGENT", ""),
-        "argv": redact_argv(list(argv), verbs, flags),
-        "exit": int(code),
-        "tail": redactor("log").text(tail or "").text[-TAIL_CHARS:],
-    }
     path = _path(repo)
     try:
+        line = {
+            "t": time.time(),
+            "agent": agent or os.environ.get("DDFLOW_AGENT", ""),
+            "argv": redact_argv(list(argv), verbs, flags),
+            "exit": int(code) if code is not None else None,
+            "tail": redactor("log").text(tail or "").text[-TAIL_CHARS:],
+        }
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(line, default=str) + "\n")
-    except OSError:
+    except (OSError, ValueError, TypeError):
         return
     _trim(path)
 
@@ -83,14 +83,15 @@ def _trim(path: Path) -> None:
 
 
 def recent(repo: Path, n: int) -> list[dict]:
-    """The last ``n`` records, oldest first; an empty list when there is none. Never raises."""
+    """The last ``n`` records, oldest first; an empty list when there is none (or ``n <= 0``:
+    asking for none of the log is none, never the whole ring). Never raises."""
+    if n <= 0:
+        return []
     try:
         path = _path(repo)
         if not path.exists():
             return []
-        lines = path.read_text(encoding="utf-8").splitlines()
-        if n > 0:
-            lines = lines[-n:]
+        lines = path.read_text(encoding="utf-8").splitlines()[-n:]
     except OSError:
         return []
     out: list[dict] = []
