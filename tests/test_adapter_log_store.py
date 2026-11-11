@@ -136,6 +136,14 @@ def test_fake_blob_ref_is_checked():
     assert f.blob_get(ref) == b"body"
 
 
+def test_fake_snapshots_the_payload_at_append():
+    f = FakeLogStore()
+    payload = {"marker": {"n": 1}}
+    f.append(KIND, "s", payload)
+    payload["marker"]["n"] = 2  # a mutation after append must not rewrite the record
+    assert f.read_from(0)[0].data == {"marker": {"n": 1}}
+
+
 def test_default_adapter_writes_real_jsonl_shards(tmp_path):
     store = LocalLogStore(tmp_path, agent_id="w")
     store.append(KIND, "x", {"marker": 9})

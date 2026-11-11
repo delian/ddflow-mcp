@@ -8,6 +8,7 @@ not a second hashing path in this module (r-reuse-core).
 
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -87,7 +88,7 @@ class FakeLogStore:
         """One event, with the lock already held (an `append` nested under the lock would
         deadlock a non-reentrant `threading.Lock`)."""
         self._lamport += 1
-        data = dict(data or {})
+        data = copy.deepcopy(data or {})
         ev = _Event(
             kind, subject, data, agent, self._lamport, _eid(kind, subject, data, agent, self._lamport)
         )
