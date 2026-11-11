@@ -245,11 +245,15 @@ def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O
 
 
 def _not_a_repository(repo: Path) -> bool:
-    """True only when git SAYS this is no repository: a repository git refuses to open
-    (dubious ownership, a permissions error) is not one to `git init`, so the stage runs
-    and reports what its probes find."""
-    probe = G.run(repo, "rev-parse", "--is-inside-work-tree")
-    return not probe.ok and "not a git repository" in (probe.err or "").lower()
+    """True when git cannot open ``repo`` AND no ``.git`` exists at or above it.
+
+    The second half is the filesystem, not git's message, so it holds in any locale; and a
+    repository git merely refuses to open (dubious ownership, a permissions error) has a
+    ``.git``, so it is not told to `git init`: the stage runs and reports what it finds."""
+    if G.run(repo, "rev-parse", "--is-inside-work-tree").ok:
+        return False
+    here = repo.resolve()
+    return not any((d / ".git").exists() for d in (here, *here.parents))
 
 
 def onboard(

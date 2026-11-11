@@ -37,8 +37,8 @@ def test_onboard_in_a_non_git_directory_writes_nothing_and_says_git_init(tmp_pat
 
 
 def test_a_repository_git_refuses_is_not_told_to_git_init(repo, monkeypatch):
-    """A failed rev-parse that is not "not a git repository" (dubious ownership, say)
-    must not be answered with `git init`."""
+    """A failed rev-parse on a directory that HAS a .git (dubious ownership, say) must not
+    be answered with `git init`, whatever language git's message is in."""
     from ddflow.api import onboard as OB
 
     class Refused:
@@ -47,3 +47,14 @@ def test_a_repository_git_refuses_is_not_told_to_git_init(repo, monkeypatch):
 
     monkeypatch.setattr(OB.G, "run", lambda *a, **k: Refused())
     assert OB._not_a_repository(repo) is False
+
+
+def test_a_translated_git_message_still_counts_as_not_a_repository(tmp_path, monkeypatch):
+    from ddflow.api import onboard as OB
+
+    class Refused:
+        ok = False
+        err = "fatal: kein Git-Repository (oder irgendeines der Elternverzeichnisse): .git"
+
+    monkeypatch.setattr(OB.G, "run", lambda *a, **k: Refused())
+    assert OB._not_a_repository(tmp_path) is True
