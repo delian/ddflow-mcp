@@ -179,3 +179,4 @@
 {"agent":"close-brules","data":{"at":1794432827.0036938,"holder":"close-brules"},"id":"e9e2c40b0f978693ac89dfd8c","kind":"lease.renewed","lamport":177580,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:33:47.150518Z"}
 {"agent":"close-brules","data":{"at":1794433451.63768,"holder":"close-brules"},"id":"ee25879fc77fd90c08f16ae35","kind":"lease.renewed","lamport":177681,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:44:11.787034Z"}
 {"agent":"close-brules","data":{"at":1794434080.2097182,"holder":"close-brules"},"id":"e73b106dac602574e56460623","kind":"lease.renewed","lamport":177771,"schema":1,"subject":"B-rules-inventory","ts":"2026-11-11T21:54:40.366769Z"}
+{"agent":"close-brules","data":{"tags":["bugfix","no-deps","wave:0"]},"id":"ee82bc6c180fe7618ad840b46","kind":"task.updated","lamport":177776,"schema":1,"subject":"fix-Bci-gitleaks-over-the-pushed-commi-858efc87b3-8987e88","ts":"2026-11-11T21:55:04.682046Z"}
