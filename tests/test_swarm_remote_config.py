@@ -22,8 +22,9 @@ def test_defaults_match_dataclass_defaults():
 def test_every_field_has_a_remote_knob(field):
     cfg = Config()
     assert hasattr(cfg.swarm, "remote_" + field)
-    setattr(cfg.swarm, "remote_" + field, "x" if field not in TUPLE_FIELDS else ["x"])
-    assert getattr(R.Knobs.from_config(cfg), field) == ("x",) if field in TUPLE_FIELDS else "x"
+    expected = ("x",) if field in TUPLE_FIELDS else "x"
+    setattr(cfg.swarm, "remote_" + field, ["x"] if field in TUPLE_FIELDS else "x")
+    assert getattr(R.Knobs.from_config(cfg), field) == expected
 
 
 def test_scan_batch_files_reached_the_settled_field_name():

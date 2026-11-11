@@ -256,7 +256,7 @@ class SwarmConfig:
     )
     remote_bundle_max_bytes: int = knob(
         104857600,
-        doc="Biggest outbound bundle the host sends, in bytes (default 100 MiB). Largest returned bundle instead (`return_max_bytes`).",
+        doc="Biggest outbound bundle the host sends, in bytes (default 100 MiB). The returned bundle cap is its own knob (`remote_return_max_bytes`).",
         check=_positive_int,
     )
     remote_return_max_bytes: int = knob(
@@ -276,7 +276,7 @@ class SwarmConfig:
     )
     remote_scan_max_blob_bytes: int = knob(
         1048576,
-        doc="Largest file blob the outbound scan inspects for secrets and digests: a tree with a file this big is refused, so the cap on a returned file.",
+        doc="Biggest file blob the outbound scan inspects, in bytes: the tree with a file OVER this many bytes is refused. The return refuses anything its scan inspects over this ceiling.",
         check=_positive_int,
     )
     remote_scan_batch_files: int = knob(
