@@ -73,6 +73,7 @@ from .handlers.gates import (  # noqa: F401
     _h_reviewer_approved,
     _h_reviewer_configured,
 )
+from .handlers.installmanifest import INSTALLMANIFEST_HANDLERS
 from .handlers.items import (  # noqa: F401
     _apply_definition,
     _definition,
@@ -314,6 +315,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     **SUGGESTION_HANDLERS,
     # first writer: api/mergequeue_add.py (`queue add --release`)
     **LANERELEASE_HANDLERS,
+    # first writer: services/installmanifest.py (an onboarding writer's run)
+    **INSTALLMANIFEST_HANDLERS,
     # first writer: api/probe.py (`ddflow probe`)
     **PROBE_HANDLERS,
     # first writer: services/auth.py (a redeemed pairing, a revocation)
