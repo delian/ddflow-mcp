@@ -132,3 +132,6 @@
 {"agent":"i2-kilo","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e0bdeb19679dfadf64143b6a9","kind":"job.ended","lamport":175048,"schema":1,"subject":"J9085478d3b","ts":"2026-11-11T14:31:46.241481Z"}
 {"agent":"i2-kilo","data":{"exit_code":2,"note":"exited 2 (from its log); `job end` records it (collected)"},"id":"ee403503f91391751aca2323e","kind":"job.ended","lamport":175049,"schema":1,"subject":"Jf596bf1ebe","ts":"2026-11-11T14:31:46.353562Z"}
 {"agent":"i2-kilo","data":{"exit_code":0,"note":"exited 0 (from its log); `job end` records it (collected)"},"id":"e406f4cbf80285ce620e60dec","kind":"job.ended","lamport":175050,"schema":1,"subject":"J9ae98b3324","ts":"2026-11-11T14:31:46.473642Z"}
+{"agent":"i2-kilo","data":{"tags":["feature","fusion","decide","wave:1"]},"id":"e80576977bac5a760f93a3e04","kind":"task.updated","lamport":175052,"schema":1,"subject":"FUS-patterns-decide","ts":"2026-11-11T14:32:02.077902Z"}
+{"agent":"i2-kilo","data":{"tags":["wave:0"]},"id":"e61e4808fcf7b91d4fb800bd1","kind":"task.updated","lamport":175053,"schema":1,"subject":"SW-headroom","ts":"2026-11-11T14:32:02.159357Z"}
+{"agent":"i2-kilo","data":{"tags":["wave:0"]},"id":"e5eec0271b1de09c98099f536","kind":"task.updated","lamport":175054,"schema":1,"subject":"TE-model-routing","ts":"2026-11-11T14:32:02.236651Z"}
