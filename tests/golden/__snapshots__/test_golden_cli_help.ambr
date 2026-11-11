@@ -349,6 +349,19 @@
   
   '''
 # ---
+# name: test_help[ddflow bug duplicate]
+  '''
+  usage: ddflow bug duplicate [-h] --of OF id
+  
+  positional arguments:
+    id
+  
+  options:
+    -h, --help  show this help message and exit
+    --of OF     the already-fixed bug this one duplicates
+  
+  '''
+# ---
 # name: test_help[ddflow bug file-tasks]
   '''
   usage: ddflow bug file-tasks [-h] [--all] [--dry-run] [id]
@@ -519,13 +532,14 @@
 # ---
 # name: test_help[ddflow bug]
   '''
-  usage: ddflow bug [-h] {found,file-tasks,dedupe,fixed,invalid,tag,reopen,list,show} ...
+  usage: ddflow bug [-h] {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show} ...
   
   positional arguments:
-    {found,file-tasks,dedupe,fixed,invalid,tag,reopen,list,show}
+    {found,file-tasks,dedupe,duplicate,fixed,invalid,tag,reopen,list,show}
       file-tasks          file the fix task of one open bug that has none (--all: every such bug)
       dedupe              cluster near-duplicate OPEN bugs by symptom + root cause; --apply links
                           the younger ones onto each cluster's canonical
+      duplicate           close a bug as a duplicate of a bug that is already FIXED (cites its test)
       invalid             close a bug as a FALSE finding (never as fixed), with why and the probe
       tag                 add or remove tags on an existing bug, open or closed
       reopen              reopen a bug closed by mistake (fixed or invalid), saying why
@@ -3931,6 +3945,7 @@
     'ddflow brief',
     'ddflow bug',
     'ddflow bug dedupe',
+    'ddflow bug duplicate',
     'ddflow bug file-tasks',
     'ddflow bug fixed',
     'ddflow bug found',
