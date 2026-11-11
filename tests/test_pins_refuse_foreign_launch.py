@@ -81,3 +81,16 @@ def test_a_regeneration_that_adds_more_refusals_to_a_pin_that_quoted_one_is_refu
     )
     assert "foreign-launch refusal" in rep.failed[0].error
     assert (tree / "pin.json").read_text() == quoted
+
+
+def test_a_replacement_with_the_refusal_line_is_refused_even_at_the_same_phrase_count(tree):
+    """A pin that quoted the bare phrase and a run that REPLACED it with the guard's refusal
+    line have the same number of phrase copies; the refusal line this run wrote is still refused."""
+    quoted = f"docs: the guard says {I.FOREIGN_LAUNCH_REFUSAL} X\n"
+    (tree / "pin.json").write_text(quoted)
+    refusal = f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL} /lane\n"
+    rep = PN.regenerate(
+        tree, Config.load(tree), recipes=[_recipe(f"open('pin.json','w').write({refusal!r})")]
+    )
+    assert rep.failed and "foreign-launch refusal" in rep.failed[0].error
+    assert (tree / "pin.json").read_text() == quoted

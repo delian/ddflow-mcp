@@ -413,11 +413,12 @@ def _recorded_a_refusal(
 
 
 def _records_refusal(repo: Path, r: Recipe, kept: dict[Path, bytes | None] | None) -> bool:
-    """Whether a file the recipe owns now holds MORE copies of the foreign-launch refusal message
-    than it did before the run (``kept``): text a pin already quotes, or a file this run did not
-    touch, is not a recorded refusal; a transcript the run filled with the refusal always has
-    more (one per command)."""
-    needle = FOREIGN_LAUNCH_REFUSAL.encode()
+    """Whether this run ADDED the guard's refusal LINE to a file the recipe owns: more copies of
+    ``ddflow: {FOREIGN_LAUNCH_REFUSAL}`` than before the run (``kept``). The line — not the bare
+    phrase — is counted, because a legitimate quote of the phrase in a doc sentence carries no
+    ``ddflow: `` before it, and a run that REPLACED a pre-existing quote with the bare phrase
+    (same total count) is still a refusal this run wrote."""
+    needle = f"ddflow: {FOREIGN_LAUNCH_REFUSAL}".encode()
     for p in _owned(repo, r):
         try:
             now = p.read_bytes()
