@@ -75,6 +75,13 @@ def test_handoff_note_without_a_summary_still_names_the_next_step():
     assert LR.handoff_note("TE-context-caps", "   ").startswith("rotated: TE-context-caps")
 
 
+def test_handoff_note_stays_under_the_cap_even_with_a_long_item_id():
+    # Finding #2 (grok rubber_duck): a long item id leaves no room, and the ellipsis was
+    # laid on AFTER the budget, pushing the note past the cap. The whole note is capped.
+    note = LR.handoff_note("x" * 400, "summary")
+    assert len(note) <= LR.HANDOFF_NOTE_CHARS
+
+
 # -- the auto-compact window knobs -------------------------------------------
 
 

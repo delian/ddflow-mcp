@@ -70,16 +70,18 @@ def hint(tokens_used: int | None, cfg: Config) -> str:
 
 def handoff_note(item_id: str, summary: str) -> str:
     """The hand-off note the rotated agent writes into the item's evidence: the item id, a
-    one-line summary, and the next step. The WHOLE note is bounded to ``HANDOFF_NOTE_CHARS``
+    one-line summary, and the next step. The WHOLE note is capped at ``HANDOFF_NOTE_CHARS``
     so it round-trips through `ddflow brief` (the lead pastes it to the fresh agent) without
     dragging the whole transcript along."""
-    prefix = f"rotated: {item_id} — "
     suffix = "; resume with `ddflow brief`."
-    budget = HANDOFF_NOTE_CHARS - len(prefix) - len(suffix)
+    prefix = f"rotated: {item_id} — "
     body = " ".join(summary.split()) or "(no summary)"
-    if len(body) > budget:
-        body = body[: max(budget - 1, 0)] + "…"
-    return prefix + body + suffix
+    note = prefix + body + suffix
+    if len(note) > HANDOFF_NOTE_CHARS:
+        room = max(HANDOFF_NOTE_CHARS - len(prefix) - len(suffix), 0)
+        body = body[: max(room - 1, 0)] + "…"
+        note = prefix + body + suffix
+    return note[:HANDOFF_NOTE_CHARS]
 
 
 def window_env(cfg: Config) -> dict[str, str]:
@@ -103,15 +105,15 @@ def doctor_notes(cfg: Config, context_tokens: int | None = None) -> list[str]:
         return [hint(context_tokens, cfg)]
     window = cfg.session.claude_autocompact_window
     pct = cfg.session.claude_autocompact_pct_override
-    if window > 0 or pct > 0:
-        knob = (
-            f"{AUTO_COMPACT_WINDOW_ENV}={window}"
-            if window > 0
-            else f"{AUTO_COMPACT_PCT_ENV}={pct}"
-        )
+    knobs = []
+    if window > 0:
+        knobs.append(f"{AUTO_COMPACT_WINDOW_ENV}={window}")
+    if pct > 0:
+        knobs.append(f"{AUTO_COMPACT_PCT_ENV}={pct}")
+    if knobs:
         return [
-            f"Claude Code auto-compact window set ({knob}), the alternative to lane rotation "
-            f"at [session].agent_rotate_tokens={cfg.session.agent_rotate_tokens}"
+            f"Claude Code auto-compact window set ({', '.join(knobs)}), the alternative to "
+            f"lane rotation at [session].agent_rotate_tokens={cfg.session.agent_rotate_tokens}"
         ]
     return []
 

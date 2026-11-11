@@ -12,6 +12,12 @@ from ._docs import declare, int_at_least, knob
 #: What `[session].progress_after_complete` accepts (services/progress_line).
 PROGRESS_MODES = ("on", "phase", "off")
 
+#: The Claude Code auto-compact window range the docs spell (0 = harness default).
+CLAUDE_WINDOW_OFF = 0
+CLAUDE_WINDOW_MIN = 100000
+CLAUDE_WINDOW_MAX = 1000000
+CLAUDE_PCT_MAX = 100
+
 #: The sections of the standard subagent launch brief (`ddflow brief --for-agent`), in the order
 #: `templates/prompts/agent_brief.md` carries them; `agent_brief_off` names the ones to leave out.
 AGENT_BRIEF_SECTIONS = (
@@ -168,12 +174,22 @@ class SessionConfig:
     claude_autocompact_window: int = knob(
         0,
         doc="The Claude Code auto-compact window, in tokens, as the alternative to lane rotation: set it to put `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the harness's environment so a long lane agent compacts instead of rotating (D-TE-Q2). 100000-1000000, as the Claude Code docs spell the range; 0 leaves the harness default untouched (DDflow cannot flip a harness's environment, so this is the value the lead puts there; `ddflow doctor` names it).",
-        check=int_at_least(0),
+        check=lambda v: (
+            ""
+            if isinstance(v, int)
+            and not isinstance(v, bool)
+            and (v == CLAUDE_WINDOW_OFF or CLAUDE_WINDOW_MIN <= v <= CLAUDE_WINDOW_MAX)
+            else "must be 0 (harness default) or 100000..1000000 (the range Claude Code honours)"
+        ),
     )
     claude_autocompact_pct_override: int = knob(
         0,
         doc="`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, in percent, alongside `claude_autocompact_window`: it LOWS the window only (Claude Code honours it as a percentage override, never a raise). 0 leaves the harness default untouched.",
-        check=int_at_least(0),
+        check=lambda v: (
+            ""
+            if isinstance(v, int) and not isinstance(v, bool) and CLAUDE_WINDOW_OFF <= v <= CLAUDE_PCT_MAX
+            else "must be a whole-number percent, 0..100 (0 = harness default)"
+        ),
     )
     agent_brief_max_chars: int = knob(
         9000,
