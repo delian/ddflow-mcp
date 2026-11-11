@@ -139,10 +139,15 @@ def test_a_trapped_term_that_then_fails_is_failed_not_stopped(tmp_path):
     argv = (
         sys.executable,
         "-c",
-        "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(1); exit(1)",
+        "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); time.sleep(5); exit(1)",
     )
     assert t.start("a", argv).ok
-    time.sleep(0.2)  # after the child has registered SIG_IGN: the TERM is now ignored, not fatal
+    got = tmp_path / "got.log"
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if t.copy_out("a", "lane.log", got, 512).ok and "ready" in got.read_text():
+            break  # the lane has installed SIG_IGN: the TERM below is ignored, not fatal
+        time.sleep(0.02)
     assert t.signal("a", "TERM").ok
     st = ended(t, "a")
     assert st.state == "failed" and st.exit_code == 1

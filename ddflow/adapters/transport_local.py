@@ -36,7 +36,7 @@ _CHUNK = 65536
 class _Run:
     popen: Any
     dir: Path
-    stopped: bool = False
+    stop_sig: int | None = None
 
 
 def _safe(lane: str) -> str:
@@ -109,7 +109,7 @@ class LocalTransport:
         if run.popen.poll() is not None:
             return failed("the lane has ended")
         if sig in _STOP:
-            run.stopped = True
+            run.stop_sig = _SIGNALS[sig]
         kill_group(run.popen, _SIGNALS[sig])
         return ok(f"{sig} sent to the process group")
 
@@ -120,9 +120,10 @@ class LocalTransport:
         code = run.popen.poll()
         if code is None:
             return LaneStatus("running", pid=run.popen.pid)
-        # stopped = we asked to stop AND the child died BY a signal (a trapped term that then
-        # exits nonzero failed on its own, so it is not silenced as a stop).
-        state = "stopped" if run.stopped and code < 0 else "exited" if code == 0 else "failed"
+        # stopped = the process died BY the exact stop signal we sent (a trapped term that then
+        # exits nonzero, or a SIGABRT a signal did not cause, is its own failure, not a stop).
+        sig = run.stop_sig
+        state = "stopped" if sig is not None and code == -sig else "exited" if code == 0 else "failed"
         return LaneStatus(state, pid=run.popen.pid, exit_code=code)
 
     def copy_in(self, lane: str, local: Path, name: str) -> Result:
