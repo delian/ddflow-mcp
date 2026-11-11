@@ -121,7 +121,7 @@ class LeaseConfig:
     )
     scan_view_trees_max: int = knob(
         16,
-        doc="The most worktrees a read-only view (`status`, `brief`) measures for the recovery report. Each measured tree is a `git status` process, so a log with 126 stale leases made `status` spawn hundreds; a tree beyond the cap is reported as NOT MEASURED -- treated as holding work, never as clean -- and `ddflow recover` always measures every one. 0 measures none in a view.",
+        doc="The most worktrees a read-only view (`status`, `brief`) measures for the recovery report. Each measured tree is a `git status` process, so a log with 126 stale leases made `status` spawn hundreds; the trees are ranked by their unmerged-commit signal first, and a tree beyond the cap is still treated as holding work by `recover` and `status` (never as clean) while the brief counts it quietly -- `ddflow recover` always measures every one. 0 measures none in a view.",
         check=int_at_least(0),
     )
     scan_view_verdicts_max: int = knob(

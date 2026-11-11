@@ -43,6 +43,7 @@ from .baseline import (  # noqa: F401
     cache_store,
     only_tests_failed,
     read_full,
+    test_check,
     test_files_of,
     write_full,
 )
