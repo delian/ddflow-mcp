@@ -579,6 +579,7 @@ def cmd_adopt(a, c: Ctx) -> int:
             launch=a.launch or "",
             image=a.image or "",
             refresh_docs=bool(getattr(a, "refresh_docs", False)),
+            plan=bool(getattr(a, "plan", False)),
         ),
         agent=c.requested_agent,
         called_from=c.called_from,
