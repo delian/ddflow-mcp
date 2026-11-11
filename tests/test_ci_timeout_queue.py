@@ -1,105 +1,88 @@
 """DX-ci-timeout-excludes-queue: the ci run's ``timeout_s`` budgets the checks ALONE, and the
-seconds a run queued for the host-wide suite lock are reported apart, never as part of the
-timeout or the run. A run that queued past its timeout still gets the WHOLE timeout once the
-lock is taken (B4f35548c0a separated the queue wait from the run budget; this pins it)."""
+seconds a run queued for the host-wide suite lock are reported apart, never off the run budget.
+A run that queued LONGER than its timeout still gets the WHOLE timeout once the lock is taken
+(B4f35548c0a separated the queue wait from the run budget; this pins it)."""
 
 from __future__ import annotations
 
-import time
 from types import SimpleNamespace as NS
-
-import pytest
 
 from ddflow.config import Config
 from ddflow.services.ci import runner
 
 
-def test_a_run_queued_past_timeout_keeps_the_whole_timeout_once_it_holds_the_lock(monkeypatch):
-    """The queue wait never comes off the run budget: however long ``timeout_s`` is, it budgets
-    the checks that run AFTER the slot is held, unchanged by the seconds spent queued."""
-    captured: dict[str, object] = {}
+class _Clock:
+    """A clock whose ``monotonic`` the test drives: ``_run_under_slot`` reads ``queued_at`` at 0,
+    ``_Hold`` advances it by the simulated queue wait, and the runner reads the difference."""
+
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def monotonic(self) -> float:
+        return self.t
+
+
+class _Hold:
+    """A suite slot already claimed for ``wait_s`` more seconds before this waiter takes it."""
+
+    def __init__(self, clock: _Clock, wait_s: float) -> None:
+        self._clock, self._wait_s = clock, wait_s
+
+    def __enter__(self) -> _Hold:
+        self._clock.t += self._wait_s  # the seconds spent queued before the slot frees
+        return self
+
+    def __exit__(self, *a: object) -> None:
+        return None
+
+
+class _Tree:
+    def __enter__(self) -> tuple[NS, None]:
+        return NS(), None
+
+    def __exit__(self, *a: object) -> None:
+        return None
+
+
+def _drive(monkeypatch, *, timeout_s: float, wait_s: float, run_s: float):
+    """Drive ``runner.run`` for a full-suite run whose lock is held past ``timeout_s``; return
+    (result, budget the checks received)."""
+    captured: dict[str, float] = {}
+    clock = _Clock()
 
     monkeypatch.setattr(runner, "resolve_command", lambda *a: ("hooks", ""))
     monkeypatch.setattr(runner, "tool_missing", lambda c: "")
-    monkeypatch.setattr(runner.W, "rev", lambda *a: "abc")
     monkeypatch.setattr(runner, "_merge_base", lambda *a: ("main", None))
     monkeypatch.setattr(runner, "_needs_suite_slot", lambda *a: True)  # a full-suite run
     monkeypatch.setattr(runner, "_stale_pins", lambda *a, **k: "")
 
-    class Hold:
-        def __enter__(self):
-            time.sleep(0.15)  # the lock stays taken past the run's own timeout budget
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
-
-    def fake_execute(cfg, tree, cmd, scope, budget, tick, **kw):
-        captured["budget"] = budget
-        return (NS(kind="", ran=True, code=0, output=""), "", 0.0)
-
-    monkeypatch.setattr(runner, "_execute", fake_execute)
-
-    class Tree:
-        def __enter__(self):
-            return NS(), None
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(runner, "merge_tree", lambda *a: Tree())
-
-    timeout_s = 3  # a run budget FAR below the simulated queue wait: the wait must not eat it
-    res = runner.run("/repo", Config(), command="", base="main", timeout_s=timeout_s)
-
-    assert captured["budget"] == timeout_s
-    assert res.status == "passed"
-    assert res.elapsed_s == 0.0  # the checks ran for 0 s; the queue wait is NOT part of it
-    assert res.waited_s is not None and res.waited_s >= 0.15
-
-
-def test_the_queue_wait_is_recorded_apart_and_never_folds_into_the_run(monkeypatch):
-    """The wait the run spent queued is carried as ``waited_s`` separately from ``elapsed_s``
-    (the run itself), so a busy host reports how long it queued instead of reading that time as
-    run time (B1d51fb9da1) and never as part of the timeout."""
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(runner, "resolve_command", lambda *a: ("hooks", ""))
-    monkeypatch.setattr(runner, "tool_missing", lambda c: "")
+    monkeypatch.setattr(runner, "CLOCK", clock)
     monkeypatch.setattr(runner.W, "rev", lambda *a: "abc")
-    monkeypatch.setattr(runner, "_merge_base", lambda *a: ("main", None))
-    monkeypatch.setattr(runner, "_needs_suite_slot", lambda *a: True)
-    monkeypatch.setattr(runner, "_stale_pins", lambda *a, **k: "")
-
-    class Hold:
-        def __enter__(self):
-            time.sleep(0.2)
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr(runner.SL, "hold", lambda *a, **k: Hold())
+    monkeypatch.setattr(runner, "merge_tree", lambda *a: _Tree())
+    monkeypatch.setattr(runner.SL, "hold", lambda cfg, holder, *a, **k: _Hold(clock, wait_s))
 
     def fake_execute(cfg, tree, cmd, scope, budget, tick, **kw):
         captured["budget"] = budget
-        return (NS(kind="", ran=True, code=0, output=""), "", 7.0)  # the checks ran 7 s
+        return (NS(kind="", ran=True, code=0, output=""), "", run_s)
 
     monkeypatch.setattr(runner, "_execute", fake_execute)
 
-    class Tree:
-        def __enter__(self):
-            return NS(), None
+    res = runner.run("/repo", Config(), command="", base="main", timeout_s=timeout_s)
+    return res, captured.get("budget")
 
-        def __exit__(self, *a):
-            return False
 
-    monkeypatch.setattr(runner, "merge_tree", lambda *a: Tree())
+def test_a_run_queued_past_timeout_keeps_the_whole_timeout_once_it_holds_the_lock(monkeypatch):
+    """wait_s (52 s) exceeds timeout_s (7 s): a budget the queue wait came off would hand
+    ``_execute`` less than 7 s here -- the run keeps all of it anyway."""
+    res, budget = _drive(monkeypatch, timeout_s=7, wait_s=52, run_s=3.0)
+    assert budget == 7
+    assert res.status == "passed"
 
-    res = runner.run("/repo", Config(), command="", base="main", timeout_s=30)
 
-    assert captured["budget"] == 30        # the wait did not reduce the run's timeout
-    assert res.elapsed_s == pytest.approx(7.0)  # the run, not the wait
-    assert res.waited_s is not None and res.waited_s >= 0.2
+def test_the_queue_wait_is_recorded_apart_and_never_counts_against_the_timeout(monkeypatch):
+    """The queue wait is carried as the dedicated ``waited_s`` (B1d51fb9da1), the run's own
+    ``elapsed_s`` is the check time alone, and none of the wait came off the run budget."""
+    res, budget = _drive(monkeypatch, timeout_s=30, wait_s=12.5, run_s=8.0)
+    assert budget == 30            # the whole timeout survived the 12.5 s queue wait
+    assert res.waited_s == 12.5    # recorded separately (never as run time)
+    assert res.elapsed_s == 8.0    # the run, not wait + run
