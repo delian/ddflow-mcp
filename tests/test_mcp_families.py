@@ -168,7 +168,9 @@ def test_the_whole_families_surface_is_much_smaller_than_the_flat_one():
     # 57_000 (raised, GM-surface-counts): the `suggest` (ddflow_lease), `lanes` (ddflow_view)
     # and `research_add`/`research show` (ddflow_task) action clauses each add a per-action
     # description clause and enum value; the list measures 56,774 with them.
-    assert fams + singles < 57_000
+    # 59_000 (raised, B92ab2d8f54): the view family grew again (ddflow_perf joined);
+    # the list measures 58,178 on main.
+    assert fams + singles < 59_000
 
 
 def _flat(tool):
