@@ -131,3 +131,6 @@
 {"agent":"close-blgitflow","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"ea7929b51a683d136dc947d3f","kind":"cadence.ran","lamport":175263,"schema":1,"subject":"recall_recheck:B175","ts":"2026-11-11T14:55:06.909136Z"}
 {"agent":"close-blgitflow","data":{"at":1794408943.737234,"holder":"close-blgitflow"},"id":"ecf4fc1a1b736ba92fbece58d","kind":"lease.renewed","lamport":175272,"schema":1,"subject":"B181","ts":"2026-11-11T14:55:44.327258Z"}
 {"agent":"close-blgitflow","data":{"at":1794409140.0880346,"holder":"close-blgitflow"},"id":"e3da080b1532994f97f5d4be3","kind":"lease.renewed","lamport":175304,"schema":1,"subject":"B181","ts":"2026-11-11T14:59:00.240716Z"}
+{"agent":"close-blgitflow","data":{"at":1794409578.9987888,"holder":"close-blgitflow"},"id":"e60668b5d5908008b1e3a0441","kind":"lease.renewed","lamport":175399,"schema":1,"subject":"B175","ts":"2026-11-11T15:06:19.163406Z"}
+{"agent":"close-blgitflow","data":{"at":1794409617.2078383,"holder":"close-blgitflow"},"id":"e3118a6aed81ec0e342e5c8ba","kind":"lease.renewed","lamport":175405,"schema":1,"subject":"B181","ts":"2026-11-11T15:06:57.355661Z"}
+{"agent":"close-blgitflow","data":{"at":1794409769.3846798,"holder":"close-blgitflow"},"id":"eeb7dc8b6095a6e10f436b9d3","kind":"lease.renewed","lamport":175430,"schema":1,"subject":"B181","ts":"2026-11-11T15:09:29.534830Z"}
