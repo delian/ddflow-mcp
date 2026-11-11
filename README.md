@@ -244,7 +244,7 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 
 ## Table of contents
 
-<!-- ddflow:begin README/toc sha=8e8631b33231 -->
+<!-- ddflow:begin README/toc sha=1392ab1ee7aa -->
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
@@ -256,116 +256,13 @@ every tool's declared result schema; `tests/golden/json/result_schemas.json` pin
 - [How do I…?](#how-do-i)
 - [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
 - [The default workflow at a glance](#the-default-workflow-at-a-glance)
-- [Two ways to drive it](#two-ways-to-drive-it)
-  - [Standalone: a terminal, a Makefile, CI](#standalone-a-terminal-a-makefile-ci)
-  - [Every command](#every-command)
-  - [As an MCP server](#as-an-mcp-server)
-  - [What goes in AGENTS.md / CLAUDE.md](#what-goes-in-agentsmd--claudemd)
-- [The workflow, and changing it](#the-workflow-and-changing-it)
-  - [Changing it](#changing-it)
 - [Why it is built this way](#why-it-is-built-this-way)
-- [Install into any project](#install-into-any-project)
-  - [Docker — for operators with no Python toolchain](#docker--for-operators-with-no-python-toolchain)
-  - [Extending it by writing text, not code](#extending-it-by-writing-text-not-code)
-  - [Publishing and registry](#publishing-and-registry)
-  - [Cutting a release](#cutting-a-release)
-  - [What CI checks](#what-ci-checks)
-  - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
-  - [Companion tools](#companion-tools)
-- [Pin files regenerate; they are never hand-merged](#pin-files-regenerate-they-are-never-hand-merged)
-- [Finding a test polluter](#finding-a-test-polluter)
-- [Wiring it into your agent](#wiring-it-into-your-agent)
-  - [One set of rules, every agent](#one-set-of-rules-every-agent)
-- [From plan mode to the queue](#from-plan-mode-to-the-queue)
-- [When a companion is missing](#when-a-companion-is-missing)
-- [Adopting a project that already has history](#adopting-a-project-that-already-has-history)
-  - [What it will and will not decide for you](#what-it-will-and-will-not-decide-for-you)
-  - [What an unticked box means, and where things live](#what-an-unticked-box-means-and-where-things-live)
-  - [Verifying an import, at any time](#verifying-an-import-at-any-time)
-  - [What it reports rather than fixes](#what-it-reports-rather-than-fixes)
-- [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
-  - [Model-tier hint (advisory)](#model-tier-hint-advisory)
-  - [Pull dispatch: `ddflow next --lane NAME`](#pull-dispatch-ddflow-next---lane-name)
-- [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
-- [Architectural decisions](#architectural-decisions)
-- [Recall — "have we been here before?"](#recall--have-we-been-here-before)
-  - [The Embedder: semantic ranking, optional](#the-embedder-semantic-ranking-optional)
-  - [One path for guidance: rules and decisions reach you ranked, budgeted and fenced](#one-path-for-guidance-rules-and-decisions-reach-you-ranked-budgeted-and-fenced)
-  - [Who wrote it: provenance and the data fence](#who-wrote-it-provenance-and-the-data-fence)
-  - [Similar — "is this already filed?"](#similar--is-this-already-filed)
-  - [Dupes and link — settling a pair already in the log](#dupes-and-link--settling-a-pair-already-in-the-log)
-  - [The check every add runs](#the-check-every-add-runs)
-- [Operational memory](#operational-memory)
-- [Resources and long-running jobs](#resources-and-long-running-jobs)
-- [Usage meters](#usage-meters)
-- [Dependencies on another repository](#dependencies-on-another-repository)
-- [Status, progress, and loops](#status-progress-and-loops)
-- [The task pipeline](#the-task-pipeline)
-  - [Proving a gate can fail at all](#proving-a-gate-can-fail-at-all)
-  - [A gate that runs only on the work it concerns](#a-gate-that-runs-only-on-the-work-it-concerns)
-  - [A pass that must name its evidence](#a-pass-that-must-name-its-evidence)
-  - [When the exit code is not the verdict](#when-the-exit-code-is-not-the-verdict)
-- [The phase pipeline](#the-phase-pipeline)
-- [Human approval: a gate the agent cannot clear](#human-approval-a-gate-the-agent-cannot-clear)
-- [Parallelism and coordination](#parallelism-and-coordination)
-  - [Lanes: who is working and what to do next](#lanes-who-is-working-and-what-to-do-next)
-  - [Adaptive parallelism: configuration](#adaptive-parallelism-configuration)
-  - [Adaptive parallelism: the sample ring and the derived limit](#adaptive-parallelism-the-sample-ring-and-the-derived-limit)
-  - [Adaptive parallelism: host signals](#adaptive-parallelism-host-signals)
-  - [Log-derived flow signals](#log-derived-flow-signals)
-- [Gitflow, pull requests and version tags](#gitflow-pull-requests-and-version-tags)
-  - [Several release lines: fixes to older majors](#several-release-lines-fixes-to-older-majors)
-  - [Environment branches: promoting downstream](#environment-branches-promoting-downstream)
-  - [Workflow choices: asked, recorded, defaulted on the record](#workflow-choices-asked-recorded-defaulted-on-the-record)
-- [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
-  - [Is it stateless?](#is-it-stateless)
-  - [Who is calling?](#who-is-calling)
-  - [Can one server serve several projects?](#can-one-server-serve-several-projects)
-  - [Locking, contention and measured cost](#locking-contention-and-measured-cost)
-- [Crash recovery](#crash-recovery)
-- [Reconstruction from logs alone](#reconstruction-from-logs-alone)
-- [Lessons that check themselves](#lessons-that-check-themselves)
-- [Checking that the checks are working](#checking-that-the-checks-are-working)
-- [Reading the log, and why it is never compacted](#reading-the-log-and-why-it-is-never-compacted)
-  - [Events that vanished from a shard](#events-that-vanished-from-a-shard)
-  - [Managed definitions: the `def.*` event kinds](#managed-definitions-the-def-event-kinds)
-  - [A log from a newer ddflow, and the link event kinds](#a-log-from-a-newer-ddflow-and-the-link-event-kinds)
-  - [The compatibility contract](#the-compatibility-contract)
-  - [Upgrading ddflow](#upgrading-ddflow)
-  - [Upgrading a project: the whole picture](#upgrading-a-project-the-whole-picture)
-  - [The version stamp and the skew guard](#the-version-stamp-and-the-skew-guard)
-  - [Versioned data repairs](#versioned-data-repairs)
-  - [The upgrade manifest: what changed since your version](#the-upgrade-manifest-what-changed-since-your-version)
-  - [Migrations: breaking changes P-unify makes to what a project holds](#migrations-breaking-changes-p-unify-makes-to-what-a-project-holds)
-  - [Applying an upgrade](#applying-an-upgrade)
-  - [The compaction that was declined](#the-compaction-that-was-declined)
-- [Lessons, research and bugs](#lessons-research-and-bugs)
-  - [Bugs are queue items](#bugs-are-queue-items)
-  - [Listing tasks, phases, bugs and research](#listing-tasks-phases-bugs-and-research)
-  - [Searching everything](#searching-everything)
-- [Cadences](#cadences)
-  - [Scheduled jobs](#scheduled-jobs)
-  - [Event triggers](#event-triggers)
-- [Exporting documents](#exporting-documents)
-- [Keeping AGENTS.md true](#keeping-agentsmd-true)
-- [Surviving a compaction](#surviving-a-compaction)
-- [Keeping session-start cost flat](#keeping-session-start-cost-flat)
-- [Agent portability](#agent-portability)
-- [Keeping the two surfaces honest](#keeping-the-two-surfaces-honest)
+- [Where the rest lives](#where-the-rest-lives)
+- [Generated reference tables](#generated-reference-tables)
+  - [Every command](#every-command)
+  - [Agent portability](#agent-portability)
   - [All MCP tools](#all-mcp-tools)
-- [Command reference](#command-reference)
-- [Configuration](#configuration)
   - [All knobs](#all-knobs)
-- [Id schemes](#id-schemes)
-- [What is automated, and what is not](#what-is-automated-and-what-is-not)
-- [Customisation reference](#customisation-reference)
-  - [Files you can edit](#files-you-can-edit)
-  - [Configuration sections (`.ddflow/config.toml`)](#configuration-sections-ddflowconfigtoml)
-  - [Prompts and workflow commands](#prompts-and-workflow-commands)
-  - [CLI commands that change the project's setup](#cli-commands-that-change-the-projects-setup)
-  - [MCP tools that change the project's setup](#mcp-tools-that-change-the-projects-setup)
-  - [Environment variables](#environment-variables)
-- [Testing](#testing)
 - [Documentation index](#documentation-index)
 <!-- ddflow:end README/toc -->
 
@@ -611,7 +508,7 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=4e4e8a96386b -->
+<!-- ddflow:begin README/commands sha=007a8dcf553b -->
 <details><summary>All 102 commands</summary>
 
 | Command | What it does |
@@ -621,7 +518,7 @@ needs a line written by hand here.
 | `ddflow task` | add a task |
 | `ddflow split` | split an item into sub-tasks in place, keeping its id and history |
 | `ddflow resolve` | settle a CONTESTED item (rival adds or claims from two clones), on the record |
-| `ddflow update` | change an item's fields |
+| `ddflow update` | change the fields of any record (task, phase, bug, lesson, research, decision, memory, session, rule… |
 | `ddflow batch` | apply many item edits in one all-or-nothing transaction |
 | `ddflow rename` | move an item to a new id (and phase), re-pointing every needs edge |
 | `ddflow chore` | commit or approve chore files (no reviewer) |
@@ -780,7 +677,7 @@ ddflow.surfaces.tool_table README.md` rewrites it, and refuses a table edited by
 given `--force`) and a test fails when it differs, so its count, groups and tiers cannot
 drift. The groups are the ones `ddflow help` prints.
 
-<!-- ddflow:begin README/tools sha=49d001b195fe -->
+<!-- ddflow:begin README/tools sha=67b9cf0ac6de -->
 **Profiles** (`[mcp].tools`; nothing a profile hides is removed: every tool and every old name stays callable):
 
 - `lean` (16 tools): the default (`[mcp].tools = auto`): the 9 hot singles and 7 families
@@ -797,7 +694,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_workflow` (7 actions): `flow_show` (was `ddflow_flow_show`), `flow_choose` (was `ddflow_flow_choose`), `show`, `pipeline` (was `ddflow_workflow_pipeline`), `gate` (was `ddflow_workflow_gate`), `drop` (was `ddflow_workflow_drop`), `state` (was `ddflow_workflow_state`)
 - `ddflow_task` (12 actions): `phase_add` (was `ddflow_phase_add`), `split` (was `ddflow_split`), `add` (was `ddflow_task_add`), `research_add` (was `ddflow_research_add`), `update` (was `ddflow_update`), `remove` (was `ddflow_remove`), `resolve` (was `ddflow_resolve`), `phase_close` (was `ddflow_phase_close`), `batch` (was `ddflow_batch`), `fold` (was `ddflow_task_fold`), `rename` (was `ddflow_rename`), `phase_complete` (was `ddflow_phase_complete`)
 - `ddflow_memory` (11 actions): `lesson_verify` (was `ddflow_lesson_verify`), `lesson_add` (was `ddflow_lesson_add`), `lesson_search` (was `ddflow_lesson_search`), `recall` (was `ddflow_recall`), `similar` (was `ddflow_similar`), `dupes` (was `ddflow_dupes`), `link` (was `ddflow_link`), `add` (was `ddflow_memory_add`), `list` (was `ddflow_memory_list`), `forget` (was `ddflow_memory_forget`), `lesson_show` (was `ddflow_lesson_show`)
-- `ddflow_bug` (8 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`), `dedupe` (was `ddflow_bug_dedupe`), `duplicate` (was `ddflow_bug_duplicate`), `reopen`, `tag`
+- `ddflow_bug` (7 actions): `fixed` (was `ddflow_bug_fixed`), `invalid` (was `ddflow_bug_invalid`), `found` (was `ddflow_bug_found`), `file_tasks` (was `ddflow_bug_file_tasks`), `dedupe` (was `ddflow_bug_dedupe`), `reopen`, `tag`
 - `ddflow_doctor` (10 actions): `recover` (was `ddflow_recover`), `cleanup` (was `ddflow_cleanup`), `replay` (was `ddflow_replay`), `rebuild` (was `ddflow_rebuild`), `verify` (was `ddflow_verify`), `bisect` (was `ddflow_bisect`), `hooks` (was `ddflow_hooks`), `check`, `precommit` (was `ddflow_precommit`), `record` (was `ddflow_record`)
 - `ddflow_admin` (10 actions): `onboard` (was `ddflow_onboard`), `import` (was `ddflow_import`), `import_verify` (was `ddflow_import_verify`), `prompts` (was `ddflow_prompts`), `upgrade` (was `ddflow_upgrade`), `export` (was `ddflow_export`), `setup` (was `ddflow_setup`), `configure` (was `ddflow_configure`), `external_sync` (was `ddflow_external_sync`), `sync` (was `ddflow_sync`)
 - `ddflow_decision` (5 actions): `add` (was `ddflow_decision_add`), `list` (was `ddflow_decision_list`), `applicable` (was `ddflow_decision_applicable`), `supersede` (was `ddflow_decision_supersede`), `show` (was `ddflow_decision_show`)
@@ -806,7 +703,7 @@ drift. The groups are the ones `ddflow help` prints.
 - `ddflow_job` (4 actions): `run` (was `ddflow_job_run`), `add` (was `ddflow_job_add`), `list` (was `ddflow_job_list`), `end` (was `ddflow_job_end`)
 - `ddflow_rule` (7 actions): `add` (was `ddflow_rule_add`), `list` (was `ddflow_rule_list`), `search` (was `ddflow_rule_search`), `edit` (was `ddflow_rule_edit`), `remove` (was `ddflow_rule_remove`), `sync` (was `ddflow_rule_sync`), `show` (was `ddflow_rule_show`)
 
-<details><summary>All 142 MCP tools by their own name (the flat list): 34 in the `core` tier, 53 more in `standard`, 55 more in `all`</summary>
+<details><summary>All 141 MCP tools by their own name (the flat list): 34 in the `core` tier, 52 more in `standard`, 55 more in `all`</summary>
 
 | Group | Tool | Tier | What it does |
 |---|---|---|---|
@@ -845,7 +742,7 @@ drift. The groups are the ones `ddflow help` prints.
 | Shaping the work | `ddflow_split` | standard | Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover… |
 | Shaping the work | `ddflow_task_add` | core | Add a task to a phase. |
 | Shaping the work | `ddflow_task_fold` | all | Fold the duplicate `dup` into the survivor `keep` in one transaction: dup's body is appended to keep's, its… |
-| Shaping the work | `ddflow_update` | core | Change an item's fields. |
+| Shaping the work | `ddflow_update` | core | Change a record's fields; id may be kind:id. |
 | Shaping the work | `ddflow_batch` | all | Apply many field edits in ONE locked transaction: a JSON array of {id, needs, add_needs, remove_needs, tags… |
 | Shaping the work | `ddflow_rename` | all | Re-file the unclaimed task `old` as `new` (under `parent` when given): title, body, globs, resources, tags… |
 | Doing the work | `ddflow_abandon` | standard | Stop work on an item without completing it, with a reason. |
@@ -892,7 +789,6 @@ drift. The groups are the ones `ddflow help` prints.
 | Landing it | `ddflow_version_cut` | all | Tag the next version. |
 | Landing it | `ddflow_version_show` | standard | The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the release branch), the next one, the… |
 | What the project remembers | `ddflow_bug_dedupe` | standard | Cluster the OPEN bugs that describe one root cause under different wordings (symptom + root-cause matching… |
-| What the project remembers | `ddflow_bug_duplicate` | standard | Close the open bug `id` as a duplicate of `of`, which must already be FIXED with a regression test: the link… |
 | What the project remembers | `ddflow_bug_file_tasks` | all | File the fix task of ONE open bug that has none (`id`), or of every such bug (`all`: one-shot after an… |
 | What the project remembers | `ddflow_bug_fixed` | core | Close a bug. |
 | What the project remembers | `ddflow_bug_found` | core | Report a bug the moment you find it, BEFORE fixing it. |
