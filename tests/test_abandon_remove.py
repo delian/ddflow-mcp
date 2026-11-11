@@ -190,9 +190,7 @@ def test_abandon_with_drop_edges_drops_the_edges(repo):
         "--needs",
         "P1.T1",
     )
-    code, _, err = run_cli(
-        repo, "abandon", "P1.T1", "--reason", "superseded", "--drop-edges"
-    )
+    code, _, err = run_cli(repo, "abandon", "P1.T1", "--reason", "superseded", "--drop-edges")
     assert code == OK, err
     shown = json.loads(run_cli(repo, "--json", "show", "P1.T3")[1])
     assert "P1.T1" not in shown["needs"], shown["needs"]
