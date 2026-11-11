@@ -22,9 +22,12 @@ import tomllib
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-import tomlkit
-
 from .ports import port
+
+# `tomlkit` (the write side) is imported lazily inside `dumps`/`document` (B19157c3453):
+# the READ side (`tomllib`) must stay importable under `-S`, where site-packages is dropped
+# and `tomlkit` is gone, or the bare-interpreter import `scripts/bump.sh` (and the MCP
+# handshake) refuses to start.
 
 
 class TomlError(tomllib.TOMLDecodeError):
@@ -105,9 +108,13 @@ class TomlLibIo:
         return self.loads(text)
 
     def dumps(self, data: Any) -> str:
+        import tomlkit  # deferred: the write side's dep is optional to import the module
+
         return tomlkit.dumps(data)
 
     def document(self, text: str) -> Any:
+        import tomlkit  # deferred: see `dumps`
+
         try:
             return tomlkit.parse(text)
         except tomlkit.exceptions.ParseError as exc:  # one error family, as `loads` has
