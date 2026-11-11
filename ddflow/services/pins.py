@@ -412,17 +412,18 @@ def _recorded_a_refusal(
 
 
 def _records_refusal(repo: Path, r: Recipe, kept: dict[Path, bytes | None] | None) -> bool:
-    """Whether a file the recipe owns now holds the foreign-launch refusal message that it did
-    not hold before the run (``kept``): text a pin already quotes, or a file this run did not
-    touch, is not a recorded refusal."""
+    """Whether a file the recipe owns now holds MORE copies of the foreign-launch refusal message
+    than it did before the run (``kept``): text a pin already quotes, or a file this run did not
+    touch, is not a recorded refusal; a transcript the run filled with the refusal always has
+    more (one per command)."""
     needle = FOREIGN_LAUNCH_REFUSAL.encode()
     for p in _owned(repo, r):
         try:
             now = p.read_bytes()
         except OSError:
             continue
-        before = (kept or {}).get(p)
-        if needle in now and not (before is not None and needle in before):
+        before = (kept or {}).get(p) or b""
+        if now.count(needle) > before.count(needle):
             return True
     return False
 

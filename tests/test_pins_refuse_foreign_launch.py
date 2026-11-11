@@ -70,3 +70,14 @@ def test_text_the_pin_already_quoted_is_not_a_recorded_refusal(tree):
     )
     assert not rep.failed or "foreign-launch" not in rep.failed[0].error
     assert (tree / "pin.json").read_text().endswith("more")
+
+
+def test_a_regeneration_that_adds_more_refusals_to_a_pin_that_quoted_one_is_refused(tree):
+    quoted = f"docs: the guard says {I.FOREIGN_LAUNCH_REFUSAL} X\n"
+    (tree / "pin.json").write_text(quoted)
+    poisoned = quoted + f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL} /lane\n"
+    rep = PN.regenerate(
+        tree, Config.load(tree), recipes=[_recipe(f"open('pin.json','w').write({poisoned!r})")]
+    )
+    assert "foreign-launch refusal" in rep.failed[0].error
+    assert (tree / "pin.json").read_text() == quoted
