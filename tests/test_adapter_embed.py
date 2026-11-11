@@ -34,9 +34,7 @@ def embed_conformance(e: Embedder) -> None:
     assert all(isinstance(r, tuple) and all(isinstance(x, float) for x in r) for r in got)
 
 
-CONFORMANCE = {
-    "Embedder": {"real": _real, "cases": embed_conformance}
-}
+CONFORMANCE = {"Embedder": {"real": _real, "cases": embed_conformance}}
 
 
 def test_the_adapter_and_the_fake_satisfy_the_port():

@@ -16,9 +16,7 @@ def fuzzy_conformance(f: Fuzzy) -> None:
     assert 0.0 <= f.ratio("apple", "banana") <= 1.0
 
 
-CONFORMANCE = {
-    "Fuzzy": {"real": lambda monkeypatch: N.DefaultFuzzy(), "cases": fuzzy_conformance}
-}
+CONFORMANCE = {"Fuzzy": {"real": lambda monkeypatch: N.DefaultFuzzy(), "cases": fuzzy_conformance}}
 
 
 def test_the_adapter_and_the_fake_satisfy_the_port():
