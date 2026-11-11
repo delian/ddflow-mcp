@@ -66,7 +66,11 @@ def _runs_by_bucket(ctx: Context, size: dict[str, int | None]) -> dict[str, list
     for o in ctx.facts.outcomes:
         if o.gate not in REVIEW_GATES or o.kind not in RAN or not ctx.in_scope(o.item, o.at):
             continue
-        r = {"elapsed_s": o.elapsed_s, "wait_s": o.waited_s, "finding": (o.item, o.gate) in with_finding}
+        r = {
+            "elapsed_s": o.elapsed_s,
+            "wait_s": o.waited_s,
+            "finding": (o.item, o.gate) in with_finding,
+        }
         bucket_runs[bucket_of(size.get(o.item))].append(r)
     return bucket_runs
 
@@ -109,9 +113,7 @@ def build(ctx: Context, group_by: str = "") -> dict:
                 "lock_wait": waited,
                 "findings": n,
                 "findings_per_run": rate(n, len(runs), minimum),
-                "runs_with_finding": rate(
-                    sum(1 for r in runs if r["finding"]), len(runs), minimum
-                ),
+                "runs_with_finding": rate(sum(1 for r in runs if r["finding"]), len(runs), minimum),
                 "confirmed": finds.get("confirmed", 0),
                 "refuted": finds.get("refuted", 0),
                 "confirmed_rate": rate(

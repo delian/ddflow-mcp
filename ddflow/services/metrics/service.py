@@ -141,7 +141,7 @@ def _lanes(events: Sequence[Event], cfg: Config, now: float, floor: float | None
     return Answer(not reason, reason, metrics={**g, **u}, text=text_lanes(g, u))
 
 
-def run(  # noqa: PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
+def run(  # noqa: C901, PLR0911 -- one return per view in a dispatch table, like ``Server.handle``
     events: Sequence[Event],
     state: State,
     cfg: Config,
