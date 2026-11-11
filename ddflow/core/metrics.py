@@ -21,4 +21,5 @@ VIEWS: tuple[str, ...] = (
     "variants",
     "swarm",
     "slo",
+    "batch",
 )
