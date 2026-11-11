@@ -108,7 +108,10 @@ def _dotted_string_name(dotted: str) -> tuple[str, str]:
 
 
 def _patched_reexport(
-    node: ast.Call, log_names: set[str], parent_names: set[str], ddflow_names: set[str],
+    node: ast.Call,
+    log_names: set[str],
+    parent_names: set[str],
+    ddflow_names: set[str],
     reexports: dict[str, set[str]],
 ) -> str | None:
     """The re-export name a ``monkeypatch.setattr`` rebinds on the log PACKAGE, or ``None``
@@ -129,12 +132,16 @@ def _patched_reexport(
             return name.value if on_log else None
         # A variable attribute name on the package re-spells any re-export and cannot be
         # resolved statically: flag it so the author spells the submodule patch out.
-        return "<dynamic>" if _is_log_package(target, log_names, parent_names, ddflow_names) else None
+        return (
+            "<dynamic>" if _is_log_package(target, log_names, parent_names, ddflow_names) else None
+        )
     # Two-arg form. ``setattr(L, "APPEND_HOOKS")`` / ``setattr("ddflow.infra.log",
     # "APPEND_HOOKS")`` deletes the package attribute; ``setattr("ddflow.infra.log.NAME",
     # value)`` names the attribute as the last part of the dotted target string.
     if isinstance(name, ast.Constant) and isinstance(name.value, str):
-        on_log = name.value in reexports and _is_log_package(target, log_names, parent_names, ddflow_names)
+        on_log = name.value in reexports and _is_log_package(
+            target, log_names, parent_names, ddflow_names
+        )
         if on_log:
             return name.value
     if isinstance(target, ast.Constant) and isinstance(target.value, str):
@@ -150,7 +157,11 @@ def _offenders(src: str, reexports: dict[str, set[str]]) -> list[tuple[int, str]
     log_names, parent_names, ddflow_names = _log_package_bindings(tree)
     bad = []
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "setattr"):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "setattr"
+        ):
             continue
         attr = _patched_reexport(node, log_names, parent_names, ddflow_names, reexports)
         if attr is not None:
@@ -202,9 +213,7 @@ def test_guard_flags_a_dynamic_attribute_name_on_the_package():
     the guard cannot resolve it statically, so it is refused rather than silently missed."""
     reexports = _by_value_reexports()
     src = (
-        'from ddflow.infra import log as L\n'
-        'attr = "APPEND_HOOKS"\n'
-        'monkeypatch.setattr(L, attr, [])'
+        'from ddflow.infra import log as L\nattr = "APPEND_HOOKS"\nmonkeypatch.setattr(L, attr, [])'
     )
     names = [name for _, name in _offenders(src, reexports)]
     assert names == ["<dynamic>"], names

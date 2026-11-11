@@ -203,9 +203,7 @@ def assess(ctx: Context) -> dict:
         },
     ]
     burn = {
-        r["name"]: _burn(
-            r["value"], r["target"], s.burn_rate_window_s, s.burn_rate_exhaust_s
-        )
+        r["name"]: _burn(r["value"], r["target"], s.burn_rate_window_s, s.burn_rate_exhaust_s)
         for r in rows
         if r["burn"]
     }
