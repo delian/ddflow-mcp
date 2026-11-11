@@ -58,6 +58,7 @@ def _iter_counter_cases() -> Iterator[tuple[str, str, int]]:
     yield ("from pathlib import Path\nPath('a').replace('b').replace('c')\n", "os_replace", 2)
     yield ("from pathlib import Path\ntarget = Path('x')\ntarget.replace('y')\n", "os_replace", 1)
     yield ("from pathlib import Path\nPath('a').parent.replace('b')\n", "os_replace", 1)
+    yield ("from pathlib import Path\nPath.home().replace('b')\n", "os_replace", 1)
     yield ("from pathlib import Path\ndef f(*, dest: Path):\n    dest.replace('b')\n", "os_replace", 1)
     yield ("from pathlib import Path\ndef f(dest: Path, /):\n    dest.replace('b')\n", "os_replace", 1)
     yield ("import hashlib\nhashlib.sha256(b'').hexdigest()\n", "hashlib", 1)

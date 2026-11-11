@@ -112,6 +112,8 @@ _PATH_RESULT = frozenset(
         "pathlib.Path.absolute",
         "pathlib.Path.expanduser",
         "pathlib.Path.joinpath",
+        "pathlib.Path.cwd",
+        "pathlib.Path.home",
     }
 )
 
