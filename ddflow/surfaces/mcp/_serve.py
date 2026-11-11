@@ -16,6 +16,7 @@ from ...adapters.mcp import StdioServer
 from ...api import cap_blas_threads
 from ...infra import proc as PROC
 from ...infra.worktree import repo_root
+from .. import mcp_lifecycle as _lifecycle
 from .. import mcp_upgrade as _upgrade
 from ..mcp_protocol import SERVER_INFO
 from ..mcp_protocol import modern_check as _modern_check
@@ -74,7 +75,9 @@ def serve(
         return True
 
     def after() -> None:
-        if srv.reexec_pending and _reexec_ready(inp, relays):
+        if srv.kill_pending and _reexec_ready(inp, relays):
+            _lifecycle.exit_process()  # a kill (local) or a reboot (remote): never returns
+        elif srv.reexec_pending and _reexec_ready(inp, relays):
             _upgrade.execute(srv, PROC.replace_process)
 
     transport.serve(inp, srv.handle, intercept=intercept, after=after)
