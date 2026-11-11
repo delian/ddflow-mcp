@@ -863,8 +863,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=02c33f8c846b -->
-<details><summary>All 675 knobs across 60 sections</summary>
+<!-- ddflow:begin README/knobs sha=33f90fc572a5 -->
+<details><summary>All 677 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1332,6 +1332,8 @@ long default is left to `ddflow config --explain`.
 | `pins.mergiraf_min_git` | `"2.44"` |  |
 | `pins.mergiraf_keep_pct` | `10` |  |
 | `plan.warn_missing_globs` | `true` |  |
+| `prices.limit` | `{}` |  |
+| `prices.reset` | `{}` |  |
 | `prompts.review_system` | `""` |  |
 | `prompts.review_user` | `""` |  |
 | `prompts.gate_instruction` | `""` |  |

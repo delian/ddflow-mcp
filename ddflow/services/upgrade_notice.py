@@ -33,9 +33,11 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..config._tree import declared_version
 from ..core.events import is_older, version_key
 from ..core.model import State
 from ..infra import fsio
+from ..infra import paths as _paths
 from ..infra.log import running_version
 from . import upgrade_apply as UA
 from . import upgrade_plan as UP
@@ -158,9 +160,15 @@ def line(repo: Path, log: Any, cfg: Config, st: State, *, agent: str = "") -> st
 def installed_version() -> str:
     """The version of the ddflow package installed NOW (distribution metadata, read from
     disk each time), "" when it cannot be told. A running process keeps the version it was
-    imported at; after an upgrade the two differ."""
+    imported at; after an upgrade the two differ. A source tree / editable install IS its
+    own install, so its "installed" version is what the tree declares on disk now -- the
+    metadata answers the frozen import version, which hides an on-disk bump and lets a
+    stale server conclude a restart would change nothing."""
     try:
-        return install_info().version
+        info = install_info()
+        if info.kind in ("source-tree", "editable"):
+            return declared_version(_paths.package_parent()) or info.version
+        return info.version
     except Exception:
         return ""
 

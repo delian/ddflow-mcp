@@ -240,11 +240,16 @@ def item_set(kd_kind: str, rid: str, edit) -> str:
         return bad
     _fold_set_lists(edit, extra)
     if extra:
-        return (
-            f"{kd_kind} {rid} has no own field {sorted(extra)[0]!r} to set: its fields are the "
-            "update flags (--title --body --append-body --tags --needs --globs --parent "
-            "--priority ...), and --set carries only add_/remove_ tags, needs and globs. "
-            "Nearest verb: ddflow update --help."
+        return " ".join(
+            [
+                kd_kind,
+                rid,
+                "has no own field",
+                repr(sorted(extra)[0]),
+                "to set: its fields are the update flags (--title --body --append-body --tags",
+                "--needs --globs --parent --priority ...), and --set carries only add_/remove_",
+                "tags, needs and globs. Nearest verb: ddflow update --help.",
+            ]
         )
     return ""
 

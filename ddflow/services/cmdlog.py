@@ -21,12 +21,13 @@ read-only log must not break the command being logged.
 from __future__ import annotations
 
 import json
-import os
-import time
 from collections.abc import Iterable
 from pathlib import Path
 
+from ..adapters.clock import DEFAULT as CLOCK
+from ..adapters.env import DEFAULT as ENV
 from ..core.redact import redact_argv
+from ..infra import fsio
 from .redact_report import redactor
 
 CAP_ENTRIES = 500  #: The ring size (a module constant for this slice; the knob is for later).
@@ -55,8 +56,8 @@ def record(
     path = _path(repo)
     try:
         line = {
-            "t": time.time(),
-            "agent": agent or os.environ.get("DDFLOW_AGENT", ""),
+            "t": CLOCK.wall(),
+            "agent": agent or ENV.get("DDFLOW_AGENT", ""),
             "argv": redact_argv(list(argv), verbs, flags),
             "exit": int(code) if code is not None else None,
             "tail": redactor("log").text(tail or "").text[-TAIL_CHARS:],
@@ -71,19 +72,17 @@ def record(
 
 def _trim(path: Path) -> None:
     """Drop the oldest lines once the log has grown past ``CAP_ENTRIES``. The tail is rewritten
-    through a temp file and renamed into place (`os.replace` is atomic), so a kill or a full
-    disk mid-rewrite leaves the old ring, never a half-written or emptied one. Two processes
-    may still drop one another's concurrent append -- a best-effort "last N" ring, so `recent`
-    skips a line torn by that."""
+    through `ddflow.infra.fsio.replace_text` (`write_text`'s one home), which writes a temp
+    file and atomically renames it into place, so a kill or a full disk mid-rewrite leaves the
+    old ring, never a half-written or emptied one. Two processes may still drop one another's
+    concurrent append -- a best-effort "last N" ring, so `recent` skips a line torn by that."""
     try:
         if path.stat().st_size == 0:
             return
         text = path.read_text(encoding="utf-8")
         if text.count("\n") <= CAP_ENTRIES:
             return
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text("".join(text.splitlines(keepends=True)[-CAP_ENTRIES:]), encoding="utf-8")
-        os.replace(tmp, path)
+        fsio.replace_text(path, "".join(text.splitlines(keepends=True)[-CAP_ENTRIES:]))
     except OSError:
         return
 

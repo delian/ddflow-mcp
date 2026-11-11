@@ -38,6 +38,8 @@ the escape hatch — recorded as a skip, never as a pass.
 `--max-batch N` entries per run, `--unit-tests` / `--no-unit-tests` to run or skip each entry's
 `unit_tests` gate on the merged result — `ddflow queue status` (the default) prints the line, and
 `ddflow queue remove <id>` drops an entry. Defaults live in `[merge_queue]`.
+`ddflow merge <id> --queue` is the same enqueue from the merge command: it puts the item in the queue
+instead of landing it, so the integrator lands it with the rest.
 
 **Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
 `ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on

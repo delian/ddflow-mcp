@@ -175,7 +175,7 @@ def test_parse_accepts_a_minimal_descriptor():
             lambda t: t.replace('[mcp]\npath = ".demo/mcp.json"\nshape = "mcpServers"', ""),
             "expected a table",
         ),
-        (lambda t: t + '\n[hooks]\nstyle = "claude"\n', "needs file, normalizer, emitter"),
+        (lambda t: t + '\n[hooks]\nstyle = "claude"\n', "needs file, emitter"),
         (lambda t: t + '\n[hooks]\nstyle = "none"\nfile = "x"\n', "takes no file"),
         (
             lambda t: t + '\n[hooks]\nstyle = "plugin"\n[hooks.events]\nsparkle = "x"\n',
