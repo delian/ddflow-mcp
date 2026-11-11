@@ -32,7 +32,7 @@ from .reservations import (
     _clears_on_release,
     _in_motion,
 )
-from .wait_approval import _bounded, _keep_alive, _note_cap, _poll, _wait_approval, _wait_job
+from .wait_approval import _bounded, _call_cap, _keep_alive, _note_cap, _poll, _wait_approval, _wait_job
 
 
 def _judge_held(st, cfg, it, me: str, now: float, globs, out: dict[str, Any]) -> dict[str, Any]:
@@ -537,7 +537,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
         return args
     item, phase, kind, lease, want, notify, resume, poll, empty = args
     log, cfg, st = _load(repo, agent)
-    timeout, capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
+    timeout, capped = _bounded(timeout_s, max_s, _call_cap(cfg))
     found = (
         _require(st, item, "wait", cfg.lease.grace_s, log.clone_id(create=False)) if item else None
     )
@@ -568,7 +568,7 @@ def wait(  # noqa: PLR0913 -- one keyword per wait facet, all keyword-only
     ):
         return result(v, 0.0, [])
 
-    _note_cap(say, capped, resume, cfg.lease.wait_cap_s)
+    _note_cap(say, capped, resume, _call_cap(cfg))
     started = time.monotonic()
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`

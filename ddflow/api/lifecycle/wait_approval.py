@@ -34,18 +34,29 @@ def _note_cap(say, capped: bool, token: str, cap: float = WAIT_MAX_S) -> None:
         say(f"waiting at most {cap}s at a time; resume with the token {token} to wait longer")
 
 
+def _call_cap(cfg) -> float:
+    """The longest one `wait` call blocks: `[wait].max_call_seconds` (the economy bound the
+    agent re-calls at, D-TE-Q3) within `[lease].wait_cap_s` (the hard ceiling below the
+    client's idle abort). Whichever is shorter wins."""
+    return min(float(cfg.wait.max_call_seconds), float(cfg.lease.wait_cap_s))
+
+
 def _bounded(
     timeout_s: float | None, max_s: float | None, cap: float = WAIT_MAX_S
 ) -> tuple[float, bool]:
-    """(seconds to wait, which a text-mode caller reads cutting the cap). ``max_s`` is the
-    caller's own bound and is honoured whole: it is the wait's length when no ``timeout_s``
-    is given (B-wait-lease-max-s-ignored) and the wait never outlasts it."""
+    """(seconds to wait, whether a text-mode caller is told it was cut to the cap).
+
+    ``max_s`` is the caller's own bound: it is the wait's length when no ``timeout_s`` is
+    given (B-wait-lease-max-s-ignored), and it can SHORTEN the wait below ``cap`` but never
+    lengthen it past ``cap`` -- the one-call ceiling applies always (D-TE-Q3), so an agent
+    asking for 600 s still returns at ``cap``, still-waiting, and re-calls with its
+    heartbeat riding on the next call."""
     if timeout_s is None:
         timeout = DEFAULT_WAIT_TIMEOUT_S if max_s is None else float(max_s)
     else:
         timeout = float(timeout_s)
     if max_s is not None:
-        return min(timeout, float(max_s)), False  # negative: refused by the caller
+        return min(timeout, float(max_s), float(cap)), min(timeout, float(max_s)) > cap
     return min(timeout, float(cap)), timeout > cap
 
 
@@ -223,7 +234,7 @@ def _wait_approval(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
             **empty_v({"status": "blocked", "ready": [], "waiting_on": [], "blocked": []}),
         )
     log, cfg, st = _load(repo, agent)
-    timeout, _capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
+    timeout, _capped = _bounded(timeout_s, max_s, _call_cap(cfg))
     poll = WT.POLL_S if poll_s is None else float(poll_s)
     if timeout < 0 or poll <= 0:
         return O.failed(
@@ -420,7 +431,7 @@ def _wait_job(  # noqa: PLR0913, PLR0917 -- the facets `wait` forwards
             **empty_v({"status": "blocked", "ready": [], "waiting_on": [], "blocked": []}),
         )
     log, cfg, st = _load(repo, agent)
-    timeout, _capped = _bounded(timeout_s, max_s, cfg.lease.wait_cap_s)
+    timeout, _capped = _bounded(timeout_s, max_s, _call_cap(cfg))
     poll = WT.POLL_S if poll_s is None else float(poll_s)
     if timeout < 0 or poll <= 0:
         return O.failed(
