@@ -5,6 +5,7 @@ from __future__ import annotations
 from shlex import quote
 
 from ....views.output_caps import from_args as _cap
+from ....views.output_caps import lane_token as _lane_token
 from ..capflags import capped
 from ._shared import (
     AB,
@@ -35,7 +36,8 @@ def _next(repo, a, agent):
         out = _api().next_lane(
             repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
         )
-        return _cap(repo, out, f"next --lane {lane}", a)  # its footer names the lane call
+        token = _lane_token(lane, "" if kind == _api().DEFAULT_NEXT_KIND else kind, phase)
+        return _cap(repo, out, token, a)  # its footer names the lane call
     return _cap(
         repo,
         _api().next_item(repo, kind=kind, phase=phase, agent=agent, phase_only=phase_only),

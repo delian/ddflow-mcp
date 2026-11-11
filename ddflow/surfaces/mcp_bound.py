@@ -7,8 +7,9 @@ read into a model's context in full, so each of those is paid for on every call.
 
 The rule, set by `B-fix-status-bound` and kept here: counts are exact, a list that is cut
 says so (`truncated`, or a second content block where the body is a bare array), and says
-how to get the rest. Nothing is dropped silently. The CLI's `--json` is NOT cut: it is the
-full body, so the two agree only while nothing crosses a bound -- `bound_*` is the one
+how to get the rest. Nothing is dropped silently. The CLI's `--json` is cut by `output_caps`
+(`[output]` max_rows and max_chars), as the MCP call is: `bound_*` adds only what `output_caps`
+does not, so the two differ by that alone. `bound_*` is the one
 place that difference lives, and `tests/test_mcp_payload_bound.py` pins it.
 
 Each function takes the full body (what `--json` prints) and the call's arguments, and
@@ -27,8 +28,11 @@ from ..core import limits as L
 from ..core.textcut import clip
 from ..views.output_caps import take_note
 
-#: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
-NEXT_BLOCKED_SHOWN = 10
+#: What a cut blocked list of `ddflow_next` says about its reasons.
+_BLOCKED_HINT = (
+    "`ddflow --json next --full` lists every blocked item and its reason (a cap-held "
+    "item's reason is only in next's list, not in ddflow_show <id>)"
+)
 #: Rows `ddflow_progress` and `ddflow_decision_list` return unless `limit` says otherwise;
 #: `limit=0` is everything.
 ROWS_SHOWN = 25
@@ -85,30 +89,22 @@ def _limit(args: dict[str, Any], default: int = ROWS_SHOWN) -> int:
 
 def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_next`: the ready items with long strings clipped and counted in
-    `truncated.clipped_strings`; the blocked list cut, its reasons counted."""
+    `truncated.clipped_strings`; the blocked list is `output_caps`' to cut (max_rows)."""
     if not isinstance(body, dict) or not isinstance(body.get("blocked"), list):
         return body, None
-    if args.get("full") or "truncated" in body:
-        # `full=true` lifts the cut; a body `output_caps` already cut names its own footer.
+    if args.get("full"):
         return {**body, "ready": [_lean(i) for i in body.get("ready") or []]}, None
     out = dict(body)
-    blocked = body["blocked"]
     cut = [0]
     out["ready"] = [_clip(_lean(i), cut) for i in body.get("ready") or []]
-    if len(blocked) > NEXT_BLOCKED_SHOWN:
-        reasons: dict[str, int] = {}
-        for b in blocked:
-            reasons[b.get("reason", "")] = reasons.get(b.get("reason", ""), 0) + 1
-        out["blocked"] = blocked[:NEXT_BLOCKED_SHOWN]
-        out["truncated"] = {
-            "blocked": len(blocked),
-            "shown": NEXT_BLOCKED_SHOWN,
-            "blocked_by_reason": reasons,
-            "all": "`ddflow --json next` lists every blocked item and its reason (a cap-held "
-            "item's reason is only in next's list, not in ddflow_show <id>)",
-        }
+    cutinfo = body.get("truncated")
+    if isinstance(cutinfo, dict) and "blocked" in (cutinfo.get("lists") or {}):
+        # `output_caps` cut the blocked list and wrote the footer; this adds the one hint it
+        # lacks (where a blocked item's reason is).
+        out["truncated"] = {**cutinfo, "all": _BLOCKED_HINT}
     if cut[0]:
-        out.setdefault("truncated", {})["clipped_strings"] = cut[0]
+        out["truncated"] = dict(out.get("truncated") or {})
+        out["truncated"]["clipped_strings"] = cut[0]
         out["truncated"].setdefault(
             "all",
             "`ddflow --json next` has each body whole; ddflow_show <id> has one item's body whole",

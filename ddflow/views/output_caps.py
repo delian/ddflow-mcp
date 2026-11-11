@@ -142,11 +142,32 @@ def _cut_lists(command: str, data: dict[str, Any], limit: int, start: int) -> di
 def _entry(command: str) -> tuple[str, str, tuple[str, str] | None, str]:
     """`COMMANDS` row of ``command``. ``next --lane L`` is `next` for that lane: the calls it
     names keep the lane, and its answer (one item and a note) pages no list."""
-    base, _, lane = command.partition(" --lane ")
+    base, _, rest = command.partition(" --lane ")
     cli, tool, narrow, paged = COMMANDS[base]
-    if not lane:
+    if not rest:
         return cli, tool, narrow, paged
-    return f"{cli} --lane {shlex.quote(lane)}", f"{tool} lane={lane}", narrow, ""
+    # `next --lane L [--kind K] [--phase P]`: the rerun keeps the whole selection.
+    lane, kind, phase = _split_lane(rest)
+    c_args, t_args = [f"--lane {shlex.quote(lane)}"], [f"lane={shlex.quote(lane)}"]
+    for flag, val in (("kind", kind), ("phase", phase)):
+        if val:
+            c_args.append(f"--{flag} {shlex.quote(val)}")
+            t_args.append(f"{flag}={shlex.quote(val)}")
+    return f"{cli} {' '.join(c_args)}", f"{tool} {' '.join(t_args)}", narrow, ""
+
+
+def _split_lane(rest: str) -> tuple[str, str, str]:
+    """``'L --kind K --phase P'`` -> (L, K, P); kind and phase are optional."""
+    rest, _, phase = rest.partition(" --phase ")
+    lane, _, kind = rest.partition(" --kind ")
+    return lane, kind, phase
+
+
+def lane_token(lane: str, kind: str = "", phase: str = "") -> str:
+    """The ``command`` token `apply` reads for `next --lane`: carries kind and phase."""
+    return f"next --lane {lane}" + (f" --kind {kind}" if kind else "") + (
+        f" --phase {phase}" if phase else ""
+    )
 
 
 def _page_calls(command: str, row: int) -> tuple[str, str]:
@@ -368,7 +389,9 @@ def apply(
     rows, chars = _limits(cfg)
     # A `--json` body carries the prose AND the rows: each gets half, so the body is held to
     # `max_chars` (an MCP text tool or a terminal shows the text alone, whole).
-    budget = max(1, chars // 2) if wire and chars else chars
+    # Halved only for a body that carries prose beside its rows (`board`): one without a
+    # `text` (`status`) is held to the whole budget, as the MCP call is.
+    budget = max(1, chars // 2) if wire and chars and out.data.get("text") else chars
     start = max(0, int(cursor or 0)) if _entry(command)[3] else 0
     work, limit, info = _fit(command, out.data, rows, start, budget if chars else 0)
     text, cut_chars = _cut_text(
