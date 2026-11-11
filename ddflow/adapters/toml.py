@@ -24,10 +24,10 @@ from typing import Any, Protocol, runtime_checkable
 
 from .ports import port
 
-# `tomlkit` (the write side) is imported lazily inside `dumps`/`document` (B19157c3453):
-# the READ side (`tomllib`) must stay importable under `-S`, where site-packages is dropped
-# and `tomlkit` is gone, or the bare-interpreter import `scripts/bump.sh` (and the MCP
-# handshake) refuses to start.
+# `tomlkit` (the write side) is imported lazily via `_tomlkit` (B19157c3453): the READ side
+# (`tomllib`) must stay importable under `-S`, where site-packages is dropped and `tomlkit`
+# is gone, or the bare-interpreter import `scripts/bump.sh` (and the MCP handshake) refuses
+# to start.
 
 
 class TomlError(tomllib.TOMLDecodeError):
@@ -89,6 +89,14 @@ class TomlIo(Protocol):
         """``text`` as an editable document (comments and layout kept); `TomlError` when bad."""
 
 
+def _tomlkit() -> Any:
+    """The write side's `tomlkit` module, imported on first use: ``-S`` drops site-packages
+    and with it tomlkit, so the READ side must import without it (B19157c3453)."""
+    import tomlkit
+
+    return tomlkit
+
+
 class TomlLibIo:
     """The default `TomlIo`: `tomllib` to read, `tomlkit` to write."""
 
@@ -108,13 +116,10 @@ class TomlLibIo:
         return self.loads(text)
 
     def dumps(self, data: Any) -> str:
-        import tomlkit  # deferred: the write side's dep is optional to import the module
-
-        return tomlkit.dumps(data)
+        return _tomlkit().dumps(data)
 
     def document(self, text: str) -> Any:
-        import tomlkit  # deferred: see `dumps`
-
+        tomlkit = _tomlkit()
         try:
             return tomlkit.parse(text)
         except tomlkit.exceptions.ParseError as exc:  # one error family, as `loads` has
