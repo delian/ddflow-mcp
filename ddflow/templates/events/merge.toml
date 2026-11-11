@@ -7,3 +7,9 @@ fields = { "agent" = ["str"], "approval" = ["dict"], "sha" = ["str"], "unmet_gat
 text = ["unmet_gates"]
 lookup = { "agent" = "an agent id compared", "approval" = "an approval stamp compared", "sha" = "a sha" }
 exempt = "gate names and an approval stamp only; no claim about code to check"
+
+[[kind]]
+name = "merge.reconciled"
+doc = "This item's landing touched a file another item changed since it forked; complete is refused until the affected tests pass on the reconciled tree."
+fields = { "base" = ["str"], "files" = ["list"], "main" = ["str"], "unknown" = ["bool"] }
+exempt = "file paths and merge shas a landing reconciled, recorded by merge; no authored prose to check for duplication"

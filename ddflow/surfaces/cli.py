@@ -432,7 +432,13 @@ def _remember_command(
     try:
         root = repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
     except Exception:
-        root = Path.cwd()
+        try:
+            root = repo_root(Path.cwd())
+        except Exception:
+            # Neither the target nor the current directory is a git repository: there is no
+            # repo-local command log to append to, and writing one would leave a stray
+            # `.ddflow/` behind in a plain directory (Bd7c147dfb9).
+            return
     try:
         cmdlog.record(
             root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags

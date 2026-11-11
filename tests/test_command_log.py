@@ -4,10 +4,12 @@ reads the last N, and `reprobundle` reports them instead of "keeps no log of the
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 from ddflow.core.redact import redact_argv
 from ddflow.services import cmdlog
+from ddflow.surfaces import cli
 
 
 def _record(tmp_path: Path, argv, code=2, tail="", agent="me", **kw) -> None:
@@ -60,6 +62,30 @@ def test_the_log_drops_the_oldest_past_the_cap(tmp_path: Path):
     rows = cmdlog.recent(tmp_path, cmdlog.CAP_ENTRIES + 3)
     assert rows[0]["exit"] == 4, "the oldest 3 records were not dropped past the cap"
     assert (tmp_path / cmdlog.REL).read_text().count("\n") <= cmdlog.CAP_ENTRIES
+
+
+def test_the_command_log_is_not_written_when_there_is_no_repo(tmp_path: Path, monkeypatch):
+    """The command log lives under a repo root; run outside a git repository there is none, so
+    the best-effort log must not fall back to the cwd and leave a stray `.ddflow` (Bd7c147dfb9)."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    monkeypatch.chdir(plain)
+    monkeypatch.delenv("DDFLOW_REPO", raising=False)
+    args = argparse.Namespace(repo=None, agent="me")
+    cli._remember_command(args, ["ddflow", "onboard", "status"], 1, "", set(), set())
+    assert not (plain / ".ddflow").exists(), "a non-git directory must not gain a .ddflow dir"
+
+
+def test_the_command_log_still_falls_back_to_a_repository_cwd(repo: Path, monkeypatch):
+    """A target that is not a repository does not mean `skip`: when the process runs from
+    inside a real repository, the command belongs to that repository's log."""
+    plain = repo.parent / "outside"
+    plain.mkdir()
+    monkeypatch.chdir(repo)
+    monkeypatch.delenv("DDFLOW_REPO", raising=False)
+    args = argparse.Namespace(repo=str(plain), agent="me")  # a non-repository target
+    cli._remember_command(args, ["ddflow", "onboard", "status"], 1, "", set(), set())
+    assert (repo / ".ddflow" / "local" / "cmdlog.jsonl").exists()
 
 
 def test_the_tail_keeps_the_command_but_not_the_machine_home(tmp_path: Path):
