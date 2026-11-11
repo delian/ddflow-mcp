@@ -32,6 +32,10 @@ COMMANDS: tuple[Command, ...] = (
         path=("dispatch",),
         summary="the dispatcher's plan: what to start now, in order, on which lane (advise only)",
         tool="ddflow_dispatch",
+        family="ddflow_view",
+        action="dispatch",
+        tier="all",
+        help_group="Doing the work",
         description=(
             "Compute which queue items to start right now from the free slots, the ready "
             "set, conflicts and pin waits: the ordered items (bug fixes first, then "

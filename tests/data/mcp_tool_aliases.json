@@ -119,6 +119,11 @@
   "0.2.8",
   "1.0"
  ],
+ "ddflow_dispatch": [
+  "ddflow_view action=dispatch",
+  "0.2.8",
+  "1.0"
+ ],
  "ddflow_docs": [
   "ddflow_view action=docs",
   "0.2.8",

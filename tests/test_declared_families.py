@@ -149,3 +149,12 @@ def test_importing_families_with_an_unplaced_tool_in_the_registry_fails():
     run = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
     assert run.returncode != 0
     assert "ddflow_zed_go" in run.stderr
+
+
+def test_dispatch_is_placed_in_the_view_family_as_action_dispatch():
+    """B9121cc2762: ddflow_dispatch declared no family/action, so importing the families
+    module raised and every ci gate failed at the install probe."""
+    from ddflow.surfaces.declared import dispatch as D
+
+    assert [(c.family, c.action) for c in D.COMMANDS] == [("ddflow_view", "dispatch")]
+    assert F.placement("ddflow_dispatch") == ("ddflow_view", "dispatch")
