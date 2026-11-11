@@ -704,11 +704,11 @@
           person's approval.
       bugs.file_task = True   [default]
           Whether `bug found` files the bug's fix task in the queue (default true):
-          `fix-<bug id>`, tagged as a bug fix, under the standing `[bugs] phase`
-          (never the found item's own phase, which it would hold open), carrying the
-          bug's own found scope (the files its summary names plus the tests pinning
-          them) unless `--globs` says otherwise -- and the item's inherited globs when
-          the bug names more than `named_scope_at` files -- and linked to the bug.
+          `fix-<bug id>`, tagged as a bug fix, under the found item's own OPEN phase
+          (Be8ca1270a5) instead of the standing `[bugs] phase`, carrying the bug's own
+          found scope (the files its summary names plus the tests pinning them) unless
+          `--globs` says otherwise -- and the item's inherited globs when the bug
+          names more than `named_scope_at` files -- and linked to the bug.
           `bugs_first` offers it before features and a feature on the same files waits
           behind it, so bugs do not pile up under new work. `complete <fix task>`
           refuses while the bug is open and `--regression-test` closes it; `bug found
@@ -718,8 +718,9 @@
           fix task that fixes no other bug, that task is the fix and nothing new is
           filed. `false`: bugs are flat records, as before.
       bugs.phase = 'bugs'   [default]
-          The standing phase (default `bugs`) every fix task is filed under, whatever
-          item the bug names. Made on first use, with the title `Bugs`.
+          The standing phase (default `bugs`) every fix task is filed under when the
+          found item has no open phase of its own. Made on first use, with the title
+          `Bugs`.
       bugs.lint_checks = ['ruff', '(CI: Lint)', 'format', 'bandit', '(CI: Static security scan)']   [default]
           Substrings (case-insensitive) that make a CI-filed bug one with no test to
           write (a lint or static-scan check): `ddflow bug fixed <Bci-...> --lint-
@@ -2497,6 +2498,17 @@
           waiter must say so (`ddflow claim --break`), so breaking another agent's
           lease is always a deliberate, attributed act. On: any plain claim of a
           contended, idle lease breaks it.
+      lease.reconcile_tests = 'affected'   [default]
+          When this item's merge reconciled files another item changed since this one
+          branched (recorded as merge.reconciled), complete is refused until the tests
+          have passed on the reconciled tree: 'affected' runs the tests the reconciled
+          files select, 'full' the whole suite, 'off' turns the reconcile guard off.
+          D-lease-hold-limit-r2, D-gate-economy-r3. An unrecognised value in a config
+          file is warned about, reported by `doctor` and falls back to 'full', the
+          strictest (run the whole suite, never the narrower affected set); `config
+          --set`, `ddflow_configure` and the environment refuse it, and so does
+          loading ddflow's own source tree, where the file and the code are one
+          commit.
       lease.inbox_max_chars = 2000   [default]
           Longest message a lane's inbox (`ddflow session message`) keeps, in
           characters; the rest is cut and marked. Messages are untrusted text shown to
