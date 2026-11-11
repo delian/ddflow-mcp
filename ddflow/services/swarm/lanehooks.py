@@ -37,7 +37,7 @@ from typing import Any
 
 from ...infra import git as G
 from ...infra import proc as P
-from ...infra.fsio import replace_text, scratch_dir
+from ...infra.fsio import replace_text, rmtree_owned, scratch_dir
 from .. import approval, harnessreg
 from ..lane_driver import Result, unavailable
 from . import githook
@@ -299,7 +299,7 @@ def remove(home: Path) -> str:
             continue
         Path(f).unlink(missing_ok=True)
         done.append(f"removed {f}")
-    shutil.rmtree(home / DIR_NAME, ignore_errors=True)
+    rmtree_owned(home / DIR_NAME)
     return "; ".join(done) or "removed the lane hook manifest"
 
 
