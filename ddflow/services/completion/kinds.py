@@ -148,13 +148,16 @@ def infer(
     if name.endswith("_id"):
         stem = name[:-3]
         return f"id:{stem}" if stem in _id_kinds else "id"
-    # A flag whose metavar literally says ``ID`` takes a record id (``--extends ID``).
-    if metavar == "ID":
-        return "id"
+    # A name that spells a fixed vocabulary kind, or a record kind, is more specific than
+    # a bare ``ID`` metavar: `agent`/`bug` name the vocabulary, ``ID`` alone is the record-id
+    # fallback for an id call whose name says nothing specific (``--extends ID``).
     if name in NAME_KINDS:
         return NAME_KINDS[name]
     if name in _id_kinds:
         return f"id:{name}"
+    # A flag whose metavar literally says ``ID`` takes a record id when its name does not.
+    if metavar == "ID":
+        return "id"
     if name in DIR_NAMES or metavar in DIR_METAVARS:
         return "dir"
     if name in PATH_NAMES or metavar in PATH_METAVARS:
