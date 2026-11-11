@@ -23,7 +23,7 @@ def _over_cap(repo: Path) -> None:
 def test_over_cap_import_does_not_claim_nothing_was_found(repo):
     _over_cap(repo)
     run_cli(repo, "init")
-    code, out, err = run_cli(repo, "import", "--max-tasks", "50")
+    _code, out, err = run_cli(repo, "import", "--max-tasks", "50")
     text = out + err
     assert "REFUSING" in text, text
     assert "Nothing to import" not in text, text
