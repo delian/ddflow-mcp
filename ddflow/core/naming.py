@@ -140,17 +140,19 @@ def generate(
     role: str,
     family: str = "",
     host: str = "",
+    hostname: str = "",
     taken: Iterable[str] = (),
     current: str = "",
     draw: Callable[[str], str] | None = None,
 ) -> Resolved:
     """A name for a lane or agent ddflow names itself.
 
-    ``taken`` is every name in use (shard files, lease holders). ``current`` is the name
+    ``host`` is the host label, or ``hostname`` the OS name it is derived from (`host_part`); ``taken`` is every name in use (shard files, lease holders). ``current`` is the name
     this same agent already holds: a valid one is kept (resume, restart and re-claim
     change nothing). Otherwise the template is rendered; a taken result is re-drawn
     (`on_collision = suffix`) up to `[naming].max_tries` times, or refused (`refuse`)."""
     n = cfg.naming
+    host = host or (host_part(cfg, hostname) if hostname else "")
     if current and not name_problem(current, max_length=63):
         # Before the template is read: a restart changes nothing, whatever the template says
         # now. A case twin among the taken names is noted, as for a declared name.

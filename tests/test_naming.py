@@ -262,3 +262,14 @@ def test_a_resumed_name_that_is_a_case_twin_of_a_taken_one_carries_a_note() -> N
 def test_zero_tries_is_a_refusal_not_a_crash() -> None:
     with pytest.raises(naming.NameRefused, match="0 tries"):
         naming.generate(_cfg(max_tries=0), role="x")
+
+
+def test_generate_derives_the_host_label_from_a_hostname() -> None:
+    got = naming.generate(
+        Config(), role="r", family="k", hostname="Build-Box.example.org", draw=_fixed
+    )
+    assert got.name == "r-k-build-box-bbbb"
+    labelled = naming.generate(
+        _cfg(host_label="ci-7"), role="r", family="k", hostname="x.y", draw=_fixed
+    )
+    assert labelled.name == "r-k-ci-7-bbbb"
