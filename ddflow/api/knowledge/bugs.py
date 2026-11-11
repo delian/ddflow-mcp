@@ -202,13 +202,16 @@ def _fix_task_of(st, cfg, item: str, bug_id: str):
 
 def _open_phase_of(st, item: str) -> str:
     """The nearest OPEN phase at or above ``item``, or "". A finished phase does not take
-    new work: a task filed under it would sit open beneath a phase that says done."""
+    new work (a task filed under it would sit open beneath a phase that says done), and
+    a phase with ``needs`` of its own does not either: a bug fix task is a `no-deps`
+    leaf, and sitting beneath a phase whose needs it inherits would hold it behind
+    unrelated phases (B53cff7c735). Both fall back to the standing bugs phase."""
 
     it = st.items.get(item) if item else None
     if it is None or it.removed:
         return ""
     for node in (it, *st.ancestors(item)):
-        if node.kind == "phase" and not node.terminal and not node.removed:
+        if node.kind == "phase" and not node.terminal and not node.removed and not node.needs:
             return node.id
     return ""
 
