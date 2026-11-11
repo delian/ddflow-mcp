@@ -51,8 +51,8 @@ def _section(name: str, repo: Path | None, overrides: dict[str, str] | None) -> 
 
 #: Wording that tells a reader to answer the request themselves: never in a route, whoever
 #: wrote the template. (The words grant nothing; this keeps them from pointing the wrong way.)
-_FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "approve it yourself")
-_FLAG = re.compile(r"--approval[ =]+([^\s`'\".,;:)]+)")
+_FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "yourself", "approve it")
+_FLAG = re.compile(r"--approval[ =]+[`'\"]*([^\s`'\".,;:)]+)")
 _MAX_CHARS = 1200
 
 
@@ -67,7 +67,9 @@ def _sound(out: str, ident: str) -> bool:
         0 < len(out) <= _MAX_CHARS
         and all(m in out for m in _MUST_NAME)
         and all(f not in low for f in _FORBIDDEN)
-        and all(m in (ident, "request") for m in _FLAG.findall(out))
+        and bool(flags := _FLAG.findall(out))
+        and all(m in (ident, "request") for m in flags)
+        and out.count("--approval") == len(flags)
     )
 
 
