@@ -1253,7 +1253,7 @@
   
   options:
     -h, --help     show this help message and exit
-    --agent AGENT  one agent (default: all)
+    --agent AGENT  an agent descriptor or control plane (default: all)
     --unverified   only leads, and sections left out
   
   '''
@@ -1344,7 +1344,8 @@
       list                every agent and whether this project is adopted for it
       show                per event the ladder level in effect, and per feature the support
       doctor              drift, missing hooks and dangling commands (exit 1 = findings)
-      facts               every descriptor value with its status, source, tool version and date
+      facts               every descriptor value and control-plane fact with status, source, tool
+                          version and date
       add                 scaffold a descriptor skeleton with every fact left out (not verified)
       lint                a descriptor against the schema and the three-valued rule (exit 1 =
                           problems)
