@@ -32,7 +32,9 @@ def _next(repo, a, agent):
     kind, phase = a.get("kind") or _api().DEFAULT_NEXT_KIND, a.get("phase", "") or ""
     phase_only = bool(a.get("phase_only", False))
     if lane := a.get("lane", ""):
-        out = _api().next_lane(repo, lane=lane, kind=kind, phase=phase, agent=agent)
+        out = _api().next_lane(
+            repo, lane=lane, kind=kind, phase=phase, phase_only=phase_only, agent=agent
+        )
         return _cap(repo, out, f"next --lane {lane}", a)  # its footer names the lane call
     return _cap(
         repo,

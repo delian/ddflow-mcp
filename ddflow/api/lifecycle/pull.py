@@ -133,7 +133,13 @@ def _ask(
 
 
 def next_lane(
-    repo: Path, *, lane: str, kind: str = DEFAULT_NEXT_KIND, phase: str = "", agent: str = ""
+    repo: Path,
+    *,
+    lane: str,
+    kind: str = DEFAULT_NEXT_KIND,
+    phase: str = "",
+    agent: str = "",
+    phase_only: bool = False,
 ) -> O.Outcome:
     """The pull answer for ``lane``: an offer (exit 0), else exit 2 with why not."""
     log, cfg, st = _load(repo, agent)
@@ -141,7 +147,9 @@ def next_lane(
         return O.failed("next", unknown, phase=phase)
     now = CLOCK.wall()
     me = cfg.agent.id or log.agent_id
-    p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me)
+    p = plan_for(
+        repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me, phase_only=phase_only
+    )
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     live = st.active_leases(now, cfg.lease.grace_s)
     c = caps(st, cfg, live, parallel)
