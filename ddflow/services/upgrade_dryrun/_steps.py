@@ -75,7 +75,7 @@ class _RehearsalSteps:
         args = ("clone", "--quiet", "--local", "--no-hardlinks", "--no-checkout", str(src))
         done = self.git(work, *args, str(self.pristine))
         if not done.ok:
-            shutil.rmtree(self.pristine, ignore_errors=True)
+            fsio.rmtree_owned(self.pristine)
             time.sleep(CLONE_RETRY_S)
             done = self.git(work, *args, str(self.pristine))
         if not done.ok:

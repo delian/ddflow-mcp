@@ -75,7 +75,19 @@ def test_detector_folds_symbolic_name_arithmetic(tmp_path: Path) -> None:
     ]
 
 
-def test_bug_window_is_a_single_knob_not_a_hidden_duplicate() -> None:
+def test_bug_window_is_a_single_knob_not_a_hidden_duplicate(tmp_path: Path) -> None:
+    """B82352e0b9f: swarm_metrics.py duplicated ledger.py's BUG_WINDOW_S as
+    `7 * 24 * HOUR`; the pre-fold detector could not fold a Name operand, so a
+    ROOT scan passed vacuously on the unfixed tree (the duplicate was invisible
+    either way). Feed the detector the duplicate's exact shape and require it to
+    fold it to its literal value -- that part fails on a detector that still
+    cannot see `7 * 24 * HOUR` -- and keep the single-knob check on the real
+    tree so a re-introduced duplicate can never hide."""
+    a = _plant(
+        tmp_path,
+        "HOUR = 3600.0\nBUG_WINDOW_S = 7 * 24 * HOUR\n",
+    )
+    assert [(c.name, c.value) for c in a.unclassified] == [("BUG_WINDOW_S", 604800.0)]
     keys = {c.key for c in ca.scan(ROOT)}
     assert "ddflow/services/swarm/ledger.py:BUG_WINDOW_S" in keys
     assert "ddflow/services/swarm_metrics.py:BUG_WINDOW_S" not in keys

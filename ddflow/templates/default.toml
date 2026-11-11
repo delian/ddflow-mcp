@@ -352,6 +352,7 @@ idle_max_s = 900
 hold_max_s = 3600
 release_at_merge = true
 break_on_timeout = false
+reconcile_tests = "affected"
 inbox_max_chars = 2000
 inbox_max_pending = 50
 inbox_ttl_s = 86400

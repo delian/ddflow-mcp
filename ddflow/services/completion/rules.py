@@ -288,6 +288,74 @@ def _coverage_gap_blocker(cfg, gaps) -> str:
     return ""
 
 
+def _reconciled_blocker(cfg: Config, it: Item) -> str:
+    """When merge reconciled files another item changed since this one forked, complete is
+    refused until the tests pass on the reconciled tree (D-lease-hold-limit-r2); "" when
+    nothing is owed, the guard is off, or a pass already sits on the record."""
+    if cfg.lease.reconcile_tests == "off":
+        return ""
+    files = it.reconciled.get("files", []) if it.reconciled else []
+    unknown = bool(it.reconciled.get("unknown")) if it.reconciled else False
+    if not files and not unknown:
+        return ""
+    reconciled_at = it.reconciled.get("at") or ""
+    reconciled_main = (it.reconciled.get("main") or "")[:12]
+
+    def names_reconciled_tree(rec) -> bool:
+        # A stamp at or after `at` is not proof the run was ON the reconciled tree: a pass
+        # recorded after the reconcile can still be a stale pre-merge checkout. `tree_sha` is
+        # the run's OWN word for where it ran ("<commit-sha-prefix>+<status>"), so only a run
+        # whose HEAD starts with the reconciled commit sat on the reconciled tree; anything
+        # else (a different commit, or no `tree_sha`) is not proof and the guard stays closed.
+        # The note is free text and never evidence of WHERE the run ran (a path name is a
+        # substring of other names), so it is not consulted.
+        ev = rec.evidence or {}
+        sha = str(ev.get("tree_sha", "") or "")
+        return bool(sha) and bool(reconciled_main) and sha.startswith(reconciled_main)
+
+    def passed_on_reconciled_tree(gate: str) -> bool:
+        # A pass recorded BEFORE the reconcile is a stale pre-merge run; the guard asks for
+        # the suite on the RECONCILED tree, so only a gate recorded at or after `at` counts.
+        # A reconcile with no stamp cannot prove any pass is post-reconcile: fail closed.
+        if not reconciled_at:
+            return False
+        rec = it.gates.get(gate)
+        return (
+            bool(rec)
+            and rec.outcome == GateOutcome.PASSED
+            and rec.at >= reconciled_at
+            and names_reconciled_tree(rec)
+        )
+
+    passed = passed_on_reconciled_tree("unit_tests")
+    if cfg.lease.reconcile_tests != "full":
+        passed = passed or passed_on_reconciled_tree("ci")
+    if passed:
+        return ""
+    base = (it.reconciled.get("base") or "")[:12]
+    main = (it.reconciled.get("main") or "")[:12]
+    scope = "full suite" if cfg.lease.reconcile_tests == "full" else "affected tests"
+    if unknown:
+        return (
+            f"merge could not read the changed files (git could not answer, base {base}, main "
+            f"{main}): the {scope} must pass on the reconciled tree before complete "
+            f"(`ddflow gate run {it.id} unit_tests`), or set [lease].reconcile_tests = off"
+        )
+    named = ", ".join(files[:8])
+    return (
+        f"merge reconciled {named} that another item changed since this one forked "
+        f"(base {base}, main {main}): the {scope} must pass on the reconciled tree before "
+        f"complete (`ddflow gate run {it.id} unit_tests`), or set [lease].reconcile_tests = off"
+    )
+
+
+def _push_reconciled_blocker(cfg: Config, it: Item, blockers: list[str]) -> None:
+    """Append `_reconciled_blocker`'s answer when it answers (keeps `verdict` under its
+    complexity cap: the branch lives here, not in the caller)."""
+    if blocker := _reconciled_blocker(cfg, it):
+        blockers.append(blocker)
+
+
 def verdict(
     state: State,
     cfg: Config,
@@ -340,6 +408,7 @@ def verdict(
             + ")"
             + "".join(GA.next_step(it, item_id, g) for g in missing if GA.next_step(it, item_id, g))
         )
+    _push_reconciled_blocker(cfg, it, v.blockers)
 
     # ANY item with work beneath it, not only a phase: a task split into sub-tasks is
     # an umbrella too, and completing it while its children are open marks work
