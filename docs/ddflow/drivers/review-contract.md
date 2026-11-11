@@ -32,5 +32,6 @@ of the fix, the same as if it were a defect in the code.
 The engine is the checker the brief names. `ddflow.services.review.engine.parse` turns a
 round's reply into findings and reports `on_contract` from its `STATUS:` block, and
 `finding_digest` is a finding's id. A reply whose `STATUS:` block is missing is flagged off
-contract; a finding word-for-word identical to a closed one shares its digest, so repeating it
-is visible and flagged rather than silently re-litigated.
+contract; a finding word-for-word identical to a closed one shares its digest, and the
+convergence floor (`blocking_findings` over the digest) keeps a repeated one standing instead
+of dropping it as a new nit — so repeating it is visible rather than silently re-litigated.

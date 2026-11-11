@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 from ddflow.services.review.engine import parse
-from ddflow.services.review.model import finding_digest
+from ddflow.services.review.model import blocking_findings, finding_digest
 
 CONTRACT = Path(__file__).resolve().parents[1] / "docs" / "ddflow" / "drivers" / "review-contract.md"
 
@@ -28,24 +28,28 @@ def test_the_contract_states_the_stop_rule():
         assert re.search(term, text), f"the contract does not state the {term!r} rule"
 
 
-def test_a_repeated_closed_finding_shares_its_digest():
-    """The contract says a finding is its full text: a round repeating a closed finding
-    returns a finding with the same digest, so the repeat is visible instead of re-litigated."""
+def test_a_repeated_closed_finding_is_flagged_by_its_digest():
+    """The contract names one checker: a finding's full text is its id, so a round that
+    repeats a finding already seen is the same id, and the floor filter keeps a repeated one
+    standing instead of dropping it as a new nit."""
     closed = parse(
-        "FINDING HIGH ddflow/core/nope.py:1\nreturns None on empty input, which the caller dereferences\n"
-        "STATUS: FINDINGS 1\n"
+        "FINDING LOW ddflow/core/nope.py:1\nreturns None on empty input\nSTATUS: FINDINGS 1\n"
     )[0]
-    assert closed
-    repeat = parse(
+    digest = finding_digest(
+        closed[0].severity, closed[0].location, closed[0].title, closed[0].detail
+    )
+    repeated = parse(
         "STATUS: FINDINGS 1\n"
-        "FINDING HIGH ddflow/core/nope.py:1\nreturns None on empty input, which the caller dereferences\n"
+        "FINDING LOW ddflow/core/nope.py:1\nreturns None on empty input\n"
     )[0]
-    assert repeat
-    assert {
-        finding_digest(f.severity, f.location, f.title, f.detail) for f in repeat
-    } == {
-        finding_digest(f.severity, f.location, f.title, f.detail) for f in closed
-    }, "a repeated finding did not produce the same digest as the closed one it repeats"
+    # The runner stamps the digest on each finding it keeps (the contract's "id"); the floor
+    # filter then tells a NEW nit below the floor from a SAME words-again one.
+    for f in repeated:
+        f.digest = finding_digest(f.severity, f.location, f.title, f.detail)
+    assert blocking_findings(repeated, converged=True, floor="HIGH", known=[]) == []
+    assert blocking_findings(repeated, converged=True, floor="HIGH", known=[digest]), (
+        "a repeated finding was dropped as a new nit instead of flagged"
+    )
 
 
 def test_an_off_contract_reply_is_flagged():
