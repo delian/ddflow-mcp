@@ -171,6 +171,15 @@ def test_the_reviewer_refusal_keeps_a_command_reviewer_off_the_chat_route():
     )
 
 
+def test_an_unreadable_shipped_template_falls_back_to_the_code_text(monkeypatch):
+    def boom(*a, **k):
+        raise OSError("gone")
+
+    monkeypatch.setattr(H, "_section", boom)
+    text = H.route(GOOD)
+    assert f"--approval {GOOD}" in text and "ddflow approvals ask" in text
+
+
 def test_an_override_much_longer_than_the_shipped_route_is_ignored(tmp_path):
     p = tmp_path / "approvals.md"
     p.write_text(
