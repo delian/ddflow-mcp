@@ -115,6 +115,74 @@ def driver_drift(
     return list(driver_states(repo, docs_dir=docs_dir, package_dir=package_dir))
 
 
+def _plan_driver(mine: Path, tmpl: Path, rel: str) -> str:
+    """What `_write_driver` would do to one driver doc, predicted without writing it."""
+    region, want = _driver_region(rel), tmpl.read_text("utf-8")
+    if not mine.exists():
+        return f"would create {rel}"
+    try:
+        existing = mine.read_text("utf-8")
+    except UnicodeDecodeError:
+        return f"would write {rel} (your file is not UTF-8: it is kept aside first)"
+    state = doc_state(existing, region, want)
+    if state == DOC_NEWER:
+        s = region.stamp(existing)
+        return (
+            f"would refuse {rel}: written by ddflow {s.version if s else '?'} at a newer "
+            "format level"
+        )
+    if state == DOC_CURRENT:
+        return f"{rel} is current"
+    note = ""
+    if state == DOC_EDITED:
+        note = " (your edits are kept in .local-edits)"
+    elif state == DOC_LEGACY:
+        note = " (a copy from before headers: nothing says whether it was edited)"
+    return f"would rewrite {rel}{note}"
+
+
+def _plan_actions(
+    repo: Path, docs_dir: str, templates: Path, only: Collection[str] | None
+) -> list[str]:
+    """What `refresh_docs` would write, reported as a plan — nothing is written, no backup is
+    made and no `.local-edits` copy is taken."""
+
+    out: list[str] = []
+    for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
+        if only is not None and rel not in only:
+            continue
+        out.append(_plan_driver(mine, tmpl, rel))
+    section = project_section(docs_dir)
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        if only is not None and name not in only:
+            continue
+        path = repo / name
+        if name == "CLAUDE.md" and not path.exists() and "claude" not in (
+            adopted_agents(repo, docs_dir=docs_dir)
+        ):
+            continue
+        out.append(_plan_block(path, section, name))
+    for key in adopted_agents(repo, docs_dir=docs_dir):
+        if key in NATIVE_RULES and (only is None or NATIVE_RULES[key].path in only):
+            out.append(_plan_native(repo, key, docs_dir))
+    return out
+
+
+def _plan_block(path: Path, section: str, name: str) -> str:
+    """Predict what `_upsert_block` would do to one rules file, without writing it."""
+    label = name or path.name
+    try:
+        existing = path.read_text("utf-8") if path.exists() else ""
+    except UnicodeDecodeError:
+        return f"would skip {label}: it is not UTF-8 text"
+    return f"would refresh the managed block in {label}"
+
+
+def _plan_native(repo: Path, key: str, docs_dir: str) -> str:
+    """Predict what `_write_native_rule` would do for one adopted agent, without writing."""
+    return f"would refresh the native rule for {key}"
+
+
 def _write_driver(mine: Path, tmpl: Path, rel: str) -> str:
     """Write one driver doc as a stamped region, keeping what a person wrote: an EDITED
     document is copied to `.local-edits` first, text outside the region stays, and one a newer
@@ -177,6 +245,7 @@ def refresh_docs(
     package_dir: Path | None = None,
     only: Collection[str] | None = None,
     backup: bool = True,
+    plan: bool = False,
 ) -> list[str]:
     """Rewrite ONLY the agent-facing documents: the driver docs, the managed rules blocks
     and the adopted agents' native rules. Never the MCP launch, the hooks, the command
@@ -188,6 +257,10 @@ def refresh_docs(
     Before a file is rewritten its original is copied to `.ddflow/backups/` (``backup``;
     `ddflow upgrade --apply` makes its own backup and passes False), and the first action
     says where.
+
+    ``plan`` reports what a refresh would write without writing it (a diff mode): the
+    actions describe each driver doc, rules file and native rule, nothing is rewritten, no
+    backup is made and no `.local-edits` copy is taken.
 
     Refuses (ValueError) a project that was never adopted: a refresh must not adopt.
     """
@@ -203,6 +276,8 @@ def refresh_docs(
             f"driver templates are missing from {templates}. This is a packaging fault, "
             f"not a configuration one: reinstall ddflow-mcp."
         )
+    if plan:
+        return _plan_actions(repo, docs_dir, templates, only)
     actions: list[str] = []
     agents = adopted_agents(repo, docs_dir=docs_dir)
     if backup:

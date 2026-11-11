@@ -164,6 +164,11 @@ COMMANDS: tuple[Command, ...] = (
                 type="boolean",
                 help="rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the agents' native rules from this ddflow's templates; leaves MCP launches, hooks and command files alone (what `doctor` points to when drivers lag)",
             ),
+            Param(
+                "plan",
+                type="boolean",
+                help="with --refresh-docs: report what it would rewrite without writing anything (a diff/plan mode)",
+            ),
         ),
     ),
     Command(
