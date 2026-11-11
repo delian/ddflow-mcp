@@ -18,15 +18,12 @@ from .pairs import link_record
 
 
 def open_duplicates(st, bug: str) -> list[str]:
-    """Open bugs linked to ``bug`` as its duplicates, in either direction, sorted."""
+    """Open bugs that say they are duplicates of ``bug`` (the link sits on the duplicate)."""
     found = {
         other
         for other, lk in st.links.items()
         if other != bug and bug in lk.linked("duplicate_of")
     }
-    own = st.links.get(bug)
-    if own is not None:
-        found |= own.linked("duplicate_of")
     return sorted(b for b in found if b in st.bugs and b != bug and st.bugs[b].open)
 
 

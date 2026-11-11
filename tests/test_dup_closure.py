@@ -100,3 +100,17 @@ def test_duplicate_refused_for_unknown_or_self_or_closed(repo):
     assert run_cli(repo, "bug", "duplicate", "B1", "--of", "B1")[0] == REFUSED
     assert run_cli(repo, "bug", "duplicate", "B2", "--of", "B1")[0] == OK
     assert run_cli(repo, "bug", "duplicate", "B2", "--of", "B1")[0] == REFUSED
+
+
+def test_a_duplicate_is_not_listed_as_having_duplicates_of_its_original(repo):
+    """The link sits on the duplicate: fixing B2 (itself a duplicate of B1) must not list
+    its ORIGINAL B1 as something to close."""
+    _init(repo)
+    code, out, err = _fix(repo, "B2")
+    assert code == OK, err
+    assert "open duplicates" not in out
+    out = K.bug_fixed(
+        repo, "B3", regression_test="tests/test_probe.py::test_guard",
+        verify_regression=False, verify_reason="fixture",
+    )  # fmt: skip
+    assert out.data["open_duplicates"] == []
