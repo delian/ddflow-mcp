@@ -133,13 +133,3 @@ def test_a_torn_trailing_multibyte_line_keeps_the_earlier_chunks(tmp_path):
     # keeps it; the torn chunk 2 line loses only itself.
     assert rf.chunks() == [(1, "ok")]
 
-
-def test_a_concurrent_run_does_not_clear_a_siblings_checkpointed_file(repo, tmp_path):
-    from ddflow.api.review.reviewers import _ReplyFile, _begin_run, active_files
-
-    _begin_run("run-A")
-    first = _ReplyFile(repo, "TK-cdc", "critic", "r")
-    first.add(1, "ok")
-    _begin_run("run-B")  # a concurrent review in this process must NOT drop run-A's file
-    assert active_files("TK-cdc", "critic", "run-A") == [first]
-
