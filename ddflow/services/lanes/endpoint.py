@@ -189,20 +189,24 @@ def launch_env(ep: Endpoint) -> dict[str, str]:
     in a FILE has no source env name: its value travels only in `secret_env`, and `env` asks
     for nothing live (the launcher refuses a missing source name, which would wrongly refuse
     a file key whose variable is unset)."""
-    if not ep.api_key_env or ep.api_key_file:
+    if not ep.api_key_env:
+        return {}
+    if resolve_key(ep).source == "file":
         return {}
     return {ep.api_key_env: ep.api_key_env}
 
 
 def secret_env(ep: Endpoint) -> dict[str, str]:
-    """`LaunchSpec.secret_env` for the key: child variable -> resolved VALUE. The value is
-    read here (its variable first, then its key file, the same resolver the reviewers use)
-    and goes to the child's environment only -- never into the process environment nor the
-    rendered provider block, which names the variable alone."""
+    """`LaunchSpec.secret_env` for the key: child variable -> the FILE-resolved VALUE. Only a
+    key read from its key file is snapshotted here, because it has no live source name to
+    read at launch; an env-sourced key is read live by `launch_env`, never snapshotted stale
+    (a revoked or rotated variable then refuses the launch or reads its live value)."""
     if not ep.api_key_env:
         return {}
     got = resolve_key(ep)
-    return {ep.api_key_env: got.value} if got else {}
+    if got.source == "file":
+        return {ep.api_key_env: got.value}
+    return {}
 
 
 def resolve_key(ep: Endpoint) -> review_keys.KeyResult:
