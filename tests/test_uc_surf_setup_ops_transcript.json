@@ -3,9 +3,9 @@
   [
    "init"
   ],
-  0,
-  "Initialised ddflow in <repo>/.ddflow\n  config: <repo>/.ddflow/config.toml\n  Next: `ddflow phase add P1 --title 'First phase'`\n\n  Setup changed these files — commit them before your first merge, or this\n  checkout stays dirty and `ddflow merge` will refuse:\n    git add .gitignore .gitattributes .ddflow && git commit -m 'ddflow: adopt'\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -15,9 +15,9 @@
    "--title",
    "Phase one"
   ],
-  0,
-  "phase P1 added\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -29,9 +29,9 @@
    "--title",
    "First task"
   ],
-  0,
-  "task T1 added to P1\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -45,54 +45,54 @@
    "--needs",
    "T1"
   ],
-  0,
-  "task T2 added to P1\n",
-  ""
- ],
- [
-  [
-   "export"
-  ],
-  0,
-  "DOCUMENT   TARGET        MODE    STATE\nbugs       BUGS.md       whole   not selected\nchangelog  CHANGELOG.md  whole   not selected\ndecisions  DECISIONS.md  whole   not selected\nroadmap    ROADMAP.md    whole   not selected\nrules      RULES.md      whole   not selected\nsecurity   SECURITY.md   region  not selected\nsessions   SESSION.md    whole   not selected\nstatus     STATUS.md     whole   not selected\nworklog    LOG.md        whole   not selected\n\nselected: (none). Print any one with `ddflow export <doc>`; `--all` acts on the selected set.\n",
-  ""
- ],
- [
-  [
-   "--json",
-   "export"
-  ],
-  0,
-  "{\n  \"schema\": \"export@1\",\n  \"documents\": [\n    {\n      \"doc\": \"bugs\",\n      \"title\": \"Bugs: open, fixed and invalid, with filters\",\n      \"filters\": [\n        \"limit\",\n        \"phase\",\n        \"since\",\n        \"status\"\n      ],\n      \"target\": \"BUGS.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"changelog\",\n      \"title\": \"CHANGELOG.md in Keep a Changelog form, from items, bugs and version tags\",\n      \"filters\": [\n        \"tag\"\n      ],\n      \"target\": \"CHANGELOG.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"decisions\",\n      \"title\": \"Decisions index: id, status, date, title, governs\",\n      \"filters\": [\n        \"limit\",\n        \"since\",\n        \"status\"\n      ],\n      \"target\": \"DECISIONS.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"roadmap\",\n      \"title\": \"Roadmap: phases in Now / Next / Later lanes with progress\",\n      \"filters\": [\n        \"limit\",\n        \"phase\",\n        \"since\"\n      ],\n      \"target\": \"ROADMAP.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"rules\",\n      \"title\": \"Decisions in force, lessons by tag and the enforced workflow\",\n      \"filters\": [\n        \"limit\",\n        \"tag\"\n      ],\n      \"target\": \"RULES.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"security\",\n      \"title\": \"Security policy: supported versions and known issues\",\n      \"filters\": [],\n      \"target\": \"SECURITY.md\",\n      \"mode\": \"region\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"sessions\",\n      \"title\": \"Sessions: summary first, then prompts, notes and items touched\",\n      \"filters\": [\n        \"limit\",\n        \"session\",\n        \"since\"\n      ],\n      \"target\": \"SESSION.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"status\",\n      \"title\": \"Status: counts, agent-hours, in-flight work, open bugs\",\n      \"filters\": [],\n      \"target\": \"STATUS.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    },\n    {\n      \"doc\": \"worklog\",\n      \"title\": \"Work log: one line per item per day, newest first\",\n      \"filters\": [\n        \"limit\",\n        \"since\"\n      ],\n      \"target\": \"LOG.md\",\n      \"mode\": \"whole\",\n      \"selected\": false,\n      \"state\": \"not selected\",\n      \"detail\": \"\",\n      \"enabled_by\": \"\",\n      \"enabled_at\": \"\",\n      \"by_agent\": false,\n      \"acknowledged\": true,\n      \"locked\": false\n    }\n  ],\n  \"selected\": [],\n  \"unacknowledged\": [],\n  \"redact\": true,\n  \"redaction_applied\": true,\n  \"max_bytes\": 60000,\n  \"refresh\": \"off\"\n}\n",
-  ""
- ],
- [
-  [
-   "export",
-   "changelog"
-  ],
-  0,
-  "<!-- ddflow:generated doc=changelog v=<VERSION> body-sha256=<hex> redacted=0 -->\nGenerated by ddflow from the event log - edit the source, not this file\n\n# Changelog\n\nAll notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n## [Unreleased]\n",
-  ""
- ],
- [
-  [
-   "--json",
-   "export",
-   "changelog"
-  ],
-  0,
-  "{\n  \"schema\": \"export@1\",\n  \"results\": [\n    {\n      \"doc\": \"changelog\",\n      \"path\": \"CHANGELOG.md\",\n      \"mode\": \"whole\",\n      \"action\": \"print\",\n      \"code\": 0,\n      \"message\": \"\",\n      \"text\": \"<!-- ddflow:generated doc=changelog v=<VERSION> body-sha256=<hex> redacted=0 -->\\nGenerated by ddflow from the event log - edit the source, not this file\\n\\n# Changelog\\n\\nAll notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\\n\\n## [Unreleased]\\n\",\n      \"truncated\": false,\n      \"bytes\": 416,\n      \"redacted\": true\n    }\n  ],\n  \"selected\": []\n}\n",
-  ""
- ],
- [
-  [
-   "export",
-   "nosuch"
-  ],
-  3,
+  1,
   "",
-  "nosuch: unknown document kind 'nosuch'. Known: bugs, changelog, decisions, roadmap, rules, security, sessions, status, worklog\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
+ ],
+ [
+  [
+   "export"
+  ],
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
+ ],
+ [
+  [
+   "--json",
+   "export"
+  ],
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
+ ],
+ [
+  [
+   "export",
+   "changelog"
+  ],
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
+ ],
+ [
+  [
+   "--json",
+   "export",
+   "changelog"
+  ],
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
+ ],
+ [
+  [
+   "export",
+   "nosuch"
+  ],
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -100,27 +100,27 @@
    "export",
    "nosuch"
   ],
-  3,
-  "{\n  \"schema\": \"export@1\",\n  \"results\": [\n    {\n      \"doc\": \"nosuch\",\n      \"path\": \"\",\n      \"mode\": \"\",\n      \"action\": \"refused\",\n      \"code\": 3,\n      \"message\": \"unknown document kind 'nosuch'. Known: bugs, changelog, decisions, roadmap, rules, security, sessions, status, worklog\",\n      \"text\": \"\",\n      \"truncated\": false,\n      \"bytes\": 0,\n      \"redacted\": false\n    }\n  ],\n  \"selected\": []\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "export",
    "--all"
   ],
-  2,
+  1,
   "",
-  "no documents are selected ([export].documents is empty), so --all has nothing to do. Print one with `ddflow export <doc>`; list the kinds with `ddflow export`.\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "export",
    "validate"
   ],
-  2,
+  1,
   "",
-  "no documents are selected ([export].documents is empty): name one (ddflow export validate <doc>)\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -128,9 +128,9 @@
    "export",
    "validate"
   ],
-  2,
-  "{\n  \"schema\": \"export@1\",\n  \"results\": [],\n  \"notes\": []\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -138,9 +138,9 @@
    "validate",
    "changelog"
   ],
-  0,
-  "changelog: ok (shipped changelog.md.j2)\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -148,9 +148,9 @@
    "enable",
    "changelog"
   ],
-  0,
-  "enabled changelog -> CHANGELOG.md (by tx); the operator can stop it with ddflow export disable changelog\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -162,9 +162,9 @@
    "--mode",
    "whole"
   ],
-  0,
-  "enabled changelog -> CL.md (by tx); the operator can stop it with ddflow export disable changelog\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -172,9 +172,9 @@
    "changelog",
    "--diff"
   ],
-  0,
-  "--- /dev/null\n+++ b/CL.md\n@@ -0,0 +1,8 @@\n+<!-- ddflow:generated doc=changelog v=<VERSION> body-sha256=<hex> redacted=0 -->\n+Generated by ddflow from the event log - edit the source, not this file\n+\n+# Changelog\n+\n+All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n+\n+## [Unreleased]\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -183,8 +183,8 @@
    "--check"
   ],
   1,
-  "CL.md: stale (changelog)\n--- /dev/null\n+++ b/CL.md\n@@ -0,0 +1,8 @@\n+<!-- ddflow:generated doc=changelog v=<VERSION> body-sha256=<hex> redacted=0 -->\n+Generated by ddflow from the event log - edit the source, not this file\n+\n+# Changelog\n+\n+All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n+\n+## [Unreleased]\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -193,9 +193,9 @@
    "--update",
    "--yes"
   ],
-  0,
-  "changelog: CL.md: created\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -203,9 +203,9 @@
    "changelog",
    "--check"
   ],
-  0,
-  "changelog: CL.md: fresh\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -213,18 +213,18 @@
    "disable",
    "changelog"
   ],
-  0,
-  "disabled changelog\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "export",
    "ack"
   ],
-  3,
+  1,
   "",
-  "acknowledging is the operator's: this call is an agent's (--agent tx). refusing: approval <ask> requested for 'export.ack' (T2, level L1+): the operator approves it with `ddflow approvals approve <ask>` from their own terminal (or answers it over a channel they use); then run `ddflow wait --approval <ask>` to block until the answer, and re-run this command with --approval <ask>. It is single-use, bound to this exact command and its current state, and expires.\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -232,9 +232,9 @@
    "export",
    "ack"
   ],
-  3,
-  "{\n  \"schema\": \"export@1\"\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -242,9 +242,9 @@
    "eject",
    "changelog"
   ],
-  0,
-  "ejected changelog -> .ddflow/templates/export/changelog.md.j2\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -253,9 +253,9 @@
    "--diff",
    "--check"
   ],
-  3,
+  1,
   "",
-  "--diff, --check and --update are alternatives (--out names the file for any of them)\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -263,35 +263,35 @@
    "--out",
    "X.md"
   ],
-  0,
-  "DOCUMENT   TARGET        MODE    STATE\nbugs       BUGS.md       whole   not selected\nchangelog  CL.md         whole   not selected\ndecisions  DECISIONS.md  whole   not selected\nroadmap    ROADMAP.md    whole   not selected\nrules      RULES.md      whole   not selected\nsecurity   SECURITY.md   region  not selected\nsessions   SESSION.md    whole   not selected\nstatus     STATUS.md     whole   not selected\nworklog    LOG.md        whole   not selected\n\nselected: (none). Print any one with `ddflow export <doc>`; `--all` acts on the selected set.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "ci"
   ],
-  0,
-  "command:   (none)\nbase:      (default branch)\ntimeout:   3600s\navailable: NO -- no [ci].command and no .pre-commit-config.yaml: there is nothing to run\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "ci"
   ],
-  0,
-  "{\n  \"schema\": \"ci@1\",\n  \"command\": \"\",\n  \"base\": \"(default branch)\",\n  \"timeout_s\": 3600,\n  \"available\": false,\n  \"why\": \"no [ci].command and no .pre-commit-config.yaml: there is nothing to run\"\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "ci",
    "status"
   ],
-  0,
-  "command:   (none)\nbase:      (default branch)\ntimeout:   3600s\navailable: NO -- no [ci].command and no .pre-commit-config.yaml: there is nothing to run\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -300,7 +300,7 @@
   ],
   1,
   "",
-  "ci record needs --result passed|failed\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -311,9 +311,9 @@
    "--stage",
    "gate"
   ],
-  0,
-  "ci: recorded gate passed\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -325,9 +325,9 @@
    "--stage",
    "merge"
   ],
-  0,
-  "{\n  \"schema\": \"ci@1\",\n  \"stage\": \"merge\",\n  \"status\": \"failed\",\n  \"failed\": []\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -338,18 +338,18 @@
    "--stage",
    "nosuch"
   ],
-  3,
+  1,
   "",
-  "unknown stage 'nosuch': gate | merge | pre-push | schedule\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "ci",
    "run"
   ],
-  2,
+  1,
   "",
-  "no [ci].command and no .pre-commit-config.yaml: there is nothing to run\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -357,9 +357,9 @@
    "ci",
    "run"
   ],
-  2,
-  "{\n  \"schema\": \"ci@1\",\n  \"status\": \"unavailable\",\n  \"sha\": \"\",\n  \"merged_with\": \"\",\n  \"command\": \"\",\n  \"why\": \"no [ci].command and no .pre-commit-config.yaml: there is nothing to run\",\n  \"checks\": [],\n  \"output_tail\": \"\"\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -370,9 +370,9 @@
    "--ref",
    "HEAD"
   ],
-  0,
-  "ci: true  on <hex> merged with main\nci: passed\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -383,7 +383,7 @@
   ],
   1,
   "",
-  "the command must contain {tests} where the test list goes\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -394,8 +394,8 @@
    "true"
   ],
   1,
-  "{\n  \"refusal\": {\n    \"reason\": \"the command must contain {tests} where the test list goes\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"bisect@1\"\n}\n",
-  "the command must contain {tests} where the test list goes\n"
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -408,7 +408,7 @@
   ],
   1,
   "",
-  "the command must contain {tests} where the test list goes\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -416,16 +416,16 @@
   ],
   1,
   "",
-  "verify what? give a task id, or --all / --phase P for a sweep\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "verify",
    "T1"
   ],
-  2,
+  1,
   "",
-  "T1 is open, not done: there is no completion to verify\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -433,9 +433,9 @@
    "verify",
    "T1"
   ],
-  2,
-  "{\n  \"schema\": \"verify@1\",\n  \"item\": \"T1\",\n  \"verdict\": \"not completed\",\n  \"claims\": []\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -444,16 +444,16 @@
   ],
   1,
   "",
-  "no such item 'nosuch'\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "verify",
    "--all"
   ],
-  2,
-  "checked 0 completed task(s): \n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -461,9 +461,9 @@
    "verify",
    "--all"
   ],
-  2,
-  "{\n  \"schema\": \"verify@1\",\n  \"checked\": 0,\n  \"counts\": {\n    \"holds\": 0,\n    \"holds with notes\": 0,\n    \"cannot tell\": 0,\n    \"does not hold\": 0\n  },\n  \"shown\": 0,\n  \"worst\": [],\n  \"bugs_filed\": []\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -471,9 +471,9 @@
    "--phase",
    "P1"
   ],
-  2,
-  "checked 0 completed task(s): \n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -483,7 +483,7 @@
   ],
   1,
   "",
-  "no such phase 'nosuch'\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -493,7 +493,7 @@
   ],
   1,
   "",
-  "--all, --phase, --limit and --file-bugs are for a sweep, not a single task\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -502,7 +502,7 @@
   ],
   1,
   "",
-  "--reopen, --reason and --force need a task id\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -510,9 +510,9 @@
    "T1",
    "--pack"
   ],
-  2,
+  1,
   "",
-  "T1 is not done: there is nothing to pack\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -523,7 +523,7 @@
   ],
   1,
   "",
-  "--pack or --judge (one of them) takes one task id and nothing else\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -532,24 +532,24 @@
   ],
   1,
   "",
-  "--pack or --judge (one of them) takes one task id and nothing else\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "review"
   ],
-  2,
-  "→ no item named: reviewing the working tree, and recording nothing for critic. Name the item (`ddflow review <id>`) to record the outcome.\n",
-  "No reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "review",
    "T1"
   ],
-  2,
-  "NOTE: critic comes after research, rules, implement, rubber_duck in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n→ note: T1 has no live lease: this review is recorded against it all the same.\n",
-  "No reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -557,9 +557,9 @@
    "review",
    "T1"
   ],
-  2,
-  "{\n  \"refusal\": {\n    \"reason\": \"No reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\\nRecording UNAVAILABLE \\u2014 which is NOT a pass.\",\n    \"exit\": 2\n  },\n  \"schema\": \"review@1\",\n  \"gate\": \"critic\"\n}\n",
-  "NOTE: critic comes after research, rules, implement, rubber_duck in the pipeline, and none of those have run yet. Recording anyway ([gates].enforce_order = 'warn').\n→ note: T1 has no live lease: this review is recorded against it all the same.\nNo reviewer is configured for gate 'critic'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -568,7 +568,7 @@
   ],
   1,
   "",
-  "no such item 'nosuch'\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -578,7 +578,7 @@
   ],
   1,
   "",
-  "T1 has no `ddflow review` with numbered findings on any gate\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -593,7 +593,7 @@
   ],
   1,
   "",
-  "--probe is required: for --refuted the run that shows the finding false, for --confirmed the fix or test that answers it\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -612,7 +612,7 @@
   ],
   1,
   "",
-  "T1.critic has no `ddflow review` with numbered findings on record (a hand-recorded gate, a clean review, or one from before triage)\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -621,26 +621,26 @@
    "--gate",
    "nosuch"
   ],
-  2,
-  "→ note: T1 has no live lease: this review is recorded against it all the same.\n",
-  "No reviewer is configured for gate 'nosuch'. `ddflow reviewers detect --write` finds local models.\nRecording UNAVAILABLE — which is NOT a pass.\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "reviewers"
   ],
-  2,
+  1,
   "",
-  "usage: ddflow reviewers [-h] {detect,list,presets,add,approve,test} ...\nddflow reviewers: error: the following arguments are required: reviewers_cmd\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "reviewers",
    "list"
   ],
-  2,
-  "No reviewers configured. Run `ddflow reviewers detect --write`.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -648,18 +648,18 @@
    "reviewers",
    "list"
   ],
-  2,
-  "{\n  \"schema\": \"reviewers_list@1\",\n  \"reviewers\": [],\n  \"message\": \"No reviewers configured. Run `ddflow reviewers detect --write`.\"\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "reviewers",
    "presets"
   ],
-  0,
-  "  anthropic    anthropic https://api.anthropic.com/v1\n  claude-cli   command   claude -p --model {model}\n  codex-cli    command   codex exec -m {model} -\n  deepseek     openai    https://api.deepseek.com/v1\n  fireworks    openai    https://api.fireworks.ai/inference/v1\n  gemini       gemini    https://generativelanguage.googleapis.com/v1beta\n  gemini-cli   command   gemini -m {model} -p\n  groq         openai    https://api.groq.com/openai/v1\n  litellm      openai    http://127.0.0.1:4000/v1\n  llamacpp     openai    http://127.0.0.1:8080/v1\n  llm-cli      command   llm -m {model}\n  lmstudio     openai    http://127.0.0.1:1234/v1\n  mistral      openai    https://api.mistral.ai/v1\n  ollama       openai    http://127.0.0.1:11434/v1\n  openai       openai    https://api.openai.com/v1\n  openrouter   openai    https://openrouter.ai/api/v1\n  together     openai    https://api.together.xyz/v1\n  vllm         openai    http://127.0.0.1:8000/v1\n  xai          openai    https://api.x.ai/v1\n\nAdd one with:  ddflow reviewers add --preset <name> [--model M]\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -667,18 +667,18 @@
    "reviewers",
    "presets"
   ],
-  0,
-  "{\n  \"schema\": \"reviewers_presets@1\",\n  \"hint\": \"Add one with:  ddflow reviewers add --preset <name> [--model M]\",\n  \"presets\": [\n    {\n      \"name\": \"anthropic\",\n      \"kind\": \"anthropic\",\n      \"where\": \"https://api.anthropic.com/v1\"\n    },\n    {\n      \"name\": \"claude-cli\",\n      \"kind\": \"command\",\n      \"where\": \"claude -p --model {model}\"\n    },\n    {\n      \"name\": \"codex-cli\",\n      \"kind\": \"command\",\n      \"where\": \"codex exec -m {model} -\"\n    },\n    {\n      \"name\": \"deepseek\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.deepseek.com/v1\"\n    },\n    {\n      \"name\": \"fireworks\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.fireworks.ai/inference/v1\"\n    },\n    {\n      \"name\": \"gemini\",\n      \"kind\": \"gemini\",\n      \"where\": \"https://generativelanguage.googleapis.com/v1beta\"\n    },\n    {\n      \"name\": \"gemini-cli\",\n      \"kind\": \"command\",\n      \"where\": \"gemini -m {model} -p\"\n    },\n    {\n      \"name\": \"groq\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.groq.com/openai/v1\"\n    },\n    {\n      \"name\": \"litellm\",\n      \"kind\": \"openai\",\n      \"where\": \"http://127.0.0.1:4000/v1\"\n    },\n    {\n      \"name\": \"llamacpp\",\n      \"kind\": \"openai\",\n      \"where\": \"http://127.0.0.1:8080/v1\"\n    },\n    {\n      \"name\": \"llm-cli\",\n      \"kind\": \"command\",\n      \"where\": \"llm -m {model}\"\n    },\n    {\n      \"name\": \"lmstudio\",\n      \"kind\": \"openai\",\n      \"where\": \"http://127.0.0.1:1234/v1\"\n    },\n    {\n      \"name\": \"mistral\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.mistral.ai/v1\"\n    },\n    {\n      \"name\": \"ollama\",\n      \"kind\": \"openai\",\n      \"where\": \"http://127.0.0.1:11434/v1\"\n    },\n    {\n      \"name\": \"openai\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.openai.com/v1\"\n    },\n    {\n      \"name\": \"openrouter\",\n      \"kind\": \"openai\",\n      \"where\": \"https://openrouter.ai/api/v1\"\n    },\n    {\n      \"name\": \"together\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.together.xyz/v1\"\n    },\n    {\n      \"name\": \"vllm\",\n      \"kind\": \"openai\",\n      \"where\": \"http://127.0.0.1:8000/v1\"\n    },\n    {\n      \"name\": \"xai\",\n      \"kind\": \"openai\",\n      \"where\": \"https://api.x.ai/v1\"\n    }\n  ]\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "reviewers",
    "add"
   ],
-  0,
-  "added reviewer 'reviewer' to <repo>/.ddflow/local/reviewers.toml\n  Git-ignored, machine-local: not committed. --shared commits a reviewer every clone should use.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -686,18 +686,18 @@
    "add",
    "nosuchpreset"
   ],
-  2,
+  1,
   "",
-  "usage: ddflow [-h] [--repo REPO] [--agent AGENT] [--json] [--allow-older-version]\n              [--reason SKEW_REASON] [--version]\n              {init,phase,task,split,resolve,update,batch,rename,chore,grant,approvals,plan,next,claim,heartbeat,release,wait,approve,gate,complete,abandon,remove,block,unblock,merge,pr,version,promote,flow,brief,external,job,memory,lesson,recall,similar,dupes,link,decision,rule,verify,ci,onboard,status,research,bug,session,record,replay,recover,progress,loops,cleanup,doctor,rebuild,render,board,show,report,config,upgrade,export,bisect,cadence,pins,queue,tests,precommit,lanes,vigil,health,decide,docs,metrics,reviewers,review,adopt,history,workflow,help,import,companions,harness,model,prompts,hooks,mcp,search,identify,list,archdeps,suggest,paths,perf,probe,digest,pair,tokens,sync,watch,waves} ...\nddflow: error: unrecognized arguments: nosuchpreset\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "reviewers",
    "approve"
   ],
-  0,
-  "Written by a tool, not counted until approved:\n  reviewer                 openai   written by tx at <time>\n\nCheck each entry, then: ddflow reviewers approve <name>\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -705,9 +705,9 @@
    "reviewers",
    "approve"
   ],
-  0,
-  "{\n  \"schema\": \"reviewers_approve@1\",\n  \"pending\": [\n    {\n      \"name\": \"reviewer\",\n      \"digest\": \"b69c08a37ef6c7a3\",\n      \"kind\": \"openai\",\n      \"agent\": \"tx\",\n      \"person\": false,\n      \"user\": \"pinuser\",\n      \"at\": \"<time>\"\n    }\n  ]\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -715,35 +715,35 @@
    "approve",
    "nosuch"
   ],
-  3,
+  1,
   "",
-  "refusing: approving is a person's act, and this command runs under an agent identity (--agent tx). Run it from your own terminal, or ask the operator over chat: where the command takes `--approval`, re-run it with `--approval request` (or the refusal names the request id) and the operator answers in chat.\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "workflow"
   ],
-  0,
-  "# The workflow this project runs\n\nEvery task passes through these gates, in order. An item cannot be\ncompleted until each carries an outcome.\n\n   1. research      agent     \n      asks: Before implementing: state the claim, its mechanism, the single observation that would REFUTE it\n   2. rules         agent     \n      asks: Run `ddflow brief --item <id>`. It returns the project rules digest and the handful of past less\n   3. implement     agent       (required)\n      asks: Implement in the worktree ddflow created. Touch only files inside this task's declared globs; if\n   4. rubber_duck   agent       (evidence required, needs a different-family reviewer)\n      asks: Dispatch a reviewer on a DIFFERENT model family than the author. Ask it to refute, not to review\n   5. critic        agent       (evidence required, needs a different-family reviewer)\n      asks: Run the configured critic over the diff WITH the task's intent. It flags where the diff and the \n   6. standards     agent       (evidence required)\n      asks: Run the project's standards tools. Apply their FINDINGS; verify their FIXES by running the tests\n   7. unit_tests    agent       (required, evidence required)\n      asks: Run it with `ddflow gate run <ID> unit_tests`, never from a run of your own. With `[ci].tests_sc\n   8. bug_hunt      agent     \n      asks: Hunt: off-by-one, empty-collection/vacuous-truth, silently dropped config, torn-tail resume, una\n   9. dedupe        agent     \n      asks: Search by OPERATION, not by the name you invented ('retry with backoff', 'atomic write'). Start \n  10. merge         agent       (required)\n      asks: `ddflow merge <id>` — merges from the primary checkout without a checkout.\n\nA phase passes through: research, tasks, unit_tests, bug_hunt, dedupe, live_test, corrections, docs, merge\nA doc passes through: rules, implement, standards, dedupe, merge\n\n## The rules, and where each came from\n\n  gates.required                         ['implement', 'unit_tests', 'merge'] [default]\n  gates.require_outcome                  True                         [default]\n  gates.enforce_order                    warn                         [default]  — fired on 2 of 3 recording(s), 67%\n  gates.unavailable_is_failure           False                        [default]\n  gates.allow_skip_with_reason           True                         [default]\n  gates.evidence_required                ['unit_tests', 'rubber_duck', 'critic', 'standards', 'docs'] [default]\n  schedule.parallel                      auto                         [default]\n  schedule.max_parallel_tasks            4                            [default]\n  schedule.max_parallel_min              2                            [default]\n  schedule.max_parallel_max              8                            [default]\n  worktree.max_parallel                  0                            [default]\n  worktree.enabled                       True                         [file]\n  lease.ttl_s                            1800                         [file]\n  enforce.commit_without_lease           warn                         [file]\n  enforce.require_item_trailer           False                        [default]\n  agent.reviewer_family_must_differ      True                         [default]\n\n## Reviewers\n\n  reviewer                                              family=?\n\nCommit hook: not installed\n\nNothing incoherent: every gate in a pipeline is defined, every\nrequired gate is in one, and each has a command or a prompt.\n\nChange any of it with `ddflow workflow pipeline|gate|drop`, or by\nediting .ddflow/config.toml. Both are validated before anything is\nwritten. \n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "workflow"
   ],
-  0,
-  "{\n  \"schema\": \"workflow@1\",\n  \"task_pipeline\": [\n    \"research\",\n    \"rules\",\n    \"implement\",\n    \"rubber_duck\",\n    \"critic\",\n    \"standards\",\n    \"unit_tests\",\n    \"bug_hunt\",\n    \"dedupe\",\n    \"merge\"\n  ],\n  \"phase_pipeline\": [\n    \"research\",\n    \"tasks\",\n    \"unit_tests\",\n    \"bug_hunt\",\n    \"dedupe\",\n    \"live_test\",\n    \"corrections\",\n    \"docs\",\n    \"merge\"\n  ],\n  \"promotion_pipeline\": [],\n  \"kind_pipelines\": {\n    \"task\": [\n      \"research\",\n      \"rules\",\n      \"implement\",\n      \"rubber_duck\",\n      \"critic\",\n      \"standards\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"merge\"\n    ],\n    \"phase\": [\n      \"research\",\n      \"tasks\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"live_test\",\n      \"corrections\",\n      \"docs\",\n      \"merge\"\n    ],\n    \"bug\": [\n      \"research\",\n      \"rules\",\n      \"implement\",\n      \"rubber_duck\",\n      \"critic\",\n      \"standards\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"merge\"\n    ],\n    \"doc\": [\n      \"rules\",\n      \"implement\",\n      \"standards\",\n      \"dedupe\",\n      \"merge\"\n    ],\n    \"research\": [\n      \"research\",\n      \"rules\",\n      \"implement\",\n      \"rubber_duck\",\n      \"critic\",\n      \"standards\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"merge\"\n    ],\n    \"job\": [\n      \"research\",\n      \"rules\",\n      \"implement\",\n      \"rubber_duck\",\n      \"critic\",\n      \"standards\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"merge\"\n    ]\n  },\n  \"gates\": [\n    {\n      \"id\": \"research\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 1,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Before implementing: state the claim, its mechanism, the single observation that would REFUTE it, and the cheapest test that could. Run that test and paste its command AND output. Record with `ddflow research add --verdict CONFIRMED|REFUTED|THEORETICAL`. A pass with no CONFIRMED/REFUTED label is a literature summary, not research.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"rules\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": false,\n      \"in_promotion\": false,\n      \"position\": 2,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Run `ddflow brief --item <id>`. It returns the project rules digest and the handful of past lessons ranked against this task's text. Do not read the whole lessons corpus; that is what the ranking is for.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"implement\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": false,\n      \"in_promotion\": false,\n      \"position\": 3,\n      \"required\": true,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Implement in the worktree ddflow created. Touch only files inside this task's declared globs; if you must widen them, run `ddflow update <id> --globs <every glob, old and new>` FIRST (it replaces the list, and moves your lease to it) so the conflict detector can see it.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"rubber_duck\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": false,\n      \"in_promotion\": false,\n      \"position\": 4,\n      \"required\": false,\n      \"evidence\": true,\n      \"reviewer\": \"different_family\",\n      \"command\": \"\",\n      \"prompt\": \"Dispatch a reviewer on a DIFFERENT model family than the author. Ask it to refute, not to review: 'find the input that makes this wrong'. When uncertain it must report nothing \\u2014 a reviewer rewarded for finding things finds things.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"critic\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": false,\n      \"in_promotion\": false,\n      \"position\": 5,\n      \"required\": false,\n      \"evidence\": true,\n      \"reviewer\": \"different_family\",\n      \"command\": \"\",\n      \"prompt\": \"Run the configured critic over the diff WITH the task's intent. It flags where the diff and the stated intent disagree. Exit 2 means UNAVAILABLE and must be recorded as such \\u2014 never as a pass.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"standards\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": false,\n      \"in_promotion\": false,\n      \"position\": 6,\n      \"required\": false,\n      \"evidence\": true,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Run the project's standards tools. Apply their FINDINGS; verify their FIXES by running the tests \\u2014 a suggested fix reasoning from general language rules does not know your types' operator overloads. Review an EXPLICIT commit: `roborev review <sha>` with your branch head's sha, never `roborev review HEAD` from a worktree (it can enqueue the primary's HEAD), and record it with `gate record --reviewed-sha <sha>`: ddflow refuses a sha that is not your branch. On a loaded host review the COMBINED diff with a bounded wait: `python -m ddflow.services.roborev_branch` (one range job over the whole branch; waits `[gates].standards_wait_s`; exit 2 names why it gave nothing, and that is recorded `unavailable` WITH the reason and the job id; re-run it once the queue drains with `--job <id>`, a sha with a job is never enqueued twice).\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"unit_tests\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 7,\n      \"required\": true,\n      \"evidence\": true,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Run it with `ddflow gate run <ID> unit_tests`, never from a run of your own. With `[ci].tests_scope = selected` (D-test-economy-r2) the item's ci run covers the affected tests, so this gate is `covered by ci selected run <sha>` or runs only the difference; the whole suite is the merge queue's, the cadence's and the phase end's (`ddflow ci run --full`), not an item's. Run it in parallel -- pytest with `-n auto` (pytest-xdist) or a fixed worker count; `ddflow workflow` says when the command uses ONE core. While you work, `ddflow tests --item <ID>` lists the tests your change reaches and a parallel command for them: fast feedback, not this gate. Set `[gate.unit_tests].command` in .ddflow/config.toml so this gate runs itself, e.g. `pytest -q -n auto`.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 3600\n    },\n    {\n      \"id\": \"bug_hunt\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 8,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Hunt: off-by-one, empty-collection/vacuous-truth, silently dropped config, torn-tail resume, unavailable-treated-as-clean, dead knobs. A finding may only change source if a runnable probe demonstrates it AND ships as the regression test in the same commit \\u2014 then MUTATE the fix and watch the probe fail. A probe that passes both ways proves nothing. No probe -> file it as THEORETICAL, change nothing.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"dedupe\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 9,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Search by OPERATION, not by the name you invented ('retry with backoff', 'atomic write'). Start from a mechanical clone report if the project has one. Second occurrence: reuse or extract. Third: extraction is mandatory.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"merge\",\n      \"kind\": \"agent\",\n      \"in_task\": true,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 10,\n      \"required\": true,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"`ddflow merge <id>` \\u2014 merges from the primary checkout without a checkout.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"tasks\",\n      \"kind\": \"agent\",\n      \"in_task\": false,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 0,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Not performed by hand. `ddflow next --phase <id>` offers the ready set; independent tasks run in parallel worktrees.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"live_test\",\n      \"kind\": \"agent\",\n      \"in_task\": false,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 0,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Run the real thing on a small input and paste the output. A green unit suite and a working feature are different claims.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"corrections\",\n      \"kind\": \"agent\",\n      \"in_task\": false,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 0,\n      \"required\": false,\n      \"evidence\": false,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Fix what the phase gates found; each fix carries its own regression test.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    },\n    {\n      \"id\": \"docs\",\n      \"kind\": \"agent\",\n      \"in_task\": false,\n      \"in_phase\": true,\n      \"in_promotion\": false,\n      \"position\": 0,\n      \"required\": false,\n      \"evidence\": true,\n      \"reviewer\": \"\",\n      \"command\": \"\",\n      \"prompt\": \"Read the phase's whole diff (the phase base..HEAD) and list every change a user or an agent can see: commands and MCP tools, flags, config knobs and their defaults, output, install and setup steps. Check each against the README and the project's documentation, and update what is missing or wrong in this phase -- a stale page is worse than a missing one, because a reader trusts it. Check counts and examples the README states (knob counts, command samples) still hold. Record the files you changed, or 'no user-visible change' with the reason; an unexplained pass is not evidence.\",\n      \"provable\": false,\n      \"cwd\": \"worktree\",\n      \"timeout_s\": 1800\n    }\n  ],\n  \"rules\": {\n    \"gates.required\": {\n      \"value\": [\n        \"implement\",\n        \"unit_tests\",\n        \"merge\"\n      ],\n      \"source\": \"default\"\n    },\n    \"gates.require_outcome\": {\n      \"value\": true,\n      \"source\": \"default\"\n    },\n    \"gates.enforce_order\": {\n      \"value\": \"warn\",\n      \"source\": \"default\"\n    },\n    \"gates.unavailable_is_failure\": {\n      \"value\": false,\n      \"source\": \"default\"\n    },\n    \"gates.allow_skip_with_reason\": {\n      \"value\": true,\n      \"source\": \"default\"\n    },\n    \"gates.evidence_required\": {\n      \"value\": [\n        \"unit_tests\",\n        \"rubber_duck\",\n        \"critic\",\n        \"standards\",\n        \"docs\"\n      ],\n      \"source\": \"default\"\n    },\n    \"schedule.parallel\": {\n      \"value\": \"auto\",\n      \"source\": \"default\"\n    },\n    \"schedule.max_parallel_tasks\": {\n      \"value\": 4,\n      \"source\": \"default\"\n    },\n    \"schedule.max_parallel_min\": {\n      \"value\": 2,\n      \"source\": \"default\"\n    },\n    \"schedule.max_parallel_max\": {\n      \"value\": 8,\n      \"source\": \"default\"\n    },\n    \"worktree.max_parallel\": {\n      \"value\": 0,\n      \"source\": \"default\"\n    },\n    \"worktree.enabled\": {\n      \"value\": true,\n      \"source\": \"file\"\n    },\n    \"lease.ttl_s\": {\n      \"value\": 1800,\n      \"source\": \"file\"\n    },\n    \"enforce.commit_without_lease\": {\n      \"value\": \"warn\",\n      \"source\": \"file\"\n    },\n    \"enforce.require_item_trailer\": {\n      \"value\": false,\n      \"source\": \"default\"\n    },\n    \"agent.reviewer_family_must_differ\": {\n      \"value\": true,\n      \"source\": \"default\"\n    }\n  },\n  \"reviewers\": [\n    {\n      \"name\": \"reviewer\",\n      \"model\": \"\",\n      \"family\": \"\"\n    }\n  ],\n  \"overridden_prompts\": [],\n  \"hook_installed\": false,\n  \"order_violations\": 2,\n  \"order_recordings\": 3,\n  \"order_violation_rate\": 0.6666666666666666,\n  \"findings\": [],\n  \"coherent\": true\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "workflow",
    "state"
   ],
-  0,
-  "# Workflow state\n\n- Flow: trunk / merge; max parallel tasks 4\n- Task pipeline: research -> rules -> implement -> rubber_duck -> critic -> standards -> unit_tests -> bug_hunt -> dedupe -> merge\n- Rules: 0\n- Decisions in force: 0\n- Active leases: 0\n- Phases 1; tasks {'open': 2}; open bugs 0\n\n```mermaid\nflowchart LR\n    Claim --> research[research]\n    research --> rules[rules]\n    rules --> implement[implement]\n    implement --> rubber_duck[rubber_duck]\n    rubber_duck --> critic[critic]\n    critic --> standards[standards]\n    standards --> unit_tests[unit_tests]\n    unit_tests --> bug_hunt[bug_hunt]\n    bug_hunt --> dedupe[dedupe]\n    dedupe --> merge[merge]\n    merge --> Complete[Complete]\n```\n\n## Ready (1)\n  - T1: First task [priority 100]\n## In progress (0)\n## Blocked (1)\n  - T2: deps T1\n## Open bugs (0)\n\nAsk for more:\n  - `ddflow brief` — what to do next and what governs it\n  - `ddflow board` — every item and its state\n  - `ddflow show <id>` — one item in full\n  - `ddflow bug list` / `ddflow decision list` / `ddflow workflow` — details\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -751,9 +751,9 @@
    "workflow",
    "state"
   ],
-  0,
-  "{\n  \"schema\": \"workflow_state@1\",\n  \"workflow\": {\n    \"model\": \"trunk\",\n    \"integration\": \"merge\",\n    \"max_parallel_tasks\": 4,\n    \"task_pipeline\": [\n      \"research\",\n      \"rules\",\n      \"implement\",\n      \"rubber_duck\",\n      \"critic\",\n      \"standards\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"merge\"\n    ],\n    \"phase_pipeline\": [\n      \"research\",\n      \"tasks\",\n      \"unit_tests\",\n      \"bug_hunt\",\n      \"dedupe\",\n      \"live_test\",\n      \"corrections\",\n      \"docs\",\n      \"merge\"\n    ],\n    \"promotion_pipeline\": []\n  },\n  \"workflow_diagram\": \"flowchart LR\\n    Claim --> research[research]\\n    research --> rules[rules]\\n    rules --> implement[implement]\\n    implement --> rubber_duck[rubber_duck]\\n    rubber_duck --> critic[critic]\\n    critic --> standards[standards]\\n    standards --> unit_tests[unit_tests]\\n    unit_tests --> bug_hunt[bug_hunt]\\n    bug_hunt --> dedupe[dedupe]\\n    dedupe --> merge[merge]\\n    merge --> Complete[Complete]\",\n  \"rules\": {\n    \"total\": 0,\n    \"by_scope\": {}\n  },\n  \"decisions\": {\n    \"active\": 0,\n    \"list\": []\n  },\n  \"active_work\": {\n    \"active_leases\": 0,\n    \"running\": []\n  },\n  \"project\": {\n    \"phases\": 1,\n    \"tasks\": {\n      \"open\": 2\n    },\n    \"bugs_open\": 0\n  },\n  \"task_queue\": {\n    \"ready\": [\n      {\n        \"id\": \"T1\",\n        \"title\": \"First task\",\n        \"priority\": 100,\n        \"phase\": \"P1\"\n      }\n    ],\n    \"ready_total\": 1,\n    \"in_progress\": [],\n    \"blocked\": [\n      {\n        \"id\": \"T2\",\n        \"reason\": \"deps\",\n        \"waiting_on\": [\n          \"T1\"\n        ]\n      }\n    ],\n    \"blocked_total\": 1\n  },\n  \"bugs\": {\n    \"open\": [],\n    \"total_open\": 0\n  },\n  \"blockers\": {\n    \"count\": 1,\n    \"capped\": 0\n  },\n  \"discovery_hints\": [\n    \"`ddflow brief` \\u2014 what to do next and what governs it\",\n    \"`ddflow board` \\u2014 every item and its state\",\n    \"`ddflow show <id>` \\u2014 one item in full\",\n    \"`ddflow bug list` / `ddflow decision list` / `ddflow workflow` \\u2014 details\"\n  ]\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -762,9 +762,9 @@
    "task",
    "implement,unit_tests,merge"
   ],
-  0,
-  "set gates.task_pipeline = implement, unit_tests, merge\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -774,9 +774,9 @@
    "implement,unit_tests,merge",
    "--dry-run"
   ],
-  0,
-  "would set gates.task_pipeline = implement, unit_tests, merge\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -786,9 +786,9 @@
    "task",
    "implement,merge"
   ],
-  0,
-  "{\n  \"schema\": \"workflow_pipeline@1\",\n  \"key\": \"gates.task_pipeline\",\n  \"gates\": [\n    \"implement\",\n    \"merge\"\n  ],\n  \"applied\": true\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -797,9 +797,9 @@
    "nosuch",
    "a"
   ],
-  2,
+  1,
   "",
-  "usage: ddflow workflow pipeline [-h] [--dry-run] {task,phase} gates\nddflow workflow pipeline: error: argument which: invalid choice: 'nosuch' (choose from task, phase)\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -811,9 +811,9 @@
    "--into",
    "task"
   ],
-  0,
-  "configured gate g1: gate.g1.command, gates.task_pipeline\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -824,9 +824,9 @@
    "true",
    "--dry-run"
   ],
-  0,
-  "would configure gate g1: gate.g1.command\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -836,7 +836,7 @@
   ],
   1,
   "",
-  "nothing to change. Give it a --command (it runs something) or a --prompt (an agent performs it and records evidence), or --into a pipeline.\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -847,9 +847,9 @@
    "--prompt",
    "p"
   ],
-  0,
-  "{\n  \"schema\": \"workflow_gate@1\",\n  \"gate\": \"g2\",\n  \"changed\": [\n    \"gate.g2.prompt\"\n  ],\n  \"applied\": true\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -859,9 +859,9 @@
    "--command",
    "x"
   ],
-  3,
+  1,
   "",
-  "'bad id' cannot be a gate id: use only ASCII letters, digits, `_` and `-` (it names the [gate.<id>] section of the config; D-plain-keys).\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -873,7 +873,7 @@
   ],
   1,
   "",
-  "'g3' has neither a command nor a prompt, so putting it in a pipeline would block every item that reaches it. Give it one in the same call.\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -885,9 +885,9 @@
    "--into",
    "task"
   ],
-  0,
-  "configured gate g1: \n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -895,9 +895,9 @@
    "drop",
    "g1"
   ],
-  0,
-  "dropped g1 from: task. Its [gate.g1] definition is left in place — put it back with `ddflow workflow gate g1 --into task`.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -906,9 +906,9 @@
    "g1",
    "--dry-run"
   ],
-  2,
+  1,
   "",
-  "'g1' is in no pipeline; nothing to drop\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -917,9 +917,9 @@
    "drop",
    "g1"
   ],
-  2,
-  "{\n  \"refusal\": {\n    \"reason\": \"'g1' is in no pipeline; nothing to drop\",\n    \"outcome\": \"nothing\",\n    \"exit\": 2\n  },\n  \"schema\": \"workflow_drop@1\"\n}\n",
-  "'g1' is in no pipeline; nothing to drop\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -927,9 +927,9 @@
    "drop",
    "nosuch"
   ],
-  2,
+  1,
   "",
-  "'nosuch' is in no pipeline; nothing to drop\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -937,60 +937,60 @@
    "drop",
    "g1"
   ],
-  2,
+  1,
   "",
-  "'g1' is in no pipeline; nothing to drop\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "workflow"
   ],
-  0,
-  "# The workflow this project runs\n\nEvery task passes through these gates, in order. An item cannot be\ncompleted until each carries an outcome.\n\n   1. implement     agent       (required)\n      asks: Implement in the worktree ddflow created. Touch only files inside this task's declared globs; if\n   2. merge         agent       (required)\n      asks: `ddflow merge <id>` — merges from the primary checkout without a checkout.\n\nA phase passes through: research, tasks, unit_tests, bug_hunt, dedupe, live_test, corrections, docs, merge\nA doc passes through: rules, implement, standards, dedupe, merge\n\n## The rules, and where each came from\n\n  gates.required                         ['implement', 'unit_tests', 'merge'] [default]\n  gates.require_outcome                  True                         [default]\n  gates.enforce_order                    warn                         [default]  — fired on 2 of 3 recording(s), 67%\n  gates.unavailable_is_failure           False                        [default]\n  gates.allow_skip_with_reason           True                         [default]\n  gates.evidence_required                ['unit_tests', 'rubber_duck', 'critic', 'standards', 'docs'] [default]\n  schedule.parallel                      auto                         [default]\n  schedule.max_parallel_tasks            4                            [default]\n  schedule.max_parallel_min              2                            [default]\n  schedule.max_parallel_max              8                            [default]\n  worktree.max_parallel                  0                            [default]\n  worktree.enabled                       True                         [file]\n  lease.ttl_s                            1800                         [file]\n  enforce.commit_without_lease           warn                         [file]\n  enforce.require_item_trailer           False                        [default]\n  agent.reviewer_family_must_differ      True                         [default]\n\n## Reviewers\n\n  reviewer                                              family=?\n\nCommit hook: not installed\n\nNothing incoherent: every gate in a pipeline is defined, every\nrequired gate is in one, and each has a command or a prompt.\n\nChange any of it with `ddflow workflow pipeline|gate|drop`, or by\nediting .ddflow/config.toml. Both are validated before anything is\nwritten. \n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "cleanup"
   ],
-  2,
-  "Nothing to clean up: no ddflow worktrees or branches remain.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "cleanup"
   ],
-  2,
-  "{\n  \"schema\": \"cleanup@1\",\n  \"trees\": [],\n  \"stale_branches\": [],\n  \"orphan_blobs\": []\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "cleanup",
    "--apply"
   ],
-  2,
-  "Nothing to clean up: no ddflow worktrees or branches remain.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "cadence"
   ],
-  2,
-  "No cadence due (0 tasks, 0 phases completed).\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "cadence"
   ],
-  2,
-  "[]\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1000,7 +1000,7 @@
   ],
   1,
   "",
-  "unknown cadence name 'nosuch': not a configured pass. Known: architecture_review, dedupe_sweep, integration_tests, lessons_compression, lessons_pass, mutation_tests\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1012,33 +1012,33 @@
   ],
   1,
   "",
-  "unknown cadence name 'architecture': not a configured pass. Known: architecture_review, dedupe_sweep, integration_tests, lessons_compression, lessons_pass, mutation_tests\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "import"
   ],
-  2,
-  "Nothing to import.\n  Nothing recognisable was found. That is not necessarily wrong — this looks for todo checklists, a lessons corpus, ADR files and unmerged branches in their usual locations. If this project keeps them somewhere else, tell the agent where and it can file them with `ddflow task add` / `lesson add` / `decision add` directly.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "import"
   ],
-  2,
-  "{\n  \"schema\": \"import@1\",\n  \"summary\": {},\n  \"found\": [],\n  \"skipped_existing\": [],\n  \"empty_sources\": [],\n  \"notes\": [\n    \"Nothing recognisable was found. That is not necessarily wrong \\u2014 this looks for todo checklists, a lessons corpus, ADR files and unmerged branches in their usual locations. If this project keeps them somewhere else, tell the agent where and it can file them with `ddflow task add` / `lesson add` / `decision add` directly.\"\n  ],\n  \"applied\": false\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "import",
    "--verify"
   ],
-  2,
-  "Nothing in this queue was imported.\n  Nothing in this queue records an import. If this project has history in docs/todo.md, a lessons corpus, ADRs, a research log, an engineering journal or a memory store, `ddflow import` proposes it and writes nothing until you pass --apply.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1046,18 +1046,18 @@
    "import",
    "--verify"
   ],
-  2,
-  "{\n  \"schema\": \"import_verify@1\",\n  \"imported\": {},\n  \"total\": 0,\n  \"first_at\": \"\",\n  \"last_at\": \"\",\n  \"findings\": [],\n  \"tasks_without_globs\": [],\n  \"shipped_with_open_tasks\": [],\n  \"vanished_sources\": [],\n  \"empty_sources\": [],\n  \"unstructured_provenance\": [],\n  \"branches_without_globs\": [],\n  \"imported_anything\": false,\n  \"new_since_import\": [],\n  \"notes\": [\n    \"Nothing in this queue records an import. If this project has history in docs/todo.md, a lessons corpus, ADRs, a research log, an engineering journal or a memory store, `ddflow import` proposes it and writes nothing until you pass --apply.\"\n  ],\n  \"verified\": false\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "import",
    "--apply"
   ],
-  2,
-  "Nothing to import.\n  Nothing recognisable was found. That is not necessarily wrong — this looks for todo checklists, a lessons corpus, ADR files and unmerged branches in their usual locations. If this project keeps them somewhere else, tell the agent where and it can file them with `ddflow task add` / `lesson add` / `decision add` directly.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1065,18 +1065,18 @@
    "--max-tasks",
    "1"
   ],
-  2,
-  "Nothing to import.\n  Nothing recognisable was found. That is not necessarily wrong — this looks for todo checklists, a lessons corpus, ADR files and unmerged branches in their usual locations. If this project keeps them somewhere else, tell the agent where and it can file them with `ddflow task add` / `lesson add` / `decision add` directly.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "external",
    "sync"
   ],
-  2,
-  "No item depends on another repository.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1084,9 +1084,9 @@
    "external",
    "sync"
   ],
-  2,
-  "[]\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1095,7 +1095,7 @@
   ],
   1,
   "",
-  "no such document: AGENTS.md\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1104,8 +1104,8 @@
    "AGENTS.md"
   ],
   1,
-  "{\n  \"refusal\": {\n    \"reason\": \"no such document: AGENTS.md\",\n    \"outcome\": \"failed\",\n    \"exit\": 1\n  },\n  \"schema\": \"pins@1\"\n}\n",
-  "no such document: AGENTS.md\n"
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1114,24 +1114,24 @@
   ],
   1,
   "",
-  "no such document: nosuch.md\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "tests"
   ],
-  2,
-  "No test reaches the 8 changed file(s) since main. That is not a pass: with no test to select, the unit_tests gate runs the whole suite.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "tests"
   ],
-  2,
-  "{\n  \"schema\": \"tests@1\",\n  \"tree\": \"<repo>\",\n  \"base\": \"main\",\n  \"changed\": [\n    \".ddflow/.gitignore\",\n    \".ddflow/config.toml\",\n    \".ddflow/events/pinhost-proj-<h6>.jsonl\",\n    \".ddflow/events/tx.jsonl\",\n    \".ddflow/templates/export/changelog.md.j2\",\n    \".gitattributes\",\n    \".gitignore\",\n    \"CL.md\"\n  ],\n  \"tests\": [],\n  \"command\": \"\",\n  \"full_suite\": \"\",\n  \"full_suite_known\": false,\n  \"advice\": \"\",\n  \"unparsed\": [],\n  \"cut\": [],\n  \"cut_at_hubs\": [],\n  \"full_reason\": \"\",\n  \"unit_tests_gate\": {}\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1139,9 +1139,9 @@
    "--item",
    "T1"
   ],
-  2,
-  "No test reaches the 8 changed file(s) since main. That is not a pass: with no test to select, the unit_tests gate runs the whole suite.\n\nThe unit_tests gate runs the whole suite: no ci gate in this item's pipeline runs the whole suite, so this gate runs it\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1151,42 +1151,42 @@
   ],
   1,
   "",
-  "no such item 'nosuch'\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "precommit"
   ],
-  0,
-  "# Proposed by `ddflow precommit` for this repository's stacks: none detected.\n# Review it, then `pre-commit install` (installs the hook types listed below).\n# `pre-commit autoupdate` moves the pinned revisions forward.\ndefault_install_hook_types: [pre-commit, commit-msg]\ndefault_stages: [pre-commit]\nrepos:\n  # whitespace, merge markers, oversized files, private keys, config files that do not parse\n  - repo: https://github.com/pre-commit/pre-commit-hooks\n    rev: v6.0.0\n    hooks:\n      - id: trailing-whitespace\n      - id: end-of-file-fixer\n      - id: check-merge-conflict\n      - id: check-added-large-files\n      - id: detect-private-key\n      - id: check-toml\n  # secrets in the diff (reads .gitleaks.toml when the project has one)\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.30.1\n    hooks:\n      - id: gitleaks\n  # tools the project already has, and ddflow's own checks\n  - repo: local\n    hooks:\n      - id: ddflow-check-commit\n        name: \"ddflow: claim before you edit; generated views current\"\n        entry: \"ddflow hooks check-commit\"\n        language: \"system\"\n        pass_filenames: false\n        always_run: true\n        stages: [\"pre-commit\"]\n      - id: ddflow-check-msg\n        name: \"ddflow: the commit message carries what the project requires\"\n        entry: \"ddflow hooks check-msg\"\n        language: \"system\"\n        stages: [\"commit-msg\"]\n\n# <repo>/.pre-commit-config.yaml does not exist yet. --write creates it; it never replaces one.\n# `pre-commit install` activates it.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "--json",
    "precommit"
   ],
-  0,
-  "{\n  \"schema\": \"precommit@1\",\n  \"path\": \"<repo>/.pre-commit-config.yaml\",\n  \"exists\": false,\n  \"written\": false,\n  \"installed\": true,\n  \"ddflow_cmd\": \"ddflow\",\n  \"ddflow_cmd_found\": true,\n  \"ddflow_cmd_recognised\": true,\n  \"missing\": {},\n  \"ddflow_hooks_installed\": [],\n  \"hook_types\": [\n    \"pre-commit\",\n    \"commit-msg\"\n  ],\n  \"stacks\": {},\n  \"repos\": [\n    {\n      \"repo\": \"https://github.com/pre-commit/pre-commit-hooks\",\n      \"rev\": \"v6.0.0\",\n      \"hooks\": [\n        \"trailing-whitespace\",\n        \"end-of-file-fixer\",\n        \"check-merge-conflict\",\n        \"check-added-large-files\",\n        \"detect-private-key\",\n        \"check-toml\"\n      ],\n      \"why\": \"whitespace, merge markers, oversized files, private keys, config files that do not parse\"\n    },\n    {\n      \"repo\": \"https://github.com/gitleaks/gitleaks\",\n      \"rev\": \"v8.30.1\",\n      \"hooks\": [\n        \"gitleaks\"\n      ],\n      \"why\": \"secrets in the diff (reads .gitleaks.toml when the project has one)\"\n    },\n    {\n      \"repo\": \"local\",\n      \"rev\": \"\",\n      \"hooks\": [\n        \"ddflow-check-commit\",\n        \"ddflow-check-msg\"\n      ],\n      \"why\": \"tools the project already has, and ddflow's own checks\"\n    }\n  ],\n  \"skipped\": [],\n  \"text\": \"# Proposed by `ddflow precommit` for this repository's stacks: none detected.\\n# Review it, then `pre-commit install` (installs the hook types listed below).\\n# `pre-commit autoupdate` moves the pinned revisions forward.\\ndefault_install_hook_types: [pre-commit, commit-msg]\\ndefault_stages: [pre-commit]\\nrepos:\\n  # whitespace, merge markers, oversized files, private keys, config files that do not parse\\n  - repo: https://github.com/pre-commit/pre-commit-hooks\\n    rev: v6.0.0\\n    hooks:\\n      - id: trailing-whitespace\\n      - id: end-of-file-fixer\\n      - id: check-merge-conflict\\n      - id: check-added-large-files\\n      - id: detect-private-key\\n      - id: check-toml\\n  # secrets in the diff (reads .gitleaks.toml when the project has one)\\n  - repo: https://github.com/gitleaks/gitleaks\\n    rev: v8.30.1\\n    hooks:\\n      - id: gitleaks\\n  # tools the project already has, and ddflow's own checks\\n  - repo: local\\n    hooks:\\n      - id: ddflow-check-commit\\n        name: \\\"ddflow: claim before you edit; generated views current\\\"\\n        entry: \\\"ddflow hooks check-commit\\\"\\n        language: \\\"system\\\"\\n        pass_filenames: false\\n        always_run: true\\n        stages: [\\\"pre-commit\\\"]\\n      - id: ddflow-check-msg\\n        name: \\\"ddflow: the commit message carries what the project requires\\\"\\n        entry: \\\"ddflow hooks check-msg\\\"\\n        language: \\\"system\\\"\\n        stages: [\\\"commit-msg\\\"]\\n\",\n  \"activate\": \"pre-commit install\"\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "precommit",
    "--write"
   ],
-  0,
-  "Wrote <repo>/.pre-commit-config.yaml for: none detected.\n# `pre-commit install` activates it.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "precommit",
    "--write"
   ],
-  3,
-  "# `pre-commit install` activates it.\n",
-  "<repo>/.pre-commit-config.yaml exists and is not replaced: run `ddflow precommit` without --write to see the proposal, and merge by hand what you want\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1194,7 +1194,7 @@
   ],
   1,
   "",
-  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 26 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1202,8 +1202,8 @@
    "onboard"
   ],
   1,
-  "{\n  \"schema\": \"onboard@1\",\n  \"checks\": [\n    {\n      \"name\": \"mcp handshake\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"no ddflow entry registered in .mcp.json\"\n    },\n    {\n      \"name\": \"hooks armed\",\n      \"outcome\": \"failed\",\n      \"detail\": \"not armed: pre-commit, commit-msg\"\n    },\n    {\n      \"name\": \"trailer refused\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"no commit-msg hook to probe\"\n    },\n    {\n      \"name\": \"brief/next answer\",\n      \"outcome\": \"passed\",\n      \"detail\": \"brief 26 line(s); next: ready\"\n    },\n    {\n      \"name\": \"freeze ratchet\",\n      \"outcome\": \"unavailable\",\n      \"detail\": \"nothing was imported here; no ratchet expected\"\n    }\n  ],\n  \"text\": \"unavailable mcp handshake: no ddflow entry registered in .mcp.json\\nfailed      hooks armed: not armed: pre-commit, commit-msg\\nunavailable trailer refused: no commit-msg hook to probe\\npassed      brief/next answer: brief 26 line(s); next: ready\\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\"\n}\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1212,16 +1212,16 @@
   ],
   1,
   "",
-  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 26 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\n4 of 5 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "onboard",
    "preflight"
   ],
-  2,
-  "nothing left behind: no other worktrees, no unmerged branches, no stashes\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1229,36 +1229,36 @@
    "onboard",
    "preflight"
   ],
-  2,
-  "{\n  \"schema\": \"onboard@1\",\n  \"leftovers\": [],\n  \"text\": \"nothing left behind: no other worktrees, no unmerged branches, no stashes\"\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "onboard",
    "legacy"
   ],
-  2,
-  "no cutover proposal in the files scanned (the native rulebooks, .claude/commands/*.md, and every file the operator named); name any other prompt or rulebook file explicitly so it is scanned too\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "onboard",
    "memory"
   ],
-  0,
-  "no harness memory directory for this checkout; nothing to import\n  problem: looked under <home>/.claude/projects for <mangled>\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "onboard",
    "test-gate"
   ],
-  2,
-  "no runner detected: no CI config, pyproject, package.json or Makefile said how tests run\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1267,7 +1267,7 @@
   ],
   1,
   "",
-  "unavailable mcp handshake: no ddflow entry registered in .mcp.json\nfailed      hooks armed: not armed: pre-commit, commit-msg\nunavailable trailer refused: no commit-msg hook to probe\npassed      brief/next answer: brief 26 line(s); next: ready\nunavailable freeze ratchet: nothing was imported here; no ratchet expected\nunavailable suite green: no gate.unit_tests.command configured\n5 of 6 check(s) did not pass: mcp handshake, hooks armed, trailer refused, freeze ratchet, suite green\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1275,9 +1275,9 @@
    "preflight",
    "--apply"
   ],
-  2,
-  "nothing left behind: no other worktrees, no unmerged branches, no stashes\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1287,26 +1287,26 @@
    "--accept",
    "nosuch"
   ],
-  2,
-  "nothing left behind: no other worktrees, no unmerged branches, no stashes\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "onboard",
    "nosuch"
   ],
-  2,
+  1,
   "",
-  "usage: ddflow onboard [-h] [--apply] [--accept NAME]\n                      [{status,preflight,legacy,memory,test-gate,verify,harness}]\nddflow onboard: error: argument stage: invalid choice: 'nosuch' (choose from status, preflight, legacy, memory, test-gate, verify, harness)\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "upgrade"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1314,8 +1314,8 @@
    "upgrade"
   ],
   1,
-  "{\n  \"schema\": \"upgrade@1\",\n  \"running\": \"<VERSION>\",\n  \"project_version\": \"<VERSION>\",\n  \"up_to_date\": false,\n  \"total\": 1,\n  \"categories\": {\n    \"repairs\": [\n      {\n        \"category\": \"repairs\",\n        \"id\": \"repair:unknown-author-shards\",\n        \"repair\": \"unknown-author-shards\",\n        \"summary\": \"event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\",\n        \"findings\": [\n          {\n            \"key\": \"pinhost-proj-<h6>.jsonl\",\n            \"detail\": \"pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\"\n          }\n        ],\n        \"finding_count\": 1,\n        \"unavailable\": \"\",\n        \"action\": \"needs operator confirmation\",\n        \"fix\": \"ddflow upgrade --apply\"\n      }\n    ],\n    \"migrations\": [],\n    \"records\": [],\n    \"config\": [],\n    \"instructions\": [],\n    \"hooks\": [],\n    \"mcp\": [],\n    \"features\": []\n  }\n}\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1323,17 +1323,17 @@
    "--plan"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "upgrade",
    "--apply"
   ],
-  3,
-  "[refused] repair:unknown-author-shards: needs the operator's confirmation: ddflow upgrade --apply --confirm unknown-author-shards --reason '<why>'\n1 item(s) remain in the plan.\n",
-  "1 upgrade item(s) need the operator's confirmation: ddflow upgrade --apply --confirm KEY --reason WHY\n"
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1341,9 +1341,9 @@
    "--apply",
    "hooks"
   ],
-  0,
-  "Up to date: nothing to apply.\n1 item(s) remain in the plan.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1353,7 +1353,7 @@
   ],
   1,
   "",
-  "unknown upgrade category nosuch; known: repairs, migrations, records, config, instructions, hooks, mcp, features, all\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1362,8 +1362,8 @@
    "k"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1374,8 +1374,8 @@
    "r"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1384,7 +1384,7 @@
   ],
   1,
   "",
-  "there is no upgrade backup or snapshot to restore\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1394,7 +1394,7 @@
   ],
   1,
   "",
-  "no upgrade backup or snapshot named 'nosuch'; known: none\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1402,9 +1402,9 @@
    "--restore",
    "--plan"
   ],
-  3,
+  1,
   "",
-  "--restore stands alone: choose it or the plan or --apply\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1413,17 +1413,17 @@
    "bogus"
   ],
   1,
-  "ddflow <VERSION>; this project last worked under <VERSION>\n1 upgrade item(s) pending (plan only; nothing was written):\n\ndata repairs (1)\n  - [needs operator confirmation] event shards by an agent id with no committed history: 1 finding(s); record that the operator reviewed each shard's author; nothing else changes\n      pinhost-proj-<h6>.jsonl was written by an agent id with no committed history on main: check who wrote it (`git log -- .ddflow/events/pinhost-proj-<h6>.jsonl`) before trusting it\n      -> ddflow upgrade --apply\n\nCompanions are checked by `ddflow companions`.\n",
-  ""
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "upgrade",
    "--snapshot"
   ],
-  3,
+  1,
   "",
-  "--snapshot saves the originals of an --apply: add --apply\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1467,9 +1467,9 @@
    "--filter",
    "review"
   ],
-  0,
-  "agent.reviewer_family_must_differ = True   [default]\nagent.reviewer_independence = 'model'   [default]\ncadence.architecture_review_every_phases = 2   [default]\nflow.pr_reviewers = []   [default]\ngovern.reviewer_floor_tier = 'balanced'   [default]\nimporter.preview_rows = 8   [default]\nlocks.review_reuse = 'off'   [default]\nprompts.review_system = ''   [default]\nprompts.review_user = ''   [default]\nreview.max_rounds = 2   [default]\nreview.settle_all_refuted = True   [default]\nreview.on_exceed = 'refuse'   [default]\nreview.converge_floor = 'HIGH'   [default]\nreview.delta_default = False   [default]\nreview.fix_round_free = True   [default]\nreview.require_new_work = True   [default]\nreview.combined_under_lines = 150   [default]\nreview.triage_ignore_globs = ['tests/**', '**/test_*.py', '**/*_test.py', '**/conftest.py']   [default]\nreview.doc_globs = ['docs/**', 'README*', 'CHANGELOG*']   [default]\nreview.exclude_globs = ['tests/golden/**', '*transcript*.json', 'uv.lock', '*.ambr']   [default]\nreview.manifest_max_files = 40   [default]\nreview.exclude_pin_files = True   [default]\nreview.chunk_max_tokens = 0   [default]\nreview.split_rounds = 2   [default]\nreview.degraded_cooldown_s = 3600   [default]\nslo.target_review_finding_rate = 0.6   [default]\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1478,7 +1478,7 @@
   ],
   1,
   "",
-  "a value alone sets nothing: ddflow config KEY VALUE [--local]\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1487,9 +1487,9 @@
    "3",
    "--local"
   ],
-  0,
-  "review.max_rounds = 3   (in <repo>/.ddflow/local/config.toml, not committed)\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1498,9 +1498,9 @@
    "review.max_rounds",
    "4"
   ],
-  0,
-  "review.max_rounds = 4\n  warning: shadowed -- the machine-local layer (.ddflow/local/config.toml) wins; the effective value of review.max_rounds is 3, so the committed write changes nothing here.\n  To change the winning layer: ddflow config --local review.max_rounds VALUE\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1521,7 +1521,7 @@
   ],
   1,
   "",
-  "appending this would break the config: Cannot declare ('review',) twice (at line 80, column 8)\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1537,9 +1537,9 @@
   [
    "prompts"
   ],
-  2,
+  1,
   "",
-  "usage: ddflow prompts [-h] {list,show,get,eject} ...\nddflow prompts: error: the following arguments are required: prompts_cmd\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1593,9 +1593,9 @@
    "help",
    "workflow"
   ],
-  0,
-  "# The workflow\n\n## Where work comes from\n\nA **phase** groups **tasks**. A task can be split into sub-tasks in place with\n`ddflow split`, keeping its id and its history — which is what you do when a task turns\nout to be two concerns, rather than abandoning it and filing two new ones.\n\nTwo things make an item safe to hand out, and both are declared on it:\n\n- **`--needs`** — the ids it waits for. Inherited: a phase's dependency governs every\n  task inside it, so you declare it once. `ddflow task add` (and `ddflow update\n  --needs`) refuses an id that does not exist — `no such id`, with a \"did you mean\"\n  when one is close — so a typo surfaces straight away instead of as work waiting on a\n  ghost. An imported queue is the one exception: a dependency nothing produced is kept\n  as a dangling need that stays unmet, deliberately.\n- **`--globs`** — the files it writes. This is what lets two agents run at once:\n  `ddflow claim` refuses an item whose globs overlap something already in flight. A\n  task with no globs is one the conflict detector cannot protect.\n\n## Picking work up\n\n`ddflow next` shows only what may actually start: dependencies met, no one else\nholding it, no file conflict, under the parallelism cap. Exit 2 means nothing is\nactionable — which is an answer, and usually means something is blocked rather than\nthat the queue is empty. `ddflow next --json` gives the same thing with reasons.\n\n`ddflow claim <id>` takes a lease and creates a git worktree for it. Leases expire, so\na crashed agent's work is reclaimable; `ddflow heartbeat <id>` renews one during long\nwork. `ddflow release <id>` gives it up without completing.\n\n## Putting it down\n\n`ddflow complete <id>` is the gate. It refuses — exit 3 — and lists every unsatisfied\nrequirement rather than making you guess. Then `ddflow merge <id>` lands the branch,\nrun from the primary checkout.\n\nSee also: `ddflow help gates`, `ddflow help parallel`.\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1624,7 +1624,7 @@
   ],
   1,
   "",
-  "<repo> has not been adopted (no docs/ddflow/drivers/implement-phase.md); run `ddflow adopt` first\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1634,16 +1634,16 @@
   ],
   1,
   "",
-  "unknown agent(s) 'nosuch'; known: claude, gemini, codex, copilot, vscode, kilo, cursor, kimi, opencode, glm, qwen, antigravity, devin, qodo, tabnine, aider, cline, windsurf, replit, openhands, goose, cody, dsh, grok\n"
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "hooks",
    "status"
   ],
-  2,
-  "pre-commit hook: NOT installed\npolicy [enforce].commit_without_lease = 'warn'\ncommit-msg hook: NOT installed\nClaude Code SessionStart hook: not installed (`ddflow hooks install --claude` puts the brief in every session)\nClaude Code PreCompact hook: not installed (`ddflow hooks install --claude`)\nClaude Code PreToolUse hook: not installed (`ddflow hooks install --claude` refuses pkill, git stash, git push and force flags before they run)\nprompt capture hook: Claude Code: not installed; Gemini CLI: not installed\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
@@ -1651,16 +1651,16 @@
    "hooks",
    "status"
   ],
-  2,
-  "{\n  \"schema\": \"hooks@1\",\n  \"installed\": false,\n  \"policy\": \"warn\",\n  \"session_hook\": false,\n  \"trailer_hook\": false\n}\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ],
  [
   [
    "init"
   ],
-  0,
-  "Initialised ddflow in <repo>/.ddflow\n  config: <repo>/.ddflow/config.toml\n  Next: `ddflow phase add P1 --title 'First phase'`\n\n  Setup changed these files — commit them before your first merge, or this\n  checkout stays dirty and `ddflow merge` will refuse:\n    git add .gitignore .gitattributes .ddflow && git commit -m 'ddflow: adopt'\n",
-  ""
+  1,
+  "",
+  "ddflow: imported from the linked worktree /home/delian/src/ddflow/.ddflow/worktrees/UX-output-caps-low-followups, not the primary or your own tree; the shared editable install was reset to /home/delian/src/ddflow — re-run the command\n"
  ]
 ]

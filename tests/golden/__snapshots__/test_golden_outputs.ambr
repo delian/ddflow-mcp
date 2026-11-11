@@ -2005,6 +2005,12 @@
           been renewed for this many seconds is CRASHED, minutes before the lease TTL
           lapses. Only a holder that declared its identity can be seen to die; others
           fall back to the lease TTL. 0 turns the check off.
+      health.orphan_s = 300   [default]
+          A lane that has shown no progress for this many seconds while its newest
+          live-run registry entry (a gate, review, ci or pins run) is already finished
+          -- the outcome recorded -- or whose process is gone with no recorded
+          outcome, is ORPHAN_WAIT: it is 'waiting on nothing' and the finding names
+          the log and the command to rerun. 0 turns the check off.
       health.mode_idle = 'inherit'   [default]
           The mode for an idle lane (nudge): 'inherit' (default) takes [health].mode;
           otherwise 'off', 'propose' or 'apply' as for mode, for this finding kind
@@ -2053,6 +2059,15 @@
           is reported, never acted on, by a typo); `config --set`, `ddflow_configure`
           and the environment refuse it, and so does loading ddflow's own source tree,
           where the file and the code are one commit.
+      health.mode_orphan_wait = 'inherit'   [default]
+          The mode for a lane waiting on nothing (a run that ended or died with no
+          outcome): 'inherit' (default) takes [health].mode; otherwise 'off',
+          'propose' or 'apply' as for mode, for this finding kind alone. An
+          unrecognised value in a config file is warned about, reported by `doctor`
+          and falls back to 'propose', the strictest (a finding is reported, never
+          acted on, by a typo); `config --set`, `ddflow_configure` and the environment
+          refuse it, and so does loading ddflow's own source tree, where the file and
+          the code are one commit.
       hooks.forbidden_commands = ['pkill', 'killall', 'git stash', 'git push', 'git reset --hard @primary', 'rm -rf .ddflow', '--force', '--force-with-lease']   [default]
           Commands the PreToolUse hook (`ddflow hooks install --claude`) refuses in a
           Bash tool call, naming the safe alternative. Each entry is a word sequence
@@ -3246,12 +3261,14 @@
           false.
       output.max_chars = 30000   [default]
           Characters a default answer of those commands may hold (text and serialised
-          `--json` alike; about 4 characters a token, so 30000 is roughly 7500 tokens,
-          well under the 25000-token cap an MCP client puts on a tool result). A
-          `--json` body that carries both prose and rows (`board`) gives each half. A
-          longer answer is cut on a line boundary and ends in a footer; a `--json`
-          body first loses rows until it fits and keeps its schema, adding `truncated`
-          and `next`. 0 lifts the character cap, unless `allow_full` is false.
+          `--json` alike; about 4 characters a token for ASCII text only, so 30000 is
+          roughly 7500 tokens of English; non-ASCII prose costs more, see
+          `non_ascii_weight`; well under the 25000-token cap an MCP client puts on a
+          tool result). A `--json` body that carries both prose and rows (`board`)
+          gives each half. A longer answer is cut on a line boundary and ends in a
+          footer; a `--json` body first loses rows until it fits and keeps its schema,
+          adding `truncated` and `next`. 0 lifts the character cap, unless
+          `allow_full` is false.
       output.non_ascii_weight = 4   [default]
           How many characters of `max_chars` one non-ASCII character of prose costs. A
           character count is only a token estimate for ASCII: 30000 characters

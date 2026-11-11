@@ -335,9 +335,10 @@ def test_every_capped_command_has_a_full_flag(repo, command):
     assert "--full" in out + err, command
 
 
-def test_status_by_tag_json_keeps_the_wire_budget_of_plain_status(repo, monkeypatch):
-    """`--by-tag` goes through its own handler: a `--json` body gets the same half of
-    `max_chars` there as in `cmd_status`, or the two modes of one command disagree."""
+def test_status_by_tag_json_keeps_the_budget_of_plain_status(repo, monkeypatch):
+    """`--by-tag` goes through its own handler: a `--json` body gets the same budget there
+    as in `cmd_status` (the whole `max_chars`: status has no prose half), or the two modes
+    of one command disagree."""
     run_cli(repo, "init")
     log = EventLog(repo, "agent-test")
     for i in range(40):
@@ -351,10 +352,11 @@ def test_status_by_tag_json_keeps_the_wire_budget_of_plain_status(repo, monkeypa
     monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", str(chars))
     _code, text, _err = run_cli(repo, "--json", "status", "--by-tag", "k")
     body = json.loads(text)
-    assert "truncated" in body, "three quarters of the body is over the wire half"
+    assert "truncated" in body, "three quarters of the body is over the budget"
     for extra in ("truncated", "next"):
         body.pop(extra)
-    assert len(json.dumps(body, indent=2)) <= chars // 2
+    size = len(json.dumps(body, indent=2))
+    assert chars // 2 < size <= chars, "held to the whole budget, not its half"
 
 
 def _heavy_row(item: str) -> dict:
@@ -424,3 +426,60 @@ def test_next_lane_answer_goes_through_the_cap_like_the_queue(repo, monkeypatch)
     assert out.data["next"]["full_mcp"] == "ddflow_next lane=L full=true"
     full = navigate._next(repo, {"lane": "L", "full": True}, "agent")
     assert full.data["note"] == note
+
+
+def _lane_footer(monkeypatch, repo, a):
+    from ddflow.surfaces.declared.lifecycle import navigate
+
+    fake = SimpleNamespace(
+        DEFAULT_NEXT_KIND="task",
+        next_lane=lambda *x, **k: O.ok("next", lane=a["lane"], item="I1", note="reason " * 3000),
+    )
+    monkeypatch.setattr(navigate, "_api", lambda: fake)
+    monkeypatch.setenv("DDFLOW_OUTPUT_MAX_CHARS", "1000")
+    return navigate._next(repo, a, "agent").data["next"]
+
+
+def test_next_lane_footer_keeps_kind_and_phase(repo, monkeypatch):
+    """The rerun a capped `next --lane L --kind K --phase P` names is the same selection."""
+    nxt = _lane_footer(monkeypatch, repo, {"lane": "L", "kind": "doc", "phase": "P1"})
+    assert nxt["full_cli"] == "ddflow next --lane L --kind doc --phase P1 --full"
+    assert nxt["full_mcp"] == "ddflow_next lane=L kind=doc phase=P1 full=true"
+    only = _lane_footer(monkeypatch, repo, {"lane": "L", "phase": "P1", "phase_only": True})
+    assert only["full_cli"] == "ddflow next --lane L --phase P1 --phase-only --full"
+    assert only["full_mcp"] == "ddflow_next lane=L phase=P1 phase_only=true full=true"
+    default = _lane_footer(monkeypatch, repo, {"lane": "L"})
+    assert default["full_cli"] == "ddflow next --lane L --full"
+
+
+def test_next_lane_footer_quotes_a_lane_with_a_space(repo, monkeypatch):
+    nxt = _lane_footer(monkeypatch, repo, {"lane": "wave 2"})
+    assert nxt["full_cli"] == "ddflow next --lane 'wave 2' --full"
+    assert nxt["full_mcp"] == "ddflow_next lane='wave 2' full=true"
+
+
+def test_max_chars_doc_says_four_chars_a_token_is_ascii_only(repo):
+    run_cli(repo, "init")
+    text = run_cli(repo, "config", "--explain")[1]
+    block = text[text.index("output.max_chars") :]
+    block = (
+        block[: block.index("output.non_ascii_weight")]
+        if "output.non_ascii_weight" in block
+        else block
+    )
+    assert "ASCII" in block and "non_ascii_weight" in block
+
+
+def test_status_json_is_held_to_the_same_budget_on_cli_and_mcp():
+    """Status carries no prose, so `--json` (wire) does not halve the budget: the CLI and the
+    MCP call return the same rows. A body WITH prose (`board`) still halves."""
+
+    def rows():
+        return [{"item": f"I{i}", "title": "t" * 60} for i in range(40)]
+
+    cfg = _cfg(max_chars=len(json.dumps(rows(), indent=2)) + 400, max_rows=50)
+    plain = OC.apply(None, O.ok("status", in_flight=rows()), "status", cfg=cfg)
+    wire = OC.apply(None, O.ok("status", in_flight=rows()), "status", cfg=cfg, wire=True)
+    assert "truncated" not in wire.data and wire.data["in_flight"] == plain.data["in_flight"]
+    prose = O.ok("next", text="p" * 30, blocked=rows())
+    assert "truncated" in OC.apply(None, prose, "next", cfg=cfg, wire=True).data

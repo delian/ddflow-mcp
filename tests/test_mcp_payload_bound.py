@@ -44,22 +44,23 @@ def _blocked_queue(repo, n: int = 40) -> None:
         log.append("task.added", f"W{i:02d}", {"title": f"waits {i}", "needs": ["READY"]})
 
 
-def test_next_cuts_the_blocked_list_and_counts_it_exactly(repo):
+def test_next_defers_the_blocked_cut_to_output_max_rows(repo):
+    """The 11..50 window: MCP shows what `--json next` shows (output_caps, max_rows 50)."""
     _blocked_queue(repo)
-    r = _call(repo, "ddflow_next")
-    body = _body(r)
+    body = _body(_call(repo, "ddflow_next"))
     assert [i["id"] for i in body["ready"]] == ["READY"]
-    assert len(body["blocked"]) == B.NEXT_BLOCKED_SHOWN
-    cut = body["truncated"]
-    assert cut["blocked"] == 40 and cut["shown"] == B.NEXT_BLOCKED_SHOWN
-    assert sum(cut["blocked_by_reason"].values()) == 40
-    assert "--json next" in cut["all"]
+    assert len(body["blocked"]) == 40 and "truncated" not in body
+    log = EventLog(repo, "agent-test")
+    for i in range(30):
+        log.append("task.added", f"X{i:02d}", {"title": f"x {i}", "needs": ["READY"]})
+    cut = _body(_call(repo, "ddflow_next"))
+    assert len(cut["blocked"]) == 50 and cut["truncated"]["lists"]["blocked"] == 70
 
 
 def test_next_blocked_hint_says_the_reason_is_in_next_not_show(repo):
     """Bc4fef29fa0: the hint once said ddflow_show <id> explains why an item is blocked,
     but show of a cap-held item gives no reason. The reason is in next's blocked list."""
-    _blocked_queue(repo)
+    _blocked_queue(repo, 70)
     body = _body(_call(repo, "ddflow_next"))
     cut = body["truncated"]
     assert "not in ddflow_show <id>" in cut["all"]
@@ -83,7 +84,7 @@ def test_next_clips_long_ready_bodies_and_says_so(repo):
 
 
 def test_next_clip_merges_with_the_blocked_cut_note(repo):
-    _blocked_queue(repo, 40)
+    _blocked_queue(repo, 60)
     log = EventLog(repo, "agent-test")
     log.append(
         "task.added",
@@ -91,11 +92,11 @@ def test_next_clip_merges_with_the_blocked_cut_note(repo):
         {"title": "long body", "globs": ["lg.py"], "body": "a long body " * 80},
     )
     cut = _body(_call(repo, "ddflow_next"))["truncated"]
-    assert cut["blocked"] == 40 and cut["clipped_strings"] == 1
+    assert cut["lists"]["blocked"] == 60 and cut["clipped_strings"] == 1
     assert "--json next" in cut["all"]
 
 
-def test_next_is_whole_below_the_bound_and_the_cli_is_never_cut(repo):
+def test_next_is_whole_below_the_bound_and_cli_and_mcp_agree_above_it(repo):
     _blocked_queue(repo, 3)
     assert "truncated" not in _body(_call(repo, "ddflow_next"))
     _blocked_queue_cli = run_cli(repo, "--json", "next")[1]
@@ -106,7 +107,7 @@ def test_next_is_whole_below_the_bound_and_the_cli_is_never_cut(repo):
         log.append("task.added", f"X{i:02d}", {"title": f"x {i}", "needs": ["READY"]})
     cli = json.loads(run_cli(repo, "--json", "next")[1])
     assert len(cli["blocked"]) == 33
-    assert len(_body(_call(repo, "ddflow_next"))["blocked"]) == B.NEXT_BLOCKED_SHOWN
+    assert len(_body(_call(repo, "ddflow_next"))["blocked"]) == 33
 
 
 def _gated(repo) -> None:

@@ -2973,6 +2973,60 @@
   "output_schema": null,
   "array_schema": null
  },
+ "ddflow_paths": {
+  "command": "paths",
+  "schema": "paths@1",
+  "shape": "object",
+  "payload": [
+   "now",
+   "metrics",
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "paths@1"
+    },
+    "now": {},
+    "metrics": {},
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
+ "ddflow_perf": {
+  "command": "perf",
+  "schema": "perf@1",
+  "shape": "object",
+  "payload": [
+   "text"
+  ],
+  "output_schema": {
+   "type": "object",
+   "properties": {
+    "schema": {
+     "const": "perf@1"
+    },
+    "text": {},
+    "export_refresh": {},
+    "ci": {},
+    "progress": {},
+    "guidance": {},
+    "glob_warnings": {},
+    "refusal": {}
+   },
+   "additionalProperties": true
+  },
+  "array_schema": null
+ },
  "ddflow_phase_complete": {
   "command": "phase_complete",
   "schema": "phase_complete@1",
