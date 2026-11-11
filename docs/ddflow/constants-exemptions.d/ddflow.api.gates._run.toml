@@ -1,0 +1,2 @@
+[exempt]
+"ddflow/api/gates/_run.py:_MAX_FAILED_IDS_SHOWN" = 'internal truncation of a superseded-run refusal message: how many failing test ids it names before the "... and N more" note; changing it changes message shape, not how ddflow behaves for a person'
