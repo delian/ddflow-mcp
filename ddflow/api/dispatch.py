@@ -83,8 +83,16 @@ def dispatch(
     ledger = LN.build(events, st, cfg, now, offer)
     moves = PLAN.steer(AD(ledger, parallel, max_moves=cfg.lanes.advise_max))
 
+    move_rows = [{"verb": m.verb, "lane": m.lane, "text": m.text} for m in moves]
     rows = [
-        {"item": s.item, "lane": s.lane, "globs": list(s.globs), "note": s.note}
+        {
+            "item": s.item,
+            "agent": s.lane,
+            "lane": s.lane,
+            "claim": f"ddflow claim {s.item}",
+            "globs": list(s.globs),
+            "note": s.note,
+        }
         for s in starts
     ]
     data: dict[str, Any] = {
@@ -92,16 +100,15 @@ def dispatch(
         "free": free,
         "limit": parallel.limit,
         "starts": rows,
-        "moves": [{"verb": m.verb, "lane": m.lane, "text": m.text} for m in moves],
-        "text": _render(rows, moves),
+        "moves": move_rows,
+        "text": _render(rows, move_rows),
     }
     if mode == "tick":
         log.append(
             "session.note",
             me or "swarm",
-            {"text": _render(rows, moves), "source": "dispatch"},
+            {"text": _render(rows, move_rows), "source": "dispatch"},
         )
-        data["text"] = _render(rows, moves)
     return O.ok("dispatch", **data)
 
 

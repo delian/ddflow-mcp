@@ -58,7 +58,7 @@ class Plan:
 
     starts: tuple[Start, ...]
     moves: tuple[Move, ...]
-    free: int = 0  # free slots the fill consumed
+    free: int = 0  # free slots the fill accepted (= len(starts)): "consumed", not "left"
     sequence: tuple[str, ...] = ()  # the item ids in the order they must start
 
 
@@ -149,7 +149,7 @@ def plan(
     return Plan(
         starts=tuple(starts),
         moves=(),
-        free=free,
+        free=len(starts),
         sequence=tuple(s.item for s in starts),
     )
 
@@ -166,12 +166,15 @@ _VERB = {
 
 def steer(moves: Sequence[AD.Move]) -> tuple[Move, ...]:
     """The advisor's moves (`services.lanes.advise.advise`) as dispatch `Move`s: a resume
-    stays RESUME, a stall becomes NUDGE, an over-limit lane YIELDs. The idle move -- spare
+    stays RESUME, a stall becomes NUDGE, an over-limit lane YIELDs, one `Move` per named
+    lane so a move that names several is not reduced to its first. The idle move -- spare
     capacity, not a lane to correct -- is dropped, since it names lanes to START, not ones
     to steer.
     """
-    return tuple(
-        Move(_VERB[m.kind], m.lanes[0] if m.lanes else "", m.text)
-        for m in moves
-        if m.kind in _VERB
-    )
+    out: list[Move] = []
+    for m in moves:
+        if m.kind not in _VERB:
+            continue
+        names = m.lanes or ("",)
+        out.extend(Move(_VERB[m.kind], name, m.text) for name in names)
+    return tuple(out)
