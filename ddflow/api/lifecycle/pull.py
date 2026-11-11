@@ -46,12 +46,27 @@ def _declares_trust(path: Path, name: str) -> bool:
     return isinstance(row, dict) and "trust" in row
 
 
+def _defect(path: Path, lane: str, notes: list[str]) -> str:
+    """The note naming ``lane`` (or the file itself), without its ``name:`` prefix: why a
+    template was rejected. "" when the lane is simply absent."""
+    prefix = f"{lane}: "
+    for n in notes:
+        if n.startswith(prefix):
+            return n[len(prefix) :]
+    file_prefix = f"{path.name}: "
+    for n in notes:
+        if n.startswith(file_prefix):
+            return n[len(file_prefix) :]
+    return ""
+
+
 def _source(repo: Path, cfg: Config, st: State, lane: str, now: float) -> D.LaneSource:
     path = Path(repo) / cfg.swarm.launch_templates_file
-    t = T.load(path)[0].get(lane)
+    templates, notes = T.load(path)
+    t = templates.get(lane)
     live = sum(lz.holder == lane for lz in st.active_leases(now, cfg.lease.grace_s).values())
     if t is None:
-        return D.LaneSource(None, D.LaneFacts(), False, False, live=live)
+        return D.LaneSource(None, D.LaneFacts(), False, False, live=live, defect=_defect(path, lane, notes))
     cat = modelreg.load(local_dir=Path(repo) / LOCAL)
     return D.LaneSource(
         t,
@@ -69,7 +84,7 @@ def _slots(c: Caps, reason: str, ids: list[str]) -> D.Slots:
     what left no candidate (an item with no tree of its own is not held by it)."""
     paused = reason if c.paused else ""
     if not ids and c.tree_slots < c.flight_slots:
-        return D.Slots(c.with_trees, c.tree_limit, paused)
+        return D.Slots(c.with_trees, c.tree_limit, paused, True)
     return D.Slots(c.in_flight, c.limit, paused)
 
 
@@ -82,10 +97,16 @@ def _waited(events: Any, ids: set[str], now: float) -> dict[str, float]:
     return out
 
 
-def _live_families(events: Any, cfg: Config, live: dict[str, Any], now: float) -> dict[str, str]:
+def _live_families(
+    sessions: dict[str, list[tuple[float, str]]],
+    leases: dict[tuple[str, str], list[tuple[float, str]]],
+    cfg: Config,
+    live: dict[str, Any],
+    now: float,
+) -> dict[str, str]:
     """Item -> the family of whoever holds it now, told as the ledger tells an author's: the
-    lease's own model, else the holder's latest session. "" when neither says."""
-    sessions, leases = LG._models(events), LG._lease_models(events)
+    lease's own model, else the holder's latest session. "" when neither says. ``sessions`` and
+    ``leases`` are the one fold of the log, shared with ``LG.build``."""
     fams = dict(getattr(cfg.agent, "families", {}) or {}) or None
     return {
         i: family_for(LG._author_model(i, lz.holder, now, sessions, leases), fams)
@@ -141,7 +162,7 @@ def next_lane(
         return O.failed("next", unknown, phase=phase)
     now = CLOCK.wall()
     me = cfg.agent.id or log.agent_id
-    p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me)
+    p = plan_for(repo, log, cfg, st, purpose="offer", kind=kind, phase=phase, agent=me, now=now)
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     live = st.active_leases(now, cfg.lease.grace_s)
     c = caps(st, cfg, live, parallel)
@@ -173,13 +194,16 @@ def _world_and_items(events: Any, cfg: Config, st: State, ids: list[str], phase:
     waited = _waited(events, set(ids), now)
     items = [D.item_of(st, i, chain=chain, waited=waited, shared=shared) for i in ids]
     live = st.active_leases(now, cfg.lease.grace_s)
+    sessions, leases = LG._models(events), LG._lease_models(events)
     world = D.world_of(
         st,
         items,
         cfg=cfg,
         now=now,
-        ledger=LG.build(events, st, cfg, now, bug_window_s=w.bug_window_s),
-        families=_live_families(events, cfg, live, now),
+        ledger=LG.build(
+            events, st, cfg, now, bug_window_s=w.bug_window_s, sessions=sessions, leases=leases
+        ),
+        families=_live_families(sessions, leases, cfg, live, now),
         shared=shared,
     )
     return world, items
@@ -222,7 +246,7 @@ def _launch_due(ctx: TickCtx) -> str | None:
         return None
     live = st.active_leases(now, cfg.lease.grace_s)
     me = cfg.agent.id or log.agent_id
-    p = plan_for(repo, log, cfg, st, purpose="offer", kind=DEFAULT_NEXT_KIND, phase="", agent=me)
+    p = plan_for(repo, log, cfg, st, purpose="offer", kind=DEFAULT_NEXT_KIND, phase="", agent=me, now=now)
     parallel = FL.limit_for(repo, cfg, st, log.read_all)
     c = caps(st, cfg, live, parallel)
     ids = _candidates(p, st, cfg, c, live)

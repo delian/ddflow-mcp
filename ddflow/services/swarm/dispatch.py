@@ -63,18 +63,21 @@ class Bounds:
 
 @dataclass(frozen=True)
 class Slots:
-    """The parallelism limit in force, as the scheduler computed it."""
+    """The limit in force, as the scheduler computed it. ``tree`` says the binding limit is the
+    worktree cap (it is what left no candidate), not the flight limit."""
 
     in_flight: int
     limit: int
     paused: str = ""  # why admission is paused, "" when it is not
+    tree: bool = False  # the limit is the worktree cap, told as such instead of "parallel"
 
     def held(self) -> str:
         """Why nothing may start now, or "" when a slot is free."""
         if self.paused:
             return f"admission paused: {self.paused}"
         if self.in_flight >= self.limit:
-            return f"parallel limit reached: {self.in_flight} in flight of {self.limit}"
+            word = "worktree" if self.tree else "parallel"
+            return f"{word} limit reached: {self.in_flight} in flight of {self.limit}"
         return ""
 
 
@@ -104,6 +107,7 @@ class LaneSource:
     cap: int = 1
     level: int = 0  # measured conformance level (0 = none), from the conformance store
     pools: tuple = ()  # endpoint pool headroom (capacity.view), from the capacity probe
+    defect: str = ""  # T.load's note why a named template was rejected, "" for a plain miss
 
 
 @dataclass(frozen=True)
@@ -137,6 +141,8 @@ def gaps(src: LaneSource) -> tuple[str, ...]:
     """What is unknown about a lane; empty means it can be scored. Nothing here is defaulted."""
     t, f = src.template, src.facts
     if t is None:
+        if src.defect:
+            return (f"no template: {src.defect}",)
         return ("no template: the lane's family and trust are unknown",)
     out: list[str] = []
     if not src.trust_declared:
@@ -271,7 +277,8 @@ def item_of(
     shared: Sequence[str],
 ) -> score.Item:
     """The scored item for a queue item. ``chain`` is the critical path, ``waited`` the seconds
-    each item has stood ready, and its kind the one the ledger credits."""
+    since the item was filed (the queue's wait, not how long it has stood ready), and its kind
+    the one the ledger credits."""
     it = state.items[item]
     return score.Item(
         id=it.id,
