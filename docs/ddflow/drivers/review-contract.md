@@ -9,8 +9,8 @@ of the fix, the same as if it were a defect in the code.
 
 * A round returns **only new findings**, each with an id. A finding already raised and not
   fixed is quoted by its id, never re-argued. A finding already closed (`ddflow review triage
-  <item> --gate <gate> --finding N --refuted|--confirmed --probe ...`) is settled: a round that
-  returns it again is off contract.
+  <item> --gate <gate> --finding N --refuted|--confirmed --probe ...`) is settled: quoting it
+  again returns the same id, which reads as that closed finding, not a new one.
 * A finding's id is its full text: the same words are the same finding, so a triage of one is a
   triage of both. Two findings written differently are two findings, whatever their file names
   look like.
