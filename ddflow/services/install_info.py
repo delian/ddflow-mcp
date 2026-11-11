@@ -16,7 +16,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 import tomllib
 from dataclasses import asdict, dataclass
 from importlib import metadata
@@ -26,6 +25,7 @@ from urllib.request import url2pathname
 
 from ..config_sections import _compat as CV
 from ..core import version as V
+from ..infra import fsio
 from ..infra import git as G
 from ..infra import paths as _paths
 from ..infra import proc as P
@@ -345,7 +345,7 @@ def foreign_launch_root(root: Path | None = None) -> ForeignLaunch | None:
     # hold ddflow's own code under test, not another lane's unmerged branch — a ci/pre-push run
     # lives in one, so importing from it is legitimate and must not read as foreign (B267ff88849).
     # A lane's worktree is under `.ddflow/worktrees/`, never a sibling of the temp root.
-    if root.resolve().parent == Path(tempfile.gettempdir()).resolve() and root.name.startswith(
+    if root.resolve().parent == fsio.temp_root().resolve() and root.name.startswith(
         "ddflow-"
     ):
         return None
@@ -398,7 +398,7 @@ def repoint_shared_editable(foreign: Path, primary: Path) -> bool:
                 wrote = _direct_url_path(dist)
                 try:
                     if wrote is not None:
-                        wrote.write_text(json.dumps(record))
+                        fsio.atomic_write(wrote, json.dumps(record))
                         changed = True
                 except OSError:
                     pass
@@ -423,7 +423,7 @@ def repoint_shared_editable(foreign: Path, primary: Path) -> bool:
             same = False
         if same:
             try:
-                pth.write_text(primary_text + "\n")
+                fsio.atomic_write(pth, primary_text + "\n")
                 changed = True
             except OSError:
                 pass

@@ -48,3 +48,8 @@ def show_session(events: Any, cfg: Any, session_id: str) -> dict[str, Any]:
 def worktree_path(repo: Path | str, name: str) -> Path:
     """The path of the item worktree recorded as `name`."""
     return W.load_path(repo, name)
+
+
+def branch_exists(repo: Path | str, branch: str) -> bool:
+    """Whether the branch name still exists in ``repo`` (surfaces call through api)."""
+    return W.branch_exists(repo, branch)

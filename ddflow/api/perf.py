@@ -12,12 +12,12 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 from ..core import outcome as O
+from ..infra import proc as P
 from ..services.perf import env as E
 from ..services.perf import remote as R
 from ..services.perf import store
@@ -60,7 +60,7 @@ def run_perf_run(repo: Path, *, cmd: str = "", agent: str = "") -> O.Outcome:
 
     def run() -> None:
         try:
-            proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            proc = P.Popen(argv, stdout=P.DEVNULL, stderr=P.DEVNULL)
         except OSError:
             missing["argv0"] = argv[0] if argv else "?"
             raise

@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
+from ..infra import fsio
 from ..services.metrics import service as MS
 from ..services.metrics.facts import collect
 from ..services.metrics.providers import Context
@@ -172,7 +173,7 @@ def run_perf_report(
             doc = CH.html_report(charts, title="perf report")
         path = _target(repo, fmt, out, at)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(doc, "utf-8")
+        fsio.atomic_write(path, doc, encoding="utf-8")
         # The whole document is inlined so a shell-less operator still SEES the report
         # (they cannot open a path); it is bounded by construction -- at most two
         # fixed-precision bar charts over the finite gate and model row sets -- and the

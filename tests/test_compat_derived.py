@@ -74,7 +74,7 @@ def test_an_old_index_of_other_code_is_collected_on_rebuild(log, repo, cfg):
     unrelated = d / "index.dbx"
     for f in (old, old_wal, young, legacy, unrelated):
         f.write_text("x")
-    ago = time.time() - (S.STALE_INDEX_DAYS + 1) * 86400
+    ago = time.time() - (cfg.store.stale_index_days + 1) * 86400
     for f in (old, old_wal, legacy, unrelated):
         os.utime(f, (ago, ago))
     me.rebuild(log)
@@ -205,7 +205,7 @@ def test_an_index_in_use_is_touched_so_it_is_not_taken_for_abandoned(log, repo, 
     log.append("lesson.recorded", "L1", {"title": "Alpha", "rule": "alpha"})
     st = S.Store(repo, cfg)
     st.rebuild(log)
-    ago = time.time() - (S.STALE_INDEX_DAYS + 1) * 86400
+    ago = time.time() - (cfg.store.stale_index_days + 1) * 86400
     os.utime(st.path, (ago, ago))
     assert not st.stale(log)  # a reader asks, finds it current ...
     assert time.time() - st.path.stat().st_mtime < 60  # ... and marks it used
