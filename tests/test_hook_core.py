@@ -93,7 +93,6 @@ def test_an_absent_or_empty_fields_table_is_the_claude_fallback():
     assert hookio.fieldmap({}) is hookio._DEFAULT
 
 
-
 # --- normalizers: each dialect into one payload -------------------------------------------
 
 

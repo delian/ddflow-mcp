@@ -69,4 +69,3 @@ def test_commit_shards_refuses_on_a_detached_head(repo):
     _git(repo, "checkout", "-q", "--detach")
     sha, note = EC.commit_shards(repo, "release T1")
     assert not sha and "detached" in note, (sha, note)
-

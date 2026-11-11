@@ -31,4 +31,6 @@ def test_complete_of_a_merged_item_records_the_merge_sha(repo):
     it = st.items["T1"]
     led = LG.build(EventLog(repo).read_all(), "T1")
     assert it.merged_sha, "the merge recorded no landing sha to complete with"
-    assert led["sha"] == it.merged_sha, f"completed with no merge sha: {led['sha']!r} != {it.merged_sha!r}"
+    assert led["sha"] == it.merged_sha, (
+        f"completed with no merge sha: {led['sha']!r} != {it.merged_sha!r}"
+    )

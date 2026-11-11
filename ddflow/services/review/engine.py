@@ -14,9 +14,23 @@ import re
 import sys
 import time as _time
 from pathlib import Path
-from typing import Any
 
-from ...adapters.http import HttpIncompleteRead, HttpProtocolError, HttpStatusError
+from ...adapters.http import HttpProtocolError, HttpStatusError
+from ...adapters.reviewer_clients import (
+    _COLD,
+    CLIENTS,
+    DID_NOT_CONVERGE,
+    TRUNCATED,
+    ReviewerChat,
+    temperature_field,
+    truncated_reason,
+)
+from ...adapters.reviewer_clients import (
+    cut_off as _cut_off,
+)
+from ...adapters.reviewer_clients import (
+    no_answer_in_time as _no_answer_in_time,
+)
 from ...core import unidiff
 from ...infra import proc as P
 from ...infra.container import rewrite_localhost
@@ -26,6 +40,10 @@ from ..cmdrunner import Declared
 from ..gates.reviewers import git_state, git_state_change
 from .model import Finding, Reviewer
 from .transport import _abort, _attach_to_running
+
+#: Re-exported constants moved to the adapter module: kept importable here so the split
+#: package's lazy re-export resolves them exactly as it did when they were defined here.
+__all__ = ["DID_NOT_CONVERGE", "TRUNCATED", "_COLD"]
 
 _RUNNER = CR.CommandRunner()
 
@@ -197,20 +215,50 @@ def _chat(
     OpenAI-compatible one that most providers and every local server speak, Anthropic's
     Messages API, Google's generateContent, and -- the universal fallback -- an
     arbitrary command reading stdin. The last one is what makes a model with no HTTP
-    API at all usable as a reviewer.
+    API at all usable as a reviewer. The three wire protocols are `ReviewerClient`
+    adapters (``ddflow.adapters.reviewer_clients``), one per kind, so a new kind is a
+    new adapter, not another branch here.
     """
     if rev.kind == "command":
         return _chat_command(rev, system, user, timeout_s, tree)
-    if rev.kind == "anthropic":
-        return _chat_anthropic(rev, system, user, timeout_s)
-    if rev.kind == "gemini":
-        return _chat_gemini(rev, system, user, timeout_s)
-    if rev.kind != "openai":
+    if rev.kind not in CLIENTS:
         return "", (
             f"unknown reviewer kind {rev.kind!r}; expected one of "
             f"openai, anthropic, gemini, command"
         )
-    return _chat_openai(rev, system, user, timeout_s)
+    return _chat_kind(CLIENTS[rev.kind], rev, system, user, timeout_s)
+
+
+def _chat_kind(client, rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
+    """Run one wire-protocol `client` (a `ReviewerClient`) for ``rev``.
+
+    The key is resolved HERE (the review service owns key loading), into `ReviewerChat`,
+    and the HTTP plumbing is the package's swappable `_post_json` -- so a test that
+    monkeypatches ``R._post_json`` or ``R._client`` binds what the adapter calls, exactly
+    as it bound ``_chat_openai`` before the wire bodies moved behind the port.
+    """
+    return client.complete(_reviewer_chat(client, rev, system, user, timeout_s))
+
+
+def _reviewer_chat(client, rev: Reviewer, system: str, user: str, timeout_s: float):
+    """The `ReviewerChat` a wire client ``client`` runs: ``rev``'s request, its resolved key,
+    and the review-service glue the adapter layer may not import."""
+    got = rev.key_result(getattr(client, "key_env", ""))
+    return ReviewerChat(
+        system=system,
+        user=user,
+        timeout_s=timeout_s,
+        model=rev.model,
+        base_url=rev.base_url,
+        max_tokens=rev.max_tokens,
+        temperature=rev.temperature,
+        extra_body=dict(rev.extra_body),
+        api_key=got.value,
+        no_key_reason=got.reason,
+        post_json=sys.modules[__package__]._post_json,
+        has_verdict=(lambda text: parse(text)[1]),
+        scrub=(lambda text: review_keys.scrub(text, got.value)),
+    )
 
 
 def _tool_moved(before: dict[str, str] | None, tree: Path | None) -> str:
@@ -277,21 +325,6 @@ def _chat_command(
     return out, ""
 
 
-def _cut_off(exc: Exception) -> str:
-    """An `HttpProtocolError` (urllib's `http.client.HTTPException`): most often a response that
-    stopped mid-read (`IncompleteRead`). Never a `TRUNCATED`, so never retried as one.
-
-    The everyday cause is hedging: the winning copy shuts a loser's socket while the
-    loser is reading its answer. Uncaught, it escaped `_chat` and crashed the whole
-    review, whose contract is never to raise (bug Bf948d29d37).
-    """
-    if isinstance(exc, HttpIncompleteRead):
-        return f"connection cut off mid-response: {exc}"
-    # The rest of the family is the endpoint, not the reply: an InvalidURL from a bad
-    # base_url port, a BadStatusLine from a proxy that does not speak HTTP (critic).
-    return f"bad HTTP exchange with the endpoint: {exc}"
-
-
 def _post(url: str, body: bytes, headers: dict, timeout_s: float):
     """One POST through the package's HTTP client (`_client`, swappable by a test), its
     socket handed to the running hedged copy so it can be cancelled."""
@@ -333,196 +366,29 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
         return None, f"bad response body: {exc}"
 
 
-#: Marks a request the endpoint ACCEPTED but did not answer within its timeout.
-DID_NOT_CONVERGE = "DID NOT CONVERGE:"
-
-
-def _no_answer_in_time(timeout_s: float) -> str:
-    """A read timeout, told apart from an endpoint that is not there.
-
-    `urlopen` wraps a CONNECT timeout in `URLError` -- nothing is listening, which is
-    "unreachable". A timeout raised bare came after the request was sent and accepted:
-    the server was still generating. Reported as "unreachable: timed out" it sent
-    operators to check an endpoint that was fine, while the chunk was deterministically
-    running to `max_tokens` (bug B338a8bb598: 32 000 tokens at under 36 tok/s is more
-    than the 900 s timeout).
-    """
-    return (
-        f"{DID_NOT_CONVERGE} the endpoint accepted the request but no answer came within "
-        f"{timeout_s:.0f}s -- the model was still generating, most likely toward "
-        f"max_tokens. Raise [[reviewer]].timeout_s, lower max_tokens, or lower "
-        f"max_chunk_chars so each chunk needs less thinking. The endpoint is reachable."
-    )
-
-
 def _temperature(rev: Reviewer) -> dict[str, float]:
-    """The request's temperature field: absent unless the reviewer entry sets one."""
-    return {} if rev.temperature is None else {"temperature": rev.temperature}
-
-
-#: Below this a reasoning model is sampled colder than vendors recommend (DeepSeek and
-#: Qwen thinking modes: 0.6-1.0), which is where looping-to-the-budget was measured.
-_COLD = 0.6
-
-#: Marks a `_truncated` reply, so a chunk lost to it can be told apart and retried.
-TRUNCATED = "TRUNCATED:"
+    """The request's temperature field (the `temperature_field` helper over ``rev``)."""
+    return temperature_field(rev.temperature)
 
 
 def _truncated(rev: Reviewer, *, reasoning_tokens: object = None) -> str:
-    """The one way this package explains a reply that ran out of budget mid-thought.
-
-    Written three times before — once per backend — and already drifted: the OpenAI
-    copy named `max_chunk_chars` and reported reasoning-token usage, the Gemini copy
-    named neither. A reviewer that hit this returns UNAVAILABLE, and the difference
-    between "raise max_tokens" and "lower max_chunk_chars" is the difference between
-    a fix and another hour of the same failure, so the remedy has to be complete
-    wherever it is read.
-
-    Measured, not guessed: on Qwen3.8-Flash-Next-FP8 over a 30 KB diff, a 6,000-token
-    budget produced ZERO characters of content — the whole budget went to reasoning.
-    That is why the default is 32,000.
-    """
-    detail = ""
-    if reasoning_tokens not in (None, "", 0):
-        detail = f" ({reasoning_tokens} of them reasoning)"
-    cold = (
-        f"[[reviewer]].temperature = {rev.temperature} is below what most reasoning "
-        f"models are tuned for, and a model sampled cold can loop until the budget is "
-        f"gone: remove it (the model's own default applies) or set the vendor's "
-        f"recommended value. Otherwise raise "
-        if rev.temperature is not None and rev.temperature < _COLD
-        else "If the model's vendor recommends a temperature, check the server applies "
-        "it ([[reviewer]].temperature sets one explicitly). Otherwise raise "
-    )
-    return (
-        f"{TRUNCATED} the model consumed all {rev.max_tokens} tokens{detail} before "
-        f"emitting any answer. This is UNAVAILABLE, not a clean review. {cold}"
-        f"[[reviewer]].max_tokens, or lower [[reviewer]].max_chunk_chars so each "
-        f"chunk needs less thinking."
-    )
+    """The one budget-exhaustion message (the `truncated_reason` helper over ``rev``)."""
+    return truncated_reason(rev.max_tokens, rev.temperature, reasoning_tokens)
 
 
 def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
-    """Anthropic Messages API: system is a TOP-LEVEL field, not a message."""
-    got = rev.key_result("ANTHROPIC_API_KEY")
-    key = got.value
-    if not key:
-        return "", got.reason
-    _post_json_ = sys.modules[__package__]._post_json
-
-    body, err = _post_json_(
-        rev.base_url.rstrip("/") + "/messages",
-        {
-            "model": rev.model,
-            "max_tokens": rev.max_tokens,
-            **_temperature(rev),
-            "system": system,
-            "messages": [{"role": "user", "content": user}],
-            **rev.extra_body,
-        },
-        {"x-api-key": key, "anthropic-version": "2023-06-01"},
-        timeout_s,
-    )
-    if err:
-        return "", review_keys.scrub(err, key)
-    try:
-        blocks = body["content"]
-    except (KeyError, TypeError):
-        return "", f"unexpected response shape: {str(body)[:300]}"
-    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-    if body.get("stop_reason") == "max_tokens" and not parse(text)[1]:
-        return "", _truncated(rev)
-    return text, ""
+    """Anthropic Messages API, through its `ReviewerClient`."""
+    return _chat_kind(CLIENTS["anthropic"], rev, system, user, timeout_s)
 
 
 def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
-    """Google generateContent: the key goes in the query string, not a header."""
-    got = rev.key_result("GEMINI_API_KEY")
-    key = got.value
-    if not key:
-        return "", got.reason
-    # The key goes in a header, never the URL: a URL is echoed by proxies, access logs and
-    # transport errors.
-    url = f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
-    _post_json_ = sys.modules[__package__]._post_json
-
-    body, err = _post_json_(
-        url,
-        {
-            "systemInstruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {**_temperature(rev), "maxOutputTokens": rev.max_tokens},
-            **rev.extra_body,
-        },
-        {"x-goog-api-key": key},
-        timeout_s,
-    )
-    if err:
-        return "", review_keys.scrub(err, key)
-    try:
-        cand = body["candidates"][0]
-    except (KeyError, IndexError, TypeError):
-        fb = (body or {}).get("promptFeedback", {})
-        return "", f"no candidate returned{f' ({fb})' if fb else ''}"
-    text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
-    if cand.get("finishReason") == "MAX_TOKENS" and not parse(text)[1]:
-        return "", _truncated(rev)
-    return text, ""
+    """Google generateContent, through its `ReviewerClient`."""
+    return _chat_kind(CLIENTS["gemini"], rev, system, user, timeout_s)
 
 
 def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
-    payload: dict[str, Any] = {
-        "model": rev.model,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        **_temperature(rev),
-        "max_tokens": rev.max_tokens,
-        **rev.extra_body,
-    }
-
-    got = rev.key_result()
-    if not got.value and got.reason:
-        return "", got.reason
-    key = got.value
-    data = json.dumps(payload).encode("utf-8")  # outside the try: see `_post_json`
-    try:
-        resp = _post(
-            rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
-            data,
-            {
-                "Content-Type": "application/json",
-                **({"Authorization": f"Bearer {key}"} if key else {}),
-            },
-            timeout_s,
-        )
-        body = json.loads(resp.body.decode("utf-8", "replace"))
-    except HttpStatusError as exc:
-        return "", review_keys.scrub(
-            f"HTTP {exc.status}: {exc.body[:300].decode('utf-8', 'replace')}", key
-        )
-    except TimeoutError:
-        return "", _no_answer_in_time(timeout_s)
-    except HttpProtocolError as exc:
-        return "", review_keys.scrub(_cut_off(exc), key)
-    except OSError as exc:
-        return "", review_keys.scrub(f"unreachable: {exc}", key)
-    except (ValueError, json.JSONDecodeError) as exc:
-        return "", review_keys.scrub(f"bad response body: {exc}", key)
-    try:
-        choice = body["choices"][0]
-        msg = choice["message"]
-    except (KeyError, IndexError, TypeError):
-        return "", f"unexpected response shape: {str(body)[:300]}"
-    content = (msg.get("content") or "").strip()
-    if choice.get("finish_reason") == "length" and not parse(content)[1]:
-        # Naming the remedy matters: "empty completion" sends an operator hunting for a
-        # broken endpoint, when the endpoint is fine and the token budget is too small
-        # for a model that thinks before it answers.
-        used = (body.get("usage") or {}).get("completion_tokens_details") or {}
-        return "", _truncated(rev, reasoning_tokens=used.get("reasoning_tokens"))
-    # Reasoning models split deliberation from the answer. We want the ANSWER; if the
-    # model spent its whole budget reasoning and returned no content, that is an empty
-    # completion (UNAVAILABLE), not a review that found nothing.
-    return content, ""
+    """The OpenAI-compatible shape, through its `ReviewerClient`."""
+    return _chat_kind(CLIENTS["openai"], rev, system, user, timeout_s)
 
 
 def parse(text: str) -> tuple[list[Finding], bool]:
