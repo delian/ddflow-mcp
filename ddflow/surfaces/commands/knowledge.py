@@ -19,7 +19,7 @@ from ...core.events import OLDER_MARK, stamp_text
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 from ..declared.mutation_params import mutation_of
-from ..declared.records import BUG_INVALID_FIELDS, file_tasks_call
+from ..declared.records import BUG_FIXED_FIELDS, BUG_INVALID_FIELDS, file_tasks_call
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
 from ..history_verbs import HISTORY_VERBS
@@ -366,17 +366,7 @@ def _bug_fixed(a, c: Ctx) -> int:
     c.out(
         f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
         + _lesson_tail(out.data.get("lesson_capture") or {}),
-        out.body(
-            (
-                "id",
-                "landed",
-                "regression_verified",
-                "regression_verify",
-                "lesson_captured",
-                "lesson_capture",
-                "open_duplicates",
-            )
-        ),
+        out.body(BUG_FIXED_FIELDS),
     )
     return OK
 

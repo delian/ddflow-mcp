@@ -14,9 +14,9 @@ from ...infra import worktree as W
 from ...services import completion as CM
 from ...services import gates as G
 from .._base import _load
-from .bug_duplicate import open_duplicates
 from .bug_lint import _close_lint_exempt, _is_node_id
 from .bugs import _unknown_bug
+from .dup_closure import open_duplicates
 from .fix_task_drop import (  # noqa: F401 -- re-exported by the package
     NOTHING_TO_REMOVE,
     STILL_QUEUED,

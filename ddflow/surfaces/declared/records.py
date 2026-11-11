@@ -24,6 +24,17 @@ from ..tools._common import (
 from .answer import ANSWER_FLAG_EXEMPT, ANSWER_PARAMS
 from .mutation_params import MUTATION_FLAG_EXEMPT, MUTATION_ORDER, MUTATION_PARAMS, mutation_of
 
+#: The body of `bug fixed`, on both surfaces (the tag form adds its own fields below).
+BUG_FIXED_FIELDS = (
+    "id",
+    "landed",
+    "regression_verified",
+    "regression_verify",
+    "lesson_captured",
+    "lesson_capture",
+    "open_duplicates",
+)
+
 #: The body of `bug invalid`, on both surfaces (`ddflow bug invalid --json` and the tool).
 BUG_INVALID_FIELDS = (
     "id",
@@ -394,13 +405,7 @@ COMMANDS: tuple[Command, ...] = (
             )
         ),
         payload=(
-            "id",
-            "landed",
-            "regression_verified",
-            "regression_verify",
-            "lesson_captured",
-            "lesson_capture",
-            "open_duplicates",
+            *BUG_FIXED_FIELDS,
             "tags",
             "was",
             "changed",
