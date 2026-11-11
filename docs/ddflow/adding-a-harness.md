@@ -214,8 +214,9 @@ asserts only on the event log: the MCP tool was called, a claim exists under a d
 identity, the item completed or was released, no stray lease, the event shard committed. A
 missing session.started or session.prompt (a harness at the "no native prompt hook, first-call
 fallback" level is expected to lack the latter) is listed as a gap in the report, not a failure.
-The smoke never installs an agent CLI: a missing one is `unavailable` (a consented scratch-dir
-install is a later step). Exit codes: 0 pass, 1 fail, 2 unavailable, 3 refused.
+The smoke never installs an agent CLI on its own: a missing one is `unavailable`. Only with the
+operator's consent (`run --consent-install '<command>'`, run with `$AGENT_SMOKE_PREFIX` set to a
+scratch directory, never a global location) is it installed first, per D-agent-compat. Exit codes: 0 pass, 1 fail, 2 unavailable, 3 refused.
 
 ## Overriding a value
 

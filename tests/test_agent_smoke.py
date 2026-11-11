@@ -278,3 +278,20 @@ def test_the_cli_reads_the_process_environment_through_the_script(tmp_path):
     )  # fmt: skip
     # the CLI on PATH was SEEN (not unavailable for a missing binary): the run reached the agent
     assert "not installed" not in out.stdout
+
+
+def test_a_consented_install_goes_to_a_scratch_prefix_and_is_then_found(tmp_path):
+    prefix = tmp_path / "prefix"
+    prefix.mkdir()
+    cmd = 'mkdir -p "$AGENT_SMOKE_PREFIX/bin" && printf "#!/bin/sh\\nexit 0\\n" > "$AGENT_SMOKE_PREFIX/bin/fakeagent" && chmod +x "$AGENT_SMOKE_PREFIX/bin/fakeagent"'
+    env = {"PATH": "/usr/bin:/bin", "FAKE_KEY": "x"}
+    assert S.detect(_harness(), env, S.C.CommandRunner())  # missing before
+    new, why = S.consented_install(_harness(), cmd, prefix, env)
+    assert why == "" and (prefix / "bin" / "fakeagent").is_file()
+    assert S.detect(_harness(), new, S.C.CommandRunner()) == ""
+    assert "AGENT_SMOKE_PREFIX" not in env  # the caller's env is left alone
+
+
+def test_a_failed_consented_install_is_unavailable_not_pass(tmp_path):
+    _, why = S.consented_install(_harness(), "exit 3", tmp_path, {"PATH": "/usr/bin:/bin"})
+    assert "consented install failed" in why

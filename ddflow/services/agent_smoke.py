@@ -161,7 +161,10 @@ def _gaps(evs: list[Any], harness: str) -> list[str]:
     if not started or (harness and not any(e.data.get("harness") == harness for e in started)):
         gaps.append("no session.started with the harness name")
     if not any(e.kind == "session.prompt" for e in evs):
-        gaps.append("no session.prompt: no native prompt hook, first-call fallback")
+        gaps.append(
+            "no session.prompt (expected only at the ladder level "
+            "'no native prompt hook, first-call fallback')"
+        )
     return gaps
 
 
@@ -234,6 +237,26 @@ def _attempt(h, project: Path, line: str, env, runner, timeout_s, prepare, asses
         )
     )
     return Attempt(PASS if ok else FAIL, why, a, gaps)
+
+
+def consented_install(
+    h: harnessreg.Harness, command: str, prefix: Path, env: Mapping[str, str]
+) -> tuple[dict[str, str], str]:
+    """The OPERATOR consented to install ``h``'s CLI: run their ``command`` with
+    ``AGENT_SMOKE_PREFIX`` set to a scratch ``prefix`` (never a global location) and put
+    ``prefix/bin`` first on PATH. Returns the new env and "" or why the install failed."""
+    given = dict(env)
+    given["AGENT_SMOKE_PREFIX"] = str(prefix)
+    run = C.CommandRunner(max_output=20000).run(
+        C.Declared(command, f"operator consent: install {h.id}"),
+        cwd=prefix,
+        env=given,
+        timeout_s=900,
+    )
+    if not run.ran or run.code != 0:
+        return dict(env), f"consented install failed: {run.reason or run.output[-200:]}"
+    given["PATH"] = f"{prefix / 'bin'}:{_path(env)}"
+    return given, ""
 
 
 def smoke(
@@ -312,6 +335,11 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
     r.add_argument("--timeout", type=float, default=None)
     r.add_argument("--max-turns", type=int, default=None)
     r.add_argument("--json", action="store_true")
+    r.add_argument(
+        "--consent-install",
+        metavar="COMMAND",
+        help="operator consent: install the CLI with COMMAND into a scratch dir ($AGENT_SMOKE_PREFIX)",
+    )
     r.add_argument("--record", action="store_true", help="append agent.smoke to this repo's log")
     a = ap.parse_args(argv)
     if a.cmd == "plan":
@@ -339,7 +367,16 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
             "timeout_s": a.timeout,
             "max_turns": a.max_turns,
         }
-        res = smoke(h, workdir=Path(work), env=dict(env or {}),
+        run_env = dict(env or {})
+        missing = a.consent_install and detect(h, run_env, C.CommandRunner())
+        if missing and "not installed" in missing:
+            prefix = Path(work) / "prefix"
+            prefix.mkdir()
+            run_env, why = consented_install(h, a.consent_install, prefix, run_env)
+            if why:
+                print(why, file=sys.stderr)
+                return EXIT_FOR[UNAVAILABLE]
+        res = smoke(h, workdir=Path(work), env=run_env,
                     log=EventLog(Path.cwd(), "agent-smoke") if a.record else None,
                     **{k: v for k, v in given.items() if v is not None})  # fmt: skip
     print(
