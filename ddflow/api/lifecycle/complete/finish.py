@@ -35,6 +35,18 @@ from .closing import _close_arg_refusal, _close_bugs, _phase_end_self_assessment
 from .dispose import _dispose
 
 
+def _closing_tail(hard: bool, agent: str, it, item: str, gates: list[str]) -> str:
+    """The close after the blockers: what lifts them. `gate_accept.next_step` already names the
+    route for a person-only baseline-red partial ("Do NOT request an approval: fix what it
+    names"), so the agent `_ask_hint` tail ("ask the operator to override these in chat") is
+    dropped when one of the unmet gates says so (B-complete-refusal-contradicts-approval-advice)."""
+    if hard:
+        return "--force does not lift the review-gate blocker above."
+    if any(GA.next_step(it, item, g) for g in gates):
+        return "--force overrides, and the override is recorded."
+    return "--force overrides, and the override is recorded." + _ask_hint(agent)
+
+
 def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict is one story
     repo: Path,
     item: str,
@@ -164,22 +176,12 @@ def complete(  # noqa: PLR0913 -- one keyword per completion facet; the verdict 
     force, stamp = _auto_complete_unavailable(log, cfg, it, v, hard, approval, agent, force, stamp)
     if not v.may_complete and not force:
         _remember_declared_model(st, log, cfg, model, model_source)
-        # `gate_accept.next_step` already names the route for a measured baseline-red partial
-        # ("Do NOT request an approval: fix what it names"). The generic `_ask_hint` tail that
-        # says to spend `--approval request` then contradicts it, so drop the tail when one of the
-        # unmet gates says so (B-complete-refusal-contradicts-approval-advice).
-        next_step_applies = any(GA.next_step(it, item, g) for g in v.unmet_gates)
         return O.refused(
             "item.completed",
             f"cannot complete {item} — {len(v.blockers)} unmet condition(s):\n"
             + "\n".join(f"  - {b}" for b in v.blockers)
             + f"\n\n`ddflow gate status {item}` shows the pipeline. "
-            + (
-                "--force does not lift the review-gate blocker above."
-                if hard
-                else "--force overrides, and the override is recorded."
-                + ("" if next_step_applies else _ask_hint(agent))
-            ),
+            + _closing_tail(hard, agent, it, item, v.unmet_gates),
             forced=False,
             **base,
         )
