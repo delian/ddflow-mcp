@@ -77,8 +77,9 @@ class LocalTransport:
         except OSError as e:
             return failed(f"cannot open the lane log: {e}")
         try:
-            # one open file description for both streams: fd 1 and 2 share the offset (`2>&1`).
-            p = P.popen(list(argv), stdout=log, stderr=log, start_new_session=True)
+            # one open file description for both streams: fd 1 and 2 share the offset (`2>&1`);
+            # the child runs in the lane directory, so a copied file is where a relative argv sees it.
+            p = P.popen(list(argv), cwd=d, stdout=log, stderr=log, start_new_session=True)
         except (OSError, ValueError) as e:
             log.close()
             return failed(f"cannot start {argv[0] if argv else 'a process'}: {e}")
@@ -125,11 +126,11 @@ class LocalTransport:
         if not src.is_file():
             return failed(f"no {name!r} in lane {lane!r}")
         try:
+            if src.stat().st_size > max_bytes:
+                return failed(f"the file is over the {max_bytes} byte cap")
             data = src.read_bytes()
         except OSError as e:
             return failed(f"cannot read {name!r} of lane {lane!r}: {e}")
-        if len(data) > max_bytes:
-            return failed(f"the file is over the {max_bytes} byte cap")
         try:
             Path(local).write_bytes(data)
         except OSError as e:

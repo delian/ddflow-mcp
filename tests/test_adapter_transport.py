@@ -114,6 +114,17 @@ def test_the_fake_refuses_the_second_start_and_a_bad_signal():
     assert f.signal("r", "TERM").ok and f.observe("r").state == "stopped"
 
 
+def test_the_lane_runs_in_its_own_directory(tmp_path):
+    t = LocalTransport(root=tmp_path)
+    argv = (sys.executable, "-c", "import os; print(os.getcwd())")
+    assert t.start("a", argv).ok
+    st = ended(t, "a")
+    assert isinstance(st, L.LaneStatus) and st.state == "exited"
+    got = tmp_path / "got.log"
+    assert t.copy_out("a", "lane.log", got, 512).ok
+    assert Path(got.read_text().strip()).resolve() == (tmp_path / "a").resolve()
+
+
 def test_a_bad_lane_name_is_refused_not_taken_as_a_path():
     with pytest.raises(ValueError):
         LocalTransport().start("../x", (sys.executable, "-c", "pass"))
