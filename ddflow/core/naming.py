@@ -66,7 +66,9 @@ def clean(part: str, limit: int | None = None) -> str:
 
 def host_part(cfg: Config, hostname: str) -> str:
     """This machine's label: `[naming].host_label`, else the first label of ``hostname``."""
-    return clean(cfg.naming.host_label or hostname.split(".")[0], cfg.naming.host_length)
+    return clean(
+        cfg.naming.host_label or hostname.split(".", maxsplit=1)[0], cfg.naming.host_length
+    )
 
 
 def template_problem(template: str, scope: str) -> str:

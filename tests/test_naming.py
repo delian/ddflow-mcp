@@ -42,7 +42,16 @@ def test_the_default_template_makes_role_family_host_rand() -> None:
 def test_every_shipped_default_passes_its_own_rules() -> None:
     n = Config().naming
     assert naming.template_problem(n.template, n.scope) == ""
-    for knob in ("template", "scope", "on_collision", "max_length", "rand_length", "max_tries", "host_length", "host_label"):
+    for knob in (
+        "template",
+        "scope",
+        "on_collision",
+        "max_length",
+        "rand_length",
+        "max_tries",
+        "host_length",
+        "host_label",
+    ):
         assert f"naming.{knob}" in C.KNOB_DOCS
 
 
@@ -74,7 +83,11 @@ def test_the_rand_alphabet_has_no_vowels_or_lookalikes() -> None:
 
 def test_a_long_name_loses_role_first_then_family_never_host_or_rand() -> None:
     got = naming.generate(
-        _cfg(max_length=24), role="a-very-long-role-label", family="kilo", host="box", draw=_seq_draw()
+        _cfg(max_length=24),
+        role="a-very-long-role-label",
+        family="kilo",
+        host="box",
+        draw=_seq_draw(),
     ).name
     assert len(got) <= 24 and got.endswith("-kilo-box-bcdf"), got
     squeezed = naming.generate(
@@ -176,7 +189,7 @@ def test_a_valid_template_is_accepted(template: str, scope: str) -> None:
 
 def test_generate_refuses_a_template_its_scope_cannot_trust() -> None:
     cfg = _cfg(template="{role}-{family}-{host}-{seq}")  # global needs {rand}
-    with pytest.raises(naming.NameRefused, match="needs {rand}"):
+    with pytest.raises(naming.NameRefused, match=r"needs \{rand\}"):
         naming.generate(cfg, role="r", family="k", host="h")
 
 

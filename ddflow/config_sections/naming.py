@@ -9,6 +9,7 @@ as spelled.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,17 +55,17 @@ def name_template_problem(template: Any) -> str:
     return ""
 
 
-def _max_length_problem(v: Any) -> str:
-    # 63 is a DNS label (RFC 1123), so a name fits a branch, a shard and a tmux session.
-    if isinstance(v, int) and not isinstance(v, bool) and 16 <= v <= 63:
-        return ""
-    return "must be an integer from 16 to 63 (a DNS label is at most 63)"
+def _int_between(lo: int, hi: int, why: str) -> Callable[[Any], str]:
+    """The `check=` of an integer knob that must lie in ``lo``..``hi``."""
+    return lambda v: "" if isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi else why
 
 
-def _rand_length_problem(v: Any) -> str:
-    return "" if isinstance(v, int) and not isinstance(v, bool) and 3 <= v <= 12 else (
-        "must be an integer from 3 to 12"
-    )  # fmt: skip
+# 63 is a DNS label (RFC 1123), so a name fits a branch, a shard and a tmux session.
+_max_length_problem = _int_between(
+    16, 63, "must be an integer from 16 to 63 (a DNS label is at most 63)"
+)
+_rand_length_problem = _int_between(3, 12, "must be an integer from 3 to 12")
+_host_length_problem = _int_between(4, 24, "must be an integer from 4 to 24")
 
 
 def _host_label_problem(v: Any) -> str:
@@ -156,7 +157,7 @@ class NamingConfig:
     host_length: int = knob(
         12,
         doc="Longest {host} label in a generated name, cut from the end; 4 to 24.",
-        check=lambda v: "" if isinstance(v, int) and not isinstance(v, bool) and 4 <= v <= 24 else "must be an integer from 4 to 24",
+        check=_host_length_problem,
     )
     host_label: str = knob(
         "",
@@ -167,4 +168,3 @@ class NamingConfig:
         ),
         check=_host_label_problem,
     )
-
