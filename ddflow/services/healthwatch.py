@@ -201,25 +201,49 @@ def _expired(log, st, cfg, repo, now, recoveries) -> dict[str, Any]:
 def _runs(repo: Path, st) -> list[H.Run]:
     """The live-run registry rows for every leased, unfinished item: one per run marker
     (alive or dead) plus one per recorded gate outcome (the run that finished; its pid and
-    log path stay in the cleared marker, so only the outcome and start time remain)."""
+    log path stay in the cleared marker, so only the outcome and when it ended remain)."""
     out: list[H.Run] = []
     for i, it in st.items.items():
         if it.lease is None or it.removed or it.terminal:
             continue
         for m in running.dead_runs(repo, i):
-            out.append(H.Run(i, m.gate, m.pid, clock.epoch(m.at), False, m.path))
+            out.append(
+                H.Run(i, m.gate, m.pid, clock.epoch(m.at), False, m.path, expected_s=m.expected_s)
+            )
         for m in running.live_runs(repo, i):
-            out.append(H.Run(i, m.gate, m.pid, clock.epoch(m.at), True, m.path))
+            out.append(
+                H.Run(i, m.gate, m.pid, clock.epoch(m.at), True, m.path, expected_s=m.expected_s)
+            )
         for g, rec in it.gates.items():
             if rec.outcome:
                 out.append(
-                    H.Run(i, g, 0, clock.epoch(rec.at) if rec.at else 0.0, None, "", rec.outcome)
+                    H.Run(
+                        i,
+                        g,
+                        0,
+                        0.0,
+                        None,
+                        "",
+                        rec.outcome,
+                        clock.epoch(rec.at) if rec.at else 0.0,
+                    )
                 )
     return out
 
 
-def _live_run_items(repo: Path, held: dict[str, Any]) -> set[str]:
-    return {i for i in held if running.live_runs(repo, i)}
+def _live_run_items(repo: Path, held: dict[str, Any], now: float) -> set[str]:
+    """Items with a live registered run still WITHIN its expected duration: work in flight,
+    so the lane is not idle or stalled (a legitimate long run is not a dead one). A live run
+    past its expected duration is no longer in flight, and a run with no expected duration
+    recorded (``expected_s`` 0) is treated as in flight for as long as it lives."""
+    out: set[str] = set()
+    for i in held:
+        if any(
+            m.expected_s <= 0 or now - clock.epoch(m.at) < m.expected_s
+            for m in running.live_runs(repo, i)
+        ):
+            out.add(i)
+    return out
 
 
 def gather(
@@ -252,9 +276,11 @@ def gather(
     ]
     budget = cfg.health.runaway_s
     busy = {p.item for p in procs if p.running and (budget <= 0 or now - p.started_at < budget)}
-    # A live registered run (a gate/review/ci/pins process still going) is work in flight:
-    # its lane is NOT idle or stalled (a legitimate long run is not a dead one).
-    busy |= _live_run_items(repo, held)
+    # A live registered run (a gate/review/ci/pins process still going) is work in flight
+    # while it is alive WITHIN its expected duration: its lane is NOT idle or stalled (a
+    # legitimate long run is not a dead one). One that outlived its expected duration is
+    # no longer in flight, so the lane is judged idle or stalled as its progress says.
+    busy |= _live_run_items(repo, held, now)
     clone = log.clone_id(create=False)
     lanes = [
         _lane(

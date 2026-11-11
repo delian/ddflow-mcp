@@ -87,7 +87,9 @@ class Run:
     """One registered gate/review/ci/pins run of an item (the live-run registry,
     `services.gates.running`). `alive` says whether the process is still going (None =
     unknown: another host, or the run left no marker); `outcome` is the recorded outcome
-    of a run that finished ("" while none is recorded)."""
+    of a run that finished ("" while none is recorded); `ended_at` is when it ended (0 =
+    unknown: unfinished, or left no record of when it stopped); `expected_s` is how long
+    it was expected to take (0 = unknown)."""
 
     item: str
     gate: str
@@ -96,6 +98,8 @@ class Run:
     alive: bool | None = None
     log_path: str = ""
     outcome: str = ""
+    ended_at: float = 0.0
+    expected_s: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -310,16 +314,17 @@ def _runaways(procs: list[Proc], now: float, limit: float) -> list[Finding]:
 
 def _orphan(lane: Lane, run: Run, now: float) -> Finding:
     """One lane whose newest registered run is already over: it is 'waiting on nothing'."""
-    age = now - run.started_at
     name = f"{run.gate} run {run.pid}" if run.pid else run.gate
     if run.outcome:
+        age = now - run.ended_at if run.ended_at else 0.0
+        when = f" that ended {_age(age)} ago" if run.ended_at else ""
         detail = (
-            f"waits on {name} that ended {_age(age)} ago "
-            f"(outcome recorded: {run.outcome}, see `ddflow gate status`)"
+            f"waits on {name}{when} (outcome recorded: {run.outcome}, see `ddflow gate status`)"
         )
     else:
         where = f" (log: {run.log_path})" if run.log_path else ""
         detail = f"waits on {name} that died with no outcome{where}"
+        age = now - run.started_at
     return Finding(
         ORPHAN_WAIT,
         lane.item,
@@ -338,7 +343,8 @@ def _orphans(lanes: list[Lane], runs: list[Run], now: float, limits: Limits) -> 
         return []
     newest: dict[str, Run] = {}
     for r in runs:
-        if r.item not in newest or r.started_at > newest[r.item].started_at:
+        stamp = r.ended_at or r.started_at
+        if r.item not in newest or stamp > (newest[r.item].ended_at or newest[r.item].started_at):
             newest[r.item] = r
     out: list[Finding] = []
     for ln in lanes:
