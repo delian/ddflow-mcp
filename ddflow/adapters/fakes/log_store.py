@@ -12,7 +12,6 @@ import copy
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Any
 
 from ddflow.adapters import digest as D
@@ -28,8 +27,8 @@ _ID_SIZE = 12
 class _Event:
     """What the fake records for one event: the fields a caller reads, and the `sort_key`
     the fold sorts by -- the storage surface, none of the fold's domain semantics. `data`
-    is the immutable snapshot taken at append, so a caller cannot rewrite what was written
-    (the jsonl store re-parses bytes on read; the fake holds a frozen copy)."""
+    is the payload snapshotted at append; `append`/`read_from`/`snapshot` hand a FRESH
+    deep copy back, so the jsonl store's re-parse-on-read is matched, not mimicked."""
 
     kind: str
     subject: str
@@ -80,25 +79,26 @@ class FakeLogStore:
 
     def append(self, kind, subject, data=None, *, agent=""):
         with self._lock:
-            return self._write(kind, subject, data, agent or self._default_agent)
+            return copy.deepcopy(self._write(kind, subject, data, agent or self._default_agent))
 
     def append_many(self, items):
         with self._lock:
             return [
-                self._write(kind, subject, data, self._default_agent)
+                copy.deepcopy(self._write(kind, subject, data, self._default_agent))
                 for kind, subject, data in items
             ]
 
     def _write(self, kind: str, subject: str, data: Any, agent: str) -> _Event:
         """One event, with the lock already held (an `append` nested under the lock would
-        deadlock a non-reentrant `threading.Lock`)."""
+        deadlock a non-reentrant `threading.Lock`). The payload is deep-copied here, and
+        the caller is handed a fresh copy back: the jsonl store re-parses bytes on read, so
+        a store must return a snapshot, never something a later mutation can reach back into."""
         self._lamport += 1
         data = copy.deepcopy(data or {})
-        snapshot = MappingProxyType(data)
         ev = _Event(
             kind,
             subject,
-            snapshot,
+            data,
             agent,
             self._lamport,
             _eid(kind, subject, data, agent, self._lamport),
@@ -122,7 +122,7 @@ class FakeLogStore:
 
     def read_from(self, offset: int = 0):
         with self._lock:
-            return [e for e in self._events() if e.lamport > offset]
+            return [copy.deepcopy(e) for e in self._events() if e.lamport > offset]
 
     def shards(self) -> list[str]:
         with self._lock:
@@ -130,7 +130,7 @@ class FakeLogStore:
 
     def snapshot(self) -> list[_Event]:
         with self._lock:
-            return list(self._events())
+            return [copy.deepcopy(e) for e in self._events()]
 
     def compact(self) -> int:
         with self._lock:
