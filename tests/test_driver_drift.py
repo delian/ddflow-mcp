@@ -165,14 +165,17 @@ def test_claude_delta_carries_the_lane_context_caps_section():
 
 def test_refresh_docs_plan_reports_without_writing(repo):
     """Bug B420810120e: `adopt --refresh-docs` had no plan/dry-run mode, so previewing what it
-    would rewrite meant running it. `--plan` reports the changes and writes nothing."""
+    would rewrite meant running it. `--plan` reports the changes (a current doc is a no-op,
+    a drifted one is a rewrite) and writes nothing."""
     _adopted(repo)
+    fresh = _ddflow(repo, "adopt", "--refresh-docs", "--plan")
+    assert fresh.returncode == 0, fresh.stderr
+    assert "is current" in fresh.stdout, "a current doc must read as a no-op, not a rewrite"
     before = {rel: (repo / rel).read_bytes() for rel in (DRIVER, DELTA)}
     _lag(repo)
     p = _ddflow(repo, "adopt", "--refresh-docs", "--plan")
     assert p.returncode == 0, p.stderr
-    assert p.stdout.strip(), "the plan must say something"
+    assert "would" in p.stdout, "the plan names what it would change"
     for rel, data in before.items():
         assert (repo / rel).read_bytes() == data, f"{rel} must not be written by --plan"
-    assert "would" in p.stdout, "the plan names what it would change"
 

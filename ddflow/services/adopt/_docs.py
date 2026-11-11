@@ -11,9 +11,20 @@ from ...infra.fsio import Managed, RegionError, atomic_write, replace_text
 from ..backups import make_backup
 from ._native import _write_native_rule
 from ._refused import Refused
-from ._rules import adopted_agents, has_been_adopted, project_section, rules_status
-from ._targets import NATIVE_RULES
-from ._upsert import _upsert_block, local_edits_path
+from ._rules import (
+    CURRENT,
+    DUPLICATE,
+    NO_BLOCK,
+    adopted_agents,
+    block_edited,
+    has_been_adopted,
+    native_rule_text,
+    project_section,
+    rules_status,
+    _block_state,
+)
+from ._targets import FORM_BLOCK, FORM_WHOLE, NATIVE_RULES
+from ._upsert import _section_body, _upsert_block, local_edits_path
 
 
 def _driver_pairs(repo: Path, docs_dir: str, templates: Path) -> list[tuple[str, Path, Path]]:
@@ -169,18 +180,46 @@ def _plan_actions(
 
 
 def _plan_block(path: Path, section: str, name: str) -> str:
-    """Predict what `_upsert_block` would do to one rules file, without writing it."""
+    """Predict what `_upsert_block` would do to one rules file, without writing it: it
+    classifies the block the way `_upsert_block` would (create/append/update/collapse/refuse)
+    so a plan distinguishes a no-op from a rewrite."""
     label = name or path.name
+    if not path.exists():
+        return f"would append the managed block to {label}"
     try:
-        existing = path.read_text("utf-8") if path.exists() else ""
+        existing = path.read_text("utf-8")
     except UnicodeDecodeError:
         return f"would skip {label}: it is not UTF-8 text"
-    return f"would refresh the managed block in {label}"
+    try:
+        state = _block_state(existing, _section_body(section))
+    except RegionError:
+        return f"would skip {label}: fix the markers and re-run adopt"
+    if state == CURRENT:
+        return f"{label} is current"
+    if state == DUPLICATE:
+        return f"would collapse the managed blocks in {label}"
+    if state == NO_BLOCK:
+        return (
+            f"would create {label}" if not existing.strip() else f"would append the managed block to {label}"
+        )
+    note = " (your edits are kept in .local-edits)" if block_edited(existing) else ""
+    return f"would update the managed block in {label}{note}"
 
 
 def _plan_native(repo: Path, key: str, docs_dir: str) -> str:
     """Predict what `_write_native_rule` would do for one adopted agent, without writing."""
-    return f"would refresh the native rule for {key}"
+    rule = NATIVE_RULES[key]
+    if rule.form == FORM_BLOCK:
+        return _plan_block(repo / rule.path, project_section(docs_dir), rule.path)
+    if rule.form == FORM_WHOLE:
+        want = native_rule_text(docs_dir)
+        cur = (repo / rule.path).read_text("utf-8") if (repo / rule.path).exists() else None
+        return (
+            f"{rule.path} is current"
+            if cur == want
+            else f"would write {rule.path} (always-applied project rule)"
+        )
+    return f"would update the native rule for {key}"
 
 
 def _write_driver(mine: Path, tmpl: Path, rel: str) -> str:
