@@ -58,8 +58,7 @@ claude_md = "no"
 [hooks]
 style = "claude"
 file = ".acme/settings.json"
-normalizer = "claude"
-emitter = "claude"
+emitter = "plain"
 block = "exit2"
 session_id = "session_id"
 inject = ["session_start", "prompt"]
