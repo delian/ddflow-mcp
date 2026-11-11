@@ -127,6 +127,19 @@ def test_swarm_orders_critical_then_waited_then_priority_then_id():
     ]
 
 
+def test_swarm_prefers_the_critical_path_over_a_longer_wait():
+    # critical and waited DISAGREE: the critical item wins the early rank even though the
+    # other waited far longer, so a scorer that swapped the two keys would still differ.
+    items = [_c("q", False, 5), _c("p", False, 5)]
+    ctx = {
+        "facts": {
+            "q": {"critical": True, "waited_s": 0.0},
+            "p": {"critical": False, "waited_s": 99.0},
+        }
+    }
+    assert [p.id for p in O.get_optimizer("swarm-v1").order(ctx, items)] == ["q", "p"]
+
+
 def test_swarm_orders_the_longest_waiting_first():
     items = [_c("x", False, 5), _c("y", False, 5)]
     ctx = {"facts": {"x": {"waited_s": 9.0}, "y": {"waited_s": 99.0, "critical": False}}}
@@ -143,4 +156,11 @@ def test_swarm_explain_itemises_critical_and_wait():
     p = O.get_optimizer("swarm-v1").order({}, [_c("b", True, 50)])[0]
     assert (
         O.get_optimizer("swarm-v1").explain(p).startswith("b: rank 0 by critical=0, waited_s=0.0")
+    )
+    # a non-zero fact is itemised, so the explain text reports the fact it actually read
+    q = O.get_optimizer("swarm-v1").order(
+        {"facts": {"a": {"critical": True, "waited_s": 10.0}}}, [_c("a", False, 5)]
+    )[0]
+    assert (
+        O.get_optimizer("swarm-v1").explain(q).startswith("a: rank 0 by critical=1, waited_s=10.0")
     )

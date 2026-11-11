@@ -151,11 +151,13 @@ def _facts(state: State, cfg: Config, now: float, candidates: list[Item]) -> dic
         return {}
     chain = frozenset(critical_path(state, "", cfg))
     return {
-        it.id: {
-            "critical": it.id in chain,
-            "waited_s": max(0.0, now - epoch(it.created_at)) if it.created_at else 0.0,
+        "facts": {
+            it.id: {
+                "critical": it.id in chain,
+                "waited_s": max(0.0, now - epoch(it.created_at)) if it.created_at else 0.0,
+            }
+            for it in candidates
         }
-        for it in candidates
     }
 
 

@@ -18,11 +18,13 @@ overlaps nothing already taken. ``swarm-v1`` is the second: the swarm scheduler'
 are PREFERENCES that reorder, never filters: hard constraints stay `needs` and `globs`, decided
 by the caller's readiness filters.
 
-Deterministic: terms are integers (or the id), the id is the final tie-break, no clock, no hash
-order, no randomness. ``ctx`` is an OPEN mapping: the caller fills ``ctx["facts"]`` with the
-per-candidate facts an adapter may read (``critical``, ``waited_s``) and it reads only the keys
-it knows. An adapter says which facts it reads with ``facts``; the default reads none, so the
-default plan pays for none. Pure of ddflow: imports no other layer.
+Deterministic given the ctx: the algorithm reads no clock, no hash order and no randomness,
+and the id is the final tie-break; a fact such as ``waited_s`` is time-derived by the CALLER's
+``now``, so the same ``ctx`` always ranks the same, but the fact itself ages as time moves. The
+``ctx`` is an OPEN mapping: the caller fills ``ctx["facts"]`` with the per-candidate facts an
+adapter may read (``critical``, ``waited_s``) and it reads only the keys it knows. An adapter
+says which facts it reads with ``facts``; the default reads none, so the default plan pays for
+none. Pure of ddflow: imports no other layer.
 """
 
 from __future__ import annotations
