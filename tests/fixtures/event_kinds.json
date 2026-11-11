@@ -1,6 +1,13 @@
 {
  "format": 1,
  "kinds": {
+  "agent.onboarded": {
+   "fields": {
+    "agent": ["str"],
+    "artifacts": ["list"]
+   },
+   "v": 1
+  },
   "approval.granted": {
    "fields": {
     "digest": ["str"],
