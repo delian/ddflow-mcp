@@ -21,8 +21,10 @@ from ddflow.services.parity import reuse as R
 BASELINE = frozenset({"antigravity", "cline", "copilot", "cursor", "goose", "windsurf"})
 
 
-def _h(id: str, emitter: str, fields: dict | None = None):
-    return SimpleNamespace(id=id, hooks=SimpleNamespace(emitter=emitter, fields=fields or {}))
+def _h(id: str, emitter: str, fields: dict | None = None, delta: str = ""):
+    return SimpleNamespace(
+        id=id, delta=delta, hooks=SimpleNamespace(emitter=emitter, fields=fields or {})
+    )
 
 
 def _hookless(id: str):
@@ -105,12 +107,29 @@ def test_the_bespoke_set_only_shrinks():
     )
 
 
+def test_a_missing_delta_note_is_empty():
+    assert R.delta_note(_hookless("cody")) == ""
+    assert R.delta_note(_h("x", "plain", delta="")) == ""
+    assert R.delta_note(_h("x", "plain", delta="note-that-does-not-exist.md")) == ""
+
+
 def test_unrecorded_names_a_bespoke_agent_missing_from_the_recorded_set():
     assert R.unrecorded(recorded=BASELINE) == []
     # a new agent bespoke on the emitter axis, with its gap not yet recorded
     hs = [_h("one", "plain"), _h("two", "plain"), _h("novel", "novel_variant")]
     assert R.unrecorded(hs, recorded=frozenset()) == ["novel"]
-    assert R.unrecorded(hs, recorded=frozenset({"novel"})) == []
+    assert R.unrecorded(hs, recorded=frozenset({"novel"})) == ["novel"]  # still no delta note
+
+
+def test_a_recorded_bespoke_agent_needs_its_delta_note(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "DELTA_DIR", tmp_path)
+    hs = [_h("one", "plain"), _h("two", "plain")]
+    bespoke_novel = _h("novel", "novel_variant", delta="novel.md")
+    (tmp_path / "novel.md").write_text("emitter novel_variant: pending the fixture probe\nreason\n")
+    assert R.unrecorded([*hs, bespoke_novel], recorded=frozenset()) == ["novel"]  # unrecorded
+    assert (
+        R.unrecorded([*hs, bespoke_novel], recorded=frozenset({"novel"})) == []
+    )  # recorded + note
 
 
 def test_a_noop_measure_of_nothing_is_zero_not_infinite():

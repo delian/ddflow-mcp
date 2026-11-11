@@ -30,8 +30,12 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
+from pathlib import Path
 
 from .. import harnessreg as HR
+
+#: The driver delta notes a descriptor's ``delta`` field names (its own file scheme).
+DELTA_DIR = Path(__file__).resolve().parents[2] / "templates" / "drivers" / "deltas"
 
 #: A hook normalizer or emitter used by fewer descriptors than this is bespoke Python.
 SHARE_MIN = 2
@@ -117,9 +121,24 @@ def measure(hs: Sequence[HR.Harness] | None = None) -> dict:
 
 
 def unrecorded(hs: Sequence[HR.Harness] | None = None, recorded: Sequence[str] = ()) -> list[str]:
-    """The bespoke agents NOT in ``recorded``: a descriptor that added per-agent Python
-    without recording the gap -- and its reason -- in its delta note. ``recorded`` is the
-    committed set those notes list; the ratchet fails while this is non-empty and, once a
-    gap closes (the piece is now shared), the stale ``recorded`` entry must leave the set."""
+    """The bespoke agents a ratchet must refuse. Two gaps read as unrecorded: an id that
+    ``recorded`` does not list, and an id ``recorded`` lists whose driver delta note is
+    missing or empty -- adding the id is not enough, the note itself must record the gap and
+    its reason (``delta_note``)."""
+    hs = list(HR.load() if hs is None else hs)
     recorded_set = set(recorded)
-    return sorted(a for a in measure(hs)["bespoke"] if a not in recorded_set)
+    by_id = {h.id: h for h in hs}
+    return sorted(a for a in bespoke(hs) if a not in recorded_set or not delta_note(by_id[a]))
+
+
+def delta_note(h: HR.Harness) -> str:
+    """``h``'s driver delta note (``templates/drivers/deltas/<h.delta>``), stripped, or
+    ``""`` when the file is missing or empty. This is where a descriptor that needs bespoke
+    Python records the gap -- and its reason; a recorded id with no note is still refused."""
+    name = getattr(h, "delta", "")
+    if not name:
+        return ""
+    try:
+        return (DELTA_DIR / name).read_text("utf-8").strip()
+    except OSError:
+        return ""
