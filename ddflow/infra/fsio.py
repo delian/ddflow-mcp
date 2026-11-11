@@ -85,19 +85,26 @@ def rmtree(path: Path | str, *, ignore_errors: bool = True) -> None:
 def rmtree_owned(path: Path | str, *, ignore_errors: bool = True) -> None:
     """Remove the directory tree at ``path``, refusing the targets ``shutil.rmtree`` makes
     dangerous (AU-safe-rmtree): ``shutil.rmtree('', ignore_errors=True)`` empties the current
-    directory, so an empty or relative path, the process's current directory and a filesystem
-    root are each refused outright rather than left to the caller to remember."""
+    directory. A dangerous target is never removed; with ``ignore_errors=True`` (the default,
+    matching the best-effort call sites) it is refused silently, and with ``ignore_errors=False``
+    it raises `ValueError` naming the target."""
     p = Path(path)
     if not p.parts:
-        raise ValueError("rmtree_owned: an empty path is the current directory; refused")
-    if not p.is_absolute():
-        raise ValueError(f"rmtree_owned: {str(p)!r} is relative; refused")
-    resolved = p.resolve()
-    if resolved == Path.cwd().resolve():
-        raise ValueError("rmtree_owned: refusing to remove the current directory")
-    if resolved == Path(resolved.anchor):
-        raise ValueError("rmtree_owned: refusing to remove a filesystem root")
-    rmtree(p, ignore_errors=ignore_errors)
+        refusal = ValueError("rmtree_owned: an empty path is the current directory; refused")
+    elif not p.is_absolute():
+        refusal = ValueError(f"rmtree_owned: {str(p)!r} is relative; refused")
+    else:
+        resolved = p.resolve()
+        if resolved == Path.cwd().resolve():
+            refusal = ValueError("rmtree_owned: refusing to remove the current directory")
+        elif resolved == Path(resolved.anchor):
+            refusal = ValueError("rmtree_owned: refusing to remove a filesystem root")
+        else:
+            refusal = None
+    if refusal is None:
+        rmtree(p, ignore_errors=ignore_errors)
+    elif not ignore_errors:
+        raise refusal
 
 
 @dataclass(frozen=True, slots=True)
