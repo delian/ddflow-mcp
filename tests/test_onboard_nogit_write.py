@@ -34,3 +34,16 @@ def test_onboard_in_a_non_git_directory_writes_nothing_and_says_git_init(tmp_pat
     assert "git init" in text, text
     assert "GitError" not in text, text
     assert _state(plain) == set(), _state(plain)
+
+
+def test_a_repository_git_refuses_is_not_told_to_git_init(repo, monkeypatch):
+    """A failed rev-parse that is not "not a git repository" (dubious ownership, say)
+    must not be answered with `git init`."""
+    from ddflow.api import onboard as OB
+
+    class Refused:
+        ok = False
+        err = "fatal: detected dubious ownership in repository"
+
+    monkeypatch.setattr(OB.G, "run", lambda *a, **k: Refused())
+    assert OB._not_a_repository(repo) is False

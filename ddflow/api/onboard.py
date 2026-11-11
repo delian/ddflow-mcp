@@ -244,6 +244,14 @@ def harness(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O
     return O.ok("onboard.harness", **data)
 
 
+def _not_a_repository(repo: Path) -> bool:
+    """True only when git SAYS this is no repository: a repository git refuses to open
+    (dubious ownership, a permissions error) is not one to `git init`, so the stage runs
+    and reports what its probes find."""
+    probe = G.run(repo, "rev-parse", "--is-inside-work-tree")
+    return not probe.ok and "not a git repository" in (probe.err or "").lower()
+
+
 def onboard(
     repo: Path,
     *,
@@ -253,7 +261,7 @@ def onboard(
     agent: str = "",
 ) -> O.Outcome:
     """`stage` -> its report; unknown stages are refused with the list, never guessed."""
-    if stage in _NEEDS_GIT and not G.run(repo, "rev-parse", "--is-inside-work-tree").ok:
+    if stage in _NEEDS_GIT and _not_a_repository(repo):
         # Before any probe: the probes run `ddflow brief` underneath, which writes
         # .ddflow/local state and then fails with a raw GitError.
         msg = f"{repo} is not a git repository: run `git init` there first, then onboard"
