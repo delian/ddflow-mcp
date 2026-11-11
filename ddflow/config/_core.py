@@ -16,7 +16,14 @@ from ..config_sections.export import _export_table_problem, export_table_keys
 from ..config_sections.schedule import SIGNALS, merge_signals
 from ._coerce import _coerce_layer_knob
 from ._compat import _migrate_renamed
-from ._decls import _KNOB_CHECKS, _MEMBER_FILTERS, _STRICT_FALLBACK, _TOLERANT_VALUES, strictest
+from ._decls import (
+    _KNOB_CHECKS,
+    _MEMBER_FILTERS,
+    _OPERATOR_ONLY,
+    _STRICT_FALLBACK,
+    _TOLERANT_VALUES,
+    strictest,
+)
 from ._errors import InvalidValue
 from ._packaged import apply_packaged
 from ._tree import _is_code_tree
@@ -78,6 +85,22 @@ def _merge_budget_table(key: str, below: Any, value: Any) -> Any:
     if key == "session.context_budget" and isinstance(value, dict):
         return {**below, **value}
     return value
+
+
+def _operator_only_refusal(sec: str, knob: str, key: str) -> str:
+    """Why the committed ``file`` layer may not set ``key`` (never ``""`` for these).
+
+    The committed layer is visible to every clone, so a token holder who can land a commit
+    could widen its own role there (B-token-role-widened). Deciding case-by-case whether a
+    committed table *widens* a role would be glob-language containment over `agent.
+    capability_verbs` verb globs; the safe, simple rule is that these two operator tables may
+    not be set in the committed layer at all -- fail-closed (r-tighten-only). A tightening
+    belongs in the local layer, which still accepts it."""
+    return (
+        f"{key} is operator-only: the committed config cannot set it (a cloned project "
+        "must not widen a token's role). Set it in the local layer (`ddflow config --set "
+        f"{sec}.{knob} ... --local`), the environment, or `ddflow_configure`."
+    )
 
 
 class _SectionFields:
@@ -325,6 +348,9 @@ class Config(_SectionFields):
         key = f"{sec}.{knob}"
         typ = next(f.type for f in fields(target) if f.name == knob)
         value = _coerce_layer_knob(sec, knob, raw, typ, lenient)
+        if key in _OPERATOR_ONLY and source == "file":
+            if why := _operator_only_refusal(sec, knob, key):
+                raise InvalidValue(why)
         written = value  # what THIS layer says, before any merge: what a note names
         if key == SIGNALS and isinstance(value, dict):
             # merged over the layers below, mark by mark (`merge_signals`)
