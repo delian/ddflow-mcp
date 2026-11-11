@@ -57,6 +57,23 @@ def test_running_from_the_primary_itself_is_not_foreign(checkout, monkeypatch):
     assert I.foreign_launch_root() is None
 
 
+def test_ddflows_own_scratch_tree_is_not_foreign(checkout, monkeypatch, tmp_path):
+    """A ``ddflow-*`` tree directly under the temp dir is ddflow's OWN throwaway scratch,
+    not another lane's unmerged branch: importing from it is legitimate (B267ff88849 — the
+    ci pre-push run lives in one). A lane's tree is never a sibling of the temp root."""
+    import tempfile
+
+    import ddflow.services.install_info as II
+
+    primary, _tree = checkout
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(II.tempfile, "gettempdir", lambda: str(tmp_path))
+    scratch = tmp_path / "ddflow-ci.abc123"
+    _git(primary, "worktree", "add", "-q", str(scratch), "--detach")
+    monkeypatch.setattr(PATHS, "package_parent", scratch.resolve)
+    assert I.foreign_launch_root() is None
+
+
 def test_a_non_ddflow_repository_worktree_is_not_foreign(tmp_path, monkeypatch):
     other = tmp_path / "other"
     other.mkdir()
@@ -137,7 +154,9 @@ def test_the_cli_guard_allows_the_callers_own_tree(checkout, monkeypatch):
 
     _primary, tree = checkout
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base=""))
+    monkeypatch.setattr(
+        W, "current", lambda start: W.Worktree(item="", path=tree, branch="b", base="")
+    )
     assert CLI._guard_foreign_launch() == CLI.OK
 
 

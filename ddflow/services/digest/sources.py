@@ -272,8 +272,8 @@ SOURCES: tuple[Source, ...] = (
         OPERATOR,
         "nudge",
         "session note or ask of kind question without an answer",
-        "answer the question in chat; the lead records the answer",
-        "ddflow approvals show <id>",
+        "answer the question at a terminal; the lead records it",
+        "ddflow approvals answer <id> --text '<answer>'",
         ASK,
         "the asker",
     ),
@@ -307,6 +307,7 @@ EXEMPT_SITES: dict[str, str] = {
     "pins.regenerate": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "history.accept": "a pending request for it is an 'approval' entry; nothing else pends in State",
     "token.manage": "T3 signed act; nothing pends in State",
+    "channel.consent": "a pending request for it is an 'approval' entry; nothing else pends in State",
 }
 
 
