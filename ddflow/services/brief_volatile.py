@@ -20,13 +20,16 @@ from typing import Any
 
 
 def _rules_line(v: dict[str, Any]) -> str:
-    details = " ".join(
+    details = [
         str(r["detail"])
         for r in v.get("rules_drift") or []
         if isinstance(r, dict) and r.get("detail")
-    )
+    ]
+    if not details:  # no drift: the brief omits the warning, as the template's `{% if %}` did
+        return ""
+    text = " ".join(details)
     return (
-        f"This project's rules file needs the operator: {details} Ask the operator before "
+        f"This project's rules file needs the operator: {text} Ask the operator before "
         "fixing it; if they agree, `ddflow_setup` replaces only the managed block and "
         "leaves everything else untouched."
     )
