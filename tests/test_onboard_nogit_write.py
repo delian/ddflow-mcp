@@ -36,25 +36,17 @@ def test_onboard_in_a_non_git_directory_writes_nothing_and_says_git_init(tmp_pat
     assert _state(plain) == set(), _state(plain)
 
 
-def test_a_repository_git_refuses_is_not_told_to_git_init(repo, monkeypatch):
-    """A failed rev-parse on a directory that HAS a .git (dubious ownership, say) must not
-    be answered with `git init`, whatever language git's message is in."""
+def test_a_directory_with_a_dot_git_is_not_told_to_git_init(tmp_path):
+    """A `.git` that git may refuse to open (dubious ownership) is still a repository to
+    report on, never an invitation to `git init`."""
     from ddflow.api import onboard as OB
 
-    class Refused:
-        ok = False
-        err = "fatal: detected dubious ownership in repository"
-
-    monkeypatch.setattr(OB.G, "run", lambda *a, **k: Refused())
-    assert OB._not_a_repository(repo) is False
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "sub").mkdir()
+    assert OB._not_a_repository(tmp_path / "sub") is False
 
 
-def test_a_translated_git_message_still_counts_as_not_a_repository(tmp_path, monkeypatch):
+def test_a_directory_without_a_dot_git_above_it_is_not_a_repository(tmp_path):
     from ddflow.api import onboard as OB
 
-    class Refused:
-        ok = False
-        err = "fatal: kein Git-Repository (oder irgendeines der Elternverzeichnisse): .git"
-
-    monkeypatch.setattr(OB.G, "run", lambda *a, **k: Refused())
     assert OB._not_a_repository(tmp_path) is True
