@@ -841,6 +841,29 @@ in `new_failures`) instead of hiding it behind `still_failing`.
 
 ---
 
+### Chores: files that land without a reviewer
+
+Some files are not code: rules, `.mailmap`, `DDFLOW.md`, decision records, generated views. Taking
+each through claim, ten gates and a reviewer is ceremony. `ddflow chore commit FILE... -m "message"`
+runs the whole arc in one step: it files a task tagged `chore`, claims it, copies the files into
+its worktree and commits them, records every skipped gate with its reason, merges and completes (when
+every gate of the item's pipeline is skipped or left to the merge: see `skip_gates` below). It
+takes no reviewer because two things hold: every file matches `[chore].globs`, and a person approved
+that list. A file outside the list is refused before any task exists and takes the normal pipeline.
+
+- `[chore].globs` is the class: the files a chore may touch (the default is the rules, `.mailmap`,
+  `DDFLOW.md`, decision records and the generated queue and lessons views).
+- `[chore].skip_gates` is the gates a chore skips (by default research, rules, implement,
+  rubber_duck, critic, verify, standards, ci, unit_tests, bug_hunt and dedupe). A gate in the
+  item's pipeline that is neither listed nor `merge` is left for you to run, and the chore does not
+  complete until it carries an outcome.
+- `ddflow chore approve [--note "why"]` is the person's approval of exactly THIS list and
+  `skip_gates`. It is refused under an agent identity, so an agent cannot widen the class: a
+  changed list needs approving again before a chore may use it, whoever edited it. An agent that
+  needs the approval gets a request filed and passes the operator's answer as `--approval ID`.
+
+---
+
 ## Checking that the checks are working
 
 Three questions ddflow asks about itself, all derived from the log and all reported by
