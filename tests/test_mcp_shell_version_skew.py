@@ -102,3 +102,17 @@ def test_installed_version_reads_a_source_tree_from_disk(tmp_path, monkeypatch):
     (tmp_path / "ddflow").mkdir()
     (tmp_path / "ddflow" / "__init__.py").write_text(f'__version__ = "{DECLARED}"\n')
     assert UN.installed_version() == DECLARED
+
+
+def test_installed_version_reads_an_editable_install_from_disk(tmp_path, monkeypatch):
+    """The editable arm of `installed_version` shares the source-tree path: it too reads the
+    on-disk literal, whose metadata version is the frozen import version."""
+    from ddflow.services import upgrade_notice as UN
+
+    monkeypatch.setattr(
+        UN, "install_info", lambda: SimpleNamespace(kind="editable", version=RUNNING)
+    )
+    monkeypatch.setattr(UN._paths, "package_parent", lambda: tmp_path)
+    (tmp_path / "ddflow").mkdir()
+    (tmp_path / "ddflow" / "__init__.py").write_text(f'__version__ = "{DECLARED}"\n')
+    assert UN.installed_version() == DECLARED
