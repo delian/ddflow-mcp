@@ -17,6 +17,7 @@ from ...core import clock
 from ...core import outcome as O
 from ...core.outcome import FAIL, NOTHING, OK, REFUSED
 from ...core.progress import new_reports_line
+from ...core.schedule import wave_of
 from ...core.tier import tier_of
 from ..tools._common import _api
 
@@ -276,6 +277,7 @@ def next_text(out, a, ctx) -> str | None:
         return None
     p = out.data["_render"]["plan"]
     bdeps = p.blocking_deps
+    flat = bool(a.get("flat", False))
     if not p.ready and not bdeps:
         more = (
             [f"  ... and {len(p.blocked) - _BLOCKED_SHOWN_NO_READY} more (--json holds them all)"]
@@ -290,6 +292,10 @@ def next_text(out, a, ctx) -> str | None:
                     for b in p.blocked[:_BLOCKED_SHOWN_NO_READY]
                 ),
                 *more,
+                *(
+                    f"  {b['item']}: {b['reason']} — {b['detail']}"
+                    for b in out.data.get("excluded_leased") or []
+                ),
                 *([note] if (note := out.data.get("_footer")) else []),
             ]
         )
@@ -299,14 +305,46 @@ def next_text(out, a, ctx) -> str | None:
         tier = tier_of(it.tags)
         return f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else "")
 
+    def deps_line(it):
+        needs = [n for n in it.needs if n]
+        if not needs:
+            return None
+        return f"      needs: {', '.join(needs)}"
+
     if p.ready:
         lines.append(f"Ready ({p.summary()}):")
+        last_k = None  # the previous row's wave bucket, so a header prints only on a change
         for it in p.ready:
+            k = None if flat else wave_of(it.tags)
+            if not flat and (last_k is None or last_k != k):
+                label = f"wave:{k}" if k is not None else "wave:unstamped"
+                lines.append(f"  [{label}]")
+                last_k = k
             lines.append(ready_line(it))
             if it.globs:
                 lines.append(f"      writes: {', '.join(it.globs)}")
-        if len(p.ready) > 1:
+            if needs := deps_line(it):
+                lines.append(needs)
+        if len(p.ready) > 1 and not flat:
+            lines.append(
+                "\nThese are independent — run them in parallel worktrees; items that share "
+                "a dependency or globs are one co-locate cluster (below)."
+            )
+        elif len(p.ready) > 1:
             lines.append("\nThese are independent — run them in parallel worktrees.")
+    if (clusters := out.data.get("co_location_hints") or []):
+        lines.append("\nCo-locate (place in ONE lane to minimize locking):")
+        for c in clusters:
+            if c["shared_deps"]:
+                why = f"share dep(s): {', '.join(c['shared_deps'])}"
+            else:
+                why = "overlapping globs"
+            lines.append(f"  {', '.join(c['items'])}  ({why})")
+    exc = out.data.get("excluded_leased") or []
+    if exc:
+        lines.append("\nExcluded (globs overlap another agent's live lease):")
+        for b in exc:
+            lines.append(f"  {b['item']}: {b['detail']}")
     if bdeps:
         lines.append(
             f"Blocking dependencies ({len(bdeps)} ready to start — do these to unblock the phase):"
@@ -315,6 +353,8 @@ def next_text(out, a, ctx) -> str | None:
             lines.append(ready_line(it) + "  [blocking-dependency]")
             if it.globs:
                 lines.append(f"      writes: {', '.join(it.globs)}")
+            if needs := deps_line(it):
+                lines.append(needs)
     lines += [
         f"  (blocked) {b.item}: {b.reason} — {b.detail}"
         for b in p.blocked[:_BLOCKED_SHOWN_WITH_READY]

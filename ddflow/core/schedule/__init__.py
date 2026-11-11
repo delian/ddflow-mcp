@@ -50,6 +50,8 @@ from ..records import SIGHTINGS_THAT_CONFIRM as SIGHTINGS_THAT_CONFIRM
 from ._chain import _chain_scope as _chain_scope
 from ._chain import chain_cycles as chain_cycles
 from ._chain import critical_path as critical_path
+from ._colocate import co_location_hints as co_location_hints
+from ._colocate import wave_of as wave_of
 from ._filters import FILTERS as FILTERS
 from ._filters import KEYS as KEYS
 from ._filters import LEASE_FILTERS as LEASE_FILTERS
