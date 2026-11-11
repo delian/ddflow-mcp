@@ -295,3 +295,25 @@ def test_a_consented_install_goes_to_a_scratch_prefix_and_is_then_found(tmp_path
 def test_a_failed_consented_install_is_unavailable_not_pass(tmp_path):
     _, why = S.consented_install(_harness(), "exit 3", tmp_path, {"PATH": "/usr/bin:/bin"})
     assert "consented install failed" in why
+
+
+def test_the_missing_prompt_gap_reads_the_descriptors_ladder(repo):
+    _, fallback = S.assess(repo, "fakeagent", native_prompt=False)
+    _, native = S.assess(repo, "fakeagent", native_prompt=True)
+    assert any("first-call fallback" in g for g in fallback)
+    assert any("maps a native prompt hook" in g for g in native)
+    assert not any("first-call fallback" in g for g in native)
+
+
+def test_a_failed_consented_install_through_the_cli_is_still_reported(tmp_path):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    env = {"PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    out = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ci" / "agent-smoke"), "run", "grok", "--live",
+         "--consent-install", "exit 3", "--json"],
+        capture_output=True, text=True, env=env, cwd=tmp_path,
+    )  # fmt: skip
+    assert out.returncode == 2, out.stdout + out.stderr
+    assert json.loads(out.stdout)["verdict"] == "unavailable"
+    assert "consented install failed" in out.stdout

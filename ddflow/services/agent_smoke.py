@@ -154,7 +154,7 @@ def _shard_committed(project: Path) -> bool:
     return bool(tracked) and not G.status_run(project, ".ddflow/events").out.strip()
 
 
-def _gaps(evs: list[Any], harness: str) -> list[str]:
+def _gaps(evs: list[Any], harness: str, native_prompt: bool) -> list[str]:
     """What the compat report lists but the verdict does not rest on."""
     gaps = []
     started = [e for e in evs if e.kind == "session.started"]
@@ -162,13 +162,16 @@ def _gaps(evs: list[Any], harness: str) -> list[str]:
         gaps.append("no session.started with the harness name")
     if not any(e.kind == "session.prompt" for e in evs):
         gaps.append(
-            "no session.prompt (expected only at the ladder level "
-            "'no native prompt hook, first-call fallback')"
+            "no session.prompt although the descriptor maps a native prompt hook"
+            if native_prompt
+            else "no session.prompt: no native prompt hook, first-call fallback (ladder level)"
         )
     return gaps
 
 
-def assess(project: Path, harness: str = "") -> tuple[dict[str, bool], list[str]]:
+def assess(
+    project: Path, harness: str = "", native_prompt: bool = False
+) -> tuple[dict[str, bool], list[str]]:
     """The assertions, from the project's event log (and git for the shard) only."""
     evs = EventLog(project, RUNNER_IDENTITY).read_all()
     acquired = [e for e in evs if e.kind == "lease.acquired"]
@@ -179,7 +182,7 @@ def assess(project: Path, harness: str = "") -> tuple[dict[str, bool], list[str]
         "no_stray_lease": not _open_leases(evs),
         "shard_committed": _shard_committed(project),
     }
-    return a, _gaps(evs, harness)
+    return a, _gaps(evs, harness, native_prompt)
 
 
 def scaffold(project: Path, agent: str = "") -> None:
@@ -275,7 +278,9 @@ def smoke(
     """Smoke ``h``: unavailable without an agent or key; else ``rounds`` rounds in fresh
     projects under ``workdir``, each failed attempt retried ``retries`` times, the verdict the
     majority. An unavailable attempt ends the run (a rate limit is not hammered)."""
-    assess_fn = assess_fn or (lambda p: assess(p, h.id))
+    assess_fn = assess_fn or (
+        lambda p: assess(p, h.id, bool(h.hooks and "prompt" in h.hooks.events))
+    )
     keys = [k.strip() for k in _test(h).get("env_keys", "").split(",") if k.strip()]
     runner = C.CommandRunner(max_output=20000, redactor=_redactor(env, keys))
     try:
@@ -360,6 +365,7 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
     if h is None:
         print(f"unknown agent {a.agent!r}", file=sys.stderr)
         return EXIT_REFUSED
+    log = EventLog(Path.cwd(), "agent-smoke") if a.record else None
     with scratch_dir("agent-smoke-") as work:
         given = {
             "rounds": a.rounds,
@@ -369,16 +375,20 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
         }
         run_env = dict(env or {})
         missing = a.consent_install and detect(h, run_env, C.CommandRunner())
+        why = ""
         if missing and "not installed" in missing:
+            # a sibling of the throwaway projects (`workdir/rN-tM`), never inside one
             prefix = Path(work) / "prefix"
             prefix.mkdir()
             run_env, why = consented_install(h, a.consent_install, prefix, run_env)
-            if why:
-                print(why, file=sys.stderr)
-                return EXIT_FOR[UNAVAILABLE]
-        res = smoke(h, workdir=Path(work), env=run_env,
-                    log=EventLog(Path.cwd(), "agent-smoke") if a.record else None,
-                    **{k: v for k, v in given.items() if v is not None})  # fmt: skip
+        if why:
+            res = SmokeResult(h.id, UNAVAILABLE, why)
+            if log is not None:
+                log.append(KIND, h.id, {"agent": h.id, "verdict": UNAVAILABLE, "reason": why,
+                                        "attempts": []})  # fmt: skip
+        else:
+            res = smoke(h, workdir=Path(work), env=run_env, log=log,
+                        **{k: v for k, v in given.items() if v is not None})  # fmt: skip
     print(
         json.dumps(res.as_dict(), indent=1)
         if a.json
