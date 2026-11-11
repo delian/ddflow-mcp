@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from .mcp import (  # the wire an SDK swap touches: one home
+from .mcp_wire import (  # the wire an SDK swap touches: one home (no mcp import: keeps the graph a DAG)
     CLOSED_BEFORE_READ,
     ECHOED,
     EOF,
