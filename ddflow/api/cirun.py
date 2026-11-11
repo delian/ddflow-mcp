@@ -127,7 +127,8 @@ def _auto_fix_ruff(repo: Path, cfg, st, item: str, res: CI.Result, data: dict) -
     root = W.load_path(repo, it.worktree)
     if not root.is_dir():
         return
-    ready = CI.auto_fix(root, CI.changed_python(repo, res.sha, res.merged_with))
+    owned = CI.changed_python(repo, res.sha, res.merged_with, own=True)
+    ready = CI.auto_fix(root, owned)
     if ready.get("unavailable"):
         data["corrections_unavailable"] = ready["unavailable"]
     elif ready:

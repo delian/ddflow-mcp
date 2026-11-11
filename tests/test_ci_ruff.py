@@ -120,6 +120,34 @@ def test_ruff_autofix_off_leaves_the_drift_for_the_agent(repo, monkeypatch, tmp_
     assert (wt / "src/a.py").read_text() == "value=1\n", "autofix off must not rewrite the file"
 
 
+def test_changed_python_own_excludes_a_merge_pulled_file(tmp_path):
+    """B-autoformat-stages-outside-lease: a merge pulled `base`'s `b.py` in, which a broad
+    glob still matches; `changed_python(own=True)` names only the item's own edit (`a.py`)."""
+    from ddflow.services.ci import ruff
+
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@t")
+    _git(tmp_path, "config", "user.name", "t")
+    _git(tmp_path, "switch", "-c", "main")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("a\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "base")
+    _git(tmp_path, "checkout", "-qb", "item")
+    (tmp_path / "src" / "a.py").write_text("a2\n")
+    _git(tmp_path, "commit", "-qam", "item edit")
+    item = _git(tmp_path, "rev-parse", "HEAD").strip()
+    _git(tmp_path, "checkout", "-q", "main")
+    (tmp_path / "src" / "b.py").write_text("b\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "main b")
+    base = _git(tmp_path, "rev-parse", "HEAD").strip()
+
+    own = ruff.changed_python(tmp_path, item, base, own=True)
+    assert own == ["src/a.py"], own
+    assert "src/b.py" not in own
+
+
 def test_safe_files_keeps_only_the_worktrees_own_python_files(tmp_path):
     """A path that escapes the worktree or reads as a flag is never handed to ruff."""
     from ddflow.services.ci import ruff
