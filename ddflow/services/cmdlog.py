@@ -27,6 +27,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from ..core.redact import redact_argv
+from ..infra import fsio
 from .redact_report import redactor
 
 CAP_ENTRIES = 500  #: The ring size (a module constant for this slice; the knob is for later).
@@ -71,19 +72,17 @@ def record(
 
 def _trim(path: Path) -> None:
     """Drop the oldest lines once the log has grown past ``CAP_ENTRIES``. The tail is rewritten
-    through a temp file and renamed into place (`os.replace` is atomic), so a kill or a full
-    disk mid-rewrite leaves the old ring, never a half-written or emptied one. Two processes
-    may still drop one another's concurrent append -- a best-effort "last N" ring, so `recent`
-    skips a line torn by that."""
+    through `ddflow.infra.fsio.replace_text` (`write_text`'s one home), which writes a temp
+    file and atomically renames it into place, so a kill or a full disk mid-rewrite leaves the
+    old ring, never a half-written or emptied one. Two processes may still drop one another's
+    concurrent append -- a best-effort "last N" ring, so `recent` skips a line torn by that."""
     try:
         if path.stat().st_size == 0:
             return
         text = path.read_text(encoding="utf-8")
         if text.count("\n") <= CAP_ENTRIES:
             return
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text("".join(text.splitlines(keepends=True)[-CAP_ENTRIES:]), encoding="utf-8")
-        os.replace(tmp, path)
+        fsio.replace_text(path, "".join(text.splitlines(keepends=True)[-CAP_ENTRIES:]))
     except OSError:
         return
 
