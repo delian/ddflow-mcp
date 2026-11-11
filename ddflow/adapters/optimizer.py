@@ -13,12 +13,16 @@ and `get_optimizer` resolves it.
 
 The default adapter, ``greedy-v1``, is the algorithm ddflow always had: the registered order
 keys left to right (bugs first, priority, id) and a greedy cut that takes an item only when it
-overlaps nothing already taken. Affinity and aversion are PREFERENCES that reorder, never filters:
-hard constraints stay `needs` and `globs`, decided by the caller's readiness filters.
+overlaps nothing already taken. ``swarm-v1`` is the second: the swarm scheduler's item order
+(critical-path items first, then the longest-waiting) over the same cut. Affinity and aversion
+are PREFERENCES that reorder, never filters: hard constraints stay `needs` and `globs`, decided
+by the caller's readiness filters.
 
 Deterministic: terms are integers (or the id), the id is the final tie-break, no clock, no hash
-order, no randomness. ``ctx`` is an OPEN mapping: later phases (lock-wait signals, load) add keys
-and an adapter reads only the ones it knows. Pure of ddflow: imports no other layer.
+order, no randomness. ``ctx`` is an OPEN mapping: the caller fills ``ctx["facts"]`` with the
+per-candidate facts an adapter may read (``critical``, ``waited_s``) and it reads only the keys
+it knows. An adapter says which facts it reads with ``facts``; the default reads none, so the
+default plan pays for none. Pure of ddflow: imports no other layer.
 """
 
 from __future__ import annotations
@@ -119,6 +123,15 @@ def _term_text(value: Any) -> str:
     return str(int(value)) if isinstance(value, bool) else str(value)
 
 
+def _fact(ctx: Mapping[str, Any], candidate_id: str) -> dict[str, Any]:
+    """The per-candidate facts ``ctx["facts"][candidate_id]``, or ``{}`` when the ctx
+    carries none. The ctx is OPEN: a caller fills the keys it knows and an adapter reads the
+    ones it recognises, so an absent fact is a miss, never an error."""
+    facts = ctx.get("facts", ())
+    cell = facts.get(candidate_id, ()) if isinstance(facts, Mapping) else ()
+    return cell if isinstance(cell, Mapping) else {}
+
+
 @port
 @runtime_checkable
 class Optimizer(Protocol):
@@ -156,9 +169,11 @@ OPTIMIZERS: Registry[Optimizer] = Registry("optimizer", key=lambda a: a.name, sa
 
 
 class GreedyV1:
-    """The default adapter: ddflow's own ordering, unchanged."""
+    """The default adapter: ddflow's own ordering, unchanged. ``facts`` names the
+    ``ctx["facts"]`` keys this adapter reads (none: its terms live on the candidate)."""
 
     name = DEFAULT_NAME
+    facts: frozenset[str] = frozenset()
 
     def order(self, ctx: Mapping[str, Any], candidates: Sequence[Candidate]) -> list[Placement]:
         ranked = sorted(candidates, key=lambda c: (tuple(v for _, v in c.terms), c.id))
@@ -194,7 +209,45 @@ class GreedyV1:
         return f"{placement.id}: rank {placement.rank} by {items or 'id'}"
 
 
+class SwarmV1(GreedyV1):
+    """The swarm scheduler's own item order (critical-path items first, then the
+    longest-waiting), over the SAME greedy cut: one overlap check, not a parallel design.
+
+    Reads the per-candidate facts the caller fills into ``ctx["facts"]`` (``critical``: on the
+    critical path, ``waited_s``: seconds since filed). A fact it does not find is neutral --
+    the ctx is open and absent means unmeasured. Deterministic: the id breaks the last tie.
+    """
+
+    name = "swarm-v1"
+    facts: frozenset[str] = frozenset({"critical", "waited_s"})
+
+    def order(self, ctx: Mapping[str, Any], candidates: Sequence[Candidate]) -> list[Placement]:
+        def key(c: Candidate) -> tuple:
+            cell = _fact(ctx, c.id)
+            return (
+                not bool(cell.get("critical", False)),
+                -float(cell.get("waited_s", 0.0)),
+                tuple(v for _, v in c.terms),
+                c.id,
+            )
+
+        placed: list[Placement] = []
+        for n, c in enumerate(sorted(candidates, key=key)):
+            cell = _fact(ctx, c.id)
+            terms = (
+                ("critical", bool(cell.get("critical", False))),
+                ("waited_s", float(cell.get("waited_s", 0.0))),
+            )
+            placed.append(Placement(c.id, n, terms + tuple(c.terms)))
+        return placed
+
+    def explain(self, placement: Placement) -> str:
+        items = ", ".join(f"{k}={_term_text(v)}" for k, v in placement.terms)
+        return f"{placement.id}: rank {placement.rank} by {items}"
+
+
 OPTIMIZERS.register(GreedyV1())
+OPTIMIZERS.register(SwarmV1())
 
 
 def get_optimizer(name: str = "") -> Optimizer:

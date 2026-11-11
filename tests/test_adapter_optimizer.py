@@ -58,6 +58,10 @@ def _real(monkeypatch):
     return O.get_optimizer("greedy-v1")
 
 
+def _swarm(monkeypatch):
+    return O.get_optimizer("swarm-v1")
+
+
 CONFORMANCE = {"Optimizer": {"real": _real, "cases": optimizer_cases}}
 
 
@@ -99,3 +103,44 @@ def test_the_fake_pins_an_order_and_records_calls():
     got = f.order({"k": 1}, [_c("a"), _c("m"), _c("z")])
     assert [p.id for p in got] == ["z", "a", "m"]
     assert f.calls == [("order", {"k": 1})]
+
+
+def test_swarm_v1_is_a_second_registered_adapter():
+    swarm = O.get_optimizer("swarm-v1")
+    assert isinstance(swarm, Optimizer)
+    assert swarm is not O.get_optimizer("greedy-v1")
+    assert "swarm-v1" in O.OPTIMIZERS and "greedy-v1" in O.OPTIMIZERS
+    assert O.GreedyV1.facts == frozenset()  # the default reads no ctx facts (fast path)
+    assert O.SwarmV1.facts == frozenset({"critical", "waited_s"})
+
+
+def test_swarm_orders_critical_then_waited_then_priority_then_id():
+    items = [_c("c", False, 5), _c("a", False, 5), _c("b", True, 50), _c("d", False, 1)]
+    ctx = {"facts": {"a": {"critical": True, "waited_s": 10.0}}}
+    # 'a' is on the critical path, so it leads whatever its priority; the rest fall back to
+    # the greedy terms (bugs first, then priority, then id).
+    got = O.get_optimizer("swarm-v1").order(ctx, items)
+    assert [p.id for p in got] == ["a", "b", "d", "c"]
+    # deterministic: a total order, the input order does not matter
+    assert [p.id for p in O.get_optimizer("swarm-v1").order(ctx, items[::-1])] == [
+        p.id for p in got
+    ]
+
+
+def test_swarm_orders_the_longest_waiting_first():
+    items = [_c("x", False, 5), _c("y", False, 5)]
+    ctx = {"facts": {"x": {"waited_s": 9.0}, "y": {"waited_s": 99.0, "critical": False}}}
+    assert [p.id for p in O.get_optimizer("swarm-v1").order(ctx, items)] == ["y", "x"]
+
+
+def test_swarm_falls_back_to_the_greedy_terms_without_facts():
+    # an absent ctx is a miss, not an error: the same order as greedy-v1
+    items = [_c("c", False, 5), _c("a", False, 5), _c("b", True, 50), _c("d", False, 1)]
+    assert [p.id for p in O.get_optimizer("swarm-v1").order({}, items)] == ["b", "d", "a", "c"]
+
+
+def test_swarm_explain_itemises_critical_and_wait():
+    p = O.get_optimizer("swarm-v1").order({}, [_c("b", True, 50)])[0]
+    assert (
+        O.get_optimizer("swarm-v1").explain(p).startswith("b: rank 0 by critical=0, waited_s=0.0")
+    )
