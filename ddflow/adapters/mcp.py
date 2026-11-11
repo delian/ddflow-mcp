@@ -338,4 +338,5 @@ from .mcp_client import (  # noqa: E402, F401 -- re-exported, not used locally
     StdioClient,
     _ChannelClient,
     finish_answer,
+    send_line,
 )
