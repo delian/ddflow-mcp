@@ -674,7 +674,14 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     # the fix IS that head (a `--delta` re-checks only what changed since it). Untriaged
     # findings still need `ddflow review triage`, not a round this path can settle.
     if rec is not None and rec.outcome == "failed" and dropped and not counts.get("untriaged"):
-        return _release_settled(log, cfg, it, gate, how, why, counts)
+        fix_counts = dict(counts)
+        # name the released CONFIRMED findings (the dropped list), not triage_counts' latest-
+        # record count: the pass is emitted because those findings were fixed, and reading 0
+        # would be a vacuous "0 confirmed" record (roborev job 4647).
+        fix_counts["confirmed"] = len(dropped)
+        if not fix_counts.get("findings"):
+            fix_counts["findings"] = len(dropped)
+        return _release_settled(log, cfg, it, gate, how, why, fix_counts)
     tag = f"{it.id}.{gate}" if it is not None else gate
     reason = f"{why} No round was counted; {tag} stays {stays}."
     untriaged = counts.get("untriaged", 0)

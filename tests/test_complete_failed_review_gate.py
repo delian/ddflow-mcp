@@ -197,6 +197,30 @@ def test_a_delta_that_is_empty_because_the_fix_is_at_the_reviewed_head_settles_i
     assert BLOCKER not in _complete(repo)[1], out2.data
 
 
+def test_a_mix_of_one_dropped_and_one_carried_confirmed_finding_releases_nothing(
+    repo, tmp_path
+):
+    """The robustness the reviewers found on B-tk-delta-round-empty: `_dropped_unrechecked`
+    must release the gate only when EVERY unrechecked confirmed finding was dropped by the
+    latest record; a mix (one dropped, another still carried) releases nothing or an unfixed
+    defect would merge."""
+    import ddflow.api.review.triaging as TR
+
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)  # R1 raises #1, confirmed at x.py
+    _commit(repo, "x.py", "x = 1\n")  # fixes #1
+    _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # a new MEDIUM below the HIGH floor
+    out = api.review(repo, gate="critic", item="T1", branch="feat", full=True)  # drops #1, raises #B
+    assert out.data["outcome"] == "failed", out.data
+    # the new finding is confirmed too (its fix is not made): still carried by the latest record
+    t = api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="to fix y.py")
+    assert t.exit == 0, t.reason
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert TR._dropped_unrechecked(st.items["T1"], "critic") == [], (
+        "one confirmed dropped, another still carried: nothing releases"
+    )
+
+
 def test_any_gate_with_a_reviewer_counts_not_only_different_family_ones(repo, tmp_path):
     """The critic's finding on the skip guard: same_family_ok review gates were left out."""
     from dataclasses import replace
