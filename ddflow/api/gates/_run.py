@@ -248,12 +248,12 @@ def _superseded_run(
     return ""
 
 
-def _mark_or_refuse_twin(repo, item, gate, started_on):
+def _mark_or_refuse_twin(repo, item, gate, started_on, expected_s=0):
     """Mark, then look, under one lock: of two runs started together the first to take it
     marks and sees no twin; the second sees the first's marker and refuses.
     Returns ``(marker, None)`` to go on, or ``(None, the refusal)`` for a live twin, or
     ``(None, None)`` when no marker could be written and no twin was seen."""
-    marker, twin = RUN.claim_started(repo, item, gate, started_on)
+    marker, twin = RUN.claim_started(repo, item, gate, started_on, expected_s=expected_s)
     if not twin:
         return marker, None
     return None, O.nothing(
@@ -399,7 +399,7 @@ def run(
         if covered is not None:
             return covered
         started_on = G.tree_identity(cwd)
-        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on)
+        marker, twin_refusal = _mark_or_refuse_twin(repo, item, gate, started_on, gdef.timeout_s)
         if twin_refusal is not None:
             return twin_refusal
         started_at = clock.now_iso()

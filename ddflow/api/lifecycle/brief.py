@@ -23,6 +23,7 @@ from ...services import choices as CHO
 from ...services import cleanup as CL
 from ...services import gates as G
 from ...services import lanerelease as LR
+from ...services import lanerotate as LROT2
 from ...services import leasebreak as LB
 from ...services import leases as L
 from ...services import searchcore as SC
@@ -477,6 +478,11 @@ def brief(
 
     if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
         text += "\n" + line
+    # The lane-rotation hint (TE-context-caps): fire the same advice doctor/health carries
+    # here, for the lane's wake brief, the moment an agent's measured context passes the
+    # threshold (silent while it is unknown -- B-gap-spend is the feed).
+    if hint := LROT2.brief_hint(cfg):
+        text += "\n" + hint
     text += _operator_lines(st)
     if notice := _upgrade_notices(repo, log, cfg, st, agent):
         text = notice + "\n\n" + text
