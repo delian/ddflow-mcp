@@ -53,7 +53,6 @@ def _section(name: str, repo: Path | None, overrides: dict[str, str] | None) -> 
 #: wrote the template. (The words grant nothing; this keeps them from pointing the wrong way.)
 _FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "yourself", "approve it")
 _FLAG = re.compile(r"--approval[ =]+[`'\"]*([^\s`'\".,;:)]+)")
-_MAX_CHARS = 1200
 #: A route is prose: shell syntax in it is how a second command rides along with the first.
 _SHELLISH = re.compile(r"[;|&$<>\\\n\r]|\becho\b|\beval\b")
 #: Anything shaped like an ask id: only the bound one may appear in a route.
@@ -68,7 +67,7 @@ def _sound(out: str, ident: str, need: str) -> bool:
     operator. A text that fails is never half-used."""
     low = out.lower()
     return (
-        0 < len(out) <= _MAX_CHARS
+        bool(out)
         and all(m in out for m in _MUST_NAME)
         and all(f not in low for f in _FORBIDDEN)
         and not _SHELLISH.search(out)

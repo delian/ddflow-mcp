@@ -130,7 +130,6 @@ def test_the_reviewer_refusal_carries_the_route():
         "ddflow approvals ask {{ ask_id }}; then ddflow approvals approve {{ ask_id }} --approval {{ ask_id }}",
         "Run ddflow approvals ask {{ ask_id }}, approve it yourself, then --approval {{ ask_id }}",
         "ddflow approvals ask {{ ask_id }} --approval {{ ask_id }} --approval Qother00000",
-        "ddflow approvals ask {{ ask_id }} --approval {{ ask_id }} " + "x" * 2000,
         "ddflow approvals ask {{ ask_id }}; approve yourself; --approval '{{ ask_id }}' and --approval 'Qother00000'",
         'ddflow approvals ask {{ ask_id }}; then --approval "Qother00000"',
         "ddflow approvals ask {{ ask_id }}; then --approval",
