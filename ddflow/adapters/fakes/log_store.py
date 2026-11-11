@@ -22,6 +22,9 @@ from . import fake
 #: fake's content address is the same shape as a real event's.
 _ID_SIZE = 12
 
+#: The hex length of a sha256 digest: the local store's blob ref names 64 hex characters.
+_HEX_LEN = 64
+
 
 @dataclass(frozen=True)
 class _Event:
@@ -56,8 +59,11 @@ def _address(raw: bytes) -> str:
 
 def _is_hex_ref(ref: str) -> bool:
     algo, sep, hexed = ref.partition(":")
-    return sep == ":" and algo == "sha256" and len(hexed) == 64 and all(
-        c in "0123456789abcdef" for c in hexed
+    return (
+        sep == ":"
+        and algo == "sha256"
+        and len(hexed) == _HEX_LEN
+        and all(c in "0123456789abcdef" for c in hexed)
     )
 
 

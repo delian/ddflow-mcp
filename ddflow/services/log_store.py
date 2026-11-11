@@ -19,7 +19,7 @@ from ddflow.adapters.log_store import LogStore
 from ddflow.infra.blobstore import BlobStore
 from ddflow.infra.log import EventLog
 
-__all__ = ["LogStore", "LocalLogStore"]
+__all__ = ["LocalLogStore", "LogStore"]
 
 
 class LocalLogStore:
