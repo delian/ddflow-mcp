@@ -77,7 +77,7 @@ def _sound(out: str, ident: str, need: str) -> bool:
         and all(m in (ident, need) for m in flags)
         and need in flags
         and all(m == ident for m in _ANY_ID.findall(out))
-        and out.count("ddflow approvals ask") == out.count("`ddflow approvals ask")
+        and out.count("ddflow approvals ask") == 1
         and out.count("--approval") == len(flags)
     )
 
