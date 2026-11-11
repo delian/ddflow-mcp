@@ -379,7 +379,9 @@ def annotate(rows: list[dict[str, Any]], st: State) -> None:
         row["acknowledged"] = bool(e.get("acked")) if on else True
         row["locked"] = bool(e.get("locked")) and not e.get("enabled")
         row["locked_by"] = (e.get("lock") or {}).get("by", "") if row["locked"] else ""
-        row["locked_by_agent"] = bool(row["locked"] and not (e.get("lock") or {}).get("human", True))
+        row["locked_by_agent"] = bool(
+            row["locked"] and not (e.get("lock") or {}).get("human", True)
+        )
 
 
 def brief_line(st: State, cfg: Config) -> str:
