@@ -7,12 +7,12 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-from ... import items as _items
 from ....core import outcome as O
 from ....core.model import DONE, REVIEW, fold
 from ....core.stuck import stuck_edges_to
 from ....services import leases as L
 from ....services.gates import skip_followup as SF
+from ... import items as _items
 from ..._base import _load_fresh
 from .._common import _require
 from .dispose import _dispose
