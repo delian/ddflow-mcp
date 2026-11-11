@@ -59,8 +59,12 @@ UNKNOWN: Any = object()
 
 
 def file_digest(path: Path) -> str | None:
-    """SHA-256 of a file's bytes; None when it is absent. An unreadable file raises OSError."""
-    return hasher(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None
+    """SHA-256 of a file's bytes; None when it is absent. An unreadable file (or one behind an
+    unreadable directory) raises OSError: `Path.is_file` would call it absent."""
+    try:
+        return hasher(Path(path).read_bytes()).hexdigest()
+    except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
+        return None
 
 
 def _scope(repo: Path, path: str) -> tuple[str, bool]:

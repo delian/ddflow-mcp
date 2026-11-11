@@ -156,3 +156,18 @@ def test_a_resolver_returning_none_cannot_report_a_present_file_gone(repo, log):
     (repo / "p.md").write_text("one\n")
     IM.record(log, repo, "claude", "p.md", "plugin", "", IM.file_digest(repo / "p.md"), descriptor="c", version="1")
     assert IM.read(log, repo, "claude", current=lambda a: None).changed == []
+
+
+def test_a_file_behind_an_unreadable_directory_is_unknown_not_gone(repo, log):
+    import os
+
+    if os.geteuid() == 0:
+        pytest.skip("root reads through a mode-000 directory")
+    (repo / "d").mkdir()
+    (repo / "d" / "p.md").write_text("one\n")
+    IM.record(log, repo, "claude", "d/p.md", "plugin", "", "stale", descriptor="c", version="1")
+    (repo / "d").chmod(0)
+    try:
+        assert IM.read(log, repo, "claude").changed == []
+    finally:
+        (repo / "d").chmod(0o755)
