@@ -21,8 +21,11 @@ from ddflow.infra import fsio
 
 def test_refuses_an_empty_path_silently_by_default(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    fsio.rmtree_owned("")  # refused-to-delete, no raise (ignore_errors=True)
-    assert Path.cwd() == tmp_path  # nothing was emptied
+    marker = tmp_path / "marker.txt"
+    marker.write_text("kept", encoding="utf-8")
+    fsio.rmtree_owned("")  # refused-to-delete: no raise (ignore_errors=True)
+    assert marker.exists()  # the cwd's children were not emptied
+    assert Path.cwd() == tmp_path
 
 
 def test_raises_on_dangerous_targets_when_errors_are_not_ignored():

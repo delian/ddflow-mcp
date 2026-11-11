@@ -86,25 +86,36 @@ def rmtree_owned(path: Path | str, *, ignore_errors: bool = True) -> None:
     """Remove the directory tree at ``path``, refusing the targets ``shutil.rmtree`` makes
     dangerous (AU-safe-rmtree): ``shutil.rmtree('', ignore_errors=True)`` empties the current
     directory. A dangerous target is never removed; with ``ignore_errors=True`` (the default,
-    matching the best-effort call sites) it is refused silently, and with ``ignore_errors=False``
-    it raises `ValueError` naming the target."""
+    matching the best-effort call sites) it — and a target whose path could not be resolved —
+    is refused silently, and with ``ignore_errors=False`` it raises `ValueError` naming the target."""
     p = Path(path)
+
+    def refuse(message: str) -> None:
+        if not ignore_errors:
+            raise ValueError(message)
+
+    reason: str | None
     if not p.parts:
-        refusal = ValueError("rmtree_owned: an empty path is the current directory; refused")
+        reason = "rmtree_owned: an empty path is the current directory; refused"
     elif not p.is_absolute():
-        refusal = ValueError(f"rmtree_owned: {str(p)!r} is relative; refused")
+        reason = f"rmtree_owned: {str(p)!r} is relative; refused"
     else:
-        resolved = p.resolve()
-        if resolved == Path.cwd().resolve():
-            refusal = ValueError("rmtree_owned: refusing to remove the current directory")
-        elif resolved == Path(resolved.anchor):
-            refusal = ValueError("rmtree_owned: refusing to remove a filesystem root")
+        try:
+            resolved, cwd = p.resolve(), Path.cwd().resolve()
+        except OSError:
+            reason = f"rmtree_owned: {str(p)!r} cannot be resolved; refused"
         else:
-            refusal = None
-    if refusal is None:
-        rmtree(p, ignore_errors=ignore_errors)
-    elif not ignore_errors:
-        raise refusal
+            reason = (
+                "rmtree_owned: refusing to remove the current directory"
+                if resolved == cwd
+                else "rmtree_owned: refusing to remove a filesystem root"
+                if resolved == Path(resolved.anchor)
+                else None
+            )
+    if reason is not None:
+        refuse(reason)
+        return
+    rmtree(p, ignore_errors=ignore_errors)
 
 
 @dataclass(frozen=True, slots=True)
