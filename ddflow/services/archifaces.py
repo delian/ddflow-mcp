@@ -75,9 +75,14 @@ PROTOCOL_HOMES: dict[str, str] = {
 }
 
 
-# Modules already allowed to speak a protocol by hand: the adapter and its fake (ADP-mcp).
+# Modules already allowed to speak a protocol by hand: the adapter, its client side and its
+# fake (ADP-mcp; `mcp_client` holds the client ORM split out of `mcp` for r-small-files).
 PROTOCOL_MODULES: dict[str, tuple[str, ...]] = {
-    "mcp": ("ddflow.adapters.mcp", "ddflow.adapters.fakes.mcp"),
+    "mcp": (
+        "ddflow.adapters.mcp",
+        "ddflow.adapters.mcp_client",
+        "ddflow.adapters.fakes.mcp",
+    ),
     "acp": ("ddflow.adapters.acp", "ddflow.adapters.fakes.acp"),
 }
 

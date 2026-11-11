@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
+from readme_corpus import readme_corpus
 
 from ddflow.api import review as AR
 from ddflow.api import setup as AS
@@ -236,7 +237,7 @@ def test_the_handshake_and_readme_say_services_go_local():
     manual = (root / "ddflow" / "templates" / "prompts" / "help" / "manual.md").read_text()
     assert ".ddflow/local/" in instr, "the charter says where services go"
     assert ".ddflow/local/" in manual and "local=true" in manual, "the manual says how"
-    readme = (root / "README.md").read_text()
+    readme = readme_corpus()
     assert "What is committed, and what stays on your machine" in readme
     assert "ddflow config --local --set" in readme
 
