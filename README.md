@@ -866,8 +866,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=33f90fc572a5 -->
-<details><summary>All 677 knobs across 61 sections</summary>
+<!-- ddflow:begin README/knobs sha=22c8ea34eca9 -->
+<details><summary>All 679 knobs across 61 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -1148,6 +1148,8 @@ long default is left to `ddflow config --explain`.
 | `lanes.fleet_reason_chars` | `120` |  |
 | `lanes.watch_interval_s` | `5` |  |
 | `lanes.advise_max` | `10` |  |
+| `lanes.idle_s` | `1800` |  |
+| `lanes.coordinator_max_rows` | `15` |  |
 | `lanes.brief_notes` | `3` |  |
 | `lanes.brief_text_chars` | `1200` |  |
 | `lanes.stop_grace_s` | `10` |  |
