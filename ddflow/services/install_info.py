@@ -339,8 +339,10 @@ class ForeignLaunch:
 #: recorded as a pin's expected output (Bc28808f9c3): one string, so the two cannot drift apart.
 FOREIGN_LAUNCH_REFUSAL = "imported from the linked worktree"
 
-#: The temp directories ddflow's scratch trees are made in when TMPDIR is not redirected.
-SYSTEM_TEMP_DIRS: tuple[Path, ...] = (Path("/tmp"), Path("/var/tmp"))
+#: The temp directories ddflow's scratch trees are made in when TMPDIR is not redirected:
+#: the two canonical system temp roots, listed as the whitelist `_scratch_parents` checks a
+#: scratch tree's parent against — not temp files ddflow itself creates (nosec B108).
+SYSTEM_TEMP_DIRS: tuple[Path, ...] = (Path("/tmp"), Path("/var/tmp"))  # nosec B108
 
 #: The directory-name prefixes ddflow's `scratch_tree` makes ITS throwaway trees under (its
 #: default and its callers: ddflow/services/ci/scratch.py ``ddflow-ci.``, services/gates/
