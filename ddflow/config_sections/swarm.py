@@ -250,3 +250,89 @@ class SwarmConfig:
         doc="Ceiling on any template's `budget_usd`: a launch from a template that asks for more is refused, whatever its approval. Zero removes the ceiling.",
         check=_nonneg,
     )
+    remote_exclude: list[str] = knob(
+        factory=lambda: [".ddflow", ".env", "**/.env"],
+        doc="Relative path globs a remote lane's working tree never carries in its bundle: ddflow's own event log, secrets and env files stay on the host. What the outbound commit leaves out is `ddflow.services.swarm.remote.Knobs.exclude`.",
+    )
+    remote_bundle_max_bytes: int = knob(
+        104857600,
+        doc="Biggest outbound bundle the host sends, in bytes (default 100 MiB). Largest returned bundle instead (`return_max_bytes`).",
+        check=_positive_int,
+    )
+    remote_return_max_bytes: int = knob(
+        52428800,
+        doc="Biggest returned bundle back to the host, in bytes (default 50 MiB).",
+        check=_positive_int,
+    )
+    remote_return_max_commits: int = knob(
+        200,
+        doc="Most commits a returned branch, bundle or import carries; one past the cap is refused.",
+        check=_count,
+    )
+    remote_git_timeout_s: int = knob(
+        120,
+        doc="How long one remote git command may run, in seconds.",
+        check=_positive,
+    )
+    remote_scan_max_blob_bytes: int = knob(
+        1048576,
+        doc="Largest file blob the outbound scan inspects for secrets and digests: a tree with a file this big is refused, so the cap on a returned file.",
+        check=_positive_int,
+    )
+    remote_scan_batch_files: int = knob(
+        64,
+        doc="At most this many blobs of `remote_scan_max_blob_bytes` the scan holds in memory at once.",
+        check=_positive_int,
+    )
+    remote_branch_prefix: str = knob(
+        "swarm/remote/",
+        doc="Branch refs the remote work is stored under on the host.",
+    )
+    remote_seed_name: str = knob(
+        "SEED.md",
+        doc="Name of the seed pack file inside the outbound bundle.",
+    )
+    remote_proposals_max: int = knob(
+        5,
+        doc="Most proposal the return reports at once.",
+        check=_count,
+    )
+    remote_proposal_chars: int = knob(
+        400,
+        doc="Longest one proposal in characters before it is cut.",
+        check=_count,
+    )
+    remote_proposals_max_bytes: int = knob(
+        65536,
+        doc="Longest whole return reply in bytes at once, proposals included.",
+        check=_positive_int,
+    )
+    remote_ssh_argv: list[str] = knob(
+        factory=lambda: ["ssh"],
+        doc="The ssh binary and flags, `ssh` by default; a different ssh binary's path goes here.",
+    )
+    remote_ssh_timeout_s: int = knob(
+        60,
+        doc="How long one ssh command may run, in seconds, before the remote reads it as not finishing.",
+        check=_positive,
+    )
+    remote_ssh_connect_timeout_s: int = knob(
+        15,
+        doc="How long ssh may keep trying to connect before it gives up, on its own budget.",
+        check=_positive,
+    )
+    remote_copy_timeout_s: int = knob(
+        600,
+        doc="How long one copy in or out may run before the remote reads it as does not finish.",
+        check=_positive,
+    )
+    remote_lanes_root: str = knob(
+        "ddflow-lanes",
+        doc="Directory under the remote home lanes live; a first segment names the lane.",
+        check=lambda v: "" if isinstance(v, str) and v else "a path",
+    )
+    remote_detail_chars: int = knob(
+        200,
+        doc="Longest one line of remote stderr a report keeps before the cut: enough to ask nicely.",
+        check=_count,
+    )
