@@ -90,12 +90,6 @@ def parse_version(version: str | None) -> tuple[int, int, int] | None:
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
 
 
-def supports_1h(version: str | None) -> bool | None:
-    """Whether ``version`` can set the subagent cache TTL to 1 hour. ``True``/``False`` from a
-    parsed version >= 2.1.242, ``None`` when it could not be told."""
-    parsed = parse_version(version)
-    return None if parsed is None else parsed >= MIN_1H_VERSION
-
 def read_settings(repo: Path) -> Mapping[str, Any]:
     """The Claude Code settings relevant to the cache TTL, best-effort: user
     ``~/.claude/settings.json``, the project ``.claude/settings.json`` and the project-local

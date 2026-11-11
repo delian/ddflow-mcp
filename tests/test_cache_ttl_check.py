@@ -28,10 +28,12 @@ def test_version_unknown_when_unparseable():
 
 
 def test_one_hour_support_needs_2_1_242():
-    assert CTL.supports_1h("2.1.241") is False
-    assert CTL.supports_1h("2.1.242") is True
-    assert CTL.supports_1h("2.1.318") is True
-    assert CTL.supports_1h("junk") is None
+    # The version gate the effective-TTL computation applies: 2.1.242 is the first Claude Code
+    # that honors the 1-hour subagent knob, and an unparseable version is "unknown", never a pass.
+    assert CTL.effective_subagent_ttl({}, {}, "2.1.241").one_hour_available is False
+    assert CTL.effective_subagent_ttl({}, {}, "2.1.242").one_hour_available is True
+    assert CTL.effective_subagent_ttl({}, {}, "2.1.318").one_hour_available is True
+    assert CTL.effective_subagent_ttl({}, {}, "junk").one_hour_available is None
 
 
 # -- the precedence matrix ---------------------------------------------------
