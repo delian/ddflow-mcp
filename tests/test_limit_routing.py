@@ -19,9 +19,7 @@ def test_the_table_routes_a_mechanical_item_to_the_first_enabled_model_with_head
 
 def test_an_exhausted_model_is_skipped_for_the_next_with_headroom():
     table = _prices(cheap=0.0, strong=10.0)
-    assert (
-        LR.pick(table, [("cheap", 0.01), ("strong", 0.6)], {"cheap": 40.0}) == "strong"
-    )
+    assert LR.pick(table, [("cheap", 0.01), ("strong", 0.6)], {"cheap": 40.0}) == "strong"
 
 
 def test_unavailable_limit_data_is_not_treated_as_headroom():

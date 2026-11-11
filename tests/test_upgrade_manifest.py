@@ -45,10 +45,7 @@ def test_unreleased_fragments_store_defaults_json_encoded():
     reddened in the ci. Re-baring one must fail HERE."""
     m = UM.load()  # ManifestError when any fragment's default is not JSON-encoded
     swarm = {
-        c.key: c.new
-        for _v, _d, cs in m.releases
-        for c in cs
-        if c.key.startswith("swarm.remote")
+        c.key: c.new for _v, _d, cs in m.releases for c in cs if c.key.startswith("swarm.remote")
     }
     assert swarm["swarm.remote_branch_prefix"] == "swarm/remote/"
     assert swarm["swarm.remote_exclude"] == [".ddflow", ".env", "**/.env"]

@@ -74,7 +74,9 @@ def test_bug_carries_a_bundle_with_the_facts(proj, monkeypatch):
     assert got["config_deltas"]["bugs.phase"]["layer"] != "default"
     assert got["item"]["id"] == "T1" and "gates" in got["item"]
     assert "load_avg" in got["machine"] and "disk_free_mb" in got["machine"]
-    assert got["commands"]["last"], got["commands"]  # the fixture's `ddflow init` recorded to the log
+    assert got["commands"]["last"], got[
+        "commands"
+    ]  # the fixture's `ddflow init` recorded to the log
     run = got["repro_cmd"]
     assert run["command"] == "uv run pytest tests/test_x.py"
     # DX-bug-repro-verify: the command is run AT FILING, in a scratch checkout of the
