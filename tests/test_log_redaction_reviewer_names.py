@@ -116,21 +116,20 @@ def test_the_narrowed_redaction_read_does_not_alarm_about_fields_it_deliberately
     root = tmp_path / "repo"
     (root / ".ddflow").mkdir(parents=True)
     (root / ".ddflow" / "reviewers.toml").write_text(
-        '[[reviewer]]\n'
+        "[[reviewer]]\n"
         f'name = "{NAME}"\n'
         'kind = "openai"\n'
         'family = "local"\n'
         'gates = ["critic", "rubber_duck"]\n'
         'base_url = "http://127.0.0.1:8000/v1"\n'
         f'model = "{MODEL}"\n'
-        'hedge = 3\n'
-        'max_chunk_chars = 5000\n'
-        'temperature = 1.0\n'
+        "hedge = 3\n"
+        "max_chunk_chars = 5000\n"
+        "temperature = 1.0\n"
     )
     capsys.readouterr()  # clear any prior stderr
     _reviewer_redact_names(root)
     _, err = capsys.readouterr()
     assert "does not know" not in err, (
-        f"the narrowed redaction reader must not warn about fields it deliberately "
-        f"ignores: {err!r}"
+        f"the narrowed redaction reader must not warn about fields it deliberately ignores: {err!r}"
     )
