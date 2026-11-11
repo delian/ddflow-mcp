@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from ddflow.adapters import embed as N
 from ddflow.adapters.embed import Embedder
 from ddflow.adapters.fakes import FAKES
@@ -11,7 +13,7 @@ from ddflow.adapters.fakes.embed import FakeEmbedder
 class _FakeStaticModel:
     """Stands in for model2vec's `StaticModel`: the real one needs a model on disk."""
 
-    rows = [[1.0, 0.0]]
+    rows: ClassVar[list[list[float]]] = [[1.0, 0.0]]
 
     @classmethod
     def from_pretrained(cls, path):

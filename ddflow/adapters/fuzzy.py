@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - depends on the environment
 
 from .ports import port
 
-__all__ = ["DEFAULT", "Fuzzy", "DefaultFuzzy", "available", "ratio"]
+__all__ = ["DEFAULT", "DefaultFuzzy", "Fuzzy", "available", "ratio"]
 
 
 @port
