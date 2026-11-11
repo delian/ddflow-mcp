@@ -95,3 +95,15 @@ def test_a_replacement_with_the_refusal_line_is_refused_even_at_the_same_phrase_
     )
     assert rep.failed and "foreign-launch refusal" in rep.failed[0].error
     assert (tree / "pin.json").read_text() == documented
+
+
+def test_a_second_copy_of_an_existing_refusal_line_is_refused(tree):
+    """A transcript that already held one anchored refusal line and a run that wrote that line a
+    SECOND time is refused: each prior occurrence excuses at most one after the run."""
+    line = f"ddflow: {I.FOREIGN_LAUNCH_REFUSAL} /lane\n"
+    (tree / "pin.json").write_text(line)
+    rep = PN.regenerate(
+        tree, Config.load(tree), recipes=[_recipe(f"open('pin.json','w').write({(line * 2)!r})")]
+    )
+    assert rep.failed and "foreign-launch refusal" in rep.failed[0].error
+    assert (tree / "pin.json").read_text() == line
