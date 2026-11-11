@@ -166,7 +166,8 @@ def plan_import(
         if f.ident not in known:
             plan.found.append(f)
 
-    if not plan.found and not plan.skipped_existing and not plan.duplicates:
+    refused = any(n.startswith("REFUSING") for n in plan.notes)
+    if not plan.found and not plan.skipped_existing and not plan.duplicates and not refused:
         plan.notes.append(
             "Nothing recognisable was found. That is not necessarily wrong — this looks "
             "for todo checklists, a lessons corpus, ADR files and unmerged branches in "
