@@ -133,3 +133,28 @@ def test_an_id_flag_without_a_positional_metavar_is_inferred():
     assert kinds.infer("id") == "id"
     assert kinds.infer("extends", metavar="ID") == "id"
     assert kinds.infer("decision_id") == "id:decision"
+
+
+def test_vocabulary_introspection_for_the_engine():
+    assert kinds.is_id("id") and kinds.is_id("id:bug") and not kinds.is_id("none")
+    assert kinds.record_kind("id:bug") == "bug"
+    assert kinds.record_kind("id") is None
+    assert "none" in kinds.FIXED and "enum" in kinds.FIXED
+
+
+def test_declared_shorthand_is_normalized_on_the_action():
+    """`complete="phase"` reaches the action as `id:phase`, the engine's canonical form."""
+    subparsers = argparse.ArgumentParser(prog="x").add_subparsers(dest="cmd", required=True)
+    add_commands(
+        subparsers,
+        [
+            Command(
+                path=("probe",),
+                summary="probe",
+                params=(Param("phase", positional=True, complete="phase"),),
+                handler=lambda a, c: 0,
+            ),
+        ],
+    )
+    positional = [a for a in subparsers.choices["probe"]._actions if not a.option_strings][0]
+    assert positional.complete == "id:phase"

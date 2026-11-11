@@ -27,8 +27,8 @@ harness is completed with no completion code.
 
 `_id_kinds` is the record-kind word list the inference knows. The item/record kinds are
 seeded here; more (the data kinds `templates/kinds/*.toml`) register through
-`declare_id_kind` when the completion engine boots, so a record kind added to the
-registry is inferable without editing this file.
+`declare_id_kind` — the completion engine's boot calls it once per record kind, so a
+record kind added to the registry is inferable without editing this file.
 """
 
 from __future__ import annotations
