@@ -21,7 +21,7 @@ from ..gates import item_tree
 from ..knowledge.regression import _unresolved_tests
 from ..review_finding_ref import resolve as resolve_finding
 from .findings import _chunk_numbers, _finding_listing, _mirror_sibling_gates
-from .records import _prior_evidence
+from .records import _prior_evidence, _unrechecked_confirmed
 
 _NODE = re.compile(r"[\w./-]+\.py::\S+")
 
@@ -596,12 +596,14 @@ def _why_outcome(log, cfg, it, gate: str, how: str, why: str, sargs: dict[str, A
 def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     """A delta over a tree unchanged since the reviewed head (B10ad449deb): no reviewer
     has anything new to see, so no round runs and none counts. The gate re-evaluates
-    instead: a held pass over now-settled findings is released as passed; anything else
+    instead: a held pass over now-settled findings is released as passed; a failed gate
+    over a CONFIRMED finding whose fix is at that reviewed head is released too, because
+    the delta that would re-check the fix is empty (B-tk-delta-round-empty); anything else
     stays as recorded, and the answer says which."""
     tag = f"{it.id}.{gate}" if it is not None else gate
-    counts = _held_and_settled(it, gate)
-    if counts is not None:
-        rec = it.gates.get(gate)
+
+    def release(counts: dict[str, int]) -> O.Outcome:
+        rec = it.gates.get(gate) if it is not None else None
         mark = _settle_mark(counts, _rounds_used(it, gate), cfg.review.max_rounds)
         GD.record(
             log,
@@ -610,8 +612,8 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
             gate,
             "passed",
             reason="",
-            evidence={**(rec.evidence or {}), **mark},
-            by=rec.by,
+            evidence={**((rec.evidence or {}) if rec is not None else {}), **mark},
+            by=rec.by if rec is not None else "",
         )
         flag = "ON REFUTATION (flagged)" if counts["refuted"] else "(findings fixed)"
         text = (
@@ -628,9 +630,29 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
             how=how,
             text=text,
         )
+
+    counts = _held_and_settled(it, gate)
+    if counts is not None:
+        return release(counts)
+    # B-tk-delta-round-empty: a FAILED gate over a CONFIRMED finding whose fix is now AT
+    # the reviewed head. `_delta_scope` already said nothing changed since the reviewed
+    # head, so the reviewed head answers every finding it ever recorded; a delta round
+    # that re-checks the fix is impossible because the fix IS the reviewed head (a
+    # `--delta` re-checks only what changed since it). Release the gate like the held-pass
+    # shape, except that untriaged findings still need `ddflow review triage`, not a round
+    # this path can settle.
     rec = it.gates.get(gate) if it is not None else None
     stays = rec.outcome if rec is not None else "unreviewed"
     counts = GD.triage_counts(it, gate) or {} if it is not None else {}
+    unrechecked, unreadable = _unrechecked_confirmed(it, gate) if it is not None else ([], False)
+    if (
+        rec is not None
+        and rec.outcome == "failed"
+        and unrechecked
+        and not unreadable
+        and not counts.get("untriaged")
+    ):
+        return release(counts)
     reason = f"{why} No round was counted; {tag} stays {stays}."
     untriaged = counts.get("untriaged", 0)
     if untriaged:

@@ -176,6 +176,27 @@ def test_a_confirmed_finding_a_later_full_round_dropped_still_needs_a_delta(repo
     assert BLOCKER in _complete(repo)[1]
 
 
+def test_a_delta_that_is_empty_because_the_fix_is_at_the_reviewed_head_settles_it(
+    repo, tmp_path
+):
+    """Bug B-tk-delta-round-empty: the fix for a confirmed finding IS the reviewed head
+    (R2, a full re-review, reviewed the tip that already carries the fix), so a `--delta`
+    re-checks nothing (`_unchanged_delta`). It used to answer "stays failed" and merge
+    refused forever: a delta round that would re-check the fix is impossible because the
+    delta is empty. The reviewed head already covers the tip, so the finding is settled."""
+    _setup(repo, tmp_path)
+    _failed_and_confirmed(repo)  # R1 raises #1, confirmed
+    _commit(repo, "x.py", "x = 1\n")  # the fix
+    _commit(repo, "y.py", "y = 1  # FINDME-B\n")  # a MEDIUM nit: below the HIGH floor
+    out = api.review(repo, gate="critic", item="T1", branch="feat", full=True)  # R2: reviewed head = fix
+    assert out.data["outcome"] == "failed", out.data  # confirmed #1 still has no delta round
+    t = api.triage(repo, "T1", gate="critic", finding=1, verdict="refuted", probe="the nit is fine")
+    assert t.exit == 0, t.reason
+    assert BLOCKER in _complete(repo)[1]
+    out2 = api.review(repo, gate="critic", item="T1", branch="feat")  # delta_default -> empty delta
+    assert BLOCKER not in _complete(repo)[1], out2.data
+
+
 def test_any_gate_with_a_reviewer_counts_not_only_different_family_ones(repo, tmp_path):
     """The critic's finding on the skip guard: same_family_ok review gates were left out."""
     from dataclasses import replace
