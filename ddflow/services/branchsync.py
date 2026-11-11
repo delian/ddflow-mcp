@@ -28,6 +28,10 @@ class SyncResult:
     status: str
     behind: int | None = 0
     relevant: int = 0
+    #: the shas the merge brought in (from `drift.measure`'s commits), newest first.
+    commits: list[str] = field(default_factory=list)
+    #: the sha `base` pointed at when the merge landed (the newest commit brought in).
+    base_sha: str = ""
     merged_pins: list[str] = field(default_factory=list)
     conflicts: dict[str, str] = field(default_factory=dict)  # path -> who last changed it on base
     dirty: list[str] = field(default_factory=list)
@@ -265,6 +269,8 @@ def sync(
         return _restore(out, tree, tag, sha)
     out.status = "merged"
     out = _restore(out, tree, tag, sha)
+    out.commits = [c.sha for c in rep.commits]
+    out.base_sha = rep.commits[0].sha if rep.commits else ""
     moved = {p for c in rep.commits for p in c.paths}
     out.merged_pins = sorted(
         f for f in set(pin_files(repo, cfg)) if f in moved or _inside_dir(f, moved)
