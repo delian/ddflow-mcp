@@ -52,3 +52,4 @@
 {"agent":"lw3-kilo","data":{"tags":["wave:2"]},"id":"edfe166bafc30487878fe3a01","kind":"task.updated","lamport":169588,"schema":1,"subject":"RQ-note-capture","ts":"2026-11-11T04:00:12.665384Z"}
 {"agent":"lw3-kilo","data":{"tags":["wave:3"]},"id":"e02b2ed6e6c3be0aad28d013c","kind":"task.updated","lamport":169589,"schema":1,"subject":"RQ-note-deliver","ts":"2026-11-11T04:00:12.751493Z"}
 {"agent":"lw3-kilo","data":{"tags":["workflow-path","wave:1"]},"id":"ec35b67cd6b659d3258052e05","kind":"task.updated","lamport":169590,"schema":1,"subject":"WP-review-fork","ts":"2026-11-11T04:00:12.835599Z"}
+{"agent":"lw3-kilo","data":{"gate":"ci"},"id":"ee5dd8e7ebcad26a5e55e1356","kind":"gate.started","lamport":169591,"schema":1,"subject":"fix-B-token-role-widened-by-project-config","ts":"2026-11-11T04:01:30.061442Z"}
