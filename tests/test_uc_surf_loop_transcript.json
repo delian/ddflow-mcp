@@ -261,7 +261,7 @@
    "T1"
   ],
   0,
-  "{\n  \"schema\": \"heartbeat@1\",\n  \"renewed\": true,\n  \"waiters\": [\n    {\n      \"agent\": \"other\",\n      \"item\": \"T1\",\n      \"phase\": \"\",\n      \"waiting_on\": [\n        \"T1\"\n      ],\n      \"waiting_s\": <n>\n    }\n  ],\n  \"globs_withheld\": \"\",\n  \"new_reports\": 0,\n  \"recall\": \"\"\n}\n",
+  "{\n  \"schema\": \"heartbeat@1\",\n  \"renewed\": true,\n  \"waiters\": [\n    {\n      \"agent\": \"other\",\n      \"item\": \"T1\",\n      \"phase\": \"\",\n      \"waiting_on\": [\n        \"T1\"\n      ],\n      \"waiting_s\": <n>,\n      \"notify\": \"\"\n    }\n  ],\n  \"globs_withheld\": \"\",\n  \"new_reports\": 0,\n  \"recall\": \"\"\n}\n",
   ""
  ],
  [

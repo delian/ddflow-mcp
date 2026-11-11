@@ -1,0 +1,2 @@
+{"agent":"close-pdrivers","data":{"format_level":1,"install":"source-tree","version":"0.2.11"},"id":"eed6e299e0553fc81b698606e","kind":"ddflow.seen","lamport":170874,"schema":1,"subject":"ddflow","ts":"2026-11-11T06:08:10.996029Z"}
+{"agent":"close-pdrivers","data":{"gate":"unit_tests"},"id":"ecc12543d83044178a75e5098","kind":"gate.started","lamport":170875,"schema":1,"subject":"P-drivers","ts":"2026-11-11T06:08:11.062416Z"}
