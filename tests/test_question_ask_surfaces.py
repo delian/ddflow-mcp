@@ -220,3 +220,44 @@ def test_a_multiple_choice_answer_outside_the_options_is_refused(repo, tmp_path)
     ok, message = H.attest(log, cfg, qid)
     assert not ok, message
     assert "red" in message and "blue" in message
+
+
+def test_a_free_text_question_can_be_answered_from_the_cli(repo):
+    """B-ask-question-no-answer-verb: `approvals answer <id> --text ...` answers a free-text
+    question from a terminal (outcome 'answered', the text the answer), so a pending question
+    no longer has to be answered by editing the log."""
+    run_cli(repo, "init")
+    qid = _question(repo)
+    code, out, err = run_cli(repo, "approvals", "answer", qid, "--text", "red")
+    assert code == 0, (out, err)
+    row = _row(repo, qid)
+    assert row["outcome"] == E.ANSWERED_WORD
+    assert row["answer"] == "red"
+
+
+def test_a_multiple_choice_question_can_be_answered_from_the_cli(repo):
+    """The selected option is the outcome (answer stays empty), mirroring the attest path."""
+    run_cli(repo, "init")
+    qid = _question(repo, options=("red", "blue"))
+    code, out, err = run_cli(repo, "approvals", "answer", qid, "--text", "red")
+    assert code == 0, (out, err)
+    row = _row(repo, qid)
+    assert row["outcome"] == "red"
+    assert row["answer"] == ""
+
+
+def test_answering_a_question_outside_its_options_from_the_cli_is_refused(repo):
+    """The option membership check lives in E.answer; the CLI verb surfaces it as a refusal."""
+    run_cli(repo, "init")
+    qid = _question(repo, options=("red", "blue"))
+    code, out, err = run_cli(repo, "approvals", "answer", qid, "--text", "green")
+    assert code == 3, (out, err)
+    assert "red" in (out + err) and "blue" in (out + err)
+
+
+def test_an_agent_cannot_answer_a_question(repo):
+    """Answering is a person's act: refused under every agent identity, like approve/deny."""
+    run_cli(repo, "init")
+    qid = _question(repo)
+    code, out, err = run_cli(repo, "approvals", "answer", qid, "--text", "red", agent="bot-1")
+    assert code == 3, (out, err)

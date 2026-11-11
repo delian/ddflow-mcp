@@ -41,6 +41,10 @@ class Recovery:
     #: worktree (broken gitdir, git absent, NFS stall) report "safe to remove" -- and
     #: `sweep(apply=True)` acts on exactly this flag.
     salvageable: bool | None = False
+    #: Left unmeasured only because the READ-ONLY view hit ``lease.scan_view_trees_max``,
+    #: after every higher-signal tree was measured -- still unknown (never swept), but the
+    #: brief counts it quietly rather than as the "could not measure" alarm (Bfb4b6306d1).
+    budget_capped: bool = False
     #: The tree is the HARNESS's (`Item.adopted`): the agent's own live working
     #: directory, which ddflow bound to the item and did not create. Never advised for
     #: removal -- `merge` refuses to delete one for the same reason (B930f5c6b7c).

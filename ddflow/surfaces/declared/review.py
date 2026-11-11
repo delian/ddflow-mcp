@@ -21,7 +21,10 @@ _REVIEW_EPILOG = (
     "                                            record what became of one finding\n"
     "  ddflow review show <id> [--gate G]        list the recorded round's numbered findings\n"
     "--finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the\n"
-    "`triage` verb: without it they are refused, never run as a review."
+    "`triage` verb: without it they are refused, never run as a review.\n"
+    "--agent AGENT names who this review is recorded under (a global option, accepted before or\n"
+    "            after `review`); pass your `as_agent` so a run from a shell is not recorded\n"
+    "            under a derived {host}-{tree} identity (Bbf6e536827)."
 )
 
 COMMANDS: tuple[Command, ...] = (

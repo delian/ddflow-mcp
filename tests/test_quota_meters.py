@@ -190,6 +190,27 @@ class TestSnapshot:
         assert V.snapshot_statusline(old, json.dumps(early)) == 0
         assert of(V.read_claude_snapshot(new), "5h").value == 80.0
 
+    def test_a_future_dated_row_reads_stale_and_does_not_block_a_real_figure(self, tmp_path):
+        c = ctx(tmp_path)
+        c.snapshot.parent.mkdir(parents=True, exist_ok=True)
+        c.snapshot.write_text(
+            json.dumps(
+                {
+                    "version": V.SNAPSHOT_VERSION,
+                    "windows": {
+                        "5h": {
+                            "percent": 99,
+                            "observed_at": iso(NOW + 86400),
+                            "origin": "stream-json",
+                        }
+                    },
+                }
+            )
+        )
+        assert of(V.read_claude_snapshot(c), "5h").stale is True
+        assert V.snapshot_statusline(c, json.dumps(self.STATUS)) == 2
+        assert of(V.read_claude_snapshot(c), "5h").value == 23.5
+
     def test_stream_event_single_window_is_rescaled(self, tmp_path):
         c = ctx(tmp_path)
         line = {
@@ -256,6 +277,14 @@ class TestSnapshot:
         c.snapshot.parent.mkdir(parents=True)
         row = {"percent": 0, "observed_at": iso(NOW)}
         c.snapshot.write_text(json.dumps({"version": True, "windows": {"5h": row}}))
+        assert none_of(V.read_claude_snapshot(c))
+
+    def test_a_version_written_as_a_float_is_not_this_version(self, tmp_path):
+        c = ctx(tmp_path)
+        c.snapshot.parent.mkdir(parents=True)
+        row = {"percent": 50, "observed_at": iso(NOW)}
+        # ddflow only ever writes the integer version; a JSON 1.0 must not read as it.
+        c.snapshot.write_text(json.dumps({"version": 1.0, "windows": {"5h": row}}))
         assert none_of(V.read_claude_snapshot(c))
 
     def test_corrupt_snapshot_is_unavailable_and_a_new_write_heals_it(self, tmp_path):

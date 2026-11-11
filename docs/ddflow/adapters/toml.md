@@ -7,7 +7,7 @@ overlay loader and comment-preserving key edits are the older **Toml** port in
 Read side: `loads(text)`, `read(path)`. The write side (`dumps`, `document`, over `tomlkit`)
 lands with ADP-toml-contract.
 
-- **Default adapter:** `TomlLibIo` in the same module: `tomllib` reads. Parse failures are `TomlError` (`tomllib.TOMLDecodeError`).
+- **Default adapter:** `TomlLibIo` in the same module: `tomllib` reads. Parse failures are `TomlError` (`tomllib.TOMLDecodeError`). Look it up as the module-level `DEFAULT` (`TomlIo`), don't import `TomlLibIo` at the call site.
 - **Fake:** `FakeTomlIo`, a small TOML subset (tables, JSON-shaped values) over an in-memory
   `files` dict.
 - **Conformance cases:** tests/test_adapter_toml.py.

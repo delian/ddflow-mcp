@@ -62,6 +62,7 @@ _SUBMODULE_OF = {
     "_recovery_band": "report",
     "_ref": "report",
     "_score": "report",
+    "_CAPPED": "report",
     "_UNHELD": "report",
     "_UNMEASURED": "report",
     "addenda_lines": "report",

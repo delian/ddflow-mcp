@@ -51,8 +51,10 @@ def scan(
     base holds) are asked once per scan (`RepoFacts`), not once per tree. ``view`` is a
     read-only report (`status`, `brief`): it measures at most ``lease.scan_view_trees_max``
     trees and weighs at most ``lease.scan_view_verdicts_max`` completions, because each is
-    a process (or dozens) per tree; a tree left unmeasured is ``salvageable = None`` --
-    treated as holding work -- and says so. ``recover`` and ``sweep`` are never capped.
+    a process (or dozens) per tree; the trees are ranked by their unmerged-commit signal
+    first, and a tree left unmeasured past the cap is ``salvageable = None`` with
+    ``budget_capped = True`` -- unknown, never clean, but counted quietly by the brief.
+    ``recover`` and ``sweep`` are never capped.
     """
     now = _leases.time.time() if now is None else now
     if (
@@ -71,6 +73,7 @@ def scan(
     )
     _prefetch_landed(state, cfg, facts)
 
+    pending: list[tuple[Recovery, object]] = []  # items whose trees still need measuring
     for it in state.items.values():
         if it.removed:
             continue
@@ -97,10 +100,9 @@ def scan(
                     f"worktree is in another clone (held by {lease.holder}, clone "
                     f"{lease.clone}); ask its owner"
                 )
+                out.append(rec)
             else:
-                _measure(rec, repo, cfg, facts, budget)
-                _note_landed(rec, it, state, cfg, repo, facts, budget, cache=cache)
-            out.append(rec)
+                pending.append((rec, it))
         elif not lease and it.worktree and it.state != REVIEW:
             # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
             # changes a reviewer may request, and the request is its custodian. Reported
@@ -119,9 +121,7 @@ def scan(
                 worktree=it.worktree,
                 branch=it.branch,
             )
-            _measure(rec, repo, cfg, facts, budget)
-            _note_landed(rec, it, state, cfg, repo, facts, budget, cache=cache)
-            out.append(rec)
+            pending.append((rec, it))
         elif schedule.interrupted(state, it, live):
             # Same predicate the scheduler uses, so `recover` and `next` cannot
             # disagree about which items are mid-flight with nobody on them.
@@ -132,7 +132,52 @@ def scan(
                 advice=f"`ddflow claim {it.id}` to resume, or `ddflow block {it.id} --reason ...`",
             )
             out.append(rec)
+
+    # Spend the tree-measurement budget where real work most likely is: a read-only view
+    # caps `git status` calls (``lease.scan_view_trees_max``), and measuring in state order
+    # let a run of clean merged leftovers eat the budget before the one tree holding an
+    # unmerged commit was looked at, which reported it "NOT MEASURED" (Bfb4b6306d1). The
+    # unmerged-commit count is already a batched, repository-wide answer, so it ranks the
+    # candidates for free where per-tree status would still be the capped process.
+    base = facts.base(cfg.worktree.base_ref)
+    rank_keyed = [
+        (_measure_signal(rec, repo, base, facts), idx, rec, it)
+        for idx, (rec, it) in enumerate(pending)
+    ]
+    rank_keyed.sort(key=lambda x: (x[0], x[1]))
+    for _sig, _idx, rec, it in rank_keyed:
+        _measure(rec, repo, cfg, facts, budget)
+        _note_landed(rec, it, state, cfg, repo, facts, budget, cache=cache)
+        out.append(rec)
     return sorted(out, key=lambda r: (r.kind, r.item))
+
+
+def _measure_signal(
+    rec: Recovery,
+    repo: Path,
+    base: str,
+    facts: RepoFacts,
+) -> tuple:
+    """Rank a tree-carrying recovery candidate before the view's measurement budget is
+    spent: unmerged commits first (most likely to hold work), a HEAD git could not resolve
+    next (possibly unreadable), a base-equal HEAD last (only status could still find
+    uncommitted files, which stays bounded by the cap), and a gone tree last of all (it is
+    measured by a cheap branch probe, not a ``git status``, so it never spends the budget).
+
+    The ahead count comes from ``RepoFacts``, asked once per scan across every worktree, so
+    this rank costs nothing the scan was not already paying. Unknown ranks below unmerged but
+    above resolved-clean: ranking an unknown LAST would push a possibly-unreadable tree past
+    the cap, and ranking it FIRST would let every queryable tree hide a genuinely unmerged
+    one."""
+    wt = W.load_path(repo, rec.worktree) if rec.worktree else None
+    if not wt or not wt.exists():
+        return (3, 0)  # gone: the cheap branch probe, in any order
+    ahead = facts.ahead(wt, base)
+    if ahead > 0:
+        return (0, -ahead)  # most unmerged first
+    if ahead == -1:
+        return (1, 0)  # HEAD unknown: possibly unreadable, measure before the clean
+    return (2, 0)  # equal to base: measure clean last, so it does not starve real work
 
 
 class _Budget:
@@ -372,6 +417,46 @@ def _note_stale_base_ref(rec: Recovery) -> None:
         )
 
 
+def _measure_past_cap(
+    rec: Recovery,
+    cfg: Config,
+    facts: RepoFacts,
+    wt: Path,
+) -> None:
+    """Record a tree the view left past ``lease.scan_view_trees_max`` (its `git status`
+    was never run) using ONLY the free batched signals. The unmerged count is not budgeted,
+    so a tree the scan KNOWS holds unmerged commits is still reported as holding work; a
+    HEAD the scan could not resolve is still "could not measure"; only a base-equal HEAD
+    -- which could hide nothing but uncommitted files -- is the quiet "past the cap"
+    unknown (still never swept: `salvageable` stays None)."""
+    base = facts.base(cfg.worktree.base_ref)
+    ahead = facts.ahead(wt, base)
+    if ahead > 0:
+        rec.unmerged_commits = ahead
+        rec.salvageable = True
+        rec.advice = (
+            f"known to hold {ahead} unmerged commit(s) (counted past the cap; "
+            f"`ddflow recover` weighs it fully): `git -C {wt} log {base}..HEAD`."
+        )
+        return
+    if ahead == -1:
+        # Same "could not measure" danger the uncapped path reports (a broken gitdir, a
+        # missing HEAD), not the quiet cap note (Bfb4b6306d1).
+        rec.salvageable = None
+        rec.advice = (
+            f"COULD NOT MEASURE this worktree (HEAD not resolved by the scan). Treat it "
+            f"as containing work until you have looked: `git -C {wt} status` and "
+            f"`git -C {wt} rev-parse HEAD`. It will NOT be swept automatically."
+        )
+        return
+    rec.salvageable = None
+    rec.budget_capped = True
+    rec.advice = (
+        f"past the measurement cap ({cfg.lease.scan_view_trees_max} trees): "
+        f"`ddflow recover` measures every tree, or `git -C {wt} status` this one."
+    )
+
+
 def _measure(
     rec: Recovery,
     repo: Path,
@@ -402,12 +487,7 @@ def _measure(
         return
     rec.stale_base_ref = _stale_base_ref(wt)
     if budget is not None and not budget.take_tree():
-        rec.salvageable = None  # not measured: unknown is never clean
-        rec.advice = (
-            "NOT MEASURED in this view (it measures at most "
-            f"{cfg.lease.scan_view_trees_max} trees, `lease.scan_view_trees_max`). Treat it as "
-            f"containing work until `ddflow recover` has measured it: `git -C {wt} status`."
-        )
+        _measure_past_cap(rec, cfg, facts, wt)
         return
     base = facts.base(cfg.worktree.base_ref)
     tw = W.tree_work(wt, base, ahead=False)
