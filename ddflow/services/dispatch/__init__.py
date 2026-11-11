@@ -5,7 +5,7 @@ queue still left to a person or a master agent: *what do I start right now?* The
 is pure (`plan` and the `steer` mapping): nothing starts, nothing writes, no clock and no
 model -- the same inputs give the same plan, so a second call returns nothing new until
 the state changes. The API half (`ddflow.api.dispatch`) reads the queue and the fleet and
-renders the result; `--tick` writes one `dispatch.planned` event so an advised plan is
+renders the result; `--tick` records one `session.note` audit note so an advised plan is
 auditable.
 """
 
