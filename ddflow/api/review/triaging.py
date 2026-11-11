@@ -645,12 +645,23 @@ def _unchanged_delta(log, cfg, it, gate: str, how: str, why: str) -> O.Outcome:
     stays = rec.outcome if rec is not None else "unreviewed"
     counts = GD.triage_counts(it, gate) or {} if it is not None else {}
     unrechecked, unreadable = _unrechecked_confirmed(it, gate) if it is not None else ([], False)
+    released_digests: set[str] = set()
+    if it is not None:
+        found = LB.full((rec.evidence or {}) if rec is not None else {}).get("chunk_findings")
+        if GD.is_triageable(found):
+            released_digests = {f["digest"] for f in found}
     if (
         rec is not None
         and rec.outcome == "failed"
         and unrechecked
         and not unreadable
         and not counts.get("untriaged")
+        # Only when a LATER round reviewed the tree and did NOT re-raise the confirmed
+        # finding (the fix IS that tree: `_delta_scope` said nothing changed since the
+        # reviewed head). A confirmed finding the latest record still carries was raised
+        # by the round that set the reviewed head with no fix at all -- released by this
+        # path, merge would land an unfixed defect (the reviewer's regression scenario).
+        and all(digest not in released_digests for digest, _ in unrechecked)
     ):
         return release(counts)
     reason = f"{why} No round was counted; {tag} stays {stays}."
