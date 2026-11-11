@@ -115,6 +115,21 @@ A2A_METHODS = frozenset(
 OPENAPI_LITERALS = frozenset({"openapi"})
 UTCP_LITERALS = frozenset({"utcp"})
 
+# A set literal that names exactly one protocol family (the `jsonrpc` literal is handled
+# apart: it disambiguates to mcp/acp when those methods are present). Built once so
+# `_literal_site` stays a single ``elif v in`` lookup instead of one branch per family.
+_LITERAL_FAMILY: dict[str, str] = {
+    lit: fam
+    for fam, lits in (
+        ("mcp", MCP_METHODS),
+        ("acp", ACP_METHODS),
+        ("a2a", A2A_METHODS),
+        ("openapi", OPENAPI_LITERALS),
+        ("utcp", UTCP_LITERALS),
+    )
+    for lit in lits
+}
+
 # A file another tool owns: the literal's last path component (or the whole literal).
 MANAGED_NAMES: dict[str, str] = {
     "settings.json": "settings.json",
@@ -431,16 +446,8 @@ class _Scan:
             ]
             for fam in fams or ["jsonrpc"]:
                 self.add("protocol", fam, node, v)
-        elif v in MCP_METHODS:
-            self.add("protocol", "mcp", node, v)
-        elif v in ACP_METHODS:
-            self.add("protocol", "acp", node, v)
-        elif v in A2A_METHODS:
-            self.add("protocol", "a2a", node, v)
-        elif v in OPENAPI_LITERALS:
-            self.add("protocol", "openapi", node, v)
-        elif v in UTCP_LITERALS:
-            self.add("protocol", "utcp", node, v)
+        elif v in _LITERAL_FAMILY:
+            self.add("protocol", _LITERAL_FAMILY[v], node, v)
         m = _URL.match(v)
         name = v.rsplit("/", 1)[-1]
         if not m and name in MANAGED_NAMES and "\n" not in v and " " not in v:
