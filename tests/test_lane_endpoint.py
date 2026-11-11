@@ -78,8 +78,9 @@ def test_key_by_name_only_and_keyless(tmp_path, monkeypatch):
 
 def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, monkeypatch):
     # A keyed lane endpoint whose key lives ONLY in its key file must still launch: the
-    # resolver reads the variable first, then the file, and `launch_env` hands the value
-    # to the child under the variable name -- without exporting it into the process env.
+    # resolver reads the variable first, then the file, `secret_env` hands the file's value
+    # to the child under the variable name -- and `launch_env` asks for nothing live (a
+    # missing source name would wrongly refuse a file key whose variable is not set).
     keyfile = tmp_path / "endpoint.key"
     keyfile.write_text("sk-key-from-file")
     keyfile.chmod(0o600)
@@ -92,7 +93,7 @@ def test_launch_env_resolves_a_key_file_when_the_variable_is_unset(tmp_path, mon
     ep = E.resolve(_cat(tmp_path, t), "lan-vllm")
     assert isinstance(ep, E.Endpoint)
     assert E.resolve_key(ep).value == "sk-key-from-file"
-    assert E.launch_env(ep) == {"LAN_ENDPOINT_KEY": "LAN_ENDPOINT_KEY"}
+    assert E.launch_env(ep) == {}
     assert E.secret_env(ep) == {"LAN_ENDPOINT_KEY": "sk-key-from-file"}
     assert "LAN_ENDPOINT_KEY" not in os.environ
 

@@ -185,8 +185,11 @@ def write_private(ep: Endpoint, harness: str, home: Path) -> Path | Result:
 
 def launch_env(ep: Endpoint) -> dict[str, str]:
     """`LaunchSpec.env` for the key: child variable -> SOURCE NAME (the value is read live
-    at launch, so a revoked variable refuses the launch instead of running stale)."""
-    if not ep.api_key_env:
+    at launch, so a revoked variable refuses the launch instead of running stale). A key held
+    in a FILE has no source env name: its value travels only in `secret_env`, and `env` asks
+    for nothing live (the launcher refuses a missing source name, which would wrongly refuse
+    a file key whose variable is unset)."""
+    if not ep.api_key_env or ep.api_key_file:
         return {}
     return {ep.api_key_env: ep.api_key_env}
 
