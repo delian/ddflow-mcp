@@ -21,6 +21,14 @@ def test_an_osc_sequence_and_bare_controls_are_stripped_too():
     assert "\x07" not in _line("task", row)
 
 
+def test_cr_and_the_8bit_c1_osc_are_stripped_too():
+    row = {"id": "T3", "state": "open", "title": "a\rT fake\x9d0;pwned\x07x", "owner": "", "updated": "2026"}
+    line = _line("task", row)
+    assert "\r" not in line
+    assert "\x9d" not in line
+    assert "0;pwned" not in line
+
+
 def test_the_control_strip_is_not_vacuous():
     assert "\x1b" not in _CONTROL.sub("", "plain title \x1b[31mx")
     assert "\x1b" in "plain title \x1b[31mx"

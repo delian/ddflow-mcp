@@ -92,12 +92,15 @@ def _filter_params(kind: str) -> tuple[Param, ...]:
 
 #: Terminal control sequences a record's raw text must not replay to a terminal: the ANSI
 #: CSI (e.g. an SGR like `\x1b[31m`) and OSC (`\x1b]0;...BEL`) an operator stored in a
-#: title, and the bare C0/C1 controls. Strip them when a bare text line is rendered
-#: (B-B743bfde582).
+#: title, their 8-bit C1 single-byte forms (`\x9b` CSI, `\x9d` OSC), and the bare C0/C1
+#: controls (CR drives the cursor back to column 0, LF injects rows). Strip them when a
+#: bare text line is rendered (B-B743bfde582).
 _CONTROL = re.compile(
-    "\x1b\\[[0-9;:?]*[ -/]*[@-~]"  # ANSI CSI (SGR \x1b[31m, ...)
-    "|\x1b\\][^\x07\x1b]*\x07"  # ANSI OSC \x1b]...BEL (ST is its \x1b\ form or U+009C)
-    "|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x9b\x9c]"  # bare C0/C1 single-byte controls
+    "\x1b\\[[0-9;:?]*[ -/]*[@-~]"  # ANSI CSI, 7-bit (SGR \x1b[31m, ...)
+    "|\x1b\\][^\x07\x1b\x9c]*(?:\x07|\x9c)"  # ANSI OSC, 7-bit \x1b]... BEL/ST
+    "|\x9b[0-9;:?]*[ -/]*[@-~]"  # ANSI CSI, 8-bit C1 \x9b...
+    "|\x9d[^\x07\x9c]*(?:\x07|\x9c)"  # ANSI OSC, 8-bit C1 \x9d...
+    "|[\x00-\x1f\x7f-\x9f]"  # a bare C0/C1 control (CR, LF, TAB, the lone ESC, ...)
 )
 
 
