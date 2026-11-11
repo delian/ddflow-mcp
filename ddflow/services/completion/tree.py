@@ -100,10 +100,27 @@ def _value(a: argparse.Action) -> dict[str, Any]:
     return {
         "arity": _arity(a),
         "choices": None if a.choices is None else [str(c) for c in a.choices],
+        "kind": _complete(a),
         "type": None if t is None else getattr(t, "__name__", type(t).__name__),
         "metavar": meta if meta is None or isinstance(meta, str) else list(meta),
         "dest": a.dest,
     }
+
+
+def _complete(a: argparse.Action) -> str:
+    """The value kind declared on the action (`Param.complete`), else inferred from its own
+    name / choices / metavar by `kinds.infer` (the engine reads this one string per
+    argument; free text is ``"none"``)."""
+    from . import kinds  # local, so tree stays import-light until a tree is walked
+
+    metavar = a.metavar if isinstance(a.metavar, str) else None
+    declared = getattr(a, "complete", "") or ""
+    return declared or kinds.infer(
+        a.dest or "",
+        choices=a.choices,
+        metavar=metavar,
+        positional=not a.option_strings,
+    )
 
 
 def _repeats(a: argparse.Action) -> bool:
