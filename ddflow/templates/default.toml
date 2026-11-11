@@ -747,6 +747,9 @@ self = "ask"
 [upstream_gh]
 error_max = 400
 
+[wait]
+max_call_seconds = 240
+
 [waves]
 auto_stamp = true
 
