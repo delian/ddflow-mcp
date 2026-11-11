@@ -171,10 +171,17 @@ def build(
     since: float | None = None,
     bug_window_s: float = BUG_WINDOW_S,
     families: dict[str, str] | None = None,
+    sessions: dict[str, list[tuple[float, str]]] | None = None,
+    leases: dict[tuple[str, str], list[tuple[float, str]]] | None = None,
 ) -> Ledger:
-    """The ledger over items completed at or after ``since`` (None: the whole log)."""
+    """The ledger over items completed at or after ``since`` (None: the whole log). ``sessions``
+    and ``leases`` may be the caller's one fold of the log (``_models``/``_lease_models``), so the
+    whole ledger is built in a single pass alongside its other readers."""
     facts = collect(events, state, now, cfg)
-    sessions, leases = _models(events), _lease_models(events)
+    if sessions is None:
+        sessions = _models(events)
+    if leases is None:
+        leases = _lease_models(events)
     fam_map = families if families is not None else dict(getattr(cfg.agent, "families", {}) or {})
     gates: dict[str, list] = {}
     for o in facts.outcomes:

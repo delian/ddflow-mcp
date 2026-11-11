@@ -349,7 +349,7 @@ class ProcessHeadless:
     def _rm(paths: list[Path]) -> None:
         for d in paths:
             if d.is_dir():
-                shutil.rmtree(d, ignore_errors=True)
+                fsio.rmtree_owned(d)
             else:
                 d.unlink(missing_ok=True)
 

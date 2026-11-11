@@ -94,6 +94,67 @@ def _record_forced(log, item: str, sha: str, gates, stamp, agent: str) -> None:
         )
 
 
+def _record_reconciled(
+    repo, cfg, log, it, item: str, landed_before: str, landed_after: str, branch_head: str
+) -> None:
+    """Record `merge.reconciled` when this landing touched a file another item changed since
+    this item forked: the reconcile-at-merge safety net of D-lease-hold-limit-r2. Complete is
+    then refused until the affected tests pass on the reconciled tree, unless
+    `[lease].reconcile_tests = off`. A clean landing over nothing records nothing."""
+    if cfg.lease.reconcile_tests == "off":
+        return
+    fork = it.base_sha or landed_before
+    mine = CH.changed_paths(repo, fork, tip=branch_head, include=("committed",), fork=True)
+    if mine is None:
+        # git could not tell what this item changed (a lost rev, a shallow tree): fail CLOSED
+        # with a reconcile whose empty file list still blocks, so an unreconciled overlap is
+        # never silently skipped when the probe cannot answer.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": [], "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
+    if not mine:
+        return
+    if not it.base_sha:
+        # No recorded fork (a located/resumed worktree records no base_sha, or an imported
+        # item never had one): what `main` changed since this item REALLY forked is
+        # unanswerable, and `fork` fell back to `landed_before`, so the `moved` probe below
+        # would compare `landed_before` with itself and read empty. Fail CLOSED -- reconcile
+        # over MY files with `unknown`, so an overlapping merge is never silently skipped
+        # when the fork is unknown.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": sorted(mine), "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
+    # The overlap trigger is "this landing touched a file `main` changed since this item
+    # forked" -- another item merged since the fork, OR a main-into-branch conflict resoved at
+    # sync (a direct `main` commit touching a file this branch also touched). Both are the one
+    # set `mine ∩ moved`, where `moved` is what `landed_before` did since `fork`; a direct
+    # `main` commit is a `moved` file with no `merged_sha`, so it no longer slips past a
+    # per-item loop.
+    moved = CH.changed_paths(repo, fork, tip=landed_before, include=("committed",), fork=True)
+    if moved is None:
+        # git could not tell what `main` changed since the fork: fail CLOSED by reconciling
+        # over MY files, so an unanswerable probe still holds complete for a reconciled test.
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": sorted(mine), "base": landed_before, "main": landed_after, "unknown": True},
+        )
+        return
+    files = sorted(set(mine) & set(moved))
+    if files:
+        log.append(
+            "merge.reconciled",
+            item,
+            {"files": files, "base": landed_before, "main": landed_after},
+        )
+
+
 def _spend_after_land(log, cfg, item: str, gates, stamp: dict | None, pending: str) -> dict | None:
     """Spend an agent's approval only now the landing landed (B527b0a518c). ``pending`` names
     the approval id to spend, and is "" unless `authorise` validated a real `--approval <id>`;
@@ -274,6 +335,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         landed_before=landed_before,
         landed_after=landed_after,
     )
+    _record_reconciled(repo, cfg, log, it, item, landed_before, landed_after, branch_head)
     return _finish_merge(
         repo,
         cfg,
