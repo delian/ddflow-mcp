@@ -24,6 +24,7 @@ from ..core.defaults import DEFAULT_PRIORITY
 from ..core.model import DONE, WORK_KINDS, Item
 from . import leases as L
 from . import priority as P
+from . import wiring as W
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -42,6 +43,7 @@ _FIELDS = (
     "priority",
     "line",
     "kind",
+    "adds",
 )
 
 
@@ -125,6 +127,9 @@ class TaskDraft:
     line: str | None = None
     #: A work kind other than a plain task ("doc", ...); None writes nothing: a task.
     kind: str | None = None
+    #: The feature classes this item introduces (`knob`, `event`, `command`), whose wiring
+    #: files join its globs (`services.wiring`). None writes nothing: a task that adds none.
+    adds: list[str] | None = None
     #: Fields only some callers write: `fixes`, `promote_from`, `port_of`, `source` ...
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -160,6 +165,7 @@ def problem_of(draft: TaskDraft) -> str:
         or GS.problem(draft.globs or [])
         or SCH.problem(draft.resources or [])
         or _bad_kind(draft.kind)
+        or _bad_adds(draft.adds)
     )
 
 
@@ -180,6 +186,11 @@ def _bad_kind(kind: str | None) -> str:
     if kind == "phase":
         return "a phase is made with `ddflow phase add`, not `task add --kind phase`."
     return f"unknown kind {kind!r}: task add makes {', '.join(WORK_KINDS)}."
+
+
+def _bad_adds(adds: list[str] | None) -> str:
+    """Why ``adds`` cannot name what this item introduces, or "" (none, or a feature class)."""
+    return W.problem(adds)
 
 
 def missing_parent(st: State, parent: str | None) -> str:
@@ -297,6 +308,11 @@ def add_task(
         banded = P.band(cfg, draft.id, draft.tags or [])
         if banded != DEFAULT_PRIORITY:
             draft = replace(draft, priority=banded)
+    # A feature item declares what it adds (`adds`): its globs grow the wiring files
+    # that introduction touches, so the lease covers them before the first write
+    # (`services.wiring`, B-item-globs-omit-wiring-files).
+    if draft.adds:
+        draft = replace(draft, globs=W.expand(draft.globs, draft.adds))
     data = draft.data()
     if not isinstance(dedupe, str):
         data.update(dedupe.fields)
