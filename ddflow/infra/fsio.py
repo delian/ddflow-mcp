@@ -82,6 +82,24 @@ def rmtree(path: Path | str, *, ignore_errors: bool = True) -> None:
     _fs.DEFAULT.rmtree(path, ignore_errors=ignore_errors)
 
 
+def rmtree_owned(path: Path | str, *, ignore_errors: bool = True) -> None:
+    """Remove the directory tree at ``path``, refusing the targets ``shutil.rmtree`` makes
+    dangerous (AU-safe-rmtree): ``shutil.rmtree('', ignore_errors=True)`` empties the current
+    directory, so an empty or relative path, the process's current directory and a filesystem
+    root are each refused outright rather than left to the caller to remember."""
+    p = Path(path)
+    if not p.parts:
+        raise ValueError("rmtree_owned: an empty path is the current directory; refused")
+    if not p.is_absolute():
+        raise ValueError(f"rmtree_owned: {str(p)!r} is relative; refused")
+    resolved = p.resolve()
+    if resolved == Path.cwd().resolve():
+        raise ValueError("rmtree_owned: refusing to remove the current directory")
+    if resolved == Path(resolved.anchor):
+        raise ValueError("rmtree_owned: refusing to remove a filesystem root")
+    rmtree(p, ignore_errors=ignore_errors)
+
+
 @dataclass(frozen=True, slots=True)
 class Unreadable:
     """Why `read_json` could not give a JSON object; each caller words its own refusal.
