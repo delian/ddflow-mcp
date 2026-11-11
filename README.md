@@ -553,8 +553,8 @@ command parser (`python -m ddflow.surfaces.command_table README.md` rewrites it,
 `ddflow pins regenerate` does so after a merge), so a command added on another branch never
 needs a line written by hand here.
 
-<!-- ddflow:begin README/commands sha=2256599cd648 -->
-<details><summary>All 101 commands</summary>
+<!-- ddflow:begin README/commands sha=4e4e8a96386b -->
+<details><summary>All 102 commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -649,6 +649,7 @@ needs a line written by hand here.
 | `ddflow identify` | who this shell is and which layer named it (declaring is `--agent` / DDFLOW_AGENT) |
 | `ddflow list` | list tasks, phases, bugs, research notes, lessons or sessions (what `<kind> list` shows); `search --query… |
 | `ddflow archdeps` | the external-dependency census: families, importing modules, home, violations |
+| `ddflow dispatch` | the dispatcher's plan: what to start now, in order, on which lane (advise only) |
 | `ddflow suggest` | send a bounded change to the lease holder of an item, as a suggestion |
 | `ddflow paths` | workflow-path variants: directly-follows, top variants, burst overlap, superseded passes, out-of-order |
 | `ddflow perf` | perf of the host (fingerprint, measuring wrapper) and the perf report (window, filters, format) |
@@ -1125,7 +1126,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 653 knobs.
+cadences, and the rest of the 675 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 Every config change goes through the one write pipeline, `services/configwrite.apply_edit`:
@@ -5439,7 +5440,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 653): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 675): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -6029,7 +6030,7 @@ declared once and persists — see
 
 ## Configuration
 
-653 knobs across 60 sections, every one documented in place and listed, with its default
+675 knobs across 60 sections, every one documented in place and listed, with its default
 and its values, in the [table below](#all-knobs):
 
 ```console
@@ -6096,8 +6097,8 @@ ddflow.views.knob_table README.md` rewrites it, and refuses a table edited by ha
 given `--force`) and a test fails when it differs, so its count and defaults cannot drift. A
 long default is left to `ddflow config --explain`.
 
-<!-- ddflow:begin README/knobs sha=7871d7d9e4b4 -->
-<details><summary>All 653 knobs across 60 sections</summary>
+<!-- ddflow:begin README/knobs sha=02c33f8c846b -->
+<details><summary>All 675 knobs across 60 sections</summary>
 
 | Knob | Default | Values |
 |---|---|---|
@@ -6545,6 +6546,10 @@ long default is left to `ddflow config --explain`.
 | `perf_metrics.prop_marginal_gain` | `0.25` |  |
 | `perf_metrics.prop_batch_dominance` | `2.0` |  |
 | `perf_metrics.prop_retire_payback` | `2.0` |  |
+| `perf_metrics.prop_split_share` | `0.5` |  |
+| `perf_metrics.prop_shard_skew` | `0.9` |  |
+| `perf_metrics.prop_select_miss_min` | `2` |  |
+| `perf_metrics.prop_select_min_runs` | `3` |  |
 | `perf_metrics.report_default_window` | `"28d"` |  |
 | `perf_metrics.report_max_rows` | `20` |  |
 | `perf_metrics.report_width` | `76` |  |
@@ -6722,6 +6727,24 @@ long default is left to `ddflow config --explain`.
 | `swarm.launch_enabled` | `false` |  |
 | `swarm.launch_templates_file` | `".ddflow/local/lane-templates.toml"` |  |
 | `swarm.launch_max_budget_usd` | `5.0` |  |
+| `swarm.remote_exclude` | `[".ddflow", ".env", "**/.env"]` |  |
+| `swarm.remote_bundle_max_bytes` | `104857600` |  |
+| `swarm.remote_return_max_bytes` | `52428800` |  |
+| `swarm.remote_return_max_commits` | `200` |  |
+| `swarm.remote_git_timeout_s` | `120` |  |
+| `swarm.remote_scan_max_blob_bytes` | `1048576` |  |
+| `swarm.remote_scan_batch_files` | `64` |  |
+| `swarm.remote_branch_prefix` | `"swarm/remote/"` |  |
+| `swarm.remote_seed_name` | `"SEED.md"` |  |
+| `swarm.remote_proposals_max` | `5` |  |
+| `swarm.remote_proposal_chars` | `400` |  |
+| `swarm.remote_proposals_max_bytes` | `65536` |  |
+| `swarm.remote_ssh_argv` | `["ssh"]` |  |
+| `swarm.remote_ssh_timeout_s` | `60` |  |
+| `swarm.remote_ssh_connect_timeout_s` | `15` |  |
+| `swarm.remote_copy_timeout_s` | `600` |  |
+| `swarm.remote_lanes_root` | `"ddflow-lanes"` |  |
+| `swarm.remote_detail_chars` | `200` |  |
 | `triggers.max_fires_per_hour` | `10` |  |
 | `upgrade.skew` | `"refuse"` | `refuse` \| `warn` \| `off` |
 | `upgrade.skew_notice` | `"once"` | `once` \| `always` \| `off` |

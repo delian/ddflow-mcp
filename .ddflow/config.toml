@@ -42,6 +42,7 @@ shared_globs = [
   "tests/golden/json/result_schemas.json",
   "tests/test_uc_surf_setup_ops_transcript.json",
 ]
+reconcile_tests = "off"
 [worktree]
 enabled = true
 

@@ -24,11 +24,11 @@ import sys
 from pathlib import Path
 
 from ..api import cap_blas_threads
-from ..api.guard_launch import guard_foreign_launch
 from ..api import items as A_ITEMS
 from ..api import loops as _loops
 from ..api import progress as _progress
 from ..api import surf_setup as SS
+from ..api.guard_launch import guard_foreign_launch
 from ..api.refs import provide_upgrade_vocabulary
 from ..api.waves_auto import scope_of
 from ..config_sections._layers import tolerating_conflicts
