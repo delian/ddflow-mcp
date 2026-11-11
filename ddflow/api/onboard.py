@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ..core import outcome as O
+from ..infra import git as G
 from ..services import adopt as AD
 from ..services import harness as HS
 from ..services import harnessreg as HR
@@ -25,6 +26,8 @@ from ..services.enforce import NEWER_HINT
 from ._base import _load
 from .harness import best_level
 
+#: The stages that probe the project through `ddflow` itself and so need a git repository.
+_NEEDS_GIT = ("status", "preflight", "verify")
 #: The stages in the prompt's own order; the CLI choices and MCP enum come from here.
 STAGES = ("status", "preflight", "legacy", "memory", "test-gate", "verify", "harness")
 
@@ -250,6 +253,11 @@ def onboard(
     agent: str = "",
 ) -> O.Outcome:
     """`stage` -> its report; unknown stages are refused with the list, never guessed."""
+    if stage in _NEEDS_GIT and not G.run(repo, "rev-parse", "--is-inside-work-tree").ok:
+        # Before any probe: the probes run `ddflow brief` underneath, which writes
+        # .ddflow/local state and then fails with a raw GitError.
+        msg = f"{repo} is not a git repository: run `git init` there first, then onboard"
+        return O.failed(f"onboard.{stage}", msg, text=msg)
     if stage == "status":
         return status(repo)
     if stage == "preflight":
