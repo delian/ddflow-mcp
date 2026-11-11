@@ -35,13 +35,13 @@ MODES = ("off", "basic", "full")
 def _commands(repo: Path, bugs, mode: str) -> dict[str, Any]:
     """The last N commands this session ran (DX-command-log): the git-ignored local ring log
     when it has records (each already shape- and output-redacted at write time), else the note
-    that none are kept."""
+    that none are recorded yet."""
     records = cmdlog.recent(repo, bugs.repro_events)
     if records:
         return {"last": records}
     return {
-        "unavailable": "ddflow keeps no log of the commands a session ran (no session or "
-        "hook command log exists)" + ("; see recent_events" if mode == "full" else "")
+        "unavailable": "the command log has no records yet"
+        + ("; see recent_events" if mode == "full" else "")
     }
 
 

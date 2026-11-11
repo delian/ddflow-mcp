@@ -476,7 +476,10 @@ def _remember_command(
         root = _W.repo_root(Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd()))
     except Exception:
         root = Path.cwd()
-    cmdlog.record(root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags)
+    try:
+        cmdlog.record(root, getattr(args, "agent", "") or "", typed, code, said, verbs=verbs, flags=flags)
+    except Exception:  # the log is best-effort; it must not change the command's exit code
+        pass
 
 
 def _run(args: argparse.Namespace) -> int:

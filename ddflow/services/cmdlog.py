@@ -70,7 +70,10 @@ def record(
 
 
 def _trim(path: Path) -> None:
-    """Drop the oldest lines once the log has grown past ``CAP_ENTRIES``."""
+    """Drop the oldest lines once the log has grown past ``CAP_ENTRIES``. The read-then-rewrite
+    is not atomic across two processes (the CLI and the post_tool hook may write at once): a
+    record appended by the other writer during the rewrite can be dropped, and `recent` skips a
+    line torn by it. That is accepted -- this is a best-effort "last N" ring, not a durable log."""
     try:
         if path.stat().st_size == 0:
             return
