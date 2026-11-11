@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 PURPOSES: tuple[str, ...] = ("offer", "view", "structure")
 
 
-def plan_for(
+def plan_for(  # noqa: PLR0913 -- each keyword is one planner facet `next`/`brief`/`wait` share
     repo: Path,
     log,
     cfg: Config,
