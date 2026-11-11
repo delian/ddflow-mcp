@@ -1,0 +1,43 @@
+# Event kinds owned by record updates (core/handlers/record_update.py). One [[kind]] per kind.
+
+[[kind]]
+name = "bug.updated"
+doc = "A bug's fields were changed (`ddflow update`); the event holds the new values, the original record is never rewritten."
+fields = { "fields" = ["dict"] }
+text = ["fields"]
+exempt = "changes an existing record (same id); the add was checked"
+
+[[kind]]
+name = "lesson.updated"
+doc = "A lesson's fields were changed (`ddflow update`); the event holds the new values, the original record is never rewritten."
+fields = { "fields" = ["dict"] }
+text = ["fields"]
+exempt = "changes an existing record (same id); the add was checked"
+
+[[kind]]
+name = "research.updated"
+doc = "A research's fields were changed (`ddflow update`); the event holds the new values, the original record is never rewritten."
+fields = { "fields" = ["dict"] }
+text = ["fields"]
+exempt = "changes an existing record (same id); the add was checked"
+
+[[kind]]
+name = "decision.updated"
+doc = "A decision's fields were changed (`ddflow update`); the event holds the new values, the original record is never rewritten."
+fields = { "fields" = ["dict"] }
+text = ["fields"]
+exempt = "changes an existing record (same id); the add was checked"
+
+[[kind]]
+name = "memory.updated"
+doc = "A memory's fields were changed (`ddflow update`); the event holds the new values, the original record is never rewritten."
+fields = { "fields" = ["dict"] }
+text = ["fields"]
+exempt = "changes an existing record (same id); the add was checked"
+
+[[kind]]
+name = "session.updated"
+doc = "A session's fields were changed (`ddflow update`); the event holds the new values, the original record is never rewritten."
+fields = { "fields" = ["dict"] }
+text = ["fields"]
+exempt = "changes an existing record (same id); the add was checked"
