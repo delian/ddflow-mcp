@@ -19,6 +19,7 @@ from ...config import Config
 from ...core import outcome as O
 from ...infra import harness_identity
 from ...infra.log import EventLog
+from .. import mcp_lifecycle as _lifecycle
 from .. import mcp_next as _NEXT
 from .. import mcp_protocol as protocol
 from .. import projectkinds as PK
@@ -79,6 +80,9 @@ class Server(_Handlers):
         #: The stale-server note (`mcp_upgrade.footer`): said once, looked for once a minute;
         #: `reexec_pending` asks `serve` to replace the process once it is quiet.
         self.reexec_pending = False
+        #: `kill_pending` asks `serve` to end the process once it is quiet (a hard `kill`,
+        #: or a `restart`/`kill` on a remote server, which resolves to a reboot).
+        self.kill_pending = False
         self._stale_said = False
         self._stale_checked_at = float("-inf")
         #: Declared identity for this connection; empty means "use the process
@@ -203,7 +207,10 @@ class Server(_Handlers):
 
     def _invoke(self, spec, args, agent, per_call, params):
         with _identity().via_mcp(), self._stamped(agent):
-            return self._invoke_marked(spec, args, agent, per_call, params)
+            result = self._invoke_marked(spec, args, agent, per_call, params)
+        if spec.get("lifecycle"):
+            _lifecycle.arm(self, spec["lifecycle"])
+        return result
 
     def _stamped(self, agent):
         """Stamping `wave:N` by default (`[waves].auto_stamp`) after a call that wrote."""
