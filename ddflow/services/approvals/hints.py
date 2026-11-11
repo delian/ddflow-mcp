@@ -54,6 +54,8 @@ def _section(name: str, repo: Path | None, overrides: dict[str, str] | None) -> 
 _FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "yourself", "approve it")
 _FLAG = re.compile(r"--approval[ =]+[`'\"]*([^\s`'\".,;:)]+)")
 _MAX_CHARS = 1200
+#: A route is prose: shell syntax in it is how a second command rides along with the first.
+_SHELLISH = re.compile(r"[;|&$<>\\]|\becho\b|\beval\b")
 #: Anything shaped like an ask id: only the bound one may appear in a route.
 _ANY_ID = re.compile(r"\bQ[0-9a-f]{10}\b")
 
@@ -69,11 +71,13 @@ def _sound(out: str, ident: str, need: str) -> bool:
         0 < len(out) <= _MAX_CHARS
         and all(m in out for m in _MUST_NAME)
         and all(f not in low for f in _FORBIDDEN)
+        and not _SHELLISH.search(out)
+        and (ident == PLACEHOLDER or re.search(rf"`ddflow approvals ask {ident}`", out))
         and bool(flags := _FLAG.findall(out))
         and all(m in (ident, need) for m in flags)
         and need in flags
         and all(m == ident for m in _ANY_ID.findall(out))
-        and (ident == PLACEHOLDER or f"ddflow approvals ask {ident}" in out)
+        and out.count("ddflow approvals ask") == out.count("`ddflow approvals ask")
         and out.count("--approval") == len(flags)
     )
 
