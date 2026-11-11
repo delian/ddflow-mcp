@@ -13,6 +13,7 @@ from ...core.bookkeeping import STATE_EXCLUDE
 from ...core.digest import content_digest, hasher
 from ...core.model import State
 from ...infra import git as GIT
+from ..approvals import hints
 from .defs import DEFAULT_GATES, GateDef
 
 
@@ -316,8 +317,9 @@ def _no_reviewer_refusal(fams, anonymous, unapproved, author_desc: str) -> str:
             f"write a reviewer, so it cannot vouch for one. The operator reviews the "
             f"entry and runs "
             + " and ".join(f"`ddflow reviewers approve {shlex.quote(n)}`" for n in names)
-            + " from their own terminal, or an agent runs it with `--approval request` and the "
-            "operator approves in chat (an HTTP entry; a command reviewer is terminal only)."
+            + ". "
+            + hints.route()
+            + " (An HTTP entry; a command reviewer is terminal only.)"
         )
     if not fams:
         if anonymous:
