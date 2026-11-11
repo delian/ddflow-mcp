@@ -2,6 +2,10 @@
 
 What you can change per project, the macro and prompt layers, and exporting documents. Part of the ddflow [README](../../README.md); the reference moved out of it by D-readme-split. Every heading here keeps the anchor it had in the README.
 
+## Extending ddflow with text
+
+Templates, macros and prompts: changing ddflow by writing text, not code.
+
 ### Extending it by writing text, not code
 
 Every prompt is an external template, resolved config → project → shipped:
