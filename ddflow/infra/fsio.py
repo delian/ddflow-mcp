@@ -101,13 +101,17 @@ def rmtree_owned(path: Path | str, *, ignore_errors: bool = True) -> None:
         reason = f"rmtree_owned: {str(p)!r} is relative; refused"
     else:
         try:
-            resolved, cwd = p.resolve(), Path.cwd().resolve()
+            resolved = p.resolve()
         except OSError:
             reason = f"rmtree_owned: {str(p)!r} cannot be resolved; refused"
         else:
+            try:
+                cwd = Path.cwd().resolve()
+            except OSError:  # cwd unlinked: compare to the root only, still remove a safe tree
+                cwd = None
             reason = (
                 "rmtree_owned: refusing to remove the current directory"
-                if resolved == cwd
+                if cwd is not None and resolved == cwd
                 else "rmtree_owned: refusing to remove a filesystem root"
                 if resolved == Path(resolved.anchor)
                 else None
