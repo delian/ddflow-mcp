@@ -35,7 +35,6 @@ from ._fingerprint import _SEARCH_COLS as _SEARCH_COLS
 from ._fingerprint import FOLD_REV as FOLD_REV
 from ._fingerprint import INDEX_MAX_FILES as INDEX_MAX_FILES
 from ._fingerprint import INDEX_MAX_MB as INDEX_MAX_MB
-from ._fingerprint import INDEX_TOUCH_S as INDEX_TOUCH_S
 from ._fingerprint import META_MARK as META_MARK
 from ._fingerprint import META_SHARD_DIGESTS as META_SHARD_DIGESTS
 from ._fingerprint import MIN_FINGERPRINT_SOURCES as MIN_FINGERPRINT_SOURCES
@@ -94,7 +93,6 @@ __all__ = [
     "FOLD_REV",
     "INDEX_MAX_FILES",
     "INDEX_MAX_MB",
-    "INDEX_TOUCH_S",
     "META_MARK",
     "META_SHARD_DIGESTS",
     "MIN_FINGERPRINT_SOURCES",

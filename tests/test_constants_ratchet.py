@@ -111,7 +111,6 @@ def test_ci_main_drift_reclassifies_moves_and_new_constants() -> None:
     reg = ca.load_register(ROOT)
     for key in (
         "ddflow/api/records/_kind.py:CELL_MAX",
-        "ddflow/infra/store/_fingerprint.py:INDEX_TOUCH_S",
         "ddflow/services/enforce/hooks.py:MAX_LISTED_PATHS",
     ):
         assert key in reg.knob, f"moved constant not re-pinned at its new home: {key}"

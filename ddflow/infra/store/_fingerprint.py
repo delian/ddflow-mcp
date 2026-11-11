@@ -38,9 +38,8 @@ INDEX_MAX_FILES = 3
 INDEX_MAX_MB = 1024.0
 
 #: An index in use is touched at most this often, so its mtime means "last used", not "last
-#: rebuilt", and `[store].stale_index_days` of silence really is disuse.
-INDEX_TOUCH_S = 86400.0
-#: Fewer source files than this found under `ddflow/core/` means there is no source tree.
+#: rebuilt", and `[store].stale_index_days` of silence really is disuse (the interval is the
+#: live `[store].index_touch_s` knob).
 MIN_FINGERPRINT_SOURCES = 3
 
 #: Every file a fingerprinted index (or an earlier one) can leave beside it.

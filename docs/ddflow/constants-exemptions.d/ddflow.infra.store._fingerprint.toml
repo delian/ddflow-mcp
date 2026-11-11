@@ -1,6 +1,3 @@
-[knob]
-"ddflow/infra/store/_fingerprint.py:INDEX_TOUCH_S" = 'store.index_touch_s'
-
 [exempt]
 "ddflow/infra/store/_fingerprint.py:MIN_FINGERPRINT_SOURCES" = 'minimum token/word/stem length of a matcher heuristic: changing it changes what text means, not how ddflow behaves for a person'
 "ddflow/infra/store/_fingerprint.py:REBUILD_LOCK_TIMEOUT_S" = 'internal timing of a lock or poll loop (tested contract of the lock itself), not a workload setting'
