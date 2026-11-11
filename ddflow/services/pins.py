@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 import tomllib
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
@@ -414,20 +415,25 @@ def _recorded_a_refusal(
 
 def _records_refusal(repo: Path, r: Recipe, kept: dict[Path, bytes | None] | None) -> bool:
     """Whether this run wrote the guard's refusal LINE into a file the recipe owns: a line that
-    STARTS with ``ddflow: {FOREIGN_LAUNCH_REFUSAL}`` (the guard's exact refusal, anchored) that was
-    not in the file before the run (``kept``). A bare quote of the phrase in a doc sentence carries
-    no anchoring ``ddflow: `` and is never a refusal line; the anchored line is what a poisoned
-    transcript records (one per refused command), caught whether it is ADDED or REPLACES a pin that
-    already documents the phrase at the same total count."""
-    needle = f"ddflow: {FOREIGN_LAUNCH_REFUSAL}".encode()
+    STARTS with ``ddflow: {FOREIGN_LAUNCH_REFUSAL}`` (the guard's exact refusal, anchored) appears
+    in the file MORE times than it did before the run (``kept``). A bare quote of the phrase in a
+    doc sentence carries no anchoring ``ddflow: `` and is never a refusal line; the anchored line is
+    what a poisoned transcript records (one per refused command), caught whether the run ADDS one
+    or REPLACES a documented quote at the same total count. Each of a line's occurrences before the
+    run excuses at most one occurrence after it, so a second copy the run wrote is still caught."""
+    anchor = f"ddflow: {FOREIGN_LAUNCH_REFUSAL}".encode()
     for p in _owned(repo, r):
         try:
             now = p.read_bytes()
         except OSError:
             continue
         before = (kept or {}).get(p) or b""
-        if any(ln not in before for ln in now.splitlines() if ln.startswith(needle)):
-            return True
+        had = Counter(ln for ln in before.splitlines() if ln.startswith(anchor))
+        for ln in now.splitlines():
+            if ln.startswith(anchor):
+                if had[ln] == 0:
+                    return True
+                had[ln] -= 1
     return False
 
 
