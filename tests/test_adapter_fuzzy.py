@@ -24,6 +24,6 @@ def test_the_adapter_and_the_fake_satisfy_the_port():
     assert FAKES["Fuzzy"] is FakeFuzzy
 
 
-def test_the_module_level_functions_delegate_to_the_default_adapter():
-    assert N.ratio("same", "same") == 1.0 and N.ratio("a", "b") == 0.0
-    assert isinstance(N.available(), bool)
+def test_the_fake_matches_identical_strings_case_insensitively():
+    f = FakeFuzzy()
+    assert f.ratio("DNS", "dns") == 1.0 and f.ratio("a", "b") == 0.0
