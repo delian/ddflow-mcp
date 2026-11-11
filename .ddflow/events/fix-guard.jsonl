@@ -58,3 +58,5 @@
 {"agent":"fix-guard","data":{"at":1794414031.0224233,"holder":"fix-guard"},"id":"e6eddd4dd9cf885549c3eb93a","kind":"lease.renewed","lamport":175951,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:20:31.152947Z"}
 {"agent":"fix-guard","data":{"evidence":{"scores":{},"surfaced":[]},"result":"0"},"id":"e14d5cb704210f54e8a66d98d","kind":"cadence.ran","lamport":175953,"schema":1,"subject":"recall_recheck:fix-Bbaaaba1364","ts":"2026-11-11T16:20:40.561884Z"}
 {"agent":"fix-guard","data":{"at":1794414352.9881577,"holder":"fix-guard"},"id":"e10e9bbddc41de78c15769b14","kind":"lease.renewed","lamport":176013,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:25:53.698153Z"}
+{"agent":"fix-guard","data":{"at":1794414679.388563,"holder":"fix-guard"},"id":"e9fc28a72a1edb294445b6e31","kind":"lease.renewed","lamport":176070,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:31:19.964577Z"}
+{"agent":"fix-guard","data":{"at":1794415000.4329371,"holder":"fix-guard"},"id":"ea0c5b1de7610a123d91aa77d","kind":"lease.renewed","lamport":176105,"schema":1,"subject":"fix-Bbaaaba1364","ts":"2026-11-11T16:36:40.579405Z"}
