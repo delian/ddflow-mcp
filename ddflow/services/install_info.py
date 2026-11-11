@@ -234,6 +234,7 @@ __all__ = [
     "FOREIGN_LAUNCH_REFUSAL",
     "KINDS",
     "METHODS",
+    "SCRATCH_PREFIXES",
     "SYSTEM_TEMP_DIRS",
     "ForeignLaunch",
     "InstallInfo",
@@ -341,6 +342,22 @@ FOREIGN_LAUNCH_REFUSAL = "imported from the linked worktree"
 #: The temp directories ddflow's scratch trees are made in when TMPDIR is not redirected.
 SYSTEM_TEMP_DIRS: tuple[Path, ...] = (Path("/tmp"), Path("/var/tmp"))
 
+#: The directory-name prefixes ddflow's `scratch_tree` makes ITS throwaway trees under (its
+#: default and its callers: ddflow/services/ci/scratch.py ``ddflow-ci.``, services/gates/
+#: baseline_red.py ``ddflow-base.``, services/gates/mutation.py ``ddflow-mut.``, api/gates/
+#: _run.py ``ddflow-merged.``, services/onboard_tests.py ``ddflow-baseline-``). A tree carrying
+#: one of these is ddflow's own scratch; any other ``ddflow-*`` name made by hand (a detached
+#: worktree such as ``git worktree add --detach /tmp/ddflow-x <sha>``) is a lane's unmerged
+#: code and stays foreign — DETACHED alone is not unique to scratch trees.
+SCRATCH_PREFIXES: tuple[str, ...] = (
+    "ddflow-scratch-",
+    "ddflow-ci.",
+    "ddflow-base.",
+    "ddflow-mut.",
+    "ddflow-merged.",
+    "ddflow-baseline-",
+)
+
 
 def _scratch_parents() -> set[Path]:
     """Where a ``ddflow-*`` scratch tree can sit: this process's temp root or a system one."""
@@ -348,11 +365,12 @@ def _scratch_parents() -> set[Path]:
 
 
 def _is_scratch_tree(root: Path) -> bool:
-    """ddflow's own throwaway tree: a ``ddflow-*`` directory directly in a temp dir, checked
-    out DETACHED (`scratch_tree` always detaches; a lane's tree sits on its branch). Name and
-    parent are read from the RESOLVED path, so a symlink named like a scratch tree is not one."""
+    """ddflow's own throwaway tree: a directory carrying one of `SCRATCH_PREFIXES` names,
+    directly in a temp dir, checked out DETACHED (`scratch_tree` always detaches; a lane's
+    tree sits on its branch). Name and parent are read from the RESOLVED path, so a symlink
+    named like a scratch tree is not one."""
     real = root.resolve()
-    if not real.name.startswith("ddflow-") or real.parent not in _scratch_parents():
+    if not real.name.startswith(SCRATCH_PREFIXES) or real.parent not in _scratch_parents():
         return False
     return _paths.detached_worktree(real)
 

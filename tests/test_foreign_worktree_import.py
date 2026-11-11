@@ -300,6 +300,23 @@ def test_a_ddflow_named_tree_on_a_branch_in_the_temp_dir_is_still_foreign(
     assert I.foreign_launch_root() is not None
 
 
+def test_a_hand_made_detached_tree_named_like_a_generic_scritch_is_still_foreign(
+    checkout, monkeypatch, tmp_path
+):
+    """A detached worktree directly in the temp dir under a generic ``ddflow-`` name (not one
+    of the prefixes ddflow's `scratch_tree` makes) is a lane's unmerged code checked out by
+    hand, not ddflow's own throwaway scratch: detached alone is not unique to scratch trees,
+    so it stays foreign."""
+    primary, _tree = checkout
+    systmp = tmp_path / "systmp"
+    systmp.mkdir()
+    lane = systmp / "ddflow-x"
+    _git(primary, "worktree", "add", "-q", str(lane), "--detach")
+    monkeypatch.setattr(I, "SYSTEM_TEMP_DIRS", (systmp.resolve(),))
+    monkeypatch.setattr(PATHS, "package_parent", lane.resolve)
+    assert I.foreign_launch_root() is not None
+
+
 def test_a_symlink_named_like_a_scratch_tree_is_still_foreign(checkout, monkeypatch, tmp_path):
     primary, tree = checkout
     systmp = tmp_path / "systmp"

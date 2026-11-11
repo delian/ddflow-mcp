@@ -365,6 +365,7 @@ def _run_all(
         done = _run(repo, r.regen, r, limit, write=True, tick=tick)
         poisoned = _recorded_a_refusal(repo, r, done, kept)
         broke = done.error is not None or done.returncode != 0 or poisoned
+        elapsed = time.monotonic() - began  # one read, shared by every branch message
         # A killed or failed regeneration leaves its files as it dropped them (README.md with
         # thousands of duplicated lines, snapshots deleted: Bf965d87b66): put them back.
         back = (
@@ -380,17 +381,17 @@ def _run_all(
             states[
                 r.name
             ].unavailable = f"the regeneration did not finish in {limit}s (timed out).{back}"
-            say(f"pins: {r.name}: unavailable ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: unavailable ({elapsed:.0f}s)")
         elif poisoned:
             states[r.name].error = _REFUSED_RECORDING + back
             states[r.name].unavailable = ""
-            say(f"pins: {r.name}: REFUSED ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: REFUSED ({elapsed:.0f}s)")
         elif broke:
             states[r.name].error = f"regeneration failed: {_tail(done)}{back}"
             states[r.name].unavailable = ""
-            say(f"pins: {r.name}: FAILED ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: FAILED ({elapsed:.0f}s)")
         else:
-            say(f"pins: {r.name}: re-recorded ({time.monotonic() - began:.0f}s)")
+            say(f"pins: {r.name}: re-recorded ({elapsed:.0f}s)")
             redone.append(r)
     _pmap(again, redone, workers, say, every, "re-checks")
     return [states[r.name] for r in chosen]
