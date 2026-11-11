@@ -94,7 +94,7 @@ whole cut (exit 3) rather than guessing which line is the version; a trunk cut w
 
 **Changelog with the cut.** `version cut --changelog` also writes the new version's
 section into `CHANGELOG.md` (the path of `[export.changelog]`, default `CHANGELOG.md`)
-through [`ddflow export changelog`](../../customisation.md#exporting-documents): the Unreleased entries
+through [`ddflow export changelog`](customisation.md#exporting-documents): the Unreleased entries
 become `## [x.y.z] - date` with the right compare link, and an empty Unreleased remains. The
 file is committed on the branch the tag names, so the tag's commit holds it; in gitflow with
 pull requests it is a commit on the release branch, part of the release request, and the

@@ -381,7 +381,7 @@ Until then that reader reports `unavailable` and `claude-cache` carries the perc
 
 The snapshot and the sample log are per user (`$XDG_STATE_HOME/ddflow`, or `quota.snapshot_path` and
 `quota.samples_path`), because several projects share one account. They hold figures only, with an
-account as a short digest, never a raw id. The `[quota]` knobs are in the [configuration table](../../configuration.md#configuration-1).
+account as a short digest, never a raw id. The `[quota]` knobs are in the [configuration table](configuration.md#configuration-1).
 
 ## Dependencies on another repository
 
@@ -1114,7 +1114,7 @@ part that matters.
   the standing `bugs` phase, on the named item's files -- so a feature touching the
   same files waits behind it, and the bug closes when that task completes with a
   regression test (`complete fix-<bug> --regression-test ...`). See [Bugs are queue
-  items](../../knowledge.md#bugs-are-queue-items).
+  items](knowledge.md#bugs-are-queue-items).
 * **Gate evidence records which tree and how much** — one tree identity (commit plus content) plus
   files/lines changed — so a pass names what it passed on. If the tree moves afterwards,
   `complete` warns that the evidence describes source nobody is shipping.

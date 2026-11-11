@@ -45,19 +45,24 @@ def test_the_readme_is_the_front_door_and_points_at_every_guide():
         assert moved not in titles, f"{moved!r} should have moved out of the README"
 
 
+def _anchors_of(p: Path) -> list[str]:
+    return T.anchors([t for _, t in T.headings(_text(p), T._ANY_HEADING)])
+
+
 def test_every_relative_link_resolves_and_its_anchor_exists():
+    broken = []
     for src in [README, *(GUIDE / f"{g}.md" for g in GUIDES)]:
         for target in _LINK.findall(_text(src)):
-            if re.match(r"[a-z]+:", target) or target.startswith("#"):
+            if re.match(r"[a-z][a-z0-9+.-]*:", target):
                 continue
             path, _, anchor = target.partition("#")
-            dest = (src.parent / path).resolve()
+            dest = (src.parent / path).resolve() if path else src
             if not dest.exists():
-                continue  # links into other trees are checked by the docs index test
-            if anchor and dest.suffix == ".md" and dest.is_relative_to(ROOT / "docs" / "guide"):
-                tt = [t for _, t in T.headings(_text(dest), T._ANY_HEADING)]
-                assert anchor in T.anchors(tt), f"{src.name}: {target} names no heading"
-        for target in _LINK.findall(_text(src)):
-            if target.startswith("#") and src.parent == GUIDE:
-                tt = [t for _, t in T.headings(_text(src), T._ANY_HEADING)]
-                assert target[1:] in T.anchors(tt), f"{src.name}: {target} dangles"
+                broken.append(f"{src.name}: {target} names no file")
+            elif anchor and dest.suffix == ".md" and dest.is_relative_to(ROOT):
+                if dest in (
+                    README,
+                    *(GUIDE / f"{g}.md" for g in GUIDES),
+                ) and anchor not in _anchors_of(dest):
+                    broken.append(f"{src.name}: {target} names no heading")
+    assert not broken, broken

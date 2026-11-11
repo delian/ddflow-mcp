@@ -66,7 +66,7 @@ suite that never ran.
 servers alone:
 
 **22 agents are supported.** The full table, with what each one gets, is in
-[Wiring it into your agent](../../adoption.md#wiring-it-into-your-agent).
+[Wiring it into your agent](adoption.md#wiring-it-into-your-agent).
 
 It also copies the driver to `docs/ddflow/drivers/`, and installs the pre-commit hook
 that enforces claim-before-you-edit.
@@ -345,6 +345,6 @@ ddflow_identify(agent=...)      declare who you are ON THIS CONNECTION (MCP only
 A CLI invocation is one process that exits, so it says who it is with `--agent` and the
 question does not outlive the command. An MCP connection is a session, so identity is
 declared once and persists — see
-[Who is calling?](../../parallelism.md#who-is-calling).
+[Who is calling?](parallelism.md#who-is-calling).
 
 ---

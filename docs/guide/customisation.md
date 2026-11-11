@@ -486,7 +486,7 @@ knob with its value, source and documentation.
 | `AGENTS.md` / `CLAUDE.md` | shared | The managed ddflow block plus your own prose | `ddflow adopt` (re-run), editor outside the block |
 | `docs/ddflow/drivers/implement-phase.md` and `deltas/<agent>.md` | shared | The implementation driver and per-agent notes | edit (outside the stamped region freely; an edit inside it is kept in `<file>.local-edits` when `ddflow adopt --refresh-docs` resets it to shipped) |
 | `.claude/commands/implement.md` (and other agents' command dirs) | shared | The slash command that drives the queue | edit after `ddflow adopt` |
-| Agent MCP config (`.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, …) | shared | How the agent launches ddflow; see [Wiring it into your agent](../../adoption.md#wiring-it-into-your-agent) | `ddflow adopt --agents …` |
+| Agent MCP config (`.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, …) | shared | How the agent launches ddflow; see [Wiring it into your agent](adoption.md#wiring-it-into-your-agent) | `ddflow adopt --agents …` |
 | `.ddflow/events/` | shared | The source-of-truth log. **Append-only: do not edit.** | the CLI/MCP only |
 
 ### Configuration sections (`.ddflow/config.toml`)
