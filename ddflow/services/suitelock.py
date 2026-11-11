@@ -108,11 +108,14 @@ def running(
     for i in range(max(1, int(cfg.ci.max_concurrent_suites))):
         if not _held(directory, i):
             continue
-        with contextlib.suppress(OSError, ValueError, TypeError):
+        with contextlib.suppress(OSError, ValueError, TypeError, OverflowError):
             note = json.loads(_note(directory, i).read_text())
             if not isinstance(note, dict):
                 continue
-            began = float(note.get("at", at))  # a non-number raises: the slot is skipped
+            if "at" not in note:  # no start time on record: listed, with no age claimed
+                rows.append({**note, "slot": i, "age_s": 0})
+                continue
+            began = float(note["at"])  # a non-number raises: the slot is skipped
             rows.append({**note, "at": began, "slot": i, "age_s": max(0, int(at - began))})
     queued = 0
     stale = float(cfg.ci.suite_queue_stale_s)

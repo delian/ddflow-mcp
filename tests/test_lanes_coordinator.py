@@ -7,8 +7,10 @@ same holders. Every test fails against the code before the task.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -187,16 +189,40 @@ def test_item_does_not_replace_the_lane_of_the_other_views(busy):
     assert code == 0 and out.startswith("# Lane brief: holder")
 
 
-def test_a_note_with_a_string_time_is_read_as_a_number(tmp_path, monkeypatch):
+def _notes(tmp_path, monkeypatch, *bodies):
+    """Hold slot 0 as lane-a, put each body of `bodies` in the notes of the next slots."""
     Cfg = Config()
-    Cfg.ci.max_concurrent_suites = 2
+    Cfg.ci.max_concurrent_suites = 1 + len(bodies)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     with SL.hold(Cfg, "lane-a"):
         d = SL.state_dir()
-        with SL.SLOTS.Slots(d, SL.NAME).hold(2, 0):
-            for i in range(2):
-                note = d / f"{SL.NAME}.{i}.holder"
-                if "lane-a" not in note.read_text() if note.exists() else True:
-                    note.write_text('{"holder": "b", "at": "5"}')
-            rows, _ = SL.running(Cfg)
-    assert sorted(r["holder"] for r in rows) == ["b", "lane-a"]
+        slots = SL.SLOTS.Slots(d, SL.NAME)
+        with contextlib.ExitStack() as stack:
+            for body in bodies:
+                slot = stack.enter_context(slots.hold(1 + len(bodies), 0))
+                (d / f"{SL.NAME}.{slot.index}.holder").write_text(body)
+            return SL.running(Cfg, now=time.time() + 100)[0]
+
+
+def test_a_note_with_a_string_time_is_read_as_a_number(tmp_path, monkeypatch):
+    rows = _notes(tmp_path, monkeypatch, '{"holder": "b", "at": "5"}')
+    by = {r["holder"]: r for r in rows}
+    assert by["b"]["at"] == 5.0 and by["b"]["age_s"] > 0 and set(by) == {"b", "lane-a"}
+
+
+@pytest.mark.parametrize(
+    "junk",
+    [
+        '{"holder": "b", "at": "pending"}',
+        '{"holder": "b", "at": null}',
+        '{"holder": "b", "at": "nan"}',
+        '{"holder": "b", "at": "inf"}',
+    ],
+)
+def test_a_note_with_a_junk_time_is_skipped_and_the_rest_listed(tmp_path, monkeypatch, junk):
+    assert [r["holder"] for r in _notes(tmp_path, monkeypatch, junk)] == ["lane-a"]
+
+
+def test_a_note_with_no_time_is_listed_without_an_age(tmp_path, monkeypatch):
+    rows = {r["holder"]: r for r in _notes(tmp_path, monkeypatch, '{"holder": "b"}')}
+    assert "at" not in rows["b"] and rows["b"]["age_s"] == 0

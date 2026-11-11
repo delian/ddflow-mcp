@@ -134,7 +134,7 @@ def render(d: dict[str, Any]) -> str:
 
     out = ["SUITES"]
     out += [
-        f"  pid {s.get('pid', '?')} {safe(str(s.get('holder', '?')))} running {fmt_age(s.get('age_s', 0), 'm')}"
+        f"  pid {s.get('pid', '?')} {safe(str(s.get('holder', '?')))} running {fmt_age(s.get('age_s') or 0, 'm')}"
         for s in d["suites"]
     ] or ["  none running"]
     out += more("suites")
