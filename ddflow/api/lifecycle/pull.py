@@ -48,11 +48,15 @@ def _declares_trust(path: Path, name: str) -> bool:
 
 def _defect(path: Path, lane: str, notes: list[str]) -> str:
     """The note naming ``lane`` (or the file itself), without its ``name:`` prefix: why a
-    template was rejected. "" when the lane is simply absent."""
+    template was rejected. The last lane-named note is the rejection itself (an informational
+    note, e.g. an ignored ``approved`` key, is written first); "" when the lane is absent."""
+    lane_note = ""
     prefix = f"{lane}: "
     for n in notes:
         if n.startswith(prefix):
-            return n[len(prefix) :]
+            lane_note = n[len(prefix) :]
+    if lane_note:
+        return lane_note
     file_prefix = f"{path.name}: "
     for n in notes:
         if n.startswith(file_prefix):

@@ -387,7 +387,7 @@ def test_next_lane_without_a_template_is_unavailable(repo):
 def test_next_lane_names_why_a_template_was_rejected(repo):
     bad = TEMPLATES + (
         '[template.bad]\nharness = "kilo"\nroute = "deepseek"\nfamily = "deepseek"\n'
-        "bogus_key = 1\n"
+        "approved = true\nbogus_key = 1\n"
     )
     _queue(repo, tmp=bad)
     out = api.next_lane(repo, lane="bad")
@@ -395,6 +395,7 @@ def test_next_lane_names_why_a_template_was_rejected(repo):
     assert out.data["status"] == D.UNAVAILABLE
     assert "no template" in out.reason
     assert "bogus_key" in out.reason
+    assert "approved" not in out.reason
 
 
 def test_next_lane_needs_a_declared_trust_and_an_approval(repo):
