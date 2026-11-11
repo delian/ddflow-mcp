@@ -68,12 +68,16 @@ def test_agents_do_not_share_artifacts(repo, log):
 
 def test_user_scope_paths_go_to_the_machine_local_file_not_the_log(repo, log, tmp_path):
     outside = tmp_path / "home" / ".claude" / "settings.json"
-    IM.record(log, repo, "claude", str(outside), "json_key", "hooks", "d1", descriptor="c", version="1")
+    IM.record(
+        log, repo, "claude", str(outside), "json_key", "hooks", "d1", descriptor="c", version="1"
+    )
     assert _onboarded(log) == []
     stored = json.loads((repo / IM.LOCAL_FILE).read_text())
     assert stored["claude"][0]["path"] == str(outside)
     assert IM.artifacts(log, "claude", repo=repo)[0]["digest"] == "d1"
-    IM.record(log, repo, "claude", str(outside), "json_key", "hooks", "d2", descriptor="c", version="1")
+    IM.record(
+        log, repo, "claude", str(outside), "json_key", "hooks", "d2", descriptor="c", version="1"
+    )
     assert [a["digest"] for a in IM.artifacts(log, "claude", repo=repo)] == ["d2"]
 
 
@@ -97,8 +101,28 @@ def test_a_run_that_raises_records_nothing(repo, log):
 def test_read_says_which_digests_changed(repo, log):
     (repo / "cmd.md").write_text("one\n")
     (repo / "keep.md").write_text("same\n")
-    IM.record(log, repo, "claude", "cmd.md", "command", "", IM.file_digest(repo / "cmd.md"), descriptor="c", version="1")
-    IM.record(log, repo, "claude", "keep.md", "command", "", IM.file_digest(repo / "keep.md"), descriptor="c", version="1")
+    IM.record(
+        log,
+        repo,
+        "claude",
+        "cmd.md",
+        "command",
+        "",
+        IM.file_digest(repo / "cmd.md"),
+        descriptor="c",
+        version="1",
+    )
+    IM.record(
+        log,
+        repo,
+        "claude",
+        "keep.md",
+        "command",
+        "",
+        IM.file_digest(repo / "keep.md"),
+        descriptor="c",
+        version="1",
+    )
     IM.record(log, repo, "claude", "gone.md", "command", "", "x", descriptor="c", version="1")
     IM.record(log, repo, "claude", "r.md", "block", "k", "x", descriptor="c", version="1")
     (repo / "cmd.md").write_text("two\n")
@@ -108,7 +132,9 @@ def test_read_says_which_digests_changed(repo, log):
     assert changed["cmd.md"] == IM.file_digest(repo / "cmd.md")
     assert changed["gone.md"] is None
     assert "keep.md" not in changed
-    assert "r.md" not in changed  # a block's digest needs the writer's resolver: unknown, not changed
+    assert (
+        "r.md" not in changed
+    )  # a block's digest needs the writer's resolver: unknown, not changed
 
 
 def test_read_uses_a_writers_resolver_for_regions(repo, log):
@@ -127,7 +153,17 @@ def test_the_fold_is_replayable(repo, log):
 
 def test_a_resolver_that_does_not_know_an_artifact_leaves_whole_files_to_read(repo, log):
     (repo / "p.md").write_text("one\n")
-    IM.record(log, repo, "claude", "p.md", "plugin", "", IM.file_digest(repo / "p.md"), descriptor="c", version="1")
+    IM.record(
+        log,
+        repo,
+        "claude",
+        "p.md",
+        "plugin",
+        "",
+        IM.file_digest(repo / "p.md"),
+        descriptor="c",
+        version="1",
+    )
     IM.record(log, repo, "claude", "r.md", "block", "k", "old", descriptor="c", version="1")
 
     def resolver(a):
@@ -135,7 +171,10 @@ def test_a_resolver_that_does_not_know_an_artifact_leaves_whole_files_to_read(re
 
     assert [c["path"] for c in IM.read(log, repo, "claude", current=resolver).changed] == ["r.md"]
     (repo / "p.md").write_text("two\n")
-    assert {c["path"] for c in IM.read(log, repo, "claude", current=resolver).changed} == {"p.md", "r.md"}
+    assert {c["path"] for c in IM.read(log, repo, "claude", current=resolver).changed} == {
+        "p.md",
+        "r.md",
+    }
 
 
 def test_an_unreadable_file_is_unknown_not_gone(repo, log, monkeypatch):
@@ -154,7 +193,17 @@ def test_an_unreadable_file_is_unknown_not_gone(repo, log, monkeypatch):
 
 def test_a_resolver_returning_none_cannot_report_a_present_file_gone(repo, log):
     (repo / "p.md").write_text("one\n")
-    IM.record(log, repo, "claude", "p.md", "plugin", "", IM.file_digest(repo / "p.md"), descriptor="c", version="1")
+    IM.record(
+        log,
+        repo,
+        "claude",
+        "p.md",
+        "plugin",
+        "",
+        IM.file_digest(repo / "p.md"),
+        descriptor="c",
+        version="1",
+    )
     assert IM.read(log, repo, "claude", current=lambda a: None).changed == []
 
 
