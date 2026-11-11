@@ -54,6 +54,8 @@ def _section(name: str, repo: Path | None, overrides: dict[str, str] | None) -> 
 _FORBIDDEN = ("approvals approve", "ddflow approve", "self-approve", "yourself", "approve it")
 _FLAG = re.compile(r"--approval[ =]+[`'\"]*([^\s`'\".,;:)]+)")
 _MAX_CHARS = 1200
+#: Anything shaped like an ask id: only the bound one may appear in a route.
+_ANY_ID = re.compile(r"\bQ[0-9a-f]{10}\b")
 
 
 def _sound(out: str, ident: str, need: str) -> bool:
@@ -68,8 +70,9 @@ def _sound(out: str, ident: str, need: str) -> bool:
         and all(m in out for m in _MUST_NAME)
         and all(f not in low for f in _FORBIDDEN)
         and bool(flags := _FLAG.findall(out))
-        and all(m in (ident, "request") for m in flags)
+        and all(m in (ident, need) for m in flags)
         and need in flags
+        and all(m == ident for m in _ANY_ID.findall(out))
         and (ident == PLACEHOLDER or f"ddflow approvals ask {ident}" in out)
         and out.count("--approval") == len(flags)
     )
