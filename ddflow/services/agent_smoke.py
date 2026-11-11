@@ -25,6 +25,7 @@ from ..adapters import git as G
 from ..adapters.fsio import scratch_dir
 from ..core.redact import Redactor
 from ..infra.fsio import atomic_write
+from ..infra.log import EventLog
 from . import cmdrunner as C
 from . import harnessreg
 
@@ -133,10 +134,8 @@ def detect(h: harnessreg.Harness, env: Mapping[str, str], runner: C.CommandRunne
     return ""
 
 
-def assess(project: Path) -> tuple[dict[str, bool], list[str]]:
+def assess(project: Path, harness: str = "") -> tuple[dict[str, bool], list[str]]:
     """The assertions, from the project's event log only."""
-    from ..infra.log import EventLog
-
     evs = EventLog(project, RUNNER_IDENTITY).read_all()
     theirs = [e for e in evs if e.agent != RUNNER_IDENTITY]
     acquired = [e for e in evs if e.kind == "lease.acquired"]
@@ -152,7 +151,8 @@ def assess(project: Path) -> tuple[dict[str, bool], list[str]]:
         "no_stray_lease": not open_leases,
     }
     gaps = []
-    if not any(e.kind == "session.started" for e in evs):
+    started = [e for e in evs if e.kind == "session.started"]
+    if not started or (harness and not any(e.data.get("harness") == harness for e in started)):
         gaps.append("no session.started with the harness name")
     if not any(e.kind == "session.prompt" for e in evs):
         gaps.append("no session.prompt: no native prompt hook, first-call fallback")
@@ -225,7 +225,7 @@ def smoke(
     workdir: Path,
     env: Mapping[str, str],
     prepare: Callable[[Path], None] | None = None,
-    assess_fn: Callable[[Path], tuple[dict[str, bool], list[str]]] = assess,
+    assess_fn: Callable[[Path], tuple[dict[str, bool], list[str]]] | None = None,
     rounds: int = 3,
     retries: int = 1,
     timeout_s: float = 600.0,
@@ -235,6 +235,7 @@ def smoke(
     """Smoke ``h``: unavailable without an agent or key; else ``rounds`` rounds in fresh
     projects under ``workdir``, each failed attempt retried ``retries`` times, the verdict the
     majority. An unavailable attempt ends the run (a rate limit is not hammered)."""
+    assess_fn = assess_fn or (lambda p: assess(p, h.id))
     keys = [k.strip() for k in _test(h).get("env_keys", "").split(",") if k.strip()]
     runner = C.CommandRunner(max_output=20000, redactor=_redactor(env, keys))
     why = detect(h, env, runner)
@@ -243,7 +244,8 @@ def smoke(
         line = command_line(h, max_turns=max_turns)
         prep = prepare or (lambda p: scaffold(p, h.id))
         verdicts: list[str] = []
-        for r in range(rounds):
+        retries = max(retries, 0)
+        for r in range(max(rounds, 1)):
             att = None
             for t in range(retries + 1):
                 att = _attempt(
@@ -289,6 +291,7 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
     r.add_argument("--timeout", type=float, default=None)
     r.add_argument("--max-turns", type=int, default=None)
     r.add_argument("--json", action="store_true")
+    r.add_argument("--record", action="store_true", help="append agent.smoke to this repo's log")
     a = ap.parse_args(argv)
     if a.cmd == "plan":
         rows = plan()
@@ -316,6 +319,7 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
             "max_turns": a.max_turns,
         }
         res = smoke(h, workdir=Path(work), env=dict(env or {}),
+                    log=EventLog(Path.cwd(), "agent-smoke") if a.record else None,
                     **{k: v for k, v in given.items() if v is not None})  # fmt: skip
     print(
         json.dumps(res.as_dict(), indent=1)

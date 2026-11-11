@@ -16,9 +16,9 @@ def smoke_of(st: State) -> dict[str, dict[str, Any]]:
 def h_smoke(st: State, ev: Event) -> None:
     agent = str(ev.data.get("agent") or ev.subject)
     smoke_of(st)[agent] = {
-        "verdict": str(ev.data.get("verdict", "")),
-        "reason": str(ev.data.get("reason", "")),
-        "attempts": list(ev.data.get("attempts", [])),
+        "verdict": str(ev.data.get("verdict") or ""),
+        "reason": str(ev.data.get("reason") or ""),
+        "attempts": list(ev.data.get("attempts") or []),
     }
 
 

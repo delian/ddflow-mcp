@@ -226,3 +226,23 @@ def test_the_cli_live_run_with_no_agent_present_is_unavailable(tmp_path):
 
 def test_event_log_unused_import_guard():
     assert EventLog  # the fixtures above build on the real log
+
+
+def test_a_null_payload_does_not_break_the_fold(repo, log):
+    log.append("agent.smoke", "x", {"agent": "x", "verdict": None, "attempts": None})
+    assert fold(log.read_all()).__dict__["smoke"]["x"] == {
+        "verdict": "",
+        "reason": "",
+        "attempts": [],
+    }
+
+
+def test_a_negative_retry_count_still_gives_a_verdict(tmp_path):
+    r = _run(tmp_path, rounds=1, retries=-1)
+    assert r.verdict == "pass"
+
+
+def test_a_session_started_for_another_harness_is_a_gap(tmp_path, repo, log):
+    log.append("session.started", "s", {"harness": "other"})
+    _, gaps = S.assess(repo, "fakeagent")
+    assert "no session.started with the harness name" in gaps
