@@ -40,7 +40,7 @@ def test_plus_and_numbered_checkboxes_import_as_tasks(repo):
 def test_ticked_plus_and_numbered_forms_are_done_like_dash(repo):
     (repo / "TODO.md").write_text("# T\n\n## Work\n\n+ [x] a done\n1. [X] b done\n- [ ] c open\n")
     run_cli(repo, "init")
-    code, out, _ = run_cli(repo, "--json", "import")
+    _code, out, _ = run_cli(repo, "--json", "import")
     found = {f["title"]: f for f in json.loads(out)["found"] if f["kind"] == "task"}
     assert "c open" in found
     assert "a done" not in found and "b done" not in found  # finished: left out as with '-'
