@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 
 from ..core import outcome as O
-from ..core.globs import match
 from ..infra import fsio
 from ..infra import worktree as W
 from ..services import ci as CI
@@ -128,11 +127,7 @@ def _auto_fix_ruff(repo: Path, cfg, st, item: str, res: CI.Result, data: dict) -
     root = W.load_path(repo, it.worktree)
     if not root.is_dir():
         return
-    owned = [
-        f
-        for f in CI.changed_python(repo, res.sha, res.merged_with)
-        if any(match(f, g) for g in it.globs)
-    ]
+    owned = CI.changed_python(repo, res.sha, res.merged_with, own=True)
     ready = CI.auto_fix(root, owned)
     if ready.get("unavailable"):
         data["corrections_unavailable"] = ready["unavailable"]

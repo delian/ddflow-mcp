@@ -51,13 +51,15 @@ def _is_ruff(check_id: str) -> bool:
     return check_id.startswith("ruff check") or check_id.startswith("ruff format")
 
 
-def changed_python(repo: Path, sha: str, base: str) -> list[str]:
+def changed_python(repo: Path, sha: str, base: str, *, own: bool = False) -> list[str]:
     """The `.py`/`.pyi` files ``sha`` changed since ``base``: the diff the ruff hooks checked.
 
     ``base`` is the ref the ci run merged ``sha`` with (``Result.merged_with``); empty means the
-    commit itself (`sha^`), so a bare commit is still described."""
+    commit itself (`sha^`), so a bare commit is still described. ``own`` is ``sha``'s own
+    changes (three-dot: from the merge base), what the item itself edited, excluding the
+    files ``base`` moved that a merge pulled in (B-autoformat-stages-outside-lease)."""
     base = base or f"{sha}^"
-    names = G.paths(repo, "diff", "--name-only", f"{base}..{sha}") or []
+    names = G.paths(repo, "diff", "--name-only", f"{base}{'...' if own else '..'}{sha}") or []
     return [n for n in names if n.endswith(_PY)]
 
 
