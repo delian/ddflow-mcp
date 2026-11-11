@@ -49,9 +49,19 @@ class TomlError(tomllib.TOMLDecodeError):
         return self.msg
 
     def __reduce__(self) -> tuple[Any, ...]:  # `args` is tomllib's (msg, doc, pos)
-        # `type(self)` (never the base `TomlError`) so a subclass round-trips as itself, and
-        # the whole `__dict__` so `add_note` notes and subclass attributes survive too.
-        return (type(self), (self.msg,), self.__dict__)
+        # `type(self)` -> a subclass round-trips as itself. `args` and `add_note` notes live
+        # outside `__dict__` (BaseException stores `args` in its own slot), so both are passed
+        # to `_rebuild_error` as plain values (passing `self` would recurse forever).
+        return (_rebuild_error, (type(self), self.msg, tuple(self.__dict__.items()), self.args))
+
+
+def _rebuild_error(
+    cls: type[TomlError], msg: str, items: tuple[Any, ...], args: tuple[Any, ...]
+) -> TomlError:
+    err = cls(msg)
+    err.__dict__.update(dict(items))
+    err.args = args
+    return err
 
 
 @port
