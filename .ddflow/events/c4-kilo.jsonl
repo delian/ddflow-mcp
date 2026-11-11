@@ -123,3 +123,4 @@
 {"agent":"c4-kilo","data":{},"id":"e430388e4512229d099f2330b","kind":"item.started","lamport":172182,"schema":1,"subject":"B-sched-due","ts":"2026-11-11T08:48:56.227833Z"}
 {"agent":"c4-kilo","data":{"tags":["track:dx","wave:0"]},"id":"e89fa70538e6396db8e1aa311","kind":"task.updated","lamport":172183,"schema":1,"subject":"DX-fold-review-settle","ts":"2026-11-11T08:49:04.778825Z"}
 {"agent":"c4-kilo","data":{"tags":["workflow-path","wave:0"]},"id":"e21a82e9d31d5efb4ebd1151a","kind":"task.updated","lamport":172184,"schema":1,"subject":"WP-review-fork","ts":"2026-11-11T08:49:04.874313Z"}
+{"agent":"c4-kilo","data":{"by":"c4-kilo","event":"e2eb8c295e26a74e4ee35e161","holder":"c4-kilo","note":""},"id":"e6f3d0096af725d6a25b1328d","kind":"lease.released","lamport":172187,"schema":1,"subject":"B-sched-due","ts":"2026-11-11T08:49:43.791345Z"}
