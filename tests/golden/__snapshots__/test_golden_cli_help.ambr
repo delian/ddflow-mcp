@@ -2889,6 +2889,15 @@
   
   '''
 # ---
+# name: test_help[ddflow rule inventory]
+  '''
+  usage: ddflow rule inventory [-h]
+  
+  options:
+    -h, --help  show this help message and exit
+  
+  '''
+# ---
 # name: test_help[ddflow rule list]
   '''
   usage: ddflow rule list [-h] [--tag TAG] [--scope SCOPE]
@@ -2952,10 +2961,12 @@
 # ---
 # name: test_help[ddflow rule]
   '''
-  usage: ddflow rule [-h] {add,edit,list,search,show,remove,sync} ...
+  usage: ddflow rule [-h] {add,edit,list,search,show,remove,inventory,sync} ...
   
   positional arguments:
-    {add,edit,list,search,show,remove,sync}
+    {add,edit,list,search,show,remove,inventory,sync}
+      inventory           every agent's rule and command files: who loads what, always-loaded cost,
+                          restated workflow
       sync                record hand-edited rule files in the log; write the files the log has and
                           the disk lacks
   
@@ -4070,6 +4081,7 @@
     'ddflow rule',
     'ddflow rule add',
     'ddflow rule edit',
+    'ddflow rule inventory',
     'ddflow rule list',
     'ddflow rule remove',
     'ddflow rule search',
