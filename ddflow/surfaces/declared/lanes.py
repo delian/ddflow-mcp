@@ -33,8 +33,7 @@ COMMANDS: tuple[Command, ...] = (
         call=lambda repo, a, agent: _api().lanes(
             repo,
             view="coordinator" if a.get("coordinator") else (a.get("view") or "state"),
-            lane=a.get("lane") or "",
-            item=a.get("item") or "",
+            lane=(a.get("item") if a.get("coordinator") else "") or a.get("lane") or "",
             agent=agent,
         ),
         payload=(
@@ -59,7 +58,16 @@ COMMANDS: tuple[Command, ...] = (
                 cli_help="state (default), brief <lane>, advise, lead, fleet, resume <lane> or approve <template>",
                 positional=True,
                 nargs="?",
-                choices=("state", "brief", "advise", "fleet", "resume", "lead", "approve", "coordinator"),
+                choices=(
+                    "state",
+                    "brief",
+                    "advise",
+                    "fleet",
+                    "resume",
+                    "lead",
+                    "approve",
+                    "coordinator",
+                ),
                 default=None,
             ),
             Param(

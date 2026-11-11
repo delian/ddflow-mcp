@@ -15,6 +15,7 @@ from .approvals import view as AP
 from .lanes import states as S
 from .lanes.safe import safe
 
+
 def _cut(rows: list, cap: int, partial: dict[str, int], name: str) -> list:
     if cap > 0 and len(rows) > cap:
         partial[name] = len(rows) - cap
@@ -41,12 +42,18 @@ def _chain(item: str, st, plan, now: float, grace_s: int, rows: int) -> list[dic
             for dep in b.waiting_on:
                 walk(dep, depth + 1)
         elif it is None:
-            out.append({"item": node, "depth": depth, "reason": "unknown", "detail": "no such item"})
+            out.append(
+                {"item": node, "depth": depth, "reason": "unknown", "detail": "no such item"}
+            )
         elif it.lease and it.lease.live(now, grace_s):
             out.append(
-                {"item": node, "depth": depth, "reason": "held",
-                 "detail": f"held by {safe(it.lease.holder)} ({it.state})"}
-            )  # fmt: skip
+                {
+                    "item": node,
+                    "depth": depth,
+                    "reason": "held",
+                    "detail": f"held by {safe(it.lease.holder)} ({it.state})",
+                }
+            )
         else:
             reason = "ready" if node in ready else it.state
             out.append({"item": node, "depth": depth, "reason": reason, "detail": ""})
@@ -74,8 +81,13 @@ def build(
     for ln in held:
         quiet = max(0, int(now - max(ln.heartbeat, ln.last_event)))
         holders.append(
-            {"lane": ln.name, "item": ln.item, "state": ln.state, "quiet_s": quiet,
-             "idle": idle_s > 0 and quiet >= idle_s}  # fmt: skip
+            {
+                "lane": ln.name,
+                "item": ln.item,
+                "state": ln.state,
+                "quiet_s": quiet,
+                "idle": idle_s > 0 and quiet >= idle_s,
+            }
         )
     owners = {h["lane"]: h["item"] for h in holders}
     asks = [
@@ -154,6 +166,8 @@ def render(d: dict[str, Any]) -> str:
 
 def render_holders(d: dict[str, Any]) -> str:
     """`ddflow lease`: the holders block of the screen, alone."""
-    return render({**d, "suites": [], "approvals": [], "ready": {}, "item": "", "chain": []}).split(
-        "HOLDERS\n", 1
-    )[1].split("\nAPPROVALS", 1)[0]
+    return (
+        render({**d, "suites": [], "approvals": [], "ready": {}, "item": "", "chain": []})
+        .split("HOLDERS\n", 1)[1]
+        .split("\nAPPROVALS", 1)[0]
+    )

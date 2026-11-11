@@ -130,7 +130,9 @@ def test_the_cli_renders_the_view_and_json_matches_the_mcp_tool(busy):
     assert code == 0 and "HOLDERS" in out and "holder" in out and "CHAIN Y" in out
     _, js, _ = run_cli(busy, "lanes", "--coordinator", "--json")
     mcp = tool_json(rpc_call(Server(busy), "ddflow_lanes", coordinator=True))
-    assert json.loads(js)["coordinator"]["owners"] == mcp["coordinator"]["owners"] == {"holder": "X"}
+    assert (
+        json.loads(js)["coordinator"]["owners"] == mcp["coordinator"]["owners"] == {"holder": "X"}
+    )
 
 
 def test_ddflow_lease_lists_the_same_holders_as_lanes_coordinator(busy):

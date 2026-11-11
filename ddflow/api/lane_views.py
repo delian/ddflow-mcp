@@ -12,8 +12,8 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import approval as AP
-from ..services import fleet as FR
 from ..services import coordinator_view as CV
+from ..services import fleet as FR
 from ..services import flowstate as FL
 from ..services import lanes as LN
 from ..services import suitelock as SL
@@ -110,14 +110,8 @@ def _coordinator(data: dict, ledger, st, cfg, at: float, offer, item: str, view:
     return O.ok("lanes", **data)
 
 
-def lanes(  # noqa: PLR0913 -- one keyword per view argument
-    repo: Path,
-    *,
-    view: str = "state",
-    lane: str = "",
-    now: float | None = None,
-    agent: str = "",
-    item: str = "",
+def lanes(
+    repo: Path, *, view: str = "state", lane: str = "", now: float | None = None, agent: str = ""
 ) -> O.Outcome:
     """The ledger (``state``), one lane's first prompt (``brief``) or the moves (``advise``)."""
     view = view or "state"
@@ -148,7 +142,7 @@ def lanes(  # noqa: PLR0913 -- one keyword per view argument
         "coordinator": {},
     }
     if view in ("coordinator", "lease"):
-        return _coordinator(data, ledger, st, cfg, at, offer, item or lane, view)
+        return _coordinator(data, ledger, st, cfg, at, offer, lane, view)
     if view in ("fleet", "resume"):
         return fleet_view(
             data, view=view, lane=lane, events=events, st=st, cfg=cfg, now=at, plan=offer
