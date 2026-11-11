@@ -123,3 +123,30 @@ def test_the_fold_is_replayable(repo, log):
     st = fold(log.read_all())
     assert st.onboarded["claude"]
     assert isinstance(Path(repo), Path)
+
+
+def test_a_resolver_that_does_not_know_an_artifact_leaves_whole_files_to_read(repo, log):
+    (repo / "p.md").write_text("one\n")
+    IM.record(log, repo, "claude", "p.md", "plugin", "", IM.file_digest(repo / "p.md"), descriptor="c", version="1")
+    IM.record(log, repo, "claude", "r.md", "block", "k", "old", descriptor="c", version="1")
+
+    def resolver(a):
+        return "new" if a["kind"] == "block" else IM.UNKNOWN
+
+    assert [c["path"] for c in IM.read(log, repo, "claude", current=resolver).changed] == ["r.md"]
+    (repo / "p.md").write_text("two\n")
+    assert {c["path"] for c in IM.read(log, repo, "claude", current=resolver).changed} == {"p.md", "r.md"}
+
+
+def test_an_unreadable_file_is_unknown_not_gone(repo, log, monkeypatch):
+    (repo / "p.md").write_text("one\n")
+    IM.record(log, repo, "claude", "p.md", "plugin", "", "stale", descriptor="c", version="1")
+    real = Path.read_bytes
+
+    def deny(self):
+        if self.name == "p.md":
+            raise PermissionError("no")
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", deny)
+    assert IM.read(log, repo, "claude").changed == []

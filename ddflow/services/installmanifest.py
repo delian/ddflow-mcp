@@ -54,12 +54,13 @@ ARTIFACT_KINDS = (
 FILE_KINDS = frozenset({"plugin", "command", "skill", "subagent", "git_hook"})
 
 
+#: What a resolver, or `_current`, returns for "I cannot say": the artifact is neither changed nor gone.
+UNKNOWN: Any = object()
+
+
 def file_digest(path: Path) -> str | None:
-    """SHA-256 of a file's bytes; None when it is absent or unreadable."""
-    try:
-        return hasher(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None
-    except OSError:
-        return None
+    """SHA-256 of a file's bytes; None when it is absent. An unreadable file raises OSError."""
+    return hasher(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None
 
 
 def _scope(repo: Path, path: str) -> tuple[str, bool]:
@@ -180,24 +181,30 @@ class Report:
     changed: list[dict[str, Any]]
 
 
-def _current(repo: Path, art: dict[str, str]) -> str | None | bool:
-    """The digest now, None when the file is gone, False when only the writer can say."""
-    if art["kind"] in FILE_KINDS:
-        p = Path(art["path"]).expanduser()
+def _current(repo: Path, art: dict[str, str]) -> str | None:
+    """The digest now: None when the file is gone, UNKNOWN when only the writer can say (a
+    block, key, hook or env line) or the file cannot be read."""
+    if art["kind"] not in FILE_KINDS:
+        return UNKNOWN
+    p = Path(art["path"]).expanduser()
+    try:
         return file_digest(p if p.is_absolute() else Path(repo) / p)
-    return False
+    except OSError:
+        return UNKNOWN
 
 
 def read(log: Any, repo: Path, agent: str,
          current: Callable[[dict[str, str]], str | None] | None = None) -> Report:  # fmt: skip
     """The agent's artifacts and which digests changed. ``current(artifact)`` is a writer's
-    resolver for the digest now (a block, key, hook or env line); without it only whole-file
-    kinds are checked and the rest are unknown, never reported as changed."""
+    resolver for the digest now (None: gone; `UNKNOWN`: it cannot say, and whole-file kinds
+    are then checked here). Whatever stays unknown is never reported as changed."""
     rows = artifacts(log, agent, repo=repo)
     changed: list[dict[str, Any]] = []
     for a in rows:
-        now = current(a) if current is not None else _current(repo, a)
-        if now is False:
+        now = current(a) if current is not None else UNKNOWN
+        if now is UNKNOWN:
+            now = _current(repo, a)
+        if now is UNKNOWN:
             continue
         if now != a["digest"]:
             changed.append({**a, "now": now})
