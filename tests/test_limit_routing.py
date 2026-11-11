@@ -38,6 +38,14 @@ def test_remaining_headroom_subtracts_spent_from_the_limit():
     assert LR.headroom(table, "cheap", {"cheap": 3.0}).remaining == 7.0
 
 
+def test_a_non_numeric_limit_degrades_to_unknown_not_headroom():
+    """A present-but-non-numeric limit (a typo'd string) is UNKNOWN, never headroom, and
+    never raises at routing time (roborev 4652 finding)."""
+    table = PR.PricesConfig(limit={"cheap": "unlimited"}, reset={})
+    assert table.limit_of("cheap") is None
+    assert LR.pick(table, [("cheap", 0.01)]) is None
+
+
 def test_a_reset_defaults_to_1mo_when_the_model_names_none():
     table = PR.PricesConfig(limit={"cheap": 1.0}, reset={})
     assert table.reset_of("cheap") == "1mo"
